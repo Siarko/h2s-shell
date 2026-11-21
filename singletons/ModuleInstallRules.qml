@@ -401,6 +401,42 @@ Singleton {
         return list;
     }
 
+    // The first shell version whose config file holds the acknowledgements (Config's
+    // acknowledgedModules key): a file written by it or a later one without the key was not
+    // left by an older shell, and is read as {}
+    readonly property string acknowledgementsSince: "2.1.0"
+
+    // The acknowledgements from the config file: `text` its entry, `facts` { loadFailed (the
+    // file could not be read), inFile (the file held the key when loaded), writtenBy (the
+    // version that wrote it, "" for none) }. → undefined (never written: the baseline may be
+    // written) when the entry is "" and the file holds the key or predates
+    // acknowledgementsSince (or there is no file); {} when the file could not be read, or is
+    // newer and lacks the key, or its writer cannot be read; else parseAcknowledgements
+    function readAcknowledgements(text, facts) {
+        if (facts?.loadFailed === true)
+            return {};
+        if (typeof text === "string" && text !== "")
+            return parseAcknowledgements(text);
+        if (facts?.inFile === true)
+            return undefined;
+        const writtenBy = typeof facts?.writtenBy === "string" ? facts.writtenBy : "";
+        if (writtenBy === "")
+            return undefined;
+        const parse = version => {
+            const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(version);
+            return match ? [Number(match[1]), Number(match[2]), Number(match[3])] : null;
+        };
+        const written = parse(writtenBy);
+        const since = parse(acknowledgementsSince);
+        if (!written || !since)
+            return {};
+        for (let i = 0; i < 3; i++) {
+            if (written[i] !== since[i])
+                return written[i] < since[i] ? undefined : {};
+        }
+        return {};
+    }
+
     // What the first start of a shell that confirms modules acknowledges, so that what ran
     // before keeps running without a question (§5): `modules` [{ found, manifest, enabled }],
     // the modules that count (not shadowed, a valid manifest). → { <id>: acknowledgementOf }
@@ -426,7 +462,7 @@ Singleton {
         if (confirmation?.needed !== true)
             return "";
         const shown = _plain(typeof name === "string" && name !== "" ? name : String(id ?? ""), 60);
-        const command = " (modules confirm " + _plain(String(id ?? ""), 60) + ")";
+        const command = " (modules confirm " + _plain(String(id ?? ""), 60) + " <directory>)";
         const reasons = _list(confirmation.reasons);
         if (confirmation.state === "approval") {
             const what = reasons.includes("privileged") && reasons.includes("author") ? "now asks for administrator rights and names another author"
@@ -463,7 +499,9 @@ Singleton {
     // The shell script that reads them (the host's source check, run as the user, under a
     // time limit): arguments the user root, the versions root, the built-in root, the record
     // file, then pairs "developer <path>" / "system <path>". Prints, tab-separated:
-    //   root <kind> <canonical path>           each root that resolves (cd -P)
+    //   root <kind> <canonical path> <owner uid> <writable 1|0>
+    //                                          each root that resolves (cd -P), who owns it
+    //                                          and whether the user can write it
     //   entry <link|dir> <path> <canonical>    each entry of the user root (at most 400), its
     //                                          path under the canonical root, where it leads
     //                                          ("" when nowhere: a dangling link, a file)
@@ -474,8 +512,9 @@ Singleton {
     readonly property string sourceCheckScript: "tab=$(printf '\\t'); nl=$(printf '\\nx'); nl=${nl%x}; "
         + "canon() { (cd -P -- \"$1\" 2>/dev/null && pwd); }; "
         + "plain() { case \"$1\" in *\"$tab\"*|*\"$nl\"*) return 1 ;; esac; return 0; }; "
-        + "root() { [ -n \"$2\" ] || return 0; real=$(canon \"$2\") || return 0; "
-        + "if plain \"$real\"; then printf 'root\\t%s\\t%s\\n' \"$1\" \"$real\"; fi; }; "
+        + "root() { [ -n \"$2\" ] || return 0; real=$(canon \"$2\") || return 0; plain \"$real\" || return 0; "
+        + "owner=$(stat -c %u -- \"$real\" 2>/dev/null) || owner=; writable=0; [ -w \"$real\" ] && writable=1; "
+        + "printf 'root\\t%s\\t%s\\t%s\\t%s\\n' \"$1\" \"$real\" \"$owner\" \"$writable\"; }; "
         + "user=$1; versions=$2; builtin=$3; record=$4; shift 4; "
         + "root user \"$user\"; root versions \"$versions\"; root builtin \"$builtin\"; "
         + "while [ $# -ge 2 ]; do root \"$1\" \"$2\"; shift 2; done; "
@@ -491,6 +530,20 @@ Singleton {
         + "printf '%s-state\\tok\\n' \"$1\"; }; "
         + "file builtin \"${builtin:+$builtin/builtin.json}\" 65536; file record \"$record\" 262144; echo end"
 
+    // What the launcher's H2S_SHELL_DISCOVERY says to the shell in `shellDirectory`:
+    // { launched — the launcher started this shell (its directory named), searched — and its
+    // search answered }. Anything else (unset, another directory: a shell started by hand that
+    // inherited it) is neither
+    function discoveryOf(value, shellDirectory) {
+        const text = typeof value === "string" ? value : "";
+        const cut = text.indexOf(" ");
+        const word = cut < 0 ? "" : text.slice(0, cut);
+        const directory = _cleanPath(cut < 0 ? "" : text.slice(cut + 1));
+        const own = _cleanPath(String(shellDirectory ?? "").replace(/^file:\/\//, ""));
+        const launched = directory !== "" && directory === own && (word === "ok" || word === "failed");
+        return { launched: launched, searched: launched && word === "ok" };
+    }
+
     // The arguments of sourceCheckScript for sourcePlaces' result
     function sourceCheckArguments(places) {
         const given = ModuleRules.isObject(places) ? places : {};
@@ -504,7 +557,9 @@ Singleton {
     }
 
     // What sourceCheckScript printed (its lines) → { complete, roots: { developer: [], user,
-    // versions, builtin, system: [] } (canonical), entries: [{ entry, isLink, target }],
+    // versions, builtin, system: [] } (canonical; a system root only when root owns it and
+    // the user cannot write it — anything else there is the user's to change, so its modules
+    // count as placed by hand), entries: [{ entry, isLink, target }],
     // builtin: { state, text }, record: { state, text } }. Not `complete` (cut off, failed):
     // nothing in it is used — every module is then "user", the unknown, never trusted.
     function parseSourceCheck(lines) {
@@ -519,8 +574,10 @@ Singleton {
             const fields = line.split("\t");
             if (line === "end") {
                 result.complete = true;
-            } else if (fields[0] === "root" && fields.length === 3 && _cleanPath(fields[2]) !== "") {
-                if (fields[1] === "developer" || fields[1] === "system") {
+            } else if (fields[0] === "root" && fields.length === 5 && _cleanPath(fields[2]) !== "") {
+                if (fields[1] === "system" && !(fields[3] === "0" && fields[4] === "0")) {
+                    continue;
+                } else if (fields[1] === "developer" || fields[1] === "system") {
                     if (!result.roots[fields[1]].includes(fields[2]))
                         result.roots[fields[1]].push(fields[2]);
                 } else if (["user", "versions", "builtin"].includes(fields[1])) {

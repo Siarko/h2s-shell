@@ -797,9 +797,10 @@ The interface modules are written against (`qs.api`), versioned on its own
 ### Changed
 - A module that is not part of h2s-shell — one you put into `~/.local/share/h2s-shell/modules`
   yourself, linked or copied — starts off the first time the shell finds it, until you
-  confirm it (`qs ipc call modules confirm <id>`; Settings → Modules will ask). Modules you
-  already had on keep running without a question: the first start of this version takes
-  them as confirmed. A module you placed by hand that starts asking for administrator rights,
+  confirm it (`qs ipc call modules confirm <id> <directory>`, the directory as `modules list`
+  shows it; Settings → Modules will ask). Modules you already had on keep running without a
+  question: the first start of this version takes them as confirmed. A configuration file
+  that cannot be read is no longer saved over with the defaults. A module you placed by hand that starts asking for administrator rights,
   or names another author, is held off until you approve it the same way. Built-in modules,
   your system's and those on the development path (`H2S_SHELL_MODULE_PATH`) never ask.
 - `qs ipc call modules rediscover` finds modules put on disk since the shell started and

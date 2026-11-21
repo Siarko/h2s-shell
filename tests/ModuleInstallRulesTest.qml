@@ -518,6 +518,27 @@ TestCase {
                                                                      clock: Object.assign({}, given, { source: "elsewhere" }), notes: "yes" }));
         assertEqual(Object.keys(mixed).join(","), "tailscale", "entries not well formed are left out: a bad id, a bad field, an unknown source");
 
+        const read = (text, facts) => JSON.stringify(rules.readAcknowledgements(text, facts) ?? "undefined");
+        assertEqual(read("", {}), "\"undefined\"", "read: no file, no key: never written (the baseline)");
+        assertEqual(read("", { writtenBy: "2.0.0" }), "\"undefined\"", "read: a file an older shell wrote, without the key: never written");
+        assertEqual(read("", { writtenBy: "2.1.0", inFile: true }), "\"undefined\"", "read: a newer file holding the key empty: not written yet");
+        assertEqual(read("", { writtenBy: rules.acknowledgementsSince }), "{}", "read: a file of the version that added the key, without it: {} (asks again)");
+        assertEqual(read("", { writtenBy: "3.0.0" }), "{}", "read: … of a later one: {}");
+        assertEqual(read("", { writtenBy: "garbage" }), "{}", "read: a writer that cannot be read: {}");
+        assertEqual(read(JSON.stringify({ tailscale: given }), { loadFailed: true }), "{}", "read: a file that could not be read: {}, whatever it seemed to hold");
+        assertEqual(read(JSON.stringify({ tailscale: given }), { writtenBy: "2.1.0", inFile: true }), JSON.stringify({ tailscale: given }), "read: a written list");
+        assertEqual(read("", null), "\"undefined\"", "read: no facts: never written, no throw");
+
+        const discovered = (value, dir) => JSON.stringify(rules.discoveryOf(value, dir));
+        assertEqual(discovered("ok /home/anna/.config/quickshell/default", "/home/anna/.config/quickshell/default/"), JSON.stringify({ launched: true, searched: true }),
+                    "H2S_SHELL_DISCOVERY: the launcher started this shell and its search answered");
+        assertEqual(discovered("failed /home/anna/.config/quickshell/default", "/home/anna/.config/quickshell/default"), JSON.stringify({ launched: true, searched: false }),
+                    "… its search failed: launched, not searched");
+        assertEqual(discovered("ok /home/anna/.config/quickshell/default", "/home/anna/wt/m2"), JSON.stringify({ launched: false, searched: false }),
+                    "… another directory's (inherited by a shell started by hand): neither");
+        for (const junk of [null, "", "ok", "maybe /x", "ok relative"])
+            assertEqual(discovered(junk, "/x"), JSON.stringify({ launched: false, searched: false }), "… unset or garbage: neither — " + JSON.stringify(junk));
+
         const user = { source: "user", address: "/home/anna/src/ts" };
         const manifest = id => ({ id: id, author: "Anna", privileged: id === "tailscale" ? { why: "x", programs: [] } : null });
         const baseline = rules.baselineAcknowledgements([
@@ -539,11 +560,11 @@ TestCase {
                     "… one that was off asks when turned on");
 
         const text = (state, reasons) => rules.confirmationText("Tailscale", "tailscale", { needed: true, state: state, reasons: reasons });
-        assertEqual(text("unconfirmed", ["new"]), "Tailscale is new and not part of h2s-shell: confirm it first (modules confirm tailscale)", "refusal: new");
-        assertEqual(text("unconfirmed", ["source"]), "Tailscale comes from another place than the one confirmed: confirm it first (modules confirm tailscale)", "refusal: another source");
-        assertEqual(text("approval", ["privileged"]), "Tailscale now asks for administrator rights: approve it first (modules confirm tailscale)", "refusal: privileged");
-        assertEqual(text("approval", ["author"]), "Tailscale now names another author: approve it first (modules confirm tailscale)", "refusal: author");
-        assertEqual(text("approval", ["privileged", "author"]), "Tailscale now asks for administrator rights and names another author: approve it first (modules confirm tailscale)", "refusal: both");
+        assertEqual(text("unconfirmed", ["new"]), "Tailscale is new and not part of h2s-shell: confirm it first (modules confirm tailscale <directory>)", "refusal: new");
+        assertEqual(text("unconfirmed", ["source"]), "Tailscale comes from another place than the one confirmed: confirm it first (modules confirm tailscale <directory>)", "refusal: another source");
+        assertEqual(text("approval", ["privileged"]), "Tailscale now asks for administrator rights: approve it first (modules confirm tailscale <directory>)", "refusal: privileged");
+        assertEqual(text("approval", ["author"]), "Tailscale now names another author: approve it first (modules confirm tailscale <directory>)", "refusal: author");
+        assertEqual(text("approval", ["privileged", "author"]), "Tailscale now asks for administrator rights and names another author: approve it first (modules confirm tailscale <directory>)", "refusal: both");
         assertEqual(rules.confirmationText("T", "t", { needed: false }) + rules.confirmationText("T", "t", null), "", "nothing to confirm: no words");
         assert(!rules.confirmationText("A\nB\u202e", "t", { needed: true, state: "unconfirmed", reasons: ["new"] }).includes("\n"), "a name from outside: one line");
 
@@ -565,20 +586,24 @@ TestCase {
         assertEqual(JSON.stringify(rules.sourceCheckArguments(null)), JSON.stringify(["", "", "", ""]), "… none: four empty ones");
 
         const checked = rules.parseSourceCheck([
-            "root\tuser\t/home/anna/.local/share/h2s-shell/modules", "root\tbuiltin\t/opt/builtin", "root\tdeveloper\t/home/anna/dev",
-            "root\tsystem\t/usr/share/h2s-shell/modules", "root\tsystem\t/usr/share/h2s-shell/modules", "root\tuser\trelative",
+            "root\tuser\t/home/anna/.local/share/h2s-shell/modules\t1000\t1", "root\tbuiltin\t/opt/builtin\t0\t0", "root\tdeveloper\t/home/anna/dev\t1000\t1",
+            "root\tsystem\t/usr/share/h2s-shell/modules\t0\t0", "root\tsystem\t/usr/share/h2s-shell/modules\t0\t0", "root\tuser\trelative\t1000\t1",
+            "root\tsystem\t/home/anna/.local/share/flatpak/exports/share/h2s-shell/modules\t1000\t1",
+            "root\tsystem\t/opt/shared/h2s-shell/modules\t0\t1", "root\tsystem\t/srv/h2s-shell/modules\t\t0",
             "entry\tlink\t/home/anna/.local/share/h2s-shell/modules/tailscale\t/home/anna/src/ts",
             "entry\tdir\t/home/anna/.local/share/h2s-shell/modules/player\t/home/anna/.local/share/h2s-shell/modules/player",
             "entry\tlink\t/home/anna/.local/share/h2s-shell/modules/gone\t",
             "builtin\t{\"off\":", "builtin\t [\"player\"]}", "builtin-state\tok", "record-state\tmissing", "noise", "end"
         ]);
         assertEqual(JSON.stringify(checked.roots), JSON.stringify({ developer: ["/home/anna/dev"], user: "/home/anna/.local/share/h2s-shell/modules",
-                    versions: "", builtin: "/opt/builtin", system: ["/usr/share/h2s-shell/modules"] }), "the check's roots, canonical, each once; a relative one dropped");
+                    versions: "", builtin: "/opt/builtin", system: ["/usr/share/h2s-shell/modules"] }), "the check's roots, canonical, each once; a relative one dropped; a system root the user owns or can write, or whose owner is unknown, dropped");
         assertEqual(checked.entries.length + " " + checked.entries[0].isLink + " " + checked.entries[1].isLink + " " + JSON.stringify(checked.entries[2].target),
                     "3 true false \"\"", "its entries: links and folders, a dangling link leading nowhere");
         assertEqual(JSON.stringify(rules.builtinOff(checked.builtin.text)), JSON.stringify({ ok: true, off: ["player"] }), "builtin.json's lines joined back");
         assertEqual(checked.record.state, "missing", "no record: missing");
-        const cut = rules.parseSourceCheck(["root\tuser\t/home/anna/.local/share/h2s-shell/modules", "entry\tdir\t/a/b\t/a/b"]);
+        const cut = rules.parseSourceCheck(["root\tuser\t/home/anna/.local/share/h2s-shell/modules\t1000\t1", "entry\tdir\t/a/b\t/a/b"]);
+        assertEqual(rules.sourceOf("/home/anna/.local/share/flatpak/exports/share/h2s-shell/modules/x", null, checked.roots, rules.parseRecord("")).source, "user",
+                    "a module in a user-writable data directory: placed by hand (user), never the system's");
         assertEqual(cut.complete + " " + cut.roots.user + cut.entries.length, "false 0", "cut off before its end: nothing of it is used");
         assertEqual(rules.parseSourceCheck(null).complete, false, "nothing: not complete, no throw");
 

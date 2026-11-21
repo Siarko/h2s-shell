@@ -45,6 +45,11 @@ Singleton {
     // "" while never written — the first start of the module host that confirms modules writes
     // it (the baseline). Written with setAcknowledgedModules
     readonly property string acknowledgedModulesText: _adapter.acknowledgedModules
+    // Read from the file as it was loaded (ModuleInstallRules.readAcknowledgements tells "never
+    // written" from "missing in a file that should hold it"): whether it held the key, and
+    // the version that wrote it ("" for none)
+    property bool acknowledgedModulesInFile: false
+    property string writtenByAtLoad: ""
     // The notice about locking before sleep last given (SleepLockNotice,
     // LockIoRules.sleepNoticeStep): remembered, so it is given once, not at every start
     property alias sleepLockNotice: _adapter.sleepLockNotice
@@ -61,6 +66,7 @@ Singleton {
     // Set by the test runner: the suites load the real config, and nothing they change
     // may reach the user's file
     property bool readOnly: false
+    property bool _refusedSave: false
 
     signal saved
 
@@ -106,6 +112,14 @@ Singleton {
         onAdapterUpdated: _saveTimer.restart()
         onLoaded: {
             root.loadFailed = ProfileRules.configReadFailed("", text());
+            try {
+                const data = JSON.parse(text());
+                root.acknowledgedModulesInFile = data !== null && typeof data === "object" && Object.prototype.hasOwnProperty.call(data, "acknowledgedModules");
+                root.writtenByAtLoad = typeof data?.writtenBy === "string" ? data.writtenBy : "";
+            } catch (error) {
+                root.acknowledgedModulesInFile = false;
+                root.writtenByAtLoad = "";
+            }
             if (root.loadFailed)
                 console.warn("[Config] " + path + " is not a JSON object: its settings are not used");
             root.ready = true;
@@ -175,6 +189,15 @@ Singleton {
         onTriggered: {
             if (root.readOnly)
                 return;
+            // A file that could not be read is never overwritten with the defaults: the
+            // user's settings stay in it to be repaired (and nothing reads defaults back as
+            // their choice at the next start)
+            if (root.loadFailed) {
+                if (!root._refusedSave)
+                    console.warn("[Config] " + _file.path + " could not be read: changes are not saved over it");
+                root._refusedSave = true;
+                return;
+            }
             _adapter.writtenBy = Version.number;
             _file.writeAdapter();
             root.saved();

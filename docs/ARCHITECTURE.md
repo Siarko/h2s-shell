@@ -694,9 +694,15 @@ the `qs.api` facade, the registries taking modules' contributions, slots and anc
   kept in the config file: source, address, author, whether it runs administrator actions):
   a new one is `unconfirmed`, a hand-placed one that now declares administrator actions or
   names another author waits for `approval` (`ModuleInstallRules.needsConfirmation`).
-  `qs ipc call modules confirm <id>` acknowledges it and turns it on; `setEnabled` refuses
-  it, saying why. The first start that confirms finds no list and writes one from the
-  hand-placed modules that are on, so they keep running without a question. Nothing is
+  `qs ipc call modules confirm <id> <directory>` (the directory as `modules list` shows it;
+  refused when the id now names another) acknowledges it and turns it on; `setEnabled`
+  refuses it, saying why. Confirmations hold only in a shell the launcher started from its
+  own directory (`H2S_SHELL_DISCOVERY`), never in a `quickshell` started by hand. The first
+  start that confirms finds no list and writes one from the hand-placed modules that are on,
+  so they keep running without a question — only from a launcher search that answered, with
+  at least one module read; otherwise nothing is written. A module counts as the system's
+  only in a data directory root owns and the user cannot write (a user-writable one, such as
+  a Flatpak export, counts as placed by hand). Nothing is
   confirmed, searched for or loaded again over IPC while the session is locked. The host
   writes the ids of the modules loaded to `$XDG_RUNTIME_DIR/h2s-shell-modules-on` (never in
   safe mode) and reads at its first load what the last run wrote (`previousModulesOn`);

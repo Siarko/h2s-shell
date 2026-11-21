@@ -22,3 +22,6 @@ seam_gdbus=gdbus
 # The launcher's pauses, "first=S lockwait=S discoveryhang=S"; empty: its own
 # (launch.sh)
 seam_launcher_timings=
+# A file the module search hangs only while it exists ("discoveryhang=S"); empty: it always
+# does (launch.sh)
+seam_discovery_hang_while=

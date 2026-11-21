@@ -19,3 +19,6 @@ seam_gdbus=${seam_gdbus:-gdbus}
 # H2S_LAUNCHER_TEST_TIMINGS: the launcher's pauses, shortened ("first=0.1 lockwait=3",
 # seconds), and "discoveryhang=S", a module search that takes S seconds
 seam_launcher_timings=${H2S_LAUNCHER_TEST_TIMINGS:-}
+# H2S_LAUNCHER_TEST_HANG_WHILE: a file the module search hangs only while it exists
+# ("discoveryhang=S"), so a test can let one search through
+seam_discovery_hang_while=${H2S_LAUNCHER_TEST_HANG_WHILE:-}

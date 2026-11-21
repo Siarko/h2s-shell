@@ -25,7 +25,11 @@ import QtCore
 // line in the log): the host must never be what keeps the bar or the lock screen from coming
 // up. No module file is ever imported statically — a broken one would fail the whole config.
 //
-// The host confirms modules (ModuleHost.confirmations) unless Config.readOnly (the test runners):
+// The host confirms modules (ModuleHost.confirmations) only in a shell the launcher started
+// from this directory (H2S_SHELL_DISCOVERY names it: never a `quickshell` started by hand, even
+// one that inherited a launcher's environment) and never under the test runners
+// (Config.readOnly); its first acknowledgements only from a list the launcher's search
+// answered with ("ok"):
 // the places a module's source is told by come from the same environment the launcher's
 // search reads (ModuleInstallRules.sourcePlaces; the built-in root from
 // H2S_SHELL_BUILTIN_MODULES), the modules loaded are written to
@@ -40,8 +44,10 @@ import QtCore
 //   qs ipc call modules setEnabled <id> <on> turns a module on or off, as Settings → Modules
 //                                            will (Config.disabledModules); "" or why not — a
 //                                            module waiting for confirmation is not turned on
-//   qs ipc call modules confirm <id>         acknowledges a module that waits for the user's
-//                                            confirmation or approval, and turns it on
+//   qs ipc call modules confirm <id> <dir>   acknowledges a module that waits for the user's
+//                                            confirmation or approval, and turns it on — the
+//                                            directory as `modules list` shows it, refused
+//                                            when the id now names another
 //   qs ipc call modules rediscover           searches for modules again and loads what it finds,
 //                                            without a restart
 //   qs ipc call modules loadWithoutSafeMode  the same, out of safe mode
@@ -155,8 +161,10 @@ Singleton {
             // temporary one instead
             if (!Config.readOnly)
                 _host.dataRoot = SystemFactsRules.dataRoot(SystemFacts.dataHome);
-            // Sources, confirmations, the modules on and the search again: the shell's own
-            if (!Config.readOnly) {
+            // Sources, confirmations, the modules on and the search again: the shell's own, as
+            // the launcher started it
+            const discovery = ModuleInstallRules.discoveryOf(Quickshell.env("H2S_SHELL_DISCOVERY"), Quickshell.shellDir);
+            if (!Config.readOnly && discovery.launched) {
                 _host.sourcePlaces = ModuleInstallRules.sourcePlaces({
                     dataHome: SystemFacts.dataHome, modulePath: Quickshell.env("H2S_SHELL_MODULE_PATH"),
                     moduleDataDirs: Quickshell.env("H2S_SHELL_MODULE_DATA_DIRS"), dataDirs: Quickshell.env("XDG_DATA_DIRS"),
@@ -182,7 +190,7 @@ Singleton {
             if (TestSeams.moduleTestMode)
                 _host.setTestMode(true);
             _host.load(typeof value === "string" ? value : "", {
-                safeMode: safe,
+                safeMode: safe, searched: discovery.searched,
                 safeModeReason: "the launcher started the shell in safe mode (H2S_SHELL_SAFE_MODE=1): it died within 30 s of starting twice in a row"
             });
             if (safe)
@@ -215,8 +223,14 @@ Singleton {
             return "";
         }
 
-        function confirm(id: string): string {
-            return _host.confirm(id);
+        // The directory as `modules list` shows it: what the answer is about (its subject) —
+        // refused when missing or when the id now names another directory
+        function confirm(id: string, directory: string): string {
+            if (_host.locked)
+                return "Refused while the session is locked";
+            if (directory === "")
+                return "Give the module's directory as modules list shows it: modules confirm <id> <directory>";
+            return _host.confirm(id, directory);
         }
 
         function rediscover(): string {

@@ -86,9 +86,11 @@ Scope {
     // default — every module is taken as acknowledged and nothing is written)
     property bool confirmations: false
     // The user's acknowledgements (Config.acknowledgedModulesText,
-    // ModuleInstallRules.parseAcknowledgements): undefined while never written, {} when the
-    // config file could not be read (what cannot be read asks again)
-    readonly property var acknowledgements: Config.loadFailed ? ({}) : ModuleInstallRules.parseAcknowledgements(Config.acknowledgedModulesText)
+    // ModuleInstallRules.readAcknowledgements): undefined while never written, {} when the
+    // config file could not be read or should hold them and does not (what cannot be read
+    // asks again)
+    readonly property var acknowledgements: ModuleInstallRules.readAcknowledgements(Config.acknowledgedModulesText, {
+        loadFailed: Config.loadFailed, inFile: Config.acknowledgedModulesInFile, writtenBy: Config.writtenByAtLoad })
     // The places a module's source is told by (ModuleInstallRules.sourcePlaces: { user,
     // versions, record, builtin, developer: [], system: [] }, as given; {} — the suites'
     // default — none: every module is "user")
@@ -306,13 +308,16 @@ Scope {
     }
 
     // (Re)loads from `directoryList` (an array, or a colon-separated string as in
-    // H2S_SHELL_MODULES). `options`: { safeMode }. Never throws: a failure of the host
+    // H2S_SHELL_MODULES). `options`: { safeMode, safeModeReason, ignoreGuard, searched —
+    // the list is what a search that answered found (the launcher's, or rediscover()'s): only
+    // such a list may make the first acknowledgements }. Never throws: a failure of the host
     // itself unloads everything and is kept in hostError.
     function load(directoryList, options) {
         try {
             unload();
             hostError = "";
             _askedSafeMode = options?.safeMode === true;
+            _searched = options?.searched === true;
             // Out of safe mode by the user's choice (loadWithoutSafeMode): the start guard's
             // count no longer decides it, for the host's life
             if (options?.ignoreGuard === true)
@@ -457,7 +462,8 @@ Scope {
         if (outcome !== "")
             return;
         console.info("[Modules] loading the modules found again" + (leaveSafeMode ? ", out of safe mode" : ""));
-        load(output, leaveSafeMode ? { safeMode: false, ignoreGuard: true } : { safeMode: safeMode, safeModeReason: safeModeReason });
+        load(output, leaveSafeMode ? { safeMode: false, ignoreGuard: true, searched: true }
+                                   : { safeMode: safeMode, safeModeReason: safeModeReason, searched: true });
     }
 
     function _setLists(id, enabled) {
@@ -1232,6 +1238,8 @@ Scope {
     // ---- The first start that confirms modules (§5) ----
 
     property bool _baselineAsked: false
+    // The modules of the last load are what a search that answered found (load()'s `searched`)
+    property bool _searched: false
 
     // No acknowledgement written yet: once every module of this load is read and its source
     // known, what is on is acknowledged as it is (ModuleInstallRules.baselineAcknowledgements)
@@ -1243,9 +1251,13 @@ Scope {
         }
     }
 
+    // Only from a search that answered, with at least one module read: a list that is empty
+    // because the search failed, or was never run (a shell started without the launcher),
+    // must not become the acknowledgements for good — then nothing is written, and every
+    // module found counts as acknowledged as it is until a search answers
     function _baselineDue() {
-        return confirmations && _loadCalled && settingsKnown && _sourcesKnown && acknowledgements === undefined
-            && _records.every(record => record.manifestRead);
+        return confirmations && _loadCalled && _searched && settingsKnown && _sourcesKnown && acknowledgements === undefined
+            && _records.length > 0 && _records.every(record => record.manifestRead) && _records.some(record => record.manifest.valid);
     }
 
     function _writeBaseline() {

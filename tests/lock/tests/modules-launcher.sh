@@ -13,11 +13,12 @@
 #     past the quick-death window (30 s) ends it, and the next start picks up a module
 #     installed meanwhile (discovery runs before every start).
 # (3) Sources and confirmations (notes/plans/modules-management.md §3, §5): each module's
-#     source in `modules list`; the first start acknowledges the hand-placed modules it finds
+#     source in `modules list` (a data dir the user can write is not the system's); the first
+#     start acknowledges the hand-placed modules it finds
 #     on (the config file keeps them) and writes the modules on to the runtime directory; the
 #     safe-mode start tells them and loads them in place on `modules loadWithoutSafeMode`; the
 #     module installed meanwhile starts unconfirmed — `modules setEnabled` refuses it, `modules
-#     confirm` turns it on and the config file keeps it; one put there while the shell runs is
+#     confirm` with its directory turns it on (without, or with another, it is refused) and the config file keeps it; one put there while the shell runs is
 #     found by `modules rediscover`, without a restart.
 #
 # The launcher's first pause is 0.2 s here (H2S_LAUNCHER_TEST_TIMINGS): the schedule of the
@@ -82,8 +83,11 @@ check_within 15 "beta (data home): loaded" module_state_is beta loaded
 check "beta-copy (data dirs, same id): reported as a duplicate" module_state_is beta-copy duplicate
 check_within 15 "zeta: loaded" module_state_is zeta loaded
 check "the launcher logged what it found" grep -aq "modules: 5 (" "$RUN/h2s-shell-launcher.log"
-check "sources: the development path's, the user root's, the system's" \
-    test "$(module_field explicit source) $(module_field alpha source) $(module_field beta source) $(module_field zeta source)" = "developer user user system"
+check "the shell the launcher started confirms modules" test "$(module_field - confirmations)" = true
+# (The test's "system" data dir is the test's own, which the user can write: its modules are
+# the user's, never the system's)
+check "sources: the development path's, the user root's, a user-writable data dir's: user" \
+    test "$(module_field explicit source) $(module_field alpha source) $(module_field beta source) $(module_field zeta source)" = "developer user user user"
 config_file=$XDG_CONFIG_HOME/h2s_shell/config.json
 # The ids the config file holds acknowledgements for, sorted ("none" while never written)
 acknowledged() {
@@ -96,7 +100,7 @@ except Exception:
 print(" ".join(sorted(json.loads(text))) if text else "none")' "$config_file"
 }
 acknowledged_are() { [ "$(acknowledged)" = "$1" ]; }
-check_within 5 "the first start acknowledged the hand-placed modules it found on, in the config file" acknowledged_are "alpha beta"
+check_within 5 "the first start acknowledged the hand-placed modules it found on, in the config file" acknowledged_are "alpha beta zeta"
 modules_on() { tr '\n' ' ' < "$RUN/h2s-shell-modules-on" 2> /dev/null; }
 modules_on_are() { [ "$(modules_on)" = "$1" ]; }
 check_within 5 "the modules on are written to the runtime directory" modules_on_are "alpha beta explicit zeta "
@@ -148,10 +152,15 @@ check_within 15 "… the modules load again" module_state_is alpha loaded
 check_within 15 "… and the module installed meanwhile is found: off until confirmed" module_state_is gamma unconfirmed
 check "… its source: user" test "$(module_field gamma source)" = user
 check "modules setEnabled refuses it, saying why" \
-    test "$(shell_ipc modules setEnabled gamma true)" = "gamma is new and not part of h2s-shell: confirm it first (modules confirm gamma)"
-check "modules confirm: done" test -z "$(shell_ipc modules confirm gamma)"
+    test "$(shell_ipc modules setEnabled gamma true)" = "gamma is new and not part of h2s-shell: confirm it first (modules confirm gamma <directory>)"
+check "modules confirm without the directory: refused" \
+    test "$(shell_ipc modules confirm gamma "")" = "Give the module's directory as modules list shows it: modules confirm <id> <directory>"
+check "modules confirm for another directory: refused" \
+    test "$(shell_ipc modules confirm gamma "$home_modules/beta")" = "The module changed: gamma is now $(module_field gamma directory)"
+check "… still unconfirmed" module_state_is gamma unconfirmed
+check "modules confirm with its directory: done" test -z "$(shell_ipc modules confirm gamma "$(module_field gamma directory)")"
 check_within 15 "… it loads" module_state_is gamma loaded
-check_within 5 "… the config file keeps its acknowledgement" acknowledged_are "alpha beta gamma"
+check_within 5 "… the config file keeps its acknowledgement" acknowledged_are "alpha beta gamma zeta"
 fourth=$SHELL_PID
 make_module "$home_modules/delta" delta
 check "modules rediscover: started" test -z "$(shell_ipc modules rediscover)"

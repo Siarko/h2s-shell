@@ -1277,6 +1277,15 @@ TestCase {
             Config.setAcknowledgedModules(undefined);
             Config.disabledModules = ["off"];
             Config.enabledModules = [];
+            // No baseline from a list no search answered with, nor from an empty one
+            _trustHost.load([], { searched: true });
+        });
+        _then("an empty searched list settles", () => _trustSettled(), () => {
+            _trustHost.load([_trustRoot + "/dev/devmod", _trustRoot + "/" + user + "old"], {});
+        });
+        _then("a list no search answered with loads", () => _trustSettled() && _fileReads(_trustRoot + "/modules-on", "devmod\nold"), () => {
+            assertEqual(_trustHost.acknowledgements, undefined, "an empty searched list, then a list not searched: no acknowledgement written");
+            assertEqual(_trust("old")?.state, "loaded", "… what is found counts as acknowledged meanwhile");
             assertEqual(_trustHost.rediscover(), "", "the launcher's search started");
         });
         _then("the first start settles and writes its baseline", () => _trustSettled() && _trustHost.acknowledgements !== undefined
@@ -1303,7 +1312,7 @@ TestCase {
             assertEqual(off?.state + " " + JSON.stringify(off?.confirmation), "unconfirmed [\"new\"]",
                         "one that was off at the first start: unconfirmed once the list is written");
             assertEqual(_trustHost.setEnabled("off", true), false, "setEnabled refuses a module that waits for confirmation");
-            assertEqual(_trustHost.enableProblem("off"), "Off is new and not part of h2s-shell: confirm it first (modules confirm off)", "… and says why");
+            assertEqual(_trustHost.enableProblem("off"), "Off is new and not part of h2s-shell: confirm it first (modules confirm off <directory>)", "… and says why");
             assert(_trustHost.setEnabled("shipped-off", true), "a built-in module that starts off: turned on");
             assertEqual(_trustHost._plainList(Config.enabledModules).join(" "), "shipped-off", "… remembered in enabledModules");
         });
@@ -1330,7 +1339,7 @@ TestCase {
         _then("the search again loads what changed", () => _trustSettled() && _trust("fresh")?.state === "unconfirmed" && _trust("old")?.state === "approval", () => {
             assertEqual(JSON.stringify(_trust("fresh").confirmation), "[\"new\"]", "a module put on disk after the first start: unconfirmed, new");
             assertEqual(JSON.stringify(_trust("old").confirmation), "[\"author\"]", "a hand-placed module whose author changed: held for approval");
-            assertEqual(_trustHost.enableProblem("old"), "Old now names another author: approve it first (modules confirm old)", "… said");
+            assertEqual(_trustHost.enableProblem("old"), "Old now names another author: approve it first (modules confirm old <directory>)", "… said");
             assertEqual(JSON.stringify(_trustHost.restartNeeded), "[\"Devmod\"]", "a main changed in place since the engine built it: a restart needed");
             assertEqual(JSON.stringify(_trustHost.describe().restartNeeded), "[\"Devmod\"]", "… in modules list");
             assertEqual(_trust("devmod")?.state, "loaded", "… it keeps running");

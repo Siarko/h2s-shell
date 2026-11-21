@@ -1,14 +1,16 @@
 # Module discovery is on the path of every start of the shell, the re-lock after a crash
 # included, and it is bounded (scripts/launch.sh, discover_modules): a search that hangs (a
 # hung mount under a data dir) is cut off after 3 s and the shell starts without modules.
-# Here every search hangs — H2S_LAUNCHER_TEST_TIMINGS "discoveryhang=60": the search sleeps
-# 60 s first; no real mount is involved.
+# Here a search hangs while the file $WORK/hang exists — H2S_LAUNCHER_TEST_TIMINGS
+# "discoveryhang=60" and H2S_LAUNCHER_TEST_HANG_WHILE: the search sleeps 60 s first; no real
+# mount is involved.
 #
 # (1) The first start: the shell is up within the bound, with no modules although one is
-#     installed, the launcher said why, and the search left nothing running. The shell's own
-#     search again (`modules rediscover`, which runs the launcher's search: it hangs too) is
-#     bounded as well: cut off, said in the shell's log, the modules left as they are, nothing
-#     left running.
+#     installed, the launcher said why, and the search left nothing running; no
+#     acknowledgement is written from that empty list. The shell's own search again
+#     (`modules rediscover`, the launcher's search) with the hang gone finds the module, loads
+#     it and acknowledges it; with the hang back it is bounded as well: cut off, said in the
+#     shell's log, the module still loaded, nothing left running.
 # (2) Killed while locked: the new shell comes up through the same bounded search and locks
 #     again — while locked it refuses to search again or to confirm a module over IPC; the
 #     password unlocks it.
@@ -22,7 +24,8 @@ make_module() {
 }
 make_module "$XDG_DATA_HOME/h2s-shell/modules/alpha" alpha
 
-stack_start --launcher-timings "first=0.2 discoveryhang=60"
+touch "$WORK/hang"
+stack_start --launcher-timings "first=0.2 discoveryhang=60" --shell-env "H2S_LAUNCHER_TEST_HANG_WHILE=$WORK/hang"
 
 launcher_log=$RUN/h2s-shell-launcher.log
 # Seconds from the first line matching $1 to the next one matching $2, in the launcher's log
@@ -48,11 +51,30 @@ check "no modules for the shell" test -z "$(process_env "$SHELL_PID" H2S_SHELL_M
 check "… so the installed one is not loaded" test "$(shell_ipc modules list | grep -c '"state":"loaded"')" = 0
 check "the cut-off search left nothing running" test -z "$(hung_searches)"
 
+config_file=$XDG_CONFIG_HOME/h2s_shell/config.json
+acknowledged() {
+    python3 -I -c '
+import json, sys
+try:
+    text = json.load(open(sys.argv[1])).get("acknowledgedModules", "")
+except Exception:
+    text = ""
+print(" ".join(sorted(json.loads(text))) if text else "none")' "$config_file"
+}
+acknowledged_are() { [ "$(acknowledged)" = "$1" ]; }
+check "the failed search's empty list wrote no acknowledgement" acknowledged_are none
+
 # ---- (1b) the shell's own search again ----
 shell_logged() { [ "$(shell_log_count "$1")" -gt 0 ]; }
-check "modules rediscover: started" test -z "$(shell_ipc modules rediscover)"
+alpha_loaded() { shell_ipc modules list | grep -q '"id":"alpha"[^}]*"state":"loaded"'; }
+rm -f "$WORK/hang"
+check "modules rediscover (no hang): started" test -z "$(shell_ipc modules rediscover)"
+check_within 15 "… the module is found and loaded, without a restart" alpha_loaded
+check_within 5 "… and acknowledged, from a search that answered" acknowledged_are alpha
+touch "$WORK/hang"
+check "modules rediscover (hanging): started" test -z "$(shell_ipc modules rediscover)"
 check_within 10 "… cut off by the shell's bound, said in its log" shell_logged "the module search took longer than"
-check "… the modules left as they are: none loaded" test "$(shell_ipc modules list | grep -c '"state":"loaded"')" = 0
+check "… the module still loaded" alpha_loaded
 check_within 5 "… the cut-off search left nothing running" test -z "$(hung_searches)"
 
 # ---- (2) killed while locked: the re-lock goes through the bounded search ----
@@ -69,7 +91,7 @@ check_within 5 "the compositor confirmed the new shell's lock" state_is secure t
 stop_lock_watch
 check "the compositor never reported unlocked across the restart" lock_watch_never_unlocked
 check "locked: modules rediscover refused" test "$(shell_ipc modules rediscover)" = "Refused while the session is locked"
-check "locked: modules confirm refused" test "$(shell_ipc modules confirm alpha)" = "Refused while the session is locked"
+check "locked: modules confirm refused" test "$(shell_ipc modules confirm alpha /x)" = "Refused while the session is locked"
 check "locked: modules setEnabled refused" test "$(shell_ipc modules setEnabled alpha true)" = "Refused while the session is locked"
 check "the search was cut off again" test "$(grep -ac "module discovery took longer than 3 s" "$launcher_log")" -ge 2
 wake_prompt || fail "the new shell's prompt did not wake"
