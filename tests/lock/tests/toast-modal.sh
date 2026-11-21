@@ -80,7 +80,7 @@ window_pressed_at() {
 clicks_pass_beside() {
     click_at "$1" "$2"
     click_at "$3" "$4"
-    check_within 3 "$5: a click beside it reaches the window beneath" window_pressed_at "$3" "$4"
+    check_within "$GUARD" "$5: a click beside it reaches the window beneath" window_pressed_at "$3" "$4"
     check "… a click on it does not (it is the toast's)" not window_pressed_at "$1" "$2"
 }
 not() { ! "$@"; }
@@ -123,11 +123,11 @@ check "the bar keeps space at the screen's top (else the checks below would prov
 check "the HUD's window covers the whole screen, over the bar's space" test "$HUD_X $HUD_Y" = "0 0"
 
 backup=$(notify_staying "Backup running")
-check_within 5 "a staying toast shows" toast_at "$backup" shown staying
+check_within "$GUARD" "a staying toast shows" toast_at "$backup" shown staying
 next=$(notify_staying "Second backup")
-check_within 5 "a second one waits in the staying queue (one at a time)" toast_at "$next" waiting staying
+check_within "$GUARD" "a second one waits in the staying queue (one at a time)" toast_at "$next" waiting staying
 toast_rests_movable() { toast_rect_is "$1" movable true && toast_rect_is "$1" settled true; }
-check_within 5 "the toast rests on the first screen, movable (the default)" toast_rests_movable "$backup"
+check_within "$GUARD" "the toast rests on the first screen, movable (the default)" toast_rests_movable "$backup"
 # Below the bar by the toasts' gap to the screen's edges (the theme's osdToast.screenGap, 16)
 check "its top is below the bar's space, by the gap ($(toast_rect "$backup" y))" toast_rect_is "$backup" y $((RESERVED_TOP + 16))
 
@@ -142,7 +142,7 @@ value = json.load(sys.stdin)[sys.argv[1]]
 print(str(value).lower() if isinstance(value, bool) else value)' "$1"
 }
 pill_resting() { [ "$(pill_field resting)" = true ]; }
-check_within 3 "the shell's message shows and rests" pill_resting
+check_within "$GUARD" "the shell's message shows and rests" pill_resting
 pill_top=$(pill_field y) pill_height=$(pill_field height)
 log "the shell's message at y $((HUD_Y + pill_top)), ${pill_height} px tall, on a ${OUTPUT_HEIGHT} px screen"
 screenshot toast-geometry
@@ -151,7 +151,7 @@ check "… whole on the screen, its clearance from the bottom edge kept (40 px)"
 
 # Before: a click away from the toasts reaches the window beneath
 click_at 400 600
-check_within 3 "a click away from the toasts reaches the window beneath" window_presses_are 1
+check_within "$GUARD" "a click away from the toasts reaches the window beneath" window_presses_are 1
 read -r _ window_x window_y < <(grep '^press' "$WORK/window.log" | tail -n 1)
 WINDOW_DX=$((400 - window_x)) WINDOW_DY=$((600 - window_y))
 log "the stand-in window's origin on the screen: ($WINDOW_DX, $WINDOW_DY)"
@@ -161,16 +161,16 @@ start_x=$(toast_rect "$backup" x) start_y=$(toast_rect "$backup" y)
 log "the toast at ($start_x, $start_y), $(toast_rect "$backup" width)x$(toast_rect "$backup" height)"
 grab_x=$((start_x + 60)) grab_y=$((start_y + 14))
 drag_held $grab_x $grab_y -500 300 10
-check_within 2 "while held, the toast follows the pointer (500 px left, 300 down)" toast_near "$backup" $((start_x - 500)) $((start_y + 300))
+check_within "$GUARD" "while held, the toast follows the pointer (500 px left, 300 down)" toast_near "$backup" $((start_x - 500)) $((start_y + 300))
 for step in 1 2 3 4 5 6; do
     pointer_to $((grab_x - 500 - step * 50)) $((grab_y + 300 + step * 30))
 done
-check_within 2 "… and on, still held" toast_near "$backup" $((start_x - 800)) $((start_y + 480))
+check_within "$GUARD" "… and on, still held" toast_near "$backup" $((start_x - 800)) $((start_y + 480))
 send_input "release left"
-check_within 3 "dropped: a modal" toast_at "$backup" moved staying
+check_within "$GUARD" "dropped: a modal" toast_at "$backup" moved staying
 check "… where it was dropped" toast_near "$backup" $((start_x - 800)) $((start_y + 480))
-check_within 3 "its slot in the staying queue went to the next one" toast_at "$next" shown staying
-check_within 3 "… which rests in the stack" toast_rect_is "$next" settled true
+check_within "$GUARD" "its slot in the staying queue went to the next one" toast_at "$next" shown staying
+check_within "$GUARD" "… which rests in the stack" toast_rect_is "$next" settled true
 
 modal_x=$(toast_rect "$backup" x) modal_y=$(toast_rect "$backup" y)
 modal_height=$(toast_rect "$backup" height)
@@ -184,7 +184,7 @@ clicks_pass_beside $((next_x + 60)) $((next_y + 30)) $((next_x + 60)) 900 "the n
 # Dragged again, as a modal: it just changes place, and the mask follows it
 drag_held $((modal_x + 60)) $((modal_y + 14)) 300 -120 6
 send_input "release left"
-check_within 3 "a modal dragged again: at its new place" toast_near "$backup" $((modal_x + 300)) $((modal_y - 120))
+check_within "$GUARD" "a modal dragged again: at its new place" toast_near "$backup" $((modal_x + 300)) $((modal_y - 120))
 check "… still a modal" toast_at "$backup" moved staying
 clicks_pass_beside $((modal_x + 300 + 120)) $((modal_y - 120 + modal_height / 2)) $((modal_x + 120)) $((modal_y + modal_height / 2)) \
     "the modal at its new place (beside it: its old place)"
@@ -192,7 +192,7 @@ clicks_pass_beside $((modal_x + 300 + 120)) $((modal_y - 120 + modal_height / 2)
 # Dropped half off the screen: back inside it, whole
 drag_held $((modal_x + 360)) $((modal_y - 106)) -1600 1000 8
 send_input "release left"
-check_within 3 "dropped past the bottom left corner: inside the screen, whole" \
+check_within "$GUARD" "dropped past the bottom left corner: inside the screen, whole" \
     toast_near "$backup" "$HUD_X" $((OUTPUT_HEIGHT - modal_height))
 
 # "×" dismisses it: the entry goes, and its place passes clicks again
@@ -203,9 +203,9 @@ has_entry() {
 import json, sys
 sys.exit(0 if any(n["id"] == int(sys.argv[1]) for n in json.load(sys.stdin)) else 1)' "$1"
 }
-check_within 3 "… the notification is dismissed (its entry gone)" not has_entry "$backup"
-check_within 3 "… and off the screen" toast_rect_is "$backup" x ""
+check_within "$GUARD" "… the notification is dismissed (its entry gone)" not has_entry "$backup"
+check_within "$GUARD" "… and off the screen" toast_rect_is "$backup" x ""
 corner_y=$((OUTPUT_HEIGHT - modal_height / 2 - 30))
 click_at $((HUD_X + 121)) $corner_y
-check_within 3 "its place passes clicks to the window again" window_pressed_at $((HUD_X + 121)) $corner_y
+check_within "$GUARD" "its place passes clicks to the window again" window_pressed_at $((HUD_X + 121)) $corner_y
 check "no protocol errors" no_protocol_errors

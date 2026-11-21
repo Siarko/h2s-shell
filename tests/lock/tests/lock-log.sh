@@ -7,7 +7,7 @@
 stack_start --logind
 
 lock_by_ipc
-check_within 5 "locked" compositor_locked
+check_within "$GUARD" "locked" compositor_locked
 wake_prompt || fail "the prompt did not wake"
 type_text "lt-wrong-pass-99"
 press_key Return

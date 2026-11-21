@@ -16,8 +16,8 @@ break_shell() { echo "this is not QML {" > "$shell_qml"; log "shell.qml broken i
 mend_shell() { cp "$WORK/shell.qml.good" "$shell_qml"; log "shell.qml mended"; }
 
 lock_by_ipc
-check_within 5 "locked" compositor_locked
-check_within 5 "confirmed" state_is secure true
+check_within "$GUARD" "locked" compositor_locked
+check_within "$GUARD" "confirmed" state_is secure true
 check "file watching is off while locked (breaking the file reloads nothing)" state_is watch_files false
 
 start_lock_watch retry
@@ -27,7 +27,7 @@ old_shell=$SHELL_PID
 signal_shell KILL
 check_within 30 "after 3 failed restarts while locked, the launcher gives up" \
     grep -aq "after 3 restarts since the last unlock: not starting it again. The session stays locked." "$WORK/shell.log"
-check_within 5 "… and ends" test ! -e "/proc/$supervisor"
+check_within "$GUARD" "… and ends" test ! -e "/proc/$supervisor"
 check "each failed start counted" test "$(shell_log_count "while locked)")" = 3
 check "the compositor is still locked" compositor_locked
 check "the marker still says locked" marker_file_is locked
@@ -41,16 +41,16 @@ start_launcher
 log "a launcher started by hand: pid $SUPERVISOR_PID, its shell $SHELL_PID"
 supervisor=$SUPERVISOR_PID
 check_within 10 "it comes up locked (the marker)" state_is phase locked
-check_within 5 "confirmed" state_is secure true
-sleep 1
+check_within "$GUARD" "confirmed" state_is secure true
+sleep 1 # fixed sleep: a negative claim: the lock watch sees no unlock after the restart either
 stop_lock_watch
 check "the compositor never reported unlocked" lock_watch_never_unlocked
 wake_prompt || fail "the prompt did not wake"
-check_within 5 "the methods are known" state_is armed true
+check_within "$GUARD" "the methods are known" state_is armed true
 type_text "$LOCKTEST_PASSWORD"
 press_key Return
 check_within 10 "the password unlocks" compositor_unlocked
-check_within 3 "the marker says unlocked" marker_file_is unlocked
+check_within "$GUARD" "the marker says unlocked" marker_file_is unlocked
 
 # Unlocked: a shell that cannot start is given up
 break_shell
@@ -58,5 +58,5 @@ old_shell=$SHELL_PID
 signal_shell KILL
 check_within 20 "unlocked, the launcher gives up on a shell that cannot start" \
     grep -aq "times in 2 minutes: not starting it again" "$WORK/shell.log"
-check_within 3 "and ends" test ! -e "/proc/$supervisor"
+check_within "$GUARD" "and ends" test ! -e "/proc/$supervisor"
 mend_shell

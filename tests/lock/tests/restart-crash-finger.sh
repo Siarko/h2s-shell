@@ -14,9 +14,9 @@ ulimit -c 0
 stack_start --methods "password fingerprint"
 
 lock_by_ipc
-check_within 5 "locked" compositor_locked
-check_within 5 "confirmed" state_is secure true
-check_within 5 "a fingerprint conversation runs" _one_finger_waiter
+check_within "$GUARD" "locked" compositor_locked
+check_within "$GUARD" "confirmed" state_is secure true
+check_within "$GUARD" "a fingerprint conversation runs" _one_finger_waiter
 old_conversation=$(finger_waiters)
 old_helper=$(awk '{ print $4 }' "/proc/$old_conversation/stat" 2> /dev/null)
 log "the fingerprint conversation $old_conversation, its PAM helper $old_helper"
@@ -30,7 +30,7 @@ failed_relaunches_before=$(shell_log_count 'Launching config: ""')
 crashed_shell=$SHELL_PID
 signal_shell SEGV
 check_within 15 "Quickshell's handler restarts it" lines_more_than "$crashes_before" "Quickshell has been restarted" "$WORK/shell.log"
-sleep 2
+wait_until 20 relaunch_decided "$failed_relaunches_before"
 if [ "$(shell_log_count 'Launching config: ""')" -gt "$failed_relaunches_before" ]; then
     # Quickshell 0.3.2's relaunch sometimes loses its config path (restart-crash-locked):
     # then the launcher starts a fresh shell, and its own clean-up kills the helper
@@ -45,14 +45,14 @@ check_within 20 "the restarted shell answers" shell_ipc lockscreen status
 # Killed, it stays a zombie of the restarted image (which never waits for it): dead all the
 # same — its D-Bus connection, and so a real reader's claim, is gone
 helper_dead() { [ ! -e "/proc/$old_helper" ] || [ "$(awk '{ print $3 }' "/proc/$old_helper/stat" 2> /dev/null)" = Z ]; }
-check_within 5 "the old PAM helper is dead (gone, or a zombie)" helper_dead
+check_within "$GUARD" "the old PAM helper is dead (gone, or a zombie)" helper_dead
 if [ "$in_place" = 1 ]; then
     check "the restarted shell killed it" grep -aq "killed a PAM helper this process left before it was restarted in place: $old_helper" "$WORK/shell.log"
 fi
-check_within 3 "its fingerprint conversation ended" test ! -e "/proc/$old_conversation"
+check_within "$GUARD" "its fingerprint conversation ended" test ! -e "/proc/$old_conversation"
 check "… as an orphan" grep -q "orphaned $old_conversation" "$WORK/finger/log"
 check_within 10 "and locks again (the marker)" state_is phase locked
-check_within 5 "confirmed" state_is secure true
+check_within "$GUARD" "confirmed" state_is secure true
 check_within 10 "the new shell's fingerprint conversation is the only one" _one_finger_waiter
 finger ok
 check_within 10 "a finger unlocks" compositor_unlocked
@@ -71,7 +71,8 @@ if [ "$in_place" = 0 ]; then
     failed_relaunches_before=$(shell_log_count 'Launching config: ""')
     crashed_shell=$SHELL_PID
     signal_shell SEGV
-    sleep 4
+    crash_handled() { lines_more_than "$crashes_before" "Quickshell has been restarted" "$WORK/shell.log" || ! kill -0 "$crashed_shell" 2> /dev/null; }
+    wait_until 15 crash_handled && wait_until 20 relaunch_decided "$failed_relaunches_before"
     if [ "$(shell_log_count "Quickshell has been restarted")" -gt "$crashes_before" ] && kill -0 "$crashed_shell" 2> /dev/null \
         && [ "$(shell_log_count 'Launching config: ""')" = "$failed_relaunches_before" ]; then
         in_place=1
@@ -83,8 +84,8 @@ fi
 if [ "$in_place" = 1 ]; then
     check "the shell was relaunched in place (its exec-time environment says so)" relaunched_in_place
     lock_by_ipc
-    check_within 5 "the relaunched shell locks" compositor_locked
-    check_within 8 "a fingerprint conversation runs" _one_finger_waiter
+    check_within "$GUARD" "the relaunched shell locks" compositor_locked
+    check_within "$GUARD" "a fingerprint conversation runs" _one_finger_waiter
     conversation=$(finger_waiters)
     helper=$(awk '{ print $4 }' "/proc/$conversation/stat" 2> /dev/null)
     check "its PAM helper is the shell's child" test "$(awk '{ print $4 }' "/proc/$helper/stat" 2> /dev/null)" = "$SHELL_PID"
@@ -94,7 +95,7 @@ if [ "$in_place" = 1 ]; then
     signal_shell KILL
     check_within 10 "the launcher starts a new shell" wait_for_new_shell "$old_shell" 10
     helper_gone() { [ ! -e "/proc/$helper" ] || [ "$(awk '{ print $3 }' "/proc/$helper/stat" 2> /dev/null)" = Z ]; }
-    check_within 5 "the dead shell's PAM helper was killed by the launcher" helper_gone
+    check_within "$GUARD" "the dead shell's PAM helper was killed by the launcher" helper_gone
     check "the launcher said so" grep -aq "killing what the shell left behind: $helper " "$WORK/shell.log"
     check_within 10 "the new shell locks" state_is phase locked
     check_within 10 "exactly one fingerprint conversation (the orphan's is over)" _one_finger_waiter

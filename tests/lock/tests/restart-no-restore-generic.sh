@@ -13,15 +13,15 @@
 stack_start --no-lock-restore --no-hyprland-ipc --launcher-timings "first=0.1"
 
 lock_by_ipc
-check_within 5 "locked" compositor_locked
-check_within 5 "confirmed" state_is secure true
+check_within "$GUARD" "locked" compositor_locked
+check_within "$GUARD" "confirmed" state_is secure true
 
 start_lock_watch generic
 supervisor=$SUPERVISOR_PID
 signal_shell KILL
 check_within 30 "after 3 restarts while locked the launcher gives up" \
     grep -aq "after 3 restarts since the last unlock: not starting it again. The session stays locked." "$WORK/shell.log"
-check_within 5 "… and ends" test ! -e "/proc/$supervisor"
+check_within "$GUARD" "… and ends" test ! -e "/proc/$supervisor"
 stop_lock_watch
 log "pauses: $(grep -ao 'starting it again in [0-9.]* s' "$WORK/shell.log" | awk '{ print $5 }' | tr '\n' ' ')"
 log "how the restarted shells ended: $(sed 's/\x1b\[[0-9;]*m//g' "$WORK/shell.log" | grep -a -E 'wl_display|fatal error|the shell exited' | sed 's/^.*launcher[^:]*: //' | sort | uniq -c | tr '\n' '|')"

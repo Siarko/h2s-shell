@@ -15,7 +15,7 @@ mkdir -p "$standins" || abort "cannot make $standins"
 cat > "$standins/head" << 'EOF'
 #!/bin/sh
 # A read that does not answer (a hung mount): longer than the host's deadline, then gives up
-sleep 40
+sleep 40 # fixed sleep: a stand-in that never answers
 exit 1
 EOF
 chmod +x "$standins/head"
@@ -39,15 +39,15 @@ modules = [m for m in json.load(sys.stdin)["modules"] if m["directory"].endswith
 print("; ".join(modules[0]["errors"]) if modules else "")'
 }
 
-check_within 5 "the shell answers while the module's files hang" module_state_is pending
+check_within "$GUARD" "the shell answers while the module's files hang" module_state_is pending
 check "the lock screen's settings are there (lockscreen.lockOnSleep, through Profiles)" \
     test -n "$(shell_ipc profiles status | python3 -I -c 'import json,sys; print(json.load(sys.stdin)["values"].get("lockscreen.lockOnSleep"))')"
 
 lock_by_ipc
-check_within 5 "lock by IPC locks the compositor (module still hung)" compositor_locked
-check_within 5 "the compositor confirmed it" state_is secure true
+check_within "$GUARD" "lock by IPC locks the compositor (module still hung)" compositor_locked
+check_within "$GUARD" "the compositor confirmed it" state_is secure true
 wake_prompt || fail "the prompt did not wake"
-check_within 5 "the methods are known" state_is armed true
+check_within "$GUARD" "the methods are known" state_is armed true
 type_text "$LOCKTEST_PASSWORD"
 press_key Return
 check_within 10 "the password unlocks" compositor_unlocked

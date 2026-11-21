@@ -23,8 +23,8 @@ counter=$!
 
 # ---- Crash after 10 s: restarted in place ----
 lock_by_ipc
-check_within 5 "locked" compositor_locked
-check_within 5 "confirmed" state_is secure true
+check_within "$GUARD" "locked" compositor_locked
+check_within "$GUARD" "confirmed" state_is secure true
 started=$(stat -c %Y "/proc/$SHELL_PID")
 until [ $(($(date +%s) - started)) -ge 12 ]; do sleep 0.5; done
 crashes_before=$(shell_log_count "Quickshell has been restarted")
@@ -38,7 +38,7 @@ check_within 15 "Quickshell's handler restarts it" lines_more_than "$crashes_bef
 # and the crash reporter it forked read the instance info through one shared file offset,
 # and the one that reads second finds nothing (notes/upstream/, finding 5). Then the
 # launcher starts a fresh shell. Either way: one shell, and it locks again
-sleep 2
+wait_until 20 relaunch_decided "$failed_relaunches_before"
 if [ "$(shell_log_count 'Launching config: ""')" -gt "$failed_relaunches_before" ]; then
     log "Quickshell's relaunch lost its config path: the launcher's restart must take over"
     check_within 15 "the launcher started a fresh shell" wait_for_new_shell "$crashed_shell" 15
@@ -49,20 +49,20 @@ else
 fi
 check_within 20 "the restarted shell answers" shell_ipc lockscreen status
 check_within 10 "and locks again (the marker)" state_is phase locked
-check_within 5 "confirmed" state_is secure true
-sleep 1
+check_within "$GUARD" "confirmed" state_is secure true
+sleep 1 # fixed sleep: a negative claim: the lock watch sees no unlock after the restart either
 stop_lock_watch
 check "the compositor never reported unlocked across the crash" lock_watch_never_unlocked
 wake_prompt || fail "the prompt did not wake"
-check_within 5 "the methods are known" state_is armed true
+check_within "$GUARD" "the methods are known" state_is armed true
 type_text "$LOCKTEST_PASSWORD"
 press_key Return
 check_within 10 "the password unlocks" compositor_unlocked
 
 # ---- Crash within 10 s of starting: the handler gives up, the launcher restarts ----
 lock_by_ipc
-check_within 5 "locked again" compositor_locked
-check_within 5 "confirmed" state_is secure true
+check_within "$GUARD" "locked again" compositor_locked
+check_within "$GUARD" "confirmed" state_is secure true
 old_shell=$SHELL_PID
 start_lock_watch early-crash
 # A process started just now (Quickshell's clock starts at exec, which the in-place restart
@@ -87,12 +87,12 @@ else
 fi
 check "the launcher saw it exit with 255" lines_more_than "$exits_before" "the shell exited (status 255) while the screen was locked" "$WORK/shell.log"
 check_within 10 "the new shell locks (the marker)" state_is phase locked
-check_within 5 "confirmed" state_is secure true
-sleep 1
+check_within "$GUARD" "confirmed" state_is secure true
+sleep 1 # fixed sleep: a negative claim: the lock watch sees no unlock after the restart either
 stop_lock_watch
 check "the compositor never reported unlocked across the early crash" lock_watch_never_unlocked
 wake_prompt || fail "the prompt did not wake"
-check_within 5 "the methods are known" state_is armed true
+check_within "$GUARD" "the methods are known" state_is armed true
 type_text "$LOCKTEST_PASSWORD"
 press_key Return
 check_within 10 "the password unlocks" compositor_unlocked

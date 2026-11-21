@@ -44,18 +44,18 @@ wake_and_settle() {
 
 # ---- (1) Right after an unlock with edits made while locked ----
 lock_by_ipc
-check_within 5 "locked" compositor_locked
+check_within "$GUARD" "locked" compositor_locked
 echo "// written by tests/lock reload-window.sh while locked" >> "$LOCKTEST_SHELL/singletons/Theme.qml"
 reloads_before=$(reloads)
 unlock_for_test || fail "logind's Unlock did not unlock"
 launcher_ipc lockscreen lock > "$WORK/ipc-1.out" 2>&1
 check "a lock by the launcher's IPC right after the unlock is taken (status 0)" test $? = 0
-check_within 5 "… and locks" compositor_locked
+check_within "$GUARD" "… and locks" compositor_locked
 check "no reload came with the unlock" test "$(reloads)" = "$reloads_before"
 unlock_for_test || fail "logind's Unlock did not unlock"
 wait_until 5 inhibitor_held
 logind_signal sleep
-check_within 5 "a PrepareForSleep right after an unlock locks" compositor_locked
+check_within "$GUARD" "a PrepareForSleep right after an unlock locks" compositor_locked
 wake_and_settle
 unlock_for_test || fail "logind's Unlock did not unlock"
 check "still no reload" test "$(reloads)" = "$reloads_before"
@@ -72,7 +72,7 @@ launcher_ipc lockscreen lock > "$WORK/ipc-2.out" 2>&1
 status=$?
 log "the launcher's call: status $status, said: $(tr '\n' ' ' < "$WORK/ipc-2.out")"
 check "the launcher's lock during the reload ends with status 0" test "$status" = 0
-check_within 5 "… and the screen locks" compositor_locked
+check_within "$GUARD" "… and the screen locks" compositor_locked
 check "the call did not end on \"Not ready\"" test "$(grep -c 'Not ready' "$WORK/ipc-2.out")" = 0
 wait_until 10 shell_status_is locked
 unlock_for_test || fail "logind's Unlock did not unlock"
@@ -94,7 +94,7 @@ for offset in 0 0.4; do
     before=$(shell_log_count "Reloading configuration")
     echo "// written by tests/lock reload-window.sh, unlocked (3, $offset)" >> "$LOCKTEST_SHELL/singletons/Theme.qml"
     wait_until 5 reloading_since "$before" || abort "the shell did not reload on a file change"
-    sleep "$offset"
+    sleep "$offset" # fixed sleep: the moment into the reload is the subject (SERIAL)
     # The inhibitors held when the signal goes out — the ones logind waits for — oldest first
     held_at_signal=$(awk '$1 == "hold" { held[$2] = ++n } $1 == "release" { delete held[$2] } END { for (pid in held) print held[pid], pid }' "$WORK/logind/log" | sort -n | awk '{ print $2 }')
     signal_line=$(wc -l < "$WORK/shell.log")

@@ -61,11 +61,11 @@ check "the bar keeps space at the screen's bottom, none at the top" test "$RESER
 check "the HUD's window covers the whole screen" test "$(hud_origin)" = "0 0"
 
 backup=$(notify "Backup" "Backup running" '{}' 0)
-check_within 5 "a staying toast rests" toast_rests "$backup"
+check_within "$GUARD" "a staying toast rests" toast_rests "$backup"
 check "its top is the gap from the screen's top, no bar there ($(toast_field "$backup" y))" test "$(toast_field "$backup" y)" -eq 16
 
 notify "Shell" "Saved" '{"category": <"x-qs-shell">}' -1 > /dev/null
-check_within 3 "the shell's message shows and rests" pill_resting
+check_within "$GUARD" "the shell's message shows and rests" pill_resting
 pill_bottom=$(( $(pill_field y) + $(pill_field height) ))
 log "the shell's message ends at y ${pill_bottom}, the bar's space starts at $((OUTPUT_HEIGHT - RESERVED_BOTTOM))"
 screenshot hud-bar-bottom
@@ -84,5 +84,5 @@ modal_above_bar() {
     [ "$(toast_field "$backup" modal)" = true ] && [ "$(toast_field "$backup" settled)" = true ] \
         && [ "$(toast_field "$backup" y)" -eq $((OUTPUT_HEIGHT - RESERVED_BOTTOM - height)) ]
 }
-check_within 3 "dropped onto the bar: a modal kept just above it" modal_above_bar || log "the toast: $(shell_ipc toasttest toastRect "$backup"), ${height} px tall"
+check_within "$GUARD" "dropped onto the bar: a modal kept just above it" modal_above_bar || log "the toast: $(shell_ipc toasttest toastRect "$backup"), ${height} px tall"
 check "no protocol errors" no_protocol_errors

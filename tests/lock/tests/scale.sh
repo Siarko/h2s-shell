@@ -83,12 +83,12 @@ for scale in 1.5 3; do
     wait_until 3 scaled "$before" || abort "the scale $scale was not taken"
     log "asked for scale $scale: WAYLAND-1 is now (scale, logical size) $(output_scale WAYLAND-1)"
     lock_by_ipc
-    check_within 5 "scale $scale: locked" compositor_locked
-    sleep 1
+    check_within "$GUARD" "scale $scale: locked" compositor_locked
+    sleep 1 # fixed sleep: a negative claim: nothing wakes the prompt by itself
     check "scale $scale: the prompt sleeps" state_is prompt_awake false
     screenshot_output_ppm WAYLAND-1 "asleep-$scale"
     wake_prompt || fail "scale $scale: the prompt did not wake"
-    sleep 0.5
+    wait_settled WAYLAND-1
     screenshot_output_ppm WAYLAND-1 "awake-$scale"
     check "scale $scale: the prompt shows whole, inside the output" inside "asleep-$scale" "awake-$scale"
     type_text "$LOCKTEST_PASSWORD"
@@ -107,9 +107,9 @@ read -r _ main_width main_height <<< "$(output_scale WAYLAND-1)"
 monitor_rule "$small" 300x260@60 "${main_width}x0" 1
 wait_until 3 small_output_is 300 260 || abort "the small output did not take 300x260 (it is $(output_pixels "$small"))"
 lock_by_ipc
-check_within 5 "small: locked" compositor_locked
-check_within 5 "small: two surfaces" state_is surfaces 2
-sleep 1
+check_within "$GUARD" "small: locked" compositor_locked
+check_within "$GUARD" "small: two surfaces" state_is surfaces 2
+wait_settled "$small"
 screenshot_output_ppm "$small" asleep-small
 moved=0
 for attempt in 1 2 3 4 5; do
@@ -117,7 +117,7 @@ for attempt in 1 2 3 4 5; do
     wait_until 0.5 state_is prompt_screen "$small" && { moved=1; break; }
 done
 check "small: a press on it brings the prompt there" test "$moved" = 1
-sleep 0.5
+wait_settled "$small"
 screenshot_output_ppm "$small" awake-small
 check "small: the prompt is narrowed to fit, whole" inside asleep-small awake-small
 type_text "$LOCKTEST_PASSWORD"

@@ -7,8 +7,8 @@ LOCKTEST_PASSWORD="lt-ßö€é-7"
 stack_start --keymap us-intl
 
 lock_by_ipc
-check_within 5 "locked" compositor_locked
-check_within 5 "armed" state_is armed true
+check_within "$GUARD" "locked" compositor_locked
+check_within "$GUARD" "armed" state_is armed true
 wake_prompt || fail "the prompt did not wake"
 
 type_text "lt-sp5e-7"

@@ -30,32 +30,32 @@ launchers_of_run() {
 # ---- (1) SIGSTOP ----
 stopped=$SHELL_PID
 signal_shell STOP
-sleep 3
+sleep 3 # fixed sleep: a negative claim: the stopped shell is left alone
 check "a stopped shell is left alone (not killed)" test -e "/proc/$stopped"
 check "… it is still stopped" test "$(awk '{ print $3 }' "/proc/$stopped/stat" 2> /dev/null)" = T
 check "… and no other shell was started" test "$(_find_shell_pid)" = "$stopped"
 check "… nor anything killed" test "$(shell_log_count "killing what the shell left behind")" = 0
 signal_shell CONT
-check_within 5 "continued, it answers" shell_ipc lockscreen status
+check_within "$GUARD" "continued, it answers" shell_ipc lockscreen status
 check "the supervisor still watches it" kill -0 "$SUPERVISOR_PID"
 
 # ---- SIGHUP to the launcher (the terminal it was started from closed): not a stop ----
 assert_supervisor_process "$SUPERVISOR_PID"
 kill -HUP "$SUPERVISOR_PID"
 log "sent SIGHUP to the launcher (pid $SUPERVISOR_PID)"
-sleep 1
+sleep 1 # fixed sleep: a negative claim: SIGHUP stops nothing
 check "SIGHUP: the launcher carries on" kill -0 "$SUPERVISOR_PID"
 check "… and so does the shell, untouched" test "$(_find_shell_pid)" = "$stopped"
-check_within 3 "… it said so" grep -aq "SIGHUP (the terminal it was started from closed?): the shell runs on, supervised" "$WORK/shell.log"
+check_within "$GUARD" "… it said so" grep -aq "SIGHUP (the terminal it was started from closed?): the shell runs on, supervised" "$WORK/shell.log"
 
 # ---- (2) A second plain launcher ----
 check "the supervisor holds the lock and wrote its pid" test "$(cat "$RUN/h2s-shell-launcher.lock")" = "$SUPERVISOR_PID"
 spawn "$WORK/second-launcher.log" env "${LAUNCHER_ENV[@]}" "$LOCKTEST_LAUNCHER"
 second=$SPAWNED_PID
-sleep 1
+sleep 1 # fixed sleep: a negative claim: the second launcher starts no shell while it waits
 check "while it waits, one shell" test "$(instances)" = 1
 check_within 10 "the second launcher gives up" grep -aq "still supervises the shell of this session: not starting a second one" "$WORK/second-launcher.log"
-check_within 3 "… and ends" test -z "$(pgrep -P "$second")"
+check_within "$GUARD" "… and ends" test -z "$(pgrep -P "$second")"
 check "one shell, the first one" test "$(instances)" = 1 -a "$(_find_shell_pid)" = "$stopped"
 check "it said why while waiting" grep -aq "another launcher (pid $SUPERVISOR_PID) supervises the shell" "$WORK/second-launcher.log"
 
@@ -72,16 +72,16 @@ dying=$SHELL_PID
 counter=$!
 signal_shell KILL
 wait_until 3 test ! -e "/proc/$dying"
-check_within 3 "the supervisor is in its pause" grep -aq "starting it again in 3 s" "$WORK/shell.log"
+check_within "$GUARD" "the supervisor is in its pause" grep -aq "starting it again in 3 s" "$WORK/shell.log"
 spawn "$WORK/restart.log" env --default-signal=HUP -i "${environment[@]}" "$LOCKTEST_LAUNCHER" --restart
-check_within 6 "the old supervisor was told and ended (during its pause)" test ! -e "/proc/$old_supervisor"
+check_within "$GUARD" "the old supervisor was told and ended (during its pause)" test ! -e "/proc/$old_supervisor"
 new_supervisor() { local pid; for pid in $(launchers_of_run); do [ "$pid" != "$old_supervisor" ] && echo "$pid" && return 0; done; return 1; }
 check_within 10 "a new supervisor runs" new_supervisor
 SUPERVISOR_PID=$(new_supervisor)
 assert_supervisor_process "$SUPERVISOR_PID"
 [ "$(awk '{ print $6 }' "/proc/$SUPERVISOR_PID/stat" 2> /dev/null)" = "$SUPERVISOR_PID" ] && PROCESS_GROUPS+=("$SUPERVISOR_PID")
 check_within 15 "it starts a shell" wait_for_new_shell "$dying" 15
-sleep 5
+sleep 5 # fixed sleep: a negative claim: the sampler sees never two shells over the race
 kill "$counter" 2> /dev/null
 wait "$counter" 2> /dev/null
 log "instances over the race: $(sort "$WORK/instance-count" | uniq -c | tr '\n' ' ')"
@@ -91,7 +91,7 @@ check "one launcher of this run" test "$(launchers_of_run | wc -l)" = 1
 check "the old supervisor did not start a shell" test "$(shell_log_count "started the shell: pid")" = 1
 check "the lock names the new supervisor" test "$(cat "$RUN/h2s-shell-launcher.lock")" = "$SUPERVISOR_PID"
 lock_by_ipc
-check_within 5 "the new shell locks" compositor_locked
+check_within "$GUARD" "the new shell locks" compositor_locked
 unlock_for_test
 check "… and unlocks" compositor_unlocked
 log "the launcher log: $(tr '\n' '|' < "$RUN/h2s-shell-launcher.log")"

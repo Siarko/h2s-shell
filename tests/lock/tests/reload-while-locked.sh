@@ -8,14 +8,14 @@ stack_start
 
 check "file watching is on while unlocked" state_is watch_files true
 lock_by_ipc
-check_within 5 "locked" compositor_locked
-check_within 5 "confirmed" state_is secure true
+check_within "$GUARD" "locked" compositor_locked
+check_within "$GUARD" "confirmed" state_is secure true
 check "file watching is off while locked" state_is watch_files false
 
 reloads_before=$(grep -ac "Reloading configuration" "$WORK/shell.log")
 echo "// written by tests/lock reload-while-locked.sh while locked" >> "$LOCKTEST_SHELL/singletons/Theme.qml"
 log "wrote to the shell's copy while locked"
-sleep 4
+sleep 4 # fixed sleep: a negative claim: no reload follows the edit
 check "no reload while locked" test "$(grep -ac "Reloading configuration" "$WORK/shell.log")" = "$reloads_before"
 check "still locked (compositor)" compositor_locked
 check "still locked (shell)" shell_status_is locked
@@ -25,8 +25,8 @@ wake_prompt || fail "the prompt did not wake"
 type_text "$LOCKTEST_PASSWORD"
 press_key Return
 check_within 10 "the password unlocks" compositor_unlocked
-check_within 5 "file watching is on again after the unlock" state_is watch_files true
-sleep 1
+check_within "$GUARD" "file watching is on again after the unlock" state_is watch_files true
+sleep 1 # fixed sleep: a negative claim: no reload follows the unlock
 check "the unlock itself did not reload (edit-while-locked.sh)" \
     test "$(grep -ac "Reloading configuration" "$WORK/shell.log")" = "$reloads_before"
 
@@ -38,7 +38,7 @@ check_within 10 "the reloaded shell answers" shell_status_is unlocked
 check "the same process (a reload, not a restart)" kill -0 "$SHELL_PID"
 
 lock_by_ipc
-check_within 5 "the reloaded shell locks" compositor_locked
-check_within 5 "… and the compositor confirms it" state_is secure true
+check_within "$GUARD" "the reloaded shell locks" compositor_locked
+check_within "$GUARD" "… and the compositor confirms it" state_is secure true
 unlock_for_test
 check "… and unlocks again" compositor_unlocked

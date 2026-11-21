@@ -27,8 +27,8 @@ print(count)' "$WORK/$1.ppm"
 }
 now_us() { echo "${EPOCHREALTIME//[.,]/}"; }
 
-sleep 1
-screenshot_ppm desktop
+window_shows() { screenshot_ppm desktop > /dev/null && [ "$(magenta_pixels desktop)" -gt 10000 ]; }
+wait_until "$GUARD" window_shows
 before=$(magenta_pixels desktop)
 log "stand-in window pixels before the lock (every 7th sampled): $before"
 [ "$before" -gt 10000 ] || abort "the stand-in window does not show before the lock"
@@ -55,8 +55,8 @@ for shot in $(seq 1 20); do
     started_at[$shot]=$(now_us)
     screenshot_ppm "fade-$shot"
 done
-check_within 5 "locked" compositor_locked
-check_within 5 "confirmed" state_is secure true
+check_within "$GUARD" "locked" compositor_locked
+check_within "$GUARD" "confirmed" state_is secure true
 wait_until 5 test -e "$WORK/secure-at" || fail "the poll never saw the confirmation"
 kill "$poller" 2> /dev/null
 wait "$poller" 2> /dev/null

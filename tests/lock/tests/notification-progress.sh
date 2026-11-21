@@ -29,11 +29,11 @@ sys.exit(0 if held == json.loads(sys.argv[1]) else 1)' "$1"
 
 id=$(notify_hints 0 "Sending" '{"value": <int32 10>}')
 check "the server gave the notification an id" test -n "$id"
-check_within 5 "one entry, its bar at 10 %" notifications_are "[[$id, \"Sending\", true, 0.1, \"running\"]]"
+check_within "$GUARD" "one entry, its bar at 10 %" notifications_are "[[$id, \"Sending\", true, 0.1, \"running\"]]"
 
 replaced=$(notify_hints "$id" "Sending" '{"value": <int32 60>}')
 check "the replacement keeps the id" test "$replaced" = "$id"
-check_within 5 "still one entry, its bar at 60 %" notifications_are "[[$id, \"Sending\", true, 0.6, \"running\"]]"
+check_within "$GUARD" "still one entry, its bar at 60 %" notifications_are "[[$id, \"Sending\", true, 0.6, \"running\"]]"
 
 notify_hints "$id" "Sent" "{\"value\": <int32 60>, \"x-qs-progress-state\": <'done'>}" > /dev/null
-check_within 5 "done: one entry, its bar full" notifications_are "[[$id, \"Sent\", true, 1, \"done\"]]"
+check_within "$GUARD" "done: one entry, its bar full" notifications_are "[[$id, \"Sent\", true, 1, \"done\"]]"

@@ -63,8 +63,8 @@ click_badge() {
 
 updates=$(notify_staying "Updates ready")
 notify_staying "More updates" > /dev/null
-check_within 5 "a staying toast rests on the first screen" toast_settled "$updates"
-check_within 5 "the next waits: the staying badge shows beside it, at rest" badge_settled
+check_within "$GUARD" "a staying toast rests on the first screen" toast_settled "$updates"
+check_within "$GUARD" "the next waits: the staying badge shows beside it, at rest" badge_settled
 right_before=$(toast_right "$updates")
 badge_before=$(badge_right)
 log "the toast's right edge at $right_before, the badge's at $badge_before"
@@ -72,24 +72,24 @@ log "the toast's right edge at $right_before, the badge's at $badge_before"
 # ---- The badge opens the centre on its screen; the column stands left of it ----
 click_badge
 centre_open() { [ "$(popup_field open)" = true ] && [ "$(popup_field content)" = notifications ]; }
-check_within 3 "a click on the badge opens the centre" centre_open
+check_within "$GUARD" "a click on the badge opens the centre" centre_open
 centre_placed() { [ -n "$(centre_field screen)" ]; }
-check_within 3 "… its place told to the toasts" centre_placed
+check_within "$GUARD" "… its place told to the toasts" centre_placed
 screen_a=$(centre_field screen)
 log "the centre open on $screen_a at x $(centre_field x), $(centre_field width) px wide"
 check "… on the badge's screen (the first)" test "$screen_a" = WAYLAND-1
 check "the centre reaches into the toasts' column (else the next checks prove nothing)" \
     test "$(centre_field x)" -lt "$badge_before"
-check_within 3 "the toast and its badge move left of the centre, by the gap" column_left_of_centre "$updates"
+check_within "$GUARD" "the toast and its badge move left of the centre, by the gap" column_left_of_centre "$updates"
 check "the column stands free of the screen's edge" test "$(centre_field free)" = true
 screenshot toast-beside-centre
 check "the toast still shows (staying), the next still waits (its badge)" test -n "$(toast_field "$updates" x)" -a -n "$(badge_field x)"
 
 # ---- The badge again: the centre closes, the column slides back ----
 click_badge
-check_within 3 "a click on the badge with the centre open closes it" centre_closed
-check_within 3 "the toast slides back to its place" toast_back "$updates" "$right_before"
-check_within 3 "… and the badge to the screen's edge" badge_back
+check_within "$GUARD" "a click on the badge with the centre open closes it" centre_closed
+check_within "$GUARD" "the toast slides back to its place" toast_back "$updates" "$right_before"
+check_within "$GUARD" "… and the badge to the screen's edge" badge_back
 
 # ---- Two outputs: the badge's own screen, never the other one ----
 hyprctl output create headless > /dev/null
@@ -109,15 +109,15 @@ log "a second output, $B: the pointer's extent ${EXTENT_WIDTH}x${EXTENT_HEIGHT}"
 two_bars() { [ "$(hyprctl -j layers | python3 -I -c '
 import json, sys
 print(sum(1 for monitor in json.load(sys.stdin).values() for level in monitor["levels"].values() for layer in level if layer["namespace"] == "hud"))')" = 2 ]; }
-check_within 5 "a HUD on each output" two_bars
-check_within 3 "the badge still shows on the first screen" badge_settled
+check_within "$GUARD" "a HUD on each output" two_bars
+check_within "$GUARD" "the badge still shows on the first screen" badge_settled
 
 for round in 1 2; do
-    check_within 3 "round $round: the badge at rest by the screen's edge" badge_back
+    check_within "$GUARD" "round $round: the badge at rest by the screen's edge" badge_back
     click_badge
-    check_within 3 "round $round: the badge opens the centre on its own screen ($screen_a), not $B" centre_open_on "$screen_a"
-    check_within 3 "… the column left of it" column_left_of_centre "$updates"
+    check_within "$GUARD" "round $round: the badge opens the centre on its own screen ($screen_a), not $B" centre_open_on "$screen_a"
+    check_within "$GUARD" "… the column left of it" column_left_of_centre "$updates"
     click_badge
-    check_within 3 "… the badge again closes it, rather than moving it to $B" centre_closed
+    check_within "$GUARD" "… the badge again closes it, rather than moving it to $B" centre_closed
 done
 check "no protocol errors" no_protocol_errors

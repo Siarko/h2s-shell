@@ -13,7 +13,7 @@
 stack_start --launcher-timings "first=0.5"
 
 lock_by_ipc
-check_within 5 "locked" compositor_locked
+check_within "$GUARD" "locked" compositor_locked
 check "the marker says locked (a shell that dies would be restarted)" marker_file_is locked
 
 socket=$RUN/wayland-1
@@ -39,7 +39,7 @@ kill -KILL "$hyprland"
 log "killed the nested Hyprland (pid $hyprland)"
 check_within 10 "the launcher stops: the compositor is gone" grep -aq "the compositor is gone: not starting" "$WORK/shell.log"
 check "it said why: nobody holds the socket's lock" grep -aq "nobody holds $socket.lock: the compositor is dead" "$WORK/shell.log"
-check_within 3 "the launcher ended" test ! -e "/proc/$supervisor"
+check_within "$GUARD" "the launcher ended" test ! -e "/proc/$supervisor"
 check "the socket file was left behind (what fooled the old check)" test -S "$socket"
 check "no restart was attempted" test "$(shell_log_count "starting it again in")" = 0
 check "no shell of this run is left" test -z "$(_find_shell_pid)"

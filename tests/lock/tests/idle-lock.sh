@@ -10,20 +10,20 @@ idle_lock_safe() { compositor_locked && _password_stack_is_ours_and_safe; }
 # Activity every second for 5 s: never 3 s idle
 for second in 1 2 3 4 5; do
     move_pointer $((600 + second * 10)) 400
-    sleep 1
+    sleep 1 # fixed sleep: activity once a second, never 3 s apart, is the subject
 done
 check "kept busy: not locked" compositor_unlocked
 check "and no screensaver (it is off)" state_is screensaver false
 
-check_within 8 "3 s without input: locked" compositor_locked
-check_within 5 "ready for a password (test stack)" idle_lock_safe
+check_within "$GUARD" "3 s without input: locked" compositor_locked
+check_within "$GUARD" "ready for a password (test stack)" idle_lock_safe
 wake_prompt || fail "the prompt did not wake"
 type_text "$LOCKTEST_PASSWORD"
 press_key Return
 check_within 10 "the password unlocks" compositor_unlocked
 
-check_within 8 "idle again: locked AGAIN" compositor_locked
-check_within 5 "the second lock is ready for a password" idle_lock_safe
+check_within "$GUARD" "idle again: locked AGAIN" compositor_locked
+check_within "$GUARD" "the second lock is ready for a password" idle_lock_safe
 wake_prompt || fail "the prompt did not wake"
 type_text "$LOCKTEST_PASSWORD"
 press_key Return

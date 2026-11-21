@@ -34,13 +34,15 @@ parent_is_alive() {
     [ "$current_parent" = "$parent" ]
 }
 # Nobody answering: by default the round fails after 120 s. With finger/timeout (seconds,
-# finger_timeout in lib.sh) it ends after that long as pam_fprintd's own time-out does — in
-# PAM's Error: timedout.<helper> tells the stack's next line (finger-error.sh) to fail
+# to a tenth: finger_timeout in lib.sh) it ends after that long as pam_fprintd's own
+# time-out does — in PAM's Error: timedout.<helper> tells the stack's next line
+# (finger-error.sh) to fail
 rounds=1200 timeout_is_error=0
 if [ -e "$directory/timeout" ]; then
     read -r seconds < "$directory/timeout"
-    if [[ "$seconds" =~ ^[0-9]+$ ]] && [ "$seconds" -gt 0 ]; then
-        rounds=$((seconds * 10)) timeout_is_error=1
+    if [[ "$seconds" =~ ^([0-9]+)(\.([0-9]))?$ ]]; then
+        tenths=$((10#${BASH_REMATCH[1]} * 10 + 10#${BASH_REMATCH[3]:-0}))
+        [ "$tenths" -gt 0 ] && rounds=$tenths timeout_is_error=1
     fi
 fi
 for ((round = 0; round < rounds; round++)); do

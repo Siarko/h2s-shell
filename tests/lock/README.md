@@ -12,17 +12,30 @@ tests/lock/run.sh relock harness      # some of them, by file name without .sh
 LOCKTEST_KEEP=1 tests/lock/run.sh     # keep logs and screenshots even when all pass
 tests/lock/run.sh -j 3                # at most 3 tests at a time (LOCKTEST_JOBS=3 too)
 tests/lock/run.sh -j 1                # one after another, output as it comes
+LOCKTEST_RERUN=0 tests/lock/run.sh    # no second run, alone, of a test that failed
+LOCKTEST_SLOW=2 tests/lock/run.sh     # every check_within deadline doubled (a slow machine)
+tests/lock/selftest.sh                # the runner's own checks (lint, FLAKY), in seconds
 LOCKTEST_EXTRA_TESTS=<dir> tests/lock/run.sh <name>   # a test from another directory (a module's repository)
 ```
 
 Exit status 0 when every test passed or failed exactly as expected, 1 when one failed (or
-a test marked as failing passed; a test whose stack does not come up counts as failed),
-2 when the test bed could not be set up before any test ran (tools, launcher, paths),
-130 when interrupted. A full run takes about three minutes with the default four tests at
-a time, about fifteen one after another (each test starts its own stack, in
+a test marked as failing passed; a test whose stack does not come up counts as failed; so
+does a FLAKY one, below, and a scenario with a fixed sleep that does not say why), 2 when
+the test bed could not be set up before any test ran (tools, launcher, paths), 130 when
+interrupted. A full run takes some two minutes with eight tests at a time (32 threads),
+about three with four, some ten one after another (each test starts its own stack, in
 2–3 s; the idle tests wait out real idle timeouts, the crash tests Quickshell's 10 s before
 it restarts a crash in place; the launcher's restart pauses are shortened where a test only
-needs their schedule, `--launcher-timings`).
+needs their schedule, `--launcher-timings`, and so are the lock's own, `--timings`).
+
+**A failed test runs again, alone.** At the end of the run each test that failed runs once
+more with nothing else of the run going on. Passing then, it is **FLAKY**: it still fails
+the run — what fails one run in two is a defect of the test or of the shell — and it gets a
+line in `${XDG_CACHE_HOME:-~/.cache}/h2s-shell-tests/flaky.log` (the date, the test, the
+commit, the machine's load when it failed, the jobs, where its first log is kept: beside
+the second's, as `<name>.first/`). Failing again, it is a FAIL ("and again, alone").
+`LOCKTEST_RERUN=0` runs nothing twice. A test that checked nothing, or passed against its
+`EXPECTED_TO_FAIL` mark, is not run again: another run cannot change those.
 
 **One run at a time on a machine.** The tests depend on timing, and a run starts as many
 at once as the machine keeps on schedule; a second run beside it would have both fail for
@@ -45,8 +58,9 @@ Ctrl-C (or SIGTERM/SIGHUP) stops the running tests and their stacks, sweeps, rem
 runtime and artifacts dirs (kept with `LOCKTEST_KEEP=1`) and exits 130.
 
 **Several at a time.** `-j N` (or `LOCKTEST_JOBS`) runs at most N tests at once; the default
-is one fewer than the cores, at most 4 (with 5 stacks on 6 cores the launcher's restart
-tests no longer keep to their schedule). Each test has its own stack, runtime dir,
+is a quarter of the cores, at least 4 and at most 8, never more than one fewer than the
+cores (with 5 stacks on 6 cores the launcher's restart tests no longer keep to their
+schedule, so a 6-core machine keeps 4). Each test has its own stack, runtime dir,
 artifacts dir, copy of the shell and marker (`LOCKTEST_TEST_ID`, beside the run's
 `LOCKTEST_RUN_ID`): what a test looks for among processes (`run_processes`, `test_pgrep`,
 the checks before a signal) is its own, and the sweep after a test kills only what carries
@@ -448,7 +462,7 @@ A file `tests/<name>.sh`, sourced after `lib.sh` in a fresh bash:
 # What it checks, and why.
 stack_start                       # or: stack_start --methods "password fingerprint"
 lock_by_ipc
-check_within 5 "lock by IPC locks the compositor" compositor_locked
+check_within "$GUARD" "lock by IPC locks the compositor" compositor_locked
 wake_prompt || fail "the prompt did not wake"
 type_text "$LOCKTEST_PASSWORD"
 press_key Return
@@ -508,7 +522,24 @@ check a `head` that hangs (`H2S_SHELL_TEST_MODULE_CHECK_PATH`) and a 15 s deadli
 (`--log-times`). `scripts/lock-log.sh` is run against the test shell in `lock-log`.
 
 `check <description> <command…>` and `check_within <seconds> <description> <command…>`
-print PASS or FAIL and count; `abort` ends the test for a setup failure (`FAIL (setup)`);
+print PASS or FAIL and count. A `check_within` deadline guards against a hang; it is not a
+claim about time: the check passes as soon as its condition holds, so a generous deadline
+costs nothing when all is well, and a tight one fails on a loaded machine for no fault of
+the shell. Its seconds are scaled by `LOCKTEST_SLOW` and never fewer than `$GUARD` (10 s;
+write `check_within "$GUARD"` for an ordinary wait). A check whose subject IS a time bound
+uses `check_timed <seconds>`, which keeps its number, and its test goes in `SERIAL` with its
+reason. A wait for a fade to end (before a screenshot) is `wait_settled [output]`: two
+screenshots in a row the same.
+
+**No fixed sleeps.** A scenario waits on conditions; `lint.sh` (run by `run.sh` on the
+scenarios of each run, and by `selftest.sh`) refuses a `sleep` that does not say why on its
+own line, after `# fixed sleep: `. What may sleep: a negative claim ("nothing unlocks it in
+a second"), a stand-in that never answers, input paced on purpose, a moment that is the
+subject (`reload-window`). `lint.sh --list` lists them with their reasons. A one-line poll
+loop (`until …; do sleep 0.5; done`) is a wait on a condition, and passes. A finding fails
+the run.
+
+`abort` ends the test for a setup failure (`FAIL (setup)`); `abort` ends the test for a setup failure (`FAIL (setup)`);
 the test fails if any check failed, and so does one that prints no PASS line (it checked
 nothing). `check_within` re-runs its command, but its arguments
 were expanded once: to wait on something that changes, pass a function (`no_finger_waiters`,

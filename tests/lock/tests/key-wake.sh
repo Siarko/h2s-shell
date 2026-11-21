@@ -6,20 +6,20 @@
 stack_start
 
 lock_by_ipc
-check_within 5 "locked" compositor_locked
-check_within 5 "the compositor confirmed the lock" state_is secure true
-sleep 0.5
+check_within "$GUARD" "locked" compositor_locked
+check_within "$GUARD" "the compositor confirmed the lock" state_is secure true
+sleep 0.5 # fixed sleep: a negative claim: nothing wakes the prompt by itself
 check "the prompt sleeps" state_is prompt_awake false
 
 # An Enter that wakes the prompt: nothing typed, nothing sent, refused as empty
 press_key Return
-check_within 3 "Enter wakes the prompt" state_is prompt_awake true
-check_within 2 "and is refused as an empty password" state_is refusal empty
+check_within "$GUARD" "Enter wakes the prompt" state_is prompt_awake true
+check_within "$GUARD" "and is refused as an empty password" state_is refusal empty
 check "nothing was checked" test ! -e "$WORK/pam/check.log"
 
 # Back to sleep: Escape at an awake prompt hides it (as its time-out would, 10 s later)
 press_key Escape
-check_within 3 "Escape puts the prompt back to sleep" state_is prompt_awake false
+check_within "$GUARD" "Escape puts the prompt back to sleep" state_is prompt_awake false
 check "… still locked" compositor_locked
 check "… the refusal is gone with it" state_is refusal ""
 

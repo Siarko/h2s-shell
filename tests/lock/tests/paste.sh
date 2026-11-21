@@ -11,14 +11,13 @@
 
 stack_start
 lock_by_ipc
-check_within 5 "locked" compositor_locked
-check_within 5 "armed" state_is armed true
+check_within "$GUARD" "locked" compositor_locked
+check_within "$GUARD" "armed" state_is armed true
 
 pasted="lt-PASTED-from-the-desktop"
 wl-copy --primary "$pasted" 2> "$WORK/wl-copy.log"
-sleep 0.5
-check "the primary selection holds the text (the test bed can set it while locked)" \
-    test "$(timeout 5 wl-paste --primary --no-newline 2> /dev/null)" = "$pasted"
+primary_holds() { [ "$(timeout 5 wl-paste --primary --no-newline 2> /dev/null)" = "$pasted" ]; }
+check_within "$GUARD" "the primary selection holds the text (the test bed can set it while locked)" primary_holds
 
 wake_prompt || fail "the prompt did not wake"
 # The top-left pixel (where the catcher was), then down the middle of the screen through
@@ -28,7 +27,7 @@ for spot in "0 0" "1 1" $(for y in $(seq 380 12 700); do echo "960_$y"; done) "1
     send_input "abs ${spot% *} ${spot#* } 1920 1080" "click middle"
 done
 send_input "abs 0 0 1920 1080" "click middle"
-sleep 0.5
+sleep 0.5 # fixed sleep: a negative claim: the middle clicks submit nothing
 check "the prompt is still awake" state_is prompt_awake true
 check "nothing was submitted by the clicks" test ! -s "$WORK/pam/check.log"
 

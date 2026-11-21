@@ -18,7 +18,7 @@ mkdir -p "$standins" || abort "cannot make $standins"
 cat > "$standins/head" << 'SCRIPT'
 #!/bin/sh
 # A read that does not answer: longer than this test, then gives up
-sleep 40
+sleep 40 # fixed sleep: a stand-in that never answers
 exit 1
 SCRIPT
 chmod +x "$standins/head"

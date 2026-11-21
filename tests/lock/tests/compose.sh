@@ -7,8 +7,8 @@ LOCKTEST_PASSWORD="lt-café-1"
 stack_start --keymap us-compose
 
 lock_by_ipc
-check_within 5 "locked" compositor_locked
-check_within 5 "armed" state_is armed true
+check_within "$GUARD" "locked" compositor_locked
+check_within "$GUARD" "armed" state_is armed true
 wake_prompt || fail "the prompt did not wake"
 
 type_text "lt-caf"
@@ -24,8 +24,8 @@ check "PAM got exactly the password's bytes" test "$(password_details | tail -n 
 # the sequence — nothing of it is typed — and the Backspace still deletes as usual (the f
 # before it, observed), so the f is typed again before the whole sequence
 lock_by_ipc
-check_within 5 "locked again" compositor_locked
-check_within 5 "armed again" state_is armed true
+check_within "$GUARD" "locked again" compositor_locked
+check_within "$GUARD" "armed again" state_is armed true
 wake_prompt || fail "the prompt did not wake"
 type_text "lt-caf"
 press_key Multi_key

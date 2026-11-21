@@ -16,8 +16,8 @@
 stack_start --no-lock-restore --hyprland-debug
 
 lock_by_ipc
-check_within 5 "locked" compositor_locked
-check_within 5 "confirmed" state_is secure true
+check_within "$GUARD" "locked" compositor_locked
+check_within "$GUARD" "confirmed" state_is secure true
 
 old_shell=$SHELL_PID
 start_lock_watch no-restore
@@ -32,7 +32,7 @@ check "the marker file still says locked" marker_file_is locked
 check "it did not ask for a lock Hyprland would refuse" test "$(shell_log_count '"type":"lockRequested","source":"restore"')" = 0
 looks_at_refusal=$(shell_log_count "taking the lock back again in")
 refused_shell=$SHELL_PID
-sleep 12
+sleep 12 # fixed sleep: a negative claim: no hot loop — the looks counted over 12 s (the backoff table, 5 s then 10 s, is the shell's own)
 looks=$(( $(shell_log_count "taking the lock back again in") - looks_at_refusal ))
 log "looks at Hyprland in 12 s after the first refusal: $looks"
 check "no hot loop: at most 2 more looks in 12 s (after 5 s, then 10 s)" test "$looks" -le 2
@@ -42,7 +42,7 @@ check "the shell was not killed, the launcher restarted nothing" test "$(_find_s
 check "the compositor is still locked" compositor_locked
 check "the status still says compositor-locked" shell_status_is compositor-locked
 shell_ipc lockscreen lock > /dev/null
-sleep 1
+sleep 1 # fixed sleep: a negative claim: the request does not ask the compositor
 check "a lock request meanwhile does not ask the compositor either" test "$(shell_log_count '"type":"lockRequested"')" = 1
 check "… and the shell is still the same process" test "$(_find_shell_pid)" = "$refused_shell"
 
@@ -55,14 +55,14 @@ option=$(hyprctl -j getoption misc:allow_session_lock_restore 2>&1 | tr -d '\n '
 log "getoption → $option"
 check "hyprctl eval switches the setting on at runtime" grep -q '"bool":true' <<< "$option"
 check_within 45 "the shell's next look takes the lock" state_is phase locked
-check_within 5 "confirmed" state_is secure true
+check_within "$GUARD" "confirmed" state_is secure true
 check "its status says locked" shell_status_is locked
 stop_lock_watch
 check "the compositor never reported unlocked throughout" lock_watch_never_unlocked
 wake_prompt || fail "the prompt did not wake"
-check_within 5 "the methods are known" state_is armed true
+check_within "$GUARD" "the methods are known" state_is armed true
 type_text "$LOCKTEST_PASSWORD"
 press_key Return
 check_within 10 "the password unlocks" compositor_unlocked
-check_within 3 "the marker says unlocked" state_is marker unlocked
+check_within "$GUARD" "the marker says unlocked" state_is marker unlocked
 log "Hyprland on the lock: $(sed 's/\x1b\[[0-9;]*m//g' "$WORK/hyprland.log" | grep -a -E 'SessionLock|sessionLock|lockscreen|relock|restore' | grep -v -i 'clock\|LED\|Mod index' | tr '\n' '|')"

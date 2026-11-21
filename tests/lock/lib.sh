@@ -20,6 +20,8 @@
 # XDG_DATA_DIRS, and two settings for a test:
 #   LOCKTEST_QT_LOGGING    QT_LOGGING_RULES for the shell under test
 #   LOCKTEST_PROCESS_TIMEOUT  the cap on each process of the stack, in seconds
+#   LOCKTEST_SLOW          a factor for every check_within deadline (2 on a machine known
+#                          to be slow; a whole number, 1 by default)
 #
 # run.sh starts this bash with no new privileges (setpriv --no-new-privs): everything
 # below inherits that, so no setuid program (pkexec, unix_chkpwd) gains anything.
@@ -38,6 +40,16 @@ LOCKTEST_PROCESS_TIMEOUT=${LOCKTEST_PROCESS_TIMEOUT:-300}
 # checked to be it (stack_start), and the tests' pointer coordinates are written for it
 LOCKTEST_OUTPUT_SIZE=1920x1080
 OUTPUT_WIDTH=1920 OUTPUT_HEIGHT=1080
+
+# A check_within deadline only guards a hang: the check passes as soon as its condition
+# holds, so a generous deadline costs nothing when all is well, and a tight one fails on a
+# loaded machine for no fault of the shell. GUARD is the least any check_within waits
+# (seconds; scaled by LOCKTEST_SLOW, as every deadline is). A check whose subject IS a time
+# bound uses check_timed, which keeps its number — and such a test runs alone (run.sh,
+# SERIAL), on a machine with nothing else going on.
+LOCKTEST_SLOW=${LOCKTEST_SLOW:-1}
+[[ "$LOCKTEST_SLOW" =~ ^[1-9][0-9]*$ ]] || LOCKTEST_SLOW=1
+GUARD=$((10 * LOCKTEST_SLOW))
 
 WORK=$LOCKTEST_ARTIFACTS
 TOOLS=$LOCKTEST_TOOLS
@@ -139,8 +151,23 @@ check() {
     return 1
 }
 
-# check_within <seconds> <description> <command...>
+# check_within <seconds> <description> <command...>: the condition holds within the
+# deadline — a guard against a hang, not a claim about time: <seconds> is scaled by
+# LOCKTEST_SLOW and never less than GUARD
 check_within() {
+    local seconds description=$2
+    seconds=$(awk -v seconds="$1" -v slow="$LOCKTEST_SLOW" -v guard="$GUARD" \
+        'BEGIN { seconds *= slow; printf "%g", seconds < guard ? guard : seconds }')
+    shift 2
+    if wait_until "$seconds" "$@"; then pass "$description"; return 0; fi
+    fail "$description (not within ${seconds} s)"
+    return 1
+}
+
+# check_timed <seconds> <description> <command...>: the condition holds within exactly
+# <seconds> — for a check whose subject is that time bound (the test belongs in run.sh's
+# SERIAL then); everything else uses check_within
+check_timed() {
     local seconds=$1 description=$2
     shift 2
     if wait_until "$seconds" "$@"; then pass "$description"; return 0; fi
@@ -1200,6 +1227,25 @@ screenshot() { grim "$WORK/$1.png" 2> /dev/null && log "screenshot $1.png"; }
 # screenshot_output_ppm <output> <name>: one output only, as <name>.ppm
 screenshot_output_ppm() { grim -o "$1" -t ppm "$WORK/$2.ppm" 2> /dev/null; }
 
+# wait_settled [output]: waits (a guard's time) until two screenshots in a row — of
+# <output>, else of the whole screen — are the same: a fade has ended, and the next
+# screenshot shows where things rest. A screen that never settles is a failure
+wait_settled() {
+    rm -f "$WORK/.settle.ppm" "$WORK/.settle-previous.ppm"
+    wait_until "$GUARD" _screen_settled "${1:-}" && return 0
+    fail "the screen${1:+ $1} settled (two screenshots in a row the same)"
+    return 1
+}
+_screen_settled() {
+    if [ -n "$1" ]; then grim -o "$1" -t ppm "$WORK/.settle.ppm"; else grim -t ppm "$WORK/.settle.ppm"; fi 2> /dev/null || return 1
+    if [ -f "$WORK/.settle-previous.ppm" ] && cmp -s "$WORK/.settle.ppm" "$WORK/.settle-previous.ppm"; then
+        rm -f "$WORK/.settle.ppm" "$WORK/.settle-previous.ppm"
+        return 0
+    fi
+    mv -f "$WORK/.settle.ppm" "$WORK/.settle-previous.ppm"
+    return 1
+}
+
 # What the password stack received, per check, in order: "length <bytes> sha256 <hex>"
 # lines (pam/check-detail.log; never the text), and the line a string would give
 password_details() { cat "$WORK/pam/check-detail.log" 2> /dev/null; }
@@ -1276,6 +1322,19 @@ def read_ppm(path):
     return int(fields[1]), int(fields[2]), data[position:]
 '
 
+# reddish_above <count> <name>: more than <count> clearly red pixels in the prompt's area
+# (reddish_pixels, a new screenshot <name>.ppm each time): for waiting on an error's colour
+reddish_above() { [ "$(reddish_pixels "$2")" -gt "$1" ]; }
+
+# relaunch_decided <lines before>: after a crash past Quickshell's 10 s, its in-place
+# relaunch has either come back without its config path (`Launching config: ""` beyond the
+# <lines before> there were) or come up and answers — whichever, the test knows which way
+# it went
+relaunch_decided() {
+    lines_more_than "$1" 'Launching config: ""' "$WORK/shell.log" && return 0
+    timeout 2 "$LOCKTEST_QS" ipc --pid "$SHELL_PID" call lockscreen status > /dev/null 2>&1
+}
+
 # ---- The fingerprint stand-in -------------------------------------------------------
 
 # Live waiting conversations: waiting.<pid> files whose process still exists
@@ -1310,7 +1369,7 @@ no_finger_waiters() { [ -z "$(finger_waiters)" ]; }
 # were expanded once)
 lines_more_than() { [ "$(grep -c -- "$2" "$3" 2> /dev/null)" -gt "$1" ]; }
 
-# finger_timeout <seconds>: from the next round on, a round nobody answers ends after that
+# finger_timeout <seconds>: (to a tenth) from the next round on, a round nobody answers ends after that
 # long in PAM's Error, as pam_fprintd's own time-out does (wait-finger.sh, finger-error.sh);
 # `finger_timeout 0` puts the default back (a plain failure after 120 s)
 finger_timeout() {

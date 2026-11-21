@@ -94,7 +94,7 @@ screenshot_ppm good-on
 
 # Its settings page (System tab, from its manifest)
 check "its settings page opens (settings openPage good)" test -z "$(shell_ipc settings openPage good)"
-sleep 1
+wait_settled
 screenshot good-settings
 check "… built without an error (a page that fails is recorded in its status)" test "$(module_field good errors)" = "[]"
 shell_ipc settings close > /dev/null
@@ -105,16 +105,16 @@ cell_y=$(python3 -I -c 'import json,sys; r=json.loads(sys.argv[1]); print(r["y"]
 move_pointer "$cell_x" "$cell_y"
 send_input "click left"
 popup_is() { shell_ipc shelltest popupState | python3 -I -c 'import json,sys; s=json.load(sys.stdin); sys.exit(0 if (s["open"], s["content"]) == (sys.argv[1] == "open", sys.argv[2]) else 1)' "$1" "$2"; }
-check_within 5 "a click on its cell opens its popup panel" popup_is open good
+check_within "$GUARD" "a click on its cell opens its popup panel" popup_is open good
 screenshot good-popup
 
 # Off over IPC: the widget and its IPC go; on again: back
 check "modules setEnabled good false" test -z "$(shell_ipc modules setEnabled good false)"
-check_within 5 "good: disabled" module_state_is good disabled
+check_within "$GUARD" "good: disabled" module_state_is good disabled
 cell_gone() { ! cell_shown; }
-check_within 5 "its widget left the bar (its bar entry kept, nothing shown)" cell_gone
+check_within "$GUARD" "its widget left the bar (its bar entry kept, nothing shown)" cell_gone
 popup_gone() { ! popup_is open good; }
-check_within 5 "… and its popup, open, closed" popup_gone
+check_within "$GUARD" "… and its popup, open, closed" popup_gone
 screenshot_ppm good-off
 region_changes() {
     python3 -I -c "$_PPM_READER"'
@@ -135,7 +135,7 @@ log "pixels of good's cell that changed when it went: $changed"
 check "the screenshot showed it (its cell changed when it went)" test "${changed:-0}" -gt 20
 check "its IPC target went with its main" test "$(shell_ipc good ping 2>&1)" != "pong 1"
 check "modules setEnabled good true" test -z "$(shell_ipc modules setEnabled good true)"
-check_within 5 "good: loaded again" module_state_is good loaded
+check_within "$GUARD" "good: loaded again" module_state_is good loaded
 check_within 10 "… its widget back in the bar" cell_shown
 check "… its IPC back, one main" test "$(shell_ipc good ping)" = "pong 1"
 check "the shell logged the broken module" grep -aq "\[Modules\] broken failed" "$WORK/shell.log"
@@ -143,10 +143,10 @@ check "the shell logged the exception it could not see" grep -aq "broken-main fi
 
 # The lock, with every one of them installed
 lock_by_ipc
-check_within 5 "lock by IPC locks the compositor" compositor_locked
-check_within 5 "the compositor confirmed it" state_is secure true
+check_within "$GUARD" "lock by IPC locks the compositor" compositor_locked
+check_within "$GUARD" "the compositor confirmed it" state_is secure true
 wake_prompt || fail "the prompt did not wake"
-check_within 5 "the methods are known" state_is armed true
+check_within "$GUARD" "the methods are known" state_is armed true
 type_text "$LOCKTEST_PASSWORD"
 press_key Return
 check_within 10 "the password unlocks" compositor_unlocked
@@ -161,8 +161,10 @@ started=$(stat -c %Y "/proc/$SHELL_PID")
 until [ $(($(date +%s) - started)) -ge 12 ]; do sleep 0.5; done
 crashed_shell=$SHELL_PID
 failed_relaunches_before=$(shell_log_count 'Launching config: ""')
+crashes_before=$(shell_log_count "Quickshell has been restarted")
 signal_shell SEGV
-sleep 2
+crash_handled() { lines_more_than "$crashes_before" "Quickshell has been restarted" "$WORK/shell.log" || ! kill -0 "$crashed_shell" 2> /dev/null; }
+wait_until 15 crash_handled && wait_until 20 relaunch_decided "$failed_relaunches_before"
 guard_count() { shell_ipc modules list 2> /dev/null | python3 -I -c 'import json,sys; print(json.load(sys.stdin)["startGuard"]["count"])'; }
 guard_count_is() { [ "$(guard_count)" = "$1" ]; }
 if [ "$(shell_log_count 'Launching config: ""')" -gt "$failed_relaunches_before" ]; then

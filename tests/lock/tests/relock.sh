@@ -13,10 +13,10 @@ stack_start
 for cycle in 1 2; do
     log "cycle $cycle"
     lock_by_ipc
-    check_within 5 "cycle $cycle: lock by IPC locks the compositor" compositor_locked || break
-    check_within 5 "cycle $cycle: the compositor confirmed the lock" state_is secure true
+    check_within "$GUARD" "cycle $cycle: lock by IPC locks the compositor" compositor_locked || break
+    check_within "$GUARD" "cycle $cycle: the compositor confirmed the lock" state_is secure true
     check "cycle $cycle: shell says locked" shell_status_is locked
-    check_within 5 "cycle $cycle: authentication is armed" state_is armed true
+    check_within "$GUARD" "cycle $cycle: authentication is armed" state_is armed true
 
     wake_prompt || fail "cycle $cycle: the prompt did not wake"
     type_text "$LOCKTEST_PASSWORD"
@@ -26,7 +26,7 @@ for cycle in 1 2; do
     describe_lock
 
     # The shell must know it is unlocked, or the next lock is not armed
-    check_within 3 "cycle $cycle: shell says unlocked afterwards" shell_status_is unlocked
+    check_within "$GUARD" "cycle $cycle: shell says unlocked afterwards" shell_status_is unlocked
     check "cycle $cycle: the shell's lock mirror is false" state_is locked false
 
     # Still locked: the failure is counted; the next cycle could prove nothing (the run

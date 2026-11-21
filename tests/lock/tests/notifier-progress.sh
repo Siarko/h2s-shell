@@ -58,71 +58,71 @@ sys.exit(0 if n is not None and n["summary"] == sent["summary"] and n["body"] ==
 }
 
 progress send "$show_json" > /dev/null
-check_within 5 "shown: the handle has an id and runs" handle_is 'h["id"] > 0 and h["state"] == "running" and h["open"]'
+check_within "$GUARD" "shown: the handle has an id and runs" handle_is 'h["id"] > 0 and h["state"] == "running" and h["open"]'
 id=$(handle_field id)
 check "the summary and the body arrived exactly as sent" texts_are "$id"
 check "one entry, its bar at 0" entry_is "$id" 'n["progress"]["shown"] and n["progress"]["value"] == 0 and n["progress"]["state"] == "running"'
-check_within 5 "whileRunning: its toast is up and stays (no time), in the staying queue" entry_is "$id" \
+check_within "$GUARD" "whileRunning: its toast is up and stays (no time), in the staying queue" entry_is "$id" \
     '(n["toast"]["shown"] and n["toast"]["duration"] == 0) and n["toast"]["queue"] == "staying"'
 
 usual=$(DBUS_SESSION_BUS_ADDRESS=$LOCKTEST_SESSION_BUS gdbus call --session \
     --dest org.freedesktop.Notifications --object-path /org/freedesktop/Notifications \
     --method org.freedesktop.Notifications.Notify "Messages" 0 "" "Beside" "" '[]' '{}' "int32 -1" \
     | sed -n 's/^(uint32 \([0-9]*\),)$/\1/p')
-check_within 5 "an ordinary toast beside it counts the user's 2 s, in the ordinary queue" entry_is "$usual" \
+check_within "$GUARD" "an ordinary toast beside it counts the user's 2 s, in the ordinary queue" entry_is "$usual" \
     'n["toast"]["shown"] and n["toast"]["duration"] == 2000 and n["toast"]["queue"] == "ordinary"'
-check_within 6 "… and goes" entry_is "$usual" 'not n["toast"]["shown"]'
+check_within "$GUARD" "… and goes" entry_is "$usual" 'not n["toast"]["shown"]'
 check "the progress toast is still up, past the user's time" entry_is "$id" '(n["toast"]["shown"] and n["toast"]["duration"] == 0)'
 
 calls_before=$(handle_field calls)
 for value in 10 20 30 40 50 60 70 80 90 95; do
     progress update "{\"progress\": $value}" > /dev/null
 done
-check_within 5 "ten updates in a burst: the last value shown" entry_is "$id" 'n["progress"]["value"] == 0.95'
+check_within "$GUARD" "ten updates in a burst: the last value shown" entry_is "$id" 'n["progress"]["value"] == 0.95'
 calls_after=$(handle_field calls)
 log "gdbus calls for the ten updates: $((calls_after - calls_before))"
 check "… in at most four gdbus calls (coalesced)" test "$((calls_after - calls_before))" -le 4
 check "… still one entry with that id" entry_is "$id" 'n is not None and n["toast"]["shown"]'
 
 check "an action pressed on it" test -z "$(shell_ipc shelltest notificationAction "$id" cancel)"
-check_within 5 "the action reached its callback" handle_is 'h["events"] == ["action:cancel"]'
+check_within "$GUARD" "the action reached its callback" handle_is 'h["events"] == ["action:cancel"]'
 check "… once, the handle open" handle_is 'h["events"] == ["action:cancel"] and h["open"]'
 check "… and the entry stays (resident)" entry_is "$id" 'n is not None'
 
 progress update '{"state": "done", "progress": 100, "summary": "Sent"}' > /dev/null
-check_within 5 "done: the bar full, the summary changed" entry_is "$id" 'n["summary"] == "Sent" and n["progress"]["value"] == 1 and n["progress"]["state"] == "done"'
-check_within 5 "done: the toast takes the user's 2 s, where it is (the staying queue)" entry_is "$id" \
+check_within "$GUARD" "done: the bar full, the summary changed" entry_is "$id" 'n["summary"] == "Sent" and n["progress"]["value"] == 1 and n["progress"]["state"] == "done"'
+check_within "$GUARD" "done: the toast takes the user's 2 s, where it is (the staying queue)" entry_is "$id" \
     '(n["toast"]["shown"] and n["toast"]["duration"] == 2000) and n["toast"]["queue"] == "staying"'
-check_within 6 "… and goes" entry_is "$id" 'not n["toast"]["shown"]'
+check_within "$GUARD" "… and goes" entry_is "$id" 'not n["toast"]["shown"]'
 check "the entry stays in the centre" entry_is "$id" 'n is not None and n["progress"]["state"] == "done"'
 check "after done no update is taken" handle_is 'h["state"] == "done"'
 done_id=$id
 
 # An announce brings a toast back once; a plain update does not
 progress send '{"summary": "Announced", "progress": 10}' > /dev/null
-check_within 5 "a brief handle shown" handle_is 'h["id"] > 0 and h["state"] == "running"'
+check_within "$GUARD" "a brief handle shown" handle_is 'h["id"] > 0 and h["state"] == "running"'
 id=$(handle_field id)
-check_within 5 "brief: its toast counts the user's 2 s, in the ordinary queue (resident, but the shell's own)" entry_is "$id" \
+check_within "$GUARD" "brief: its toast counts the user's 2 s, in the ordinary queue (resident, but the shell's own)" entry_is "$id" \
     '(n["toast"]["shown"] and n["toast"]["duration"] == 2000) and n["toast"]["queue"] == "ordinary"'
-check_within 6 "… and goes" entry_is "$id" 'not n["toast"]["shown"]'
+check_within "$GUARD" "… and goes" entry_is "$id" 'not n["toast"]["shown"]'
 progress update '{"progress": 40}' > /dev/null
-check_within 5 "a plain update arrives" entry_is "$id" 'n["progress"]["value"] == 0.4'
+check_within "$GUARD" "a plain update arrives" entry_is "$id" 'n["progress"]["value"] == 0.4'
 check "… and brings no toast back" entry_is "$id" 'not n["toast"]["shown"]'
 progress update '{"progress": 50, "announce": true}' > /dev/null
-check_within 5 "an announced update brings the toast back" entry_is "$id" '(n["toast"]["shown"] and n["toast"]["duration"] == 2000) and n["progress"]["value"] == 0.5'
-check_within 6 "… for the user's time, then it goes" entry_is "$id" 'not n["toast"]["shown"]'
+check_within "$GUARD" "an announced update brings the toast back" entry_is "$id" '(n["toast"]["shown"] and n["toast"]["duration"] == 2000) and n["progress"]["value"] == 0.5'
+check_within "$GUARD" "… for the user's time, then it goes" entry_is "$id" 'not n["toast"]["shown"]'
 progress update '{"progress": 60}' > /dev/null
-check_within 5 "a later plain update arrives" entry_is "$id" 'n["progress"]["value"] == 0.6'
+check_within "$GUARD" "a later plain update arrives" entry_is "$id" 'n["progress"]["value"] == 0.6'
 check "… and brings nothing back (once)" entry_is "$id" 'not n["toast"]["shown"]'
 progress close > /dev/null
-check_within 5 "closed: the entry gone" entry_is "$id" 'n is None'
+check_within "$GUARD" "closed: the entry gone" entry_is "$id" 'n is None'
 
 # Dismissed by the user (as the centre dismisses it)
 progress send '{"summary": "Second", "progress": 10}' > /dev/null
-check_within 5 "a second handle shown" handle_is 'h["id"] > 0 and h["state"] == "running"'
+check_within "$GUARD" "a second handle shown" handle_is 'h["id"] > 0 and h["state"] == "running"'
 id=$(handle_field id)
 check "dismissed in the centre" test -z "$(shell_ipc shelltest notificationDismiss "$id")"
-check_within 5 "dismissed: onDismissed, the handle closed" handle_is 'h["events"] == ["dismissed"] and h["state"] == "closed" and not h["open"]'
+check_within "$GUARD" "dismissed: onDismissed, the handle closed" handle_is 'h["events"] == ["dismissed"] and h["state"] == "closed" and not h["open"]'
 check "… the entry gone" entry_is "$id" 'n is None'
 calls_before=$(handle_field calls)
 progress update '{"progress": 50, "summary": "Back?"}' > /dev/null
@@ -131,16 +131,16 @@ check "… and brings nothing back" entry_is "$id" 'n is None'
 
 # close()
 progress send '{"summary": "Third", "progress": 10, "actions": ["cancel"]}' > /dev/null
-check_within 5 "a third handle shown" handle_is 'h["id"] > 0 and h["state"] == "running"'
+check_within "$GUARD" "a third handle shown" handle_is 'h["id"] > 0 and h["state"] == "running"'
 id=$(handle_field id)
-check_within 5 "its entry is there" entry_is "$id" 'n is not None'
+check_within "$GUARD" "its entry is there" entry_is "$id" 'n is not None'
 progress close > /dev/null
-check_within 5 "close(): the entry gone" entry_is "$id" 'n is None'
+check_within "$GUARD" "close(): the entry gone" entry_is "$id" 'n is None'
 check "close(): no onDismissed, closed" handle_is 'h["events"] == [] and h["state"] == "closed"'
 
 # A reload: the running notification of the run before is an orphan
 progress send '{"summary": "Orphan", "progress": 30, "toast": "whileRunning"}' > /dev/null
-check_within 5 "a fourth handle shown" handle_is 'h["id"] > 0 and h["state"] == "running"'
+check_within "$GUARD" "a fourth handle shown" handle_is 'h["id"] > 0 and h["state"] == "running"'
 orphan=$(handle_field id)
 reloads_before=$(shell_log_count "Reloading configuration")
 shell_ipc locktest reload false > /dev/null
@@ -149,4 +149,4 @@ check_within 10 "the reloaded shell dismissed the orphan" entry_is "$orphan" 'n 
 check "the ended one stays" entry_is "$done_id" 'n is not None and n["progress"]["state"] == "done"'
 
 no_gdbus_left() { ! test_pgrep -f "org.freedesktop.Notifications" > /dev/null; }
-check_within 5 "no gdbus process left over" no_gdbus_left
+check_within "$GUARD" "no gdbus process left over" no_gdbus_left

@@ -50,47 +50,47 @@ unlock_by_password() {
 }
 
 # ---- Screensaver up, then a lock ----
-check_within 8 "3 s without input: the screensaver shows" state_is screensaver true
-check_within 2 "… its layer is on the screen" screensaver_layer
-check_within 3 "… the start command ran" commands_are "start "
+check_within "$GUARD" "3 s without input: the screensaver shows" state_is screensaver true
+check_within "$GUARD" "… its layer is on the screen" screensaver_layer
+check_within "$GUARD" "… the start command ran" commands_are "start "
 logind_signal lock
-check_within 5 "logind's Lock while the screensaver shows: locked" locked_and_secure
-check_within 3 "the screensaver's layer goes under the lock" no_screensaver_layer
+check_within "$GUARD" "logind's Lock while the screensaver shows: locked" locked_and_secure
+check_within "$GUARD" "the screensaver's layer goes under the lock" no_screensaver_layer
 check "… and stays gone" no_screensaver_layer
-check_within 5 "the lock is ready for a password (test stack)" _password_stack_is_ours_and_safe
+check_within "$GUARD" "the lock is ready for a password (test stack)" _password_stack_is_ours_and_safe
 unlock_by_password "over the screensaver"
-check_within 3 "after the unlock no screensaver: the user is back" state_is screensaver false
+check_within "$GUARD" "after the unlock no screensaver: the user is back" state_is screensaver false
 check "… nor its layer" no_screensaver_layer
-check_within 3 "the end command ran once, when the user came back" commands_are "start end "
+check_within "$GUARD" "the end command ran once, when the user came back" commands_are "start end "
 
 # ---- Screensaver up, a lock, an unlock without input ----
-check_within 8 "idle again: the screensaver shows" state_is screensaver true
-check_within 3 "… the start command ran again" commands_are "start end start "
+check_within "$GUARD" "idle again: the screensaver shows" state_is screensaver true
+check_within "$GUARD" "… the start command ran again" commands_are "start end start "
 logind_signal lock
-check_within 5 "locked over the screensaver" locked_and_secure
-check_within 3 "… its layer gone" no_screensaver_layer
+check_within "$GUARD" "locked over the screensaver" locked_and_secure
+check_within "$GUARD" "… its layer gone" no_screensaver_layer
 logind_signal unlock
-check_within 5 "logind's Unlock: unlocked" compositor_unlocked
-check_within 3 "still away: the screensaver shows again" screensaver_layer
+check_within "$GUARD" "logind's Unlock: unlocked" compositor_unlocked
+check_within "$GUARD" "still away: the screensaver shows again" screensaver_layer
 check "… the shell says so" state_is screensaver true
 check "… the same idle: no command ran" commands_are "start end start "
 move_pointer 700 400
 move_pointer 720 410
-check_within 2 "input ends it" state_is screensaver false
-check_within 3 "… its layer goes" no_screensaver_layer
-check_within 3 "… and the end command ran" commands_are "start end start end "
+check_within "$GUARD" "input ends it" state_is screensaver false
+check_within "$GUARD" "… its layer goes" no_screensaver_layer
+check_within "$GUARD" "… and the end command ran" commands_are "start end start end "
 
 # ---- Locked first, then idle ----
 lock_by_ipc
-check_within 5 "locked by the IPC" locked_and_secure
-check_within 8 "3 s without input under the lock: the shell sees the idle (start command)" \
+check_within "$GUARD" "locked by the IPC" locked_and_secure
+check_within "$GUARD" "3 s without input under the lock: the shell sees the idle (start command)" \
     commands_are "start end start end start "
 check "the screensaver stays off the screen: the lock is what shows" no_screensaver_layer
 check "still locked" locked_and_secure
 check "the prompt is asleep (nothing woke it)" state_is prompt_awake false
-check_within 5 "the lock is ready for a password (test stack)" _password_stack_is_ours_and_safe
+check_within "$GUARD" "the lock is ready for a password (test stack)" _password_stack_is_ours_and_safe
 unlock_by_password "after idle under the lock"
 check "the end command ran when the prompt was woken" commands_are "start end start end start end "
-check_within 3 "no screensaver after the unlock" state_is screensaver false
+check_within "$GUARD" "no screensaver after the unlock" state_is screensaver false
 check "… nor its layer" no_screensaver_layer
 check "no protocol error" no_protocol_errors

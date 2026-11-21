@@ -7,6 +7,8 @@
 #                                   the named ones (file names without .sh)
 #   tests/lock/run.sh -j 3 …        at most 3 tests at a time (LOCKTEST_JOBS=3 too); -j 1
 #                                   runs them one after another, their output as it comes
+#   LOCKTEST_RERUN=0 tests/lock/run.sh
+#                                   no second run, alone, of a test that failed
 #   LOCKTEST_KEEP=1 tests/lock/run.sh
 #                                   keep logs and screenshots even when all pass
 #   LOCKTEST_EXTRA_TESTS=<dir> tests/lock/run.sh <name>…
@@ -17,9 +19,14 @@
 # One run at a time on a machine: a run holds /tmp/h2s-locktest.flock from its start to its
 # end and waits, saying so, while another run has it (see "One run at a time", below).
 #
+# A test that failed is run once more at the end, alone: passing then it is FLAKY — still a
+# failure of the run, and a line in ${XDG_CACHE_HOME:-~/.cache}/h2s-shell-tests/flaky.log
+# (the date, the commit, the machine's load, the verdict, where its first log is kept).
+#
 # Exit status: 0 when every test passed (or failed exactly as expected, see below), 1
 # when one failed (a test that could not start its stack, or ended well without a PASS
-# line, counts as failed), 2 when the test bed itself could not be set up before any test
+# line, counts as failed; so does a FLAKY one, and a scenario with a fixed sleep that does
+# not say why: lint.sh), 2 when the test bed itself could not be set up before any test
 # ran, 130 when interrupted.
 set -uo pipefail
 
@@ -57,16 +64,17 @@ declare -A SERIAL=(
 # waiting for one long test started last (seconds in a parallel run, rounded). Only an
 # order: a test missing here runs anyway, after these.
 LONG_TESTS=(
-    restart-locked-retry restart-no-restore two-outputs restart-no-restore-generic
-    methods-fprintd restart-crash-locked fingerprint-timeout marker-stale
-    restart-crash-finger reload-explicit restart-launcher modules-launcher idle scale
+    modules-launcher restart-no-restore two-outputs notifications restart-crash-locked
+    modules-discovery idle supervisor modules-hung restart-crash-finger sleep-lockers logind
+    screensaver-lock restart-locked-limit reload-explicit notifier-progress
 )
 
 # ---- Jobs -----------------------------------------------------------------------------
 # How many tests run at once: -j N (or -jN, --jobs N) before the test names, else
-# LOCKTEST_JOBS, else one fewer than the cores, at most 4: each test is two compositors and
-# a Qt shell, and with 5 at once on 6 cores (load 12) the launcher's restart tests no longer
-# fit their schedule; at 4 the load stays near 8 and a full run takes some three minutes.
+# LOCKTEST_JOBS, else from the cores: a quarter of them, at least 4 and at most 8, and
+# never more than one fewer than the cores. Each test is two compositors and a Qt shell:
+# with 5 at once on 6 cores (load 12) the launcher's restart tests no longer fit their
+# schedule, so a 6-core machine keeps 4; 32 threads take 8.
 jobs=${LOCKTEST_JOBS:-}
 args=()
 while [ $# -gt 0 ]; do
@@ -80,8 +88,11 @@ while [ $# -gt 0 ]; do
 done
 set -- "${args[@]+"${args[@]}"}"
 if [ -z "$jobs" ]; then
-    jobs=$(( $(nproc 2> /dev/null || echo 2) - 1 ))
-    [ "$jobs" -gt 4 ] && jobs=4
+    cores=$(nproc 2> /dev/null || echo 2)
+    jobs=$((cores / 4))
+    [ "$jobs" -lt 4 ] && jobs=4
+    [ "$jobs" -gt 8 ] && jobs=8
+    [ "$jobs" -gt $((cores - 1)) ] && jobs=$((cores - 1))
     [ "$jobs" -lt 1 ] && jobs=1
 fi
 
@@ -278,6 +289,23 @@ for name in "${tests[@]}"; do
     fi
 done
 
+# ---- No fixed sleeps without a reason (lint.sh) ---------------------------------------
+# In this bed's own scenarios that run (a module's are its repository's to lint): a finding
+# fails the run, after the tests, as a failing test would
+own_files=()
+for name in "${tests[@]}"; do
+    [ "${TEST_FILE[$name]}" = "$LOCKTEST_DIR/tests/$name.sh" ] && own_files+=("${TEST_FILE[$name]}")
+done
+lint_findings=""
+if [ ${#own_files[@]} -gt 0 ]; then
+    lint_findings=$("$BASH" "$LOCKTEST_DIR/lint.sh" --selftest {lock_fd}<&- 2>&1) \
+        && lint_findings="" \
+        || lint_findings=$(grep -v '^PASS ' <<< "$lint_findings")
+    lint_sleeps=$("$BASH" "$LOCKTEST_DIR/lint.sh" "${own_files[@]}" {lock_fd}<&- 2>&1)
+    [ -n "$lint_sleeps" ] && lint_findings=${lint_findings:+$lint_findings$'\n'}$lint_sleeps
+    [ -z "$lint_findings" ] || { echo "lint.sh: fixed sleeps without their reason (# fixed sleep: …):"; echo "$lint_findings" | sed 's/^/    /'; }
+fi
+
 ARTIFACTS=$(mktemp -d "$temp_base/h2s-locktest.XXXXXX") || setup_error "cannot create the artifacts dir"
 LOCKTEST_RUN_ID=$(basename "$ARTIFACTS")-$$
 
@@ -384,6 +412,7 @@ export LOCKTEST_CANARY=1
 started=$SECONDS
 declare -A results=()
 declare -A test_started=()
+declare -A failed_load=()
 inhibitor_leak=""
 total=${#tests[@]}
 launched=0
@@ -483,6 +512,8 @@ finish_test() {
         fi
     fi
     results[$name]=$(classify "$name" "$status")
+    # The machine's load when a test failed (for the flaky log, should it pass alone)
+    [ "${results[$name]}" = FAIL ] && read -r failed_load[$name] _ < /proc/loadavg
     # The test's copy of the shell: only worth keeping when asked to
     [ "${LOCKTEST_KEEP:-0}" = 1 ] || [ -z "$name" ] || rm -rf "${ARTIFACTS:?}/shells/$name"
     if ! serial_output; then
@@ -532,6 +563,47 @@ else
     run_tests 1 "${alone[@]+"${alone[@]}"}"
 fi
 
+# ---- A failed test, once more, alone -----------------------------------------------------
+# A test that failed runs again at the end with nothing else of the run going on. Passing
+# then, it is FLAKY: still a failure of the run — what fails one run in two is a defect of
+# the test or of the shell, to be found — and a line in the flaky log, which a lead reads
+# across runs and machines. Its first run's logs are kept beside the second's (<name>.first).
+# Not for a test that checked nothing (EMPTY) or passed against its mark (XPASS): another
+# run cannot change those.
+declare -A flaky_first_log=()
+again=()
+if [ "${LOCKTEST_RERUN:-1}" != 0 ]; then
+    for name in "${tests[@]}"; do
+        [ "${results[$name]}" = FAIL ] && again+=("$name")
+    done
+fi
+if [ ${#again[@]} -gt 0 ]; then
+    echo
+    echo "failed, so run once more, alone: ${again[*]}"
+    for name in "${again[@]}"; do
+        rm -rf "${ARTIFACTS:?}/$name.first"
+        mv "$ARTIFACTS/$name" "$ARTIFACTS/$name.first"
+        flaky_first_log[$name]=$ARTIFACTS/$name.first/test.log
+    done
+    total=${#again[@]}
+    launched=0
+    run_tests 1 "${again[@]}"
+    flaky_log_dir=${XDG_CACHE_HOME:-${HOME:-/nonexistent}/.cache}/h2s-shell-tests
+    commit=$(git -C "$LOCKTEST_REPO" rev-parse --short HEAD 2> /dev/null {lock_fd}<&-) || commit=unknown
+    for name in "${again[@]}"; do
+        case "${results[$name]}" in
+            PASS | XFAIL)
+                results[$name]=FLAKY
+                if mkdir -p "$flaky_log_dir" 2> /dev/null; then
+                    printf '%s %s commit=%s load=%s jobs=%s first-log=%s\n' \
+                        "$(date +%Y-%m-%dT%H:%M:%S)" "$name" "$commit" "${failed_load[$name]:-?}" "$jobs" \
+                        "${flaky_first_log[$name]}" >> "$flaky_log_dir/flaky.log"
+                fi
+                ;;
+        esac
+    done
+fi
+
 # Whatever of the run is still there (nothing should be: each test's was swept)
 leaked=$(marked_inhibitors LOCKTEST_RUN_ID "$LOCKTEST_RUN_ID")
 [ -n "$leaked" ] && inhibitor_leak="$inhibitor_leak end-of-run:$(echo $leaked | tr ' ' ',')"
@@ -549,9 +621,15 @@ for name in "${tests[@]}"; do
         XFAIL) echo "  XFAIL $name — expected for now: ${EXPECTED_TO_FAIL[$name]}" ;;
         XPASS) echo "  XPASS $name — passes now: remove it from EXPECTED_TO_FAIL in run.sh"; failed=1 ;;
         EMPTY) echo "  FAIL  $name — ended well without a PASS line: it checked nothing"; failed=1 ;;
+        FLAKY)
+            echo "  FLAKY $name — failed (load ${failed_load[$name]:-?}), then passed alone; the first run's log: ${flaky_first_log[$name]}"
+            failed=1
+            ;;
         FAIL)
             if [ -n "${EXPECTED_TO_FAIL[$name]:-}" ]; then
                 echo "  FAIL  $name — marked as expected to fail, but not (only) in the expected checks"
+            elif [ -n "${flaky_first_log[$name]:-}" ]; then
+                echo "  FAIL  $name — and again, alone"
             else
                 echo "  FAIL  $name"
             fi
@@ -560,6 +638,10 @@ for name in "${tests[@]}"; do
         *) echo "  PASS  $name" ;;
     esac
 done
+if [ -n "$lint_findings" ]; then
+    echo "  FAIL  lint: fixed sleeps without their reason (lint.sh; listed at the start of the run)"
+    failed=1
+fi
 if [ -n "$inhibitor_leak" ]; then
     echo "  FAIL  isolation: a process of the run held an inhibitor on the real logind:$inhibitor_leak"
     failed=1

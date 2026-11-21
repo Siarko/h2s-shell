@@ -37,10 +37,10 @@ sys.exit(0 if eval(sys.argv[1]) else 1)' "$1"
 module_job_is() { [ "$(shell_ipc good progressState)" = "$1" ]; }
 
 check "good progress: a handle" test "$(shell_ipc good progress)" != none
-check_within 5 "the module's notification is on the private bus, its bar at 30" \
+check_within "$GUARD" "the module's notification is on the private bus, its bar at 30" \
     job_is 'n is not None and n["progress"]["shown"] and n["progress"]["value"] == 0.3 and n["progress"]["state"] == "running"'
-check_within 5 "… its toast stays (whileRunning)" job_is '(n["toast"]["shown"] and n["toast"]["duration"] == 0)'
-check_within 5 "… the module's handle runs" module_job_is running
+check_within "$GUARD" "… its toast stays (whileRunning)" job_is '(n["toast"]["shown"] and n["toast"]["duration"] == 0)'
+check_within "$GUARD" "… the module's handle runs" module_job_is running
 id=$(shell_ipc locktest.notifications notificationState | python3 -I -c '
 import json, sys
 print(next(n["id"] for n in json.load(sys.stdin) if n["summary"] == "Good job"))')
@@ -48,12 +48,12 @@ log "the module's notification: $id"
 screenshot module-progress
 
 check "its action pressed as its card runs it" test -z "$(shell_ipc shelltest notificationAction "$id" stop)"
-check_within 5 "… reached the module's callback: the job cancelled" module_job_is cancelled
-check_within 5 "… the entry stays, cancelled" job_is 'n is not None and n["progress"]["state"] == "cancelled"'
+check_within "$GUARD" "… reached the module's callback: the job cancelled" module_job_is cancelled
+check_within "$GUARD" "… the entry stays, cancelled" job_is 'n is not None and n["progress"]["state"] == "cancelled"'
 
 check "modules setEnabled good false" test -z "$(shell_ipc modules setEnabled good false)"
-check_within 5 "good: disabled" good_state_is disabled
-check_within 5 "turned off: its notification closed, the entry gone" job_is 'n is None'
+check_within "$GUARD" "good: disabled" good_state_is disabled
+check_within "$GUARD" "turned off: its notification closed, the entry gone" job_is 'n is None'
 
 no_gdbus_left() { ! test_pgrep -f "org.freedesktop.Notifications" > /dev/null; }
-check_within 5 "no gdbus process left over" no_gdbus_left
+check_within "$GUARD" "no gdbus process left over" no_gdbus_left

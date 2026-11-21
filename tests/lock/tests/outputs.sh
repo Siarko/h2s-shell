@@ -23,15 +23,14 @@ point_at() { send_input "abs $1 $2 $3 $4" "move 5 5"; }
 
 # ---- Added, then removed ----
 lock_by_ipc
-check_within 5 "round 1: locked" compositor_locked
-check_within 5 "round 1: confirmed" state_is secure true
+check_within "$GUARD" "round 1: locked" compositor_locked
+check_within "$GUARD" "round 1: confirmed" state_is secure true
 check "round 1: one surface" state_is surfaces 1
 
 hyprctl output create headless > /dev/null
-check_within 5 "round 1: an added output gets a surface of its own" state_is surfaces 2
+check_within "$GUARD" "round 1: an added output gets a surface of its own" state_is surfaces 2
 added=$(headless_output)
 log "added output: $added; surfaces: $(state_field surface_screens)"
-sleep 0.5 # the new surface ignores the pointer in its first 300 ms
 woke=0
 for attempt in 1 2 3 4 5; do
     point_at $((2800 + attempt * 10)) 500 3840 1080
@@ -41,8 +40,8 @@ check "round 1: the pointer on the added output wakes the prompt there" test "$w
 type_text "half"
 
 hyprctl output remove "$added" > /dev/null
-check_within 5 "round 1: the removed output's surface goes" state_is surfaces 1
-check_within 3 "round 1: the prompt moves, awake, to the output left" state_is prompt_screen WAYLAND-1
+check_within "$GUARD" "round 1: the removed output's surface goes" state_is surfaces 1
+check_within "$GUARD" "round 1: the prompt moves, awake, to the output left" state_is prompt_screen WAYLAND-1
 check "round 1: and starts with an empty field (a new epoch)" test "$(state_field field_epoch)" -ge 1
 check "round 1: still locked" compositor_locked
 
@@ -57,9 +56,8 @@ check "round 1: what was half typed on the removed output was not sent with it" 
 hyprctl output create headless > /dev/null
 wait_until 5 test -n "$(headless_output)" || abort "no second output for round 2"
 lock_by_ipc
-check_within 5 "round 2: locked" compositor_locked
-check_within 5 "round 2: two surfaces" state_is surfaces 2
-sleep 0.5
+check_within "$GUARD" "round 2: locked" compositor_locked
+check_within "$GUARD" "round 2: two surfaces" state_is surfaces 2
 woke=0
 for attempt in 1 2 3 4 5; do
     point_at $((200 + attempt * 10)) 500 3840 1080
@@ -69,14 +67,13 @@ check "round 2: the prompt wakes on WAYLAND-1" test "$woke" = 1
 before=$(state_field prompt_surface)
 
 hyprctl output remove WAYLAND-1 > /dev/null
-check_within 5 "round 2: the prompt's output removed, its surface goes" state_is surfaces 1
-check_within 3 "round 2: the prompt moves to the other output" state_is prompt_screen "$(headless_output)"
+check_within "$GUARD" "round 2: the prompt's output removed, its surface goes" state_is surfaces 1
+check_within "$GUARD" "round 2: the prompt moves to the other output" state_is prompt_screen "$(headless_output)"
 
 hyprctl output create wayland > /dev/null
-check_within 5 "round 2: the re-added output gets a new surface" state_is surfaces 2
+check_within "$GUARD" "round 2: the re-added output gets a new surface" state_is surfaces 2
 readded=$(state_field surface_screens | tr ',' '\n' | grep '^WAYLAND' | head -n 1)
 log "re-added output: $readded; surfaces: $(state_field surface_screens)"
-sleep 0.5
 # The layout is now the headless output (1920 wide) at 0, the re-added one right of it
 # (1280x720): press on it
 moved=0

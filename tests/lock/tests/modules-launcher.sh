@@ -100,10 +100,10 @@ except Exception:
 print(" ".join(sorted(json.loads(text))) if text else "none")' "$config_file"
 }
 acknowledged_are() { [ "$(acknowledged)" = "$1" ]; }
-check_within 5 "the first start acknowledged the hand-placed modules it found on, in the config file" acknowledged_are "alpha beta zeta"
+check_within "$GUARD" "the first start acknowledged the hand-placed modules it found on, in the config file" acknowledged_are "alpha beta zeta"
 modules_on() { tr '\n' ' ' < "$RUN/h2s-shell-modules-on" 2> /dev/null; }
 modules_on_are() { [ "$(modules_on)" = "$1" ]; }
-check_within 5 "the modules on are written to the runtime directory" modules_on_are "alpha beta explicit zeta "
+check_within "$GUARD" "the modules on are written to the runtime directory" modules_on_are "alpha beta explicit zeta "
 
 # ---- (2) safe mode ----
 first=$SHELL_PID
@@ -126,9 +126,9 @@ check "… the launcher said so" grep -aq "starting it in safe mode (no modules)
 check "… it tells the modules on in the last run" test "$(module_field - previousModulesOn)" = "['alpha', 'beta', 'explicit', 'zeta']"
 check "… which safe mode left as they were" test "$(modules_on)" = "alpha beta explicit zeta "
 lock_by_ipc
-check_within 5 "in safe mode the lock locks" compositor_locked
+check_within "$GUARD" "in safe mode the lock locks" compositor_locked
 wake_prompt || fail "the prompt did not wake"
-check_within 5 "the methods are known" state_is armed true
+check_within "$GUARD" "the methods are known" state_is armed true
 type_text "$LOCKTEST_PASSWORD"
 press_key Return
 check_within 10 "… and the password unlocks" compositor_unlocked
@@ -160,7 +160,7 @@ check "modules confirm for another directory: refused" \
 check "… still unconfirmed" module_state_is gamma unconfirmed
 check "modules confirm with its directory: done" test -z "$(shell_ipc modules confirm gamma "$(module_field gamma directory)")"
 check_within 15 "… it loads" module_state_is gamma loaded
-check_within 5 "… the config file keeps its acknowledgement" acknowledged_are "alpha beta gamma zeta"
+check_within "$GUARD" "… the config file keeps its acknowledgement" acknowledged_are "alpha beta gamma zeta"
 fourth=$SHELL_PID
 make_module "$home_modules/delta" delta
 check "modules rediscover: started" test -z "$(shell_ipc modules rediscover)"

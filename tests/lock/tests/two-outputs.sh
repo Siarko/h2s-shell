@@ -43,10 +43,10 @@ shows_no_prompt() { ! shows_prompt "$@"; }
 shot() { screenshot_output_ppm "$A" "$1-A"; screenshot_output_ppm "$B" "$1-B"; }
 
 lock_by_ipc
-check_within 5 "locked" compositor_locked
-check_within 5 "confirmed" state_is secure true
-check_within 5 "a surface on each output" state_is surfaces 2
-sleep 1
+check_within "$GUARD" "locked" compositor_locked
+check_within "$GUARD" "confirmed" state_is secure true
+check_within "$GUARD" "a surface on each output" state_is surfaces 2
+sleep 1 # fixed sleep: a negative claim: nothing wakes the prompt by itself
 check "the prompt sleeps" state_is prompt_awake false
 screenshot_output_ppm "$A" asleep-A
 screenshot_output_ppm "$B" asleep-B
@@ -58,7 +58,7 @@ for attempt in 1 2 3 4 5; do
     wait_until 0.5 state_is prompt_screen "$B" && { woke=1; break; }
 done
 check "the pointer moving on $B wakes the prompt there" test "$woke" = 1
-sleep 0.6 # the fade
+wait_settled # the fade
 shot awake-on-b
 check "screenshots: $B shows the prompt" shows_prompt B awake-on-b-B
 check "screenshots: $A does not" shows_no_prompt A awake-on-b-A
@@ -66,16 +66,16 @@ check "screenshots: $A does not" shows_no_prompt A awake-on-b-A
 # ---- Keyboard focus follows the pointer; keys reach the prompt wherever it is ----
 on_a 10
 on_a 20
-sleep 0.3
+sleep 0.3 # fixed sleep: a negative claim: motion on the other output does not move the prompt
 check "motion on $A leaves the prompt on $B" state_is prompt_screen "$B"
 check_within 15 "the prompt goes to sleep" state_is prompt_awake false
 press_key Tab
-check_within 3 "a key with the pointer on $A wakes the prompt on $A: the keyboard is there" state_is prompt_screen "$A"
+check_within "$GUARD" "a key with the pointer on $A wakes the prompt on $A: the keyboard is there" state_is prompt_screen "$A"
 on_b 30
 on_b 40
-sleep 0.3
+sleep 0.3 # fixed sleep: a negative claim: motion on the other output does not move the prompt
 check "motion on $B leaves the prompt on $A" state_is prompt_screen "$A"
-sleep 0.4
+wait_settled
 shot awake-on-a
 check "screenshots: $A shows the prompt" shows_prompt A awake-on-a-A
 check "screenshots: $B does not" shows_no_prompt B awake-on-a-B
@@ -86,9 +86,9 @@ check "checked once, right" test "$(tr '\n' ' ' < "$WORK/pam/check.log" 2> /dev/
 
 # ---- A press on the other output moves the prompt there, empty ----
 lock_by_ipc
-check_within 5 "locked again" compositor_locked
-check_within 5 "two surfaces again" state_is surfaces 2
-sleep 1
+check_within "$GUARD" "locked again" compositor_locked
+check_within "$GUARD" "two surfaces again" state_is surfaces 2
+wait_settled
 screenshot_output_ppm "$A" asleep-A
 screenshot_output_ppm "$B" asleep-B
 woke=0
@@ -109,7 +109,7 @@ for sample in 1 2 3 4 5 6 7 8; do
     shot fade-$sample
     offsets[$sample]=$(( (${EPOCHREALTIME//[.,]/} - pressed) / 1000 ))
 done
-check_within 3 "a press on $B moves the prompt there" state_is prompt_screen "$B"
+check_within "$GUARD" "a press on $B moves the prompt there" state_is prompt_screen "$B"
 check "with a new field (the epoch moved)" test "$(state_field field_epoch)" -gt "$epoch"
 both_after=0
 for sample in 1 2 3 4 5 6 7 8; do
@@ -128,19 +128,18 @@ check "what was half typed on $A was not sent with it" \
 # On B: the headless output draws the cursor into its picture (WAYLAND-1, nested in labwc,
 # hands it to the parent compositor, so screenshots of it never show one)
 lock_by_ipc
-check_within 5 "locked a third time" compositor_locked
-check_within 5 "two surfaces" state_is surfaces 2
-sleep 1
+check_within "$GUARD" "locked a third time" compositor_locked
+check_within "$GUARD" "two surfaces" state_is surfaces 2
 woke=0
 for attempt in 1 2 3 4 5; do
     on_b $((100 + attempt))
     wait_until 0.5 state_is prompt_screen "$B" && { woke=1; break; }
 done
 check "the prompt wakes on $B" test "$woke" = 1
-sleep 0.4
+wait_settled "$B"
 screenshot_output_ppm "$B" cursor-awake
 check_within 15 "the prompt goes to sleep, the pointer resting" state_is prompt_awake false
-sleep 0.4
+wait_settled "$B"
 screenshot_output_ppm "$B" cursor-asleep
 # The pointer rests at 403..408,303 of B (on_b, then the 3-pixel move), far from the card
 cursor_changes=$(python3 -I -c "$_PPM_READER"'

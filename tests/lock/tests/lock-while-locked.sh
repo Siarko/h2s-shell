@@ -5,9 +5,9 @@
 stack_start --methods "password fingerprint"
 
 lock_by_ipc
-check_within 5 "locked" compositor_locked
-check_within 5 "the compositor confirmed the lock" state_is secure true
-check_within 5 "a fingerprint conversation is waiting" state_is fingerprint_waiting true
+check_within "$GUARD" "locked" compositor_locked
+check_within "$GUARD" "the compositor confirmed the lock" state_is secure true
+check_within "$GUARD" "a fingerprint conversation is waiting" state_is fingerprint_waiting true
 wait_until 5 _one_finger_waiter || abort "no single fingerprint conversation waiting"
 session=$(state_field session)
 conversation=$(state_field fingerprint_conversation)
@@ -16,7 +16,7 @@ waiter=$(finger_waiters)
 log "session $session, fingerprint conversation $conversation (process $waiter), detection $generation"
 
 check "the IPC's lock answers locked" test "$(shell_ipc lockscreen lock)" = locked
-sleep 1
+sleep 1 # fixed sleep: a negative claim: the second lock changes nothing
 check "the same session" state_is session "$session"
 check "the same fingerprint conversation" state_is fingerprint_conversation "$conversation"
 check "the stand-in's same conversation still waits" test "$(finger_waiters)" = "$waiter"

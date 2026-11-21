@@ -64,8 +64,8 @@ if len(sys.argv) > 3:
 sys.exit(0 if toast is not None and all(toast.get(key) == value for key, value in wanted.items()) else 1)' "$@"
 }
 
-check_within 8 "the screensaver shows" state_is screensaver true
-sleep 1.2 # its fade in (800 ms by default)
+check_within "$GUARD" "the screensaver shows" state_is screensaver true
+wait_settled # its fade in (800 ms by default)
 screenshot_ppm screensaver
 on_screensaver=$(card_height screensaver 30)
 log "the notification's card on the screensaver (in full): $on_screensaver px"
@@ -74,19 +74,19 @@ check "the screensaver shows the card" test "$on_screensaver" -gt 0
 # The screensaver pauses nothing: a toast counts down beneath it and goes (shown again
 # after it, it would be stale)
 under_screensaver=$(notify_for "Under the screensaver" 2000)
-check_within 5 "a 2000 ms toast sent while the screensaver shows is up" toast_is "$under_screensaver" true 2000
-check_within 4 "… and gone after its time" toast_is "$under_screensaver" false
+check_within "$GUARD" "a 2000 ms toast sent while the screensaver shows is up" toast_is "$under_screensaver" true 2000
+check_within "$GUARD" "… and gone after its time" toast_is "$under_screensaver" false
 check "… the screensaver still showing" state_is screensaver true
 # Its entry out of the way: the lock screen's card below is measured alone
 check "its entry dismissed" test -z "$(shell_ipc shelltest notificationDismiss "$under_screensaver")"
 
 move_pointer 700 400
 move_pointer 710 410
-check_within 3 "the screensaver goes" state_is screensaver false
+check_within "$GUARD" "the screensaver goes" state_is screensaver false
 
 lock_by_ipc
-check_within 5 "locked" compositor_locked
-sleep 1
+check_within "$GUARD" "locked" compositor_locked
+sleep 1 # fixed sleep: a negative claim: the prompt stays asleep
 check "the prompt sleeps (the notifications show)" state_is prompt_awake false
 screenshot_ppm lock
 on_lock=$(card_height lock 16)
@@ -97,13 +97,13 @@ check "a single line: shorter than the screensaver's by at least the title and t
 
 staying=$(notify_for "Stays" 0)
 check "the server gave the notification an id" test -n "$staying"
-check_within 5 "expire 0: its toast is up, with no time (it stays)" toast_is "$staying" true 0
+check_within "$GUARD" "expire 0: its toast is up, with no time (it stays)" toast_is "$staying" true 0
 timed=$(notify_for "Two seconds" 2000)
-check_within 5 "expire 2000: its toast is up too, for 2000 ms (the one that stays holds no slot)" toast_is "$timed" true 2000
-check_within 4 "… and gone after it, well before the user's 5 s" toast_is "$timed" false
+check_within "$GUARD" "expire 2000: its toast is up too, for 2000 ms (the one that stays holds no slot)" toast_is "$timed" true 2000
+check_within "$GUARD" "… and gone after it (its 2000 ms, not the user's 5 s: the duration above)" toast_is "$timed" false
 usual=$(notify_for "The usual" -1)
-check_within 5 "expire -1: its toast is up for the user's time, 5000 ms" toast_is "$usual" true 5000
-check_within 8 "… and gone after it" toast_is "$usual" false
+check_within "$GUARD" "expire -1: its toast is up for the user's time, 5000 ms" toast_is "$usual" true 5000
+check_within "$GUARD" "… and gone after it" toast_is "$usual" false
 check "the one that stays is still up, past the user's time" toast_is "$staying" true 0
 check "all of it while locked: the lock pauses no countdown" compositor_locked
 
@@ -134,25 +134,25 @@ sys.exit(0 if [badges.get(queue) for queue in ("critical", "staying", "ordinary"
 }
 
 first_critical=$(notify_critical "Battery at 4 %")
-check_within 5 "urgency critical: its toast shows in the critical queue" toast_at "$first_critical" shown critical
+check_within "$GUARD" "urgency critical: its toast shows in the critical queue" toast_at "$first_critical" shown critical
 second_critical=$(notify_critical "Battery at 3 %")
-check_within 5 "a second critical one waits in the critical queue (one at a time)" toast_at "$second_critical" waiting critical
+check_within "$GUARD" "a second critical one waits in the critical queue (one at a time)" toast_at "$second_critical" waiting critical
 check "… counted on the critical badge" badges_are 1 0 0
 check "the staying toast is still shown beside them" toast_at "$staying" shown staying
 beside=$(notify_for "Beside the critical ones" -1)
-check_within 5 "an ordinary toast shows beside them, in the ordinary queue" toast_at "$beside" shown ordinary
-check_within 8 "… and goes after its time" toast_at "$beside" none ""
+check_within "$GUARD" "an ordinary toast shows beside them, in the ordinary queue" toast_at "$beside" shown ordinary
+check_within "$GUARD" "… and goes after its time" toast_at "$beside" none ""
 check "the critical one still waits, the first still shown" toast_at "$second_critical" waiting critical
 
 # The lock pauses no queue either: of two ordinary toasts (one at a time) the second waits,
 # shows when the first has gone and goes after its own time, all while locked
 first_of_two=$(notify_for "First of two" 2000)
 second_of_two=$(notify_for "Second of two" 2000)
-check_within 5 "the first of two shows" toast_at "$first_of_two" shown ordinary
+check_within "$GUARD" "the first of two shows" toast_at "$first_of_two" shown ordinary
 check "… the second waits its turn" toast_at "$second_of_two" waiting ordinary
-check_within 4 "the first goes after its time" toast_at "$first_of_two" none ""
-check_within 3 "… and the second shows" toast_at "$second_of_two" shown ordinary
-check_within 4 "… and goes after its own" toast_at "$second_of_two" none ""
+check_within "$GUARD" "the first goes after its time" toast_at "$first_of_two" none ""
+check_within "$GUARD" "… and the second shows" toast_at "$second_of_two" shown ordinary
+check_within "$GUARD" "… and goes after its own" toast_at "$second_of_two" none ""
 check "still locked" compositor_locked
 
 # has_entry <id> <true|false>: whether the server still holds that notification (its entry
@@ -167,4 +167,4 @@ sys.exit(0 if held == (sys.argv[2] == "true") else 1)' "$@"
 # "×" on a toast dismisses the notification: its entry leaves the centre too
 check "the staying toast's entry is in the centre" has_entry "$staying" true
 check "\"×\" on its toast" test -z "$(shell_ipc shelltest toastDismiss "$staying")"
-check_within 3 "… its entry is gone, its toast too" has_entry "$staying" false
+check_within "$GUARD" "… its entry is gone, its toast too" has_entry "$staying" false

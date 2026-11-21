@@ -26,8 +26,8 @@ stack_start --reload-seam --hyprland-debug
 hyprland_locks() { sed 's/\x1b\[[0-9;]*m//g' "$WORK/hyprland.log" | grep -ac "Session got locked by"; }
 
 lock_by_ipc
-check_within 5 "locked" compositor_locked
-check_within 5 "confirmed" state_is secure true
+check_within "$GUARD" "locked" compositor_locked
+check_within "$GUARD" "confirmed" state_is secure true
 check "a reload now would carry the lock over" state_is carried_held true
 session_before=$(state_field session)
 reloads_before=$(shell_log_count "Reloading configuration")
@@ -36,7 +36,7 @@ start_lock_watch reload
 shell_ipc locktest reload false > /dev/null
 check_within 10 "the shell reloaded" lines_more_than "$reloads_before" "Reloading configuration" "$WORK/shell.log"
 check_within 10 "the reloaded shell answers" shell_status_is locked
-sleep 2
+sleep 2 # fixed sleep: a negative claim: the lock watch sees no unlock after the reload either
 stop_lock_watch
 check "the compositor never reported unlocked across the reload" lock_watch_never_unlocked
 check "still locked (compositor)" compositor_locked
@@ -46,22 +46,22 @@ check "… and confirmed: the rules say locked" state_is phase locked
 check "the compositor's lock is still secure" state_is secure true
 check "the same process (a reload, not a restart)" kill -0 "$SHELL_PID"
 check "file watching is off while locked (also after the reload)" state_is watch_files false
-check_within 5 "the reloaded shell has its lock surface" state_is surfaces 1
+check_within "$GUARD" "the reloaded shell has its lock surface" state_is surfaces 1
 check "Hyprland's own log: one lock, never a new one across the reload" test "$(hyprland_locks)" = 1
 log "surface instances the rules know: $(state_field surfaces); session $(state_field session) (was $session_before)"
 describe_lock
 
 wake_prompt || fail "the prompt did not wake after the reload"
-check_within 5 "the methods are known" state_is armed true
+check_within "$GUARD" "the methods are known" state_is armed true
 type_text "$LOCKTEST_PASSWORD"
 press_key Return
 check_within 10 "the password unlocks after the reload" compositor_unlocked
 check "the shell says unlocked" shell_status_is unlocked
-check_within 3 "the marker says unlocked" state_is marker unlocked
+check_within "$GUARD" "the marker says unlocked" state_is marker unlocked
 
 lock_by_ipc
-check_within 5 "the reloaded shell locks again" compositor_locked
-check_within 5 "… and the compositor confirms it" state_is secure true
+check_within "$GUARD" "the reloaded shell locks again" compositor_locked
+check_within "$GUARD" "… and the compositor confirms it" state_is secure true
 
 # Twice in a row, while locked
 start_lock_watch reload-twice
@@ -73,19 +73,19 @@ reloads_before=$(shell_log_count "Reloading configuration")
 shell_ipc locktest reload false > /dev/null
 check_within 10 "and a third, right after it" lines_more_than "$reloads_before" "Reloading configuration" "$WORK/shell.log"
 check_within 10 "the shell answers, locked" shell_status_is locked
-sleep 2
+sleep 2 # fixed sleep: a negative claim: the lock watch sees no unlock after the reloads either
 stop_lock_watch
 check "the compositor never reported unlocked across two reloads in a row" lock_watch_never_unlocked
 check "Hyprland's own log: the second lock only, no new one across the two reloads" test "$(hyprland_locks)" = 2
 check "the same process" kill -0 "$SHELL_PID"
 wake_prompt || fail "the prompt did not wake after two reloads"
-check_within 5 "the methods are known" state_is armed true
+check_within "$GUARD" "the methods are known" state_is armed true
 type_text "$LOCKTEST_PASSWORD"
 press_key Return
 check_within 10 "the password unlocks after two reloads" compositor_unlocked
 
 lock_by_ipc
-check_within 5 "and a last lock works" compositor_locked
+check_within "$GUARD" "and a last lock works" compositor_locked
 unlock_for_test
 check "… and unlocks" compositor_unlocked
 

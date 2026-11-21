@@ -30,51 +30,50 @@ restart_with_marker() {
 check "the runtime dir is private (0700, the user's)" test "$(stat -c '%a %u' "$RUN")" = "700 $(id -u)"
 check "no marker before the first lock" test ! -e "$marker"
 lock_by_ipc
-check_within 5 "locked" compositor_locked
+check_within "$GUARD" "locked" compositor_locked
 check "the marker is in the private runtime dir, the user's, not a link" \
     test -f "$marker" -a ! -L "$marker" -a "$(stat -c %u "$marker")" = "$(id -u)"
 check "it says locked, with this session's key" test "$(cat "$marker")" = "locked $(key_of "$this_boot")"
 unlock_for_test
 check "unlocked" compositor_unlocked
-check_within 3 "the marker says unlocked (a moment after the unlock: its request is sent by then)" marker_file_is unlocked
+check_within "$GUARD" "the marker says unlocked (a moment after the unlock: its request is sent by then)" marker_file_is unlocked
 
 # ---- From another boot ----
 restart_with_marker "locked $(key_of 00000000-0000-0000-0000-000000000000)"
-sleep 2
+check_within "$GUARD" "the new shell decided: the marker is overwritten" marker_file_is unlocked
 check "a marker of another boot does not lock" compositor_unlocked
 check "… the shell says unlocked" shell_status_is unlocked
 check "… it says why" grep -aq "a lock marker from another compositor session" "$WORK/shell.log"
-check "… and the marker is overwritten" test "$(cat "$marker")" = "unlocked"
 
 # ---- From another compositor (same boot, another socket) ----
 restart_with_marker "locked $this_boot:wayland-1:1:12345:1000000000"
-sleep 2
+check_within "$GUARD" "the new shell decided: the marker is overwritten" marker_file_is unlocked
 check "a marker of another compositor session does not lock" compositor_unlocked
 check "… the shell says unlocked" shell_status_is unlocked
-check "… and the marker is overwritten" test "$(cat "$marker")" = "unlocked"
 
 # ---- Junk ----
 restart_with_marker "garbage"
-sleep 2
+check_within "$GUARD" "the new shell answers, unlocked" shell_status_is unlocked
+sleep 1 # fixed sleep: a negative claim: a junk marker is left as it is, so nothing marks the decision; a lock asked for would show by now
 check "a marker that says nothing known does not lock" compositor_unlocked
 
 # ---- Positive control: this session's key locks ----
 restart_with_marker "locked $(key_of "$this_boot")"
 check_within 10 "a marker of this session locks at once" compositor_locked
-check_within 5 "the compositor confirms it" state_is secure true
+check_within "$GUARD" "the compositor confirms it" state_is secure true
 check "the shell says locked" shell_status_is locked
 wake_prompt || fail "the prompt did not wake"
-check_within 5 "the methods are known" state_is armed true
+check_within "$GUARD" "the methods are known" state_is armed true
 type_text "$LOCKTEST_PASSWORD"
 press_key Return
 check_within 10 "the password unlocks" compositor_unlocked
-check_within 3 "the marker says unlocked (a moment after the unlock: its request is sent by then)" marker_file_is unlocked
+check_within "$GUARD" "the marker says unlocked (a moment after the unlock: its request is sent by then)" marker_file_is unlocked
 
 # ---- A key the old shell did not know yet ("?": it locked before its probe answered) ----
 restart_with_marker "locked ?"
 check_within 10 "an unknown key counts as this session's (fail closed): locks" compositor_locked
 wake_prompt || fail "the prompt did not wake"
-check_within 5 "the methods are known" state_is armed true
+check_within "$GUARD" "the methods are known" state_is armed true
 type_text "$LOCKTEST_PASSWORD"
 press_key Return
 check_within 10 "… and the password unlocks it: not locked for good" compositor_unlocked

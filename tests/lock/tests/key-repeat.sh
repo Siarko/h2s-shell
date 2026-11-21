@@ -9,15 +9,15 @@
 stack_start
 
 lock_by_ipc
-check_within 5 "locked" compositor_locked
-check_within 5 "armed" state_is armed true
-sleep 0.5
+check_within "$GUARD" "locked" compositor_locked
+check_within "$GUARD" "armed" state_is armed true
+sleep 0.5 # fixed sleep: a negative claim: nothing wakes the prompt by itself
 check "the prompt sleeps" state_is prompt_awake false
 
 # Escape held: the first press wakes, the repeats count for nothing
 hold_key Escape 1.5
-check_within 2 "a held Escape wakes the prompt" state_is prompt_awake true
-sleep 0.5
+check_within "$GUARD" "a held Escape wakes the prompt" state_is prompt_awake true
+sleep 0.5 # fixed sleep: a negative claim: the repeats do not put it back to sleep
 check "it stays awake: its repeats are reported as repeats, and ignored" state_is prompt_awake true
 check "still locked" compositor_locked
 

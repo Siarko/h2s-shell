@@ -6,32 +6,31 @@
 stack_start
 
 lock_by_ipc
-check_within 5 "locked" compositor_locked
-check_within 5 "the compositor confirmed the lock" state_is secure true
-check_within 5 "armed" state_is armed true
-sleep 0.5
+check_within "$GUARD" "locked" compositor_locked
+check_within "$GUARD" "the compositor confirmed the lock" state_is secure true
+check_within "$GUARD" "armed" state_is armed true
+sleep 0.5 # fixed sleep: a negative claim: nothing wakes the prompt by itself
 check "the prompt sleeps" state_is prompt_awake false
 
 press_key Escape
-check_within 3 "Escape at a sleeping prompt wakes it" state_is prompt_awake true
-sleep 0.5
+check_within "$GUARD" "Escape at a sleeping prompt wakes it" state_is prompt_awake true
+sleep 0.5 # fixed sleep: a negative claim: Escape does not unlock
 check "and does not unlock (compositor)" compositor_locked
 check "and does not unlock (shell)" shell_status_is locked
 
 type_text "typed-then-dropped"
-sleep 0.3
 epoch=$(state_field field_epoch)
 press_key Escape
-check_within 3 "Escape at the awake prompt hides it" state_is prompt_awake false
+check_within "$GUARD" "Escape at the awake prompt hides it" state_is prompt_awake false
 check "the field emptied with it (a new field epoch)" test "$(state_field field_epoch)" -gt "$epoch"
-sleep 0.5
+sleep 0.5 # fixed sleep: a negative claim: hiding the prompt does not unlock
 check "still locked (compositor)" compositor_locked
 check "still locked (shell)" shell_status_is locked
 
 # Many presses in a burst, awake and asleep alternately: nothing but the prompt changes
 send_input "key Escape" "key Escape" "key Escape" "key Escape" "key Escape" \
            "key Escape" "key Escape" "key Escape" "key Escape" "key Escape" "key Escape"
-sleep 1
+sleep 1 # fixed sleep: a negative claim: eleven presses decide nothing
 check "eleven more presses: still locked (compositor)" compositor_locked
 check "… (shell)" shell_status_is locked
 check "… nothing was sent to PAM" test ! -e "$WORK/pam/check.log"
@@ -41,7 +40,7 @@ check "… no unlock was even decided" test "$(shell_log_count 'unlocked (')" = 
 # (its first key wakes the prompt) unlocks — checked once, and right: nothing typed before
 # the Escape went with it
 press_key Escape
-check_within 3 "(asleep again)" state_is prompt_awake false
+check_within "$GUARD" "(asleep again)" state_is prompt_awake false
 type_text "$LOCKTEST_PASSWORD"
 press_key Return
 check_within 10 "the password typed after Escape unlocks" compositor_unlocked

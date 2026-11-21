@@ -70,24 +70,24 @@ alpha_loaded() { shell_ipc modules list | grep -q '"id":"alpha"[^}]*"state":"loa
 rm -f "$WORK/hang"
 check "modules rediscover (no hang): started" test -z "$(shell_ipc modules rediscover)"
 check_within 15 "… the module is found and loaded, without a restart" alpha_loaded
-check_within 5 "… and acknowledged, from a search that answered" acknowledged_are alpha
+check_within "$GUARD" "… and acknowledged, from a search that answered" acknowledged_are alpha
 touch "$WORK/hang"
 check "modules rediscover (hanging): started" test -z "$(shell_ipc modules rediscover)"
 check_within 10 "… cut off by the shell's bound, said in its log" shell_logged "the module search took longer than"
 check "… the module still loaded" alpha_loaded
-check_within 5 "… the cut-off search left nothing running" test -z "$(hung_searches)"
+check_within "$GUARD" "… the cut-off search left nothing running" test -z "$(hung_searches)"
 
 # ---- (2) killed while locked: the re-lock goes through the bounded search ----
 lock_by_ipc
-check_within 5 "locked" compositor_locked
-check_within 5 "confirmed" state_is secure true
+check_within "$GUARD" "locked" compositor_locked
+check_within "$GUARD" "confirmed" state_is secure true
 old_shell=$SHELL_PID
 start_lock_watch kill
 signal_shell KILL
-check_within 3 "the killed shell is gone" test ! -e "/proc/$old_shell"
+check_within "$GUARD" "the killed shell is gone" test ! -e "/proc/$old_shell"
 check_within 10 "the launcher starts a new shell" wait_for_new_shell "$old_shell" 10
 check_within 10 "the new shell locks again" state_is phase locked
-check_within 5 "the compositor confirmed the new shell's lock" state_is secure true
+check_within "$GUARD" "the compositor confirmed the new shell's lock" state_is secure true
 stop_lock_watch
 check "the compositor never reported unlocked across the restart" lock_watch_never_unlocked
 check "locked: modules rediscover refused" test "$(shell_ipc modules rediscover)" = "Refused while the session is locked"
@@ -95,7 +95,7 @@ check "locked: modules confirm refused" test "$(shell_ipc modules confirm alpha 
 check "locked: modules setEnabled refused" test "$(shell_ipc modules setEnabled alpha true)" = "Refused while the session is locked"
 check "the search was cut off again" test "$(grep -ac "module discovery took longer than 3 s" "$launcher_log")" -ge 2
 wake_prompt || fail "the new shell's prompt did not wake"
-check_within 5 "the methods are known" state_is armed true
+check_within "$GUARD" "the methods are known" state_is armed true
 type_text "$LOCKTEST_PASSWORD"
 press_key Return
 check_within 10 "the password unlocks" compositor_unlocked
@@ -108,11 +108,12 @@ restart_decided() { [ "$(grep -ac "starting it again in" "$launcher_log")" -gt "
 signal_shell KILL
 wait_until 5 restart_decided \
     || abort "the launcher did not decide to start the shell again"
-# The pause is 0.2 s; the search then runs for 3 s
-sleep 1
+# The pause is 0.2 s; the search then runs for 3 s: released while it runs
+search_running() { [ -n "$(hung_searches)" ]; }
+wait_until "$GUARD" search_running || abort "no module search after the restart was decided"
 supervisor_release
-check_within 6 "the supervisor ended" test ! -e "/proc/$SUPERVISOR_PID"
+check_within "$GUARD" "the supervisor ended" test ! -e "/proc/$SUPERVISOR_PID"
 check "… without starting a shell" test "$(grep -ac "started the shell: pid" "$launcher_log")" = "$starts"
 check "… having been told during the search" grep -aq "told to let the shell go (SIGUSR1)" "$launcher_log"
 check "no shell process of this test" test -z "$(_find_shell_pid)"
-check_within 5 "the search left nothing running" test -z "$(hung_searches)"
+check_within "$GUARD" "the search left nothing running" test -z "$(hung_searches)"

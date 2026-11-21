@@ -12,21 +12,21 @@ stack_start
 
 caps_led none
 lock_by_ipc
-check_within 5 "locked" compositor_locked
-check_within 5 "armed" state_is armed true
+check_within "$GUARD" "locked" compositor_locked
+check_within "$GUARD" "armed" state_is armed true
 wake_prompt || fail "the prompt did not wake"
-sleep 0.5
+sleep 0.5 # fixed sleep: a negative claim: with no LED, the wake shows nothing of Caps Lock
 check "no LED: Caps Lock unknown, no indicator" state_is caps_lock ""
 
 caps_led 1
 press_key Caps_Lock
 keys_text "lt"
-check_within 2 "the LED on: the shell says Caps Lock is on" state_is caps_lock true
+check_within "$GUARD" "the LED on: the shell says Caps Lock is on" state_is caps_lock true
 screenshot_ppm caps-on
 caps_led 0
 press_key Caps_Lock
 type_text "-test-"
-check_within 2 "the LED off: off" state_is caps_lock false
+check_within "$GUARD" "the LED off: off" state_is caps_lock false
 screenshot_ppm caps-off
 changed=$(prompt_region_changes caps-on caps-off)
 log "pixels changed in the prompt between Caps Lock on and off: $changed"
@@ -34,10 +34,10 @@ check "the prompt shows something while Caps Lock is on that it does not show af
 
 caps_led none
 press_key Num_Lock
-check_within 2 "the LED gone: unknown again, no indicator" state_is caps_lock ""
+check_within "$GUARD" "the LED gone: unknown again, no indicator" state_is caps_lock ""
 caps_led 1
 press_key KP_9
-check_within 2 "the LED back on: on (read at a key)" state_is caps_lock true
+check_within "$GUARD" "the LED back on: on (read at a key)" state_is caps_lock true
 press_key KP_0
 press_key KP_5
 press_key KP_Enter
@@ -50,8 +50,8 @@ check "PAM got exactly LT-test-905" test "$(password_details | tail -n 1)" = "$(
 press_key Num_Lock
 caps_led 0
 lock_by_ipc
-check_within 5 "locked again" compositor_locked
-check_within 5 "armed again" state_is armed true
+check_within "$GUARD" "locked again" compositor_locked
+check_within "$GUARD" "armed again" state_is armed true
 check "before the prompt wakes: unknown (nothing of the last lock kept)" state_is caps_lock ""
 wake_prompt || fail "the prompt did not wake"
-check_within 2 "at the wake: read from the LED, off" state_is caps_lock false
+check_within "$GUARD" "at the wake: read from the LED, off" state_is caps_lock false

@@ -43,27 +43,27 @@ kill_locked() {
     check_within 10 "killed while locked ($1): the launcher starts a new shell" wait_for_new_shell "$old" 10
     check "… its restart $1 of 3 while locked, said so" lines_more_than "$before" "(restart $1 of 3 while locked)" "$WORK/shell.log"
     check_within 10 "… which locks again (the marker)" state_is phase locked
-    check_within 5 "… confirmed" state_is secure true
+    check_within "$GUARD" "… confirmed" state_is secure true
 }
 
 # ---- An unlock in between starts the count afresh ----
 lock_by_ipc
-check_within 5 "locked" compositor_locked
-check_within 5 "confirmed" state_is secure true
+check_within "$GUARD" "locked" compositor_locked
+check_within "$GUARD" "confirmed" state_is secure true
 start_lock_watch limit
 kill_locked 1
 check "the launcher recorded it" record_is 1
 stop_lock_watch
 check "the compositor never reported unlocked across the restart" lock_watch_never_unlocked
 unlock_for_test || fail "the password did not unlock"
-check_within 3 "the marker says unlocked" marker_file_is unlocked
+check_within "$GUARD" "the marker says unlocked" marker_file_is unlocked
 record_says_unlocked() { grep -q '^unlocked [0-9]*$' "$record" 2> /dev/null; }
-check_within 3 "the unlock overwrote the launcher's record" record_says_unlocked
+check_within "$GUARD" "the unlock overwrote the launcher's record" record_says_unlocked
 
 # ---- Four deaths under one lock ----
 lock_by_ipc
-check_within 5 "locked again" compositor_locked
-check_within 5 "confirmed" state_is secure true
+check_within "$GUARD" "locked again" compositor_locked
+check_within "$GUARD" "confirmed" state_is secure true
 start_lock_watch limit-four
 supervisor=$SUPERVISOR_PID
 kill_locked 1
@@ -72,7 +72,7 @@ kill_locked 3
 check "three restarts recorded" record_is 3
 last=$SHELL_PID
 signal_shell KILL
-check_within 3 "the fourth time the killed shell is gone" test ! -e "/proc/$last"
+check_within "$GUARD" "the fourth time the killed shell is gone" test ! -e "/proc/$last"
 check_within 10 "… and not started again: the launcher ends" test ! -e "/proc/$supervisor"
 check "… it said why" grep -aq "after 3 restarts since the last unlock: not starting it again. The session stays locked." "$WORK/shell.log"
 check "no shell of this run is left" test -z "$(_find_shell_pid)"
@@ -98,18 +98,18 @@ check "… not shown while its question to Hyprland is unanswered (the lock not 
 check_within 15 "Hyprland's silence is noticed" grep -aq "Hyprland did not answer (hyprctl, 2 s each): asking for the lock back anyway" "$WORK/shell.log"
 rm -f "$WORK/hyprctl-hangs"
 check_within 10 "its shell locks again (the marker)" state_is phase locked
-check_within 5 "confirmed" state_is secure true
+check_within "$GUARD" "confirmed" state_is secure true
 check "while locked, the notice is not shown (nobody would see it)" notices_are 0
 stop_lock_watch
 check "the compositor never reported unlocked before the owner's password" lock_watch_never_unlocked
 unlock_for_test || fail "the password did not unlock"
-check_within 5 "unlocked, the shell shows the notice" notices_are 1
+check_within "$GUARD" "unlocked, the shell shows the notice" notices_are 1
 check "… saying what happened and where the log is" grep -q \
     "It stopped again after 3 restarts and was left locked. Log: $RUN/h2s-shell-launcher.log" \
     <<< "$(shell_ipc shelltest notifierRecorded)"
 lock_by_ipc
-check_within 5 "locks again" compositor_locked
+check_within "$GUARD" "locks again" compositor_locked
 unlock_for_test || fail "the password did not unlock"
-check_within 3 "the marker says unlocked" marker_file_is unlocked
+check_within "$GUARD" "the marker says unlocked" marker_file_is unlocked
 check "… once: not at the next unlock" notices_are 1
 check "no protocol error in either log" no_protocol_errors

@@ -7,9 +7,9 @@ printf '#!%s\nwhile :; do read -r -t 1 _ < /dev/null; sleep 1; done\n' "$(comman
 stack_start --methods-script "$methods_script"
 
 shell_ipc lockscreen lock > /dev/null
-check_within 5 "locked" compositor_locked
+check_within "$GUARD" "locked" compositor_locked
 check "the methods are being asked" state_is methods_status detecting
-check_within 8 "after the time-out the fallback serves" state_is methods_status known
+check_within "$GUARD" "after the time-out the fallback serves" state_is methods_status known
 check "the password falls back to the fallback (the test's stand-in for the system-wide config, which denies)" \
     state_is password_config "$WORK/system-pam/h2s-shell-password"
 check "the time-out was logged" grep -aq "detecting the methods timed out" "$WORK/shell.log"

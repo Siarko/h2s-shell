@@ -7,7 +7,7 @@
 stack_start --methods "password fingerprint"
 
 lock_by_ipc
-check_within 5 "lock by IPC locks the compositor" compositor_locked
+check_within "$GUARD" "lock by IPC locks the compositor" compositor_locked
 wait_until 5 _one_finger_waiter || abort "no single fingerprint conversation waiting (found: $(finger_waiters | tr '\n' ' '))"
 waiter=$(finger_waiters)
 helper=$(awk '{ print $4 }' "/proc/$waiter/stat" 2> /dev/null)
@@ -28,7 +28,7 @@ helper_parent=$(awk '{ print $4 }' "/proc/$helper/stat" 2> /dev/null)
 pass "the PAM helper is the shell under test's child, running Quickshell, of this run"
 
 kill -KILL "$helper"
-check_within 2 "the orphaned conversation ends by itself" test ! -e "/proc/$waiter"
+check_within "$GUARD" "the orphaned conversation ends by itself" test ! -e "/proc/$waiter"
 check "it says why" grep -q "orphaned $waiter" "$WORK/finger/log"
 check "it left no waiting file behind" test ! -e "$WORK/finger/waiting.$waiter"
 check "the compositor is still locked" compositor_locked

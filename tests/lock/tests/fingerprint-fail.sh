@@ -4,18 +4,18 @@
 stack_start --methods "password fingerprint"
 
 lock_by_ipc
-check_within 5 "lock by IPC locks the compositor" compositor_locked
-check_within 5 "the compositor confirmed the lock" state_is secure true
-check_within 5 "a fingerprint conversation is waiting" state_is fingerprint_waiting true
+check_within "$GUARD" "lock by IPC locks the compositor" compositor_locked
+check_within "$GUARD" "the compositor confirmed the lock" state_is secure true
+check_within "$GUARD" "a fingerprint conversation is waiting" state_is fingerprint_waiting true
 wait_until 5 _one_finger_waiter || abort "no single fingerprint conversation waiting (found: $(finger_waiters | tr '\n' ' '))"
 first_conversation=$(finger_waiters)
 
 finger fail
-sleep 1
+sleep 1 # fixed sleep: a negative claim: a rejected finger does not unlock
 check "a rejected finger leaves the compositor locked" compositor_locked
 check "a rejected finger leaves the shell locked" shell_status_is locked
 # The method starts a new round after a short pause (500 ms, doubling for quick failures)
-check_within 5 "a new conversation waits after the rejection" _one_finger_waiter
+check_within "$GUARD" "a new conversation waits after the rejection" _one_finger_waiter
 second_conversation=$(finger_waiters)
 log "conversations: $first_conversation rejected, $second_conversation waiting"
 # The stand-in's own log: the first conversation took "fail", and a conversation started

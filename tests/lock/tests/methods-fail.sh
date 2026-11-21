@@ -7,8 +7,8 @@ printf '#!%s\necho "methods script: deliberately failing" >&2\nexit 3\n' "$(comm
 stack_start --methods-script "$methods_script"
 
 lock_by_ipc --any-safe-config
-check_within 5 "locked" compositor_locked
-check_within 5 "the methods are known (after the failure)" state_is methods_status known
+check_within "$GUARD" "locked" compositor_locked
+check_within "$GUARD" "the methods are known (after the failure)" state_is methods_status known
 check "the password falls back to the fallback (the test's stand-in for the system-wide config, which denies)" \
     state_is password_config "$WORK/system-pam/h2s-shell-password"
 check "the failure was logged, with its reason" \

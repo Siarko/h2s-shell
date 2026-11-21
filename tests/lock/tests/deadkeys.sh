@@ -13,8 +13,8 @@ LOCKTEST_PASSWORD="lt-café-1"
 stack_start --keymap us-intl
 
 lock_by_ipc
-check_within 5 "locked" compositor_locked
-check_within 5 "armed" state_is armed true
+check_within "$GUARD" "locked" compositor_locked
+check_within "$GUARD" "armed" state_is armed true
 wake_prompt || fail "the prompt did not wake"
 
 # The base letter alone: not the password
@@ -38,8 +38,8 @@ log "PAM got: $(password_details | tail -n 1 | cut -d' ' -f1-2)"
 
 # Lock again: a dead key that combines with nothing typed, then fixed
 lock_by_ipc
-check_within 5 "locked again" compositor_locked
-check_within 5 "armed again" state_is armed true
+check_within "$GUARD" "locked again" compositor_locked
+check_within "$GUARD" "armed again" state_is armed true
 wake_prompt || fail "the prompt did not wake"
 type_text "lt-caf"
 press_key dead_acute
