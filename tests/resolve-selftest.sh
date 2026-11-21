@@ -125,6 +125,8 @@ cp -a "$store" "$work/store/cccccccc-h2s-locktest-tools"
 answers store/cccccccc-h2s-locktest-tools/bin/Hyprland "no number here"
 cp -a "$store" "$work/store/dddddddd-h2s-locktest-tools"
 rm "$work/store/dddddddd-h2s-locktest-tools/bin/labwc"
+cp -a "$store" "$work/store/eeeeeeee-h2s-locktest-tools"
+rm "$work/store/eeeeeeee-h2s-locktest-tools/bin/python3"
 
 # nix: writes down how it was called, prints the store path
 nix_stand_in() { stand_in "$1/nix" "echo \"\$*\" >> '$work/nix.calls'" "echo '$2'"; }
@@ -132,6 +134,7 @@ nix_stand_in nix "$store"
 nix_stand_in nix-partial "$work/store/bbbbbbbb-h2s-locktest-tools"
 nix_stand_in nix-mute-hyprland "$work/store/cccccccc-h2s-locktest-tools"
 nix_stand_in nix-no-labwc "$work/store/dddddddd-h2s-locktest-tools"
+nix_stand_in nix-no-python "$work/store/eeeeeeee-h2s-locktest-tools"
 stand_in nix-failing/nix "echo 'error: the stand-in build failed' >&2" "exit 1"
 
 # Quickshells, and launchers: one that runs the launch.sh it is pointed at (H2S_SHELL_DIR)
@@ -176,6 +179,7 @@ echo "setpriv=$SETPRIV"
 echo "launcher=$LOCKTEST_LAUNCHER"
 echo "launcher_from=$LOCKTEST_LAUNCHER_FROM"
 echo "qs=$LOCKTEST_QS"
+echo "python=${LOCKTEST_PYTHON:-}"
 # The lock bed's set from the system's tools, as run.sh has it made (MAKE_ANYWAY: a caller
 # that asks for it where it is not for)
 if { [ "$LOCKTEST_NEED" = lock ] && [ "$LOCKTEST_TOOL_SOURCE" = system ]; } || [ -n "${MAKE_ANYWAY:-}" ]; then
@@ -624,6 +628,32 @@ prints err "driver: make_system_tools is for the lock need with the system's too
 silent_on out "made="
 is "nothing was made" test ! -e "$made"
 
+# ---- The python need (tests/device/deploy-check.sh) ---
+# The pinned set's python3, with nix; nothing else asked for, no launcher or Quickshell
+resolve python-nix python "base session nix launcher"
+exits 0
+prints out "python=$store/bin/python3"
+prints out "tools: nix (tests/lock/tools.nix, pinned: $store) — python3 version unknown"
+prints out "launcher="
+prints out "qs="
+not_called launcher
+silent_on out "quickshell:"
+# The one on PATH without nix, the compositor and setpriv not needed
+resolve python-system python "base session python"
+exits 0
+prints out "python=$work/python/python3"
+prints out "tools: system (PATH, not pinned) — python3 version unknown"
+# None: status 2, naming it with its use for this need
+resolve python-missing python "base session system qs"
+exits 2
+prints err "driver: nothing was run, the tools are not all there (tools from: system):"
+prints err "  python3 not found on PATH (reads the shell's answers, JSON)"
+hands_over_nothing
+# A pinned set without it
+resolve python-nix-partial python "base session nix-no-python"
+exits 2
+prints err "  the pinned tool set ($work/store/eeeeeeee-h2s-locktest-tools) lacks bin/python3 (reads the shell's answers, JSON)"
+
 # ---- The launcher of the lock need ---
 # The one named, before the h2s-shell on PATH
 resolve lock-launcher-given lock "$system_lock launcher" LOCKTEST_LAUNCHER="$work/launcher-given/h2s-shell"
@@ -985,7 +1015,7 @@ is "the lock is free again" flock -n "$bed_lock" true
 # ---- A caller that does not say what it needs ---
 resolve no-need "" "base session system qs"
 exits 2
-prints err "driver: resolve.sh: LOCKTEST_NEED must be unit or lock, not ''"
+prints err "driver: resolve.sh: LOCKTEST_NEED must be unit, lock or python, not ''"
 hands_over_nothing
 
 # ---- Nothing left behind (the nix log, the launcher probe's dir) ---

@@ -27,7 +27,10 @@
 # packaged one beside the `h2s-shell` command (<prefix>/share/h2s-shell), the one Quickshell
 # picks for `qs -p <that directory>` (`qs list -p`: same display; the oldest, as `qs ipc`
 # takes) — never another copy's (a test bed's, a working tree's). Read with the `qs` on PATH
-# or beside the running Quickshell. Needs bash, coreutils (timeout), awk and python3.
+# or beside the running Quickshell. Needs bash, coreutils (timeout), awk and a python3, taken
+# as the test runners take their tools (tests/lock/resolve.sh, need "python"): the pinned
+# tests/lock/tools.nix build's where there is a `nix` command, else the one on PATH
+# (H2S_TEST_TOOLS=nix or =system chooses).
 #
 # Exit status: 0 when every check passed, 1 when one failed, 2 when it could not be set up
 # (no launcher, no qs, no python3, a wrong option).
@@ -46,9 +49,16 @@ done
 [[ "$repeats" =~ ^[0-9]+$ ]] || { echo "deploy-check.sh: --repeats takes a number" >&2; exit 2; }
 [[ "$minutes" =~ ^[1-9][0-9]*$ ]] || { echo "deploy-check.sh: --minutes takes a number above 0" >&2; exit 2; }
 
-for tool in python3 timeout awk; do
-    command -v "$tool" > /dev/null || { echo "deploy-check.sh: $tool not found on PATH (it reads the IPC's JSON / bounds the calls / scans the log)" >&2; exit 2; }
-done
+command -v awk > /dev/null || { echo "deploy-check.sh: awk not found on PATH (it scans the log)" >&2; exit 2; }
+# python3 (and timeout), from the runners' one source of tools
+setup_error() { echo "deploy-check.sh: $*" >&2; exit 2; }
+LOCKTEST_DIR=$(cd "$(dirname "$(readlink -f "$0")")/../lock" && pwd) || setup_error "cannot find tests/lock"
+LOCKTEST_NEED=python
+temp_base=${TMPDIR:-/tmp}
+# shellcheck disable=SC2034  # read by resolve.sh
+PROBE_TIMEOUT=5 probe=""
+# shellcheck source=../lock/resolve.sh
+source "$LOCKTEST_DIR/resolve.sh"
 
 shell_dir=${H2S_SHELL_DIR:-}
 if command -v h2s-shell > /dev/null; then
@@ -114,7 +124,7 @@ state_status=$?
 
 # Each line printed: "PASS|FAIL|NOTE|INFO<TAB>text". Texts from the shell are made printable
 # and cut, never interpreted.
-python3 -I - "$work" "$modules_status" "$state_status" > "$work/verdicts" << 'EOF' \
+"$LOCKTEST_PYTHON" -I - "$work" "$modules_status" "$state_status" > "$work/verdicts" << 'EOF' \
     || { echo "deploy-check.sh: reading the IPC's answers failed" >&2; exit 2; }
 import json, sys
 work, modules_status, state_status = sys.argv[1], int(sys.argv[2]), int(sys.argv[3])

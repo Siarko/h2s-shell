@@ -8,8 +8,9 @@
 #   tests/deploy-check-selftest.sh
 #
 # Nothing real is reached: the PATH holds only the plain utilities the check calls and the
-# stand-ins. It needs bash, coreutils, grep, sed, awk and python3, so it runs the same on
-# NixOS and on Arch. It takes no lock: nothing of it is shared with another run.
+# stand-ins. It needs bash, coreutils, grep, sed, awk and a python3 (tests/lock/resolve.sh:
+# the pinned tools.nix build where there is nix, else PATH), so it runs the same on NixOS and
+# on Arch. It takes no lock: nothing of it is shared with another run.
 #
 # Exit status: 0 when every check passed, 1 when one failed, 2 when it could not be set up.
 set -uo pipefail
@@ -33,10 +34,26 @@ for name in bash env timeout awk date mktemp rm readlink dirname sort grep cut h
     real=$(type -P "$name") || { echo "deploy-check-selftest.sh: $name not found on PATH (the check calls it)" >&2; exit 2; }
     ln -s "$real" "$work/bin/$name"
 done
-# The interpreter itself, not a version manager's shim (which needs its own environment)
-python=$(python3 -I -c 'import sys; print(sys.executable)' 2> /dev/null) && [ -x "$python" ] \
-    || { echo "deploy-check-selftest.sh: python3 not found (the check reads the IPC's JSON with it)" >&2; exit 2; }
+# The check's python3, as the runners take their tools (tests/lock/resolve.sh: the pinned
+# tools.nix build where there is nix, else PATH; a missing one ends the run with status 2),
+# linked as the python3 on the check's PATH — the interpreter itself, not a version
+# manager's shim (which needs its own environment). The check's own lookup then takes it
+# from PATH, as with the system's tools.
+setup_error() { echo "deploy-check-selftest.sh: $*" >&2; exit 2; }
+LOCKTEST_DIR=$REPO/tests/lock
+LOCKTEST_NEED=python
+temp_base=$work/temp
+mkdir -p "$temp_base"
+# shellcheck disable=SC2034  # read by resolve.sh
+PROBE_TIMEOUT=5 probe=""
+# shellcheck source=lock/resolve.sh
+source "$LOCKTEST_DIR/resolve.sh"
+python=$("$LOCKTEST_PYTHON" -I -c 'import sys; print(sys.executable)' 2> /dev/null) && [ -x "$python" ] \
+    || setup_error "$LOCKTEST_PYTHON does not run (the check reads the IPC's JSON with it)"
 ln -s "$python" "$work/bin/python3"
+# The same utilities without python3
+mkdir -p "$work/nopy"
+for link in "$work/bin"/*; do [ "${link##*/}" = python3 ] || ln -s "$(readlink "$link")" "$work/nopy/${link##*/}"; done
 
 stand_in() {
     local file=$work/standins/$1
@@ -99,12 +116,13 @@ new_case() {
 }
 
 # run [VAR=value…] [-- options…]: OUTPUT and STATUS of the check, with the stand-ins first
-# (PATH_FIRST, set by the caller, goes before them)
+# (PATH_FIRST, set by the caller, goes before them; BIN, set by the caller, replaces the
+# utilities' directory)
 run() {
     local -a assignments=()
     while [ $# -gt 0 ] && [ "$1" != -- ]; do assignments+=("$1"); shift; done
     [ "${1:-}" = -- ] && shift
-    OUTPUT=$(env -i HOME="$work" XDG_RUNTIME_DIR="$work/run" CASE="$CASE" PATH="${PATH_FIRST:-}$work/standins:$work/bin" \
+    OUTPUT=$(env -i HOME="$work" XDG_RUNTIME_DIR="$work/run" CASE="$CASE" PATH="${PATH_FIRST:-}$work/standins:${BIN:-$work/bin}" \
         "${assignments[@]}" "$bash_path" "$SCRIPT" "$@" 2>&1)
     STATUS=$?
 }
@@ -206,6 +224,11 @@ printf 'Instance bed999:\n  Config path: %s/other/shell.qml\n  Launch time: 2026
 run
 check "no running instance of the shell the IPC reaches (only another copy): exit 1" status_is 1
 check "… named" says "FAIL  log: no running instance of $packaged"
+new_case nopy
+BIN=$work/nopy run
+check "no python3 on PATH (and no nix): exit 2" status_is 2
+check "… naming it and its use" says "python3 not found on PATH (reads the shell's answers, JSON)"
+check "… before any call" test ! -e "$CASE/calls"
 run -- --frobnicate
 check "a wrong option: exit 2" status_is 2
 run -- --minutes 0

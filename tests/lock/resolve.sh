@@ -7,6 +7,9 @@
 #
 #   unit   labwc, setpriv, setsid, timeout
 #   lock   the lock test bed's whole set (below), setsid, timeout, and a launcher
+#   python python3 and timeout only (tests/device/deploy-check.sh reads JSON with it): the
+#          pinned set's bin/python3, or the one on PATH; no launcher, no Quickshell. Sets
+#          LOCKTEST_PYTHON and prints one tools line
 #
 # The tools come from one source for the whole run, never tool by tool (they depend on each
 # other, and a mix of pinned and system parts is a configuration nobody tests):
@@ -71,7 +74,7 @@ tool_use() {
         timeout) echo "ends a compositor or a Quickshell that hangs" ;;
         Hyprland | hyprctl) echo "the compositor the lock screen is tested in" ;;
         grim) echo "screenshots of the lock screen" ;;
-        python3) echo "the virtual keyboard and pointer" ;;
+        python3) if [ "${LOCKTEST_NEED:-}" = python ]; then echo "reads the shell's answers, JSON"; else echo "the virtual keyboard and pointer"; fi ;;
         xkbcli) echo "tells the virtual keyboard which keys type a character" ;;
         dbus-daemon | gdbus) echo "a private session bus for the notification tests" ;;
         wl-copy | wl-paste) echo "the primary selection of the paste test" ;;
@@ -99,8 +102,8 @@ version_number() {
 tool_version() { version_number "$(version_line "$1")"; }
 
 case "${LOCKTEST_NEED:-}" in
-    unit | lock) ;;
-    *) setup_error "resolve.sh: LOCKTEST_NEED must be unit or lock, not '${LOCKTEST_NEED:-}'" ;;
+    unit | lock | python) ;;
+    *) setup_error "resolve.sh: LOCKTEST_NEED must be unit, lock or python, not '${LOCKTEST_NEED:-}'" ;;
 esac
 
 # ---- The source -----------------------------------------------------------------------
@@ -156,6 +159,8 @@ tools_cache_file() {
 pinned_parts() {
     if [ "$LOCKTEST_NEED" = lock ]; then
         printf '%s\n' "${lock_programs[@]/#/bin/}" share/ltproto share/us.xkb share/keymaps
+    elif [ "$LOCKTEST_NEED" = python ]; then
+        echo bin/python3
     else
         printf '%s\n' bin/labwc bin/setpriv
     fi
@@ -216,12 +221,16 @@ if [ "$LOCKTEST_TOOL_SOURCE" = nix ]; then
     [ -z "$tools_remembered" ] && [ -n "$tools_cache" ] && [ ${#missing[@]} -eq 0 ] && remember_tools "$tools_cache" "$LOCKTEST_TOOLS"
     LOCKTEST_LABWC=$LOCKTEST_TOOLS/bin/labwc
     SETPRIV=$LOCKTEST_TOOLS/bin/setpriv
-    needed_tools=(setsid timeout)
+    LOCKTEST_PYTHON=$LOCKTEST_TOOLS/bin/python3
+    if [ "$LOCKTEST_NEED" = python ]; then needed_tools=(timeout); else needed_tools=(setsid timeout); fi
 else
     LOCKTEST_TOOLS=""
     LOCKTEST_LABWC=$(type -P labwc)
     SETPRIV=$(type -P setpriv)
-    if [ "$LOCKTEST_NEED" = lock ]; then
+    LOCKTEST_PYTHON=$(type -P python3)
+    if [ "$LOCKTEST_NEED" = python ]; then
+        needed_tools=(python3 timeout)
+    elif [ "$LOCKTEST_NEED" = lock ]; then
         needed_tools=("${lock_programs[@]}" pkg-config setsid timeout)
     else
         needed_tools=(labwc setpriv setsid timeout)
@@ -230,6 +239,20 @@ fi
 for tool in "${needed_tools[@]}"; do
     type -P "$tool" > /dev/null || missing+=("$tool not found on PATH ($(tool_use "$tool"))")
 done
+
+# The python need ends here: no launcher, no Quickshell
+if [ "$LOCKTEST_NEED" = python ]; then
+    if [ ${#missing[@]} -gt 0 ]; then
+        setup_error "nothing was run, the tools are not all there (tools from: $LOCKTEST_TOOL_SOURCE):$(printf '\n  %s' "${missing[@]}")"
+    fi
+    if [ "$LOCKTEST_TOOL_SOURCE" = nix ]; then
+        echo "tools: nix (tests/lock/tools.nix, pinned: $LOCKTEST_TOOLS${tools_remembered:+, remembered from an earlier run}) — python3 $(tool_version "$LOCKTEST_PYTHON")"
+    else
+        echo "tools: system (PATH, not pinned) — python3 $(tool_version "$LOCKTEST_PYTHON")"
+    fi
+    LOCKTEST_LAUNCHER="" LOCKTEST_LAUNCHER_FROM="" LOCKTEST_QS=""
+    return 0
+fi
 
 # The lock bed's set from the system: what its share/ is made from. Each is looked at only
 # when the program that says is there (one that is not is in the list already).

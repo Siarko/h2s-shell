@@ -1604,6 +1604,10 @@ Versions are printed, not checked. A missing tool is a set-up error: status 2, e
 missing tool named with its use, nothing run. `tests/resolve-selftest.sh` checks the lookup
 against stand-in programs; it needs neither `nix` nor labwc.
 
+The deploy check (`tests/device/deploy-check.sh`) and its self-test take only a `python3`
+(for the shell's JSON answers) from the same source: the pinned set's where there is `nix`,
+else the one on `PATH`; none is a set-up error, status 2.
+
 The lock test bed (`tests/lock/run.sh`) takes a larger set from the same source: labwc,
 Hyprland and `hyprctl`, grim, wlr-randr, `wl-copy` and `wl-paste`, `xkbcli`, `dbus-daemon`,
 `gdbus`, `setpriv`, a `python3` that imports pywayland, the Python bindings of the virtual
@@ -1634,7 +1638,8 @@ are the ones beside the libpam Quickshell links, on both systems.
 
 #### NixOS
 
-`nix` builds the pinned tools, for the unit suites and the lock test bed alike. The
+`nix` builds the pinned tools, for the unit suites, the lock test bed and the deploy check's
+`python3` alike (there is no `python3` on `PATH` to fall back on). The
 launcher is the package's `h2s-shell`, so the tests run the Quickshell the installed shell
 runs.
 
@@ -1656,7 +1661,7 @@ does not install them. The packages, each with what the tests use it for
 | `wl-clipboard` | `wl-copy`, `wl-paste`: the primary selection of the paste test |
 | `libxkbcommon` | `xkbcli`: tells the virtual keyboard which keys type a character |
 | `dbus`, `glib2` | `dbus-daemon`, `gdbus`: a private session bus for the notification tests |
-| `python`, `python-pywayland` | the virtual keyboard and pointer, and the scanner their bindings are made with |
+| `python`, `python-pywayland` | the virtual keyboard and pointer, and the scanner their bindings are made with; `python` also reads the shell's answers in the deploy check |
 | `pkgconf`, `wayland`, `wayland-protocols` | finding the protocol files those bindings are made from |
 
 The first four are enough for everything but the lock test bed. The bed takes the first
