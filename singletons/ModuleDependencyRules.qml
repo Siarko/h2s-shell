@@ -24,19 +24,20 @@ Singleton {
     // What installing (or updating to) the manifest `rootManifest` brings with it.
     // `rootManifest`: the staged manifest { id, name, version, api, exports: { version } | null,
     //   uses: [{ id, version, optional, source }] } — `source` (API 1.36) the address the
-    //   dependency is downloaded from when it is missing.
-    // `installed`: { <id>: { name, version, api, exports, uses, origin, address } } — every
-    //   module on disk; `origin` "builtin", "system", "shell" (installed by the shell),
-    //   "folder" or "link" (placed by hand); `address` the recorded source of one installed by
-    //   the shell ("" otherwise). Only one installed by the shell with an address can be
-    //   updated here.
+    //   dependency is downloaded from when it is missing ("<url>#<ref>" allowed); one that
+    //   ModuleInstallRules.repositoryProblem refuses counts as none ("address not usable").
+    // `installed`: { <id>: { name, version, api, exports, uses, source, isLink, address, ref } }
+    //   — every module on disk; `source` ModuleInstallRules.sourceOf's kind (builtin, system,
+    //   repository, folder, user, developer), `address` and `ref` its recorded ones. Only one
+    //   the shell installed — a repository with a usable address, or a folder with an
+    //   absolute path — can be updated here, from that address at that ref.
     // `fetched`: { <id>: manifest } — the manifests downloaded and verified into staging so
     //   far (dependencies and updates); missing ones are asked for in `fetch`.
     // `context`: { shellApi, apiFloor (optional), alsoInstall: [ids] } — `alsoInstall` the
     //   soft dependencies whose "Also install" the user ticked.
     // → { refused: "" | why the whole chain is refused (a cycle, a limit, unreadable input),
     //     entries: [{ id, name, kind, soft, depth, neededBy: [ids], wants: [versions],
-    //                 source, from, to, fetch, reason, breaks: [ids] }] in the order met
+    //                 address, ref, from, to, fetch, reason, breaks: [ids] }] in the order met
     //       (breadth first, so a provider with several dependents is listed once) — `kind`:
     //         "there"        installed and fits every dependent: nothing to do
     //         "update"       installed, too old, can be updated from its recorded address
@@ -44,12 +45,15 @@ Singleton {
     //         "download"     missing, with a source: downloaded too, its own uses walked
     //         "unresolved"   missing, no source
     //         "incompatible" present or downloaded, but its version or its API does not fit
+    //                        (an installed copy whose API no longer fits the shell: an update
+    //                        when it can have one, else this)
     //       `reason` one line for the preview ("Needs Clipboard 0.2 — not installed, no
     //       address given"; for an update "Notes needs 1.3"); `breaks` installed modules the
     //       update would no longer serve (a new major; the update rules ask for consent),
-    //     offers: [{ id, name, wants, neededBy, source, canInstall }] — soft uses that are
-    //       missing ("Can use: Calendar — not installed"; "Also install" only with a source),
-    //     fetch: [{ id, source }] — what to download next; the installer calls plan again
+    //     offers: [{ id, name, wants, neededBy, address, ref, canInstall }] — soft uses that
+    //       are missing ("Can use: Calendar — not installed"; "Also install" only with a usable
+    //       address),
+    //     fetch: [{ id, address, ref }] — what to download next; the installer calls plan again
     //       with the new manifests in `fetched`,
     //     complete: nothing more to fetch,
     //     blocking: [lines] — the unresolved and incompatible hard dependencies,
@@ -107,18 +111,21 @@ Singleton {
                 const id = use?.id;
                 if (typeof id !== "string" || id === "" || id === rootManifest.id)
                     continue;           // a use of the root closes a cycle: found below
-                const source = typeof use.source === "string" ? use.source : "";
+                const given = _address(use.source);
+                const source = given.address;
                 const soft = use.optional === true;
                 if (soft && !met.has(id)) {
                     if (ModuleRules.has(installed, id))
                         continue;       // there: the host gives it when it fits
                     if (!(chosen.includes(id) && source !== "")) {
-                        const offer = offers.get(id) ?? { id: id, name: id, wants: [], neededBy: [], source: "", canInstall: false };
+                        const offer = offers.get(id) ?? { id: id, name: id, wants: [], neededBy: [], address: "", ref: "", canInstall: false };
                         _addOnce(offer.wants, use.version);
                         _addOnce(offer.neededBy, manifest.id);
-                        if (offer.source === "" && source !== "")
-                            offer.source = source;
-                        offer.canInstall = offer.source !== "";
+                        if (offer.address === "" && source !== "") {
+                            offer.address = source;
+                            offer.ref = given.ref;
+                        }
+                        offer.canInstall = offer.address !== "";
                         offers.set(id, offer);
                         continue;
                     }
@@ -132,10 +139,14 @@ Singleton {
                     } else {
                         _addOnce(entry.softWants, use.version);
                     }
-                    // The first source named stays: dependents naming another are not asked
-                    // which is right
-                    if (entry.source === "" && source !== "")
-                        entry.source = source;
+                    // The first usable address named stays: dependents naming another are not
+                    // asked which is right
+                    if (entry.address === "" && source !== "") {
+                        entry.address = source;
+                        entry.ref = given.ref;
+                    }
+                    if (given.problem)
+                        entry.badAddress = true;
                     continue;
                 }
                 parent.set(id, manifest.id);
@@ -146,17 +157,18 @@ Singleton {
                 offers.delete(id);
                 const entry = { id: id, name: id, kind: "", soft: soft, depth: depth + 1, neededBy: [manifest.id],
                                 wants: soft ? [] : [use.version], softWants: soft ? [use.version] : [],
-                                source: source, from: "", to: "", fetch: false, reason: "", breaks: [] };
+                                address: source, ref: given.ref, badAddress: given.problem, from: "", to: "",
+                                fetch: false, reason: "", breaks: [] };
                 met.set(id, entry);
                 if (walked.has(id) && _readable(ModuleRules.get(staged, id)))
                     queue.push({ manifest: ModuleRules.get(staged, id), depth: depth + 1 });
             }
         }
-        const cycle = _cycle(rootManifest, staged, walked);
+        const cycle = _cycle(rootManifest, installed, staged, walked);
         if (cycle.length > 0)
             return { refused: cycle.length <= 2 ? cycle[0] + " uses itself" : "uses form a cycle: " + cycle.join(" → ") };
         for (const entry of met.values())
-            _classify(entry, installed, staged, shellApi, apiFloor);
+            _classify(entry, rootManifest, installed, staged, shellApi, apiFloor);
         // An offer one module makes soft and another installs hard is not offered
         for (const id of Array.from(offers.keys()))
             if (met.has(id))
@@ -165,7 +177,12 @@ Singleton {
     }
 
     // The kind, versions and line of one entry, from everything that wants it
-    function _classify(entry, installed, staged, shellApi, apiFloor) {
+    function _classify(entry, rootManifest, installed, staged, shellApi, apiFloor) {
+        _classifyKind(entry, rootManifest, installed, staged, shellApi, apiFloor);
+        delete entry.badAddress;
+    }
+
+    function _classifyKind(entry, rootManifest, installed, staged, shellApi, apiFloor) {
         // A dependency taken only as a ticked soft one is asked for at its soft version
         const wants = entry.wants.length > 0 ? entry.wants : entry.softWants;
         const wantsText = wants.map(version => ModuleRules.show(version).replace(/^"|"$/g, "")).join(" and ");
@@ -189,18 +206,25 @@ Singleton {
         entry.wants = wants;
         if (record !== null) {
             entry.from = typeof record.version === "string" ? record.version : "";
-            const misfit = ModuleRules.isObject(record) ? _misfit(wants, record.exports) : "nothing readable";
-            if (misfit === "") {
+            const versionMisfit = ModuleRules.isObject(record) ? _misfit(wants, record.exports) : "nothing readable";
+            // A copy that serves the version but asks an API this shell no longer has does not
+            // load: it needs an update as much as a too old one
+            const api = ModuleRules.isObject(record) ? ModuleRules.apiCompatibility(record.api, shellApi, apiFloor)
+                                                     : { compatible: false, reason: "" };
+            if (versionMisfit === "" && api.compatible) {
                 entry.kind = "there";
                 return;
             }
-            const updatable = record.origin === "shell" && ModuleRules.isString(record.address, 4096);
-            if (!updatable) {
+            const misfitText = versionMisfit !== "" ? _copyWords(record?.source) + " " + versionMisfit
+                                                    : _copyWords(record?.source) + " " + entry.from + ", " + api.reason;
+            if (!_updatable(record)) {
                 entry.kind = "incompatible";
-                entry.reason = needs + _copyWords(record.origin) + " " + misfit;
+                entry.reason = needs + misfitText;
                 return;
             }
-            entry.source = record.address;
+            entry.address = record.address;
+            entry.ref = typeof record.ref === "string" ? record.ref : "";
+            entry.badAddress = false;
             if (!has) {
                 entry.kind = "update";
                 entry.fetch = true;
@@ -212,12 +236,12 @@ Singleton {
             entry.kind = problem === "" ? "update" : "incompatible";
             entry.reason = problem === "" ? neededBy + " needs " + wantsText : needs + problem;
             if (problem === "")
-                entry.breaks = _breaks(entry.id, manifest, installed, staged);
+                entry.breaks = _breaks(entry.id, manifest, installed, staged, rootManifest);
             return;
         }
-        if (entry.source === "") {
+        if (entry.address === "") {
             entry.kind = "unresolved";
-            entry.reason = needs + "not installed, no address given";
+            entry.reason = needs + (entry.badAddress ? "not installed, address not usable" : "not installed, no address given");
             return;
         }
         if (!has) {
@@ -234,11 +258,11 @@ Singleton {
     // The whole result from a settled walk
     function _finish(rootManifest, installed, staged, walk) {
         const entries = walk.entries;
-        const fetch = entries.filter(entry => entry.fetch).map(entry => ({ id: entry.id, source: entry.source }));
+        const fetch = entries.filter(entry => entry.fetch).map(entry => ({ id: entry.id, address: entry.address, ref: entry.ref }));
         const blocking = entries.filter(entry => !entry.soft && (entry.kind === "unresolved" || entry.kind === "incompatible"))
             .map(entry => entry.reason);
         // The root, when it replaces an installed copy, may leave dependents behind too
-        const rootBreaks = ModuleRules.has(installed, rootManifest.id) ? _breaks(rootManifest.id, rootManifest, installed, staged) : [];
+        const rootBreaks = ModuleRules.has(installed, rootManifest.id) ? _breaks(rootManifest.id, rootManifest, installed, staged, rootManifest) : [];
         const installing = entries.filter(entry => (entry.kind === "update" || entry.kind === "download") && !entry.fetch);
         const order = installOrder([rootManifest].concat(installing.map(entry => staged[entry.id])));
         return { refused: "", entries: entries, offers: walk.offers, fetch: fetch, complete: fetch.length === 0,
@@ -247,13 +271,15 @@ Singleton {
     }
 
     // The installed modules whose hard use of `id` the new manifest no longer serves (one
-    // being updated in the same chain is judged by its new manifest)
-    function _breaks(id, manifest, installed, staged) {
+    // being updated in the same chain — the root `rootManifest` among them — is judged by its
+    // new manifest, not its old uses)
+    function _breaks(id, manifest, installed, staged, rootManifest) {
         const result = [];
         for (const otherId of Object.keys(installed).sort()) {
             if (otherId === id)
                 continue;
-            const newer = ModuleRules.has(staged, otherId) && _readable(staged[otherId]) ? staged[otherId] : null;
+            const newer = rootManifest && otherId === rootManifest.id ? rootManifest
+                : ModuleRules.has(staged, otherId) && _readable(staged[otherId]) ? staged[otherId] : null;
             const uses = (newer ?? installed[otherId])?.uses;
             if (!Array.isArray(uses))
                 continue;
@@ -276,23 +302,52 @@ Singleton {
         return "";
     }
 
-    function _copyWords(origin) {
-        switch (origin) {
+    function _copyWords(source) {
+        switch (source) {
         case "system": return "the system's copy is";
         case "builtin": return "the built-in copy is";
-        case "folder":
-        case "link": return "the copy placed by hand is";
+        case "user": return "the copy placed by hand is";
+        case "developer": return "the development copy is";
         default: return "the installed copy is";
         }
     }
 
-    // A hard cycle among the root and the walked manifests, as [a, b, …, a], or []. Soft uses
-    // never close one (the host breaks them at load).
-    function _cycle(rootManifest, staged, walked) {
-        const manifests = new Map([[rootManifest.id, rootManifest]]);
+    // Whether an installed module can be updated here: the shell installed it and its
+    // recorded address can be fetched again
+    function _updatable(record) {
+        if (!ModuleRules.isObject(record))
+            return false;
+        if (record.source === "repository")
+            return ModuleInstallRules.repositoryProblem(record.address) === "";
+        if (record.source === "folder")
+            return typeof record.address === "string" && _cleanPath(record.address) !== "";
+        return false;
+    }
+
+    // A dependency's `source` → { address, ref, problem }: "<url>#<ref>" split; one the
+    // download would refuse is no address at all (`problem` true), so it is never fetched
+    function _address(source) {
+        if (source === undefined || source === null || source === "")
+            return { address: "", ref: "", problem: false };
+        if (ModuleInstallRules.repositoryProblem(source) !== "")
+            return { address: "", ref: "", problem: true };
+        const parts = ModuleInstallRules.splitAddress(source);
+        return { address: parts.url, ref: parts.ref, problem: false };
+    }
+
+    // A hard cycle reachable from the root, through the walked manifests and the installed
+    // modules (a dependency that is there may use the root or a new one back), as
+    // [a, b, …, a], or []. Soft uses never close one (the host breaks them at load). A cycle
+    // among installed modules alone is not this chain's.
+    function _cycle(rootManifest, installed, staged, walked) {
+        const manifests = new Map();
+        for (const id of Object.keys(installed))
+            if (ModuleRules.isObject(installed[id]) && Array.isArray(installed[id].uses))
+                manifests.set(id, installed[id]);
         for (const id of walked)
             if (_readable(ModuleRules.get(staged, id)))
                 manifests.set(id, staged[id]);
+        manifests.set(rootManifest.id, rootManifest);
         const edges = id => manifests.get(id).uses.filter(use => use?.optional !== true && manifests.has(use?.id))
             .map(use => use.id);
         const state = new Map();        // id → "open" while on the path, "done" after
@@ -313,13 +368,7 @@ Singleton {
             state.set(id, "done");
             return [];
         };
-        for (const id of manifests.keys())
-            if (!state.has(id)) {
-                const found = visit(id);
-                if (found.length > 0)
-                    return found;
-            }
-        return [];
+        return visit(rootManifest.id);
     }
 
     // The way from the root to `id` the walk took
@@ -347,18 +396,26 @@ Singleton {
     // ---- A failure halfway ----
 
     // How to take back a run that failed while installing: the user root as it was before.
-    // `run`: { staged: [directories] — every staging directory of the chain,
-    //          done: [{ id, kind: "install" | "update", version, previousVersion, backup }] —
-    //            the modules already moved in, in the order they were }
+    // Versions are named by their directory (`<version>-<commit7>`, ModuleInstallRules), never
+    // by the version text: the same version from a new commit is another directory.
+    // `run`: { stagingRoot — the staging place (ModuleInstallRules.paths().staging),
+    //          staged: [directories] — every staging directory of the chain, each inside it,
+    //          done: [{ id, kind: "install" | "update", dir, previousDir, existed, backup,
+    //                   previousRecord }] — the modules already moved in, in the order they
+    //            were; `existed` when `dir` was a kept version before this run (a refused
+    //            update kept on disk), `previousRecord` the record's entry before the run }
     // → { actions: [...] in the order to carry out — the done ones last first:
-    //       install: { action: "unlink", id }, { action: "deleteVersion", id, version }
-    //       update:  { action: "relink", id, version: previousVersion },
+    //       install: { action: "unlink", id }, { action: "deleteVersion", id, dir },
+    //                { action: "dropRecord", id }
+    //       update:  { action: "relink", id, dir: previousDir },
     //                { action: "restoreBackup", id, backup } (when one was taken),
-    //                { action: "deleteVersion", id, version }
-    //     then { action: "deleteStaging", directory } for each staged one,
+    //                { action: "deleteVersion", id, dir } (only a directory this run made:
+    //                  not the previous one, not one kept before),
+    //                { action: "restoreRecord", id, previous }
+    //     then { action: "deleteStaging", directory } for each staged one under the staging
+    //       root,
     //     problems: [lines] — steps that could not be read; what they would touch is left
-    //       alone (a new version without a previous one to relink to is kept, not deleted
-    //       from under its link) }
+    //       alone (a new version without a previous one to relink to stays linked) }
     function rollbackPlan(run) {
         const actions = [];
         const problems = [];
@@ -368,48 +425,74 @@ Singleton {
         for (let i = done.length - 1; i >= 0; i--) {
             const step = done[i];
             const id = step?.id;
-            if (!ModuleRules.isString(id, 200)) {
+            if (!ModuleManifestRules.validId(id)) {
                 problems.push("step " + (i + 1) + ": no module id");
                 continue;
             }
-            const version = ModuleRules.isString(step.version, 200) ? step.version : "";
+            const dir = _versionDir(step.dir);
             if (step.kind === "install") {
                 actions.push({ action: "unlink", id: id });
-                if (version !== "")
-                    actions.push({ action: "deleteVersion", id: id, version: version });
+                if (dir !== "")
+                    actions.push({ action: "deleteVersion", id: id, dir: dir });
                 else
-                    problems.push(id + ": the version installed is not known; its directory is left");
+                    problems.push(id + ": the version directory is not known; it is left");
+                actions.push({ action: "dropRecord", id: id });
             } else if (step.kind === "update") {
-                if (!ModuleRules.isString(step.previousVersion, 200)) {
+                const previousDir = _versionDir(step.previousDir);
+                if (previousDir === "") {
                     problems.push(id + ": the previous version is not known; the new one stays linked");
                     continue;
                 }
-                actions.push({ action: "relink", id: id, version: step.previousVersion });
+                actions.push({ action: "relink", id: id, dir: previousDir });
                 if (ModuleRules.isString(step.backup, 4096))
                     actions.push({ action: "restoreBackup", id: id, backup: step.backup });
-                if (version !== "" && version !== step.previousVersion)
-                    actions.push({ action: "deleteVersion", id: id, version: version });
+                if (dir !== "" && dir !== previousDir && step.existed !== true)
+                    actions.push({ action: "deleteVersion", id: id, dir: dir });
+                if (ModuleRules.isObject(step.previousRecord))
+                    actions.push({ action: "restoreRecord", id: id, previous: step.previousRecord });
+                else
+                    problems.push(id + ": its record before the update is not known; the record is left");
             } else {
                 problems.push(id + ": " + ModuleRules.show(step.kind) + " is not a step that can be taken back");
             }
         }
-        const staged = Array.isArray(run?.staged) ? run.staged : [];
-        for (const directory of staged) {
-            if (ModuleRules.isString(directory, 4096))
-                actions.push({ action: "deleteStaging", directory: directory });
-            else
-                problems.push("a staging directory that is not a path: " + ModuleRules.show(directory));
+        const stagingRoot = _cleanPath(run?.stagingRoot);
+        if (stagingRoot === "" && Array.isArray(run?.staged) && run.staged.length > 0)
+            problems.push("the staging place is not known; nothing staged is deleted");
+        for (const directory of Array.isArray(run?.staged) ? run.staged : []) {
+            const clean = _cleanPath(directory);
+            // Only what lies inside the staging place: a path from a broken step must never
+            // turn a cleanup into deleting something else
+            if (stagingRoot !== "" && clean !== "" && clean.startsWith(stagingRoot + "/"))
+                actions.push({ action: "deleteStaging", directory: clean });
+            else if (stagingRoot !== "")
+                problems.push("not inside the staging place: " + ModuleRules.show(directory));
         }
         return { actions: actions, problems: problems };
+    }
+
+    // A version directory's name ("1.2.0-abc1234"), "" for anything that is not one plain name
+    function _versionDir(dir) {
+        return typeof dir === "string" && /^[A-Za-z0-9][A-Za-z0-9._+-]{0,99}$/.test(dir) && dir !== "." && dir !== ".." ? dir : "";
+    }
+
+    // An absolute path with no "." or ".." segment, trailing slashes dropped; "" otherwise
+    function _cleanPath(path) {
+        if (typeof path !== "string" || !path.startsWith("/") || path.includes("\u0000"))
+            return "";
+        const parts = path.split("/").filter(part => part !== "");
+        if (parts.length === 0 || parts.some(part => part === "." || part === ".."))
+            return "";
+        return "/" + parts.join("/");
     }
 
     // ---- Remove and Disable ----
 
     // Who needs module `id`. `modules`: [{ id, name, uses: [{ id, version, optional }],
     // state }] (the others on disk; `id` among them or not).
-    // → { stopWorking: [ids] — hard dependents, and theirs in turn ("These stop working:"),
-    //     loseFeature: [ids] — soft users of it or of those, that keep working ("These lose a
-    //       feature:"),
+    // → { hard: [ids] — hard dependents, and theirs in turn ("These stop working:"),
+    //     soft: [ids] — soft users of it or of those, that keep working ("These lose a
+    //       feature:") — the shape of ModuleInstallRules.removalPlan's `dependents`,
     //     unknown: [ids] — modules whose uses cannot be read: they may need it }
     // Each list by name.
     function dependents(id, modules) {
@@ -420,7 +503,7 @@ Singleton {
             if (module.uses !== null && module.id !== id && !stopping.has(module.id)
                     && module.uses.some(use => use.optional && (use.id === id || stopping.has(use.id))))
                 losing.add(module.id);
-        return { stopWorking: _byName(stopping, known), loseFeature: _byName(losing, known),
+        return { hard: _byName(stopping, known), soft: _byName(losing, known),
                  unknown: _byName(new Set(known.list.filter(module => module.uses === null && module.id !== id).map(module => module.id)), known) };
     }
 
@@ -439,11 +522,13 @@ Singleton {
 
     // The dependencies installed for module `id` that nothing else needs once it is removed
     // — each offered unchecked with its removal ("Also remove Clipboard (installed for Notes,
-    // nothing else uses it)"). `modules`: [{ id, name, uses, origin, installedFor }].
+    // nothing else uses it)"). `modules`: [{ id, name, uses, source, installedFor }] —
+    // `source` ModuleInstallRules.sourceOf's kind.
     // Installed for it: `installedFor` is `id`, or another such dependency (a chain of two
     // recorded either way). One stays out when a module outside them (not `id`, not one of
-    // them) uses it, hard or soft, or has uses that cannot be read; built-in and system ones
-    // are never offered.
+    // them) uses it, hard or soft, or has uses that cannot be read. Only what the shell
+    // installed (`repository`, `folder`) is offered: a module placed by hand, a development
+    // copy, a built-in or a system one is the user's or someone else's to remove.
     // → [{ id, name, usedBy: [ids] }] by name — `usedBy` the other offered ones that use it:
     //   it may go only together with them.
     function orphans(id, modules) {
@@ -452,7 +537,7 @@ Singleton {
         for (let grew = true; grew;) {
             grew = false;
             for (const module of known.list)
-                if (!candidates.has(module.id) && module.id !== id && module.origin !== "builtin" && module.origin !== "system"
+                if (!candidates.has(module.id) && module.id !== id && (module.source === "repository" || module.source === "folder")
                         && (module.installedFor === id || candidates.has(module.installedFor))) {
                     candidates.add(module.id);
                     grew = true;
@@ -475,7 +560,7 @@ Singleton {
     }
 
     // The modules as { list, byId }, each { id, name, uses (null when unreadable), state,
-    // origin, installedFor }; the first of an id counts
+    // source, installedFor }; the first of an id counts
     function _modules(modules) {
         const byId = new Map();
         for (const module of Array.isArray(modules) ? modules : []) {
@@ -485,7 +570,7 @@ Singleton {
             const uses = Array.isArray(module.uses) && module.uses.every(use => typeof use?.id === "string")
                 ? module.uses.map(use => ({ id: use.id, optional: use.optional === true })) : null;
             byId.set(id, { id: id, name: _name(module.name, id), uses: uses, state: module.state,
-                           origin: module.origin, installedFor: typeof module.installedFor === "string" ? module.installedFor : "" });
+                           source: module.source, installedFor: typeof module.installedFor === "string" ? module.installedFor : "" });
         }
         return { list: Array.from(byId.values()), byId: byId };
     }

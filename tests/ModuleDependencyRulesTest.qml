@@ -23,10 +23,12 @@ TestCase {
                  exports: exportsVersion === null ? null : { version: exportsVersion }, uses: list };
     }
 
-    function _installed(id, version, exportsVersion, origin, address, uses) {
-        const manifest = _manifest(id, version, exportsVersion, uses);
-        manifest.origin = origin;
+    // An installed module; `source` ModuleInstallRules.sourceOf's kind
+    function _installed(id, version, exportsVersion, source, address, uses, api) {
+        const manifest = _manifest(id, version, exportsVersion, uses, api);
+        manifest.source = source;
         manifest.address = address ?? "";
+        manifest.ref = "";
         return manifest;
     }
 
@@ -54,6 +56,7 @@ TestCase {
         _dependents();
         _disable();
         _orphans();
+        _reviewCases();
     }
 
     // Notes → Clipboard → Base, both missing with sources: asked for one layer at a time,
@@ -65,13 +68,13 @@ TestCase {
 
         const first = _plan(notes, {}, {});
         assertEqual(first.refused, "", "chain: not refused");
-        assertEqual(JSON.stringify(first.fetch), JSON.stringify([{ id: "clipboard", source: "file:///r/clipboard" }]),
+        assertEqual(JSON.stringify(first.fetch), JSON.stringify([{ id: "clipboard", address: "file:///r/clipboard", ref: "" }]),
                     "chain: first asks for the direct dependency from its source");
         assert(!first.complete && !first.ready, "chain: not complete while something is to fetch");
         assertEqual(_entry(first, "clipboard").kind + " " + _entry(first, "clipboard").fetch, "download true", "chain: clipboard a download, still to fetch");
 
         const second = _plan(notes, {}, { clipboard: clipboard });
-        assertEqual(JSON.stringify(second.fetch), JSON.stringify([{ id: "base", source: "file:///r/base" }]),
+        assertEqual(JSON.stringify(second.fetch), JSON.stringify([{ id: "base", address: "file:///r/base", ref: "" }]),
                     "chain: the fetched dependency's own uses are walked next");
         assertEqual(_entry(second, "base").depth, 2, "chain: base met at depth 2");
         assertEqual(_entry(second, "clipboard").to, "0.2.1", "chain: the version to install is the fetched one");
@@ -86,7 +89,7 @@ TestCase {
 
     function _there() {
         const exitMap = _manifest("exitmap", "1.0.0", null, { tailscale: "1.0" });
-        const installed = { tailscale: _installed("tailscale", "0.6.0", "1.2", "shell", "file:///r/ts") };
+        const installed = { tailscale: _installed("tailscale", "0.6.0", "1.2", "repository", "file:///r/ts") };
         const result = _plan(exitMap, installed, {});
         assertEqual(_entry(result, "tailscale").kind, "there", "there: an installed provider that fits");
         assertEqual(_entry(result, "tailscale").from, "0.6.0", "there: its installed version for \"Already there\"");
@@ -113,9 +116,9 @@ TestCase {
         assert(!system.ready && system.blocking.length === 1, "incompatible: blocking");
         const builtin = _plan(notes, { weather: _installed("weather", "1.2.0", "1.2", "builtin") }, {});
         assertEqual(_entry(builtin, "weather").reason, "Needs Weather 2.0 — the built-in copy is 1.2", "incompatible: built-in");
-        const byHand = _plan(notes, { weather: _installed("weather", "1.2.0", "1.2", "link") }, {});
+        const byHand = _plan(notes, { weather: _installed("weather", "1.2.0", "1.2", "user") }, {});
         assertEqual(_entry(byHand, "weather").kind, "incompatible", "incompatible: a copy placed by hand is not updated");
-        const noAddress = _plan(notes, { weather: _installed("weather", "1.2.0", "1.2", "shell", "") }, {});
+        const noAddress = _plan(notes, { weather: _installed("weather", "1.2.0", "1.2", "repository", "") }, {});
         assertEqual(_entry(noAddress, "weather").kind, "incompatible", "incompatible: installed by the shell but no recorded address");
 
         const wants = _manifest("notes", "1.0.0", null, { clipboard: { version: "0.3", source: "file:///r/c" } });
@@ -137,11 +140,11 @@ TestCase {
 
     function _updates() {
         const notes = _manifest("notes", "1.0.0", null, { weather: "1.3" });
-        const installed = { weather: _installed("weather", "1.2.0", "1.2", "shell", "file:///r/weather"),
-                            radar: _installed("radar", "1.0.0", null, "shell", "file:///r/radar", { weather: "1.0" }) };
+        const installed = { weather: _installed("weather", "1.2.0", "1.2", "repository", "file:///r/weather"),
+                            radar: _installed("radar", "1.0.0", null, "repository", "file:///r/radar", { weather: "1.0" }) };
         const before = _plan(notes, installed, {});
         assertEqual(_entry(before, "weather").kind + " " + _entry(before, "weather").fetch, "update true", "update: too old, an address → an update to fetch");
-        assertEqual(JSON.stringify(before.fetch), JSON.stringify([{ id: "weather", source: "file:///r/weather" }]), "update: fetched from its recorded address");
+        assertEqual(JSON.stringify(before.fetch), JSON.stringify([{ id: "weather", address: "file:///r/weather", ref: "" }]), "update: fetched from its recorded address");
         assertEqual(_entry(before, "weather").reason, "notes needs 1.3", "update: the line says who needs what");
 
         const after = _plan(notes, installed, { weather: _manifest("weather", "1.3.0", "1.3", { sky: { version: "1.0", source: "file:///r/sky" } }) });
@@ -171,7 +174,7 @@ TestCase {
         assertEqual(result.entries.filter(entry => entry.id === "clipboard").length, 1, "two dependents: listed once");
         assertEqual(clipboard.neededBy.join(","), "notes,todo", "two dependents: both named");
         assertEqual(clipboard.wants.join(","), "0.2,0.3", "two dependents: both versions asked");
-        assertEqual(clipboard.source, "file:///r/c", "two dependents: the first source named stays");
+        assertEqual(clipboard.address, "file:///r/c", "two dependents: the first source named stays");
         assertEqual(clipboard.kind, "download", "two dependents: 0.3 serves both");
         assertEqual(result.order.join(","), "clipboard,todo,notes", "two dependents: order");
 
@@ -192,7 +195,7 @@ TestCase {
         assert(result.ready && result.fetch.length === 0, "soft: never downloaded unasked; the module is ready");
 
         const ticked = _plan(weather, installed, {}, { shellApi: "1.36", alsoInstall: ["calendar", "maps"] });
-        assertEqual(JSON.stringify(ticked.fetch), JSON.stringify([{ id: "calendar", source: "file:///r/cal" }]), "soft: a ticked one with a source is downloaded");
+        assertEqual(JSON.stringify(ticked.fetch), JSON.stringify([{ id: "calendar", address: "file:///r/cal", ref: "" }]), "soft: a ticked one with a source is downloaded");
         assertEqual(ticked.offers.map(offer => offer.id).join(","), "maps", "soft: a ticked one without a source stays an offer");
         const done = _plan(weather, installed, { calendar: _manifest("calendar", "1.1.0", "1.1", {}) }, { shellApi: "1.36", alsoInstall: ["calendar"] });
         assert(_entry(done, "calendar").soft && done.order.join(",") === "calendar,weather", "soft: ticked, it installs first");
@@ -287,33 +290,100 @@ TestCase {
     // The chain Notes → Clipboard, with Weather updated: Clipboard and Weather moved in, Notes
     // failed to move → the two taken back, last first, then every staging directory deleted
     function _rollback() {
+        const weatherRecord = { kind: "repository", address: "file:///r/weather", ref: "", active: "1.2.0-aaaaaaa" };
         const failedOnSecond = ModuleDependencyRules.rollbackPlan({
-            staged: ["/s/clipboard", "/s/weather", "/s/notes"],
-            done: [{ id: "clipboard", kind: "install", version: "0.2.0" },
-                   { id: "weather", kind: "update", version: "1.3.0", previousVersion: "1.2.0", backup: "/b/weather-1.2.0" }] });
+            stagingRoot: "/d/h2s-shell/module-staging",
+            staged: ["/d/h2s-shell/module-staging/clipboard", "/d/h2s-shell/module-staging/weather/", "/d/h2s-shell/module-staging/notes"],
+            done: [{ id: "clipboard", kind: "install", dir: "0.2.0-1234567" },
+                   { id: "weather", kind: "update", dir: "1.3.0-bbbbbbb", previousDir: "1.2.0-aaaaaaa", backup: "/b/weather-1.2.0",
+                     previousRecord: weatherRecord }] });
         assertEqual(JSON.stringify(failedOnSecond.actions), JSON.stringify([
-            { action: "relink", id: "weather", version: "1.2.0" },
+            { action: "relink", id: "weather", dir: "1.2.0-aaaaaaa" },
             { action: "restoreBackup", id: "weather", backup: "/b/weather-1.2.0" },
-            { action: "deleteVersion", id: "weather", version: "1.3.0" },
+            { action: "deleteVersion", id: "weather", dir: "1.3.0-bbbbbbb" },
+            { action: "restoreRecord", id: "weather", previous: weatherRecord },
             { action: "unlink", id: "clipboard" },
-            { action: "deleteVersion", id: "clipboard", version: "0.2.0" },
-            { action: "deleteStaging", directory: "/s/clipboard" },
-            { action: "deleteStaging", directory: "/s/weather" },
-            { action: "deleteStaging", directory: "/s/notes" }]), "rollback: the moved ones last first, then the staging");
+            { action: "deleteVersion", id: "clipboard", dir: "0.2.0-1234567" },
+            { action: "dropRecord", id: "clipboard" },
+            { action: "deleteStaging", directory: "/d/h2s-shell/module-staging/clipboard" },
+            { action: "deleteStaging", directory: "/d/h2s-shell/module-staging/weather" },
+            { action: "deleteStaging", directory: "/d/h2s-shell/module-staging/notes" }]),
+            "rollback: the moved ones last first by directory, their records too, then the staging");
         assertEqual(failedOnSecond.problems.length, 0, "rollback: no problems");
 
-        const beforeMoving = ModuleDependencyRules.rollbackPlan({ staged: ["/s/a", "/s/b"], done: [] });
+        const beforeMoving = ModuleDependencyRules.rollbackPlan({ stagingRoot: "/s", staged: ["/s/a", "/s/b"], done: [] });
         assertEqual(beforeMoving.actions.map(action => action.action).join(","), "deleteStaging,deleteStaging",
                     "rollback: a failed download or check deletes the staging only");
-        const noBackup = ModuleDependencyRules.rollbackPlan({ staged: [], done: [{ id: "w", kind: "update", version: "2.0.0", previousVersion: "1.0.0" }] });
-        assertEqual(noBackup.actions.map(action => action.action).join(","), "relink,deleteVersion", "rollback: an update without a backup");
+        const noBackup = ModuleDependencyRules.rollbackPlan({ staged: [], done: [{ id: "w", kind: "update", dir: "2.0.0-ccccccc",
+                                                                                   previousDir: "1.0.0-ddddddd", previousRecord: {} }] });
+        assertEqual(noBackup.actions.map(action => action.action).join(","), "relink,deleteVersion,restoreRecord", "rollback: an update without a backup");
+        const sameDir = ModuleDependencyRules.rollbackPlan({ done: [{ id: "w", kind: "update", dir: "1.0.0-ddddddd",
+                                                                      previousDir: "1.0.0-ddddddd", previousRecord: {} }] });
+        assertEqual(sameDir.actions.map(action => action.action).join(","), "relink,restoreRecord", "rollback: the previous directory is never deleted");
+        const kept = ModuleDependencyRules.rollbackPlan({ done: [{ id: "w", kind: "update", dir: "2.0.0-ccccccc", existed: true,
+                                                                   previousDir: "1.0.0-ddddddd", previousRecord: {} }] });
+        assertEqual(kept.actions.map(action => action.action).join(","), "relink,restoreRecord",
+                    "rollback: a version kept before the run (a refused update) is not deleted");
+        const sameVersionNewCommit = ModuleDependencyRules.rollbackPlan({ done: [{ id: "w", kind: "update", dir: "1.0.0-eeeeeee",
+                                                                                   previousDir: "1.0.0-ddddddd", previousRecord: {} }] });
+        assertEqual(sameVersionNewCommit.actions[1].dir, "1.0.0-eeeeeee", "rollback: the same version from a new commit is its own directory");
 
-        const unsafe = ModuleDependencyRules.rollbackPlan({ staged: ["/s/x", "", 5],
-            done: [{ id: "w", kind: "update", version: "2.0.0" }, { id: "c", kind: "install" }, { kind: "install" }, { id: "z", kind: "remove" }] });
-        assertEqual(unsafe.actions.map(action => action.action + ":" + (action.id ?? action.directory)).join(","), "unlink:c,deleteStaging:/s/x",
-                    "rollback: an update without its previous version keeps its new one linked; an unknown version's directory is left");
-        assertEqual(unsafe.problems.length, 6, "rollback: every unreadable step and path is a problem");
+        const unsafe = ModuleDependencyRules.rollbackPlan({ stagingRoot: "/s", staged: ["/s/x", "", 5, "/s", "/s/../etc", "/elsewhere/y"],
+            done: [{ id: "w", kind: "update", dir: "2.0.0-ccccccc" }, { id: "c", kind: "install", dir: "../../x" }, { kind: "install" },
+                   { id: "z", kind: "remove" }, { id: "u", kind: "update", dir: "2.0.0-c", previousDir: "1.0.0-d" }] });
+        assertEqual(unsafe.actions.map(action => action.action + ":" + (action.id ?? action.directory)).join(","),
+                    "relink:u,deleteVersion:u,unlink:c,dropRecord:c,deleteStaging:/s/x",
+                    "rollback: an update without its previous directory stays linked; a directory that is no plain name is left; staging only inside its place");
+        assertEqual(unsafe.problems.length, 10, "rollback: every unreadable step and path is a problem");
         assertEqual(ModuleDependencyRules.rollbackPlan({ done: "x" }).problems.length, 1, "rollback: unreadable list of moved ones is a problem");
+        const noRoot = ModuleDependencyRules.rollbackPlan({ staged: ["/s/a"], done: [] });
+        assert(noRoot.actions.length === 0 && noRoot.problems.length === 1, "rollback: no staging place → nothing staged deleted");
+    }
+
+    // Review cases: an installed provider's API, a source the download refuses, the root's new
+    // uses in breaks, a cycle through an installed module, refs kept
+    function _reviewCases() {
+        const notes = _manifest("notes", "1.0.0", null, { weather: "1.2" });
+        const oldApi = { weather: _installed("weather", "1.2.0", "1.2", "repository", "file:///r/weather", {}, "0.9") };
+        assertEqual(_entry(_plan(notes, oldApi, {}), "weather").kind, "update", "api: an installed provider for another API is updated");
+        const oldApiSystem = { weather: _installed("weather", "1.2.0", "1.2", "system", "", {}, "0.9") };
+        const systemEntry = _entry(_plan(notes, oldApiSystem, {}), "weather");
+        assertEqual(systemEntry.kind, "incompatible", "api: … and incompatible when it cannot be updated");
+        assert(systemEntry.reason.indexOf("Needs Weather 1.2 — the system's copy is 1.2.0, ") === 0, "api: its line — " + systemEntry.reason);
+        const newerApi = { weather: _installed("weather", "1.2.0", "1.2", "repository", "file:///r/weather", {}, "1.99") };
+        assertEqual(_entry(_plan(notes, newerApi, {}), "weather").kind, "update", "api: one asking a newer API than the shell's is no fit either");
+
+        const bad = _plan(_manifest("notes", "1.0.0", null, { clipboard: { version: "0.2", source: "ext::sh -c touch% /tmp/x" },
+                                                            calendar: { version: "1.0", optional: true, source: "--upload-pack=x" } }), {}, {});
+        assertEqual(_entry(bad, "clipboard").kind, "unresolved", "address: a source the download refuses is never fetched");
+        assertEqual(_entry(bad, "clipboard").reason, "Needs clipboard 0.2 — not installed, address not usable", "address: its line");
+        assertEqual(bad.fetch.length + " " + bad.offers[0].canInstall, "0 false", "address: an offer with such a source cannot be installed");
+        const pinned = _plan(_manifest("notes", "1.0.0", null, { clipboard: { version: "0.2", source: "https://example.org/c.git#v0.2.1" } }), {}, {});
+        assertEqual(JSON.stringify(pinned.fetch), JSON.stringify([{ id: "clipboard", address: "https://example.org/c.git", ref: "v0.2.1" }]),
+                    "address: the ref is kept apart");
+        const recordRef = { weather: _installed("weather", "1.2.0", "1.2", "repository", "file:///r/weather") };
+        recordRef.weather.ref = "stable";
+        assertEqual(_plan(_manifest("notes", "1.0.0", null, { weather: "1.3" }), recordRef, {}).fetch[0].ref, "stable",
+                    "address: an update keeps the recorded ref");
+        const folder = { weather: _installed("weather", "1.2.0", "1.2", "folder", "/home/someone/src/weather") };
+        assertEqual(_entry(_plan(_manifest("notes", "1.0.0", null, { weather: "1.3" }), folder, {}), "weather").kind, "update",
+                    "address: one the shell installed from a folder is updated from it");
+
+        // Weather 2.0 replaces 1.x; Radar is updated in the same chain to ask 2.0: nobody breaks
+        const installed = { weather: _installed("weather", "1.2.0", "1.2", "repository", "file:///r/weather"),
+                            radar: _installed("radar", "1.0.0", "1.0", "repository", "file:///r/radar", { weather: "1.0" }) };
+        const radarNew = _manifest("radar", "2.0.0", "2.0", { weather: "2.0" });
+        assertEqual(_plan(_manifest("weather", "2.0.0", "2.0", {}), installed, {}).rootBreaks.join(","), "radar", "breaks: the old Radar breaks");
+        const radarRoot = _plan(radarNew, installed, { weather: _manifest("weather", "2.0.0", "2.0", {}) });
+        assertEqual(_entry(radarRoot, "weather").breaks.length, 0, "breaks: the root is judged by its new uses, not its installed ones");
+
+        const viaInstalled = _plan(_manifest("notes", "1.0.0", "1.0", { paste: "1.0" }),
+                                   { paste: _installed("paste", "1.0.0", "1.0", "repository", "file:///r/p", { notes: "1.0" }) }, {});
+        assertEqual(viaInstalled.refused, "uses form a cycle: notes → paste → notes", "cycle: through an installed module");
+        const installedOnly = _plan(_manifest("notes", "1.0.0", null, {}),
+                                    { a: _installed("a", "1.0.0", "1.0", "repository", "file:///r/a", { b: "1.0" }),
+                                      b: _installed("b", "1.0.0", "1.0", "repository", "file:///r/b", { a: "1.0" }) }, {});
+        assertEqual(installedOnly.refused, "", "cycle: one among installed modules alone is not the chain's");
     }
 
     function _modules() {
@@ -330,14 +400,14 @@ TestCase {
 
     function _dependents() {
         const result = ModuleDependencyRules.dependents("tailscale", _modules());
-        assertEqual(result.stopWorking.join(","), "exitmap,routes,status", "dependents: hard ones and theirs, by name");
-        assertEqual(result.loseFeature.join(","), "badge,weather", "dependents: soft users of it or of those, by name");
+        assertEqual(result.hard.join(","), "exitmap,routes,status", "dependents: hard ones and theirs, by name");
+        assertEqual(result.soft.join(","), "badge,weather", "dependents: soft users of it or of those, by name");
         assertEqual(result.unknown.join(","), "mystery", "dependents: unreadable uses may need it");
         const none = ModuleDependencyRules.dependents("clock", _modules());
-        assertEqual(none.stopWorking.length + none.loseFeature.length, 0, "dependents: none");
+        assertEqual(none.hard.length + none.soft.length, 0, "dependents: none");
         const twoUsers = ModuleDependencyRules.dependents("p", [
             { id: "p", uses: [] }, { id: "a", name: "A", uses: [{ id: "p" }] }, { id: "b", name: "B", uses: [{ id: "p" }] }]);
-        assertEqual(twoUsers.stopWorking.join(","), "a,b", "dependents: a provider with two dependents names both");
+        assertEqual(twoUsers.hard.join(","), "a,b", "dependents: a provider with two dependents names both");
     }
 
     function _disable() {
@@ -352,22 +422,27 @@ TestCase {
 
     function _orphans() {
         const modules = [
-            { id: "notes", name: "Notes", uses: [{ id: "clipboard" }, { id: "todo" }], origin: "shell" },
-            { id: "clipboard", name: "Clipboard", uses: [], origin: "shell", installedFor: "notes" },
-            { id: "todo", name: "Todo", uses: [{ id: "paste" }], origin: "shell", installedFor: "notes" },
-            { id: "paste", name: "Paste", uses: [], origin: "shell", installedFor: "todo" },
-            { id: "shared", name: "Shared", uses: [], origin: "shell", installedFor: "notes" },
-            { id: "other", name: "Other", uses: [{ id: "shared", optional: true }], origin: "shell" },
-            { id: "sys", name: "Sys", uses: [], origin: "system", installedFor: "notes" }];
+            { id: "notes", name: "Notes", uses: [{ id: "clipboard" }, { id: "todo" }], source: "repository" },
+            { id: "clipboard", name: "Clipboard", uses: [], source: "repository", installedFor: "notes" },
+            { id: "todo", name: "Todo", uses: [{ id: "paste" }], source: "repository", installedFor: "notes" },
+            { id: "paste", name: "Paste", uses: [], source: "repository", installedFor: "todo" },
+            { id: "shared", name: "Shared", uses: [], source: "repository", installedFor: "notes" },
+            { id: "other", name: "Other", uses: [{ id: "shared", optional: true }], source: "repository" },
+            { id: "sys", name: "Sys", uses: [], source: "system", installedFor: "notes" },
+            { id: "placed", name: "Placed", uses: [], source: "user", installedFor: "notes" },
+            { id: "dev", name: "Dev", uses: [], source: "developer", installedFor: "notes" },
+            { id: "local", name: "Local", uses: [], source: "folder", installedFor: "notes" }];
         const result = ModuleDependencyRules.orphans("notes", modules);
-        assertEqual(result.map(orphan => orphan.id + "[" + orphan.usedBy.join(",") + "]").join(" "), "clipboard[] paste[todo] todo[]",
-                    "orphans: installed for it (or for one of those), used by nothing else; one used by another offered one says so; a soft user keeps one; system never");
+        assertEqual(result.map(orphan => orphan.id + "[" + orphan.usedBy.join(",") + "]").join(" "), "clipboard[] local[] paste[todo] todo[]",
+                    "orphans: installed for it (or for one of those), used by nothing else; one used by another offered one says so; a soft user keeps one");
         assertEqual(result[0].name, "Clipboard", "orphans: with the name for the checkbox");
+        assert(!result.some(orphan => ["sys", "placed", "dev"].includes(orphan.id)),
+               "orphans: only what the shell installed (repository, folder) — never system, placed by hand or development");
         const unknownUser = ModuleDependencyRules.orphans("notes", modules.concat([{ id: "mystery", uses: null }]));
         assertEqual(unknownUser.length, 0, "orphans: a module with unreadable uses may need any of them");
         assertEqual(ModuleDependencyRules.orphans("clock", modules).length, 0, "orphans: none for a module nothing was installed for");
         const sharedProvider = ModuleDependencyRules.orphans("a", [
-            { id: "a", uses: [{ id: "p" }] }, { id: "b", uses: [{ id: "p" }] }, { id: "p", uses: [], installedFor: "a" }]);
+            { id: "a", uses: [{ id: "p" }] }, { id: "b", uses: [{ id: "p" }] }, { id: "p", uses: [], source: "repository", installedFor: "a" }]);
         assertEqual(sharedProvider.length, 0, "orphans: a provider with two dependents stays");
     }
 }
