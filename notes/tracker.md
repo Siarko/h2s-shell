@@ -62,6 +62,10 @@ and `plans/documentation.md` predate the decisions of 2026-11-17: step 1 revises
 
 **To decide**
 
+- **PAM plan** ([plans/pam-config.md](plans/pam-config.md)): 8 open questions; found while
+  reading: on Arch the polkit hint in Settings is always empty (the shell reads only /etc/pam.d
+  and doesn't follow includes; polkit's stack is /usr/lib/pam.d/polkit-1), and pam_faillock makes
+  "password first, Enter for the reader" risky.
 - **Revised plans' questions** (2026-11-21): [plans/documentation.md](plans/documentation.md)
   ends with 4, [plans/architecture-cleanup.md](plans/architecture-cleanup.md) with 2.
 
@@ -199,7 +203,8 @@ Steps 3, 4, 5, 6 and 10 are done (done.md); the API plan's closing slice (Z) is 
    - [ ] (d) flaky live tests first: the Tailscale stand-in's event replay
          (`tools/stand-in/curl`); the tailnet-lock read not retried (`module/LockClient.qml`)
 1. Planning, no code:
-   - [ ] analysis + plan: PAM configuration from the shell (polkit and lock, NixOS and Arch)
+   - [ ] PAM configuration from the shell: plan written ([plans/pam-config.md](plans/pam-config.md),
+         2026-11-22), waits for the owner's approval and its 8 questions
    - [ ] plan: installing, updating and removing modules, with Settings → Modules
    - [ ] revise [plans/documentation.md](plans/documentation.md) and
          [plans/architecture-cleanup.md](plans/architecture-cleanup.md) for the decisions
