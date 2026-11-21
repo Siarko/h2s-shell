@@ -95,9 +95,10 @@ from the top; the generated lines are in the same order.
 | Security key | `pam_u2f.so` | Ask for the key's PIN (`pinverification=1`, off by default); `cue` always on; the keys file is pam_u2f's default (`~/.config/Yubico/u2f_keys`), shown with the number of keys in it | `pam_u2f.so` is installed and the user's keys file has a key |
 | Password | `pam_unix.so` | Failures count (pam_faillock), Arch only, where the system's rules have pam_faillock (§2.4) | always |
 | Password (as the system) | the service's own auth lines | none: read-only, fixed last (§2.3) | always |
+| Raw line | any, as written | the line itself, verbatim (`auth`/`-auth`, control, module, arguments); chip "Not checked" | always (§2.9) |
 
-Never offered or written: `nullok`, `nouserok`, `debug`, a keys file outside the user's home,
-any other module. The facts ("offered when") come from the methods script's existing answers
+The editor's own methods never offer or write `nullok`, `nouserok`, `debug` or a keys file
+outside the user's home; any other line is a raw line (§2.9), checked as far as it can be. The facts ("offered when") come from the methods script's existing answers
 (`lock-auth-methods.sh`) and `PamStacks`; a fact that cannot be read is "unknown" and treated
 as absent.
 
@@ -111,7 +112,7 @@ explanation under the picked word and as its tooltip:
 | `requisite` | "Must pass. A failure ends it at once." |
 | `optional` | "Counts only when no other row decides." |
 
-Rows carry only these four words; the generated lines may use PAM's bracket syntax where a
+The editor's own rows carry only these four words (a raw line keeps whatever it says); the generated lines may use PAM's bracket syntax where a
 pattern needs it (the counted password, the closing line), never shown as a row's word.
 
 **How a row is written** (Arch; NixOS through the module, §2.7):
@@ -157,8 +158,10 @@ Arch's system-auth counts wrong passwords (`/etc/security/faillock.conf`: `deny`
 shows it on the rows:
 - the fixed row carries a chip "Counts: 3 wrong in 15 min lock 10 min" (read from
   faillock.conf; "Counts: not known" when it cannot be read);
-- an own Password row has the detail "Failures count", on by default (§7b Q2), and a chip
-  "Counted" / "Not counted";
+- an own Password row has the detail "Failures count", **off by default** (the owner, round
+  2), and a chip "Counted" / "Not counted". The row's hint says the trade-off: "Off: an empty
+  Enter to reach the reader is not a wrong password, but guesses here are not stopped by the
+  lockout. On: they count (3 wrong in 15 min lock 10 min).";
 - fingerprint and key rows say "Not counted".
 
 A counted Password row is written as a fixed pattern, e.g. for `sufficient`:
@@ -176,9 +179,9 @@ through the row does not reset the count (only the system's `authsucc` does; the
 expires after `fail_interval`) — said in the row's hint. The exact lines are fixed in
 `PamEditRules` with unit cases, and run in the trial suite against a stand-in counter.
 
-The preview marks counted lines, and two warnings name the trade-off (W3, W4): a counted
-Password row above a reader turns the empty Enter used to reach the reader into a wrong
-password; an uncounted one is outside the lockout.
+The preview marks counted lines. W3 warns when counting is switched on for a Password row
+above a reader: the empty Enter used to reach the reader is then a wrong password. An
+uncounted row gets no warning — its hint says it, and it is the default.
 
 ### 2.5 Refused and warned lists
 
@@ -202,8 +205,13 @@ Refused:
   editor itself cannot make one).
 - **R5 Both closed**: neither sudo nor polkit would keep a password row (this list and
   `otherService`) — the user must keep one of the two as the way to repair the other.
-- **R6 Changed by hand**: the service's file is refused as a whole (§2.6.1); the editor is
-  read-only.
+- **R6 Changed by hand**: the service's file is not edited as it is (§2.6.1); the editor is
+  read-only until the user takes the file in with "Replace" (§2.9).
+- **R7 Module from a writable place**: a raw line whose module is an absolute path outside the
+  system's module directories (`/usr/lib/security`, NixOS's store) — root would load it.
+- **R8 Not a line**: a raw line that does not parse, is not an `auth` line, or holds a newline.
+- **R9 Lets anyone in**: a raw line `pam_permit.so` (or `pam_rootok.so` for polkit) as
+  `sufficient`, `[success=done …]` or before every deciding row.
 
 Warned (Apply stays; the trial proves the rows work now):
 - **W1 Only a reader**: no password row — "Only the reader lets you in. If it breaks, use the
@@ -212,8 +220,8 @@ Warned (Apply stays; the trial proves the rows work now):
   reader nobody gets in."
 - **W3 Empty Enter counts**: a counted Password row above a reader row — "An empty Enter to
   reach the reader counts as a wrong password (3 lock you out for 10 min)."
-- **W4 Not counted**: an uncounted Password row where the system counts — "Wrong passwords in
-  this row are not counted."
+- **W4 Not checked**: every raw line the rules cannot judge — "The shell does not know this
+  line: the trial runs it, the checks do not."
 - **W5 Does nothing**: an `optional` row in a list where another row decides.
 - **W6 Asked twice**: the same method in two rows.
 - **W7 Password again**: an own `sufficient` Password row above the fixed row — "A wrong
@@ -228,11 +236,11 @@ Warned (Apply stays; the trial proves the rows work now):
    between, so an edit inside the block is noticed. `polkit-1`: a new `/etc/pam.d/polkit-1`
    that shadows `/usr/lib/pam.d/polkit-1`, its first line `# Written by h2s-shell <sha256>`,
    our rows above the vendor file's auth lines, its other lines copied from the vendor file;
-   removing ours restores the vendor stack exactly. **Changed by hand** (refused, R6): the
+   removing ours restores the vendor stack exactly. **Changed by hand** (R6): the
    block's hash does not match; a `pam_fprintd`/`pam_u2f` line outside our block; a
    `/etc/pam.d/polkit-1` not written by us; a file `PamStackRules` cannot parse. The page then
-   shows the file's text with the offending lines marked and "Changed outside the shell — not
-   edited" (§7b Q1). pacman keeps `/etc/pam.d/sudo` as a backup file, so our block survives
+   shows the file's text with the offending lines marked, "Changed outside the shell", the
+   file taken in as rows (§2.9) and "Replace…" (the owner, round 2). pacman keeps `/etc/pam.d/sudo` as a backup file, so our block survives
    updates and a new upstream version lands as `.pacnew`, which the page reports; for polkit,
    the copied lines are compared with the vendor file and a difference reported ("polkit's own
    file changed: Apply again to take it over").
@@ -258,8 +266,9 @@ Warned (Apply stays; the trial proves the rows work now):
    newest backup: a click, a prompt, no trial — it is the state that was in force). No
    automatic revert: it would need a prompt nobody clicked.
 6. **One service per run**: a shared list is written as two runs, sudo first, then polkit —
-   two administrator prompts, two backups (§7b Q3). Each prompt is answered by polkit-1 still
-   as it was. A cancel between leaves the lists different: the page shows them split, with W8
+   two writes, two backups, the modal saying "1 of 2" / "2 of 2" (the owner, round 2). Each
+   prompt is answered by polkit-1 still as it was. With the remembered polkit authorization
+   (a topic and plan of its own) the second prompt usually does not appear. A cancel between leaves the lists different: the page shows them split, with W8
    and Apply for the one not saved. `su` and the root console login are never touched; the
    page names the backup paths so a repair from a console is one `cp`.
 
@@ -284,9 +293,9 @@ programs.h2s-shell.pam = {
 ```
 
 - **Types**: `rules`, `sudo.rules`, `polkit.rules` are `nullOr (listOf (submodule { method =
-  enum [ "fingerprint" "securityKey" "password" "system" ]; control = enum [ "sufficient"
+  enum [ "fingerprint" "securityKey" "password" "system" "raw" ]; control = enum [ "sufficient"
   "required" "requisite" "optional" ] (default "sufficient"); timeout, tries = nullOr int; pin,
-  counted = bool; }))`, default null = the service untouched. A service's own list wins over
+  counted = bool; module = nullOr str; args = listOf str; }))`, default null = the service untouched. A service's own list wins over
   `rules`.
 - **Translation**: each row becomes `security.pam.services.<svc>.rules.auth."h2s-<n>"` (`order`
   below the first of NixOS's own auth rules, in the rows' order; `control`; `modulePath` from
@@ -302,6 +311,11 @@ programs.h2s-shell.pam = {
   `security.pam.u2f.enable`); warnings W1–W2 become `warnings`.
 - **Counting** on NixOS: pam_faillock is not in NixOS's default stack; the "Failures count"
   detail is offered only when the generated file has it.
+- **Raw lines** on NixOS: `{ method = "raw"; control = "sufficient"; module =
+  "${pkgs.pam_ldap}/lib/security/pam_ldap.so"; args = [ "use_first_pass" ]; }`. NixOS's libpam
+  finds a module named without a path only in its own store directory, so the snippet asks for
+  the full path: a raw line with a bare module name other than libpam's own is refused there
+  (R8's text: "Needs the module's full path on NixOS").
 - The snippet is built by `PamEditRules.nixosSnippet(rows, split)`, pure, with cases.
 
 ### 2.8 The lock screen
@@ -313,6 +327,37 @@ key" switches, `lockscreen.offerFingerprint` and `lockscreen.offerSecurityKey` i
 method ("No finger enrolled", "No key registered"). A pure `LockRules` filter drops a switched-
 off method from the list the methods script found. No root, no system file; sudo and polkit
 are set on the Authentication page.
+
+### 2.9 Raw lines and taking in a hand-made file
+
+The owner, round 2: a file changed by hand can be replaced, and nothing in it is lost.
+
+- **A raw row** holds one PAM `auth` line verbatim (`auth`/`-auth`, the control word or
+  bracket syntax, the module, its arguments). It is added from "+ Add a row" → "Raw line"
+  (last in the list) or comes from taking a file in. Its row shows the line itself and a
+  chip "Not checked"; opened, a text field and what the line reads as ("auth · sufficient ·
+  pam_ldap.so") or why it does not parse. It is written exactly as typed, inside our block.
+- **Taking in** (`PamEditRules.adopt(text)`, pure): the file's auth lines, top to bottom.
+  Lines the editor writes itself become its rows — our block's lines, `pam_fprintd` with only
+  `timeout`/`max-tries`, `pam_u2f` with only `cue`/`pinverification`, `pam_unix` without
+  `nullok`, the counted pattern as one counted Password row. The trailing run of the
+  system's own lines (the vendor's `auth include system-auth` for sudo, the vendor file's auth
+  lines for polkit) becomes the fixed row; with no such run, the list has no fixed row (and
+  the checks say what that means). Everything else becomes a raw row in its place — a
+  `pam_u2f` line with its own `authfile=` stays raw rather than losing its option.
+  Non-`auth` lines (`account`, `password`, `session`) are kept verbatim in place and never
+  become rows. Round trip, a unit case per fixture: adopt, then build, gives the same auth
+  lines in the same order (only our block's markers added).
+- **Checks on raw lines** judge what can be judged from the line alone: it parses and is an
+  `auth` line (R8); its module path is a system one (R7); `pam_permit`-style lines that let
+  anyone in (R9); a raw `pam_unix`/`pam_fprintd`/`pam_u2f` line counts as that method for R1,
+  R2, R5, W1–W3; any other module is "unknown" — it never counts as a way in for R1/R5, and it
+  gets W4. The trial runs every line, raw ones included.
+- **Replace**: "Replace…" on a changed file opens a warning modal naming what goes to the
+  backups (the hand-made file, `/var/lib/h2s-shell/pam-backup/sudo.<time>`), how many lines
+  become rows and how many stay raw, and that nothing is written before Apply. "Replace"
+  makes the editor editable with the taken-in rows; Apply then runs the trial and the write
+  as for any change, the hand-made file going to the backups first.
 
 ## 3. Risks
 
@@ -333,6 +378,11 @@ are set on the Authentication page.
   fingerprint is for this seat.
 - **NixOS drift.** Lines shown for an option that the machine's config already sets
   otherwise; the page shows what is in force after reading, not what it assumed.
+- **The trial runs as the user.** A module that needs root for its state (pam_faillock's
+  tally in `/run/faillock`) may behave differently in the trial than under sudo; the trial
+  suite pins how on a stand-in, and the trial modal does not claim to have tried counting.
+- **Raw lines** are the user's own PAM: the checks judge only what a line shows (§2.9); the
+  trial is what proves the list lets the user in.
 - **Root from a writable place.** The command text is in the shell's QML, which the user can
   write — acceptable only because every run asks the password (same as any pkexec use);
   no passwordless rule is ever installed for PAM changes.
@@ -382,13 +432,17 @@ Settings → System → Authentication, below the polkit agent's rows, a section
   turns into the success modal while the administrator prompt opens; after the write, success
   "Saved" with the backup path (one button = informing). On failure a warning modal "Not
   saved": PAM's reason, "Try again", Cancel.
-- **Changed by hand**: the list read-only and dimmed, the file's text with the offending
-  lines marked, "Changed outside the shell — not edited", the reason ("A fingerprint line
-  outside the shell's block"), "Read again".
+- **Changed by hand**: the list read-only, the file's text with the offending lines marked,
+  "Changed outside the shell", the reason ("A security key line outside the shell's block"),
+  the file taken in as rows (raw rows among them), "Read again" and "Replace…" (warning modal
+  naming the backup; §2.9).
+- **Raw line**: a row showing the line itself and "Not checked"; opened, a text field and how
+  it reads.
 - **Modals** are the Settings modal of the modules plan (`notes/plans/modules-management.md`
   §4.1: kinds danger/warning/success/info, the window dimmed, "×" = cancel, always a cancel) —
-  no element of this page's own. Used for: removing the fixed row (danger), turning the split
-  off with differing lists (warning), the trial and its outcome (info → success / warning).
+  no element of this page's own; the window dimmed with `Theme.modalDim`. Used for: removing
+  the fixed row (danger), turning the split off with differing lists (warning), Replace
+  (warning), the trial and its outcome (info → success / warning).
 - **Lock screen**: the switches of §2.8 on the Lockscreen page.
 
 ## 6. Slices, in order
@@ -406,10 +460,10 @@ the agreed mockup.
    script's answers). Fixes the empty polkit hint on Arch. Suite on stand-in directories.
 3. **Rules and checks** (`PamRuleRules`, pure): the row model, the control words and their
    explanations, the methods' details and ranges, `check(rows, facts)` with every R and W
-   code (§2.5) as a case.
+   code (§2.5), raw-line checks (§2.9) included, as a case.
 4. **Text** (`PamEditRules`, pure): rows → the Arch block / our polkit-1 (the `-auth` rule,
-   the counted pattern, the closing lines), text → rows, changed-by-hand detection, round
-   trips; `nixosSnippet(rows, split)`. Unit cases.
+   the counted pattern, the closing lines, raw lines), text → rows, changed-by-hand
+   detection, `adopt` (§2.9), round trips; `nixosSnippet(rows, split)`. Unit cases.
 5. **NixOS options** `programs.h2s-shell.pam.{rules,sudo.rules,polkit.rules}` with the
    translation, conflicts and assertions of §2.7; `polkit.passwordFirst` deprecated. A test
    checks the module's text, and `tests/system/nixos` evaluates it for a case set and compares
@@ -450,28 +504,29 @@ The owner, 2026-11-21 (`notes/decisions.md`, "Lock and PAM", to add with the fir
 - E Security keys (pam_u2f) in the first version, as one more row kind.
 - F Settings → Lockscreen: switches to not offer fingerprint / security key on the lock (no
   root, no system files); the password cannot be switched off there.
+- Round 2, Q1: a file changed by hand can be replaced (the old file goes to the backups);
+  lines the shell does not understand become raw rows, kept verbatim; the editor takes a
+  hand-made file in as rows plus raw rows; the trial still runs before a write; refusals apply
+  to raw rows where they can be judged (§2.9).
+- Round 2, Q2: an own Password row does not count wrong passwords by default; counting can be
+  switched on per row; the row's hint says the trade-off (§2.4).
+- Round 2, Q3: a shared list is two writes, one per service, "1 of 2" / "2 of 2"; with the
+  planned remembered polkit authorization the second prompt usually does not appear (§2.6.6).
 
 ## 7b. Open questions for the owner
 
-Q1. **A file changed by hand: only refuse, or offer to replace it?** Example: someone added
-`auth sufficient pam_fprintd.so` to `/etc/pam.d/sudo` with an editor, outside the shell's
-block. The plan shows the file, marks that line and edits nothing; the user removes the line
-by hand (or keeps it and leaves the shell out). The alternative is a "Replace" button: the
-hand-made file goes to the backups and the shell writes its own. Replacing is convenient but
-throws away rules the shell does not understand (a pam_ldap line, a second factor of another
-kind). Recommendation: refuse only in the first version.
+Q1. **Can the user type a raw line from "+ Add a row", or do raw rows only come from taking a
+file in?** Example: someone with an LDAP account wants `auth sufficient pam_ldap.so
+use_first_pass` above the system's row. Offered in the add list, the line is checked only as
+far as §2.9 goes (it parses, its module is a system one, it does not let anyone in) and the
+trial runs it; the rest is the user's responsibility. Hidden, the only way to such a line is
+editing the file by hand and taking it in. Recommendation: offer "Raw line" in the add list,
+last, with its "Not checked" chip and warning; no extra switch.
 
-Q2. **Does an own "Password" row count wrong passwords by default?** Example: rows
-"Password · sufficient" then "Fingerprint" — to reach the reader the user presses Enter on an
-empty field. Counted (on): each empty Enter is a wrong password for pam_faillock; with libpam's
-default (deny = 3) three of them lock sudo and polkit for a while. Not counted
-(off): no lockout from the empty Enter, but a password guessed in that row is never stopped by
-the lockout. Recommendation: on by default, with the warning W3 telling what the empty Enter
-costs; the user switches it off per row.
-
-Q3. **One list for both services: two administrator prompts on Apply?** Example: the shared
-list gets a fingerprint row; Apply runs the trial once, then asks the administrator password
-to write sudo, then again to write polkit. One prompt for both would mean one root run
-changing both files — against the rule that a mistake in one service leaves the other to repair
-it with. Recommendation: two prompts, the modal saying "1 of 2" / "2 of 2"; a cancel after the
-first leaves the lists split with "Administrator prompts: not saved".
+Q2. **After Replace, does the shell keep a hand-made file's other lines (`account`,
+`password`, `session`) as they are?** Example: someone added `session optional
+pam_gnome_keyring.so auto_start` to `/etc/pam.d/sudo`. Kept, the file stays what the user made
+apart from the auth lines the editor now writes; reset, the file's other lines go back to the
+distribution's and that keyring line is lost (it is in the backup). The editor only ever
+changes `auth` lines. Recommendation: keep them verbatim, shown in the preview as "kept as it
+is".
