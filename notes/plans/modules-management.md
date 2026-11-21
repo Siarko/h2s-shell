@@ -155,13 +155,20 @@ every page of the Settings window, while a restart is pending after "Later", the
 banner (§6.5).
 
 **The list**: one `SettingsCard` per module (a `KeyedModel` keyed by id; duplicates are
-shown inside their winner's card, not as cards). Closed: the icon (`ModuleIcon`), the name,
-a subtitle "version · source"; on the name line a `StatusPill` (s) with the state:
+shown inside their winner's card, not as cards), **enabled modules first, then disabled
+ones, each group by name** (`ModuleInstallRules.listOrder`). Closed: the icon
+(`ModuleIcon`), the name, a subtitle "version · source".
+
+**On or off is not a pill**: an enabled module's name (and icon) is in the accent colour, a
+disabled one's muted, and its subtitle ends "· Off" — together with the order, that is the
+on/off state; the main button ("Disable" / "Enable") says what a click changes. Warnings and
+deprecations are **marks** beside the name — the icon and a count in the kind's colour, its
+tip on hover ("1 warning", "1 deprecated API use"); no click. A `StatusPill` stands on the
+name line only for a state worth attention:
 
 | State | Pill | Kind |
 |---|---|---|
-| loaded | "On" (parts: warnings, deprecations as counts) | success |
-| disabled | "Off" | muted |
+| loaded, disabled | none (the name's colour and the order) | — |
 | unconfirmed (new, §5) | "New — off" | warning |
 | update waits for consent (§6.4) | "Approval required" | warning |
 | update refused (§6.4) | "Update not finished" | warning |
@@ -170,9 +177,14 @@ a subtitle "version · source"; on the name line a `StatusPill` (s) with the sta
 | pending | "Starting…" | muted |
 | safe-mode | "Safe mode" | warning |
 
-A part's count always has a tip saying what it counts: "1 warning", "2 warnings",
-"1 deprecated API use" (the pill's `tip`; `ModuleInstallRules.pillParts` words them with the
-count). The two update pills stand beside the running state (the old version keeps running).
+A mark's count always has a tip saying what it counts: "1 warning", "2 warnings",
+"1 deprecated API use" (`ModuleInstallRules.marks` words them with the count). The two update
+pills stand beside any other (the old version keeps running).
+
+**A pill takes no click here**: hover shows its tip; a click on it neither expands it nor
+opens the card. The shared `StatusPill` gains `expandable` (default `true`, as today; the
+page sets `false`), and its click area stops the click from reaching the card's header —
+the public `api/StatusPill.qml` takes the same property in API 1.36.
 
 Its button row: the main button — "Disable" / "Enable" (one decision from the state:
 `ModuleInstallRules.actionsFor(status, source, context)` returns labels and effects
@@ -248,9 +260,11 @@ of the core, not of this page.
   logged once (a question never replaces another under the user's pointer).
 - **Looks**: a centred panel with an opaque background, a border in its kind's colour, a
   header (icon and title), a body, a button row; behind it the window dimmed with
-  `Theme.scrim`. Kinds `danger`, `warning`, `success`, `info` through
+  `Theme.modalDim`. Kinds `danger`, `warning`, `success`, `info` through
   `ThemeRules.modalLook(kind)` → `{ border, icon, titleColor }` (theme colour names, as
-  `buttonLook`); sizes and spacing from a new theme group `Theme.modal` (`radius`,
+  `buttonLook`); the dimming is a colour token of its own, `Theme.modalDim` (in the theme's
+  colour sets, under "Backgrounds"; default black at 55 %, clearly visible) — never `scrim`,
+  which is the lock screen's opaque black; sizes and spacing from a new theme group `Theme.modal` (`radius`,
   `padding`, `borderWidth`, `widths: { s, m }`). Nothing literal: every colour and size from
   the theme, so themes restyle it.
 - **Behaviour**: it blocks clicks through (a click on the dimmed window does nothing); the
@@ -347,7 +361,8 @@ so its first start records it as consented.)
 - **Progress**: `ModuleInstallRules.progressOf(line)` reads git's stderr lines ("Receiving
   objects:  45% (120/266), 1.20 MiB | 2.40 MiB/s", "Resolving deltas: …") into `{ phase,
   percent, bytes, rate }`; the page shows a `ProgressBar` with the percent and "1.2 MiB ·
-  2.4 MiB/s". Where git gives no numbers (a small repository, `file://`, `ssh` without
+  2.4 MiB/s" — the shared `components/ProgressBar.qml` with `wave: true` while bytes
+  arrive, as Taildrop's transfers (the module API's `ProgressBar`, 1.31). Where git gives no numbers (a small repository, `file://`, `ssh` without
   progress) or for a folder copy, the bar is of unknown length and only the step is shown.
 - **Verifying**: the host's own file check and manifest rules on the staged directory (no
   new checker): valid, API fits, the id free or held by a copy it would replace (said in the
@@ -371,6 +386,11 @@ so its first start records it as consented.)
 ### 6.3 Checking for updates; automatic updates
 
 - **By hand**: "Check for updates" on a card, "Check all" at the top of the page.
+  **Feedback, while and after**: the clicked button reads "Checking…" and is unavailable
+  while it runs (a card's line shows a `ProgressBar` of unknown length beside it); "Check all"
+  shows "Checking 2 of 4…". Then the result stays visible until the next check or the page is
+  left: on the card "Up to date · checked 14:32" / "1.3.0 available — downloading" / "Check
+  failed: codeberg.org did not answer"; at the top "2 updates · 1 up to date · 1 failed".
 - **The setting** `modules.autoUpdate` (`SettingsSchema`, global, read with
   `Profiles.value`): "Module updates" — "By hand" (default) / "Automatically".
   - *By hand*: a check (by the click) downloads what it finds in the background; the card
@@ -460,7 +480,10 @@ not yet trusted is involved, "What's new" (the side panel), buttons "Update" (`s
   backup: "0.7.0 failed to start; 0.6.0 is active again").
 - Rows at the top of the page: "Weather 1.2.0 → 1.3.0 — Downloading 45% · 2.4 MiB/s /
   Verifying / Backing up settings / Installing / Done / Approval required / Not finished /
-  Failed: <one line>", a `ProgressBar` for the queue. A row that needs consent waits there
+  Failed: <what and why, one line>", a `ProgressBar` for the queue and one per downloading
+  row (`wave: true`). The title line: "Updating" / "Updates finished", "2 of 3", and once the
+  queue has ended an "×" at its right that closes the list (tip: "Close — a pending restart
+  stays at the top of Settings"). Closing it with a restart pending is "Later" (below). A row that needs consent waits there
   with "Review"; the rest of the queue goes on.
 - **Shell-wide actions are grouped**: an update whose new files a reload cannot pick up
   (§4 Reload) adds "restart the shell" to the queue's list instead of offering it; when the
@@ -468,7 +491,14 @@ not yet trusted is involved, "What's new" (the side panel), buttons "Update" (`s
   "Restart the shell to load the new files of Weather and Notes." + "Restart shell" and
   "Later", on the page, and one notification "Restart needed" ("To finish updating Weather and
   Notes."); clicking the notification opens Settings → Modules scrolled to the offer's
-  "Restart shell". Never once per module, never automatic. A consent accepted later that
+  "Restart shell". Never once per module, never automatic. The notification has its "×"
+  like any other (no resident or critical urgency). **It goes away by itself once the shell
+  has restarted, whoever restarted it** (the bar's menu, `h2s-shell --restart`, a crash, a new
+  session): the shell is its own notification server, so a new process starts with no
+  notifications; for the hot reload, which keeps them (`keepOnReload`), the reminder carries
+  the hint `x-h2s-restart-for` = the process's id and start time, and at start the shell closes
+  any reminder whose value is not its own. `Modules.restartNeeded` lives in memory, so it
+  ends the same way. A consent accepted later that
   needs a restart makes its own single offer.
 - **"Later"** closes the offer only: the pending restart is remembered (`Modules.
   restartNeeded`, the module names, in memory — a restart clears it by being the restart) and
@@ -549,8 +579,9 @@ manifests' `uses.<id>.source` name.
   "Needs Clipboard" until it is there) and "Cancel" (§10b Q2). An update that would leave a
   dependency unresolved stops at "Approval required" with that line.
 - **A failure halfway**: nothing moves in before every module of the chain is downloaded and
-  verified; a failed download or check cancels the chain and deletes every staging directory
-  ("Clipboard: download failed — nothing was installed"). Installing is renames; if one fails,
+  verified; a failed download or check cancels the chain and deletes every staging directory.
+  The page says what happened and why, nothing more: "Clipboard: download failed — the server
+  did not answer." (a failure installs nothing; it is not said). Installing is renames; if one fails,
   the ones already renamed in this run are taken back (links removed, version directories
   deleted, updated ones relinked to their previous version and its backup), so the user root
   is as before. A module that installed but fails to start keeps its files and shows Failed
@@ -650,18 +681,18 @@ never touched (a suite asserts nothing it ran named a non-`file` address). Pure 
 | | Slice | Views | Tests |
 |---|---|---|---|
 | M0 | The trust text in `docs/` (§2: ARCHITECTURE "Modules", FEATURES, README one line) | none | — |
-| M1 | Where a module comes from (`ModuleInstallRules`, pure): `sourceOf` (builtin root, system, link vs folder, record + link inside `module-versions`), `replaces`, `actionsFor` (Enable/Disable, Remove, Update), `pillParts` (counts with their tips), `needsConfirmation` (builtin/system/developer exempt; absent list = baseline), `removalPlan` (link only / folder / versions, with or without data, dependencies installed for it), `repositoryProblem`, the git argv, `progressOf`, record parse, `builtinOff`; `stateOf` gains `unconfirmed` | none | `ModuleInstallRulesTest`, `ModuleRulesTest` cases |
+| M1 | Where a module comes from (`ModuleInstallRules`, pure): `sourceOf` (builtin root, system, link vs folder, record + link inside `module-versions`), `replaces`, `actionsFor` (Enable/Disable, Remove, Update), `needsConfirmation` (builtin/system/developer exempt; absent list = baseline), `removalPlan` (link only / folder / versions, with or without data, dependencies installed for it), `repositoryProblem`, the git argv, `progressOf`, record parse, `builtinOff`, `listOrder`, `marks`, `checkResultText`; `stateOf` gains `unconfirmed` | none | `ModuleInstallRulesTest`, `ModuleRulesTest` cases |
 | M1b | Updates as rules (`ModuleUpdateRules`, pure): `consentFor` (four reasons), `afterNotes`, `queueStep` with dependency order and the grouped shell-wide actions, `keepPlan`, `versionList`, `changelogSince` with its caps, `offerFor` (refused not re-offered), `autoRunDue` (daily, backoff), `backupPlan` (what, data cap), `backupKeepPlan` | none | `ModuleUpdateRulesTest` |
 | M1c | The `privileged`, `author` and `uses.<id>.source` fields (API 1.36): manifest read, the host refuses undeclared or unconsented privileged runs, `argv[0]` among declared programs; `Api.qml` reference with the caveat; CHANGELOG "Module API". First, in the module repository: Tailscale declares `privileged` (an unknown field is only a warning on today's shell) | none | `ModuleRulesTest` cases, `ModulesTest` fixture (undeclared module's run blocked, no prompt), Tailscale's suites |
 | M1d | The dependency chain (`ModuleDependencyRules`, pure): `plan` (there/update/download/unresolved/incompatible, soft offers, depth and size limits, cycles), install order, `rollbackPlan` for a failure halfway, dependents for Remove/Disable, `installedFor` orphans | none | `ModuleDependencyRulesTest` |
-| V1 | The Settings modal (§4.1): `components/SettingsModal.qml`, `SettingsModalHost.qml` in the Settings window, `Theme.modal`, `ThemeRules.modalLook`, `ApiElementRules.modalButtons`; the Views decision in decisions.md and the `CLAUDE.md` rule | modal | `ThemeRulesTest`, `ApiElementRulesTest` cases, `SettingsModalTest` |
+| V1 | The Settings modal (§4.1): `components/SettingsModal.qml`, `SettingsModalHost.qml` in the Settings window, `Theme.modal`, the `modalDim` colour token (all built-in themes), `ThemeRules.modalLook`, `ApiElementRules.modalButtons`; the Views decision in decisions.md and the `CLAUDE.md` rule | modal | `ThemeRulesTest`, `ApiElementRulesTest` cases, `SettingsModalTest` |
 | M2 | The host: acknowledgements and their baseline, builtin root + `builtin.json` + `enabledModules`, `unconfirmed` and "Approval required" for changed hand-placed modules, `source`/`replaces`/`installedFor` in the status and `modules list`, `modules confirm`, the modules-on file, "load without safe mode", re-discovery + `load()`, `restartNeeded`; what Reload can pick up (a `QuickshellPinTest` case: changed file after off/on) | none | `ModulesTest` fixtures, lock bed `modules-discovery` extended |
 | M2b | Builtin places in packaging: `nix/package.nix` (`share/h2s-shell-builtin`, the wrapper passes it), `install.sh` and the update fill `~/.local/share/h2s-shell/builtin/`, the launcher's builtin root | none | `tests/install-test.sh` case, NixOS system test case |
 | M3 | The installer (`singletons/ModuleInstaller.qml`): download with progress, verify, the chain (staging all, install in order, roll back), version directories and the link, record, remove (`removalPlan`, with data and orphans), switch version, delete a version, roll back on a failed start; IPC `modules install/remove/switch` | none | `ModuleInstallerTest` on local repos (a chain of two, a missing dependency, a failure on the second), folders, links (the target untouched), stand-in `git` |
-| M3b | The updater: check (`ls-remote`), `modules.autoUpdate` (daily run that switches unless consent is due), background download, the queue, consent hold and refusal, the grouped restart offer and `restartNeeded`, the notifications (opening the changelog panel, the restart offer); IPC `modules check/update` | none | `ModuleUpdaterTest` (local bare repos, stand-in `git`, fake clock, recorded notifications) |
+| M3b | The updater: check (`ls-remote`), `modules.autoUpdate` (daily run that switches unless consent is due), background download, the queue, consent hold and refusal, the grouped restart offer and `restartNeeded`, the restart reminder's `x-h2s-restart-for` and its closing at start, the notifications (opening the changelog panel, the restart offer); IPC `modules check/update` | none | `ModuleUpdaterTest` (local bare repos, stand-in `git`, fake clock, recorded notifications) |
 | M3c | Configuration backups: taken before every switch and restore, kept 5, restore (disable, write, enable); IPC `modules backups/restore` | none | `ModuleBackupTest` (profiles with `mod.<id>.*`, a store, a data dir over and under the cap) |
-| M4 | Settings → Modules page: list, cards (`SettingsCard` gains a leading item for the icon), Enable/Disable (button question or the modal), reload, the confirmation, Remove through the modal, dependencies, "Check all", pill tips | page | `ModulesPageTest` (stand-in host, clicks), `AnchorsTest` (the page's anchor) |
-| M5 | Install and update on the page: field, folder dialog, steps with progress and speed, preview with the chain, the changelog side panel, the queue rows, consent box (accept, refuse, delete the new version), switch version, backups and restore, the restart offer and the Settings-wide restart banner | page | the page suite on local repos |
+| M4 | Settings → Modules page: list in `listOrder` (enabled first), cards (`SettingsCard` gains a leading item for the icon), on/off as the name's colour, marks with tips, `StatusPill.expandable` (and its API line), Enable/Disable (button question or the modal), reload, the confirmation, Remove through the modal, dependencies, "Check all" and the check feedback | page | `ModulesPageTest` (stand-in host, clicks), `AnchorsTest` (the page's anchor) |
+| M5 | Install and update on the page: field, folder dialog, steps with progress (waving) and speed, preview with the chain, the changelog side panel, the queue rows, consent box (accept, refuse, delete the new version), switch version, backups and restore, the restart offer and the Settings-wide restart banner | page | the page suite on local repos |
 | M6 | The safe-mode banner (HUD and page) | banner | `HudTest`-style suite on a host in safe mode; lock-closure |
 
 M0–M3c need no views and can go while the mockups are judged; V1 goes before M4. CHANGELOG
@@ -683,7 +714,11 @@ lines with M1c (API), M2 (behaviour: new modules start off), V1, M4, M5, M6.
 12. Downloads show a progress bar and the speed where git gives them; the changelog shows in the side panel.
 13. The dependency chain is resolved and installed with the module (§6.9).
 14. A configuration backup at every module update, labelled with the version, with Restore; disk space for such files later (tracker).
-15. A Settings modal as a new shared element (§4.1): kinds, dimmed and blocking, always a cancel, "×" as cancel, one button = informing, fully themeable.
+15. A Settings modal as a new shared element (§4.1): kinds, dimmed and blocking, always a cancel, "×" as cancel, one button = informing, fully themeable; its dimming a token of its own, not the lock's scrim.
+16. A pill on this page takes no click (hover tip only); on/off is not a pill: enabled names in colour, the list enabled first, then disabled.
+17. Progress bars are the shared `ProgressBar` with `wave`, as Taildrop's; checking shows "Checking…" and then its result.
+18. Errors say what happened and why, nothing more.
+19. "Updates finished" closes with an "×" on its title line (a pending restart then stays as the Settings banner); the restart notification has an "×" and goes away by itself once the shell has restarted.
 
 ## 10b. Open questions
 
