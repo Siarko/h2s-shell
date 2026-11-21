@@ -125,6 +125,8 @@ alone() { [ "${names[$1]}" = "lock bed" ]; }
 start_part() {
     local index=$1 command=${commands[$1]} pid
     started_at[index]=$SECONDS
+    # (Until it is registered: a signal's trap registers it from $!)
+    starting=$index
     set -m
     if alone "$index"; then
         echo
@@ -139,14 +141,26 @@ start_part() {
     pid=$!
     set +m
     running[$pid]=$index
+    starting=""
 }
 
 # end_running <why>: every part still running is ended — its whole group, SIGTERM so that
 # it cleans up after itself, SIGKILL for what has not gone in 10 s — and, given a reason,
-# named NOT RUN with it
+# named NOT RUN with it. A part that had already ended keeps its own verdict (what it left
+# behind in its group is ended all the same).
+ending=""
+starting=""
 end_running() {
-    local pid tries=0 alive
-    [ ${#running[@]} -gt 0 ] || return 0
+    local pid tries=0 alive status finished=()
+    ending=1
+    if [ -n "$starting" ] && [ -n "${!:-}" ] && [ -z "${running[$!]:-}" ]; then
+        running[$!]=$starting
+        starting=""
+    fi
+    [ ${#running[@]} -gt 0 ] || { ending=""; return 0; }
+    for pid in "${!running[@]}"; do
+        exited "$pid" && finished+=("$pid")
+    done
     for pid in "${!running[@]}"; do kill -TERM -- "-$pid" 2> /dev/null; done
     while [ "$tries" -lt 100 ]; do
         alive=0
@@ -158,9 +172,23 @@ end_running() {
     for pid in "${!running[@]}"; do
         kill -KILL -- "-$pid" 2> /dev/null
         wait "$pid" 2> /dev/null
-        [ -z "${1:-}" ] || summary[${running[$pid]}]="  NOT RUN  ${names[${running[$pid]}]} — $1"
+        status=$?
+        if [[ " ${finished[*]} " == *" $pid "* ]]; then
+            record "${running[$pid]}" "$status"
+        elif [ -n "${1:-}" ]; then
+            summary[${running[$pid]}]="  NOT RUN  ${names[${running[$pid]}]} — $1"
+        fi
         unset "running[$pid]"
     done
+    ending=""
+}
+
+# exited <pid>: the part itself has ended (a zombie not yet waited for, or gone)
+exited() {
+    local stat
+    stat=$(cat "/proc/$1/stat" 2> /dev/null) || return 0
+    stat=${stat##*) }
+    [ "${stat%% *}" = Z ]
 }
 
 # print_ready: the output of each part, in the list's order, as far as the parts have ended
@@ -184,7 +212,7 @@ print_summary() {
     done
 }
 
-trap 'end_running; print_ready; echo; echo "run-all.sh: interrupted; the parts so far:"; print_summary; exit 130' INT TERM
+trap 'end_running; print_ready; echo; echo "run-all.sh: interrupted; the parts so far:"; print_summary; exit 130' INT TERM HUP
 
 # record <index> <status>: its summary line, and what its end means for the rest
 record() {
@@ -198,11 +226,14 @@ record() {
             summary[index]="  NOT RUN  $name — it could not be set up: ${reason:-status 2, no output}"
             any_not_run=1
             ;;
-        130) kill -INT $$ ;;
+        130)
+            [ -n "$ending" ] || kill -INT $$
+            summary[index]="  NOT RUN  $name — interrupted"
+            ;;
         *)
             summary[index]="  FAIL     $name (status $status, $took) — ${commands[index]}"
             any_failed=1
-            if [ "$keep_going" != 1 ] && [ -z "$stopped_by" ]; then
+            if [ "$keep_going" != 1 ] && [ -z "$stopped_by" ] && [ -z "$ending" ]; then
                 stopped_by=$name
                 end_running "ended: stopped after '$stopped_by' failed (--keep-going goes on)"
             fi

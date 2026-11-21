@@ -19,15 +19,17 @@ check() {
     if "$@"; then echo "  PASS $description"; else echo "  FAIL $description"; failed=1; fi
 }
 
-# part <file name> <status> [<line it prints>] [<seconds it takes>]: a stand-in part that
-# notes that it ran (ran) and when it started and ended (events), prints "output of <name>"
-# or the line given, on stderr
+# part <file name> <status> [<line it prints>] [<seconds it takes>] [<event it waits for>]: a
+# stand-in part that notes that it ran (ran) and when it started and ended (events), prints
+# "output of <name>" or the line given, on stderr, and ends after that long, or once the
+# event is noted (at most 10 s: run one after another, the part it waits for never comes)
 part() {
     {
         printf '#!%s\n' "$(type -P bash)"
         printf 'echo "%s" >> "%s/ran"\necho "start %s" >> "%s/events"\n' "$1" "$work" "$1" "$work"
         if [ -n "${3:-}" ]; then printf 'echo "%s" >&2\n' "$3"; else printf 'echo "output of %s"\n' "$1"; fi
         [ -z "${4:-}" ] || printf 'sleep %s\n' "$4"
+        [ -z "${5:-}" ] || printf 'for i in $(seq 200); do grep -qx "%s" "%s/events" && break; sleep 0.05; done\n' "$5" "$work"
         printf 'echo "end %s" >> "%s/events"\nexit %s\n' "$1" "$work" "$2"
     } > "$work/$1"
     chmod +x "$work/$1"
@@ -38,7 +40,9 @@ part bad 1
 part crashed 139
 part no-tool 2 "some-runner.sh: labwc not found on PATH (the headless compositor)"
 part bed 0
-part slow 0 "" 1
+part slow 0 "" "" "end good"
+part after-bad 0 "" "" "end bad"
+part bad-after-good 1 "" "" "end good"
 part slower 0 "" 30
 
 # run "<name>|<stand-in>"… [-- options…]: OUTPUT, STATUS, and which stand-ins ran
@@ -101,7 +105,7 @@ check "--keep-going: the later one is PASS" says "^  PASS     second "
 # Side by side: the second part ends before the first, its output still printed after it
 run "first|slow" "second|good"
 check "side by side: status 0" status_is 0
-side_by_side() { in_order "start slow" "end good" "end slow" && in_order "start good" "end good"; }
+side_by_side() { in_order "start good" "end slow" && in_order "end good" "end slow"; }
 check "side by side: both started before either ended, the second ended first" side_by_side
 check "side by side: the output in the list's order, not the order they ended" \
     before "^==== first: " "^==== second: "
@@ -121,7 +125,14 @@ check "… the part with no room does not start" bash -c '! grep -qx good "$1"' 
 check "… it is named NOT RUN, not reached" says "^  NOT RUN  third — not reached: stopped after 'second' failed"
 check "… the summary in the list's order" before "^  NOT RUN  first " "^  FAIL     second "
 
-run "first|bad" "second|slow" -- --keep-going
+# Two parts end at about the same time, one of them failing: the one that had ended keeps
+# its verdict, whichever the runner hears of first
+run "first|good" "second|bad-after-good"
+check "a failure as another part ends: that one keeps its PASS" says "^  PASS     first "
+check "… it is not named ended" silent_on "NOT RUN  first"
+check "… the failure is FAIL" says "^  FAIL     second (status 1, "
+
+run "first|bad" "second|after-bad" -- --keep-going
 check "--keep-going side by side: the running part is not ended, it passes" says "^  PASS     second "
 check "--keep-going side by side: status 1" status_is 1
 
@@ -161,8 +172,9 @@ run "first|good" -- -j 0
 check "-j 0: status 2" status_is 2
 check "-j 0: nothing runs" ran ""
 
-# Interrupted (SIGTERM) while two parts run side by side: both, and what they started, are
-# ended at once, not waited for — the stand-ins would run for 30 s — and the status is 130
+# Interrupted (SIGTERM, or SIGHUP: the terminal closed) while two parts run side by side:
+# both, and what they started, are ended at once, not waited for — the stand-ins would run
+# for 30 s — and the status is 130
 # hanging <name>: a stand-in that notes its pid and its child's, and waits on the child
 hanging() {
     printf '#!%s\necho $$ > "%s/%s.pid"\nsleep 30 &\necho $! > "%s/%s.child"\necho %s >> "%s/ran"\nwait\n' \
@@ -171,10 +183,6 @@ hanging() {
 }
 hanging hang-one
 hanging hang-two
-: > "$work/ran"
-printf '%s\n' "first|$work/hang-one" "second|$work/hang-two" "third|$work/good" > "$work/parts"
-RUN_ALL_PARTS="$work/parts" "$REPO/tests/run-all.sh" -j 2 > "$work/interrupted.out" 2>&1 &
-runner=$!
 # within <seconds> <command…>: true as soon as the command is, false after that long
 within() {
     local tries=$(($1 * 20))
@@ -186,31 +194,38 @@ within() {
     done
 }
 gone() { ! kill -0 "$1" 2> /dev/null; }
+all_gone() { local pid; for pid in "$@"; do gone "$pid" || return 1; done; }
 parts_running() { [ -s "$work/hang-one.child" ] && [ -s "$work/hang-two.child" ]; }
-if within 10 parts_running; then
-    pids=$(cat "$work/hang-one.pid" "$work/hang-two.pid")
-    children=$(cat "$work/hang-one.child" "$work/hang-two.child")
-    kill -TERM "$runner"
-    check "interrupted: the runner ends at once, not when the parts would have" within 10 gone "$runner"
-    wait "$runner"
-    STATUS=$?
-    OUTPUT=$(cat "$work/interrupted.out")
-    all_gone() { local pid; for pid in "$@"; do gone "$pid" || return 1; done; }
-    check "interrupted: status 130" status_is 130
-    # shellcheck disable=SC2086  # the pids' words
-    check "interrupted: both parts are ended" within 5 all_gone $pids
-    # shellcheck disable=SC2086
-    check "interrupted: what the parts started is ended too" within 5 all_gone $children
-    check "interrupted: says so" says "^run-all.sh: interrupted"
-    check "interrupted: the part with no room does not run" ran_set hang-one hang-two
-    check "interrupted: nothing is said to have passed" silent_on "PASS"
-    # Only what this test started, and only if the runner left it behind
-    # shellcheck disable=SC2086
-    kill $children $pids "$runner" 2> /dev/null
-else
-    check "interrupted: the stand-in parts started" false
-    kill "$runner" 2> /dev/null
-fi
+for signal in TERM HUP; do
+    : > "$work/ran"
+    rm -f "$work"/hang-*.pid "$work"/hang-*.child
+    printf '%s\n' "first|$work/hang-one" "second|$work/hang-two" "third|$work/good" > "$work/parts"
+    RUN_ALL_PARTS="$work/parts" "$REPO/tests/run-all.sh" -j 2 > "$work/interrupted.out" 2>&1 &
+    runner=$!
+    if within 10 parts_running; then
+        pids=$(cat "$work/hang-one.pid" "$work/hang-two.pid")
+        children=$(cat "$work/hang-one.child" "$work/hang-two.child")
+        kill -"$signal" "$runner"
+        check "SIG$signal: the runner ends at once, not when the parts would have" within 10 gone "$runner"
+        wait "$runner"
+        STATUS=$?
+        OUTPUT=$(cat "$work/interrupted.out")
+        check "SIG$signal: status 130" status_is 130
+        # shellcheck disable=SC2086  # the pids' words
+        check "SIG$signal: both parts are ended" within 5 all_gone $pids
+        # shellcheck disable=SC2086
+        check "SIG$signal: what the parts started is ended too" within 5 all_gone $children
+        check "SIG$signal: says so" says "^run-all.sh: interrupted"
+        check "SIG$signal: the part with no room does not run" ran_set hang-one hang-two
+        check "SIG$signal: nothing is said to have passed" silent_on "PASS"
+        # Only what this test started, and only if the runner left it behind
+        # shellcheck disable=SC2086
+        kill $children $pids "$runner" 2> /dev/null
+    else
+        check "SIG$signal: the stand-in parts started" false
+        kill "$runner" 2> /dev/null
+    fi
+done
 
 # The real list: each part's runner is there and can be started, and the lock bed is the
 # part --quick leaves out
