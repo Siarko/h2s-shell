@@ -418,6 +418,19 @@ Each is one change with its test; "check" is what proves it.
   `ownProcess`, the `after:` chains reduced to real data dependencies, per-suite limits
   from their own start. Check: `run-unit-selftest.sh` cases for a shard that crashes, a
   shard that times out, the exact count across shards; unit run ≤ 15 s here.
+  **Done 2026-11-22** (branch `tests-t4`): 111 s → 27–29 s here (5 runs in a row, all
+  passed; `--quick` 28 s). The floor is `ButtonKindsTest` alone (26 s of colour animations,
+  T3's), so ≤ 15 s waits for T3. The shard plan is computed (`plan_shards` in
+  `tests/count-suites.sh`) from the last times in `~/.cache/h2s-shell-tests/unit-times.txt`
+  (not in the tree: per machine, rewritten after each run); `-j` limits how many shards run
+  at once (default half the processors, at most 16), `-j 1` runs them one after another,
+  never in one process. Alone (`ownProcess: true`): Modules, ModuleRegistries, Anchors,
+  ModuleInstaller, ModuleUpdater, ModuleBackup (the module host, `Config`'s modules turned
+  off, VpnManager's providers) and SidePanel, SettingsModal, ModulesPage, Hud, FileChooser
+  (the keyboard or pointer their windows take). No `after:` is left, `vpnSuite` included
+  (it guarded shared state, not a result); `_asyncSuites` is read from `tests.qml`'s own
+  properties, so a suite registers on one line. Not done: a crashed shard is not rerun
+  without the suite that threw (§4.1), no FLAKY rerun per shard (§4.4).
 - **T5 — `run-all.sh` runs parts side by side** (lock bed last, alone), output per part
   in order; the privileged fixture's and the supervisor self-test's timings through their
   seams. Check: `run-all-selftest.sh` cases for parallel parts (order of output, a failing

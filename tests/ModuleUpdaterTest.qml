@@ -16,15 +16,14 @@ import qs.singletons.io
 // a newer version offered; a run while locked deferred to the unlock; an approval switching;
 // the backoff after failed runs; a late answer after cancel ignored (a check, a download);
 // stale restart reminders closed at start; and that nothing named a non-file address.
-// Runs after ModuleInstallerTest: both change the acknowledgements and the modules turned
-// off through Config.
+// Changes the acknowledgements and the modules turned off through Config, as other suites do:
+// in a process of its own.
 TestCase {
     id: suite
     suiteName: "ModuleUpdater"
     asynchronous: true
     timeLimitMs: 240000
-
-    property var after: null
+    ownProcess: true
 
     property ModuleHost host: null
     property ModuleInstaller installer: null
@@ -268,8 +267,7 @@ TestCase {
                                                                             && line.includes("ls-remote --symref -- file:///")),
                    "… every check without hooks, only the listed protocols, the address after \"--\"");
         });
-        if (after === null || after.done)
-            _clock.start();
+        _clock.start();
     }
 
     // The modules a check named as being checked, in order
@@ -279,14 +277,6 @@ TestCase {
         function onCheckingIdChanged() {
             if (suite.updater.checkingId !== "")
                 suite._checkingIds = suite._checkingIds.concat([suite.updater.checkingId]);
-        }
-    }
-
-    property Connections _afterDone: Connections {
-        target: suite.after
-        function onDoneChanged() {
-            if (suite.after.done && suite.selected && suite._steps.length > 0 && !suite._clock.running)
-                suite._clock.start();
         }
     }
 

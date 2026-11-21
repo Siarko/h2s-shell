@@ -7,7 +7,8 @@ import qs.singletons
 import qs.singletons.network
 
 // The core's registries with modules in them (notes/plans/modules.md, M2), on the shell's own
-// host (Modules.host) — so after ModulesTest, whose host loads the same fixtures (`after`):
+// host (Modules.host) — in a process of its own, as it changes that host, Config's modules
+// turned off and VpnManager's providers, which other suites read or change too:
 // with no module every registry is the core's list itself; the `good` fixture loaded, its
 // widget, popup, presets, settings, popup-mode entry, facts, settings page, handle and slot
 // contribution are in; a contribution that does not compile is contained; turning it off
@@ -18,11 +19,7 @@ TestCase {
     id: suite
     suiteName: "ModuleRegistries"
     asynchronous: true
-
-    // A suite that must be done first (it loads the same fixtures in a host of its own)
-    property var after: null
-    // The VPN provider suite: its counts of VpnManager's providers must not see this one's
-    property var vpnSuite: null
+    ownProcess: true
     property var _frame: null
 
     readonly property string fixtures: Quickshell.shellDir + "/tests/fixtures/modules"
@@ -186,10 +183,7 @@ TestCase {
 
     function runAsync() {
         _savedDisabled = Modules.host._plainList(Config.disabledModules);
-        // Waits as long as the suite it follows may run (its runner's time limit fails it,
-        // and this one, if it never ends): a deadline of its own would fail this suite on a
-        // slower machine whenever ModulesTest takes longer than that
-        _then("the module host suite is done, the config read", () => (after === null || after.done) && Config.ready, () => {
+        _then("the config read", () => Config.ready, () => {
             Config.disabledModules = [];
             // The real window starts the shell's network readers: they must find the runner's
             // stand-ins, never a real NetworkManager or notification daemon
@@ -562,9 +556,8 @@ TestCase {
         _then("panel-opener unloaded", () => Modules.host.statuses.length === 0, () => {});
 
         // The VPN slots (API 1.1): a module's provider (providerId = its id) fills them through
-        // its manifest; a provider that is no module's keeps its own. After the VPN provider
-        // suite, which counts VpnManager's providers.
-        _then("the VPN provider suite is done", () => vpnSuite === null || vpnSuite.done, () => {
+        // its manifest; a provider that is no module's keeps its own.
+        _then("the VPN slots offered", () => true, () => {
             assert(Api.slots.some(slot => slot.name === "network.vpn.row" && slot.since === "1.1")
                    && Api.slots.some(slot => slot.name === "network.vpn.card") && Api.slots.some(slot => slot.name === "network.vpn.page"),
                    "the slot table offers network.vpn.row, .card and .page (since 1.1)");

@@ -1633,24 +1633,39 @@ below).
 the suites `tests.qml` lists. `tests/run-unit.sh` (and `tests/run-modules.sh`, for modules'
 own suites — see [Modules](#modules); both share `tests/headless.sh`) runs them in a private headless labwc
 (private runtime dir, HOME and XDG dirs, D-Bus addresses that lead nowhere, no new
-privileges), so the suites' windows never show on the real screen — `run-unit.sh` also puts
+privileges), so the suites' windows never show on the real screen. `run-unit.sh` runs the
+suites in parallel **shards**, each a Quickshell process with a compositor of its own and
+only its suites selected: a suite whose file says `ownProcess: true` runs alone (it changes
+what is shared in one process — the module host, `Config`'s list of modules turned off, the
+keyboard its window takes); the others are packed by the time each took last
+(`~/.cache/h2s-shell-tests/unit-times.txt`, rewritten after each run; without it 5 s for an
+asynchronous suite, 0.1 s for another) into as many shards as it takes for none to run longer
+than the longest suite, at most half the processors' worth at once (`-j <n>` says how many).
+The plan is computed (`plan_shards` in `tests/count-suites.sh`), never kept by hand. Each
+shard is the runner again on its suites, with its own verdict, printed when it ends; the
+verdict over them wants every suite run to report exactly once. The whole set takes about
+30 s on a 32-thread machine; the floor is `ButtonKindsTest` alone (about 26 s of colour
+animations waited for). `run-unit.sh` also puts
 stand-ins for `nmcli` and `notify-send` first on `PATH` (`tests/fixtures/unit-path`), for the
 suites that build the real settings window and with it the network readers; it finds labwc and
 Quickshell through `tests/lock/resolve.sh` ("Where the test tools come from", below) and fails on any `FAIL`, a
-`TypeError`/`ReferenceError`, a non-zero exit of Quickshell (a crash after a partial
-summary), fewer suites reporting than `tests.qml` registers, a suite reporting 0/0, or more
-`PASS:` lines than the summaries count (a check made after its suite reported); the lock bed
-fails a scenario that ends well without a `PASS` line; `tests/run-unit-selftest.sh`
-checks that verdict against stand-in Quickshells, and the suite count (`tests/count-suites.sh`:
-a suite written with arguments counts too).
+`TypeError`/`ReferenceError`, a non-zero exit of a shard's Quickshell (a crash after a
+partial summary), the suites that report not being exactly those run, a suite reporting
+0/0, or more `PASS:` lines than the summaries count (a check made after its suite
+reported); the lock bed fails a scenario that ends well without a `PASS` line;
+`tests/run-unit-selftest.sh` checks that verdict against stand-in Quickshells, in one shard
+and over several, the suite count (`tests/count-suites.sh`: a suite written with arguments
+counts too) and the shard plan.
 
 Both runners can run a part: `tests/run-unit.sh FormatTest LockRulesTest` runs the named
 suites (a suite is named by its type, the file in `tests/` without `.qml`), and
 `tests/run-modules.sh --suite GoodApiTest <module dir>…` the named suites of the modules
 given. `--log <file>`, before the names, also saves the output. The list of suites stays
-`tests.qml`: the runner reads the suites from its `property var _name: SomethingTest {…}`
-lines, and which suites a suite is given (`ModuleRegistriesTest { after: _modules; … }`
-waits for them) — those run with it and are counted. The names reach `TestCase` as
+`tests.qml`, one `property var _name: SomethingTest {}` line per suite and no other list:
+the runner reads the suites from those lines, and `tests.qml` finds its asynchronous ones
+among its own properties. No suite waits for another — each builds its own state; a suite
+given another on its line (`SomethingTest { other: _name }`) would run in its shard and be
+counted, and none is now. The names reach `TestCase` as
 `H2S_TEST_SUITES`: every suite is still built, one that was not selected does nothing
 (`TestCase.selected`), and it is found by its `suiteName` followed by `Test`, so a suite's
 file is called that. With names the verdict wants exactly the selected suites to report; a
@@ -1663,13 +1678,14 @@ functions (the `*Rules` and geometry singletons, parsers). A suite that throws c
 failed, not as missing.
 
 A suite that needs the event loop sets `asynchronous: true`, does its work in
-`runAsync()` and calls `finish()`; `tests.qml` lists it in `_asyncSuites` and waits for it.
-Each asynchronous suite has its own limit, counted from the start of the suites (they run
-side by side): `TestCase.timeLimitMs`, or the runner's default — 90 s in `tests.qml`; 20 s
-in `tests-modules.qml` (a module's suites, `tests/run-modules.sh`), which caps it at 60 s. A
-suite with many concurrent scenarios declares more. `FileChooserTest`, which opens a real
-dialog, starts after the others and fails without opening one if they leave it too little
-of its limit. Of the shell's own, `PointerInputTest.qml` is one asynchronous suite: it puts real components (`BarWidget`,
+`runAsync()` and calls `finish()`; `tests.qml` waits for it. Each asynchronous suite has
+its own limit, counted from when its process starts the suites: `TestCase.timeLimitMs`, or
+the runner's default — 90 s in `tests.qml`; 20 s in `tests-modules.qml` (a module's suites,
+`tests/run-modules.sh`), which caps it at 60 s. A suite with many concurrent scenarios
+declares more. In one process the window suites do not run side by side: one that waits in
+a nested event loop (QtTest's `wait`) holds the next one's start until it returns.
+`FileChooserTest`, which opens a real dialog that takes the keyboard, runs in a process of
+its own. Of the shell's own, `PointerInputTest.qml` is one asynchronous suite: it puts real components (`BarWidget`,
 `PopupWidget`) in a small layer window and drives them with QtTest's `TestCase` used by
 hand (`when: false`) — `mouseMove`, `mouseClick`, `touchEvent` — to check what a mouse and
 a finger do. It needs a Wayland session — `run-unit.sh` gives it its own. A stylus cannot

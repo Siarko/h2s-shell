@@ -104,3 +104,113 @@ suites_with_needed() {
     # Nothing asked for, nothing printed: printf would print one empty line
     [ ${#result[@]} -eq 0 ] || printf '%s\n' "${result[@]}"
 }
+
+# plan_shards <root.qml> <times file> <suite>…
+#                                  the shards those suites run in, one line each (the suites
+#                                  of a shard, space-separated), the longest first. A suite
+#                                  whose file (tests/<type>.qml beside the root file) says
+#                                  `ownProcess: true` has a shard of its own; a suite and the
+#                                  suites it is given share one. The others are packed,
+#                                  longest first, each into the shard with the least time so
+#                                  far, into as many shards as it takes for none to hold more
+#                                  than the longest suite takes alone (5 s at least). A
+#                                  suite's time is the one last measured (the times file:
+#                                  lines "<type> <ms>"), else 5 s for an asynchronous suite
+#                                  (its file says `asynchronous: true`), 0.1 s for another.
+plan_shards() {
+    local root=$1 times=$2 table name file own weight given
+    shift 2
+    table=$(registered_suites "$root")
+    for name in "$@"; do
+        file=$(dirname "$root")/tests/$name.qml
+        own=0
+        grep -q -E '^[[:space:]]*ownProcess: true[[:space:]]*$' "$file" 2> /dev/null && own=1
+        weight=""
+        [ -n "$times" ] && [ -r "$times" ] && weight=$(awk -v name="$name" '$1 == name && $2 ~ /^[0-9]+$/ { found = $2 } END { print found }' "$times")
+        if [ -z "$weight" ]; then
+            if grep -q -E '^[[:space:]]*asynchronous: true[[:space:]]*$' "$file" 2> /dev/null; then weight=5000; else weight=100; fi
+        fi
+        given=$(awk -v name="$name" '$1 == name { $1 = ""; print }' <<< "$table")
+        echo "$name $own $weight $given"
+    done | awk '
+        function find(x) { while (parent[x] != x) x = parent[x]; return x }
+        {
+            count++
+            order[count] = $1
+            own[$1] = $2
+            weight[$1] = $3 + 0
+            parent[$1] = $1
+            givenTo[$1] = ""
+            for (i = 4; i <= NF; i++) givenTo[$1] = givenTo[$1] " " $i
+        }
+        END {
+            # A suite and what it is given: one unit, in one shard
+            for (i = 1; i <= count; i++) {
+                total = split(givenTo[order[i]], words, " ")
+                for (j = 1; j <= total; j++)
+                    if (words[j] in parent && find(words[j]) != find(order[i]))
+                        parent[find(words[j])] = find(order[i])
+            }
+            units = 0
+            longest = 0
+            for (i = 1; i <= count; i++) {
+                root = find(order[i])
+                if (!(root in unitOf)) {
+                    units++
+                    unitOf[root] = units
+                    members[units] = ""
+                    load[units] = 0
+                    alone[units] = 0
+                }
+                unit = unitOf[root]
+                members[unit] = members[unit] (members[unit] == "" ? "" : " ") order[i]
+                load[unit] += weight[order[i]]
+                if (own[order[i]]) alone[unit] = 1
+            }
+            for (unit = 1; unit <= units; unit++)
+                if (load[unit] > longest) longest = load[unit]
+            # A shard costs its own start (a compositor, Quickshell, every suite built: about
+            # a second): short suites fill one up to 5 s, at least
+            if (longest < 5000) longest = 5000
+            # The units to pack, longest first (ties: in the order registered)
+            packed = 0
+            packedLoad = 0
+            for (unit = 1; unit <= units; unit++) {
+                if (alone[unit]) continue
+                packed++
+                sorted[packed] = unit
+                packedLoad += load[unit]
+                for (k = packed; k > 1 && load[sorted[k]] > load[sorted[k - 1]]; k--) {
+                    swap = sorted[k]; sorted[k] = sorted[k - 1]; sorted[k - 1] = swap
+                }
+            }
+            shards = 0
+            for (unit = 1; unit <= units; unit++)
+                if (alone[unit]) { shards++; shardMembers[shards] = members[unit]; shardLoad[shards] = load[unit] }
+            if (packed > 0) {
+                bins = longest > 0 ? int((packedLoad + longest - 1) / longest) : 1
+                if (bins < 1) bins = 1
+                if (bins > packed) bins = packed
+                first = shards + 1
+                for (b = 0; b < bins; b++) { shardMembers[first + b] = ""; shardLoad[first + b] = 0 }
+                for (k = 1; k <= packed; k++) {
+                    unit = sorted[k]
+                    best = first
+                    for (b = first + 1; b < first + bins; b++)
+                        if (shardLoad[b] < shardLoad[best]) best = b
+                    shardMembers[best] = shardMembers[best] (shardMembers[best] == "" ? "" : " ") members[unit]
+                    shardLoad[best] += load[unit]
+                }
+                shards += bins
+            }
+            # The longest first: they start first
+            for (s = 1; s <= shards; s++) {
+                byLoad[s] = s
+                for (k = s; k > 1 && shardLoad[byLoad[k]] > shardLoad[byLoad[k - 1]]; k--) {
+                    swap = byLoad[k]; byLoad[k] = byLoad[k - 1]; byLoad[k - 1] = swap
+                }
+            }
+            for (s = 1; s <= shards; s++) print shardMembers[byLoad[s]]
+        }
+    '
+}

@@ -1,20 +1,25 @@
 #!/usr/bin/env bash
-# Checks tests/run-unit.sh's verdict against stand-in Quickshells (LOCKTEST_QS) that print
-# a summary and end in a given way — the cases where a crash used to pass:
+# Checks tests/run-unit.sh's verdict against stand-in Quickshells (LOCKTEST_QS) that report
+# the suites they are told to run (H2S_TEST_SUITES), each with three PASS lines, and end in a
+# given way in the shard that runs FormatTest — the cases where a crash used to pass. Run on
+# FormatTest, SidePanelTest and ModulesTest: three shards (the last two run alone,
+# `ownProcess`), so the shards' verdicts and the one over them are both checked:
 #
-#   crash      one suite's summary, no FAIL line, then SIGSEGV (status 139)  → must fail
-#   partial    fewer suites than tests.qml registers, exit 0                  → must fail
-#   complete   every suite tests.qml registers, all passed, exit 0            → must pass
-#   empty      every suite reports, one of them 0/0: it checked nothing       → must fail
-#   late       every suite reports, and a PASS line no summary counts (a check
-#              made after its suite reported)                                 → must fail
+#   complete   every suite tests.qml registers, in its shards, all passed     → must pass
+#              (and said how many shards; every suite reported once)
+#   serial     -j 1: the same three shards one after another                  → must pass
+#   crash      Format's summary, no FAIL line, then SIGSEGV (status 139)      → must fail
+#   timeout    Format's summary, then the status of `timeout` (124)           → must fail
+#   partial    Format does not report, exit 0                                 → must fail
+#   empty      Format reports 0/0: it checked nothing                         → must fail
+#   late       a PASS line no summary counts (a check made after its suite
+#              reported)                                                      → must fail
 #
-# with suites named to the runner (the `obedient` stand-in reports the suites it is told to
-# run in H2S_TEST_SUITES, and no other):
+# with suites named to the runner (the `obedient` stand-in, which ends well everywhere):
 #
 #   selected   two named suites, both report                                  → must pass
-#   needed     ModuleRegistriesTest: the suites it is given are run with it   → must pass
 #   logged     --log <file> with a named suite: the output is in the file     → must pass
+#   logged-shards  --log <file> over three shards: all their output in it     → must pass
 #   unknown    a name tests.qml does not register: status 2, nothing started
 #   empty      an empty name, alone or beside a suite: status 2, nothing started
 #   silent     one of two named suites does not report                        → must fail
@@ -37,14 +42,18 @@
 # the suite count against a small root file whose suites are written with and without
 # arguments (`arguments`: each one must count), the suites a suite is given, read from the
 # same file (`given`, `qualified`), a root file whose suites cannot be read reliably
-# (`unbalanced`: said, not counted short), and every suite's suiteName against its file name
-# (`names`: a named suite is found by its suiteName followed by "Test").
+# (`unbalanced`: said, not counted short), every suite's suiteName against its file name
+# (`names`: a named suite is found by its suiteName followed by "Test"), the shard plan
+# (`plan`: a suite with `ownProcess: true` alone, a suite and what it is given together, the
+# others packed by their times, the longest first), and no suite of tests.qml given another
+# (`unchained`: each builds its own state).
 #
 # and how the runner ends:
 #
 #   unreadable          a tests.qml like `unbalanced`: status 2, nothing started
-#   interrupted         told to end while Quickshell runs: status 130 at once, no
-#                       process and no temp dir left
+#   interrupted         told to end while two shards' Quickshells run (-j 2): status
+#                       130 at once, no process and no temp dir left, no shard started
+#                       after
 #   interrupted-twice   a Quickshell that ignores the request, and a second interrupt
 #                       during the cleanup: the same
 #
@@ -60,6 +69,8 @@ set -uo pipefail
 REPO=$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)
 work=$(mktemp -d "${TMPDIR:-/tmp}/ut-self.XXXXXX") || exit 2
 trap 'rm -rf "$work"' EXIT
+# The shard plan's times: none (the defaults), never the user's
+export H2S_UNIT_TIMES=$work/no-times
 # shellcheck source=count-suites.sh
 source "$REPO/tests/count-suites.sh"
 
@@ -140,40 +151,60 @@ else
     failures=$((failures + 1))
 fi
 
-# stand_in <name> <summaries> <how it ends>
-stand_in() {
-    {
-        echo "#!$(command -v bash)"
-        for ((i = 1; i <= $2; i++)); do echo "echo '  INFO: --- Suite$i: 3/3 passed'"; done
-        echo "$3"
-    } > "$work/$1"
-    chmod +x "$work/$1"
-}
-stand_in crash 1 'kill -SEGV $$'
-stand_in partial $((expected - 1)) 'exit 0'
-stand_in complete "$expected" 'exit 0'
-stand_in empty $((expected - 1)) "echo '  INFO: --- Empty: 0/0 passed ---'"
-# Each suite's three checks printed before its summary, and one more after the last
+# The shard plan, on a root file of its own with suite files beside it: AloneTest says
+# `ownProcess: true`; LongTest took 20 s last, MidATest and MidBTest 10 s; the others have no
+# time (0.1 s each, synchronous), GiverTest is given TakerTest. Packed into ceil(40.4 / 20) =
+# 3 shards, the longest first, each into the one with the least time so far
+mkdir -p "$work/plan/tests"
 {
-    echo "#!$(command -v bash)"
-    for ((i = 1; i <= expected; i++)); do
-        for check in 1 2 3; do echo "echo '  INFO:   PASS: check $check'"; done
-        echo "echo '  INFO: --- Suite$i: 3/3 passed ---'"
-    done
-    echo "echo '  INFO:   PASS: a check after its suite reported'"
-} > "$work/late"
-chmod +x "$work/late"
+    echo 'Item {'
+    for type in Alone ShortA ShortB Long MidA MidB; do echo "    property var _${type,}: ${type}Test {}"; done
+    echo '    property var _giver: GiverTest { after: _taker }'
+    echo '    property var _taker: TakerTest {}'
+    echo '}'
+} > "$work/plan/root.qml"
+for type in Alone ShortA ShortB Long MidA MidB Giver Taker; do echo "TestCase {}" > "$work/plan/tests/${type}Test.qml"; done
+printf 'TestCase {\n    ownProcess: true\n}\n' > "$work/plan/tests/AloneTest.qml"
+printf 'LongTest 20000\nMidATest 10000\nMidBTest 10000\n' > "$work/plan/times"
+planned=$(plan_shards "$work/plan/root.qml" "$work/plan/times" AloneTest ShortATest ShortBTest LongTest MidATest MidBTest GiverTest TakerTest | paste -s -d '|')
+if [ "$planned" = "LongTest|MidATest GiverTest TakerTest|MidBTest ShortATest ShortBTest|AloneTest" ]; then
+    echo "PASS plan: alone, given together, packed by time, the longest first"
+else
+    echo "FAIL plan: got '$planned'"
+    failures=$((failures + 1))
+fi
+# Without times: short suites fill one shard (5 s at least), an asynchronous one weighs 5 s
+printf 'TestCase {\n    asynchronous: true\n}\n' > "$work/plan/tests/LongTest.qml"
+planned=$(plan_shards "$work/plan/root.qml" "" ShortATest ShortBTest LongTest | paste -s -d '|')
+if [ "$planned" = "LongTest|ShortATest ShortBTest" ]; then
+    echo "PASS plan: without times, short suites share a shard, an asynchronous one weighs 5 s"
+else
+    echo "FAIL plan: without times got '$planned'"
+    failures=$((failures + 1))
+fi
+
+# No suite of tests.qml is given another: suites in other shards cannot wait for each other
+chained=$(registered_suites "$REPO/tests.qml" | awk 'NF > 1')
+if [ -z "$chained" ]; then
+    echo "PASS unchained: no suite of tests.qml is given another"
+else
+    echo "FAIL unchained: given other suites: $chained"
+    failures=$((failures + 1))
+fi
 
 # Reports the suites the runner selected (H2S_TEST_SUITES), under the names TestCase prints
-# (the type without "Test"); `silent` leaves the last one out, `extra` adds one, `renamed`
-# reports another suite in place of the last
+# (the type without "Test"), each after three PASS lines; in the shard that runs FormatTest,
+# <what then> is done before (it may change `names`) and <how it ends> after.
+# `silent` leaves the last one out, `extra` adds one, `renamed` reports another suite in
+# place of the last
 selecting_stand_in() {
     {
         echo "#!$(command -v bash)"
         echo 'IFS=: read -r -a names <<< "${H2S_TEST_SUITES:-}"'
+        echo 'format=""; [[ ":${H2S_TEST_SUITES:-}:" == *:FormatTest:* ]] && format=1'
         echo "$2"
-        echo 'for name in "${names[@]}"; do echo "  INFO: --- ${name%Test}: 3/3 passed"; done'
-        echo 'exit 0'
+        echo 'for name in "${names[@]}"; do for check in 1 2 3; do echo "  INFO:   PASS: check $check"; done; echo "  INFO: --- ${name%Test}: 3/3 passed"; done'
+        echo "${3:-exit 0}"
     } > "$work/$1"
     chmod +x "$work/$1"
 }
@@ -181,6 +212,12 @@ selecting_stand_in obedient ''
 selecting_stand_in silent 'unset "names[-1]"'
 selecting_stand_in extra 'names+=(UnnamedTest)'
 selecting_stand_in renamed 'names[-1]=UnnamedTest'
+selecting_stand_in crash '' '[ -n "$format" ] && kill -SEGV $$; exit 0'
+selecting_stand_in timeout '' '[ -n "$format" ] && exit 124; exit 0'
+selecting_stand_in partial '[ -n "$format" ] && names=("${names[@]/FormatTest/}") && names=(${names[@]})'
+selecting_stand_in empty '' '[ -n "$format" ] && echo "  INFO: --- Empty: 0/0 passed ---"; exit 0'
+selecting_stand_in late '' '[ -n "$format" ] && echo "  INFO:   PASS: a check after its suite reported"; exit 0'
+three=(FormatTest SidePanelTest ModulesTest)
 
 # verdict <case> <stand-in, or "real" for the Quickshell the runners find> <expected status>
 #         [<argument of the runner>…]: the runner is $runner
@@ -220,22 +257,33 @@ reports_only() {
 }
 reports_nothing() { ! grep -q -- "passed" "$work/$1"; }
 
-verdict crash crash 1
-verdict partial partial 1
-verdict complete complete 0
-verdict empty empty 1
+verdict complete obedient 0
+check complete "said it ran every suite in more than one shard" grep -q -E "^run-unit.sh: $expected suites in ([2-9]|[1-9][0-9]+) shards" "$work/complete.log"
+# The verdict over the shards, the last block: each suite once
+check complete "every suite reported once, in the verdict over the shards" \
+    test "$(sed -n '/^Unit suites ([0-9]* s, [0-9]* shards/,$p' "$work/complete.log" | grep -c -E -- '^  --- .*: 3/3 passed$')" = "$expected"
+verdict serial obedient 0 -j 1 "${three[@]}"
+check serial "three shards, one at a time" grep -q "^run-unit.sh: 3 suites in 3 shards, at most 1 at once" "$work/serial.log"
+verdict crash crash 1 "${three[@]}"
+check crash "said which shard" grep -q "^  shard [0-9] (FormatTest) failed (status 1)" "$work/crash.log"
+check crash "… and why" grep -q "^  quickshell exited with status 139" "$work/crash.log"
+verdict timeout timeout 1 "${three[@]}"
+check timeout "said so" grep -q "^  quickshell timed out" "$work/timeout.log"
+verdict partial partial 1 "${three[@]}"
+check partial "said which suite, in its shard" grep -q "^  Format did not report" "$work/partial.log"
+check partial "… and over the shards" grep -q "^  Format reported 0 times" "$work/partial.log"
+verdict empty empty 1 "${three[@]}"
 check empty "said which suite" grep -q "^  Empty ran no check (0/0)" "$work/empty.log"
-verdict late late 1
+verdict late late 1 "${three[@]}"
 check late "said so" grep -q "checks passed, the suites' summaries count" "$work/late.log"
 
 verdict selected obedient 0 FormatTest LockRulesTest
 check selected "FormatTest reported" reports selected.log Format
 check selected "LockRulesTest reported" reports selected.log LockRules
-verdict needed obedient 0 ModuleRegistriesTest
-check needed "ModulesTest was run with it" reports needed.log Modules
-check needed "VpnProvidersTest was run with it" reports needed.log VpnProviders
 verdict logged obedient 0 --log "$work/copy.log" FormatTest
 check logged "the output is in the file" reports copy.log Format
+verdict logged-shards obedient 0 --log "$work/copy-shards.log" "${three[@]}"
+for name in Format SidePanel Modules; do check logged-shards "$name's output is in the file" reports copy-shards.log "$name"; done
 verdict unknown obedient 2 FormatTest NoSuchTest
 check unknown "no suite ran" reports_nothing unknown.log
 verdict empty obedient 2 ""
@@ -267,8 +315,7 @@ TestCase {
     timeLimitMs: 2000
 }
 QML
-sed -e 's/^\(    property var _promises: PromisesTest {}\)$/    property var _hung: HungTest {}\n\1/' \
-    -e 's/^\(    readonly property var _asyncSuites: \[\)/\1_hung, /' "$REPO/tests.qml" > "$work/limited/tests.qml"
+sed -e 's/^\(    property var _promises: PromisesTest {}\)$/    property var _hung: HungTest {}\n\1/' "$REPO/tests.qml" > "$work/limited/tests.qml"
 limited_started=$SECONDS
 "$work/limited/tests/run-unit.sh" HungTest > "$work/limited.log" 2>&1
 limited_status=$?
@@ -323,9 +370,9 @@ refuses_unreadable() {
 check unreadable "run-unit.sh exited 2 and said why, nothing else" refuses_unreadable
 check unreadable "… with a suite named too" refuses_unreadable FirstTest
 
-# interrupted: the runner is told to end while Quickshell runs (a stand-in that never
-# ends). It ends at once with status 130 and leaves nothing: not Quickshell, not the
-# compositor, not its temp dir. TERM stands for an interrupt here: a command a script starts
+# interrupted: the runner is told to end while two shards' Quickshells run (-j 2; a stand-in
+# that never ends). It ends at once with status 130 and leaves nothing: not a Quickshell, not
+# a compositor, not a temp dir, and starts no other shard. TERM stands for an interrupt here: a command a script starts
 # in the background ignores INT.
 # interrupted-twice: a Quickshell that does not end when told to (TERM ignored), and a
 # second interrupt while the runner is stopping it: the runner still leaves nothing.
@@ -333,7 +380,7 @@ check unreadable "… with a suite named too" refuses_unreadable FirstTest
     echo "#!$(command -v bash)"
     # Asked for its version (the runner's first lines), it only ends
     echo '[ "${1:-}" = --version ] && exit 0'
-    echo "echo \"\$XDG_RUNTIME_DIR\" > '$work/sleeper.started'"
+    echo "echo \"\$XDG_RUNTIME_DIR\" >> '$work/sleeper.started'"
     echo "exec sleep 200"
 } > "$work/sleeper"
 {
@@ -342,14 +389,14 @@ check unreadable "… with a suite named too" refuses_unreadable FirstTest
     # Says when it was told to end, which is when the runner has begun to clean up
     echo "trap \"echo told > '$work/stubborn.told'\" TERM"
     echo "(trap '' TERM; exec sleep 200) &"
-    echo "echo \"\$XDG_RUNTIME_DIR\" > '$work/stubborn.started'"
+    echo "echo \"\$XDG_RUNTIME_DIR\" >> '$work/stubborn.started'"
     echo 'while kill -0 $! 2> /dev/null; do wait; done'
 } > "$work/stubborn"
 chmod +x "$work/sleeper" "$work/stubborn"
 
 runner_pid=""
 runner_processes=()
-runner_dir=""
+runner_dirs=()
 # descendants <pid>: its children and theirs, to any depth
 descendants() {
     local child
@@ -375,28 +422,34 @@ stop_runner() {
         kill -0 "$process" 2> /dev/null && kill -KILL "$process" 2> /dev/null
     done
     [ -n "$runner_pid" ] && wait "$runner_pid" 2> /dev/null
-    case "$runner_dir" in /tmp/ut.*) rm -rf "$runner_dir" ;; esac
+    for directory in "${runner_dirs[@]}"; do
+        case "$directory" in /tmp/ut.*) rm -rf "$directory" ;; esac
+    done
     runner_pid=""
     runner_processes=()
-    runner_dir=""
+    runner_dirs=()
 }
 trap 'trap "" INT TERM HUP; stop_runner; rm -rf "$work"' EXIT
 
 # interrupt <case> <stand-in> <processes it makes the runner have> [twice]
 interrupt() {
     local name=$1 quickshell=$2 expected_processes=$3 twice=${4:-} status
-    LOCKTEST_QS=$work/$quickshell "$REPO/tests/run-unit.sh" > "$work/$name.log" 2>&1 &
+    local directory present
+    LOCKTEST_QS=$work/$quickshell "$REPO/tests/run-unit.sh" -j 2 > "$work/$name.log" 2>&1 &
     runner_pid=$!
     for _ in $(seq 1 1200); do
-        [ -s "$work/$quickshell.started" ] && break
+        [ "$(grep -c . "$work/$quickshell.started" 2> /dev/null)" = 2 ] && break
         kill -0 "$runner_pid" 2> /dev/null || break
         sleep 0.1
     done
-    # timeout and the compositor, timeout and Quickshell (and what Quickshell started)
+    # The shards, and in each timeout and the compositor, timeout and Quickshell (and what
+    # Quickshell started)
     mapfile -t runner_processes < <(descendants "$runner_pid")
-    runner_dir=$(dirname "$(cat "$work/$quickshell.started" 2> /dev/null)")
-    check "$name" "Quickshell was running, in the runner's temp dir" test -d "$runner_dir" -a "$runner_dir" != .
-    check "$name" "the compositor and Quickshell are the runner's processes" test "${#runner_processes[@]}" -ge "$expected_processes"
+    runner_dirs=()
+    while read -r directory; do runner_dirs+=("$(dirname "$directory")"); done < "$work/$quickshell.started"
+    present() { [ ${#runner_dirs[@]} = 2 ] && test -d "${runner_dirs[0]}" -a -d "${runner_dirs[1]}" -a "${runner_dirs[0]}" != "${runner_dirs[1]}"; }
+    check "$name" "two Quickshells were running, each in its shard's temp dir" present
+    check "$name" "the compositors and Quickshells are the runner's processes" test "${#runner_processes[@]}" -ge "$expected_processes"
     kill -TERM "$runner_pid" 2> /dev/null
     if [ -n "$twice" ]; then
         for _ in $(seq 1 100); do [ -s "$work/$quickshell.told" ] && break; sleep 0.1; done
@@ -412,10 +465,11 @@ interrupt() {
         status=$?
         check "$name" "run-unit.sh exited 130" test "$status" = 130
         check "$name" "none of its processes is left" none_left
-        check "$name" "its temp dir is gone" test ! -e "$runner_dir"
+        check "$name" "the shards' temp dirs are gone" test ! -e "${runner_dirs[0]:-/nonexistent}" -a ! -e "${runner_dirs[1]:-/nonexistent}"
+        check "$name" "no other shard was started" test "$(grep -c . "$work/$quickshell.started")" = 2
     fi
     stop_runner
 }
-interrupt interrupted sleeper 4
-interrupt interrupted-twice stubborn 5 twice
+interrupt interrupted sleeper 8
+interrupt interrupted-twice stubborn 10 twice
 [ "$failures" = 0 ]

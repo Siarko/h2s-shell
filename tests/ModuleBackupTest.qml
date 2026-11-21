@@ -14,15 +14,14 @@ import qs.singletons.io
 // refused; a restore round trip (settings, store and files back, the module off and on
 // again, the current configuration backed up first); a module turned off stays off after a
 // restore; switches back and forth take one each, under and over the cap of 5, a staging
-// leftover never counted nor deleted. Runs after ModuleUpdaterTest: all three change the
-// acknowledgements and the modules turned off through Config, this one the profiles too.
+// leftover never counted nor deleted. Changes the acknowledgements, the modules turned off
+// through Config and the profiles, as other suites do: in a process of its own.
 TestCase {
     id: suite
     suiteName: "ModuleBackup"
     asynchronous: true
     timeLimitMs: 240000
-
-    property var after: null
+    ownProcess: true
 
     property ModuleHost host: null
     property ModuleInstaller installer: null
@@ -203,16 +202,7 @@ TestCase {
         _cap();
         _failures();
         _lockDuring();
-        if (after === null || after.done)
-            _clock.start();
-    }
-
-    property Connections _afterDone: Connections {
-        target: suite.after
-        function onDoneChanged() {
-            if (suite.after.done && suite.selected && suite._steps.length > 0 && !suite._clock.running)
-                suite._clock.start();
-        }
+        _clock.start();
     }
 
     // An update (the folder copied again at 1.1.0) backs up 1.0.0's configuration first

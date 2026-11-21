@@ -19,12 +19,19 @@ QtObject {
         return typeof names !== "string" || names === "" || names.split(":").includes(suiteName + "Test");
     }
     property bool done: !asynchronous || !selected
-    // How long an asynchronous suite may take before its runner fails it as timed out, in ms —
-    // from the moment the suites start (they run side by side), or in tests.qml, for a suite that
-    // waits for others, from when they are done. 0 takes the runner's default:
+    // How long an asynchronous suite may take before its runner fails it as timed out, in ms,
+    // from the moment its process starts the suites. 0 takes the runner's default:
     // tests.qml's 90 s, tests-modules.qml's 20 s, which it caps at 60 s. A suite with many
     // concurrent scenarios sets more than the default.
     property int timeLimitMs: 0
+    // Whether this suite needs a Quickshell process of its own: tests/run-unit.sh reads it
+    // from the suite's file (a line `ownProcess: true`) and never puts another suite in that
+    // shard. Set by a suite that changes what is shared in one process with others that do
+    // too (the module host, Config's module list, the keyboard a window takes).
+    property bool ownProcess: false
+    // When it started (ms since the epoch), for the time its summary gives: tests/run-unit.sh
+    // plans its shards from those times
+    property real _startedMs: 0
 
     function assert(condition, message) {
         if (condition) {
@@ -57,7 +64,8 @@ QtObject {
 
     function _summary() {
         const total = _passed + _failed;
-        console.log("--- " + suiteName + ": " + _passed + "/" + total + " passed" + (_failed > 0 ? ", " + _failed + " FAILED" : "") + " ---\n");
+        console.log("--- " + suiteName + ": " + _passed + "/" + total + " passed" + (_failed > 0 ? ", " + _failed + " FAILED" : "")
+                    + " (" + Math.max(0, Math.round(Date.now() - _startedMs)) + " ms) ---\n");
     }
 
     function finish() {
@@ -73,6 +81,7 @@ QtObject {
         if (asynchronous) {
             Qt.callLater(() => {
                 console.log("\n=== " + suite.suiteName + " ===");
+                suite._startedMs = Date.now();
                 try {
                     suite.runAsync();
                 } catch (error) {
@@ -83,6 +92,7 @@ QtObject {
             return;
         }
         console.log("\n=== " + suiteName + " ===");
+        _startedMs = Date.now();
         // A suite that throws counts as failed, not as missing: it used to stop before its
         // summary, and nothing said so
         try {

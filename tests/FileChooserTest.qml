@@ -13,11 +13,13 @@ import qs.singletons
 // module turned off close it with no answer. After each, the dialog, the shell's window and
 // the dialog's own window are gone — the last as the compositor lists its windows
 // (ToplevelManager), each dialog by its title. Asynchronous: windows are mapped by the
-// compositor.
+// compositor. In a process of its own: the dialog takes the keyboard, and no key another
+// suite sends may reach it, nor its keys them.
 TestCase {
     id: suite
     suiteName: "FileChooser"
     asynchronous: true
+    ownProcess: true
 
     readonly property string _directory: Quickshell.shellDir + "/tests/fixtures/device-address-reading"
     readonly property string _folders: Quickshell.shellDir + "/tests/fixtures/file-chooser/folders"
@@ -30,13 +32,6 @@ TestCase {
         property bool active: true
     }
 
-    // The suites to wait for before a dialog opens (tests.qml: the other asynchronous ones),
-    // and for how long at most (tests.qml: its limit less ownTimeMs) — then this suite fails
-    // without opening a dialog
-    property var waitFor: []
-    property int waitLimitMs: 60000
-    // What this suite needs once it starts, at most
-    readonly property int ownTimeMs: 25000
     property var _answers: []
     property var _call: null
     // The open dialog, the shell's window it was made in, and its title, kept while it is
@@ -148,16 +143,7 @@ TestCase {
     }
 
     function runAsync() {
-        _then("the other asynchronous suites are done", () => waitFor.every(other => other.done), () => {
-            const pending = waitFor.filter(other => !other.done);
-            if (pending.length > 0) {
-                // Not opened: a dialog now could take keys another suite sends
-                fail("not run: " + pending.map(other => other.suiteName).join(", ") + " still running");
-                _steps = [];
-                return;
-            }
-            _run();
-        }, waitLimitMs);
+        _run();
         _clock.start();
     }
 

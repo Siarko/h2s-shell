@@ -18,9 +18,8 @@ TestCase {
     id: suite
     suiteName: "SettingsModal"
     asynchronous: true
-
-    // A suite whose window takes the keyboard too: this one's window shows once it is done
-    property var after: null
+    // Its window takes the keyboard, as other suites' do
+    ownProcess: true
 
     property int behindClicks: 0
     property var answers: []
@@ -219,7 +218,6 @@ TestCase {
     }
 
     function _run() {
-        assert(_until(() => after === null || after.done, 60000), "the suite before, whose window takes the keyboard, is done");
         _window.visible = true;
         assert(_until(() => _window.visible && area.width > 0 && host.Window.active), "the window shows and has the keyboard");
         assertEqual(host.open + " " + host.modal.visible, "false false", "closed at first: nothing drawn");

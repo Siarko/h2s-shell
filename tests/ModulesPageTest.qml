@@ -22,9 +22,8 @@ TestCase {
     id: suite
     suiteName: "ModulesPage"
     asynchronous: true
-
-    // A suite whose window takes the keyboard too: this one's window shows once it is done
-    property var after: null
+    // Its window takes the keyboard, as other suites' do
+    ownProcess: true
 
     // The stand-in host: what the page reads of ModuleHost, and its calls recorded
     property var _host: QtObject {
@@ -385,7 +384,6 @@ TestCase {
     }
 
     function _run() {
-        assert(_until(() => after === null || after.done, 60000), "the suite before, whose window takes the keyboard, is done");
         _fixture();
         pageLoader.active = true;
         _window.visible = true;

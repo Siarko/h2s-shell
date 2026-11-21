@@ -15,6 +15,8 @@ TestCase {
     id: suite
     suiteName: "Modules"
     asynchronous: true
+    // It turns modules off and on through Config.disabledModules, as other suites do
+    ownProcess: true
 
     readonly property string fixtures: Quickshell.shellDir + "/tests/fixtures/modules"
     readonly property var names: ["good", "broken", "broken-main", "wrong-api", "key-collision", "bad-manifest",

@@ -16,17 +16,15 @@ import qs.singletons.io
 // (a clean one kept off, one with a link out), git hanging, refusing and too large, removing
 // a hand-made link (its target untouched), a hand-placed folder, a chain with the dependency
 // installed for it, a module with its data; and that nothing named a non-file address.
-// Runs after the suites that turn modules off through Config (AnchorsTest and those before
-// it), since this one does too.
+// Changes the modules turned off through Config, as other suites do: in a process of its own.
 TestCase {
     id: suite
     suiteName: "ModuleInstaller"
     asynchronous: true
     timeLimitMs: 240000
+    ownProcess: true
 
-    property var after: null
-
-    // Made once the suites before are done: nothing of this suite exists while they run
+    // Made when the suite starts
     property ModuleHost host: null
     property ModuleInstaller installer: null
     property Component _hostComponent: Component {
@@ -214,7 +212,9 @@ TestCase {
     // ---- The run ----
 
     function runAsync() {
-        _then("the config is read", () => Config.ready, () => {
+        // The profiles seeded too (Profiles does it a moment after the config is read): what
+        // is kept to compare against is what stays
+        _then("the config is read, the profiles seeded", () => Config.ready && Config.profiles !== "", () => {
             host = _hostComponent.createObject(suite);
             installer = _installerComponent.createObject(suite, { host: host });
             _savedAcknowledged = Config.acknowledgedModulesText;
@@ -280,18 +280,7 @@ TestCase {
             assert(lines.filter(line => line.includes(" clone ")).every(line => line.includes("--no-recurse-submodules") && line.includes("protocol.allow=never")),
                    "… every clone without submodules, only the listed protocols");
         });
-        // Nothing ticks while the suites before run (their layout checks poll on timers of
-        // their own): the clock starts when they are done
-        if (after === null || after.done)
-            _clock.start();
-    }
-
-    property Connections _afterDone: Connections {
-        target: suite.after
-        function onDoneChanged() {
-            if (suite.after.done && suite.selected && suite._steps.length > 0 && !suite._clock.running)
-                suite._clock.start();
-        }
+        _clock.start();
     }
 
     // Refused at once, nothing started

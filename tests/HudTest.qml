@@ -20,9 +20,8 @@ TestCase {
     id: suite
     suiteName: "Hud"
     asynchronous: true
-
-    // A suite whose window takes the pointer: this one's overlay shows once it is done
-    property var after: null
+    // Its overlay takes the pointer other suites' windows would get
+    ownProcess: true
 
     property var _host: QtObject {
         property bool safeMode: true
@@ -132,7 +131,6 @@ TestCase {
     function runAsync() {
         const saved = { launch: IconThemes.launchWarningDismissed, font: Theme.nerdFontWarningDismissed };
         try {
-            assert(_until(() => after === null || after.done, 60000), "the suite before, whose window takes the pointer, is done");
             // Only the banner under test: the other startup warnings closed
             IconThemes.launchWarningDismissed = true;
             Theme.nerdFontWarningDismissed = true;

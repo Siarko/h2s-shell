@@ -20,6 +20,8 @@ TestCase {
     id: suite
     suiteName: "SidePanel"
     asynchronous: true
+    // Its window takes the keyboard, as other suites' do
+    ownProcess: true
 
     // What the content built and destroyed, and the reasons given, in order
     property int built: 0

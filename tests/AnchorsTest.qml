@@ -18,8 +18,8 @@ import qs.singletons.network
 // module's handle; a place not offered and a placement not taken in the module's status; a
 // module turned off takes its elements, on brings them back, the other module's element
 // stays the same object; a reload builds them anew; a slot read as its anchor; Anchors.live
-// following the blocks; the view opened and closed over and over. Asynchronous; after
-// ModuleRegistriesTest, since both turn modules off through Config.disabledModules.
+// following the blocks; the view opened and closed over and over. Asynchronous; in a process of
+// its own, since it turns modules off through Config.disabledModules, as other suites do.
 //
 // A second fixture view whose root is no page (a plain item at the base holding blocks):
 // sections with no anchor are not addressable (only a page is the view's root), a block of
@@ -90,9 +90,7 @@ TestCase {
     suiteName: "Anchors"
     asynchronous: true
     timeLimitMs: 90000
-
-    // A suite that must be done first
-    property var after: null
+    ownProcess: true
 
     readonly property string fixtures: Quickshell.shellDir + "/tests/fixtures/modules"
     readonly property var table: [
@@ -2068,7 +2066,7 @@ TestCase {
     }
 
     function runAsync() {
-        _then("the suite before is done, the config read", () => (after === null || after.done) && Config.ready, () => {
+        _then("the config read", () => Config.ready, () => {
             _savedDisabled = host._plainList(Config.disabledModules);
             Config.disabledModules = [];
             // This shell's table, as the API hands it out

@@ -21,7 +21,10 @@
 # processor they do share with it: a lock-bed failure seen while these were running on a
 # small machine is run again alone before it is believed.
 #
-#   headless_setup                         the private dirs and the compositor (exit 2 on failure)
+#   headless_resolve                       the tools found and what was taken printed (not
+#                                          with HEADLESS_QUIET_RESOLVE set); exit 2 on failure
+#   headless_setup                         that, then the private dirs and the compositor
+#                                          (exit 2 on failure)
 #   headless_run <root.qml> <copy> [VAR=value…]
 #                                          Quickshell on that root file, with those variables
 #                                          added; its output printed (and copied to <copy>
@@ -96,7 +99,7 @@ setup_error() {
     exit 2
 }
 
-headless_setup() {
+headless_resolve() {
     [ "$(id -u)" != 0 ] || setup_error "do not run as root"
     # No core files, for this runner and everything it starts: a Quickshell that crashes
     # under test would leave some 15 MB outside the run's directories, and the self-test's
@@ -104,8 +107,19 @@ headless_setup() {
     ulimit -c 0 2> /dev/null
     # shellcheck disable=SC2034  # read by resolve.sh
     temp_base=${TMPDIR:-/tmp}
-    # shellcheck source=lock/resolve.sh
-    source "$LOCKTEST_DIR/resolve.sh"
+    # A shard of tests/run-unit.sh: the runner that started it has printed what was taken
+    # (and handed it on: LOCKTEST_QS, H2S_TEST_TOOLS); a set-up error still shows (stderr)
+    if [ -n "${HEADLESS_QUIET_RESOLVE:-}" ]; then
+        # shellcheck source=lock/resolve.sh
+        source "$LOCKTEST_DIR/resolve.sh" > /dev/null
+    else
+        # shellcheck source=lock/resolve.sh
+        source "$LOCKTEST_DIR/resolve.sh"
+    fi
+}
+
+headless_setup() {
+    headless_resolve
 
     # Short: a Unix socket path is limited to 107 bytes
     work=$(mktemp -d /tmp/ut.XXXXXX) || setup_error "cannot create a temp dir"
