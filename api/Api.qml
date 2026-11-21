@@ -9,7 +9,7 @@ import qs.singletons.network
 // The module API (notes/plans/modules.md, "Module API 1.0", 1.1, 1.2 and 1.3; notes/plans/api-next.md from 1.4): everything a
 // module may use of the shell. A module imports `qs.api` and reaches:
 //
-//   Api.version            "1.35" — this shell's module API, "major.minor". A module's manifest
+//   Api.version            "1.36" — this shell's module API, "major.minor". A module's manifest
 //                          asks for one ("api"); it loads when the major is the same, this
 //                          minor is at least the one asked for, and the one asked for is not
 //                          below the shell's floor (ModuleRules.apiFloor: the oldest version
@@ -800,6 +800,26 @@ import qs.singletons.network
 //
 // Running as administrator (1.11), on a module's handle (api/ModuleHandle.qml). The shell
 // knows which module asks from the handle the run is started on.
+//   (1.36) The declaration: a module that runs anything as administrator says so in its
+//   module.json (singletons/ModuleManifestRules.qml has the format):
+//     "privileged": { "why": "Connect, change Tailscale's settings", "programs": ["tailscale"] }
+//   `why`: a few words for the user, plain text on one line, at most 200 characters;
+//   `programs`: names among its requires.programs and optionalPrograms. A malformed block
+//   fails the module. The shell refuses module.privileged.start — before any prompt,
+//   nothing run, `blocked: "undeclared"`, the reason in `error` and among the module's
+//   status errors (logged once per text) — when the module has no such block, when the user
+//   has not approved it, or when `argv[0]` is not the path `module.programs` has for one of
+//   the declared programs. PrivilegedAction from a module's code is refused the same way
+//   without the block or the approval (its command is not checked against `programs`).
+//   This holds whatever API the manifest asks for. `"author"` (plain text on one line, at most
+//   100 characters) names who wrote the module; a new author asks the user again.
+//   What it is and what it is not: a guard against a module's mistakes and a statement for
+//   the user — an honest module cannot start asking for a password without saying so, and an
+//   update that starts asking stops at a question. It is not a sandbox: a module runs in the
+//   shell's process and can start programs, pkexec among them, by other means, and a run the
+//   shell cannot trace to a module's code (PrivilegedAction called from nowhere it can see)
+//   is not checked. Against a module that is not the project's, the user's protection is
+//   knowing what they install.
 //   module.privileged.available   a trusted pkexec, setuid root, and a trusted `timeout`
 //                          (coreutils) were found
 //   module.privileged.unavailableReason   why not, in a few words ("" when available)
@@ -870,6 +890,9 @@ import qs.singletons.network
 //                            blocked "no-purpose"   `what` empty once cleaned
 //                            blocked "locked"       the session is locked (dismissed too: the
 //                                            user clicks again once unlocked)
+//                            blocked "undeclared"   (1.36) not declared, not approved, or
+//                                            argv[0] not among the declared programs (the
+//                                            declaration, above); in the module's status too
 //                            notFound        argv[0] is "" (the path of a program not
 //                                            found), or not an absolute path, or — checked
 //                                            when the run's turn comes — not an executable
@@ -1000,6 +1023,10 @@ import qs.singletons.network
 //                          out (by dependent id, then provider id), null, and warned about
 //                          ("left out, a cycle of uses"). { "version": "1.2" } alone is hard.
 //                          One object form for both, so a use is one entry under one id.
+//                          (1.36) "source": "<repository address>#<ref>" in the object form:
+//                          where to get the provider when it is missing, offered when the
+//                          module is installed. Not such an address: an error in the module's
+//                          status, the entry kept without a source.
 //   module.uses            (on its handle) frozen { <id>: that module's exports object } — the
 //                          object, nothing else of the provider. Set just before the module is
 //                          turned on (before its main is made and its views built) and kept,

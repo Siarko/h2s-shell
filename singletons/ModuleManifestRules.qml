@@ -104,6 +104,24 @@ import QtQuick
 //                 module fails (another field in the object: a warning).
 //                 exports or uses in a manifest whose `api` is below 1.18: read all the same,
 //                 with a warning.
+//                 (API 1.36) An object entry may name a `source`: where to get the module when
+//                 it is missing ("<repository address>#<ref>", ModuleInstallRules
+//                 .repositoryProblem's form). One that is not such an address: the entry's
+//                 source is void, with an error (the module still loads).
+//   author        optional (API 1.36): who wrote the module, plain text on one line, at most
+//                 maxAuthorLength characters. Shown where the module is described; an author
+//                 that changes asks the user again (ModuleInstallRules.needsConfirmation).
+//   privileged    optional (API 1.36): { "why": "…", "programs": [names] } — the module runs
+//                 programs as administrator (module.privileged.start, PrivilegedAction).
+//                 `why`: a few words, plain text on one line, at most maxWhyLength characters,
+//                 shown to the user. `programs`: names among its requires.programs and
+//                 optionalPrograms, the only ones module.privileged.start may run (argv[0] must
+//                 be one's path as the handle's `programs` has it). Without this block, or
+//                 while the user has not approved it, the shell refuses the module's runs as
+//                 administrator before any prompt (PrivilegedRules.declaration).
+//                 author or privileged malformed: the module fails — what the user is told
+//                 and asked about is not guessed at. Both are read whatever the manifest's
+//                 `api`: a module written for an older API needs the block all the same.
 //
 // Files are paths inside the module's directory: relative, "/"-separated, no "..", no
 // leading "/", ending in .qml (an icon's in .svg, .png or .webp). Any other field is kept (in `raw`) and reported as a warning,
@@ -147,7 +165,69 @@ Singleton {
 
     readonly property var _topFields: ["id", "name", "version", "api", "description", "main", "widgets",
         "settingsPages", "settings", "facts", "slots", "anchors", "requires", "optionalPrograms", "testPrograms", "setupHints", "tests",
-        "exports", "uses", "icon"]
+        "exports", "uses", "icon", "author", "privileged"]
+
+    // ---- Author and the privileged declaration (API 1.36) ----
+
+    readonly property int maxAuthorLength: 100
+    readonly property int maxWhyLength: 200
+
+    // Why `value` is not a one-line plain text of 1 to `maxLength` characters ("" when it is):
+    // no control, format or line separator character, not only white space
+    function plainLineProblem(value, maxLength) {
+        if (typeof value !== "string")
+            return "not a text";
+        if (value.trim() === "")
+            return "empty";
+        if (value.length > maxLength)
+            return "longer than " + maxLength + " characters";
+        if (PrivilegedRules.unprintable(value))
+            return "holds a line break, a control or a format character";
+        return "";
+    }
+
+    // `privileged` → { why, programs } or null when absent; a malformed block is an error
+    // (`declared`: the module's programs, requires.programs and optionalPrograms)
+    function readPrivileged(raw, declared, errors, warnings) {
+        const given = ModuleRules.get(raw, "privileged");
+        if (given === undefined)
+            return null;
+        if (!ModuleRules.isObject(given)) {
+            errors.push("privileged: not an object such as { \"why\": \"…\", \"programs\": [\"tailscale\"] }");
+            return null;
+        }
+        for (const key of Object.keys(given)) {
+            if (key !== "why" && key !== "programs")
+                warnings.push("privileged: unknown field " + ModuleRules.show(key) + " (ignored)");
+        }
+        let fine = true;
+        const why = ModuleRules.get(given, "why");
+        const whyProblem = why === undefined ? "missing" : plainLineProblem(why, maxWhyLength);
+        if (whyProblem !== "") {
+            errors.push("privileged.why: " + whyProblem + " (a few words saying what it runs as administrator, for the user)");
+            fine = false;
+        }
+        const programs = ModuleRules.get(given, "programs");
+        const kept = [];
+        if (!Array.isArray(programs)) {
+            errors.push("privileged.programs: " + (programs === undefined ? "missing" : "not a list of program names"));
+            fine = false;
+        } else if (programs.length > ModuleRules.maxEntries) {
+            errors.push("privileged.programs: " + programs.length + " entries, at most " + ModuleRules.maxEntries);
+            fine = false;
+        } else {
+            programs.forEach((program, index) => {
+                if (typeof program !== "string" || !declared.includes(program)) {
+                    errors.push("privileged.programs[" + index + "]: " + ModuleRules.show(program)
+                                + " is not among the module's requires.programs or optionalPrograms");
+                    fine = false;
+                } else if (!kept.includes(program)) {
+                    kept.push(program);
+                }
+            });
+        }
+        return fine ? { why: why, programs: kept } : null;
+    }
 
     // ---- The icon (API 1.26) ----
 
@@ -658,6 +738,8 @@ Singleton {
     //   setupHints, tests
     //   exports      (1.18) { version } or null; uses (1.18) [{ id, version, optional (1.30) }]
     //   icon         (1.26) { kind, glyph, file, colors } or null (readIcon)
+    //   author       (1.36) "" for none; privileged (1.36) { why, programs } or null
+    //   uses' entries carry `source` (1.36): "" for none
     //   unknownFields   names of top-level fields this shell does not know (kept in raw)
     //   raw          the parsed object as written, or null
     //   errors, warnings
@@ -667,7 +749,7 @@ Singleton {
             valid: false, id: "", name: "", version: "", api: "", description: "", main: "",
             widgets: [], settingsPages: [], settings: [], facts: [], slots: [], anchors: [],
             programs: [], optionalPrograms: [], testPrograms: "", setupHints: [], tests: [], unknownFields: [], raw: null,
-            exports: null, uses: [], icon: null,
+            exports: null, uses: [], icon: null, author: "", privileged: null,
             errors: [], warnings: []
         };
         const errors = result.errors;
@@ -739,8 +821,18 @@ Singleton {
             else
                 warnings.push("description is not a text of at most 1000 characters (ignored)");
         }
+        const author = ModuleRules.get(raw, "author");
+        if (author !== undefined) {
+            const problem = plainLineProblem(author, maxAuthorLength);
+            if (problem !== "")
+                errors.push("author: " + problem + " (a name on one line)");
+            else
+                result.author = author;
+        }
         _readExports(raw, result, errors, warnings);
-        _readUses(raw, result, errors, warnings);
+        // A source that is no address voids that source only: reported once the rest is judged
+        const sourceErrors = [];
+        _readUses(raw, result, errors, warnings, sourceErrors);
         // Fields of a newer API than the manifest asks for: read all the same, and said —
         // the module is written against an API that does not have them
         const asked = ModuleRules.parseApi(result.api);
@@ -749,9 +841,15 @@ Singleton {
                 warnings.push(field + ": a field of API 1." + minor + ", the manifest asks for API " + result.api + " (read all the same)");
         }
         result.valid = errors.length === 0;
+        errors.push(...sourceErrors);
         // Without a usable id the namespaces cannot be checked: nothing more is read
-        if (result.id === "")
+        if (result.id === "") {
+            if (ModuleRules.get(raw, "privileged") !== undefined) {
+                errors.push("privileged: not read without a module id");
+                result.valid = false;
+            }
             return result;
+        }
 
         const moduleId = result.id;
         result.widgets = _entries(raw, "widgets", ["type", "name", "widget", "popup", "popupPanel", "settings", "multiple",
@@ -808,6 +906,13 @@ Singleton {
             else
                 result.testPrograms = testPrograms.replace(/\/$/, "");
         }
+        // After the programs: the declaration names some of them
+        const privilegedErrors = [];
+        result.privileged = readPrivileged(raw, result.programs.concat(result.optionalPrograms), privilegedErrors, warnings);
+        if (privilegedErrors.length > 0) {
+            errors.push(...privilegedErrors);
+            result.valid = false;
+        }
         _list(raw, "setupHints", errors).forEach((hint, index) => {
             if (typeof hint !== "string" || hint.length === 0 || hint.length > 1000)
                 errors.push("setupHints[" + index + "]: not a text of at most 1000 characters (dropped)");
@@ -854,13 +959,14 @@ Singleton {
             result.exports = { version: version };
     }
 
-    // `uses` (API 1.18): { <id>: "major.minor" | { version, optional } (1.30) } →
-    // result.uses, [{ id, version, optional }] in the manifest's order, or errors (the module
+    // `uses` (API 1.18): { <id>: "major.minor" | { version, optional, source (1.36) } (1.30) } →
+    // result.uses, [{ id, version, optional, source }] in the manifest's order, or errors (the module
     // fails: it would run without what it needs, or a soft entry read as hard would keep it
     // from loading). Using itself is left to the dependency plan, which names it as a cycle.
     // An object form in a manifest whose `api` is below 1.30: read all the same, with a
-    // warning.
-    function _readUses(raw, result, errors, warnings) {
+    // warning. A `source` that is not a repository address: the entry kept without it, the
+    // error in `sourceErrors` (the module still loads: it is only where to get the provider).
+    function _readUses(raw, result, errors, warnings, sourceErrors) {
         const given = ModuleRules.get(raw, "uses");
         if (given === undefined)
             return;
@@ -878,6 +984,7 @@ Singleton {
             const entry = given[id];
             let version = entry;
             let optional = false;
+            let source = "";
             if (!ModuleRules.idPattern.test(id) || ModuleRules.reservedIds.includes(id)) {
                 errors.push("uses: " + ModuleRules.show(id) + " is not a module id");
                 continue;
@@ -885,7 +992,7 @@ Singleton {
             if (ModuleRules.isObject(entry)) {
                 objectForm = true;
                 // An unknown field is a warning, as in `exports` (a manifest for a newer shell)
-                for (const other of Object.keys(entry).filter(key => key !== "version" && key !== "optional"))
+                for (const other of Object.keys(entry).filter(key => key !== "version" && key !== "optional" && key !== "source"))
                     warnings.push("uses." + id + ": unknown field " + ModuleRules.show(other) + " (ignored)");
                 if (entry.optional !== undefined && typeof entry.optional !== "boolean") {
                     errors.push("uses." + id + ".optional: " + ModuleRules.show(entry.optional) + " is not true or false");
@@ -893,11 +1000,18 @@ Singleton {
                 }
                 version = entry.version;
                 optional = entry.optional === true;
+                if (entry.source !== undefined) {
+                    const problem = typeof entry.source === "string" ? ModuleInstallRules.repositoryProblem(entry.source) : "Not a text";
+                    if (problem === "")
+                        source = entry.source;
+                    else
+                        sourceErrors.push("uses." + id + ".source: " + problem + " (no source for it)");
+                }
             }
             if (!ModuleRules.parseApi(version))
                 errors.push("uses." + id + ": " + ModuleRules.show(version) + " is not a version \"major.minor\"");
             else
-                result.uses.push({ id: id, version: version, optional: optional });
+                result.uses.push({ id: id, version: version, optional: optional, source: source });
         }
         const asked = ModuleRules.parseApi(result.api);
         if (objectForm && asked && (asked.major < 1 || (asked.major === 1 && asked.minor < 30)))

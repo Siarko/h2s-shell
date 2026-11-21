@@ -145,6 +145,8 @@ TestCase {
         _start("no limit", [talk, "lines", "1", "0"], { timeoutMs: undefined });
         _start("too short", [talk, "lines", "1", "0"], { timeoutMs: 500 });
         _start("too long", [talk, "lines", "1", "0"], { timeoutMs: 3600001 });
+        // (1.36) A program of its own that its manifest's privileged.programs does not name
+        _start("undeclared", [_path("pkexec"), "x"]);
         const handle = module.privileged.start([talk], "Connect");
         assert(handle && typeof handle.cancel === "function", "options not an object: a handle all the same");
         ModuleTestKit.setSessionLocked(true);
@@ -153,7 +155,7 @@ TestCase {
         assert(Object.keys(_runs).every(name => !_runs[name].handle || _runs[name].handle.running === false),
                "a refused run is not running from the start");
         _then("every refusal is answered", () => _done("relative", "newline", "rtl", "purpose", "absent",
-                                                       "no limit", "too short", "too long", "locked"), () => {
+                                                       "no limit", "too short", "too long", "locked", "undeclared"), () => {
             const blocked = name => _runs[name].result.blocked;
             const relative = _runs.relative.result;
             assert(relative.notFound && relative.blocked === "" && !relative.ok, "argv[0] not an absolute path: notFound: " + JSON.stringify(relative));
@@ -163,6 +165,11 @@ TestCase {
             assert(locked.blocked === "locked" && locked.dismissed && !locked.cancelled && !locked.ok, "asked for while locked: dismissed, blocked locked");
             const absent = _runs.absent.result;
             assert(absent.notFound && absent.blocked === "" && !absent.ok, "a program not found (path \"\"): notFound: " + JSON.stringify(absent));
+            const undeclared = _runs.undeclared.result;
+            assert(undeclared.blocked === "undeclared" && !undeclared.notFound && undeclared.error.includes("privileged.programs does not name it")
+                   && undeclared.error.includes(_path("pkexec")), "a program it did not declare: blocked undeclared, before any prompt: " + JSON.stringify(undeclared));
+            assert((module.status?.errors ?? []).some(text => String(text).includes("privileged.programs does not name it")), "… the reason in its status");
+            assert(!ModuleTestKit.polkitRequestOpen && _runs.undeclared.stderr === "", "… no request open, its pkexec never started");
             for (const name of ["no limit", "too short", "too long"])
                 assert(_runs[name].result.error.startsWith("timeoutMs") && _runs[name].result.blocked === "", name + ": an error, timeoutMs named");
             for (const name of Object.keys(_runs).filter(key => _runs[key].handle)) {

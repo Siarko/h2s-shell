@@ -156,9 +156,11 @@ QtObject {
         function start(argv, options) {
             if (root._privilegedKey === "")
                 root._privilegedKey = PrivilegedRuns.newOwnerKey();
-            // argv is read once, inside: the words judged are the ones that run
+            // argv is read once, inside: the words judged are the ones that run. What the
+            // manifest declares (API 1.36) is the host's to say, never the module's
+            const declaration = root.host ? root.host.privilegedDeclaration(root.moduleId, root.programs) : null;
             return PrivilegedRuns.start(root, argv, options, {
-                testMode: root.host?.testMode === true, tools: _tools
+                testMode: root.host?.testMode === true, tools: _tools, declaration: declaration
             });
         }
     }

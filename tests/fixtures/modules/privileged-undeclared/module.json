@@ -1,0 +1,10 @@
+{
+    "id": "privileged-undeclared",
+    "name": "Undeclared privileged fixture",
+    "version": "0.1.0",
+    "api": "1.36",
+    "description": "Asks to run a stand-in as administrator without a privileged block in its manifest (tests/ModulesTest.qml)",
+    "main": "Main.qml",
+    "optionalPrograms": ["pkexec", "h2s-fixture-root"],
+    "testPrograms": "stand-ins"
+}

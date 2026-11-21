@@ -1,0 +1,3 @@
+#!/bin/sh
+# What the fixture asks to run as administrator; never reached
+exit 1

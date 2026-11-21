@@ -175,8 +175,9 @@ Singleton {
     // `acknowledgement`: Config.acknowledgedModules[id] (ModuleInstallRules.acknowledgementOf's
     //   shape: { source, address, author, privileged });
     // `record`: the record's entry (ModuleInstallRules.parseRecord's modules[id]);
-    // `newManifest`: the staged manifest ({ id, name, version, author, privileged: { why,
-    //   programs } | absent, programs, optionalPrograms, uses });
+    // `newManifest`: the staged manifest as ModuleManifestRules.parseManifest reads it ({ id,
+    //   name, version, author, privileged: { why, programs } | null (none) or absent,
+    //   programs, optionalPrograms, uses });
     // `newAddress`: where the new version comes from (a repository's "#ref" does not count:
     //   a new tag of the same repository is the same source);
     // `context`: { dependencyPlan — ModuleDependencyRules.plan's result for the new manifest,
@@ -224,8 +225,9 @@ Singleton {
                 add("author", title + " names a different author.",
                     (author !== "" ? "By " + _plain(author, 100) : "No author named")
                     + (before !== "" ? ", was " + _plain(before, 100) : ", none before"));
-            // A declaration that is there but cannot be read may say anything: it asks
-            if (newManifest.privileged !== undefined && !ModuleRules.isObject(newManifest.privileged))
+            // A declaration that is there but cannot be read may say anything: it asks (null
+            // is the manifest rules' "none")
+            if (newManifest.privileged !== undefined && newManifest.privileged !== null && !ModuleRules.isObject(newManifest.privileged))
                 add("unknown", title + ": its administrator declaration could not be read.");
             if (ModuleRules.isObject(newManifest.privileged) && ack.privileged !== true) {
                 const why = _plain(newManifest.privileged.why, 200);

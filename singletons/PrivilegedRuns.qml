@@ -98,8 +98,9 @@ Singleton {
     }
 
     // A module's run (module.privileged.start). `handle`: the module's handle (moduleId,
-    // active, notify(), _privilegedKey); `facts`: { testMode, tools (PrivilegedRules
-    // .availability) } → { running, cancel() }. `done` is called once, never inside
+    // active, notify(), _privilegedKey, host); `facts`: { testMode, tools (PrivilegedRules
+    // .availability), declaration (PrivilegedRules.declaration: what its manifest declares) }
+    // → { running, cancel() }. `done` is called once, never inside
     // this call, and never while the module is off (a run asked for then is not answered).
     // `argv` and `options` are read once, here (CommandRules.argvSnapshot, a real array
     // only; PrivilegedRules.options): the words judged, the words shown and the words
@@ -136,10 +137,14 @@ Singleton {
             ? { blocked: "", notFound: false, error: snapshot.problem }
             : PrivilegedRules.refusal({
                 argv: words, options: parsed, active: handle.active === true, locked: locked,
-                available: facts?.tools?.available === true, unavailableReason: facts?.tools?.reason ?? ""
+                available: facts?.tools?.available === true, unavailableReason: facts?.tools?.reason ?? "",
+                declaration: facts?.declaration ?? null
             });
         if (refused) {
-            if (refused.blocked !== "locked")
+            // Not declared: in the module's status, logged once per text (ModuleHost.reportError)
+            if (refused.blocked === "undeclared")
+                handle.host?.reportError(job.moduleId, refused.error);
+            else if (refused.blocked !== "locked")
                 console.warn("[Privileged] " + job.moduleId + ": a run refused before pkexec — " + refused.error.slice(0, 300));
             _refuse(job, PrivilegedRules.refusedResult(refused));
             return runHandle;

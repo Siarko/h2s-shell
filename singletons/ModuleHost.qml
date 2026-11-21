@@ -462,6 +462,15 @@ Scope {
         Qt.callLater(_publish);
     }
 
+    // What module `id` may run as administrator (PrivilegedRules.declaration): its manifest's
+    // `privileged` block, approved, and the paths of the programs it names among `programs`
+    // (its handle's; null for none). No acknowledgements are recorded: every module found
+    // counts as acknowledged as it is (ModuleInstallRules.needsConfirmation's baseline).
+    function privilegedDeclaration(id, programs) {
+        const record = _record(id);
+        return PrivilegedRules.declaration(record?.manifest?.privileged ?? null, undefined, id, programs ?? null);
+    }
+
     // Of `wanted` ({ module, context, … }), the initial properties the root object of the
     // module file at `url` declares — what a Loader may be given without a warning (an
     // object made by createObject ignores the others quietly). {} for a file of no module.

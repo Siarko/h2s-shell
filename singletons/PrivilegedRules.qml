@@ -28,7 +28,7 @@ Singleton {
     readonly property int headStrictMs: 120000
     // `what` is kept to this many characters (the prompt cuts it shorter where it shows it)
     readonly property int whatMaxLength: 200
-    readonly property var blockedReasons: ["locked", "no-purpose", "unprintable"]
+    readonly property var blockedReasons: ["locked", "no-purpose", "unprintable", "undeclared"]
 
     // Where the shell looks for pkexec: NixOS's setuid wrappers first (the store's copy is
     // not setuid and cannot work), then the system's directories (Arch: /usr/bin)
@@ -150,6 +150,39 @@ Singleton {
         return result;
     }
 
+    // ---- The manifest's declaration (module API 1.36) ----
+
+    // What a module may run as administrator, from its manifest's `privileged` block
+    // (ModuleManifestRules.readPrivileged: { why, programs } or null), the user's
+    // acknowledgements (ModuleInstallRules.needsConfirmation's list: undefined while none is
+    // recorded — every module found counts as acknowledged as it is), its id, and its programs
+    // as its handle has them ({ <name>: { path } }; null: not looked at).
+    // → { problem: "" | why nothing may run, paths: [the declared programs' absolute paths] }
+    //   no block: refused; a list that is no object, or an acknowledgement for the id that does
+    //   not say privileged: true: refused (not approved); else the paths of the declared
+    //   programs that were found.
+    // A guard against a module's mistakes and a statement for the user, not a sandbox: a
+    // module runs in the shell's process and can start programs by other means.
+    function declaration(privileged, acknowledgements, moduleId, programs) {
+        const none = problem => ({ problem: problem, paths: [] });
+        if (!ModuleRules.isObject(privileged) || !Array.isArray(privileged.programs))
+            return none("asks for administrator rights; module.json does not declare it (privileged)");
+        if (acknowledgements !== undefined) {
+            const list = ModuleRules.isObject(acknowledgements) ? acknowledgements : {};
+            const given = typeof moduleId === "string" && ModuleRules.has(list, moduleId) ? list[moduleId] : null;
+            if (!ModuleRules.isObject(given) || given.privileged !== true)
+                return none("asks for administrator rights; the user has not approved its declaration");
+        }
+        const paths = [];
+        for (const name of privileged.programs) {
+            const path = ModuleRules.isObject(programs) && typeof name === "string" && ModuleRules.has(programs, name)
+                ? programs[name]?.path : "";
+            if (typeof path === "string" && path.startsWith("/") && !paths.includes(path))
+                paths.push(path);
+        }
+        return { problem: "", paths: paths };
+    }
+
     // Why a run is refused before pkexec runs, or null when it may be queued. These checks
     // catch a module's mistakes and keep the command printable as it is (no word it could
     // not show), with a purpose, and argv[0] a path, never a name that root's PATH would
@@ -161,10 +194,12 @@ Singleton {
     // `request`:
     //   argv (the caller's copy, CommandRules.argvSnapshot's `words`: what is judged here is
     //   what runs), options (options() of what was given), active (the module is on), locked (the
-    //   session), available and unavailableReason (module.privileged's)
+    //   session), available and unavailableReason (module.privileged's), declaration
+    //   (declaration()'s answer; missing: nothing declared)
     // → { blocked ("" | a blockedReasons word), notFound (bool), error }. In this order: what
     // was asked wrongly (error), a program that cannot be found (notFound: argv[0] is "", the
-    // path a missing program has, or not an absolute path), the module off, the session
+    // path a missing program has, or not an absolute path), the module off, nothing declared,
+    // not approved, or argv[0] not among the declared programs (undeclared), the session
     // locked, no purpose, a word that cannot be shown, pkexec or timeout missing (error).
     // Whether argv[0] is there and an executable file is looked at when the run's turn comes
     // (the queue's "checking": notFound).
@@ -184,6 +219,14 @@ Singleton {
             return refuse("", ModuleRules.show(argv[0].slice(0, 200)) + " is not an absolute path (a program's path, as module.programs has it)", true);
         if (request.active !== true)
             return refuse("", "the module is off");
+        const declared = request.declaration;
+        if (!ModuleRules.isObject(declared) || typeof declared.problem !== "string" || !Array.isArray(declared.paths))
+            return refuse("undeclared", "asks for administrator rights; module.json does not declare it (privileged)");
+        if (declared.problem !== "")
+            return refuse("undeclared", declared.problem);
+        if (!declared.paths.includes(argv[0]))
+            return refuse("undeclared", "runs " + JSON.stringify(argv[0].slice(0, 200))
+                          + " as administrator; module.json's privileged.programs does not name it");
         if (request.locked === true)
             return refuse("locked", "the session is locked");
         if (options.what === "")

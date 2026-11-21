@@ -719,7 +719,9 @@ the `qs.api` facade, the registries taking modules' contributions, slots and anc
   providers'.
 - **Soft uses** (API 1.30): `"uses": { "<id>": { "version": "1.2", "optional": true } }` —
   the module loads with or without that provider; `{ "version": "1.2" }` alone, like the
-  plain string, is hard. One object form under the one id rather than a second field, so an
+  plain string, is hard; (API 1.36) `"source": "<repository address>#<ref>"` in it says
+  where to get the provider when it is missing (not such an address: an error, the entry
+  kept without it). One object form under the one id rather than a second field, so an
   id is never both hard and soft and `module.uses.<id>` has one meaning. With the provider
   there and fitting, the plan puts the dependent after it and `module.uses.<id>` is its
   object; without it (not installed, off, failed, not fitting, no `exports` object) the
@@ -1183,6 +1185,18 @@ root, lets any user process become root. The shell knows which module asks from 
 handle; the run says what it does in a few words (`what`, required) and how long it may
 take (`timeoutMs`, required, 1 s to 1 h). `available` is true once a trusted, setuid pkexec
 and a trusted `timeout` are found.
+- **Declared in the manifest** (API 1.36): a module that runs anything as administrator has
+  `"privileged": { "why": "…", "programs": [names] }` in its `module.json` — `why` a few
+  words for the user, `programs` names among its `requires.programs` and `optionalPrograms`
+  (`singletons/ModuleManifestRules.qml`; a malformed block fails the module). The shell
+  refuses `start()` with `blocked: "undeclared"` — before any prompt, the reason among the
+  module's status errors, logged once — when the block is missing, not approved by the user,
+  or when argv[0] is not the path `module.programs` has for a declared program
+  (`PrivilegedRules.declaration`); `PrivilegedAction` from a module's code needs the block
+  and the approval too. This holds whatever API the manifest asks for. It is a guard against
+  mistakes and a statement for the user, not a sandbox: a module runs in the shell's process
+  and can start programs by other means. `"author"` (plain text, one line) names who wrote
+  the module.
 - **Refused before pkexec runs**, with `blocked` saying why: `unprintable` (a word holds a
   control or format character: a line break, a right-to-left override), `no-purpose`
   (`what` empty once cleaned), `locked`. A program not there is `notFound` (argv[0] `""` or

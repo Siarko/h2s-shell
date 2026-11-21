@@ -126,7 +126,11 @@ TestCase {
         assertEqual(_kinds(brokenDeclaration), "unknown", "consent: a privileged declaration that is no object asks as unknown");
         const nullDeclaration = ModuleUpdateRules.consentFor(_acknowledgement({ privileged: true }), _weatherRecord(), _manifest({ privileged: null }),
                                                              _address, { dependencyPlan: _cleanPlan });
-        assertEqual(_kinds(nullDeclaration), "unknown", "consent: even after an approved declaration");
+        assertEqual(nullDeclaration.needed, false, "consent: privileged null (parseManifest's none) declares less, never asks");
+        const parsedNone = ModuleManifestRules.parseManifest(JSON.stringify({ id: "weather", name: "Weather", version: "1.3.0", api: "1.36" }));
+        assertEqual(ModuleUpdateRules.consentFor(_acknowledgement(), _weatherRecord(), Object.assign({}, parsedNone, { uses: [] }), _address,
+                                                 { dependencyPlan: _cleanPlan }).reasons.filter(reason => reason.kind === "unknown").length, 0,
+                    "consent: a manifest as parseManifest reads it, no declaration: nothing unknown about it");
 
         const less = ModuleUpdateRules.consentFor(_acknowledgement({ privileged: true }), _weatherRecord(), _manifest(), _address,
                                                   { dependencyPlan: _cleanPlan });

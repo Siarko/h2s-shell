@@ -2,7 +2,7 @@
     "id": "good",
     "name": "Good fixture",
     "version": "1.2.3",
-    "api": "1.35",
+    "api": "1.36",
     "description": "A module that does everything right, through the module API only (tests/fixtures/modules)",
     "main": "Main.qml",
     "icon": { "svg": "icon.svg" },
@@ -26,6 +26,7 @@
         { "slot": "network.vpn.page", "component": "GoodSlot.qml" }
     ],
     "optionalPrograms": ["pkexec"],
+    "privileged": { "why": "Runs its stand-in as administrator through PrivilegedAction", "programs": [] },
     "testPrograms": "tests/programs",
     "tests": ["tests/GoodStateTest.qml", "tests/GoodApiTest.qml", "tests/GoodPanelTest.qml"]
 }

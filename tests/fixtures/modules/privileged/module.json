@@ -6,6 +6,7 @@
     "description": "Runs its stand-ins as administrator through module.privileged, in module test mode (tests/fixtures/modules)",
     "main": "Main.qml",
     "optionalPrograms": ["pkexec", "talk", "sh", "dismiss", "refuse", "absent"],
+    "privileged": { "why": "Runs its stand-ins as administrator", "programs": ["talk", "sh", "dismiss", "refuse", "absent"] },
     "testPrograms": "tests/programs",
     "tests": ["tests/PrivilegedRunsTest.qml"]
 }

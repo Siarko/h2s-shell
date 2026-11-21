@@ -25,6 +25,7 @@ TestCase {
         logStates: false
     }
     property var _savedDisabled: []
+    property var _privilegedAnswers: ({})
     property var _steps: []
     property var _created: []
 
@@ -114,7 +115,7 @@ TestCase {
             assertEqual(good?.errors.length, 0, "good: no errors");
             assertEqual(good?.warnings.length, 0, "good: no warnings");
             assertEqual(JSON.stringify(good?.deprecations ?? null), "[]", "good: on qs.api alone, nothing deprecated");
-            assertEqual(good?.version + " " + good?.api + " " + good?.name, "1.2.3 1.35 Good fixture", "good: version, API, name");
+            assertEqual(good?.version + " " + good?.api + " " + good?.name, "1.2.3 1.36 Good fixture", "good: version, API, name");
             // (1.26) Its icon, an SVG painted in the theme's colour: on its handle as the shell draws it
             assertEqual(JSON.stringify(host.handle("good").icon),
                         JSON.stringify({ kind: "svg", glyph: "", url: "file://" + fixtures + "/good/icon.svg", colors: "theme" }),
@@ -644,6 +645,48 @@ TestCase {
         _then("the recheck in test mode answers", () => !host.checkingPrograms, () => {
             assertEqual(host.handle("test-programs").programs.sh.path, "", "… still not from PATH");
             assertEqual(_status("test-programs")?.state, "loaded", "… loaded all along");
+            host.programEnvironment = ({});
+
+            // (1.36) Runs as administrator need the manifest's privileged block: refused
+            // before any prompt otherwise, and when argv[0] is not a declared program
+            host.load(_dirs(["privileged", "privileged-undeclared"]), {});
+        });
+        _then("the privileged fixtures load in test mode", () => _settled() && _status("privileged")?.state === "loaded"
+              && _status("privileged-undeclared")?.state === "loaded", () => {
+            const undeclaredHandle = host.handle("privileged-undeclared");
+            const declaredHandle = host.handle("privileged");
+            const root = undeclaredHandle.programs["h2s-fixture-root"].path;
+            assert(root.startsWith(fixtures + "/privileged-undeclared/stand-ins/") && undeclaredHandle.privileged.available,
+                   "the undeclared fixture: its program and its stand-in pkexec found, running as administrator available");
+            assertEqual(_status("privileged-undeclared")?.errors.length, 0, "… no error before it asks");
+            const declared = host.privilegedDeclaration("privileged", declaredHandle.programs);
+            assertEqual(JSON.stringify(declared), JSON.stringify({ problem: "", paths: ["talk", "sh", "dismiss", "refuse"].map(name => declaredHandle.programs[name].path) }),
+                        "the declared fixture: allowed, its declared programs' stand-ins (absent has none)");
+            assertEqual(host.privilegedDeclaration("privileged-undeclared", undeclaredHandle.programs).problem,
+                        "asks for administrator rights; module.json does not declare it (privileged)", "the undeclared one: refused, said");
+            const queued = PrivilegedRuns.count;
+            suite._privilegedAnswers = {};
+            const options = name => ({ what: "Try", timeoutMs: 5000, notifyFailures: false, done: result => suite._privilegedAnswers[name] = result });
+            undeclaredHandle.privileged.start([root, "x"], options("undeclared"));
+            undeclaredHandle.privileged.start([root, "again"], options("undeclared again"));
+            declaredHandle.privileged.start([declaredHandle.programs.pkexec.path, "x"], options("not a declared program"));
+            assertEqual(PrivilegedRuns.count, queued, "nothing queued: no prompt can come");
+            assertEqual(Object.keys(suite._privilegedAnswers).length, 0, "… answered after start() returned");
+        });
+        _then("the refused runs are answered", () => Object.keys(_privilegedAnswers).length === 3, () => {
+            const answer = _privilegedAnswers.undeclared;
+            assert(!answer.ok && answer.blocked === "undeclared" && !answer.dismissed && !answer.refused && answer.code === -1 && answer.stderr === ""
+                   && answer.error === "asks for administrator rights; module.json does not declare it (privileged)",
+                   "an undeclared module's run: blocked undeclared, nothing ran: " + JSON.stringify(answer));
+            const status = _status("privileged-undeclared");
+            assertEqual(JSON.stringify(status?.errors), JSON.stringify(["asks for administrator rights; module.json does not declare it (privileged)"]),
+                        "… the reason in its status, once for two runs");
+            assertEqual(status?.state, "loaded", "… the module stays loaded");
+            const stray = _privilegedAnswers["not a declared program"];
+            assert(stray.blocked === "undeclared" && stray.error.includes("privileged.programs does not name it") && stray.error.includes("/pkexec"),
+                   "a declared module running a program it did not declare: blocked undeclared, which said: " + JSON.stringify(stray));
+            assert(_has(_status("privileged")?.errors, "privileged.programs does not name it"), "… in its status");
+            assertEqual(PrivilegedRuns.count, 0, "the queue is empty");
             host.unload();
             const testHost = host;
             suite.host = suite._mainHost;

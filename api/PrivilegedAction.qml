@@ -75,6 +75,18 @@ QtObject {
         // run it is (for the log)
         const stack = new Error().stack;
         const rule = Modules.host.testMode ? Modules.host.testCallRule(stack) : "strict";
+        // (1.36) A module seen on the stack runs as administrator only with its manifest's
+        // `privileged` block, approved — refused before any prompt, the reason in its status.
+        // Which program runs is not checked here: this type's commands name any absolute path
+        const moduleId = _moduleOf(stack);
+        if (moduleId !== "") {
+            const declared = Modules.host.privilegedDeclaration(moduleId, null);
+            if (declared.problem !== "") {
+                Modules.host.reportError(moduleId, declared.problem);
+                done?.({ ok: false, code: -1, dismissed: false, refused: false, notFound: false, blocked: "undeclared", lines: [], error: declared.problem });
+                return;
+            }
+        }
         const givenElevate = elevate;
         const elevateSnapshot = CommandRules.argvSnapshot(givenElevate, false);
         const elevating = elevateSnapshot.argv ?? (Array.isArray(givenElevate) ? Array.from(givenElevate) : givenElevate);
@@ -88,7 +100,7 @@ QtObject {
             return;
         }
         const request = { command: command, label: label, done: done ?? null, environment: environment ?? {}, elevating: elevating,
-                          systemPkexec: PrivilegedRules.legacySystemPkexec(elevating, Modules.host.testMode), moduleId: _moduleOf(stack) };
+                          systemPkexec: PrivilegedRules.legacySystemPkexec(elevating, Modules.host.testMode), moduleId: moduleId };
         if (!command[0].startsWith("/")) {
             _notFound(request, command[0] + " is not an absolute path (pkexec needs one)");
             return;

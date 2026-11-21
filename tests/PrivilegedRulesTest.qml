@@ -94,7 +94,7 @@ TestCase {
 
         // --- refusals before pkexec runs ---
         const base = { argv: ["/usr/bin/tailscale", "up"], options: rules.options(good), active: true, locked: false,
-                       available: true, unavailableReason: "" };
+                       available: true, unavailableReason: "", declaration: { problem: "", paths: ["/usr/bin/tailscale"] } };
         const asked = changes => rules.refusal(Object.assign({}, base, changes));
         assertEqual(asked({}), null, "everything right: no refusal");
         assert(asked({ options: rules.options({ what: "x" }) }).error.startsWith("timeoutMs") && asked({ options: rules.options({ what: "x" }) }).blocked === "",
@@ -116,11 +116,55 @@ TestCase {
         const relative = asked({ argv: ["tailscale", "up"] });
         assert(relative.notFound && relative.blocked === "" && relative.error.includes("absolute"),
                "argv[0] not absolute (root's PATH is never searched): notFound: " + JSON.stringify(relative));
-        // The command is not parsed: whatever argv[0] is, an absolute path passes
+        // The command is not parsed: whatever argv[0] is, an absolute path the manifest declares passes
         for (const argv of [["/bin/sh", "-c", "id"], ["/usr/bin/env", "tailscale"], ["/usr/bin/python3", "-c", "x"],
                             ["/usr/bin/timeout", "5", "/bin/sh"], ["/nix/store/abc-coreutils-9.5/bin/coreutils", "--coreutils-prog=env", "/bin/sh"],
                             ["/home/u/.local/bin/tool"]])
-            assertEqual(asked({ argv: argv }), null, "an absolute argv[0] passes, whatever it is: " + argv[0]);
+            assertEqual(asked({ argv: argv, declaration: { problem: "", paths: [argv[0]] } }), null, "an absolute argv[0] declared passes, whatever it is: " + argv[0]);
+
+        // --- (1.36) the manifest's declaration ---
+        const programsFound = { tailscale: { path: "/usr/bin/tailscale", trusted: true }, systemctl: { path: "/usr/bin/systemctl", trusted: true },
+                                curl: { path: "/usr/bin/curl", trusted: true }, missing: { path: "", trusted: false } };
+        const block = { why: "Connect", programs: ["tailscale", "systemctl", "missing"] };
+        assertEqual(JSON.stringify(rules.declaration(block, undefined, "tailscale", programsFound)),
+                    JSON.stringify({ problem: "", paths: ["/usr/bin/tailscale", "/usr/bin/systemctl"] }),
+                    "declared, no acknowledgements recorded (the baseline): the declared programs' paths — a missing one none, an undeclared one (curl) not");
+        assertEqual(rules.declaration(null, undefined, "tailscale", programsFound).problem,
+                    "asks for administrator rights; module.json does not declare it (privileged)", "no block: refused, said");
+        assert(rules.declaration({ why: "x" }, undefined, "x", programsFound).problem !== "" && rules.declaration("yes", undefined, "x", programsFound).problem !== "",
+               "a block without a list of programs, or not an object: refused");
+        assertEqual(rules.declaration(block, { tailscale: { source: "user", privileged: true } }, "tailscale", programsFound).problem, "",
+                    "acknowledged with privileged: true: allowed");
+        for (const [list, what] of [[{ tailscale: { source: "user", privileged: false } }, "privileged false"], [{ tailscale: { source: "user" } }, "privileged not said"],
+                                    [{}, "no acknowledgement for the id"], [null, "a list that is null"], [[], "a list that is no object"],
+                                    [{ tailscale: true }, "an acknowledgement that is no object"]]) {
+            const answer = rules.declaration(block, list, "tailscale", programsFound);
+            assert(answer.problem === "asks for administrator rights; the user has not approved its declaration" && answer.paths.length === 0,
+                   what + ": not approved, nothing may run: " + JSON.stringify(answer));
+        }
+        assertEqual(rules.declaration(block, undefined, "tailscale", null).paths.length, 0, "programs not looked at: no path");
+        assertEqual(rules.declaration({ why: "x", programs: ["constructor", "__proto__"] }, undefined, "x", {}).paths.length, 0, "inherited names find nothing");
+        const undeclared = asked({ declaration: rules.declaration(null, undefined, "tailscale", programsFound) });
+        assert(undeclared.blocked === "undeclared" && undeclared.error.includes("does not declare") && !undeclared.notFound,
+               "no block: blocked undeclared: " + JSON.stringify(undeclared));
+        assertEqual(asked({ declaration: undefined }).blocked, "undeclared", "no declaration given at all: blocked undeclared");
+        assertEqual(asked({ declaration: { problem: "", paths: "/usr/bin/tailscale" } }).blocked, "undeclared", "a declaration of the wrong shape: blocked undeclared");
+        assertEqual(asked({ declaration: rules.declaration(block, {}, "tailscale", programsFound) }).blocked, "undeclared", "not approved: blocked undeclared");
+        const other = asked({ argv: ["/usr/bin/curl", "-o", "/etc/x"], declaration: rules.declaration(block, undefined, "tailscale", programsFound) });
+        assert(other.blocked === "undeclared" && other.error === "runs \"/usr/bin/curl\" as administrator; module.json's privileged.programs does not name it",
+               "argv[0] a program it has but did not declare: blocked undeclared, which said: " + JSON.stringify(other));
+        assertEqual(asked({ argv: ["/usr/bin/systemctl", "start", "x"], declaration: rules.declaration(block, undefined, "tailscale", programsFound) }), null,
+                    "a declared program by its path: passes");
+        assertEqual(asked({ argv: ["/usr/bin/../bin/tailscale", "up"] }).blocked, "undeclared", "the same program by another spelling of its path: not the declared path");
+        assertEqual(rules.refusedResult(undeclared).blocked + " " + rules.refusedResult(undeclared).dismissed, "undeclared false",
+                    "the answer: blocked undeclared, not dismissed");
+        assert(rules.blockedReasons.includes("undeclared"), "undeclared is a blocked reason");
+        // Its place in the order: after notFound and the module off, before the lock and the rest
+        assert(asked({ argv: ["", "up"], declaration: undefined }).notFound, "notFound before undeclared");
+        assertEqual(asked({ active: false, declaration: undefined }).error, "the module is off", "module off before undeclared");
+        assertEqual(asked({ locked: true, declaration: undefined }).blocked, "undeclared", "undeclared before locked");
+        assertEqual(asked({ options: rules.options({ timeoutMs: 1000 }), declaration: undefined }).blocked, "undeclared", "undeclared before no-purpose");
+        assertEqual(asked({ available: false, declaration: undefined }).blocked, "undeclared", "undeclared before availability");
         // The order
         assertEqual(asked({ locked: true, options: rules.options({ timeoutMs: 1000 }) }).blocked, "locked", "locked before no-purpose");
         assertEqual(asked({ active: false, locked: true }).error, "the module is off", "module off before locked");

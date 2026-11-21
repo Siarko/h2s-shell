@@ -1,0 +1,4 @@
+#!/bin/sh
+# Stands in for pkexec (module test mode); never reached: the fixture's runs are refused first
+echo "the undeclared fixture's pkexec ran" >&2
+exit 1

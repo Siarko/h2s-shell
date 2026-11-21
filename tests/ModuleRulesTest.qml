@@ -1148,8 +1148,8 @@ TestCase {
                "exports: an unknown field is a warning");
         const user = ModuleManifestRules.parseManifest(_manifest({ uses: { zeta: "1.0", alpha: "2.3" } }));
         assert(user.valid, "uses: valid");
-        assertEqual(JSON.stringify(user.uses), "[{\"id\":\"zeta\",\"version\":\"1.0\",\"optional\":false},{\"id\":\"alpha\",\"version\":\"2.3\",\"optional\":false}]",
-                    "uses: [{ id, version, optional }] in the manifest's order, a version alone hard");
+        assertEqual(JSON.stringify(user.uses), "[{\"id\":\"zeta\",\"version\":\"1.0\",\"optional\":false,\"source\":\"\"},{\"id\":\"alpha\",\"version\":\"2.3\",\"optional\":false,\"source\":\"\"}]",
+                    "uses: [{ id, version, optional, source }] in the manifest's order, a version alone hard, no source");
         // (1.30) The object form: soft with optional true, hard without
         const soft = ModuleManifestRules.parseManifest(_manifest({ api: "1.30", uses: { zeta: { version: "1.2", optional: true }, alpha: { version: "2.0" },
                                                                                      beta: { version: "1.0", optional: false } } }));
@@ -1175,6 +1175,49 @@ TestCase {
         assert(!ModuleManifestRules.parseManifest('{"id":"x","name":"X","version":"1","api":"1.0","uses":{"__proto__":"1.0"}}').valid,
                "uses: \"__proto__\" is no module id");
         assert(rules.states.includes("missing-module"), "the states include missing-module");
+
+        // --- (1.36) author, privileged, a use's source ---
+        const declaring = ModuleManifestRules.parseManifest(_manifest({ author: "Anna Nowak", optionalPrograms: ["tailscale", "pkexec"],
+                                                                         requires: { programs: ["systemctl"] },
+                                                                         privileged: { why: "Connect, change Tailscale's settings", programs: ["tailscale", "systemctl", "tailscale"] } }));
+        assert(declaring.valid && declaring.errors.length === 0 && declaring.warnings.length === 0,
+               "author and privileged: valid, no warning — read whatever api the manifest asks for (1.0 here): " + declaring.errors.concat(declaring.warnings).join("; "));
+        assertEqual(declaring.author, "Anna Nowak", "author read");
+        assertEqual(JSON.stringify(declaring.privileged), JSON.stringify({ why: "Connect, change Tailscale's settings", programs: ["tailscale", "systemctl"] }),
+                    "privileged: { why, programs } — names among requires.programs and optionalPrograms, a repeat kept once");
+        assert(!declaring.unknownFields.includes("author") && !declaring.unknownFields.includes("privileged"), "… neither is an unknown field");
+        const undeclaring = ModuleManifestRules.parseManifest(_manifest());
+        assert(undeclaring.author === "" && undeclaring.privileged === null, "none given: author \"\", privileged null");
+        assert(ModuleManifestRules.parseManifest(_manifest({ privileged: { why: "Print", programs: [] } })).privileged?.programs.length === 0,
+               "privileged with no programs: valid (module.privileged.start may run nothing)");
+        for (const bad of [7, "", " ", "Anna\nNowak", "Anna\u202eNowak", "x".repeat(101), ["Anna"], null]) {
+            const parsed = ModuleManifestRules.parseManifest(_manifest({ author: bad }));
+            assert(!parsed.valid && parsed.author === "" && _has(parsed.errors, "author:"), "author " + JSON.stringify(bad) + ": the module fails, said: " + parsed.errors.join("; "));
+        }
+        assert(ModuleManifestRules.parseManifest(_manifest({ author: "x".repeat(100) })).valid, "author of 100 characters: fine");
+        const programsGiven = { optionalPrograms: ["tailscale"] };
+        for (const bad of [true, "tailscale", ["tailscale"], null, {}, { why: "Connect" }, { programs: ["tailscale"] },
+                           { why: "", programs: ["tailscale"] }, { why: "Two\nlines", programs: ["tailscale"] }, { why: "x".repeat(201), programs: ["tailscale"] },
+                           { why: 3, programs: ["tailscale"] }, { why: "Connect", programs: "tailscale" }, { why: "Connect", programs: ["nft"] },
+                           { why: "Connect", programs: [7] }, { why: "Connect", programs: ["tailscale", "/usr/bin/tailscale"] }]) {
+            const parsed = ModuleManifestRules.parseManifest(_manifest(Object.assign({ privileged: bad }, programsGiven)));
+            assert(!parsed.valid && parsed.privileged === null && _has(parsed.errors, "privileged"),
+                   "privileged " + JSON.stringify(bad) + ": the module fails, never silently ignored: " + parsed.errors.join("; "));
+        }
+        const extraField = ModuleManifestRules.parseManifest(_manifest(Object.assign({ privileged: { why: "Connect", programs: ["tailscale"], sandbox: true } }, programsGiven)));
+        assert(extraField.valid && _has(extraField.warnings, "privileged: unknown field \"sandbox\""), "privileged: an unknown field is a warning");
+        assert(!ModuleManifestRules.parseManifest('{"id":"Bad","name":"X","version":"1","api":"1.0","privileged":{"why":"x","programs":[]}}').valid,
+               "privileged without a usable id: invalid all the same");
+        const sourced = ModuleManifestRules.parseManifest(_manifest({ api: "1.36", uses: {
+            clipboard: { version: "0.2", source: "https://github.com/anna/h2s-clipboard#v0.2.0" },
+            agenda: { version: "1.0", optional: true, source: "ext::sh -c touch% /tmp/x" },
+            notes: { version: "1.0", source: 5 } } }));
+        assert(sourced.valid, "a use's source that is no address: the module still loads: " + sourced.errors.join("; "));
+        assertEqual(JSON.stringify(sourced.uses.map(use => use.id + " " + use.source)),
+                    JSON.stringify(["clipboard https://github.com/anna/h2s-clipboard#v0.2.0", "agenda ", "notes "]),
+                    "uses' sources: an address kept, others void");
+        assert(_has(sourced.errors, "uses.agenda.source:") && _has(sourced.errors, "uses.notes.source:") && !_has(sourced.errors, "uses.clipboard")
+               && sourced.warnings.length === 0, "… each void source an error, no unknown-field warning: " + sourced.errors.concat(sourced.warnings).join("; "));
 
         // --- the version check ---
         assert(ModuleMergeRules.usesFit("1.1", "1.2").fits && ModuleMergeRules.usesFit("1.2", "1.2").fits, "uses: the same major, the provider's minor at least the one asked");

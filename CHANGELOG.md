@@ -24,6 +24,20 @@ Settings → Lockscreen → "Lock before the computer sleeps" is on (below, unde
 ### Module API
 The interface modules are written against (`qs.api`), versioned on its own
 (`Api.version`, notes/plans/modules.md "Module API 1.0").
+- 1.36: module.json's `privileged` block, `{ "why": "…", "programs": [names] }`: a module
+  says what it runs as administrator and why (`why` plain text on one line, at most 200
+  characters; `programs` names among its `requires.programs` and `optionalPrograms`); a
+  malformed block fails the module. The shell refuses `module.privileged.start` from a
+  module without the block, without the user's approval of it, or with an `argv[0]` that is
+  not the path `module.programs` has for a declared program — before any prompt, nothing
+  run, `blocked: "undeclared"`, the reason among the module's status errors; and
+  `PrivilegedAction` from a module's code without the block or the approval. This holds for
+  modules written for any API: one that runs anything as administrator must add the block.
+  A guard against mistakes and a statement for the user, not a sandbox: a module runs in
+  the shell's process and can start programs by other means. `author` (plain text on one
+  line, at most 100 characters, malformed fails the module); a `uses` entry's `source`
+  (`"<repository address>#<ref>"`, where to get a missing provider; not an address: an
+  error, the entry kept without it).
 - 1.35: `ProgressBar`'s `wave` (default false): the owner says the bar is moving now, and
   bands of light pass through its filled part, a new one every theme duration
   `progressWave` (300 ms by default), each crossing in `progressWaveTravel` (1200 ms); none
@@ -774,6 +788,9 @@ The interface modules are written against (`qs.api`), versioned on its own
   most), instead of one accent dot for the day.
 
 ### Changed
+- A module asks for an administrator's password only when its module.json says what it
+  runs as administrator and why (`privileged`); one that does not is refused before any
+  prompt, and Settings → Modules shows why among its errors.
 - A shell that keeps dying while the screen is locked is started again at most 3 times
   while the session stays locked (an unlock starts the count afresh), no longer once a
   minute for good. Then the launcher gives up and the session stays locked; the way back is
