@@ -223,6 +223,11 @@ new kind.
   bar.
 - **Nothing relies on one developer's environment;** NixOS and Arch are treated together. —
   Code and docs that worked on one machine only.
+- **Only Wayland is assumed.** No distribution, compositor or tiling window manager is
+  required: Hyprland is an integration used when present, and a feature that needs a
+  compositor's own interface has a path (or a plain "not available here") without it. NixOS
+  and Arch are where it is tested, not what code may assume. — The shell is meant to run on
+  any Wayland compositor with the protocols it needs.
 - **Development never depends on an LLM.** Tests, checks and every key step (releasing,
   generating docs) are plain scripts that run without one; LLM steps live at most in an
   optional wrapper. — A project that needs an LLM to be tested or released cannot be worked on

@@ -28,6 +28,11 @@ the later stands here.
   scripts (`plans/documentation.md` §8).
 
 **Direction, modules and trust**
+- Platform (2026-11-21): the shell ties itself to no distribution and no compositor. The one
+  thing it relies on is Wayland (the protocols it needs, such as layer shell and session
+  lock). NixOS and Arch are the systems it is developed and tested on today, not targets it
+  may assume; it is not tied to a tiling window manager either. Hyprland is an integration
+  (used when present, with a working path without it), like any later compositor's.
 - Direction: the shell becomes a fairly small framework that defines the structure and the
   way of working; parts built in today can be split out into modules, some shipped with the
   shell. The shell provides the services, or abstractions for reaching them; a module adds the
