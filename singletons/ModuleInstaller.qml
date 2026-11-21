@@ -89,6 +89,8 @@ Scope {
     // cancelPreview(): ModuleInstallRules.installPreview's answer plus `job` (its number) and
     // `changelogs` ([{ key, title, text, none }] for each module of the chain), else null
     property var preview: null
+    // How long a preview waits for its answer before it is dropped (staging deleted)
+    property int previewTimeoutMs: 15 * 60 * 1000
 
     // Each module's configuration backups as last read (ModuleBackupRules.listing's { ok,
     // backups (newest first: { name, version, commit, takenAt, reason, includesData, store,
@@ -435,6 +437,7 @@ Scope {
             return "Refused while the session is locked";
         _job.enable = options?.enable !== false;
         _job.anyway = options?.anyway === true;
+        _job.previewTimer?.destroy();
         preview = null;
         _resolve(_job);
         return "";
@@ -446,8 +449,24 @@ Scope {
         if (!_job || _job.number !== job || phase !== "preview")
             return false;
         _job.cancelled = true;
+        _job.previewTimer?.destroy();
+        // Not waiting any more: no proceed() while staging is deleted
+        phase = "";
+        preview = null;
         _abandon(_job, "cancelled");
         return true;
+    }
+
+    // A preview not answered within previewTimeoutMs is dropped
+    property Component _previewLimit: Component {
+        Timer {
+            property int job: 0
+            running: true
+            onTriggered: {
+                root.cancelPreview(job);
+                destroy();
+            }
+        }
     }
 
     // An install waiting at its preview is dropped when the session locks: the window that
@@ -880,6 +899,12 @@ Scope {
             _abandon(job, plan.refused);
             return;
         }
+        // After the preview, only what it showed may go on: nothing more to fetch, the same
+        // modules in the same roles
+        if (job.previewed && (plan.fetch.length > 0 || ModuleInstallRules.planSignature(plan) !== job.previewPlan)) {
+            _abandon(job, "The install changed");
+            return;
+        }
         if (plan.fetch.length > 0) {
             const next = plan.fetch[0];
             if (ModuleRules.has(job.fetched, next.id)) {
@@ -931,7 +956,9 @@ Scope {
     // install waits at phase "preview"
     function _showPreview(job, plan) {
         const manifest = job.root.manifest;
-        const names = (manifest.programs ?? []).concat(manifest.optionalPrograms ?? []);
+        job.previewPlan = ModuleInstallRules.planSignature(plan);
+        const manifests = [manifest].concat(Object.keys(job.fetched).map(id => job.fetched[id].manifest));
+        const names = [].concat(...manifests.map(each => (each.programs ?? []).concat(each.optionalPrograms ?? [])));
         _findPrograms(names, found => {
             if (!_alive(job))
                 return;
@@ -949,14 +976,18 @@ Scope {
                 if (index >= chain.length) {
                     const replaced = host.statuses.filter(status => status.id === manifest.id && ["builtin", "system"].includes(status.source))
                         .map(status => ({ directory: status.directory, source: status.source, version: status.version }));
+                    const installedNames = {};
+                    for (const id of Object.keys(installed))
+                        installedNames[id] = installed[id].name;
                     preview = Object.assign(ModuleInstallRules.installPreview({
                         root: job.root, fetched: job.fetched, plan: plan, rootTarget: job.rootTarget, replaced: replaced,
-                        shellApi: host.apiVersion, programs: found, previous: previous,
+                        shellApi: host.apiVersion, programs: found, previous: previous, names: installedNames,
                         goesTo: ModuleInstallRules._shownPath(places.user + "/" + manifest.id, home)
                     }), { job: job.number, changelogs: changelogs });
                     phase = "preview";
                     subject = String(manifest.name || manifest.id);
                     progress = null;
+                    job.previewTimer = _previewLimit.createObject(root, { interval: previewTimeoutMs, job: job.number });
                     return;
                 }
                 const item = chain[index];

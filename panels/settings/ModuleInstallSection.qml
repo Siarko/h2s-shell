@@ -284,10 +284,25 @@ SettingsSection {
                     }
                 }
             }
+            // What would stop working
+            Repeater {
+                model: ScriptModel { values: root.preview?.breaks ?? [] }
+                Text {
+                    required property string modelData
+                    objectName: "previewBreak"
+                    Layout.fillWidth: true
+                    text: "\uf071 " + modelData
+                    textFormat: Text.PlainText
+                    wrapMode: Text.Wrap
+                    font.family: Theme.fontFamily
+                    font.pixelSize: Theme.fontSizeSmall
+                    color: Theme.warning
+                }
+            }
             Text {
-                visible: root.preview?.choice === "anyway"
+                visible: text !== ""
                 Layout.fillWidth: true
-                text: "Install anyway: " + (root.preview?.name ?? "") + " waits for them until they are there."
+                text: root.preview?.anywayText ?? ""
                 textFormat: Text.PlainText
                 wrapMode: Text.Wrap
                 font.family: Theme.fontFamily

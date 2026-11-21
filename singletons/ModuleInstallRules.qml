@@ -1252,16 +1252,25 @@ Singleton {
         }
     }
 
+    // What a dependency plan does, for telling the plan a preview showed from the one an
+    // install would carry out: its order and each entry's module and role
+    function planSignature(plan) {
+        return JSON.stringify([_list(plan?.order), _list(plan?.entries).map(entry => [entry?.id, entry?.kind, _list(entry?.breaks)]),
+                               _list(plan?.rootBreaks)]);
+    }
+
     // The preview of an install (§6.2, §6.9) from what the installer staged and planned.
     // `given`: { root: { manifest, commit, source (installSource's) }, fetched: { <id>: { manifest,
     // commit, source } }, plan (ModuleDependencyRules.plan's), rootTarget (installTarget's),
     // replaced: [{ directory, source, version }] — the copies of its id it would replace (a
     // built-in or system one), shellApi, programs: { <name>: found }, goesTo (the path shown),
-    // previous: { <id>: installed version } }.
+    // previous: { <id>: installed version }, names: { <id>: installed name } }.
     // → { id, name, version, description, author, icon, api, source: [lines], privileged,
-    //     programs, alsoInstalls, updates, already, canUse, blocking, replaces, goesTo, trust,
-    //     choice: "ready" | "anyway" | "none" — Install (and keep off) / Install anyway / only
-    //     Cancel }. Texts plain, on one line, capped.
+    //     programs, alsoInstalls, updates, already, canUse, blocking, breaks ("Weather 2.0.0
+    //     would stop Exit map": installed modules the install would no longer serve), replaces,
+    //     goesTo, trust, choice: "ready" | "anyway" | "none" — Install (and keep off) / Install
+    //     anyway (something cannot be had, or something would stop) / only Cancel, anywayText —
+    //     what Install anyway means }. Texts plain, on one line, capped.
     function installPreview(given) {
         const plan = given?.plan ?? {};
         const manifest = given?.root?.manifest ?? {};
@@ -1273,6 +1282,8 @@ Singleton {
         const nameOf = other => {
             if (other === manifest.id)
                 return name;
+            if (typeof given?.names?.[other] === "string" && given.names[other] !== "")
+                return _plain(given.names[other], 60);
             const entry = entries.find(each => each?.id === other);
             return _plain(String(entry?.name ?? fetched[other]?.manifest?.name ?? ""), 60) || _plain(String(other ?? ""), 60);
         };
@@ -1304,6 +1315,10 @@ Singleton {
             .map(entry => nameOf(entry.id) + (given?.previous?.[entry.id] ? " " + _plain(String(given.previous[entry.id]), maxVersionLength) : "") + " — installed");
         const canUse = _list(plan.offers).map(offer => (_plain(String(offer?.name ?? ""), 60) || nameOf(offer?.id)) + " — not installed");
         const blocking = _list(plan.blocking).map(line => _plain(String(line ?? ""), 200));
+        const stops = (who, ids) => who + " would stop " + _list(ids).map(nameOf).join(", ");
+        const breaks = (_list(plan.rootBreaks).length > 0 ? [stops(name + (version !== "" ? " " + version : ""), plan.rootBreaks)] : [])
+            .concat(entries.filter(entry => _list(entry?.breaks).length > 0)
+                    .map(entry => stops(nameOf(entry.id) + (entry.to ? " " + _plain(String(entry.to), maxVersionLength) : ""), entry.breaks)));
         const target = given?.rootTarget?.kind;
         const replaces = target === "update"
             ? "Updates " + name + " " + _plain(String(given?.previous?.[manifest.id] ?? ""), maxVersionLength) + " → " + version
@@ -1317,9 +1332,11 @@ Singleton {
             author: _plain(String(manifest.author ?? ""), 100), icon: icon,
             api: (api !== "" ? "asks for " + api + " · " : "") + "this shell has " + _plain(String(given?.shellApi ?? ""), 20) + " — fits",
             source: sourceLines, privileged: why !== "" ? "asks for your password to: " + why : "never asks",
-            programs: programs, alsoInstalls: alsoInstalls, updates: updates, already: already, canUse: canUse, blocking: blocking,
+            programs: programs, alsoInstalls: alsoInstalls, updates: updates, already: already, canUse: canUse, blocking: blocking, breaks: breaks,
             replaces: replaces, goesTo: _plain(String(given?.goesTo ?? "")), trust: trustStatement(newNames),
-            choice: plan.refused || plan.complete !== true ? "none" : blocking.length > 0 ? "anyway" : "ready"
+            choice: plan.refused || plan.complete !== true ? "none" : blocking.length > 0 || breaks.length > 0 ? "anyway" : "ready",
+            anywayText: blocking.length > 0 ? "Install anyway: " + name + " waits for them until they are there."
+                      : breaks.length > 0 ? "Install anyway: the modules named stop working until they are updated." : ""
         };
     }
 

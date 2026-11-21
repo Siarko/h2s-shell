@@ -823,6 +823,15 @@ TestCase {
         const blocked = rules.installPreview(Object.assign({}, given, { plan: Object.assign({}, plan, { blocking: ["Needs Sync 1.0 — not installed, no address given"] }) }));
         assertEqual(blocked.choice + "|" + blocked.blocking.join(""), "anyway|Needs Sync 1.0 — not installed, no address given", "… a dependency that cannot be had: anyway");
         assertEqual(rules.installPreview(Object.assign({}, given, { plan: Object.assign({}, plan, { refused: "a cycle" }) })).choice, "none", "… refused: nothing");
+        assertEqual(preview.breaks.length + "|" + preview.anywayText, "0|", "… nothing would stop");
+        const breaking = rules.installPreview(Object.assign({}, given, { names: { exitmap: "Exit map" }, plan: Object.assign({}, plan, {
+            rootBreaks: ["exitmap"], entries: plan.entries.map(entry => entry.id === "weather" ? Object.assign({}, entry, { breaks: ["exitmap"] }) : entry) }) }));
+        assertEqual(breaking.breaks.join("|"), "Notes 0.4.0 would stop Exit map|Weather 1.3.0 would stop Exit map", "… what would stop, by name");
+        assertEqual(breaking.choice, "anyway", "… then only an explicit Install anyway");
+        assert(breaking.anywayText.includes("stop working"), "… saying what it means");
+        assert(rules.planSignature(plan) === rules.planSignature(JSON.parse(JSON.stringify(plan))), "plan signature: the same plan, the same");
+        assert(rules.planSignature(plan) !== rules.planSignature(Object.assign({}, plan, { entries: plan.entries.map(entry => Object.assign({}, entry, { kind: "there" })) })),
+               "… another role: another");
         const update = rules.installPreview(Object.assign({}, given, { rootTarget: { kind: "update" }, previous: { notes: "0.3.0" },
                                                                        plan: Object.assign({}, plan, { entries: [] }) }));
         assertEqual(update.replaces + "|" + update.trust, "Updates Notes 0.3.0 → 0.4.0|null", "… an update of its own: said, no statement");

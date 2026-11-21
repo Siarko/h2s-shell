@@ -807,5 +807,15 @@ TestCase {
         _installer.finished({ ok: false, job: 1, message: "old" });
         driver.wait(20);
         assertEqual(error.text, "Clipboard: download failed — the server did not answer", "a late answer of another job: ignored");
+
+        // The window hidden while a preview waits: dropped
+        _top();
+        _click(install);
+        const third = _installer.jobNumber;
+        _installer.phase = "preview";
+        _installer.preview = Object.assign(ModuleInstallRules.installPreview(given), { job: third, changelogs: [] });
+        assert(_until(() => _named(page, "installPreview")[0].visible), "a preview once more");
+        _window.visible = false;
+        assert(_until(() => _installer.calls[_installer.calls.length - 1] === "cancelPreview " + third), "the window hidden: the preview dropped");
     }
 }

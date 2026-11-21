@@ -417,6 +417,34 @@ TestCase {
             assertEqual(state.staging, 0, "nothing left in staging");
             assert(state.links.beta === undefined && state.links.gamma === undefined, "… nothing moved in");
         });
+        // The session locks during a preview: dropped, nothing left
+        _then("previewed, then locked: nothing runs", _idle, () => assertEqual(installer.install(_url("beta"), { preview: true }), "", "previewed once more"));
+        _then("the preview before the lock", () => installer.phase === "preview", () => {
+            host.locked = true;
+            assert(!installer.busy || installer.phase !== "preview", "the lock drops the preview at once");
+        });
+        _then("dropped by the lock", () => !installer.busy, () => {
+            host.locked = false;
+            assert(installer.lastResult.details.cancelled === true, "… ended as cancelled (" + installer.lastResult.message + ")");
+        });
+        _check("a preview dropped by the lock", state => assertEqual(state.staging, 0, "… staging emptied"));
+        // The plan changes while the preview waits: proceed ends it, nothing moves in
+        _then("previewed, then changed: nothing runs", _idle, () => assertEqual(installer.install(_url("beta"), { preview: true }), "", "previewed for a change"));
+        _then("the preview before the change", () => installer.phase === "preview", () => {
+            suite._savedStatuses = host.statuses;
+            host.statuses = host.statuses.concat([{ id: "gamma", name: "Gamma", version: "9.0.0", api: "1.36", state: "loaded", enabled: true,
+                                                    source: "user", directory: temp + "/elsewhere/gamma", shadowedBy: "" }]);
+            assertEqual(installer.proceed(installer.jobNumber, { enable: true }), "", "proceed: taken");
+        });
+        _then("the changed plan ended", () => !installer.busy, () => {
+            host.statuses = suite._savedStatuses;
+            const result = installer.lastResult;
+            assert(!result.ok && result.message === "The install changed", "a plan other than the one shown: not carried out (" + result.message + ")");
+        });
+        _check("a changed plan", state => {
+            assertEqual(state.staging, 0, "… staging emptied");
+            assert(state.links.beta === undefined && state.links.gamma === undefined, "… nothing moved in");
+        });
         _then("previewed again: nothing runs", _idle, () => assertEqual(installer.install(_url("beta"), { preview: true }), "", "previewed again"));
         _then("the preview again", () => installer.phase === "preview", () =>
               assertEqual(installer.proceed(installer.jobNumber, { enable: true }), "", "Install and enable: goes on"));
@@ -575,6 +603,7 @@ TestCase {
     // What Remove would delete, read without a job: the question's words
     property var _preview: null
     property string _handKey: ""
+    property var _savedStatuses: []
     function _previewOf(description, id, directory, check) {
         _then(description + ": preview asked", _idle, () => {
             suite._preview = null;

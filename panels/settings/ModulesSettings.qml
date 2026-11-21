@@ -45,10 +45,15 @@ Item {
     property var chooser: FileChooser
     property string home: SystemFacts.home ?? ""
 
-    // An install waiting at its preview goes with the page: nobody is left to answer it
-    Component.onDestruction: {
-        if (_install.preview)
-            installer?.cancelPreview(_install.job);
+    // The install the page started (its job number): one waiting at its preview goes with the
+    // page or when the window hides — nobody is left to answer it
+    property int _installJob: 0
+    readonly property bool _windowShown: Window.window?.visible ?? false
+    on_WindowShownChanged: if (!_windowShown) _dropPreview()
+    Component.onDestruction: _dropPreview()
+    function _dropPreview() {
+        if (_installJob !== 0)
+            installer?.cancelPreview(_installJob);
     }
 
     // The side panel: the changelogs of an install's chain ({ title, sections })
@@ -292,6 +297,7 @@ Item {
             chooser: root.chooser
             home: root.home
             onChangelogsRequested: (title, sections) => root._panel = { title: title, sections: sections }
+            onJobChanged: root._installJob = job
         }
 
         SettingsSection {
