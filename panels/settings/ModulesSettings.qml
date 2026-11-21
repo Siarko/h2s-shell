@@ -498,9 +498,11 @@ Item {
                     readonly property var backups: root.installer?.backupLists?.[modelData]?.backups ?? []
                     readonly property string shownList: root._shownList[modelData] ?? ""
                     // What a question is about: when it changes, the question goes
-                    readonly property string subjectKey: [status.directory, status.state, status.enabled, disabling.disabled.join(",")].join("|")
+                    readonly property string subjectKey: [status.directory, status.state, status.enabled, disabling.disabled.join(","),
+                                                          refusedVersion?.dir ?? ""].join("|")
                     onSubjectKeyChanged: {
                         _disableButton.asking = false;
+                        _deleteNewButton.asking = false;
                         if (root._asked && root._asked.id === modelData)
                             root.modalHost?.withdraw(root._asked);
                     }
@@ -742,6 +744,7 @@ Item {
                                 color: Theme.textSecondary
                             }
                             DeleteButton {
+                                id: _deleteNewButton
                                 objectName: "deleteNewVersion"
                                 label: parent.parent.words.deleteLabel
                                 confirmLabel: parent.parent.words.deleteQuestion

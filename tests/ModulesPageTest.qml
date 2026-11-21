@@ -188,6 +188,7 @@ TestCase {
             return "";
         }
         property var restartOffer: null
+        property var restartNeeded: []
         property var listings: ({})
         property var changelogs: ({})
         property var openRequest: null
@@ -763,6 +764,8 @@ TestCase {
         pageLoader.active = true;
         assert(_until(() => page && _cards().length === 7), "the page again, the installer's record read");
         assertEqual(_named(page, "autoUpdateRow").length, 1, "the automatic-updates setting on the page");
+        const settingLabel = _named(_named(page, "autoUpdateRow")[0], "settingLabel")[0];
+        assert(settingLabel.text === "Module updates" && !settingLabel.truncated, "… its label whole, not cut (" + settingLabel.width + " of " + settingLabel.implicitWidth + ")");
 
         // The queue
         _updater.queue = { ended: false, lastRun: 1, offered: [], rows: [
@@ -808,6 +811,18 @@ TestCase {
         assert(_until(() => deleteNew.asking), "Delete 1.3.0: asks on the button");
         _click(deleteNew);
         assertEqual(_installer.calls[_installer.calls.length - 1], "deleteVersion weather 1.3.0-bbbbbbb", "… then deletes that version directory");
+        _click(deleteNew);
+        assert(_until(() => deleteNew.asking), "asked again");
+        const record = _installer.installedRead.records.modules.weather;
+        _installer.installedRead = { ok: true, found: {}, records: { ok: true, modules: { weather: Object.assign({}, record, {
+            refused: { version: "1.3.1", commit: commit("e") },
+            versions: record.versions.filter(each => each.version !== "1.3.0").concat([{ dir: "1.3.1-eeeeeee", version: "1.3.1", commit: commit("e"), fetchedAt: 4000 }]) }) } } };
+        _installer.finished({ ok: true, job: -1, message: "", ids: [], details: {} });
+        assert(_until(() => _named(_card("weather"), "notFinishedTitle")[0]?.text === "Update to 1.3.1 not finished. 1.2.0 is active."), "another refused version: the box follows");
+        assert(!_in(_card("weather"), "deleteNewVersion").asking, "… and its question is gone, never carried over to the other version");
+        _installer.installedRead = { ok: true, found: {}, records: { ok: true, modules: { weather: record } } };
+        _installer.finished({ ok: true, job: -1, message: "", ids: [], details: {} });
+        assert(_until(() => _named(_card("weather"), "notFinishedTitle")[0]?.text === "Update to 1.3.0 not finished. 1.2.0 is active."));
 
         // Switch version
         _updater.listings = { weather: { tags: [{ name: "v1.4.0", version: "1.4.0", commit: commit("d") }], head: null } };
@@ -883,6 +898,50 @@ TestCase {
         _updater.queue = { rows: [], ended: true, offered: [], lastRun: 0 };
         _updater.checks = {};
         page.openId = "";
+        _restartBanner();
+    }
+
+    // The Settings window's banner after "Later": the updater's pending restart only
+    function _restartBanner() {
+        _updater.restartOffer = { text: "Restart the shell to load the new files of Weather.", ids: ["weather"] };
+        _updater.restartNeeded = ["Weather"];
+        const component = Qt.createComponent(Qt.resolvedUrl("../panels/SettingsWindow.qml"), Component.PreferSynchronous);
+        const settings = component.createObject(suite, { visible: false, restartUpdater: _updater });
+        assert(settings !== null, "the settings window can be made (" + component.errorString() + ")");
+        if (!settings)
+            return;
+        let started = null;
+        settings.restartClicked.connect(value => started = value);
+        // Nothing here may restart a shell: the launcher's start recorded instead
+        const realStart = Modules.startDetached;
+        let startedArgv = null;
+        Modules.startDetached = argv => startedArgv = argv;
+        try {
+            settings.visible = true;
+            settings.selectedPage = "modules";
+            assert(_until(() => settings.selectedPage === "modules_installed"), "Settings → Modules");
+            assertEqual(settings.restartBanner.visible, false, "the offer stands: no banner");
+            _updater.dismissRestartOffer();
+            assert(_until(() => settings.restartBanner.visible), "Later: the banner");
+            assertEqual(settings.restartBanner.text, "Restart the shell to finish updating Weather.", "… naming what was updated");
+            settings.selectedPage = "general";
+            assert(_until(() => settings.selectedPage === "general") && settings.restartBanner.visible, "… over another page too");
+            const button = _named(settings.restartBanner, "restartBannerButton")[0];
+            assert(_until(() => button.width > 0 && button.visible), "… with Restart shell");
+            // Another window than the driver's: the button's own click
+            button.clicked();
+            assert(_until(() => started !== null), "Restart shell: clicked");
+            assertEqual(started + " " + (startedArgv ?? []).slice(-2).join(" ").replace(/^.*\/scripts\//, ""), "true launch.sh --restart",
+                        "… the launcher restarts the shell");
+            _updater.restartNeeded = [];
+            assert(_until(() => !settings.restartBanner.visible), "nothing pending: no banner");
+        } finally {
+            Modules.startDetached = realStart;
+            settings.visible = false;
+            settings.destroy();
+            _updater.restartNeeded = [];
+            _updater.restartOffer = null;
+        }
     }
 
     function _top() {

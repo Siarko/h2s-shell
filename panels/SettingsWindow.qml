@@ -121,6 +121,12 @@ FloatingWindow {
         return pages[_pageIndex(id)] ?? pages[0];
     }
 
+    // The updater whose pending restart the banner over the pages shows (the shell's; a suite
+    // gives a stand-in), and the banner's "Restart shell" clicked: whether a restart started
+    property var restartUpdater: Modules.updater
+    readonly property alias restartBanner: _restartBanner
+    signal restartClicked(bool started)
+
     // Where a page asks a question that needs more than a button's word (SettingsModalHost.ask)
     readonly property alias modalHost: _modalHost
 
@@ -522,12 +528,14 @@ FloatingWindow {
 
                 // A new page fades in, rising a little. Its root takes its place's base from
                 // here (anchorBase, root._showPage)
-                // After "Later": a restart is pending for updated modules — over every page
-                // until the shell restarts (ModuleUpdateRules.restartBannerText)
+                // After "Later": a restart is pending for the modules an update queue updated —
+                // over every page until the shell restarts (ModuleUpdateRules.restartBannerText).
+                // Only the updater's list: a file changed under the host is no update the user ran
                 Rectangle {
                     id: _restartBanner
                     objectName: "restartBanner"
-                    readonly property string text: Modules.updater.restartOffer === null ? ModuleUpdateRules.restartBannerText(Modules.restartNeeded) : ""
+                    readonly property string text: root.restartUpdater && root.restartUpdater.restartOffer === null
+                        ? ModuleUpdateRules.restartBannerText(root.restartUpdater.restartNeeded) : ""
                     visible: text !== ""
                     anchors { left: parent.left; right: parent.right; top: parent.top; margins: visible ? Theme.settings.pageMargin : 0 }
                     height: visible ? _restartRow.implicitHeight + 16 : 0
@@ -549,9 +557,10 @@ FloatingWindow {
                             color: Theme.warning
                         }
                         SmallButton {
+                            objectName: "restartBannerButton"
                             label: "Restart shell"
                             kind: "warning"
-                            onClicked: Modules.restartShell()
+                            onClicked: root.restartClicked(Modules.restartShell())
                         }
                     }
                 }

@@ -138,13 +138,17 @@ Singleton {
 
     // "Restart shell" (the update queue's offer, the Settings banner after "Later"): always the
     // user's click — the launcher restarts the shell (scripts/launch.sh --restart), started
-    // detached so it outlives this process. Not in test mode, where nothing is started
+    // detached so it outlives this process. Not in test mode, where nothing is started, nor
+    // while the session is locked
     function restartShell() {
-        if (_host.testMode)
+        if (_host.testMode || _host.locked)
             return false;
-        Quickshell.execDetached(["bash", Quickshell.shellDir + "/scripts/launch.sh", "--restart"]);
+        startDetached(["bash", Quickshell.shellDir + "/scripts/launch.sh", "--restart"]);
         return true;
     }
+    // How restartShell starts the launcher (the suites put a recorder here: nothing of theirs
+    // may restart a shell)
+    property var startDetached: argv => Quickshell.execDetached(argv)
 
     // A notification of the updater clicked: Settings → Modules opens (the page shows what it
     // asks for: the restart button or the changelogs)

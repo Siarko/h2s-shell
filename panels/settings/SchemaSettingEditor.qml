@@ -162,8 +162,11 @@ Item {
                 font.pixelSize: Theme.fontSizeBodyLarge
                 color: Theme.textPrimary
                 // As wide as it needs, so the info icon stands right after it; elided when short of room
+                // Whole pixels: a fractional implicit width would cut the last letters
+                objectName: "settingLabel"
                 Layout.fillWidth: true
-                Layout.maximumWidth: implicitWidth
+                Layout.preferredWidth: Math.ceil(implicitWidth)
+                Layout.maximumWidth: Math.ceil(implicitWidth)
                 elide: Text.ElideRight
             }
 
