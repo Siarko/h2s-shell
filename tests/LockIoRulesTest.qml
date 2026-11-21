@@ -117,6 +117,17 @@ TestCase {
         assertEqual(factsOf(["readable", "answered"], { crashed: true }), unknown("it was killed"), "fallback facts: a killed run is not known");
         assertEqual(factsOf([], { started: false, exitCode: -1 }), unknown("it could not be started"), "fallback facts: a run that could not be started is not known");
         assertEqual(JSON.stringify(rules.fallbackFacts(undefined)), unknown("it could not be started"), "fallback facts: no run is not known");
+        // … of a run as CommandRunner answers it (the driver's LatestQuery probes)
+        const result = fields => Object.assign({ ok: true, code: 0, failedToStart: false, cancelled: false, timedOut: false, error: "" }, fields ?? {});
+        const probed = (lines, fields) => JSON.stringify(rules.fallbackFacts(rules.probeRun(lines, result(fields))));
+        assertEqual(probed(["nixos", "answered"]), known(false, true), "probe run: a run that exited 0 with its answer");
+        assertEqual(JSON.stringify(rules.probeRun(["answered"], result())), JSON.stringify({ started: true, exitCode: 0, crashed: false, lines: ["answered"] }),
+                    "probe run: started, its code, not killed, the lines as they came");
+        assertEqual(probed(["answered"], { ok: false, code: 3 }), unknown("it exited with status 3"), "probe run: a non-zero exit");
+        assertEqual(probed(["answered"], { ok: false, code: -1 }), unknown("it was killed"), "probe run: ended by a signal (code -1)");
+        assertEqual(probed([], { ok: false, code: -1, failedToStart: true }), unknown("it could not be started"), "probe run: it could not be started");
+        assertEqual(probed([], { ok: false, code: -1, error: "argv is empty" }), unknown("it could not be started"), "probe run: refused, nothing run");
+        assertEqual(JSON.stringify(rules.fallbackFacts(rules.probeRun(["answered"], null))), unknown("it could not be started"), "probe run: no result");
         // The direct question (the driver's own, when the script gives no answer) answers
         // in the same words; what follows from its answers on each system
         const fallbackFrom = lines => {

@@ -5,6 +5,7 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
 import qs.singletons
+import qs.singletons.io
 import qs.singletons.lock
 import qs.screensaver
 
@@ -499,7 +500,7 @@ Singleton {
                 return;
             fallbackAsked += 1;
             fallbackDirectFor = 0;
-            _fallbackProbe.running = true;
+            _fallbackProbe.request();
         }
 
         function probeFallbackDirectly() {
@@ -508,7 +509,7 @@ Singleton {
             if (_fallbackDirectProbe.running)
                 return;
             _fallbackDirectProbe.generation = fallbackDirectFor;
-            _fallbackDirectProbe.running = true;
+            _fallbackDirectProbe.request();
         }
 
         function fallbackAnsweredBy(source, reason) {
@@ -536,8 +537,8 @@ Singleton {
                 dispatch({ type: "settings", values: { passwordFallback: fallback } });
         }
 
-        _fallbackProbe.answered.connect(run => {
-            const facts = LockIoRules.fallbackFacts(run);
+        _fallbackProbe.answered.connect((lines, result) => {
+            const facts = LockIoRules.fallbackFacts(LockIoRules.probeRun(lines, result));
             if (facts.known) {
                 fallbackAnsweredBy("script", "");
                 applyFallbackFacts(facts);
@@ -548,14 +549,16 @@ Singleton {
             probeFallbackDirectly();
         });
 
-        _fallbackDirectProbe.answered.connect((run, generation) => {
+        _fallbackDirectProbe.answered.connect((lines, result) => {
+            // The request it was started for
+            const generation = _fallbackDirectProbe.generation;
             if (generation !== fallbackDirectFor) {
                 if (fallbackDirectFor !== 0)
                     probeFallbackDirectly();
                 return;
             }
             fallbackDirectFor = 0;
-            const facts = LockIoRules.fallbackFacts(run);
+            const facts = LockIoRules.fallbackFacts(LockIoRules.probeRun(lines, result));
             if (facts.known)
                 applyFallbackFacts(facts);
             else
@@ -583,11 +586,11 @@ Singleton {
         function recoveryEffect(effect) {
             switch (effect.type) {
             case "probeMarker":
-                _markerProbe.running = true;
+                _markerProbe.request();
                 break;
             case "probeRestore":
                 if (!_restoreProbe.running)
-                    _restoreProbe.running = true;
+                    _restoreProbe.request();
                 break;
             case "requestLock":
                 dispatch({ type: "lockRequested", source: effect.source });
@@ -651,9 +654,11 @@ Singleton {
             recover({ type: "carriedChecked", locked: state.phase.status !== "unlocked", compositorLocked: _sessionLock.locked });
         }
 
-        _restoreProbe.answered.connect(output => recover({ type: "restoreAnswered", output: output, locked: state.phase.status !== "unlocked" }));
+        // Its lines as one text again (the blank one between the two answers dropped); a
+        // signal's array arrives as a list wrapper, hence Array.from
+        _restoreProbe.done.connect(lines => recover({ type: "restoreAnswered", output: Array.from(lines).join("\n"), locked: state.phase.status !== "unlocked" }));
         // The start probe, then — its decision made — the start counts as checked
-        _markerProbe.answered.connect(lines => {
+        _markerProbe.done.connect(lines => {
             recover({ type: "markerAnswered", lines: lines, locked: state.phase.status !== "unlocked" });
             recover({ type: "markerChecked" });
         });
@@ -851,10 +856,8 @@ Singleton {
     // read the marker), `key <boot id>:<display>:<socket device:inode:ctime>` — this compositor
     // session, which a new compositor (a new socket) or a reboot changes — and `marker
     // <its first line>` when there is one
-    Process {
+    CommandQuery {
         id: _markerProbe
-        signal answered(var lines)
-        property var _lines: []
         command: ["sh", "-c",
             "dir=$1; marker=$2\n"
             + "mode=$(stat -c %A \"$dir\" 2> /dev/null)\n"
@@ -868,17 +871,6 @@ Singleton {
             + "[ -f \"$marker\" ] && [ ! -L \"$marker\" ] && [ -O \"$marker\" ] && IFS= read -r line < \"$marker\" && echo \"marker $line\"\n"
             + "exit 0",
             "sh", root._runtimeDirectory, root._markerPath]
-        stdout: SplitParser {
-            splitMarker: "\n"
-            onRead: line => _markerProbe._lines = _markerProbe._lines.concat([line])
-        }
-        onRunningChanged: {
-            if (running)
-                return;
-            const lines = _lines;
-            _lines = [];
-            answered(lines);
-        }
     }
 
     Timer {
@@ -895,60 +887,24 @@ Singleton {
 
     // Hyprland's word before a lock is taken back (LockIoRules.hyprlandLockFacts): whether
     // restoring a dead client's lock is allowed, and whether the session is locked
-    Process {
+    CommandQuery {
         id: _restoreProbe
-        signal answered(string output)
-        property string _output: ""
         // Each question bounded (2 s): a hung hyprctl used to stall the restore for good while
         // the status said "unlocked". No answer is no answer: the lock is asked for (the
         // generic path), as without Hyprland
         command: ["sh", "-c", "timeout 2 hyprctl -j getoption misc:allow_session_lock_restore; echo; timeout 2 hyprctl -j locked"]
-        stdout: StdioCollector {
-            onStreamFinished: _restoreProbe._output = text
-        }
-        onRunningChanged: {
-            if (running)
-                return;
-            const output = _output;
-            _output = "";
-            answered(output);
-        }
     }
 
     // ---- What the password fallback depends on ----
     // Both answer one word per line for what holds — "readable" (the system-wide password
-    // config), "nixos" — and "answered" last; `answered` hands the whole run to
-    // LockIoRules.fallbackFacts ({ started, exitCode, crashed, lines }), also a run that
-    // could not be started (`running` then falls back to false without `exited`).
+    // config), "nixos" — and "answered" last. Each is a LatestQuery, whose answer says how
+    // the run ended (CommandQuery's does not): LockIoRules.probeRun makes it the run
+    // LockIoRules.fallbackFacts reads, also a run that could not be started.
 
     // The methods script answers, so that it and the fallback tell the system the same way
-    Process {
+    LatestQuery {
         id: _fallbackProbe
-        signal answered(var run)
-        property var _lines: []
-        property bool _exited: false
-        property int _exitCode: -1
-        property bool _crashed: false
         command: [Quickshell.shellDir + "/scripts/lock-auth-methods.sh", "--fallback-facts"]
-        stdout: SplitParser {
-            splitMarker: "\n"
-            onRead: line => _fallbackProbe._lines = _fallbackProbe._lines.concat([line])
-        }
-        onExited: (exitCode, exitStatus) => {
-            _exited = true;
-            _exitCode = exitCode;
-            _crashed = exitStatus !== 0;
-        }
-        onRunningChanged: {
-            if (running)
-                return;
-            const run = { started: _exited, exitCode: _exitCode, crashed: _crashed, lines: _lines };
-            _lines = [];
-            _exited = false;
-            _exitCode = -1;
-            _crashed = false;
-            answered(run);
-        }
     }
 
     // The same question without the script, for when the script gives no answer: nothing
@@ -956,39 +912,15 @@ Singleton {
     // as the script reads it: LockIoRules.systemSeam) is honoured here too, so that a test
     // of this path gets the same answer on every machine. `generation`: the request it
     // was started for
-    Process {
+    LatestQuery {
         id: _fallbackDirectProbe
-        signal answered(var run, int generation)
         property int generation: 0
-        property var _lines: []
-        property bool _exited: false
-        property int _exitCode: -1
-        property bool _crashed: false
         command: ["sh", "-c",
             "test -r \"$1/h2s-shell-password\" && echo readable\n"
             + "case $2 in nixos) echo nixos ;; other) ;; *) test -e /etc/NIXOS && echo nixos ;; esac\n"
             + "echo answered",
             "sh", root._systemPamDirectory,
             LockIoRules.systemSeam(TestSeams.systemPamDirectory, TestSeams.lockSystem)]
-        stdout: SplitParser {
-            splitMarker: "\n"
-            onRead: line => _fallbackDirectProbe._lines = _fallbackDirectProbe._lines.concat([line])
-        }
-        onExited: (exitCode, exitStatus) => {
-            _exited = true;
-            _exitCode = exitCode;
-            _crashed = exitStatus !== 0;
-        }
-        onRunningChanged: {
-            if (running)
-                return;
-            const run = { started: _exited, exitCode: _exitCode, crashed: _crashed, lines: _lines };
-            _lines = [];
-            _exited = false;
-            _exitCode = -1;
-            _crashed = false;
-            answered(run, generation);
-        }
     }
 
     // ---- Adapters for the shell's lifetime ----

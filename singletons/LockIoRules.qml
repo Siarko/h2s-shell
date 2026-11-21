@@ -124,6 +124,17 @@ Singleton {
         return { known: true, systemConfigReadable: facts.includes("readable"), nixos: facts.includes("nixos") };
     }
 
+    // A fallback probe's run as the driver gets it (LatestQuery: the run's non-empty stdout
+    // lines and CommandRunner's result) → the `run` fallbackFacts takes. The probes run
+    // without a time limit: a run that never exited is `failedToStart`, one ended by a
+    // signal has the code -1 (CommandRules.result), and a refused one an `error`.
+    function probeRun(lines, result) {
+        const answered = result !== null && typeof result === "object";
+        const started = answered && result.failedToStart !== true && (result.error ?? "") === "";
+        const code = answered && typeof result.code === "number" ? result.code : -1;
+        return { started: started, exitCode: code, crashed: started && code === -1, lines: lines };
+    }
+
     // The test bed's seam for which system this is, as scripts/lock-auth-methods.sh reads
     // it: H2S_LOCK_SYSTEM=nixos|other, counted only together with H2S_LOCK_SYSTEM_PAM_DIR
     // (against the real /etc/pam.d the machine itself is asked). → "nixos", "other", or ""
