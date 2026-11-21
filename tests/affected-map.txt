@@ -11,18 +11,25 @@
 #   unit:<Suite>  unit:all       unit suites (tests/run-unit.sh)
 #   modules:all                  every module fixture part of tests/run-all.sh
 #   lock:<scenario glob>  lock:all
-#                                lock scenarios (tests/lock/run.sh); a scenario named here
-#                                (lock:all aside) no longer runs on every change in the
-#                                lock closure: give it the pattern `@lock` for that
+#                                lock scenarios (tests/lock/run.sh), besides those a change
+#                                in the lock closure runs
 #   self:<script>                a self-test or a runner, run as it is
 #   none                         no test needed (a decision, written down)
+# A line whose pattern starts with "+" only adds its targets: it places nothing, so a file
+# it matches still needs a closure or a line of its own (`--check`).
 # Directives:
-#   @lock-roots <pattern>…       the lock closure starts from these
+#   @lock-roots <pattern>…       the lock closure starts from these: a change in it runs
+#                                every scenario but the @not-lock ones
+#   @not-lock <scenario glob>…   scenarios that are not about the lock screen: they run
+#                                on their own lines only
 #   @lazy <file>…                lists of views loaded when shown: followed only from a
 #                                suite that names the file itself
 
 @lock-roots screensaver/* singletons/lock/* singletons/Lockscreen.qml pam/* scripts/launch.sh tests/lock/launcher.sh
 @lazy singletons/WidgetRegistry.qml singletons/ModuleRules.qml
+# The HUD's own (toasts, the bar's clearance), the module host's fixtures, and the methods
+# script run alone (no compositor, no shell)
+@not-lock toast-* hud-bar-bottom modules modules-notify modules-reload methods-script
 
 # ---- No test needed ------------------------------------------------------------------
 notes/* none
@@ -72,7 +79,11 @@ tests/lock/lib.sh lock:all
 tests/lock/pam/* lock:all
 tests/lock/input/* lock:all
 tests/lock/protocols/* lock:all
+tests/lock/seams/* lock:all
 tests/lock/seams/seams.sh self:tests/launcher-selftest.sh
+tests/lock/launcher.sh lock:supervisor lock:restart-* lock:modules-launcher
+singletons/TestSeams.qml lock:all
+scripts/seams.sh lock:all self:tests/launcher-selftest.sh
 tests/test-tree.sh unit:TestTreeTest lock:all
 tests/lock-closure.sh unit:ModuleRegistriesTest
 tests/affected.sh self:tests/affected-selftest.sh
@@ -98,20 +109,19 @@ singletons/Lockscreen.qml lock:restart-*
 singletons/LockRecoveryRules.qml lock:restart-*
 scripts/lock-auth-methods.sh lock:methods-*
 singletons/lock/MethodDetector.qml lock:methods-*
-@lock lock:methods-* lock:lock-log lock:modules-hung lock:sleep-* lock:notification* lock:notifier-progress
 scripts/lock-log.sh lock:lock-log
-singletons/Module* lock:modules*
-api/* lock:modules*
-tests/fixtures/modules/* lock:modules
++singletons/Module* lock:modules*
++api/* lock:modules*
++tests/fixtures/modules/* lock:modules
 singletons/Notifications.qml lock:notification* lock:notifier-progress lock:modules-notify
 singletons/Notifier.qml lock:notifier-progress lock:modules-notify
 singletons/NotificationRules.qml lock:notification* lock:notifier-progress
 singletons/io/NotificationHandle.qml lock:notifier-progress lock:modules-notify
-components/notification/* lock:notification*
++components/notification/* lock:notification*
 components/NotificationCard.qml lock:notification* lock:toast-*
 Hud.qml lock:toast-* lock:hud-bar-bottom
-hud/* lock:toast-* lock:hud-bar-bottom
-singletons/Toast* lock:toast-* lock:hud-bar-bottom
++hud/* lock:toast-* lock:hud-bar-bottom
++singletons/Toast* lock:toast-* lock:hud-bar-bottom
 singletons/BarGeometry.qml lock:hud-bar-bottom lock:toast-*
 singletons/SleepNoticeRules.qml lock:sleep-*
 singletons/SystemSleep.qml lock:sleep-*

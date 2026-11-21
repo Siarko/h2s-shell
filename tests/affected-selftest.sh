@@ -50,12 +50,20 @@ check "a scenario selects itself" is "tests/lock/run.sh relock"
 run "$REPO" --files scripts/launch.sh
 check "the launcher selects its self-test" has_line "tests/launcher-selftest.sh"
 check "… and the restart and supervisor scenarios" bash -c 'grep -q "^tests/lock/run.sh .*restart-kill-locked.*supervisor" <<< "$1"' _ "$OUTPUT"
+run "$REPO" --files tests/lock/launcher.sh
+check "the bed's launcher selects the supervisor, restart and launcher scenarios" \
+    bash -c 'grep -q "^tests/lock/run.sh .*harness .*modules-launcher .*restart-kill-locked .*supervisor" <<< "$1"' _ "$OUTPUT"
+run "$REPO" --files singletons/lock/PamMethod.qml
+check "a lock change runs the scenarios the map also names (harness, restart-*, supervisor)" \
+    bash -c 'grep -q "^tests/lock/run.sh .*harness .*modules-discovery .*modules-launcher .*restart-crash-locked .*supervisor" <<< "$1"' _ "$OUTPUT"
+run "$REPO" --files tests/lock/seams/TestSeams.qml
+check "the bed's seams select the whole bed" has_line "tests/lock/run.sh"
 run "$REPO" --files scripts/lock-auth-methods.sh
 check "the methods script selects the methods scenarios" has_line "tests/lock/run.sh methods-empty methods-fail methods-fprintd methods-hang methods-script"
 run "$REPO" --files tests/run-all.sh
 check "a runner selects its self-test" is "tests/run-all-selftest.sh"
 run "$REPO" --files nowhere/new-file.txt
-check "a file placed nowhere selects every unit suite" is "tests/run-unit.sh"
+check "a file placed nowhere selects everything" bash -c '[ "$(head -n 1 <<< "$1")" = tests/run-unit.sh ] && [ "$(grep -c "^tests/run-modules.sh" <<< "$1")" = 2 ] && [ "$(tail -n 1 <<< "$1")" = tests/lock/run.sh ]' _ "$OUTPUT"
 check "… and is named" grep -q "nowhere/new-file.txt is placed nowhere" <<< "$ERRORS"
 
 # ---- A made-up repository --------------------------------------------------------------
@@ -67,6 +75,7 @@ Item {
     property var _a: ATest {}
     property var _b: BTest {}
     property var _surface: SurfaceTest {}
+    property var _c: CTest {}
 }
 EOF
 cat > "$tree/tests/ATest.qml" << 'EOF'
@@ -86,8 +95,17 @@ echo 'Item {}' > "$tree/tests/TestCase.qml"
 echo 'Item { property int value: B.value; property string script: "/scripts/run.sh" }' > "$tree/singletons/A.qml"
 echo 'Item { property int value: 1 }' > "$tree/singletons/B.qml"
 echo 'Item {}' > "$tree/singletons/Shared.qml"
+# A lazy list: the views it quotes are loaded when shown, the singleton it uses is not
+mkdir -p "$tree/views"
+echo 'Item { property string view: "views/V.qml"; property int value: Helper.value }' > "$tree/singletons/Reg.qml"
+echo 'Item { property int value: 1 }' > "$tree/singletons/Helper.qml"
+echo 'Item {}' > "$tree/views/V.qml"
+echo 'Item { property int value: Reg.value }' > "$tree/singletons/C.qml"
+printf 'import qs.singletons\nTestCase { function test() { return C.value } }\n' > "$tree/tests/CTest.qml"
+echo 'Item {}' > "$tree/singletons/Orphan.qml"
+echo 'Item {}' > "$tree/screensaver/Old.qml"
 echo 'Item {}' > "$tree/tests-modules.qml"
-printf 'import qs.singletons\nItem { Shared {} }\n' > "$tree/screensaver/Surface.qml"
+printf 'import qs.singletons\nItem { Shared {} Old {} }\n' > "$tree/screensaver/Surface.qml"
 echo 'module' > "$tree/fixtures/mod/main.qml"
 echo 'echo run' > "$tree/scripts/run.sh"
 echo 'notes' > "$tree/notes/plan.md"
@@ -119,7 +137,11 @@ tests/run-modules.sh modules:all
 tests/lock/run.sh lock:all
 tests/x-selftest.sh none
 scripts/run.sh lock:two
-@lock lock:two
+@not-lock three
+@lazy singletons/Reg.qml
+views/V.qml none
+singletons/Orphan.qml unit:BTest
++singletons/[BHL]* lock:three
 EOF
 printf 'calls\nfail\n' > "$tree/.gitignore"
 git -C "$tree" init -q -b master
@@ -132,15 +154,22 @@ run "$tree" --check
 check "--check passes on a tree whose files are all placed" [ "$STATUS" = 0 ]
 [ "$STATUS" = 0 ] || printf '%s\n%s\n' "$OUTPUT" "$ERRORS" | sed 's/^/    /'
 run "$tree" --files singletons/B.qml
-check "a singleton used through another selects both suites" is "tests/run-unit.sh ATest BTest"
+check "a singleton used through another selects both suites" is "$(printf 'tests/run-unit.sh ATest BTest\ntests/lock/run.sh three')"
 run "$tree" --files singletons/A.qml
 check "a comment and a string name nothing" is "tests/run-unit.sh ATest"
 run "$tree" --files scripts/run.sh
 check "a script named by a suite's subject selects the suite, and the map adds its scenario" \
     is "$(printf 'tests/run-unit.sh ATest\ntests/lock/run.sh two')"
 run "$tree" --files singletons/Shared.qml
-check "the lock closure selects the scenarios the map does not name, and those given @lock" \
-    is "$(printf 'tests/run-unit.sh SurfaceTest\ntests/lock/run.sh one three two')"
+check "the lock closure selects every scenario but the @not-lock ones" \
+    is "$(printf 'tests/run-unit.sh SurfaceTest\ntests/lock/run.sh one two')"
+run "$tree" --files screensaver/Old.qml
+check "… a scenario named on a line (two) and not (one), @not-lock left out" \
+    is "$(printf 'tests/run-unit.sh SurfaceTest\ntests/lock/run.sh one two')"
+run "$tree" --files singletons/Helper.qml
+check "@lazy: a singleton a lazy file uses is followed" is "$(printf 'tests/run-unit.sh CTest\ntests/lock/run.sh three')"
+run "$tree" --files views/V.qml
+check "@lazy: a view it quotes is not, from a suite that does not name it" is ""
 run "$tree" --files fixtures/mod/main.qml
 check "a module part's file selects that part" is "tests/run-modules.sh fixtures/mod"
 run "$tree" --files tests/TestCase.qml
@@ -166,7 +195,7 @@ check "the working tree and untracked files count" is "$(printf 'tests/run-unit.
 git -C "$tree" checkout -q notes/plan.md
 rm "$tree/tests/lock/tests/four.sh"
 run "$tree" "master..work"
-check "an explicit range" is "tests/run-unit.sh ATest BTest"
+check "an explicit range" is "$(printf 'tests/run-unit.sh ATest BTest\ntests/lock/run.sh three')"
 run "$tree" "HEAD^!"
 check "a single commit, as git diff takes it" is "tests/run-unit.sh ATest"
 run "$tree" "no-such-ref..HEAD"
@@ -174,10 +203,35 @@ check "a range git cannot read: status 2" [ "$STATUS" = 2 ]
 run "$tree" --bogus
 check "a wrong option: status 2" [ "$STATUS" = 2 ]
 run "$tree" --why --files singletons/B.qml
-check "--why names each file and what it selects" is "$(printf 'singletons/B.qml\tunit:ATest unit:BTest')"
+check "--why names each file and what it selects" is "$(printf 'singletons/B.qml\tlock:three unit:ATest unit:BTest')"
+git -C "$tree" checkout -q segment-a
+run "$tree"
+check "on a segment: against its own start from master" is "$(printf 'tests/run-unit.sh ATest BTest\ntests/lock/run.sh three')"
+git -C "$tree" checkout -q work
+git -C "$tree" branch -q -f segment-a work
+run "$tree"
+check "a branch merged into a segment: against the segment's start" is "$(printf 'tests/run-unit.sh ATest BTest\ntests/lock/run.sh three')"
+
+# Paths the tree no longer has
+git -C "$tree" checkout -q -b deletions
+git -C "$tree" rm -q singletons/B.qml
+commit "B gone"
+run "$tree" "HEAD^!"
+check "a deleted file selects the suites of the files still naming it" is "$(printf 'tests/run-unit.sh ATest BTest\ntests/lock/run.sh three')"
+git -C "$tree" rm -q screensaver/Old.qml
+commit "Old gone"
+run "$tree" "HEAD^!"
+check "a deleted lock file still selects the lock scenarios" is "$(printf 'tests/run-unit.sh SurfaceTest\ntests/lock/run.sh one two')"
+git -C "$tree" rm -q singletons/Orphan.qml
+commit "Orphan gone"
+run "$tree" "HEAD^!"
+check "a deleted QML file nothing names selects everything" \
+    is "$(printf 'tests/run-unit.sh\ntests/run-modules.sh fixtures/mod\ntests/lock/run.sh')"
+git -C "$tree" checkout -q work
+git -C "$tree" branch -q -D deletions
 git -C "$tree" checkout -q master
 run "$tree"
-check "on master, against a segment-* branch made from it: the working tree only" bash -c '[ "$1" = 0 ] && [ -z "$2" ]' _ "$STATUS" "$OUTPUT"
+check "on master, against a segment-* branch made from it: nothing changed" bash -c '[ "$1" = 0 ] && [ -z "$2" ]' _ "$STATUS" "$OUTPUT"
 git -C "$tree" branch -q -D segment-a work
 run "$tree"
 check "on master, with no other branch to compare with: status 2, a range asked for" \
@@ -186,7 +240,7 @@ check "on master, with no other branch to compare with: status 2, a range asked 
 # --run: every command runs, through the runners; a failing one fails the run
 rm -f "$tree/calls"
 run "$tree" --run --files singletons/Shared.qml
-check "--run runs each command" bash -c '[ "$1" = 0 ] && [ "$(cat "$2/calls")" = "$(printf "tests/run-unit.sh SurfaceTest\ntests/lock/run.sh one three two")" ]' _ "$STATUS" "$tree"
+check "--run runs each command" bash -c '[ "$1" = 0 ] && [ "$(cat "$2/calls")" = "$(printf "tests/run-unit.sh SurfaceTest\ntests/lock/run.sh one two")" ]' _ "$STATUS" "$tree"
 rm -f "$tree/calls"
 touch "$tree/fail"
 run "$tree" --run --files singletons/Shared.qml
@@ -198,10 +252,15 @@ rm -f "$tree/fail"
 echo 'stray' > "$tree/stray.txt"
 git -C "$tree" add stray.txt
 echo 'gone/* none' >> "$tree/tests/affected-map.txt"
+echo 'Item {}' > "$tree/singletons/Loose.qml"
+git -C "$tree" add singletons/Loose.qml
+echo '@not-lock nobody*' >> "$tree/tests/affected-map.txt"
 echo 'notes/* unit:NoSuchTest lock:nothing* self:tests/missing.sh' >> "$tree/tests/affected-map.txt"
 run "$tree" --check
 check "--check fails" [ "$STATUS" = 1 ]
 check "… naming a tracked file placed nowhere" has "not placed: stray.txt"
+check "… and one only a + line matches" has "not placed: singletons/Loose.qml"
+check "… an @not-lock glob that names no scenario" has "@not-lock nobody* names no scenario"
 check "… a pattern that matches no file" has "'gone/*' matches no file"
 check "… a suite tests.qml does not register" has "unit:NoSuchTest is no suite"
 check "… a scenario glob that names none" has "lock:nothing* names no scenario"

@@ -26,15 +26,17 @@
 #   - a module fixture part of tests/run-all.sh (`tests/run-modules.sh <dir>…`) covers the
 #     closure of tests-modules.qml and of every file in its directories;
 #   - tests/affected-map.txt places what a closure cannot see — scripts, shell files, the
-#     runners, the lock scenarios' subjects — and lists what needs no test (`none`);
-#   - a lock scenario covers its own file and what the map gives it; a scenario the map
-#     does not name runs on any change in the lock closure (the map's `@lock-roots` and
-#     their closure); a scenario the map names runs on that closure too where the map
-#     gives it `@lock`;
+#     runners, the lock scenarios' subjects — and lists what needs no test (`none`); a
+#     line starting with "+" only adds tests (a broad pattern), it places nothing;
+#   - a lock scenario covers its own file and what the map gives it, and runs on any
+#     change in the lock closure (the map's `@lock-roots` and their closure) unless the
+#     map's `@not-lock` names it;
 #   - a self-test (tests/*-selftest.sh, tests/install-test.sh, tests/lock/selftest.sh)
 #     covers itself.
-# A changed file none of these places (it should not exist: --check) selects every unit
-# suite, and is named on stderr.
+# A changed path the tree no longer has is scanned as present, so that the files still
+# naming it select their tests. A changed file none of these places (deleted with nothing
+# naming it, or new: --check fails on a tracked one) selects everything — every unit
+# suite, module part and lock scenario — and is named on stderr.
 #
 # Exit status: 0 (with --run: every command passed); 1 when a command run failed, or
 # --check found a file not placed or a map line that is not true; 2 for a wrong option or
@@ -78,11 +80,48 @@ trap 'rm -rf "$work"' EXIT
 # ---- The tree: tracked files and untracked ones not ignored -------------------------
 { git ls-files; git ls-files --others --exclude-standard; } | sort -u > "$work/tree"
 
+# ---- The changed files ----------------------------------------------------------------
+: > "$work/changed"
+if [ "$mode" = check ]; then
+    :
+elif [ "$files_given" = 1 ]; then
+    printf '%s\n' "${given[@]}" > "$work/changed"
+elif [ -n "$range" ]; then
+    git diff --name-only --no-renames "$range" -- > "$work/changed" 2> "$work/error" ||
+        { echo "affected.sh: not a range git diff takes: $range ($(head -n 1 "$work/error"))" >&2; exit 2; }
+else
+    base="" best=""
+    head=$(git rev-parse HEAD)
+    for branch in $(git for-each-ref --format='%(refname:short)' 'refs/heads/segment-*' refs/heads/master); do
+        candidate=$(git merge-base HEAD "$branch" 2> /dev/null) || continue
+        if [ "$candidate" = "$head" ]; then
+            # The branch contains HEAD (HEAD is that segment, or merged into it): its own
+            # start, where it left master, is the base; master containing HEAD is none
+            [ "$branch" != master ] || continue
+            candidate=$(git merge-base "$branch" master 2> /dev/null) || continue
+        fi
+        distance=$(git rev-list --count "$candidate..HEAD")
+        if [ -z "$best" ] || [ "$distance" -lt "$best" ]; then base=$candidate best=$distance; fi
+    done
+    [ -n "$base" ] || { echo "affected.sh: no segment-* or master branch to compare with: name a range" >&2; exit 2; }
+    { git diff --name-only --no-renames "$base" --; git ls-files --others --exclude-standard; } > "$work/changed"
+fi
+sed -i '/^$/d' "$work/changed"
+sort -u -o "$work/changed" "$work/changed"
+
+# A changed path the tree no longer has (deleted, renamed away) is scanned as present, so
+# that the files still naming it reach it
+while read -r file; do
+    [ -e "$file" ] || echo "$file"
+done < "$work/changed" > "$work/gone"
+sort -u "$work/tree" "$work/gone" > "$work/scantree"
+
 # ---- The map --------------------------------------------------------------------------
-# rules: "<pattern>\t<target>" per target; lock_roots: patterns
+# rules: "<pattern>\t<target>\t<places: 1, or 0 for a + line>" per target
 : > "$work/rules"
 lock_roots=()
 lazy_files=()
+not_lock=()
 while read -r pattern targets; do
     case "$pattern" in '' | '#'*) continue ;; esac
     if [ "$pattern" = "@lock-roots" ]; then
@@ -93,8 +132,14 @@ while read -r pattern targets; do
         read -r -a lazy_files <<< "$targets"
         continue
     fi
+    if [ "$pattern" = "@not-lock" ]; then
+        read -r -a not_lock <<< "$targets"
+        continue
+    fi
     [ -n "$targets" ] || { echo "affected.sh: map line without a target: $pattern" >&2; exit 2; }
-    for target in $targets; do printf '%s\t%s\n' "$pattern" "$target" >> "$work/rules"; done
+    places=1
+    if [ "${pattern#+}" != "$pattern" ]; then pattern=${pattern#+} places=0; fi
+    for target in $targets; do printf '%s\t%s\t%s\n' "$pattern" "$target" "$places" >> "$work/rules"; done
 done < "$MAP"
 
 # matches <pattern> <path>: a map pattern (`*` matches anything, `/` included)
@@ -127,13 +172,13 @@ while read -r file; do
     for pattern in "${lock_roots[@]}"; do
         if matches "$pattern" "$file"; then printf '@lock\t%s\n' "$file" >> "$work/roots"; break; fi
     done
-done < "$work/tree"
+done < "$work/scantree"
 
 # ---- The closures: "<file>\t<target>" for every file each target reaches --------------
 sources=()
 while read -r file; do [ -f "$file" ] && sources+=("$file"); done < <(grep -E '\.(qml|js)$' "$work/tree")
 # One awk over every source, the tree's file list and the roots read first
-awk -v treefile="$work/tree" -v rootsfile="$work/roots" -v lazy=" ${lazy_files[*]} " '
+awk -v treefile="$work/scantree" -v rootsfile="$work/roots" -v lazy=" ${lazy_files[*]} " '
     function norm(path,    parts, count, out, i, n) {
         n = split(path, parts, "/")
         count = 0
@@ -169,13 +214,20 @@ awk -v treefile="$work/tree" -v rootsfile="$work/roots" -v lazy=" ${lazy_files[*
         }
         return out
     }
-    function edge(from, to,    i) {
+    # edge(from, to, kind): kind "type" (a type or singleton named, an import) or "path"
+    # (a quoted path)
+    function edge(from, to, kind,    i) {
         if (to == "" || to == "\001" || to == from) return
+        if (kind == "path") pathdeps[from] = pathdeps[from] SUBSEP to
+        else typed[from, to] = 1
         if (to in exists) { deps[from] = deps[from] SUBSEP to; return }
         # (A top-level directory is too broad to be a fixture: "tests/" in a test of a name)
         if ((to in isdir) && index(to, "/") > 0)
             for (i = 1; i <= nfiles; i++)
-                if (index(files[i], to "/") == 1 && files[i] != from) deps[from] = deps[from] SUBSEP files[i]
+                if (index(files[i], to "/") == 1 && files[i] != from) {
+                    deps[from] = deps[from] SUBSEP files[i]
+                    pathdeps[from] = pathdeps[from] SUBSEP files[i]
+                }
     }
     BEGIN {
         while ((getline line < treefile) > 0) {
@@ -211,7 +263,7 @@ awk -v treefile="$work/tree" -v rootsfile="$work/roots" -v lazy=" ${lazy_files[*
             spec = substr(line, RSTART, RLENGTH)
             sub(/^[^"]*"/, "", spec); sub(/"$/, "", spec)
             target = norm((dir == "" ? "" : dir "/") spec)
-            if (target in exists) edge(file, target)
+            if (target in exists) edge(file, target, "type")
             else if (target != "\001") dirs[++ndirs] = target
             next
         }
@@ -224,8 +276,8 @@ awk -v treefile="$work/tree" -v rootsfile="$work/roots" -v lazy=" ${lazy_files[*
             sub(/^file:\/\//, "", text)
             sub(/[:\/]+$/, "", text)
             if (text == "" || text ~ /^[.\/]*$/) continue
-            edge(file, norm((dir == "" ? "" : dir "/") text))
-            edge(file, norm(text))
+            edge(file, norm((dir == "" ? "" : dir "/") text), "path")
+            edge(file, norm(text), "path")
         }
         # Types and singletons named (outside strings: "Hardware" as a label names nothing)
         rest = line
@@ -237,7 +289,7 @@ awk -v treefile="$work/tree" -v rootsfile="$work/roots" -v lazy=" ${lazy_files[*
             done[file, word] = 1
             for (i = 1; i <= ndirs; i++) {
                 candidate = (dirs[i] == "" ? "" : dirs[i] "/") word ".qml"
-                if (candidate in exists) { edge(file, candidate); break }
+                if (candidate in exists) { edge(file, candidate, "type"); break }
             }
         }
     }
@@ -251,11 +303,18 @@ awk -v treefile="$work/tree" -v rootsfile="$work/roots" -v lazy=" ${lazy_files[*
                 current = todo[head]
                 print current "\t" target
                 if (!(current in deps)) continue
-                # A lazy file (a list of views loaded when shown) is followed only from a
-                # root that names it itself
-                if (depth[current] > 1 && index(lazy, " " current " ")) continue
+                # A lazy file (a list of views loaded when shown): the paths it quotes are
+                # followed only from a root that names it itself; its types always
+                cut = depth[current] > 1 && index(lazy, " " current " ")
+                delete quoted
+                if (cut && (current in pathdeps)) {
+                    m = split(substr(pathdeps[current], 2), next_files, SUBSEP)
+                    for (j = 1; j <= m; j++) quoted[next_files[j]] = 1
+                }
                 m = split(substr(deps[current], 2), next_files, SUBSEP)
                 for (j = 1; j <= m; j++)
+                    if (cut && (next_files[j] in quoted) && !((current SUBSEP next_files[j]) in typed)) continue
+                    else
                     # A file that is not QML (a script, a fixture) counts for a suite and
                     # the files it names: further away it is something a type runs, and
                     # its test is the one of that type. For the lock closure only its
@@ -268,29 +327,30 @@ awk -v treefile="$work/tree" -v rootsfile="$work/roots" -v lazy=" ${lazy_files[*
 sort -u -o "$work/reach" "$work/reach"
 
 ls tests/lock/tests/*.sh 2> /dev/null | sed 's|.*/||; s|\.sh$||' | sort > "$work/scenarios"
-# The scenarios the map names (lock:all aside): the others follow the lock closure
-: > "$work/declared"
-awk -F'\t' '$2 ~ /^lock:/ && $2 != "lock:all" { sub(/^lock:/, "", $2); print $2 }' "$work/rules" | while read -r glob; do
-    while read -r scenario; do
+# The scenarios a change in the lock closure runs: all but the map's @not-lock ones
+while read -r scenario; do
+    follows=1
+    for glob in "${not_lock[@]}"; do
         # shellcheck disable=SC2053
-        [[ $scenario == $glob ]] && echo "$scenario"
-    done < "$work/scenarios"
-done | sort -u > "$work/declared"
+        [[ $scenario == $glob ]] && follows=0
+    done
+    [ "$follows" = 0 ] || echo "lock:$scenario"
+done < "$work/scenarios" > "$work/lock-closure-scenarios"
 
-# place <file>: "<target>" lines for what the file selects; nothing when not placed.
-# Targets: unit:<Suite>|unit:all, modules:<index>, lock:<glob>|lock:all, self:<script>, none
+# place <file> [placing]: "<target>" lines for what the file selects; nothing when not
+# placed. With "placing", only what places it: a closure, a line of the map without "+",
+# being a scenario or a self-test.
+# Targets: unit:<Suite>|unit:all, modules:<index>|modules:all, lock:<glob>|lock:all,
+# self:<script>, none
 place() {
-    local file=$1 pattern target in_lock=0
-    while IFS=$'\t' read -r pattern target; do
-        matches "$pattern" "$file" || continue
-        if [ "$target" = "@lock" ]; then continue; fi
-        echo "$target"
+    local file=$1 placing=${2:-} pattern target places
+    while IFS=$'\t' read -r pattern target places; do
+        [ -z "$placing" ] || [ "$places" = 1 ] || continue
+        matches "$pattern" "$file" && echo "$target"
     done < "$work/rules"
     awk -F'\t' -v file="$file" '$1 == file { print $2 }' "$work/reach" | while read -r target; do
         if [ "$target" = "@lock" ]; then
-            comm -23 "$work/scenarios" "$work/declared" | sed 's/^/lock:/'
-            # The scenarios the map gives @lock as a pattern
-            awk -F'\t' '$1 == "@lock" { print $2 }' "$work/rules"
+            cat "$work/lock-closure-scenarios"
         else
             echo "$target"
         fi
@@ -301,17 +361,23 @@ place() {
     esac
 }
 
-# ---- --check: every tracked file placed, the map true ---------------------------------
+# ---- --check: every tracked file placed (not by a + line alone), the map true ---------------------------------
 if [ "$mode" = check ]; then
     problems=0
     while read -r file; do
-        if [ -z "$(place "$file")" ]; then
-            echo "not placed: $file — give it a line in tests/affected-map.txt (a test, or none)"
+        if [ -z "$(place "$file" placing)" ]; then
+            echo "not placed: $file — give it a line in tests/affected-map.txt (a test, or none; a + line does not place)"
             problems=$((problems + 1))
         fi
     done < <(git ls-files)
-    while IFS=$'\t' read -r pattern target; do
-        if [ "$pattern" != "@lock" ] && ! grep -q . < <(while read -r file; do matches "$pattern" "$file" && echo "$file"; done < "$work/tree"); then
+    for glob in "${not_lock[@]}"; do
+        grep -q "^lock:" < <(while read -r scenario; do
+            # shellcheck disable=SC2053
+            [[ $scenario == $glob ]] && echo "lock:$scenario"
+        done < "$work/scenarios") || { echo "map: @not-lock $glob names no scenario"; problems=$((problems + 1)); }
+    done
+    while IFS=$'\t' read -r pattern target _; do
+        if ! grep -q . < <(while read -r file; do matches "$pattern" "$file" && echo "$file"; done < "$work/tree"); then
             echo "map: '$pattern' matches no file of the tree"
             problems=$((problems + 1))
         fi
@@ -358,33 +424,15 @@ if [ "$mode" = check ]; then
     exit 0
 fi
 
-# ---- The changed files ----------------------------------------------------------------
-if [ "$files_given" = 1 ]; then
-    printf '%s\n' "${given[@]}" > "$work/changed"
-elif [ -n "$range" ]; then
-    git diff --name-only --no-renames "$range" -- > "$work/changed" 2> "$work/error" ||
-        { echo "affected.sh: not a range git diff takes: $range ($(head -n 1 "$work/error"))" >&2; exit 2; }
-else
-    current=$(git symbolic-ref --quiet --short HEAD || echo "")
-    base="" best=""
-    for branch in $(git for-each-ref --format='%(refname:short)' 'refs/heads/segment-*' refs/heads/master); do
-        [ "$branch" != "$current" ] || continue
-        candidate=$(git merge-base HEAD "$branch" 2> /dev/null) || continue
-        distance=$(git rev-list --count "$candidate..HEAD")
-        if [ -z "$best" ] || [ "$distance" -lt "$best" ]; then base=$candidate best=$distance; fi
-    done
-    [ -n "$base" ] || { echo "affected.sh: no segment-* or master branch to compare with: name a range" >&2; exit 2; }
-    { git diff --name-only --no-renames "$base" --; git ls-files --others --exclude-standard; } > "$work/changed"
-fi
-sed -i '/^$/d' "$work/changed"
-sort -u -o "$work/changed" "$work/changed"
-
 : > "$work/selected"
 while read -r file; do
     targets=$(place "$file" | sort -u)
-    if [ -z "$targets" ]; then
-        echo "affected.sh: $file is placed nowhere (tests/affected-map.txt): every unit suite" >&2
-        targets="unit:all"
+    # (A deleted QML file nothing names any more: what used it by a name the scan cannot
+    # follow is unknown)
+    if [ -z "$(place "$file" placing)" ] || { grep -qxF "$file" "$work/gone" &&
+        [[ $file =~ \.(qml|js)$ ]] && ! awk -F'\t' -v file="$file" '$1 == file { found = 1 } END { exit !found }' "$work/reach"; }; then
+        echo "affected.sh: $file is placed nowhere (tests/affected-map.txt): everything" >&2
+        targets=$(printf '%s\nunit:all\nmodules:all\nlock:all' "$targets" | sed '/^$/d' | sort -u)
     fi
     if [ "$mode" = why ]; then
         printf '%s\t%s\n' "$file" "$(echo "$targets" | tr '\n' ' ' | sed 's/ $//')"
