@@ -743,6 +743,22 @@ close this section.
   folder, the shell's own its link and versions; every deletion only where `deletionTarget`
   allows, never through a link. One job at a time, never started while locked; `modules job`
   says how the last ended.
+- **Configuration backups**: `singletons/ModuleBackups.qml`, run by the installer inside its
+  job before a module moves to another version (an update, a switch, the way back after a
+  failed start) and before a restore. A backup is
+  `<dataHome>/h2s-shell/module-backups/<id>/<version>-<YYYYMMDD-HHMMSS>/`: `settings.json`
+  (the module's `mod.<id>.*` values in every profile and the pinned globals, as stored),
+  `store.json` (its store's file), `data/<path>` (only the paths its manifest's `backup`
+  names) and `meta.json`; written in a staging directory beside it (`.incoming-…`) and
+  renamed in, the newest 5 kept (`ModuleBackupRules.keepPlan`). Links are never followed: a
+  store that is a link, or a named path whose resolved place is outside the data directory,
+  is left out (and a restore leaves it alone); a link inside a named folder is kept as a
+  link. A backup that cannot be taken (settings that could not be read, a folder that is a
+  link) stops the update or switch before anything moves. `modules backups <id>` lists them;
+  `modules restore <id> <backup>` (`ModuleBackupRules.restorePlan`) backs up first, turns the
+  module off, writes its settings through `Profiles`, its store and named files back by
+  temporary names and renames (folders made one level at a time, never through a link), and
+  turns it on again when it was on.
 - **The registries** read the merged lists — through `ModuleLists` (plain values the
   `Modules` singleton feeds; never `Modules` itself, so the lock screen, which reads its
   settings through Profiles, never constructs or waits for the host; modules arrive after the
@@ -1115,7 +1131,9 @@ module's directory must be the user's own and are set to 700 (`chmod 700 .`, on 
 checked). One that others could write before is refused rather than closed. One it cannot
 make so leaves the module loading with `module.dataDirectory` `""` and a warning in its
 status. The shell never removes it. Nothing in the data directory may be run as root — the
-user can write there.
+user can write there. It is never in a configuration backup as a whole: only the files or
+folders inside it that the manifest's `"backup": ["notes.db", "accounts"]` (API 1.37;
+relative paths, no `..`, at most 32) names.
 
 **Network facts.** `Api.networks` (the saved Wi-Fi and Ethernet networks, a Wi-Fi one only
 once its details are read, so a hotspot never shows) with `Api.networksReady`;

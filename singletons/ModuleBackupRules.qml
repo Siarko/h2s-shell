@@ -164,15 +164,16 @@ Singleton {
         return outcome;
     }
 
-    // meta.json of a backup taken: backupPlan's meta with what was copied — `store` (the
-    // store's file is in it), `data` (each named path: whether it was there), `refused`
+    // meta.json of a backup taken: backupPlan's meta with what was copied — `store` ("ok":
+    // its file is in it, "absent": there was none, "refused": it was there and left out — a
+    // link —, so a restore leaves the current one alone), `data` (each named path: whether it was there), `refused`
     // (what was left out, and why). → the object, or null when the copying did not finish
     function takenMeta(plan, outcome) {
         if (!plan?.ok || !outcome?.complete)
             return null;
         return Object.assign({}, plan.meta, {
             includesData: outcome.data.some(each => each.present),
-            store: outcome.store === "ok",
+            store: outcome.store,
             data: outcome.data.map(each => ({ path: each.path, present: each.present })),
             refused: outcome.refused.slice()
         });
@@ -197,7 +198,8 @@ Singleton {
     }
 
     // meta.json read back for backup `name` of module `id`. → { ok, problem, entry: { name,
-    //   version, commit, takenAt, reason, includesData, store, data: [{ path, present }] } }
+    //   version, commit, takenAt, reason, includesData, store ("ok" | "absent" | "refused"),
+    //   data: [{ path, present }] } }
     function parseMeta(text, id, name) {
         const refused = problem => ({ ok: false, problem: problem, entry: null });
         if (!validName(name))
@@ -216,7 +218,7 @@ Singleton {
             return refused("its meta.json has no time");
         if (!ModuleUpdateRules.backupReasons.includes(meta.reason))
             return refused("its meta.json has no reason");
-        if (typeof meta.store !== "boolean" || !Array.isArray(meta.data))
+        if (!["ok", "absent", "refused"].includes(meta.store) || !Array.isArray(meta.data))
             return refused("its meta.json does not say what it holds");
         const data = [];
         for (const each of meta.data) {
@@ -278,12 +280,13 @@ Singleton {
 
     // Restoring backup `name` of module `id`, as the listing read just now has it.
     // `status`: the host's status of the module (null: not here); `enabled`: whether it is
-    // on now. → { ok, problem, entry, enableAfter, store: "put"|"drop", data: [{ op
+    // on now. → { ok, problem, entry, enableAfter, store: "put"|"drop"|"keep", data: [{ op
     //   "put"|"drop", path }] } — what the backup held is written back, and what it did not
-    //   hold of what it names is removed (the current state is backed up first); the module
+    //   hold of what it names is removed (the current state is backed up first); a store the
+    //   backup left out (refused) is kept as it is; the module
     //   is turned off for it and on again only when it was on
     function restorePlan(id, name, listed, status, enabled) {
-        const refused = problem => ({ ok: false, problem: problem, entry: null, enableAfter: false, store: "drop", data: [] });
+        const refused = problem => ({ ok: false, problem: problem, entry: null, enableAfter: false, store: "keep", data: [] });
         if (!ModuleManifestRules.validId(id))
             return refused("Not a module id");
         if (!validName(name))
@@ -296,7 +299,8 @@ Singleton {
         if (!entry)
             return refused((listed.unknown ?? []).includes(name) ? "the backup " + name + " cannot be read: nothing restored"
                                                                  : "No backup " + name + " of " + id);
-        return { ok: true, problem: "", entry: entry, enableAfter: enabled === true, store: entry.store ? "put" : "drop",
+        return { ok: true, problem: "", entry: entry, enableAfter: enabled === true,
+                 store: entry.store === "ok" ? "put" : entry.store === "absent" ? "drop" : "keep",
                  data: entry.data.map(each => ({ op: each.present ? "put" : "drop", path: each.path })) };
     }
 

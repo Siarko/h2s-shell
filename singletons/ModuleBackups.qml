@@ -33,8 +33,10 @@ Scope {
     property bool allRead: false
 
     property int _asked: 0
+    // id → the token of the listing whose answer `lists` holds for it: an older answer, of
+    // one module or of all, never replaces a newer one
+    property var _applied: ({})
     property var _warned: []    // "<id>\t<path>\t<why>" already said: each said once a run
-    property var _askedFor: ({})
 
     // ---- Taking one ----
 
@@ -93,7 +95,14 @@ Scope {
                                 console.warn("[Modules] " + id + ": left out of its backup: " + each.path + " (" + each.why + ")");
                             }
                         }
-                        _prune(id, options?.protect ?? [], () => done({ ok: true, problem: "", name: named[0], meta: meta }));
+                        // The new one is never pruned at once (others may carry a later time);
+                        // gone anyway, or the list unreadable: no backup to rely on
+                        _prune(id, (options?.protect ?? []).concat([named[0]]), listed => {
+                            if (listed.ok && listed.backups.some(each => each.name === named[0]))
+                                done({ ok: true, problem: "", name: named[0], meta: meta });
+                            else
+                                done({ ok: false, problem: "it could not be read back", name: "", meta: null });
+                        });
                     }
                 });
             }
@@ -125,7 +134,7 @@ Scope {
     // backup's name ("-2" … after it when a backup of that second is there)
     readonly property string _finishScript: "s=$1; b=$2; n=$3; m=$4; umask 077; "
         + "[ -d \"$s\" ] && [ ! -L \"$s\" ] && [ ! -L \"$b\" ] || exit 1; "
-        + "t=$(mktemp -- \"$s/.meta.XXXXXX\") || exit 1; printf '%s' \"$m\" > \"$t\" && mv -f -- \"$t\" \"$s/meta.json\" || { rm -f -- \"$t\"; exit 1; }; "
+        + "t=$(mktemp -- \"$s/.meta.XXXXXX\") || exit 1; printf '%s' \"$m\" > \"$t\" && mv -fT -- \"$t\" \"$s/meta.json\" || { rm -f -- \"$t\"; exit 1; }; "
         + "for k in '' -2 -3 -4 -5 -6 -7 -8 -9; do { [ -e \"$b/$n$k\" ] || [ -L \"$b/$n$k\" ]; } && continue; "
         + "mv -T -- \"$s\" \"$b/$n$k\" && { printf 'name\\t%s\\n' \"$n$k\"; exit 0; }; done; exit 1"
 
@@ -134,16 +143,17 @@ Scope {
     }
 
     // The backups beyond the newest kept ones deleted (ModuleBackupRules.keepPlan: what
-    // cannot be read, staging leftovers and `protect` are left alone), the list read again
+    // cannot be read, staging leftovers and `protect` are left alone), the list read again.
+    // → next(the listing as it is after)
     function _prune(id, protect, next) {
         list(id, listed => {
             if (!listed.ok) {
-                next();
+                next(listed);
                 return;
             }
             const plan = ModuleBackupRules.keepPlan(listed.backups.map(each => ({ dir: each.name, takenAt: each.takenAt })), protect);
             if (plan.delete.length === 0) {
-                next();
+                next(listed);
                 return;
             }
             _run(["sh", "-c", "b=$1; shift; [ -L \"$b\" ] && exit 1; for n; do case $n in ''|.*|*/*) continue ;; esac; "
@@ -152,7 +162,7 @@ Scope {
                 done: result => {
                     if (!result.ok)
                         console.warn("[Modules] " + id + ": older backups could not be deleted");
-                    list(id, () => next());
+                    list(id, after => next(after));
                 }
             });
         });
@@ -164,11 +174,7 @@ Scope {
     // { ok, backups, unknown }) — for "", done(lists)
     function list(id, done) {
         const token = ++_asked;
-        if (id === "")
-            _askedFor = {};
-        else if (ModuleManifestRules.validId(id))
-            _askedFor = Object.assign({}, _askedFor, { [id]: token });
-        else {
+        if (id !== "" && !ModuleManifestRules.validId(id)) {
             Qt.callLater(() => done({ ok: false, backups: [], unknown: [] }));
             return;
         }
@@ -187,23 +193,29 @@ Scope {
                 const rows = ModuleBackupRules.listingRows(lines);
                 if (id !== "") {
                     const listed = ModuleBackupRules.listing(id, rows[id] ?? [], ok);
-                    // A newer listing of this module answers instead
-                    if ((_askedFor[id] ?? 0) <= token)
+                    if ((_applied[id] ?? 0) < token) {
                         lists = Object.assign({}, lists, { [id]: listed });
+                        _applied = Object.assign({}, _applied, { [id]: token });
+                    }
                     done(listed);
                     return;
                 }
-                const next = {};
-                if (ok)
-                    for (const each of Object.keys(rows))
-                        next[each] = ModuleBackupRules.listing(each, rows[each], true);
-                const merged = Object.assign({}, ok ? next : lists);
-                for (const each of Object.keys(lists))
-                    if ((_askedFor[each] ?? 0) > token)
-                        merged[each] = lists[each];
-                lists = merged;
-                if (ok)
+                if (ok) {
+                    const merged = Object.assign({}, lists);
+                    const applied = Object.assign({}, _applied);
+                    for (const each of Object.keys(rows).concat(Object.keys(lists))) {
+                        if ((applied[each] ?? 0) >= token)
+                            continue;
+                        applied[each] = token;
+                        if (rows[each])
+                            merged[each] = ModuleBackupRules.listing(each, rows[each], true);
+                        else
+                            delete merged[each];
+                    }
+                    lists = merged;
+                    _applied = applied;
                     allRead = true;
+                }
                 done(lists);
             }
         });
@@ -263,16 +275,21 @@ Scope {
         + "sd=${st%/*}; mkdir -p -- \"$sd\" || exit 1; "
         + "if [ \"$sm\" = put ]; then "
         + "if [ -f \"$src/store.json\" ] && [ ! -L \"$src/store.json\" ] && t=$(mktemp -- \"$sd/.restore.XXXXXX\"); then "
-        + "if cp -P -- \"$src/store.json\" \"$t\" && chmod 600 -- \"$t\" && mv -f -- \"$t\" \"$st\"; then printf 'ok\\tstore\\n'; else rm -f -- \"$t\"; printf 'fail\\tstore\\tnot written\\n'; fi; "
+        + "if cp -P -- \"$src/store.json\" \"$t\" && chmod 600 -- \"$t\" && mv -fT -- \"$t\" \"$st\"; then printf 'ok\\tstore\\n'; else rm -f -- \"$t\"; printf 'fail\\tstore\\tnot written\\n'; fi; "
         + "else printf 'fail\\tstore\\tnot in the backup\\n'; fi; "
+        + "elif [ \"$sm\" = keep ]; then printf 'ok\\tstore\\n'; "
         + "else if [ -L \"$st\" ] || [ -f \"$st\" ]; then rm -f -- \"$st\" && printf 'ok\\tstore\\n' || printf 'fail\\tstore\\tnot removed\\n'; "
         + "elif [ -e \"$st\" ]; then printf 'fail\\tstore\\tnot a file\\n'; else printf 'ok\\tstore\\n'; fi; fi; "
         + "mkdir -p -- \"$d\" && base=$(realpath -e -- \"$d\") || { while [ $# -ge 2 ]; do printf 'fail\\t%s\\tno data directory\\n' \"$2\"; shift 2; done; echo done; exit 0; }; "
         + "sb=; [ -d \"$src/data\" ] && [ ! -L \"$src/data\" ] && sb=$(realpath -e -- \"$src/data\"); "
-        + "while [ $# -ge 2 ]; do op=$1; rel=$2; shift 2; "
-        + "case $rel in */*) parent=$d/${rel%/*} ;; *) parent=$d ;; esac; name=${rel##*/}; "
-        + "mkdir -p -- \"$parent\" 2>/dev/null; rp=$(realpath -e -- \"$parent\" 2>/dev/null) || { printf 'fail\\t%s\\tits folder could not be made\\n' \"$rel\"; continue; }; "
-        + "case $rp in \"$base\"|\"$base\"/*) ;; *) printf 'fail\\t%s\\tleads outside its data directory\\n' \"$rel\"; continue ;; esac; "
+        + "set -f; while [ $# -ge 2 ]; do op=$1; rel=$2; shift 2; "
+        + "case $rel in */*) up=${rel%/*} ;; *) up= ;; esac; name=${rel##*/}; "
+        // Its folders made one level at a time from the data directory down, none a link:
+        // nothing is ever made through a link, inside the directory or out of it
+        + "rp=$base; bad=; old=$IFS; IFS=/; for c in $up; do IFS=$old; [ -n \"$c\" ] || continue; "
+        + "if [ -L \"$rp/$c\" ]; then bad='leads through a link'; break; fi; "
+        + "[ -d \"$rp/$c\" ] || mkdir -- \"$rp/$c\" 2>/dev/null || { bad='its folder could not be made'; break; }; rp=$rp/$c; done; IFS=$old; "
+        + "[ -z \"$bad\" ] || { printf 'fail\\t%s\\t%s\\n' \"$rel\" \"$bad\"; continue; }; "
         + "from=$src/data/$rel; "
         + "if [ \"$op\" = put ]; then fp=$(realpath -e -- \"${from%/*}\" 2>/dev/null) || fp=; "
         + "case $fp in \"$sb\"|\"$sb\"/*) [ -n \"$sb\" ] ;; *) false ;; esac && { [ -e \"$from\" ] || [ -L \"$from\" ]; } "

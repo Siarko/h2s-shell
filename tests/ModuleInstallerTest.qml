@@ -578,7 +578,7 @@ TestCase {
         });
         _then("alpha is loaded from the version linked", () => _idle() && _status("alpha")?.directory.endsWith("/9.9.9-abcdef0"),
               () => assertEqual(_status("alpha").source, "repository", "… still the shell's own"));
-        _then("alpha has data", _idle, () => _sh("mkdir -p \"$1/data/h2s-shell/module-data/alpha\" \"$1/config/h2s_shell/modules\" && touch \"$1/data/h2s-shell/module-data/alpha/x\" && printf '{}' > \"$1/config/h2s_shell/modules/alpha.json\"", [temp]));
+        _then("alpha has data", _idle, () => _sh("mkdir -p \"$1/data/h2s-shell/module-data/alpha\" \"$1/config/h2s_shell/modules\" && touch \"$1/data/h2s-shell/module-data/alpha/x\" && printf '{}' > \"$1/config/h2s_shell/modules/alpha.json\" && printf '{}' > \"$1/config/h2s_shell/modules/alphax.json\"", [temp]));
         _then("alpha's data is made", () => _out !== null, () => assert(_out.ok, "alpha's data directory and store made"));
         _job("a module with its data", () => installer.remove("alpha", _status("alpha").directory, { withData: true }), result =>
              assert(result.ok && result.message.includes("with its data"), "alpha removed with its data (" + result.message + ")"));
@@ -590,5 +590,6 @@ TestCase {
         _then("alpha's data is read", () => true, () => _sh("ls -A \"$1/data/h2s-shell/module-data\" \"$1/config/h2s_shell/modules\"", [temp]));
         _then("alpha's data was read", () => _out !== null, () =>
               assert(!_out.lines.includes("alpha") && !_out.lines.includes("alpha.json"), "… its data directory and its store's file gone"));
+        _then("alphax's store is looked at", () => true, () => assertEqual(_out.lines.includes("alphax.json"), true, "… a store of a similar id (alphax.json) untouched"));
     }
 }

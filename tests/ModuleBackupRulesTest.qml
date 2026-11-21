@@ -95,7 +95,7 @@ TestCase {
                                           ["notes.db", "escape", "sub/x"]);
         const meta = rules.takenMeta(plan, outcome);
         assertEqual(JSON.stringify(meta), JSON.stringify({ id: "weather", version: "1.2.0", commit: "abcdef1", takenAt: 1000, reason: "update", includesData: true,
-                                                          store: false, data: [{ path: "notes.db", present: true }, { path: "sub/x", present: false }],
+                                                          store: "absent", data: [{ path: "notes.db", present: true }, { path: "sub/x", present: false }],
                                                           refused: [{ path: "escape", why: "leads outside its data directory" }] }),
                     "meta: the plan's, with what was copied");
         assertEqual(rules.takenMeta(plan, Object.assign({}, outcome, { complete: false })), null, "meta: copying that did not finish: no backup");
@@ -103,7 +103,8 @@ TestCase {
         const read = rules.parseMeta(JSON.stringify(meta), "weather", "1.2.0-19700101-000001");
         assert(read.ok, "meta read: ok");
         assertEqual(read.entry.name + " " + read.entry.version + " " + read.entry.reason + " " + read.entry.store + " " + read.entry.data.length,
-                    "1.2.0-19700101-000001 1.2.0 update false 2", "meta read: its fields");
+                    "1.2.0-19700101-000001 1.2.0 update absent 2", "meta read: its fields");
+        assert(!rules.parseMeta(JSON.stringify(Object.assign({}, meta, { store: true })), "weather", "a").ok, "meta read: a store state that is not ok/absent/refused");
         assert(!rules.parseMeta(JSON.stringify(meta), "clock", "1.2.0-x").ok, "meta read: another module's: refused");
         assert(!rules.parseMeta(JSON.stringify(meta), "weather", ".incoming-1.2.0").ok, "meta read: a staging name: never a backup");
         assert(!rules.parseMeta("{", "weather", "a").ok, "meta read: not JSON");
@@ -117,7 +118,7 @@ TestCase {
     }
 
     function _metaText(takenAt) {
-        return JSON.stringify({ id: "weather", version: "1.0.0", commit: "", takenAt: takenAt, reason: "switch", includesData: false, store: true, data: [], refused: [] });
+        return JSON.stringify({ id: "weather", version: "1.0.0", commit: "", takenAt: takenAt, reason: "switch", includesData: false, store: "ok", data: [], refused: [] });
     }
 
     function _listing() {
@@ -146,9 +147,10 @@ TestCase {
 
     function _restore() {
         const listed = rules.listing("weather", rules.listingRows([
-            "B\tweather\t1.0.0-20261101-100000\td\t" + JSON.stringify({ id: "weather", version: "1.0.0", commit: "", takenAt: 1000, reason: "update", store: false,
+            "B\tweather\t1.0.0-20261101-100000\td\t" + JSON.stringify({ id: "weather", version: "1.0.0", commit: "", takenAt: 1000, reason: "update", store: "absent",
                                                                          data: [{ path: "notes.db", present: true }, { path: "cache/x", present: false }] }),
-            "B\tweather\t1.0.0-20261105-100000\td\t{broken"
+            "B\tweather\t1.0.0-20261105-100000\td\t{broken",
+            "B\tweather\t1.0.0-20261106-100000\td\t" + JSON.stringify({ id: "weather", version: "1.0.0", takenAt: 3000, reason: "update", store: "refused", data: [] })
         ]).weather, true);
         const status = { id: "weather", state: "loaded" };
         const plan = rules.restorePlan("weather", "1.0.0-20261101-100000", listed, status, true);
@@ -157,6 +159,8 @@ TestCase {
                     "drop [{\"op\":\"put\",\"path\":\"notes.db\"},{\"op\":\"drop\",\"path\":\"cache/x\"}] true",
                     "restore: what the backup held put back, what it named and did not hold removed, on again as it was");
         assertEqual(rules.restorePlan("weather", "1.0.0-20261101-100000", listed, status, false).enableAfter, false, "restore: a module that was off stays off");
+        assertEqual(rules.restorePlan("weather", "1.0.0-20261106-100000", listed, status, true).store, "keep",
+                    "restore: a store the backup left out (a link) is kept, never deleted");
         assert(rules.restorePlan("weather", "1.0.0-20261105-100000", listed, status, true).problem.includes("cannot be read"), "restore: an unreadable backup: refused");
         assert(rules.restorePlan("weather", "1.0.0-20991231-000000", listed, status, true).problem.startsWith("No backup"), "restore: a name it has none of: refused");
         assert(!rules.restorePlan("weather", "../x", listed, status, true).ok, "restore: not a backup's name");

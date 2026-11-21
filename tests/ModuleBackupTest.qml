@@ -201,6 +201,8 @@ TestCase {
         _roundTrip();
         _offStaysOff();
         _cap();
+        _failures();
+        _lockDuring();
         if (after === null || after.done)
             _clock.start();
     }
@@ -224,7 +226,7 @@ TestCase {
             const entry = _backups()[0];
             _updateBackup = entry.name;
             assert(/^1\.0\.0-\d{8}-\d{6}$/.test(entry.name), "the backup is named by the version it was taken from and the time: " + entry.name);
-            assertEqual(entry.reason + " " + entry.version + " " + entry.store + " " + entry.includesData, "update 1.0.0 true true", "… before an update, with store and data");
+            assertEqual(entry.reason + " " + entry.version + " " + entry.store + " " + entry.includesData, "update 1.0.0 ok true", "… before an update, with store and data");
             assertEqual(JSON.stringify(entry.data), JSON.stringify([{ path: "notes.db", present: true }, { path: "sub", present: true }, { path: "missing", present: false }]),
                         "… the named paths there, one missing, the link out not among them");
         });
@@ -351,6 +353,69 @@ TestCase {
              assert(result.ok, "the oldest of five restored, though a backup was taken before it (" + result.message + ")"));
     }
 
+    // The module's state as it is: its version, the version directories, its store's file
+    function _snapshot(description) {
+        _shell(description, "ls \"$1/data/h2s-shell/module-versions/kappa\" | sed 's/^/version\t/'; printf 'store\t%s\n' \"$(cat \"$1/config/h2s_shell/modules/kappa.json\")\"",
+               lines => suite._state = { version: host.status("kappa")?.version ?? "", lines: lines.join("|"), profiles: Config.profiles });
+    }
+
+    function _unchanged(description) {
+        const before = { value: null };
+        _then(description + ": the state before is kept", () => true, () => before.value = suite._state);
+        _snapshot(description + ": the state after");
+        _then(description + ": compared", () => true, () => {
+            assertEqual(suite._state.version + "|" + suite._state.lines, before.value.version + "|" + before.value.lines,
+                        description + ": nothing moved (version, version directories, store)");
+            assertEqual(suite._state.profiles, before.value.profiles, description + ": the settings untouched");
+        });
+    }
+
+    // A backup that cannot be taken stops an update, a switch and a restore, nothing moved
+    function _failures() {
+        _shell("kappa 1.2.0 in its folder", "printf '%s\\n' '" + _version("1.2.0") + "' > \"$1/folders/kappa/module.json\"", () => {});
+        _snapshot("before the failures");
+        _then("the settings unreadable", _idle, () => {
+            suite._oldest = _backups()[0]?.name ?? "";
+            Config.globals = "{";
+        });
+        _job("an update with the settings unreadable", () => installer.install(temp + "/folders/kappa", {}), result =>
+             assert(!result.ok && result.message.includes("could not be backed up"), "the update stops (" + result.message + ")"));
+        _unchanged("the update that stopped");
+        _then("switch: the other version", _idle, () => suite._switchTarget = host.status("kappa")?.version === "1.1.0" ? "1.0.0" : "1.1.0");
+        _shell("switch: its directory", "ls \"$1/data/h2s-shell/module-versions/kappa\"", lines =>
+               suite._switchDir = lines.find(line => line.startsWith(suite._switchTarget + "-")) ?? "");
+        _job("a switch with the settings unreadable", () => installer.switchVersion("kappa", suite._switchDir), result =>
+             assert(!result.ok && result.message.includes("could not be backed up"), "the switch stops (" + result.message + ")"));
+        _unchanged("the switch that stopped");
+        _job("a restore with the settings unreadable", () => installer.restore("kappa", suite._oldest), result =>
+             assert(!result.ok && result.message.includes("nothing restored"), "the restore stops (" + result.message + ")"));
+        _unchanged("the restore that stopped");
+        _then("the settings readable again", _idle, () => Config.globals = JSON.stringify(_globals));
+        _shell("the backups folder a link", "b=" + _backupsDir + "; mv \"$b\" \"$b.real\" && ln -s \"$b.real\" \"$b\"", () => {});
+        _snapshot("before the link");
+        _job("a switch with the backups folder a link", () => installer.switchVersion("kappa", suite._switchDir), result =>
+             assert(!result.ok && result.message.includes("could not be backed up"), "the switch stops (" + result.message + ")"));
+        _unchanged("the switch that stopped at the link");
+        _shell("the backups folder back", "b=" + _backupsDir + "; [ -d \"$b.real/\" ] && rm \"$b\" && mv \"$b.real\" \"$b\"", () => {});
+    }
+
+    // The session locks while a restore runs: nothing is written, the module stays on
+    function _lockDuring() {
+        _snapshot("before the lock");
+        _then("a restore, then the lock: nothing runs", _idle, () => {
+            assertEqual(installer.restore("kappa", suite._oldest), "", "a restore started");
+            host.locked = true;
+        });
+        _then("the restore under the lock: done", () => !installer.busy, () => {
+            const result = installer.lastResult ?? {};
+            assert(!result.ok && result.message.includes("locked"), "the lock stops it before anything is written (" + result.message + ")");
+            host.locked = false;
+            assert(host.isEnabled("kappa"), "… kappa still on");
+        });
+        _unchanged("the restore the lock stopped");
+    }
+
+    property var _state: null
     property string _switchTarget: ""
     property string _oldest: ""
     property string _switchDir: ""
