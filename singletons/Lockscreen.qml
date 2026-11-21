@@ -129,8 +129,8 @@ Singleton {
     // with a growing pause; see the "Recovery" note above
     property bool _restorePending: false
     // The start probe has answered; a lock is being taken back from the marker (from the
-    // marker's answer until the compositor confirms the lock or ends it) — `restoring` in
-    // the driver, mirrored
+    // marker's answer until the compositor confirms the lock or ends it) — the recovery
+    // state's `checked` and `restoring` (LockRecoveryRules), mirrored
     property bool _markerChecked: false
     property bool _restoring: false
     // The operations of the driver, closures over its private state; null until built
@@ -185,10 +185,6 @@ Singleton {
     // The launcher's record of its restarts while locked (scripts/launch.sh, "Restarts while
     // locked"): overwritten here when a lock ends, which tells the launcher of the unlock
     readonly property string _lockRestartsPath: _runtimeDirectory !== "" ? _runtimeDirectory + "/h2s-shell-lock-restarts" : ""
-    // Taking the lock back after the compositor refused it: 5 s, doubling up to a minute
-    // (under Hyprland each attempt is first a question to it — cheap, and asking for the lock
-    // only once it would be given)
-    readonly property var _restoreTable: ({ minimum: 5000, maximum: 60000, healthyRun: Infinity })
     // Hyprland's instance, when the shell runs under it: asked before a lock is taken back
     readonly property string _hyprlandSignature: Quickshell.env("HYPRLAND_INSTANCE_SIGNATURE") ?? ""
 
@@ -215,15 +211,14 @@ Singleton {
         let sessionInForce = 0;
         let watchFilesBefore = true;
         let fallbackKnown = false;
-        // Recovery (see the header). `lockKey`: this compositor session's key for the
-        // marker, "?" until the start probe has answered (a marker with "?" counts as this
-        // session's: fail closed). `restoring`: the lock in force or being asked for is one
-        // the marker asked to take back — until the compositor confirms it
-        let lockKey = "?";
-        let markerState = "";
-        let restoring = false;
-        let restoreDelay = 0;
-        let restoreRefusalLogged = false;
+        // Recovery (see the header): the marker, taking a lock back, asking again — decided
+        // by LockRecoveryRules, whose one state this is. What a reload carries over is not in
+        // it but in `_carried`, read in before each of its steps
+        let recovery = LockRecoveryRules.initial({
+            markerUsable: root._markerPath !== "",
+            hyprland: root._hyprlandSignature !== "",
+            runtimeDirectory: root._runtimeDirectory
+        });
         // Each PAM conversation's start, for the duration logged at its end: { method:
         // { conversation, at, config } }
         const pamStarts = {};
@@ -284,8 +279,8 @@ Singleton {
                         ending.retire();
                         ending.destroy();
                     }
-                    if (state.phase.status === "unlocked" && (markerState === "locked" || _carried.held))
-                        lockOver();
+                    if (state.phase.status === "unlocked")
+                        recover({ type: "ended", locked: false, lastEnd: state.phase.lastEnd });
                 },
                 onError: (where, error, effect) => log("error", (effect ? "effect " + describeEffect(effect) : where) + " failed: " + error)
             });
@@ -353,8 +348,7 @@ Singleton {
             case "lockCompositor":
                 sessionInForce = effect.session;
                 // The marker first: a shell that dies from here on comes back locked
-                writeMarker("locked");
-                _carried.secure = false;
+                recover({ type: "lockAsked" });
                 _sessionLock.locked = true;
                 // Reliable in this direction (only the unlock notify is broken): false right
                 // after setting it means Quickshell refused the lock without a signal — no
@@ -365,19 +359,11 @@ Singleton {
                 if (!_sessionLock.locked) {
                     log("warning", "the session lock was refused at once (session " + effect.session + ")");
                     _sessionLock.locked = false;
-                    _carried.held = false;
-                    // Taking back a lock this process had is refused only by a process that
-                    // believes it still holds one (Quickshell's process-wide lock manager,
-                    // left with a stale lock when a locked WlSessionLock was destroyed: a
-                    // hard reload). It can never lock again: a fresh process can — the
-                    // launcher starts one, and the marker locks it
-                    if (restoring) {
-                        exitForRestart("this process cannot take the session lock back (Quickshell still counts a destroyed lock as active)");
-                        break;
-                    }
-                    dispatch({ type: "compositorFinished", session: effect.session });
+                    // The rules say whether the lock rules hear of it, or (a lock being taken
+                    // back) this process quits for a fresh one
+                    recover({ type: "lockRefused", session: effect.session });
                 } else {
-                    _carried.held = true;
+                    recover({ type: "lockTaken" });
                 }
                 break;
             case "adoptCompositorLock":
@@ -387,9 +373,7 @@ Singleton {
                 // compositor here
                 sessionInForce = effect.session;
                 _sessionLock.locked = true;
-                _carried.held = true;
-                writeMarker("locked");
-                Qt.callLater(checkCarriedLock);
+                recover({ type: "lockAdopted" });
                 break;
             case "unlockCompositor":
                 // The rules emit this only for a session the compositor confirmed. Checked
@@ -580,21 +564,72 @@ Singleton {
 
         // ---- Recovery ----
 
-        function writeMarker(word) {
-            if (root._markerPath === "")
-                return;
-            // A pending "unlocked" never overwrites a newer "locked"
-            _markerUnlockDelay.stop();
-            _carried.markerUnlockPending = false;
-            markerState = word;
-            _marker.setText(word === "locked" ? "locked " + lockKey + "\n" : "unlocked\n");
-            log("info", "lock marker: " + (word === "locked" ? "locked " + lockKey : "unlocked"));
-            // The session is unlocked: the launcher's count of restarts while locked starts
-            // afresh (scripts/launch.sh, "Restarts while locked"). Anything but its count
-            // says so; the time makes each write differ from the last (FileView skips a
-            // write of the text it already holds, and the launcher writes behind its back)
-            if (word === "unlocked" && root._lockRestartsPath !== "")
+        // One step of LockRecoveryRules: `_carried` read in, the new state committed and
+        // mirrored before the effects run (an effect may lead back here: requestLock runs the
+        // lock rules at once, and their lockCompositor comes back as lockAsked)
+        function recover(event) {
+            const result = LockRecoveryRules.step(LockRecoveryRules.withCarried(recovery, _carried), event);
+            recovery = result.state;
+            _carried.held = recovery.carried.held;
+            _carried.secure = recovery.carried.secure;
+            _carried.markerUnlockPending = recovery.carried.markerUnlockPending;
+            root._restoring = recovery.restoring;
+            root._restorePending = recovery.restorePending;
+            root._markerChecked = recovery.checked;
+            for (const effect of result.effects)
+                recoveryEffect(effect);
+        }
+
+        function recoveryEffect(effect) {
+            switch (effect.type) {
+            case "probeMarker":
+                _markerProbe.running = true;
+                break;
+            case "probeRestore":
+                if (!_restoreProbe.running)
+                    _restoreProbe.running = true;
+                break;
+            case "requestLock":
+                dispatch({ type: "lockRequested", source: effect.source });
+                break;
+            case "writeMarker":
+                _marker.setText(effect.text);
+                break;
+            case "resetLockRestarts":
+                // Anything but its count says so; the time makes each write differ from the
+                // last (FileView skips a write of the text it already holds, and the launcher
+                // writes behind its back)
                 _lockRestarts.setText("unlocked " + Date.now() + "\n");
+                break;
+            case "startTimer":
+                _restoreRetry.interval = effect.ms;
+                _restoreRetry.start();
+                break;
+            case "startMarkerUnlockDelay":
+                if (!_markerUnlockDelay.running)
+                    _markerUnlockDelay.restart();
+                break;
+            case "stopTimer":
+                if (effect.name === "markerUnlock")
+                    _markerUnlockDelay.stop();
+                else
+                    _restoreRetry.stop();
+                break;
+            case "compositorFinished":
+                dispatch({ type: "compositorFinished", session: effect.session });
+                break;
+            case "checkCarriedLater":
+                Qt.callLater(checkCarriedLock);
+                break;
+            case "exit":
+                Qt.exit(1);
+                break;
+            case "log":
+                log(effect.level, effect.message);
+                break;
+            default:
+                log("error", "unknown recovery effect " + JSON.stringify(effect));
+            }
         }
 
         // "unlocked" goes on disk a moment after the step that ended the lock, not in it:
@@ -607,162 +642,22 @@ Singleton {
         // (fail closed — one authentication too many). ext-session-lock-v1 has no reply to
         // the unlock (and `secure` turns false inside the setter, before anything is
         // sent), so a short wait is the confirmation to be had.
-        function markerUnlockDue() {
-            if (state.phase.status === "unlocked" && !restoring && !_carried.held && markerState === "locked")
-                writeMarker("unlocked");
-        }
-        _markerUnlockDelay.triggered.connect(markerUnlockDue);
+        _markerUnlockDelay.triggered.connect(() => recover({ type: "markerUnlockDue", locked: state.phase.status !== "unlocked" }));
 
-        // The lock this shell had (or asked for) is over. A lock the marker asked to take
-        // back and the compositor refused is not over for the compositor: it keeps its lock
-        // (Hyprland without misc:allow_session_lock_restore shows "lockscreen app died"), so
-        // the marker stays and the lock is asked for again, with a growing pause — a way back
-        // in once the setting is switched on (plan, section 7, "Recovery")
-        function lockOver() {
-            _carried.held = false;
-            _carried.secure = false;
-            if (restoring && state.phase.lastEnd === "denied") {
-                restoreRefused("the compositor refused the lock");
-                return;
-            }
-            restoring = false;
-            root._restoring = false;
-            root._restorePending = false;
-            restoreDelay = 0;
-            if (markerState === "locked") {
-                if (!_markerUnlockDelay.running)
-                    _markerUnlockDelay.restart();
-                // A reload in the meantime writes it in the new generation (the start probe)
-                _carried.markerUnlockPending = true;
-            } else {
-                writeMarker("unlocked");
-            }
-        }
-
-        // The compositor will not (or did not) give the lock back: said once, shown in the
-        // status ("compositor-locked"), asked again later
-        function restoreRefused(why) {
-            restoreDelay = LockIoRules.restartDelay(restoreDelay, 0, root._restoreTable);
-            root._restorePending = true;
-            if (!restoreRefusalLogged) {
-                restoreRefusalLogged = true;
-                log("error", "the compositor refused to let this shell take back the lock it had (" + why + "): the session "
-                    + "stays locked, with no prompt of this shell's (Hyprland: misc:allow_session_lock_restore is off). Asking "
-                    + "again every few seconds to a minute; to get the prompt back, switch it on — from a TTY: hyprctl -i 0 eval "
-                    + "'hl.config({ misc = { allow_session_lock_restore = true } })' — see notes/plans/lockscreen.md, section 7, "
-                    + "\"Recovery\"");
-            }
-            log("warning", "taking the lock back again in " + Math.round(restoreDelay / 1000) + " s");
-            _restoreRetry.interval = restoreDelay;
-            _restoreRetry.start();
-        }
-
-        // A lock the marker asked for: once the compositor confirms it, it is an ordinary
-        // lock (and a later refusal is an ordinary one too)
-        function lockConfirmed() {
-            _carried.secure = true;
-            if (restoring)
-                log("info", "the lock is back: the compositor confirmed it");
-            restoring = false;
-            root._restoring = false;
-            root._restorePending = false;
-            restoreDelay = 0;
-            _restoreRetry.stop();
-        }
-
-        function restoreFromMarker(why) {
-            if (state.phase.status !== "unlocked")
-                return;
-            restoring = true;
-            root._restoring = true;
-            log("warning", why + ": locking again");
-            tryRestore();
-        }
-
-        // Asks for the lock back — under Hyprland only after asking it whether it would
-        // give it: Hyprland 0.57 refuses a new lock while a dead client's lock stands and
-        // restoring is off, and then kills the client that asked (it destroys the refused
-        // lock at once; Quickshell's get_lock_surface on it is a protocol error). Without
-        // Hyprland (or without an answer), the lock is simply asked for: refused, it is asked
-        // again later; a shell killed for asking is started again by the launcher, at most a
-        // few times
-        function tryRestore() {
-            if (!restoring || state.phase.status !== "unlocked")
-                return;
-            if (root._hyprlandSignature !== "") {
-                if (!_restoreProbe.running)
-                    _restoreProbe.running = true;
-                return;
-            }
-            dispatch({ type: "lockRequested", source: "restore" });
-        }
-
-        _restoreProbe.answered.connect(output => {
-            if (!restoring || state.phase.status !== "unlocked")
-                return;
-            const facts = LockIoRules.hyprlandLockFacts(output);
-            if (facts.restoreAllowed === null && facts.locked === null)
-                log("warning", "Hyprland did not answer (hyprctl, 2 s each): asking for the lock back anyway");
-            if (LockIoRules.lockSurelyRefused(facts)) {
-                restoreRefused("Hyprland is locked and does not allow restoring the lock; not asking, which would get "
-                    + "this shell killed");
-                return;
-            }
-            dispatch({ type: "lockRequested", source: "restore" });
-        });
-
-        // Reload, after Quickshell realized the new WlSessionLock: the lock must now be
-        // held by this process. If it is not (the old WlSessionLock was not handed over —
-        // a reload that changed this file's objects), the old one's lock dies with the old
-        // generation and Quickshell still counts it as active: this process can never lock
-        // again, and a fresh one is needed
+        // Reload, after Quickshell realized the new WlSessionLock: the lock must now be held
+        // by this process (LockRecoveryRules: else it quits for a fresh one). One function,
+        // so that Qt.callLater runs it once per pass
         function checkCarriedLock() {
-            if (state.phase.status === "unlocked" || _sessionLock.locked)
-                return;
-            exitForRestart("the lock was not carried over the reload");
+            recover({ type: "carriedChecked", locked: state.phase.status !== "unlocked", compositorLocked: _sessionLock.locked });
         }
 
-        // The process cannot lock (again): it quits with a failure, the launcher starts a
-        // fresh one, and the marker (still "locked") locks that one at once. Without the
-        // launcher's supervision nothing restarts it — no worse than staying, unable to lock
-        function exitForRestart(why) {
-            log("error", why + ": quitting so that a fresh shell takes the lock (the launcher restarts it; the marker locks it)");
-            writeMarker("locked");
-            Qt.exit(1);
-        }
-
-        // The start probe: this compositor session's key, whether the runtime dir is
-        // private, and the marker as the last shell left it
+        _restoreProbe.answered.connect(output => recover({ type: "restoreAnswered", output: output, locked: state.phase.status !== "unlocked" }));
+        // The start probe, then — its decision made — the start counts as checked
         _markerProbe.answered.connect(lines => {
-            const facts = LockIoRules.markerFacts(lines);
-            if (!facts.private) {
-                log("warning", "XDG_RUNTIME_DIR (" + root._runtimeDirectory + ") is not a private directory of this user: "
-                    + "no lock marker, a restarted shell cannot know it was locked");
-                return;
-            }
-            if (facts.key !== "")
-                lockKey = facts.key;
-            // A reload came between an unlock and its "unlocked" (markerUnlockDue): the old
-            // generation sent its unlock long before this one could start
-            if (_carried.markerUnlockPending && !_carried.held && state.phase.status === "unlocked") {
-                markerState = "locked";
-                writeMarker("unlocked");
-                return;
-            }
-            // A lock in force got "?" in its marker: now the key is known
-            if (markerState === "locked")
-                writeMarker("locked");
-            const decision = LockIoRules.markerDecision(facts.marker, lockKey);
-            if (decision === "lock")
-                restoreFromMarker("the shell was locked when it stopped (the lock marker says so)");
-            else if (decision === "stale") {
-                log("info", "a lock marker from another compositor session (" + facts.marker + "): not this session's, ignored");
-                if (state.phase.status === "unlocked" && markerState === "")
-                    writeMarker("unlocked");
-            }
+            recover({ type: "markerAnswered", lines: lines, locked: state.phase.status !== "unlocked" });
+            recover({ type: "markerChecked" });
         });
-
-        _restoreRetry.triggered.connect(tryRestore);
+        _restoreRetry.triggered.connect(() => recover({ type: "restoreRetry", locked: state.phase.status !== "unlocked" }));
 
         // The compositor confirmed the lock (secure) or ended / refused it. Tagged with the
         // session of the last lockCompositor executed, as it is at the moment of the
@@ -770,7 +665,7 @@ Singleton {
         // ignore once a new lock has begun
         _sessionLock.secureStateChanged.connect(() => {
             if (_sessionLock.secure)
-                lockConfirmed();
+                recover({ type: "confirmed" });
             dispatch({
                 type: _sessionLock.secure ? "compositorLocked" : "compositorFinished",
                 session: sessionInForce
@@ -802,12 +697,7 @@ Singleton {
         const api = {
             // While the compositor holds a lock it will not give back, asking for a new one
             // is asking for that one back (and nothing else would be given)
-            lock: source => {
-                if (root._restorePending)
-                    tryRestore();
-                else
-                    dispatch({ type: "lockRequested", source: typeof source === "string" && source !== "" ? source : "request" });
-            },
+            lock: source => recover({ type: "lockWanted", source: source, locked: state.phase.status !== "unlocked" }),
             // Only a LockSurface, once, while a lock is in force (Quickshell creates them in
             // the lockCompositor effect, after the step's state is committed). A screen
             // without a name gets one of its own: the rules refuse an empty one
@@ -865,10 +755,10 @@ Singleton {
                     // Recovery: the marker as last written ("locked" / "unlocked" / "" for
                     // none yet), whether its key is known, a lock being taken back, the
                     // compositor refusing that, what a reload would carry over
-                    marker: markerState,
-                    markerKeyKnown: lockKey !== "?",
-                    restoring: restoring,
-                    restorePending: root._restorePending,
+                    marker: recovery.marker,
+                    markerKeyKnown: recovery.key !== "?",
+                    restoring: recovery.restoring,
+                    restorePending: recovery.restorePending,
                     carriedHeld: _carried.held,
                     carriedSecure: _carried.secure
                 };
@@ -882,15 +772,7 @@ Singleton {
         publish();
         dispatch({ type: "started" });
         probeFallback();
-        // Connected after the probe's own handler: true once its decision (a restore begun or
-        // not) is made
-        _markerProbe.answered.connect(() => root._markerChecked = true);
-        if (root._markerPath !== "")
-            _markerProbe.running = true;
-        else {
-            log("warning", "XDG_RUNTIME_DIR is not set: no lock marker, a restarted shell cannot know it was locked");
-            root._markerChecked = true;
-        }
+        recover({ type: "started" });
         return api;
     }
 
@@ -907,7 +789,7 @@ Singleton {
         id: _carried
         property bool held: false
         property bool secure: false
-        // The lock ended and the marker's "unlocked" is still to be written (markerUnlockDue)
+        // The lock ended and the marker's "unlocked" is still to be written (LockRecoveryRules)
         property bool markerUnlockPending: false
         onReloaded: {
             if (held)
@@ -1004,7 +886,7 @@ Singleton {
         repeat: false
     }
 
-    // The marker's "unlocked" after a lock ended (see markerUnlockDue in _build)
+    // The marker's "unlocked" after a lock ended (see its `triggered` in _build)
     Timer {
         id: _markerUnlockDelay
         interval: 250
@@ -1269,8 +1151,8 @@ Singleton {
         }
     }
 
-    // The launcher's record of restarts while locked, overwritten at an unlock (writeMarker).
-    // Never read here. Last among the children: the ones before keep their positions
+    // The launcher's record of restarts while locked, overwritten at an unlock
+    // (resetLockRestarts). Never read here. Last among the children: the ones before keep their positions
     FileView {
         id: _lockRestarts
         path: root._lockRestartsPath

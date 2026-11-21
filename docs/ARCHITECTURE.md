@@ -558,7 +558,9 @@ refused lock), and takes the compositor's word from `secureStateChanged`, tagged
 session of the last `lockCompositor`.
 
 **Recovery** (a reload or a restart never comes up unlocked over a locked
-session):
+session). What the driver does about the marker, taking a lock back and asking again is
+decided by `singletons/LockRecoveryRules.qml`, a pure state machine like the rules (one
+case per recovery scenario of the lock test bed in `tests/LockRecoveryRulesTest.qml`):
 
 - *A reload while locked* keeps the lock. Quickshell hands a reloaded singleton's children
   their old instances by position; a `PersistentProperties` (`_carried`: "this process holds
@@ -588,7 +590,7 @@ session):
   (`notes/decisions.md`: the owner starts the launcher by hand from a text console; FEATURES,
   "The limit while locked"). "While the session stays locked": the launcher writes its count
   to `$XDG_RUNTIME_DIR/h2s-shell-lock-restarts` at each such restart, and the shell overwrites
-  it when a lock ends (`writeMarker("unlocked")`) — anything but the launcher's own number
+  it when a lock ends (with the marker's "unlocked") — anything but the launcher's own number
   there is an unlock; a new launcher starts at 0. Giving up, it leaves its count in
   `$XDG_RUNTIME_DIR/h2s-shell-lock-notice`; the next launcher removes that file and hands
   the count to its first shell only (`H2S_SHELL_LOCK_NOTICE`), where `LockNotice` sends one
