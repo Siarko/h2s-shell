@@ -526,6 +526,8 @@ notification_server_up() {
 #                    notes each start in logind/log ("monitor <pid>")
 #                    `gdbus call … ListInhibitors` answers logind/inhibitors (none
 #                    without it; logind_inhibitors writes it)
+#                    `gdbus call … SetLockedHint <bool>` notes "call SetLockedHint <path>
+#                    <bool>" in logind/log
 #   systemd-inhibit  notes "hold <pid> <time>" in logind/log, runs the command it was given
 #                    (the shell's `read -r release`) and notes "release <pid> <time>" when
 #                    that ends; between logind_signal sleep and wake it refuses, as logind
@@ -562,6 +564,14 @@ case "\$1" in
             *" PreparingForSleep "*)
                 echo "call PreparingForSleep \$(cat "\$preparing" 2> /dev/null)" >> "\$log"
                 [ "\$(cat "\$preparing" 2> /dev/null)" = true ] && echo "(<true>,)" || echo "(<false>,)"
+                exit 0
+                ;;
+            *".SetLockedHint "*)
+                # The session's LockedHint (the shell reports its lock): noted with the
+                # object path and the value, "()" as logind answers
+                path=; for argument in "\$@"; do [ "\$previous" = --object-path ] && path=\$argument; previous=\$argument; done
+                echo "call SetLockedHint \$path \$argument" >> "\$log"
+                echo "()"
                 exit 0
                 ;;
             *".ListInhibitors "*)

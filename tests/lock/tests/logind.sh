@@ -5,7 +5,8 @@
 # confirmed, no passive method runs while suspending and they start again after the wake.
 # Also: a monitor that dies is started again, an inhibitor that dies is taken again, and
 # the resume ends a screensaver that was up when the machine went to sleep (it counts as
-# input). Lock before sleep is off by default: switched on here; the screensaver too.
+# input), and the lock is reported to logind (SetLockedHint, recorded by the stand-in). Lock
+# before sleep is off by default: switched on here; the screensaver too.
 
 stack_start --logind --methods "password fingerprint" --settings '{"lockscreen.lockOnSleep": true,
     "lockscreen.screensaverEnabled": true, "lockscreen.screensaverTimeout": 5}'
@@ -19,6 +20,8 @@ saver_shown_for() {
     done
     return 0
 }
+hints() { grep -a '^call SetLockedHint' "$WORK/logind/log" | awk '{ print $3 "=" $4 }' | tr '\n' ' '; }
+hints_are() { [ "$(hints)" = "$1" ]; }
 saver_shown() { [ "$(shell_ipc idle state | python3 -I -c 'import json, sys; print(json.dumps(json.load(sys.stdin)["saverShown"]))')" = true ]; }
 
 check_within "$GUARD" "the shell follows the test's logind session" state_is logind_session "$LOCKTEST_SESSION_PATH"
@@ -30,6 +33,8 @@ check "the rules hold it" state_is inhibitor held
 logind_signal lock
 check_within "$GUARD" "logind's Lock locks" compositor_locked
 check_within "$GUARD" "confirmed" state_is secure true
+check_within "$GUARD" "the lock reported to logind: SetLockedHint true for the session" \
+    hints_are "$LOCKTEST_SESSION_PATH=true "
 check_within "$GUARD" "a fingerprint conversation runs" _one_finger_waiter
 logind_signal unlock-other
 sleep 1 # fixed sleep: a negative claim: another session's Unlock does nothing
@@ -37,6 +42,8 @@ check "another session's Unlock does not unlock" compositor_locked
 logind_signal unlock
 check_within "$GUARD" "logind's Unlock unlocks" compositor_unlocked
 check "the lock ended by logind" state_is last_end logind
+check_within "$GUARD" "the unlock reported: SetLockedHint false" \
+    hints_are "$LOCKTEST_SESSION_PATH=true $LOCKTEST_SESSION_PATH=false "
 check_within "$GUARD" "no fingerprint conversation left" no_finger_waiters
 
 # ---- Lock before sleep, from unlocked, the screensaver up ----

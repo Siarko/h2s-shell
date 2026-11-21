@@ -873,6 +873,9 @@ The interface modules are written against (`qs.api`), versioned on its own
   most), instead of one accent dot for the day.
 
 ### Changed
+- The shell's lock is reported to logind (the session's LockedHint: `loginctl show-session`
+  says `LockedHint=yes` while locked), so programs that lock themselves when the session
+  locks, such as password managers, see it.
 - Settings → Lockscreen → "Lock after" now counts from your last input, whether the
   screensaver is on or not (it counted from the screensaver's start when the screensaver was
   on); its default is 10 minutes. A value set before is not carried over: set it again if

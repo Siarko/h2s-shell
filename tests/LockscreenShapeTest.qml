@@ -44,7 +44,8 @@ TestCase {
         "CapsLockLed _capsLed",
         "PersistentProperties _helperSweepOnce",
         "Process _helperSweep",
-        "FileView _lockRestarts"
+        "FileView _lockRestarts",
+        "LockedHint _lockedHint"
     ]
 
     // The root's direct children of a QML text, in order, as "Type name"

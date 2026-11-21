@@ -282,7 +282,8 @@ Two stages, both driven by Wayland idle notifications and both counted from the 
   text with nothing to click. It also locks on request: logind's Lock
   signal for the shell's session (`loginctl lock-session`, or `HandlePowerKey=lock` in
   logind.conf) and `h2s-shell ipc call lockscreen lock`; a request while locked changes
-  nothing. Every lock starts afresh: nothing of one lock carries into the next.
+  nothing. The lock is reported to logind (the session's `LockedHint`) once the compositor
+  holds it, and cleared at the unlock. Every lock starts afresh: nothing of one lock carries into the next.
 - **The prompt** — on one screen at a time; it wakes on a key, pointer motion or a click,
   and sleeps after 10 s without activity (a question left unanswered is cancelled then, a
   password check under way is not). A click on another screen brings it there; keys typed

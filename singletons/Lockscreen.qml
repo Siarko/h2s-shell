@@ -163,7 +163,7 @@ Singleton {
         "compositorFinished", "surfaceAdded", "surfaceRemoved", "submit", "methodsDetected", "methodsFailed",
         "pamMessage", "pamCompleted", "pamStartFailed", "prepareForSleep", "resumed", "settings"]
     readonly property var _loggedEffects: ["lockCompositor", "adoptCompositorLock", "unlockCompositor", "announceLocked",
-        "detectMethods", "startPam", "abortPam", "respondPam", "holdInhibitor", "releaseInhibitor"]
+        "reportLockedHint", "detectMethods", "startPam", "abortPam", "respondPam", "holdInhibitor", "releaseInhibitor"]
 
     // The lock marker: "locked <key>" from the moment this shell asks for a compositor lock
     // until that lock is over, "unlocked" otherwise. A shell that starts and finds "locked"
@@ -394,6 +394,9 @@ Singleton {
                 } else {
                     Quickshell.watchFiles = watchFilesBefore;
                 }
+                break;
+            case "reportLockedHint":
+                _lockedHint.report(effect.locked);
                 break;
             case "detectMethods":
                 scopeFor(effect)?.detect(effect.generation);
@@ -1039,5 +1042,14 @@ Singleton {
         printErrors: false
         onSaveFailed: error => root._log("warning", "could not write the launcher's record " + root._lockRestartsPath + ": "
             + FileViewError.toString(error))
+    }
+
+    // logind's LockedHint (reportLockedHint). Last among the children: the ones before keep
+    // their positions
+    LockedHint {
+        id: _lockedHint
+        sessionPath: _logind.sessionPath
+        toolDirectory: root._toolDirectory
+        onLogLine: (level, message) => root._log(level, message)
     }
 }

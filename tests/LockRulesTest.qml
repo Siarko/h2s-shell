@@ -250,6 +250,7 @@ TestCase {
         _behaviour12Redetection();
         _behaviour13PasswordFallback();
         _behaviour14Restored();
+        _behaviour15LockedHint();
         _secrets();
         _totality();
         _livenessCases();
@@ -1630,6 +1631,40 @@ TestCase {
 
     // ---- 14. A lock carried over a reload (Stage 4) ----
 
+    // logind's LockedHint follows the lock the compositor holds: true at its confirmation,
+    // false when a confirmed lock ends; never for a lock that was not confirmed
+    function _behaviour15LockedHint() {
+        const hints = effects => of(effects, "reportLockedHint").map(effect => effect.locked).join(",");
+        const lock = locking();
+        assertEqual(hints(lock.all), "", "15: locking, not confirmed: nothing reported");
+        lock.send(confirmed());
+        assertEqual(hints(lock.effects), "true", "15: the compositor confirms: LockedHint true, once");
+        lock.send({ type: "lockRequested", source: "logind" });
+        assertEqual(hints(lock.effects), "", "15: a second lock request while locked: nothing reported again");
+        lock.send({ type: "unlockRequested", source: "logind" });
+        assertEqual(hints(lock.effects), "false", "15: unlocked: LockedHint false");
+        const order = types(lock.effects);
+        assert(order.indexOf("reportLockedHint") > order.indexOf("unlockCompositor"),
+               "15: … after the compositor was told to unlock: " + JSON.stringify(order));
+
+        const ended = locking().sendAll([confirmed(), finished()]);
+        assertEqual(hints(ended.effects), "false", "15: a confirmed lock the compositor ends: LockedHint false");
+
+        const refused = locking().send(finished());
+        assertEqual(hints(refused.all), "", "15: a lock the compositor refused: never reported, neither way");
+
+        const early = locking().sendAll([{ type: "unlockRequested", source: "logind" }, confirmed()]);
+        assert(early.state.phase.status === "unlocked" && hints(early.all) === "",
+               "15: an unlock decided before the confirmation, carried out at it: never reported locked, so nothing to take back");
+
+        assertEqual(hints(started().send({ type: "restored", secure: true }).effects), "true",
+                    "15: a confirmed lock carried over a reload: reported (again: the hint may have been lost)");
+        const carried = started().send({ type: "restored", secure: false });
+        assertEqual(hints(carried.effects), "", "15: carried over, not confirmed: not yet");
+        carried.send(confirmed());
+        assertEqual(hints(carried.effects), "true", "15: … at its confirmation");
+    }
+
     function _behaviour14Restored() {
         // Confirmed before the reload: locked at once, nothing asked of the compositor
         const carried = started().send({ type: "restored", secure: true });
@@ -2197,6 +2232,16 @@ TestCase {
         } else if (has(effects, "announceLocked", { locked: false })) {
             return "announceLocked(false) while still locked";
         }
+        // LockedHint: true only on becoming "locked" (confirmed), false only on leaving it
+        const hints = of(effects, "reportLockedHint");
+        if (hints.length > 1)
+            return "reportLockedHint more than once in a step";
+        if (hints.length === 1 && hints[0].locked === true && !(state.phase.status === "locked" && before.phase.status !== "locked"))
+            return "reportLockedHint(true) other than on becoming locked";
+        if (hints.length === 1 && hints[0].locked === false && !(before.phase.status === "locked" && state.phase.status === "unlocked"))
+            return "reportLockedHint(false) other than on leaving a confirmed lock";
+        if (hints.length === 0 && before.phase.status === "locked" && state.phase.status === "unlocked")
+            return "a confirmed lock left without reportLockedHint(false)";
         LockRules.view(state);
         return "";
     }

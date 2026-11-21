@@ -213,6 +213,8 @@ Singleton {
         }));
         LockStepRules.emit(transaction, "adoptCompositorLock", { session: session });
         LockStepRules.emit(transaction, "announceLocked", { locked: true });
+        if (secure)
+            LockStepRules.emit(transaction, "reportLockedHint", { locked: true });
         LockStepRules.log(transaction, "info", "the compositor's lock carried over (" + (secure ? "confirmed" : "not confirmed yet")
             + "): locked as session " + session + ", a new authentication needed");
         if (!secure)
@@ -284,6 +286,9 @@ Singleton {
             return;
         }
         LockStepRules.setRegion(transaction, "phase", { status: "locked" });
+        // The system is told only of a lock the compositor holds (logind's LockedHint, which
+        // programs that lock themselves with the session follow)
+        LockStepRules.emit(transaction, "reportLockedHint", { locked: true });
     }
 
     // The compositor ended the lock (locked), or refused it (locking, unlocking). Either
@@ -394,6 +399,8 @@ Singleton {
         if (transaction.state.sleep.status === "suspending" && transaction.state.sleep.inhibitor === "held")
             _releaseInhibitor(transaction);
         const session = transaction.state.phase.session;
+        // Reported locked exactly when the phase was "locked" (confirmed, no unlock pending)
+        const hinted = transaction.state.phase.status === "locked";
         LockStepRules.setTop(transaction, Object.assign(LockStepRules.freshLockRegions(), {
             phase: { status: "unlocked", session: session, lastEnd: reason, confirmLate: false, pending: null }
         }));
@@ -404,6 +411,8 @@ Singleton {
             LockStepRules.emit(transaction, "unlockCompositor", fields);
         }
         LockStepRules.emit(transaction, "announceLocked", { locked: false });
+        if (hinted)
+            LockStepRules.emit(transaction, "reportLockedHint", { locked: false });
         LockStepRules.log(transaction, "info", (unlock ? "unlocked (" : "the lock ended (") + reason + (method ? ", " + method : "") + "), session " + session);
     }
 

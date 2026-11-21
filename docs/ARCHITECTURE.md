@@ -511,8 +511,11 @@ launcher agree on the contract described under "Recovery" below):
   fprintd stuck — the script asks fprintd over D-Bus with a 4 s deadline — and what it
   says on stderr is logged). For the shell's
   lifetime: `LogindMonitor.qml` (one `gdbus monitor`, parsed by `LockRules.parseLogind`,
-  restarted with a growing pause, kept from outliving a crashed shell by a stdin watcher)
-  and `SleepInhibitor.qml` (`systemd-inhibit` held as a level, taken again when lost).
+  restarted with a growing pause, kept from outliving a crashed shell by a stdin watcher),
+  `SleepInhibitor.qml` (`systemd-inhibit` held as a level, taken again when lost) and
+  `LockedHint.qml` (`SetLockedHint` on the session for the rules' `reportLockedHint`: true
+  at the compositor's confirmation, false when a confirmed lock ends; one call at a time,
+  the latest value wins, a failure logged once and not retried).
   Their small pure helpers are in `singletons/LockIoRules.qml` (tested in
   `tests/LockIoRulesTest.qml`).
 - **Other lockers before sleep** — `singletons/SleepLockNotice.qml`, beside the driver:
