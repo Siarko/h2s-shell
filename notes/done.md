@@ -2493,3 +2493,12 @@ Moved out of the tracker as done; checked against the code and the sections abov
   every unlock the screensaver's window was mapped for its fade out (a binding glitch:
   `_show` read the new `locked` beside the old `screensaverVisible`); it now follows
   `Lockscreen.idle`.
+- **Lock clean-up D1–D4** — on `master` 2026-11-22. D1 `tx` → `transaction`, the lock's
+  notifications width `Theme.lockNotificationsWidth` (360, a constant: a theme token would need
+  an Appearance slider); D2 `LockRules` split into `LockStepRules`, `LockViewRules`,
+  `LockParseRules` with forwarders (suites split along); D3 the recovery decisions (marker,
+  restore, retry) as the pure state machine `LockRecoveryRules`, one case per recovery scenario,
+  effects in the old order; D4 the marker and Hyprland probes on `CommandQuery`, the
+  password-fallback probes on `LatestQuery` (`LockIoRules.probeRun`; a failure stays unknown).
+  Reviewed (security: decisions identical); `tests/run-all.sh` passed on both machines (lock bed
+  72/72).
