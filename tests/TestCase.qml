@@ -19,10 +19,11 @@ QtObject {
         return typeof names !== "string" || names === "" || names.split(":").includes(suiteName + "Test");
     }
     property bool done: !asynchronous || !selected
-    // How long an asynchronous suite may take before the module runner (tests-modules.qml)
-    // fails it as timed out, in ms — from the moment the suites start; the runner caps it at
-    // 60 s. A suite with many concurrent scenarios sets more than the default.
-    property int timeLimitMs: 20000
+    // How long an asynchronous suite may take before its runner fails it as timed out, in ms —
+    // from the moment the suites start (they run side by side). 0 takes the runner's default:
+    // tests.qml's 90 s, tests-modules.qml's 20 s, which it caps at 60 s. A suite with many
+    // concurrent scenarios sets more than the default.
+    property int timeLimitMs: 0
 
     function assert(condition, message) {
         if (condition) {

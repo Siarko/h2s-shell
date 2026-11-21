@@ -84,20 +84,24 @@ QtObject {
 
     // The suites that run on the event loop (TestCase.asynchronous)
     readonly property var _asyncSuites: [_pointerInput, _toastDrag, _settingsCard, _moduleContribution, _networkCardGeometry, _buttonKinds, _pillSizes, _apiElements, _sidePanel, _statusPill, _lockView, _authPromptView, _commandRunner, _systemFacts, _modules, _moduleIcon, _moduleRegistries, _anchors, _vpnProviders, _testSeamsShape, _testTree, _deviceAddressReading, _network, _fileChooser]
-    // How long the asynchronous suites may take, all together (then they fail as timed out)
+    // How long an asynchronous suite may take, counted from the start of the suites, unless
+    // it sets its own (TestCase.timeLimitMs); then it fails as timed out
     readonly property int _asyncLimitMs: 90000
+    function timeLimitOf(suite) {
+        return suite.timeLimitMs > 0 ? suite.timeLimitMs : _asyncLimitMs;
+    }
     // FileChooserTest opens a real dialog, which takes the keyboard: it starts once the other
     // asynchronous suites are done, so that no key they send reaches it, nor its keys them.
     // It waits for them until the time it needs itself is all that is left of the limit, then
     // fails without opening a dialog.
     readonly property bool _chooserLast: {
         _fileChooser.waitFor = _asyncSuites.filter(suite => suite !== _fileChooser);
-        _fileChooser.waitLimitMs = _asyncLimitMs - _fileChooser.ownTimeMs;
+        _fileChooser.waitLimitMs = timeLimitOf(_fileChooser) - _fileChooser.ownTimeMs;
         return true;
     }
 
     // Exit once the synchronous suites have run (all in Component.onCompleted) and the
-    // asynchronous ones are done — or after a deadline, counting those as failed. A suite
+    // asynchronous ones are done — each failed as timed out once past its own limit. A suite
     // that was not selected is done from the start.
     property var _quit: Timer {
         interval: 50
@@ -107,12 +111,14 @@ QtObject {
         onTriggered: {
             _waited += interval;
             const pending = _asyncSuites.filter(suite => !suite.done);
-            if (pending.length > 0 && _waited < root._asyncLimitMs)
+            for (const suite of pending) {
+                if (_waited >= root.timeLimitOf(suite)) {
+                    suite.fail("timed out (" + Math.round(root.timeLimitOf(suite) / 1000) + " s)");
+                    suite.finish();
+                }
+            }
+            if (pending.some(suite => !suite.done))
                 return;
-            pending.forEach(suite => {
-                suite.fail("timed out");
-                suite.finish();
-            });
             Qt.quit();
         }
     }

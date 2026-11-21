@@ -18,6 +18,8 @@
 #   extra      a suite that was not named reports as well                     → must fail
 #   renamed    as many suites report as were named, one of them another suite → must fail
 #   real       (the real Quickshell) FormatTest named: Format reports, alone  → must pass
+#   limited    (the real Quickshell, a copy of the tree) a suite that never finishes, with
+#              its own 2 s limit: fails as timed out at that limit             → must fail
 #
 # tests/run-modules.sh with --suite, on the fixture module tests/fixtures/modules/good — the
 # first two with the real Quickshell, so tests-modules.qml's part is checked too:
@@ -226,6 +228,35 @@ verdict extra extra 1 FormatTest
 verdict renamed renamed 1 FormatTest LockRulesTest
 verdict real real 0 FormatTest
 check real "Format reported, alone" reports_only real.log "Format"
+
+# limited: an asynchronous suite that never finishes and sets its own limit (2 s) fails as
+# timed out at that limit, not at the runner's default. The runner takes its tree from where
+# it is, so a copy of it beside a tests.qml with that suite added runs that file; the rest of
+# the tree is linked.
+mkdir -p "$work/limited/tests"
+for entry in "$REPO"/* "$REPO"/.[!.]*; do
+    case "${entry##*/}" in tests.qml|tests|.git) continue ;; esac
+    ln -s "$entry" "$work/limited/${entry##*/}"
+done
+for entry in "$REPO"/tests/*; do ln -s "$entry" "$work/limited/tests/${entry##*/}"; done
+rm "$work/limited/tests/run-unit.sh"
+cp "$REPO/tests/run-unit.sh" "$work/limited/tests/"
+cat > "$work/limited/tests/HungTest.qml" << 'QML'
+TestCase {
+    suiteName: "Hung"
+    asynchronous: true
+    timeLimitMs: 2000
+}
+QML
+sed -e 's/^\(    property var _promises: PromisesTest {}\)$/    property var _hung: HungTest {}\n\1/' \
+    -e 's/^\(    readonly property var _asyncSuites: \[\)/\1_hung, /' "$REPO/tests.qml" > "$work/limited/tests.qml"
+limited_started=$SECONDS
+"$work/limited/tests/run-unit.sh" HungTest > "$work/limited.log" 2>&1
+limited_status=$?
+limited_took=$((SECONDS - limited_started))
+check limited "run-unit.sh exited 1 (it exited $limited_status)" test "$limited_status" = 1
+check limited "the suite failed as timed out at its own limit" grep -q "FAIL: timed out (2 s)" "$work/limited.log"
+check limited "… well before the runner's default (it took ${limited_took} s)" test "$limited_took" -lt 60
 
 runner=run-modules.sh
 good=$REPO/tests/fixtures/modules/good
