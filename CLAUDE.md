@@ -130,8 +130,9 @@ mockup the owner sees before any code (`notes/workflow.md`).
   `docs/ARCHITECTURE.md`.
 - **`ShapePath` has no `visible` property.**
 - **Do not add a `qmldir`.** Quickshell registers types per directory automatically. (A
-  module directory, loaded by URL from outside the scanned tree, is the exception: see
-  "Modules" in `docs/ARCHITECTURE.md`.)
+  module directory, loaded by `file://` URL, is the exception: a copy outside the tree, or
+  in-tree under a hyphenated folder no `import qs.…` can reach, as `tests/fixtures/` and
+  `builtin-modules/`; see "Modules" in `docs/ARCHITECTURE.md`.)
 - **Versioning:** the number is in `singletons/Version.qml` (semver — major for changes
   to behaviour people rely on, minor for features, patch for fixes; a settings migration
   may ship in a minor release, never in a patch). The module API has its own number
