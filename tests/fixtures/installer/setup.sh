@@ -7,7 +7,9 @@
 # "large" (a progress line past the size cap, redrawn with carriage returns as git does and
 # no line break, then hangs), "progress" (progress redrawn the same way, a pause, then the
 # real git), "grow" (writes into the target directory, 64 KiB every tenth of a second, saying
-# nothing — what only measuring the directory catches). Nothing here reaches the network or the user's own git configuration.
+# nothing — what only measuring the directory catches), "bigfile" (one file past the cap at
+# once — what only the file size limit catches before the next measuring). Its sleeps are
+# named after the temporary directory, so a suite can see none is left. Nothing here reaches the network or the user's own git configuration.
 set -euo pipefail
 
 real_git=$(command -v git) || { echo "git is not on PATH" >&2; exit 2; }
@@ -101,10 +103,11 @@ mode=\$(cat "$T/fake/mode" 2> /dev/null || true)
 case " \$* " in
     *" clone "* | *" fetch "*)
         case "\$mode" in
-            hang) exec sleep 30 ;;
+            hang) exec -a "h2s-stand-in-sleep $T" sleep 30 ;;
             refuse) echo "fatal: repository 'stand-in' not found" >&2; exit 128 ;;
-            large) printf 'Receiving objects:   5%% (1/20), 1.00 MiB | 1.00 MiB/s\rReceiving objects:  10%% (2/20), 300.00 MiB | 10.00 MiB/s\r' >&2; exec sleep 30 ;;
+            large) printf 'Receiving objects:   5%% (1/20), 1.00 MiB | 1.00 MiB/s\rReceiving objects:  10%% (2/20), 300.00 MiB | 10.00 MiB/s\r' >&2; exec -a "h2s-stand-in-sleep $T" sleep 30 ;;
             progress) printf 'Receiving objects:  25%% (1/4), 512.00 KiB | 1.00 MiB/s\rReceiving objects:  50%% (2/4), 1.00 MiB | 2.00 MiB/s\r' >&2; sleep 1 ;;
+            bigfile) for target; do :; done; mkdir -p "\$target"; exec head -c 600000 /dev/zero > "\$target/big" ;;
             grow) for target; do :; done; mkdir -p "\$target"; for i in \$(seq 1 100); do head -c 65536 /dev/zero > "\$target/blob\$i"; sleep 0.1; done; exit 0 ;;
         esac ;;
 esac

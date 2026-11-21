@@ -358,14 +358,18 @@ Scope {
 
     function _copyFolder(job, label, folder, dir, next) {
         const download = { job: job, dir: dir, handle: null, tooLarge: false, measuring: false };
-        download.handle = _run(["sh", "-c", "[ -d \"$1\" ] || { echo 'not a folder' >&2; exit 1; }; cp -R --no-dereference -- \"$1/.\" \"$2/\" && rm -rf -- \"$2/.git\"",
-                                "sh", folder, dir], {
+        // (bash: `ulimit -f` counts 1024-byte blocks there — a file past the cap stops cp)
+        download.handle = _run(["bash", "-c", "ulimit -f \"$3\" || exit 1; [ -d \"$1\" ] || { echo 'not a folder' >&2; exit 1; }; "
+                                + "cp -R --no-dereference -- \"$1/.\" \"$2/\" && rm -rf -- \"$2/.git\"",
+                                "bash", folder, dir, String(_fileBlocks())], {
             timeoutMs: downloadTimeoutMs,
             done: result => {
                 if (_downloading === download)
                     _downloading = null;
                 if (!_alive(job))
                     return;
+                if (result.code === _fileTooLargeStatus)
+                    download.tooLarge = true;
                 if (download.tooLarge) {
                     _abandon(job, label + ": " + ModuleInstallRules.downloadProblem(result, "", { tooLarge: true, cap: maxDownloadBytes }));
                     return;
@@ -402,7 +406,7 @@ Scope {
             const command = commands.commands[index];
             const download = { job: job, dir: dir, handle: null, tooLarge: false, measuring: false };
             let lastLine = "";
-            download.handle = _run(["bash", "-c", root._progressReader, "bash"].concat(command.argv), {
+            download.handle = _run(["bash", "-c", root._progressReader, "bash", String(CommandTools.setpriv ?? ""), String(_fileBlocks())].concat(command.argv), {
                 environment: command.environment, timeoutMs: downloadTimeoutMs, keepOutput: false,
                 onLine: (line, stream) => {
                     if (stream !== "stderr" || !_alive(job))
@@ -422,6 +426,8 @@ Scope {
                         _downloading = null;
                     if (!_alive(job))
                         return;
+                    if (result.code === _fileTooLargeStatus)
+                        download.tooLarge = true;
                     if (!result.ok || download.tooLarge) {
                         _abandon(job, label + ": download failed — "
                                  + ModuleInstallRules.downloadProblem(result, lastLine, { timeoutMs: downloadTimeoutMs, tooLarge: download.tooLarge, cap: maxDownloadBytes }));
@@ -436,11 +442,24 @@ Scope {
         runNext(0);
     }
 
-    // Runs "$@" (a git command) with its standard error read in pieces ended by a carriage
-    // return or a line break, each written out as a line at once; its standard output goes;
-    // its exit status is the command's
-    readonly property string _progressReader: "set -o pipefail; \"$@\" 2>&1 >/dev/null | "
+    // Runs a git command (from $3 on) with its standard error read in pieces ended by a
+    // carriage return or a line break, each written out as a line at once; its standard
+    // output goes; its exit status is the command's. $1: setpriv (CommandTools; "" where it was
+    // not found) — git dies with this reader, so a shell that goes mid-download (the reader
+    // ends with it) or a cancel (TERM to the reader) leaves no git behind; $2: the largest
+    // file it may write, in bash's 1024-byte blocks (`ulimit -f`: a file past it stops git
+    // with SIGXFSZ at once, before the next measuring of the whole directory)
+    readonly property string _progressReader: "guard=$1; blocks=$2; shift 2; ulimit -f \"$blocks\" || exit 1; set -o pipefail; "
+        + "if [ -n \"$guard\" ]; then set -- \"$guard\" --pdeathsig KILL -- \"$@\"; fi; \"$@\" 2>&1 >/dev/null | "
         + "while IFS= read -r -d $'\\r' part || [ -n \"$part\" ]; do printf '%s\\n' \"$part\"; done >&2"
+
+    // The status of a command stopped by `ulimit -f` (SIGXFSZ, 25, as bash reports a signal)
+    readonly property int _fileTooLargeStatus: 128 + 25
+
+    // maxDownloadBytes in bash's `ulimit -f` blocks (1024 bytes), at least one
+    function _fileBlocks() {
+        return Math.max(1, Math.ceil(maxDownloadBytes / 1024));
+    }
 
     // The download running now, measured by _measureTimer
     property var _downloading: null
@@ -469,9 +488,14 @@ Scope {
                 timeoutMs: root.stepTimeoutMs,
                 done: result => {
                     download.measuring = false;
-                    if (root._downloading !== download || !result.ok)
+                    // du says what it could read and its total even when a file went away
+                    // under it (exit status 1): the total counts all the same
+                    if (root._downloading !== download)
                         return;
-                    if (ModuleInstallRules.stagedSizeProblem(String(result.stdout ?? ""), root.maxDownloadBytes) !== "")
+                    const lines = String(result.stdout ?? "").split("\n").filter(line => line !== "");
+                    const total = lines.length > 0 ? lines[lines.length - 1] : "";
+                    const problem = ModuleInstallRules.stagedSizeProblem(total, root.maxDownloadBytes);
+                    if (problem !== "" && problem !== ModuleInstallRules.stagedSizeProblem("", root.maxDownloadBytes))
                         root._stopTooLarge(download);
                 }
             });

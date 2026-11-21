@@ -800,6 +800,8 @@ TestCase {
         assertEqual(reconciled.changed + " " + reconciled.modules.weather.active + " " + reconciled.modules.weather.versions.length, "true 1.1.0-1234567 2",
                     "… a link moved to a listed version the record does not have active: made active");
         assertEqual(rules.reconcileRecord(sources, records).changed, false, "… everything as recorded: nothing changes");
+        reconciled = rules.reconcileRecord({ complete: true, roots: roots, entries: [{ entry: places.user + "/weather", isLink: true, target: "" }] }, records);
+        assertEqual(reconciled.changed, false, "… a link whose version directory is gone (no target): nothing changes");
         reconciled = rules.reconcileRecord({ complete: true, roots: roots, entries: [{ entry: places.user + "/stray", isLink: true, target: places.versions + "/stray/1.0.0-1234567" }] }, records);
         assertEqual(reconciled.changed + " " + reconciled.notes.length, "false 1", "… an id the record does not have: named, not invented");
         assertEqual(rules.reconcileRecord({ complete: true, roots: roots, entries: cutEntries }, { ok: false, modules: {}, dropped: [] }).changed

@@ -189,6 +189,16 @@ TestCase {
         _then("the stand-in git's mode is set", () => _out !== null, () => {});
     }
 
+    // Waits until no stand-in git and none of its sleeps is left (a git that outlived its
+    // reader would be one); then checks so
+    function _noneLeft(description) {
+        _then(description + ": the processes are looked for", () => true, () => _sh(
+            "for i in $(seq 1 50); do pgrep -f \"h2s-stand-in-[s]leep $1|$1/[f]ake/git\" > /dev/null || exit 0; sleep 0.2; done; "
+            + "pgrep -af \"h2s-stand-in-[s]leep $1|$1/[f]ake/git\"; exit 1", [temp]));
+        _then(description + ": the processes were looked for", () => _out !== null, () =>
+              assert(_out.ok, description + ": no stand-in git or its sleep left (" + _out.lines.join("; ") + ")"));
+    }
+
     function _url(name, ref) {
         return "file://" + temp + "/repos/" + name + ".git" + (ref ? "#" + ref : "");
     }
@@ -490,6 +500,7 @@ TestCase {
             assert(!result.ok && result.message.includes("larger than 100 MiB"), "a download git reports past the cap: stopped (" + result.message + ")");
             assert(Date.now() - suite._largeStarted < 15000, "… while it runs, from a progress line redrawn without a line break — not at the time limit");
         }, 60000);
+        _noneLeft("a download cancelled");
         _mode("grow");
         _then("a small cap", () => true, () => {
             installer.maxDownloadBytes = 256 * 1024;
@@ -497,6 +508,10 @@ TestCase {
         });
         _job("a download that grows past the cap", () => installer.install(_url("gamma"), {}), result =>
              assert(!result.ok && result.message.includes("larger than 256 KiB"), "a download measured while git writes it: stopped past the cap (" + result.message + ")"));
+        _mode("bigfile");
+        _then("measured rarely", () => true, () => installer.measureIntervalMs = 60000);
+        _job("one file past the cap", () => installer.install(_url("gamma"), {}), result =>
+             assert(!result.ok && result.message.includes("larger than 256 KiB"), "a single file past the cap: stopped by the file size limit at once (" + result.message + ")"));
         _then("the cap back", () => true, () => {
             installer.maxDownloadBytes = ModuleInstallRules.maxDownloadBytes;
             installer.measureIntervalMs = 1000;
@@ -505,6 +520,7 @@ TestCase {
         _then("a short time limit", () => true, () => installer.downloadTimeoutMs = 2000);
         _job("git hangs", () => installer.install(_url("gamma"), {}), result =>
              assert(!result.ok && result.message.includes("did not answer within 2 s"), "a server that never answers: stopped at the limit (" + result.message + ")"));
+        _noneLeft("a download past its time limit");
         _then("the time limit back", () => true, () => installer.downloadTimeoutMs = 20000);
         _mode("");
         _check("the stand-ins", state => assertEqual(state.staging, 0, "nothing left in staging after any of them"));

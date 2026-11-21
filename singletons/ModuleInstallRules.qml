@@ -1377,7 +1377,9 @@ Singleton {
     // the record) left, put right at the next start: each link in the user root that leads to
     // `<versions>/<id>/<dir>` and is named `<id>`, where the record has an entry for `id`,
     // makes `dir` listed and active — the module stays the shell's, not "placed by hand". An
-    // id with no entry cannot be told its source and is only named in `notes`.
+    // id with no entry cannot be told its source and is only named in `notes`. The version
+    // directory must be there: a link whose target cannot be resolved (the source check gives
+    // it no target) changes nothing.
     // → { changed, modules, notes }; nothing changes from a record or a check that cannot be read
     function reconcileRecord(sources, records) {
         const result = { changed: false, modules: _recordCopy(records?.modules), notes: [] };
