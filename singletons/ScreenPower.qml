@@ -50,8 +50,10 @@ Singleton {
         target: root.backend === "hyprland" ? Hyprland : null
         function onRawEvent(event) {
             if (event.name === "monitoradded" || event.name === "monitoraddedv2"
-                    || event.name === "monitorremoved" || event.name === "monitorremovedv2")
+                    || event.name === "monitorremoved" || event.name === "monitorremovedv2") {
+                root._hyprland?.monitorEvent();
                 root.read();
+            }
         }
     }
 

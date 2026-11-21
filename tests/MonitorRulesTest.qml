@@ -105,13 +105,37 @@ TestCase {
         assertEqual(rules.hyprlandDpms("", false), "", "no connector: no dispatch (Hyprland would turn every monitor off)");
         assertEqual(rules.hyprlandDpms("DP-2\" }) hl.exec(\"x", false), "", "… nor one that would break out of the expression");
         assertEqual(rules.hyprlandDpms(null, true), "", "… nor no name");
-        assertEqual(rules.dispatchProblem({ ok: true, code: 0, stdout: "ok\n" }), "", "the dispatch answered ok: worked");
-        assertEqual(rules.dispatchProblem({ ok: true, code: 0, stdout: "error: no such dispatcher" }), "hyprctl dispatch failed: error: no such dispatcher",
-                    "… exit 0 with another answer: failed");
+        assertEqual(rules.dispatchProblem({ ok: true, code: 0, stdout: "ok\n" }), "", "the dispatch ran: no problem of the run");
+        assertEqual(rules.dispatchProblem({ ok: true, code: 0, stdout: "error: no such dispatcher" }), "",
+                    "… whatever it printed: whether the monitor changed is the next reading's");
         assertEqual(rules.dispatchProblem({ ok: false, code: 3, stdout: "", stderr: "Couldn't connect" }), "hyprctl dispatch failed (3): Couldn't connect",
                     "… a failed run, its stderr");
         assertEqual(rules.dispatchProblem({ ok: false, failedToStart: true }), "hyprctl could not be started", "… not started");
         assertEqual(rules.dispatchProblem({ ok: false, timedOut: true }), "hyprctl did not answer", "… timed out");
+
+        // --- the action, by the reading after it ---
+        const after = [{ id: "a", connector: "DP-1", power: "off" }, { id: "b", connector: "DP-2", power: "on" }, { id: "c", connector: "DP-3", power: "unknown" }];
+        assertEqual(rules.actionProblem(after, "a", false), "", "off asked, read off: worked");
+        assertEqual(rules.actionProblem(after, "b", false), "it is still on", "off asked, read on: a problem, even after \"ok\"");
+        assertEqual(rules.actionProblem(after, "a", true), "it is still off", "on asked, read off: a problem");
+        assertEqual(rules.actionProblem(after, "c", false), "its power could not be read", "… read unknown: a problem");
+        assertEqual(rules.actionProblem(after, "z", false), "the monitor is gone", "… gone: a problem");
+        assertEqual(rules.actionProblem(null, "a", false), "the monitors could not be read after it", "… no reading: a problem");
+
+        // --- monitors turned off by another's action ---
+        const before = [{ connector: "DP-1", power: "on" }, { connector: "DP-2", power: "on" }, { connector: "DP-3", power: "off" }, { connector: "DP-4", power: "on" }];
+        const allOff = [{ connector: "DP-1", power: "off" }, { connector: "DP-2", power: "off" }, { connector: "DP-3", power: "off" }, { connector: "DP-4", power: "unknown" }];
+        assertEqual(JSON.stringify(rules.turnedOffBesides(before, allOff, "DP-1")), JSON.stringify(["DP-2"]),
+                    "on before, off after, not the target: turned back on; off before or unknown after: left");
+        assertEqual(JSON.stringify(rules.turnedOffBesides(before, [{ connector: "DP-9", power: "off" }], "DP-1")), "[]", "… a monitor not there before: left");
+        assertEqual(JSON.stringify(rules.turnedOffBesides(before, null, "DP-1")), "[]", "… no reading after: nothing");
+
+        // --- a twin left alone keeps its id ---
+        assertEqual(rules.identities([twinA], ["Dell Inc.|U2419H|"]).ids["DP-1"], "Dell Inc.|U2419H||DP-1", "an identity seen as twins: the connector kept");
+        assertEqual(JSON.stringify(rules.identities([twinA], ["Dell Inc.|U2419H|"]).twins), JSON.stringify(["Dell Inc.|U2419H|"]), "… still reported");
+        const alone = rules.hyprlandMonitors(JSON.stringify([{ name: "DP-1", make: "Dell Inc.", model: "U2419H", serial: "", dpmsStatus: true }]), ["Dell Inc.|U2419H|"]);
+        assertEqual(alone.monitors[0].id, "Dell Inc.|U2419H||DP-1", "… in Hyprland's answer too");
+        assertEqual(alone.monitors[0].base, "Dell Inc.|U2419H|", "… with its identity before twins as `base`");
 
         // --- the per-monitor override ---
         const overrides = { [rules.identity(samsung)]: "off", "Dell Inc.|U2419H||DP-1": "screensaver" };
@@ -124,5 +148,16 @@ TestCase {
                     "overrides of monitors not connected, to be listed");
         assertEqual(JSON.stringify(rules.notConnected(overrides, [])), JSON.stringify(Object.keys(overrides).sort()), "… all, sorted, when none is");
         assertEqual(JSON.stringify(rules.notConnected(undefined, [])), "[]", "… none without a map");
+
+        // A twin's override under either form: set while it was a twin, or before
+        const twinNow = { id: "Dell Inc.|U2419H||DP-1", base: "Dell Inc.|U2419H|", connector: "DP-1" };
+        const plainNow = { id: "Dell Inc.|U2419H|", base: "Dell Inc.|U2419H|", connector: "DP-1" };
+        assertEqual(rules.overrideFor({ "Dell Inc.|U2419H|": "off" }, twinNow), "off", "a twin: its plain identity's override, set before it had a twin");
+        assertEqual(rules.overrideFor({ "Dell Inc.|U2419H||DP-1": "off" }, plainNow), "off", "a monitor alone: the override set while it was a twin, on this connector");
+        assertEqual(rules.overrideFor({ "Dell Inc.|U2419H||DP-3": "off" }, plainNow), "", "… not one of another connector");
+        assertEqual(rules.overrideFor({ "Dell Inc.|U2419H||DP-1": "screensaver", "Dell Inc.|U2419H|": "off" }, twinNow), "screensaver", "… its own id first");
+        assertEqual(JSON.stringify(rules.notConnected({ "Dell Inc.|U2419H|": "off", "Gone|X|1": "off" }, [twinNow])), JSON.stringify(["Gone|X|1"]),
+                    "an override a connected twin uses under its plain identity: not listed as not connected");
+        assertEqual(JSON.stringify(rules.notConnected({ "Dell Inc.|U2419H||DP-1": "off" }, [plainNow])), "[]", "… nor one it uses under its twin form");
     }
 }

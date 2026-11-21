@@ -11,7 +11,9 @@ import QtQuick
 // port keeps the monitor's settings. The id is also the key of its override in the
 // `monitorBlanking` setting ({ id: way }). Two connected monitors with one id — twins with
 // no serial, or with the same placeholder serial — are told apart by their connector
-// (`make|model|serial|connector`), and reported, so a view can say why.
+// (`make|model|serial|connector`), and reported, so a view can say why. An identity once
+// seen as twins keeps the connector while the shell runs, so a twin left alone keeps its id;
+// an override is found under either form (overrideFor).
 Singleton {
     id: root
 
@@ -51,9 +53,11 @@ Singleton {
 
     // Every connected monitor's id ([{ connector, make, model, serial }]) →
     // { ids: { connector: id }, twins: [identity…] } — `twins` the identities that two or
-    // more monitors shared, each listed once, in the order first met. A twin's id takes its
-    // connector, whatever the order the monitors came in.
-    function identities(monitors) {
+    // more monitors share, or that `knownTwins` names (seen as twins before), each listed
+    // once, in the order first met. A twin's id takes its connector, whatever the order the
+    // monitors came in.
+    function identities(monitors, knownTwins) {
+        const known = Array.isArray(knownTwins) ? knownTwins : [];
         const counts = {};
         const order = [];
         for (const monitor of monitors ?? []) {
@@ -67,9 +71,9 @@ Singleton {
         const ids = {};
         for (const monitor of monitors ?? []) {
             const base = identity(monitor);
-            ids[monitor.connector] = counts[base] > 1 ? base + "|" + monitor.connector : base;
+            ids[monitor.connector] = counts[base] > 1 || known.includes(base) ? base + "|" + monitor.connector : base;
         }
-        return { ids: ids, twins: order.filter(base => counts[base] > 1) };
+        return { ids: ids, twins: order.filter(base => counts[base] > 1 || known.includes(base)) };
     }
 
     // Hyprland's `dpmsStatus` → "on" | "off" | "unknown": only a boolean is an answer
@@ -77,11 +81,12 @@ Singleton {
         return dpmsStatus === true ? "on" : dpmsStatus === false ? "off" : "unknown";
     }
 
-    // `hyprctl -j monitors` → { monitors: [{ connector, id, make, model, serial, builtIn,
-    // power }], twins } or null when the text is not such an answer (not JSON, not a list).
+    // `hyprctl -j monitors` → { monitors: [{ connector, id, base, make, model, serial,
+    // builtIn, power }], twins } (`base`: the identity before twins are told apart;
+    // `knownTwins` as identities takes it) or null when the text is not such an answer (not JSON, not a list).
     // Disabled outputs and mirrors are left out: neither is a screen of its own. An entry
     // without a usable connector is left out too: nothing could be asked of it.
-    function hyprlandMonitors(text) {
+    function hyprlandMonitors(text, knownTwins) {
         let parsed;
         try {
             parsed = JSON.parse(String(text ?? ""));
@@ -109,9 +114,9 @@ Singleton {
                 power: power(entry.dpmsStatus)
             });
         }
-        const named = identities(kept);
+        const named = identities(kept, knownTwins);
         return {
-            monitors: kept.map(monitor => Object.assign({ id: named.ids[monitor.connector] }, monitor)),
+            monitors: kept.map(monitor => Object.assign({ id: named.ids[monitor.connector], base: identity(monitor) }, monitor)),
             twins: named.twins
         };
     }
@@ -153,8 +158,10 @@ Singleton {
         return first !== "" ? ": " + first : "";
     }
 
-    // What `hyprctl dispatch` answered → "" when it worked, else the problem. The result is
-    // CommandRunner's; a dispatch that worked prints "ok".
+    // What `hyprctl dispatch` answered → "" when the run went through, else the problem.
+    // The result is CommandRunner's. Hyprland prints "ok" even for an action it did not
+    // take, so the run is all this says: whether the monitor changed is the next reading's
+    // (actionProblem).
     function dispatchProblem(result) {
         if (result === null || typeof result !== "object")
             return "hyprctl gave no answer";
@@ -162,28 +169,78 @@ Singleton {
             return "hyprctl could not be started";
         if (result.timedOut === true)
             return "hyprctl did not answer";
+        if (result.ok === true)
+            return "";
         const output = String(result.stdout ?? "").trim();
-        if (result.ok === true && output === "ok")
-            return "";
-        return "hyprctl dispatch failed" + (result.ok === true ? "" : " (" + result.code + ")")
-            + _said(output !== "" ? output : result.stderr);
+        return "hyprctl dispatch failed (" + result.code + ")" + _said(output !== "" ? output : result.stderr);
     }
 
-    // The way an id's override names in `monitorBlanking`, or "" when it has none (or the
-    // map is not one)
-    function overrideFor(monitorBlanking, id) {
-        if (monitorBlanking === null || typeof monitorBlanking !== "object" || Array.isArray(monitorBlanking))
+    // After an action: the reading that followed it ([{ id, power }], or null when it failed)
+    // → "" when the monitor's power is the one asked, else the problem
+    function actionProblem(monitors, id, on) {
+        if (!Array.isArray(monitors))
+            return "the monitors could not be read after it";
+        const monitor = monitors.find(entry => entry.id === id);
+        if (!monitor)
+            return "the monitor is gone";
+        const wanted = on === true ? "on" : "off";
+        if (monitor.power === wanted)
             return "";
-        const way = monitorBlanking[id];
-        return typeof way === "string" ? way : "";
+        return monitor.power === "unknown" ? "its power could not be read" : "it is still " + monitor.power;
     }
 
-    // The ids of overrides whose monitors are not connected, sorted: kept, and listed to be
-    // forgotten
-    function notConnected(monitorBlanking, connectedIds) {
-        if (monitorBlanking === null || typeof monitorBlanking !== "object" || Array.isArray(monitorBlanking))
+    // Monitors an action turned off by mistake: on in the reading before it, off in the one
+    // after, and not the one it was for → their connectors, each also in the reading after
+    function turnedOffBesides(before, after, targetConnector) {
+        if (!Array.isArray(before) || !Array.isArray(after))
             return [];
-        const connected = connectedIds ?? [];
-        return Object.keys(monitorBlanking).filter(id => !connected.includes(id)).sort();
+        return after.filter(monitor => monitor.power === "off" && monitor.connector !== targetConnector
+                            && before.some(earlier => earlier.connector === monitor.connector && earlier.power === "on"))
+            .map(monitor => monitor.connector);
+    }
+
+    function _isMap(value) {
+        return value !== null && typeof value === "object" && !Array.isArray(value);
+    }
+
+    // The keys an override of this monitor may be kept under, first the one it is saved
+    // under: its id, then the other form — a twin's `base|connector` and the plain `base`
+    // name one monitor, whichever it was when the override was set. A plain id string has
+    // only itself.
+    function overrideKeys(monitor) {
+        if (typeof monitor === "string")
+            return [monitor];
+        const id = String(monitor?.id ?? "");
+        const base = String(monitor?.base ?? id);
+        const connector = String(monitor?.connector ?? "");
+        const keys = [id];
+        const other = id !== base ? base : connector !== "" ? base + "|" + connector : "";
+        if (other !== "" && other !== id)
+            keys.push(other);
+        return keys;
+    }
+
+    // The way a monitor's override names in `monitorBlanking`, or "" when it has none (or
+    // the map is not one). `monitor`: { id, base, connector } as read, or an id
+    function overrideFor(monitorBlanking, monitor) {
+        if (!_isMap(monitorBlanking))
+            return "";
+        for (const key of overrideKeys(monitor)) {
+            const way = monitorBlanking[key];
+            if (typeof way === "string")
+                return way;
+        }
+        return "";
+    }
+
+    // The keys of overrides no connected monitor uses, sorted: kept, and listed to be
+    // forgotten. `monitors`: the connected ones, as read ({ id, base, connector }) or ids
+    function notConnected(monitorBlanking, monitors) {
+        if (!_isMap(monitorBlanking))
+            return [];
+        const used = [];
+        for (const monitor of monitors ?? [])
+            used.push(...overrideKeys(monitor));
+        return Object.keys(monitorBlanking).filter(key => !used.includes(key)).sort();
     }
 }
