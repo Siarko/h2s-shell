@@ -1,4 +1,5 @@
 import QtQuick
+import Quickshell.Io
 import qs.singletons
 
 // ModuleInstallRules (pure): where a module comes from, the copies it replaces, a card's
@@ -11,6 +12,11 @@ TestCase {
     suiteName: "ModuleInstallRules"
 
     readonly property string home: "/home/anna"
+    // builtin.json as the repository ships it (builtin-modules/)
+    property var _shippedBuiltin: FileView {
+        path: Qt.resolvedUrl("../builtin-modules/builtin.json")
+        blockLoading: true
+    }
     readonly property var places: ModuleInstallRules.paths(home + "/.local/share", home + "/.config")
     readonly property var roots: ({
         developer: [home + "/dev/modules"],
@@ -493,8 +499,13 @@ TestCase {
         const rules = ModuleInstallRules;
         assertEqual(JSON.stringify(rules.builtinOff('{"off": ["player", "weather", "player", "Bad", "clock", 3]}')), JSON.stringify({ ok: true, off: ["player", "weather"] }),
                     "builtin.json: the valid ids (a reserved one is none), each once");
-        assertEqual(JSON.stringify(rules.builtinOff('{ "off": [] }\n')), JSON.stringify({ ok: true, off: [] }),
-                    "builtin.json as builtin-modules/ ships it: well formed, none off (no problem for the host)");
+        const shipped = rules.builtinOff(_shippedBuiltin.text());
+        assert(shipped.ok, "builtin.json as builtin-modules/ ships it: well formed (no problem for the host)");
+        let listed = null;
+        try {
+            listed = JSON.parse(_shippedBuiltin.text()).off;
+        } catch (error) {}
+        assertEqual(JSON.stringify(shipped.off), JSON.stringify(listed), "… every id it lists as off valid, each once (none dropped)");
         for (const bad of ["", "{", "[]", '{"off": "clock"}', "{}", null])
             assertEqual(JSON.stringify(rules.builtinOff(bad)), JSON.stringify({ ok: false, off: [] }), "unreadable or another form: not ok, none off — " + JSON.stringify(bad));
         const on = (id, source, disabled, enabled) => rules.enabledByLists(id, source, ["clock"], enabled ?? [], disabled ?? []);

@@ -41,9 +41,11 @@ Qt 6 is required: QtQuick, QtQuick.Layouts, QtCore, plus the Quickshell modules
 Quickshell exposes every uppercase QML file in a directory as a type under
 `import qs.<dirname>` (`qs.widgets`, `qs.panels`, `qs.singletons.network`, …). There is
 no `qmldir` in the shell's own directories and none should be added — registration is
-automatic. (Modules are the exception: a module directory, loaded by URL from outside
-what Quickshell scans, needs its own — see [Modules](#modules); the fixture modules under
-`tests/fixtures/` have one.)
+automatic. (Modules are the exception: a module directory is loaded by its `file://` URL,
+never imported, and brings its own `qmldir` — whether it lies outside the shell's tree (an
+installed module, the packaged built-in copy) or inside it, as the fixture modules under
+`tests/fixtures/` and the built-in modules under `builtin-modules/` do; see
+[Modules](#modules).)
 
 Two consequences worth knowing:
 
@@ -644,73 +646,9 @@ one singleton reads the seams, `TestSeams` (the lock screen's above, the module 
 Integrations as separate packages. The module API's reference
 (the facade, the slot table, the anchors, the handle, the lifetime rules) is the header of `api/Api.qml`;
 the manifest schema is in `singletons/ModuleManifestRules.qml`. The parts: the rules, the host, discovery,
-the `qs.api` facade, the registries taking modules' contributions, slots and anchors.
-
-#### Modules and trust
-
-A module is QML and JavaScript that the shell loads into its own process. Nothing separates
-it from the shell: a module can do what the shell can — read and change the user's files,
-run programs as the user, use the network, and see what the shell shows and what is typed
-into it. The lock screen's password field and the password prompt for administrator actions
-run in the same process, so a module could read what is typed there too.
-
-**What the shell checks** before it loads a module: that its manifest is well formed and
-asks for an API version this shell has; that every file it names lies inside its own
-directory and is not too large; that its icon refers to nothing outside itself; which
-programs it needs and where they were found (and whether each is trusted); whether it
-reaches into the shell's internal parts; and that only a module whose manifest declares
-administrator actions (`privileged`, API 1.36) runs them, and only once the user approved
-that declaration. These checks catch mistakes. They do not make a module safe: a module that
-wants to get around them can, because it runs inside the shell — the declaration is a
-statement for the user and a guard against mistakes, not a sandbox. A shell that dies twice
-in a row within 30 s of starting loads no module the next time (safe mode).
-
-**What protects the user.** Built-in modules (the directory `H2S_SHELL_BUILTIN_MODULES`
-names, given by the shell's installation) come with the shell and are reviewed with it; they
-load without a question. Modules in a system data directory that root owns (a distribution
-package, a NixOS configuration) are the administrator's to answer for, and count as
-confirmed. Modules on the developer's `H2S_SHELL_MODULE_PATH` are not asked about either.
-Any other module is its author's work, not the project's: a module placed in the user's
-root loads only once the user has confirmed it, and waits for approval again when it starts
-to declare administrator actions or names another author; installing one with the shell's
-installer is the user's confirmation. A module asks for administrator rights only through
-the shell's password prompt, which names the module, says what the action is for and shows
-the command; for a module that is not the project's, that text is the only protection — it
-is to be read, and cancelled when it does not match what the user just did. The shell never
-installs or turns on a module without the user's action, and never asks for a password by
-itself.
-
-**What to install.** A module is like a program run as oneself: installed only from someone
-trusted, from a repository one could read, and pinned to a tag rather than a branch that can
-change underneath. What changed is read before updating.
-
-#### Built-in modules
-
-The repository's built-in modules are in `builtin-modules/`, each a module directory, with
-`builtin.json` (`{ "off": [ids] }`: the ones that start off). None ships yet: it holds only
-`builtin.json`, and a built-in root that holds nothing else finds no module and changes
-nothing for the host. The shell loads them from a copy outside its own tree, which the
-launcher names to the shell in `H2S_SHELL_BUILTIN_MODULES`. In a checkout that is itself
-the shell's tree (Arch), `builtin-modules/` lies inside what Quickshell scans: its name has a
-hyphen, so no `import qs.…` can reach it, and each module brings its own `qmldir`, as the
-fixture modules under `tests/fixtures/` do.
-
-##### NixOS
-
-`nix/package.nix` installs them to `$out/share/h2s-shell-builtin`, beside the shell's tree
-(`$out/share/h2s-shell`, which leaves `builtin-modules/` out), and the `h2s-shell` command
-sets `H2S_SHELL_BUILTIN_MODULES` to it — also when `H2S_SHELL_DIR` runs a checkout, and
-whatever the caller had set.
-
-##### Arch
-
-`install.sh` copies the checkout's `builtin-modules/` to
-`~/.local/share/h2s-shell/builtin/` (under `$XDG_DATA_HOME` when set), replacing what was
-there; `install.sh --update`, after a `git pull` in the checkout, copies it again and does
-nothing else. A link or a file in that place is left alone (status 1). The directory is
-written only there, never by Settings or by the module installer. `scripts/launch.sh`, when
-`H2S_SHELL_BUILTIN_MODULES` is unset, sets it to that directory; set (empty included), it
-takes what is given, and only an absolute path counts.
+the `qs.api` facade, the registries taking modules' contributions, slots and anchors. The
+trust model ("Modules and trust") and where the built-in modules live ("Built-in modules")
+close this section.
 
 - A **module** is a directory with a `module.json` (the schema: `singletons/ModuleManifestRules.qml`'s
   header), a `qmldir` for its singletons, and QML loaded by `file://` URL —
@@ -733,7 +671,7 @@ takes what is given, and only an absolute path counts.
   directories from `H2S_SHELL_MODULE_PATH` (the developer's list), then
   `~/.local/share/h2s-shell/modules/*`, then the built-in modules' directory
   (`H2S_SHELL_BUILTIN_MODULES`, given by the shell's installation: see "Built-in modules"
-  below), then the system data
+  at the end of this section), then the system data
   directories' `h2s-shell/modules/*` (`H2S_SHELL_MODULE_DATA_DIRS`). The running shell runs
   the same search again (`launch.sh --discover-modules`) on `qs ipc call modules rediscover`
   and loads its list in place. Safe mode (no module loads): after
@@ -1499,6 +1437,81 @@ blocked ("" | "locked" | "busy"), error }`; it returns `{ open, cancel() }`.
   chooser's lock too, and side panels': an open one closes), `privilegedIdle`, and
   `pageFrame` (the settings window's frame for a module's page, for a suite's own window:
   the page's `SidePanel`s open in it).
+
+#### Modules and trust
+
+A module is QML and JavaScript that the shell loads into its own process. Nothing separates
+it from the shell: a module can do what the shell can — read and change the user's files,
+run programs as the user, use the network, and see what the shell shows and what is typed
+into it. The lock screen's password field and the password prompt for administrator actions
+run in the same process, so a module could read what is typed there too.
+
+**What the shell checks** before it loads a module: that its manifest is well formed and
+asks for an API version this shell has; that every file it names lies inside its own
+directory and is not too large; that its icon refers to nothing outside itself; which
+programs it needs and where they were found (and whether each is trusted); whether it
+reaches into the shell's internal parts; and that only a module whose manifest declares
+administrator actions (`privileged`, API 1.36) runs them, and only once the user approved
+that declaration. These checks catch mistakes. They do not make a module safe: a module that
+wants to get around them can, because it runs inside the shell — the declaration is a
+statement for the user and a guard against mistakes, not a sandbox. A shell that dies twice
+in a row within 30 s of starting loads no module the next time (safe mode).
+
+**What protects the user.** Built-in modules (the directory `H2S_SHELL_BUILTIN_MODULES`
+names, given by the shell's installation) come with the shell and are reviewed with it; they
+load without a question. Modules in a system data directory that root owns (a distribution
+package, a NixOS configuration) are the administrator's to answer for, and count as
+confirmed. Modules on the developer's `H2S_SHELL_MODULE_PATH` are not asked about either.
+Any other module is its author's work, not the project's: a module placed in the user's
+root loads only once the user has confirmed it, and waits for approval again when it starts
+to declare administrator actions or names another author; installing one with the shell's
+installer is the user's confirmation. The confirmation guards against mistakes and against
+modules put there unnoticed, not against a program already running as the user: such a
+program can write the user's files, the shell's configuration included, and on Arch the
+built-in directory (`~/.local/share/h2s-shell/builtin/`) is the user's too — whatever lies
+there counts as built in and is never asked about. A module asks for administrator rights only through
+the shell's password prompt, which names the module, says what the action is for and shows
+the command; for a module that is not the project's, that text is the only protection — it
+is to be read, and cancelled when it does not match what the user just did. The shell never
+installs or turns on a module without the user's action, and never asks for a password by
+itself.
+
+**What to install.** A module is like a program run as oneself: installed only from someone
+trusted, from a repository one could read, and pinned to a tag rather than a branch that can
+change underneath. What changed is read before updating.
+
+#### Built-in modules
+
+The repository's built-in modules are in `builtin-modules/`, each a module directory, with
+`builtin.json` (`{ "off": [ids] }`: the ones that start off). None ships yet: it holds only
+`builtin.json`, and a built-in root that holds nothing else finds no module and changes
+nothing for the host. The shell loads them from a copy outside its own tree, which the
+launcher names to the shell in `H2S_SHELL_BUILTIN_MODULES`. In a checkout run as the shell
+(Arch; NixOS with `H2S_SHELL_DIR`), `builtin-modules/` lies inside what Quickshell scans: its name has a
+hyphen, so no `import qs.…` can reach it, and each module brings its own `qmldir`, as the
+fixture modules under `tests/fixtures/` do.
+
+##### NixOS
+
+`nix/package.nix` installs them to `$out/share/h2s-shell-builtin`, beside the shell's tree
+(`$out/share/h2s-shell`, which leaves `builtin-modules/` out), and the `h2s-shell` command
+sets `H2S_SHELL_BUILTIN_MODULES` to it — also when `H2S_SHELL_DIR` runs a checkout, and
+whatever the caller had set.
+
+##### Arch
+
+`install.sh` copies the checkout's `builtin-modules/` to
+`~/.local/share/h2s-shell/builtin/` (under `$XDG_DATA_HOME` when set), replacing what was
+there; `install.sh --update`, after a `git pull` in the checkout, copies it again and does
+nothing else. A link or a file in that place is left alone (status 1). The directory is
+written only there, never by Settings or by the module installer; it is still a directory the
+user owns, so a program running as the user can put a module there, and it loads as built in
+without a question (see "Modules and trust"). `scripts/launch.sh`, when
+`H2S_SHELL_BUILTIN_MODULES` is unset, sets it to that directory; set (empty included), it
+takes what is given, and only an absolute path counts. When the root is that directory and the
+checkout has `builtin-modules/`, the launcher's module search compares the two and says in its
+log when the copy differs or is missing ("install.sh --update copies it again"), once per change
+of that outcome.
 
 ### Logging
 

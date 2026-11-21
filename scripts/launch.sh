@@ -311,6 +311,38 @@ module_roots() {
         [ -n "$dir" ] && echo "$dir/h2s-shell/modules"
     done
 }
+# On Arch the built-in modules are the copy install.sh makes of the checkout's
+# builtin-modules/: a checkout updated without `install.sh --update` runs the old copy. When
+# the built-in root is that copy (the data home's h2s-shell/builtin) and this checkout has
+# builtin-modules/, each search compares the two (names, link targets, file checksums) and
+# says so when they differ or the copy is missing — once per change of that outcome, kept in
+# $runtime_dir, never at every search. Without find, cksum or sort it says nothing.
+builtin_copy_state=$runtime_dir/h2s-shell-builtin-copy
+tree_listing() {
+    (cd -P -- "$1" 2> /dev/null || exit 1
+     find . -mindepth 1 \( -type l -printf 'link %p %l\n' \) -o \( -type d -printf 'dir %p\n' \) \
+         -o \( -type f -exec cksum {} + \) | LC_ALL=C sort)
+}
+check_builtin_copy() {
+    local root=${H2S_SHELL_BUILTIN_MODULES-} source=$shell_dir/builtin-modules state previous=""
+    [ "$root" = "${XDG_DATA_HOME:-$HOME/.local/share}/h2s-shell/builtin" ] && [ -d "$source" ] || return 0
+    command -v find > /dev/null && command -v cksum > /dev/null && command -v sort > /dev/null || return 0
+    if [ ! -d "$root" ]; then
+        state=missing
+    elif [ "$(tree_listing "$source")" = "$(tree_listing "$root")" ]; then
+        state=same
+    else
+        state=differs
+    fi
+    [ -f "$builtin_copy_state" ] && read -r previous < "$builtin_copy_state" 2> /dev/null
+    [ "$state" = "$previous" ] && return 0
+    echo "$state" > "$builtin_copy_state" 2> /dev/null
+    case "$state" in
+        missing) say "built-in modules: $root is missing, this checkout's builtin-modules/ is not installed there (install.sh --update copies it)" ;;
+        differs) say "built-in modules: $root differs from this checkout's builtin-modules/ (install.sh --update copies it again)" ;;
+        same) [ -z "$previous" ] || say "built-in modules: $root matches this checkout's builtin-modules/ again" ;;
+    esac
+}
 # The search itself, run as `launch.sh --discover-modules` (by discover_modules, and by the
 # running shell to load modules again without a restart, ModuleHost.rediscover): the list on
 # standard output. It forks nothing per entry: module.json is looked for first, and the
@@ -323,6 +355,7 @@ find_modules() {
     if [ -n "$discovery_hang_ms" ] && { [ -z "${seam_discovery_hang_while:-}" ] || [ -e "$seam_discovery_hang_while" ]; }; then
         sleep "$(ms_to_seconds "$discovery_hang_ms")"
     fi
+    check_builtin_copy
     IFS=: read -r -a given <<< "${H2S_SHELL_MODULE_PATH-}"
     for entry in "${given[@]}"; do
         [ -n "$entry" ] || continue

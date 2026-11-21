@@ -8,7 +8,7 @@
 #   - an empty environment (env -i) with a private HOME and a PATH of one directory, made
 #     here: recording stand-ins for sudo, pacman, git, fc-list and for every program that
 #     could change the system (below), and links to the plain tools install.sh uses
-#     (bash, mkdir, dirname, grep, cat, and cp, mv, rm for the built-in modules, which work
+#     (bash, mkdir, dirname, grep, cat, and cp, mv, rm, mktemp for the built-in modules, which work
 #     only inside the private HOME). No stand-in runs anything real;
 #   - no new privileges (setpriv): even a sudo reached by another way could not become root;
 #   - before anything runs: every privileged name must resolve to a stand-in written here,
@@ -37,7 +37,7 @@ need script "gives each run of install.sh a terminal of its own, as it hands pac
 need setpriv "runs install.sh with no new privileges, so that nothing in it could become root"
 need timeout "ends a run that hangs"
 need awk "reads install.sh for ways around the stand-ins before it is run"
-for tool in bash mkdir dirname grep cat cp mv rm; do need "$tool" "install.sh uses it; linked into the private PATH"; done
+for tool in bash mkdir dirname grep cat cp mv rm mktemp; do need "$tool" "install.sh uses it; linked into the private PATH"; done
 if [ ${#missing[@]} -gt 0 ]; then
     printf 'install-test.sh: %s\n' "${missing[@]}" >&2
     exit 2
@@ -70,7 +70,7 @@ make_bin() {
     local bin=$1 control name
     control=$(dirname "$bin")/control
     mkdir -p "$bin" "$control"
-    for name in bash mkdir dirname grep cat cp mv rm; do ln -s "$(type -P "$name")" "$bin/$name"; done
+    for name in bash mkdir dirname grep cat cp mv rm mktemp; do ln -s "$(type -P "$name")" "$bin/$name"; done
     standin() { { echo "#!$BASH_PATH"; echo "$MARK"; echo "control='$control'"; cat; } > "$bin/$1"; chmod +x "$bin/$1"; }
     standin sudo << 'STANDIN'
 terminal=no
@@ -228,8 +228,8 @@ start_case() {
     echo "JetBrainsMono Nerd Font" > "$CONTROL/fonts"
     EXTRA_ENV=()
 }
-# run_install [piped | --update]: runs install.sh once in the case's surroundings — from the
-# file (with --update: given that argument), or given to bash on its standard input, as
+# run_install [piped | <arguments>…]: runs install.sh once in the case's surroundings — from
+# the file (given those arguments), or given to bash on its standard input, as
 # `curl … | bash` does. OUTPUT (both streams, as the terminal got them), STATUS.
 run_install() {
     safe_bin "$BIN" || setup_error "the private PATH of $CASE is not safe; stopped before running install.sh"
@@ -240,10 +240,10 @@ run_install() {
         [ ${#EXTRA_ENV[@]} -gt 0 ] && printf ' %q' "${EXTRA_ENV[@]}"
         if [ "${1:-}" = piped ]; then
             printf ' %q --no-new-privs %q < %q\n' "$SETPRIV" "$BIN/bash" "$INSTALL"
-        elif [ "${1:-}" = --update ]; then
-            printf ' %q --no-new-privs %q %q --update\n' "$SETPRIV" "$BIN/bash" "$INSTALL"
         else
-            printf ' %q --no-new-privs %q %q\n' "$SETPRIV" "$BIN/bash" "$INSTALL"
+            printf ' %q --no-new-privs %q %q' "$SETPRIV" "$BIN/bash" "$INSTALL"
+            [ $# -gt 0 ] && printf ' %q' "$@"
+            echo
         fi
     } > "$CASE/run.sh"
     chmod +x "$CASE/run.sh"
@@ -314,9 +314,24 @@ check "--update: the built-in modules are the checkout's now" \
     test "$(cd "$builtin" && find . | LC_ALL=C sort | tr '\n' ' ')" = ". ./builtin.json ./other ./other/module.json "
 check "--update: no sudo, no pacman" none_logged '^sudo \|^pacman:'
 check "--update: no clone, no pull" none_logged '^git: clone\|pull'
-check "--update: nothing left beside the built-in directory" test ! -e "$builtin.new" -a ! -e "$builtin.old"
+nothing_beside() { ! compgen -G "$builtin.*" > /dev/null; }
+check "--update: the built-in directory is a directory" test -d "$builtin" -a ! -L "$builtin"
+check "--update: no copy or old one left beside it" nothing_beside
+: > "$builtin.new.kept-by-someone"
+run_install --update
+check "--update: a file beside it that this run did not make is not deleted" test -e "$builtin.new.kept-by-someone"
+rm "$builtin.new.kept-by-someone"
 check "--update: says to restart the shell" says "Restart the shell to load the built-in modules again"
 
+for arguments in "--upgrade" "--update --update"; do
+    start_case "wrong-argument-${arguments// /}"
+    read -r -a words <<< "$arguments"
+    run_install "${words[@]}"
+    check "install.sh $arguments: exit 2" status_is 2
+    check "install.sh $arguments: says how it is used" says "usage: install.sh [--update]"
+    check "install.sh $arguments: nothing is run at all" test ! -s "$CONTROL/log"
+    check "install.sh $arguments: nothing is put in the home directory" test "$(home_tree)" = .
+done
 start_case update-not-installed
 run_install --update
 check "--update without an install: exit 1" status_is 1

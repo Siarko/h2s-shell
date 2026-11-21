@@ -65,7 +65,7 @@ within() { local seconds=$1 description=$2; shift 2; if wait_until "$seconds" "$
 
 # ---- The fabricated PATH: the utilities launch.sh calls, the real ones, and the stand-in ---
 mkdir -p "$work/bin" "$work/home" "$work/data"
-for name in bash env dirname readlink id date stat mv flock awk sed timeout sleep tr grep head basename cat rm; do
+for name in bash env dirname readlink id date stat mv flock awk sed timeout sleep tr grep head basename cat rm find cksum sort; do
     real=$(type -P "$name") || { echo "launcher-selftest.sh: $name not found on PATH (launch.sh calls it)" >&2; exit 2; }
     ln -s "$real" "$work/bin/$name"
 done
@@ -391,6 +391,33 @@ is "set and empty: none" test "$(discover H2S_SHELL_BUILTIN_MODULES=)" = "$alpha
 is "set: the one given, not the data home's" \
     test "$(discover "H2S_SHELL_BUILTIN_MODULES=$discovery/package")" = "$alpha:$(canonical "$discovery/package/gamma")"
 is "set to a relative path: none" test "$(discover H2S_SHELL_BUILTIN_MODULES=package)" = "$alpha"
+
+echo "== the built-in copy against the checkout's builtin-modules/"
+# Said once per change of the outcome, in the launcher's log; only for the data home's copy
+copy_log=$discovery/run/h2s-shell-launcher.log
+copy_lines() { grep -c "built-in modules: " "$copy_log" 2> /dev/null || true; }
+copy_said() { grep -q "built-in modules: $discovery/data/h2s-shell/builtin $1" "$copy_log" 2> /dev/null; }
+discover > /dev/null
+is "without builtin-modules/ in the checkout: nothing said" test "$(copy_lines)" = 0
+mkdir -p "$work/tree/builtin-modules"
+cp -R "$discovery/data/h2s-shell/builtin/." "$work/tree/builtin-modules/"
+discover > /dev/null
+is "the copy as the checkout's: nothing said" test "$(copy_lines)" = 0
+echo '{ "id": "beta", "name": "Beta" }' > "$discovery/data/h2s-shell/builtin/beta/module.json"
+discover > /dev/null
+discover > /dev/null
+is "a file changed in the copy: said once that it differs, over two searches" test "$(copy_lines)" = 1
+is "… naming the copy and install.sh --update" copy_said "differs from this checkout's builtin-modules/ (install.sh --update copies it again)"
+discover "H2S_SHELL_BUILTIN_MODULES=$discovery/package" > /dev/null
+is "another built-in root (the package's): not compared" test "$(copy_lines)" = 1
+cp "$work/tree/builtin-modules/beta/module.json" "$discovery/data/h2s-shell/builtin/beta/module.json"
+discover > /dev/null
+is "the same again: said once" test "$(copy_lines)" = 2
+is "… that it matches again" copy_said "matches this checkout's builtin-modules/ again"
+mv "$discovery/data/h2s-shell/builtin" "$discovery/builtin-away"
+discover > /dev/null
+is "the copy missing: said" copy_said "is missing"
+rm -r "$work/tree/builtin-modules"
 
 echo
 if [ "$failures" = 0 ]; then

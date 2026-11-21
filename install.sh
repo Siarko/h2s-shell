@@ -43,9 +43,10 @@ packages=(
 
 ours() { git -C "$target" remote get-url origin 2> /dev/null | grep -q "Siarko/h2s-shell"; }
 
-# The checkout's built-in modules into $builtin_target, replacing what was there: copied
-# beside it first, so a copy that fails leaves the old one in place. Links are copied as
-# links (a module whose file leads out of its directory is refused by the shell's own check).
+# The checkout's built-in modules into $builtin_target, replacing what was there: copied into
+# a new directory beside it first (mktemp: only what this run made is ever deleted), so a copy
+# that fails leaves the old one in place. Links are copied as links (a module whose file
+# leads out of its directory is refused by the shell's own check).
 copy_builtin() {
     local source="$target/builtin-modules"
     echo "==> Built-in modules, in $builtin_target"
@@ -58,14 +59,23 @@ copy_builtin() {
         exit 1
     fi
     mkdir -p "$(dirname "$builtin_target")"
-    rm -rf "$builtin_target.new" "$builtin_target.old"
-    cp -RP "$source" "$builtin_target.new"
+    local staging old=""
+    staging=$(mktemp -d "$builtin_target.new.XXXXXX")
+    cp -RP "$source/." "$staging" || { rm -rf "$staging"; exit 1; }
     if [ -d "$builtin_target" ]; then
-        mv "$builtin_target" "$builtin_target.old"
+        old=$(mktemp -d "$builtin_target.old.XXXXXX")
+        mv "$builtin_target" "$old/builtin"
     fi
-    mv "$builtin_target.new" "$builtin_target"
-    rm -rf "$builtin_target.old"
+    mv "$staging" "$builtin_target"
+    if [ -n "$old" ]; then
+        rm -rf "$old"
+    fi
 }
+
+if [ $# -gt 1 ] || { [ $# = 1 ] && [ "$1" != --update ]; }; then
+    echo "usage: install.sh [--update]" >&2
+    exit 2
+fi
 
 if [ "${1:-}" = --update ]; then
     if [ ! -e "$target/shell.qml" ] || ! ours; then
