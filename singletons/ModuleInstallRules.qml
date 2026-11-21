@@ -186,7 +186,7 @@ Singleton {
             return null;
         // What runs must be what the record describes: a link whose target resolves elsewhere
         // is not the shell's
-        if (directory !== found.target)
+        if (_cleanPath(directory) === "" || _cleanPath(directory) !== found.target)
             return null;
         const versionDirectory = _baseName(found.target);
         const version = _list(record.versions).find(each => each.dir === versionDirectory);
@@ -276,7 +276,8 @@ Singleton {
     // → { row: [action], opened: [action] } — `row` the button row (main, Update, Remove),
     //   `opened` the opened card's buttons. An action: { label, effect, asks, subject } plus
     //   what it needs (`dependents`, `version`); `asks`: "none", "button" (the button's own
-    //   question), "modal" (the Settings modal) or "confirmation" (§5's box); `subject`
+    //   question), "modal" (the Settings modal), "confirmation" (§5's box) or "approval" (the
+    //   consent box, §6.4, for a module held for approval); `subject`
     //   { id, directory } — what it acts on.
     // A duplicate gets none (it is shown inside its winner's card). In safe mode no update
     // or check is offered (§7).
@@ -288,10 +289,12 @@ Singleton {
         if (state === "duplicate" || subject.id === "")
             return { row: row, opened: opened };
         const action = (label, effect, asks, extra) => Object.assign({ label: label, effect: effect, asks: asks, subject: subject }, extra ?? {});
-        const off = state === "unconfirmed" || state === "disabled" || status?.enabled === false;
+        const off = !isOn(status);
         if (off) {
-            const confirm = state === "unconfirmed" || context?.needsConfirmation === true;
-            row.push(action("Enable", "enable", confirm ? "confirmation" : "none"));
+            // Held for approval: the consent box (§6.4's); new: the confirmation (§5)
+            const asks = state === "approval" ? "approval"
+                       : state === "unconfirmed" || context?.needsConfirmation === true ? "confirmation" : "none";
+            row.push(action("Enable", "enable", asks));
         } else {
             const dependents = _list(context?.runningDependents).map(name => _plain(String(name ?? "")));
             row.push(action("Disable", "disable", dependents.length > 0 ? "modal" : "button", { dependents: dependents }));
@@ -321,13 +324,13 @@ Singleton {
     // ---- The confirmation (§5) ----
 
     // What an acknowledgement records for a module: { source, address, author, privileged }
-    // — the source kind, where it comes from (sourceOf's `address`, without a "#ref": a new
-    // tag of the same repository is the same source), the manifest's author and whether it
+    // — the source kind, where it comes from (sourceOf's `address`; a repository's without a
+    // "#ref": a new tag of the same repository is the same source), the manifest's author and whether it
     // declares administrator actions
     function acknowledgementOf(found, manifest) {
         return {
             source: String(found?.source ?? ""),
-            address: String(found?.address ?? "").split("#")[0],
+            address: found?.source === "repository" ? String(found?.address ?? "").split("#")[0] : String(found?.address ?? ""),
             author: typeof manifest?.author === "string" ? manifest.author : "",
             privileged: ModuleRules.isObject(manifest?.privileged)
         };
@@ -335,7 +338,7 @@ Singleton {
 
     // Whether turning a module on needs the user's confirmation. `found`: sourceOf's result;
     // `manifest`: its checked manifest ({ id, author, privileged }); `acknowledgements`:
-    // Config.acknowledgedModules — undefined or null when it was never written.
+    // Config.acknowledgedModules — undefined when it was never written.
     // → { needed, state, reasons, baseline }
     //   built-in, system, development copies: never needed;
     //   no list yet: not needed, `baseline` true — the first start acknowledges everything it
@@ -346,12 +349,13 @@ Singleton {
     //   the same source, but the manifest now declares administrator actions the
     //     acknowledgement did not, or names another author: `approval` (reasons
     //     "privileged", "author") — held off as "Approval required".
-    // A list that is not an object is read as empty: a broken list asks again, never trusts.
+    // A list that is not an object (null included) is read as empty: a broken list asks again,
+    // never trusts.
     function needsConfirmation(found, manifest, acknowledgements) {
         const fine = { needed: false, state: "", reasons: [], baseline: false };
         if (exemptSources.includes(found?.source))
             return fine;
-        if (acknowledgements === undefined || acknowledgements === null)
+        if (acknowledgements === undefined)
             return Object.assign(fine, { baseline: true });
         const list = ModuleRules.isObject(acknowledgements) ? acknowledgements : {};
         const id = manifest?.id;
@@ -484,8 +488,13 @@ Singleton {
                 return /^\/[^\/]/.test(rest) || rest === "/" ? "" : "A file address needs an absolute path (file:///…)";
             const slash = rest.indexOf("/");
             const authority = slash < 0 ? rest : rest.slice(0, slash);
-            const host = authority.slice(authority.lastIndexOf("@") + 1);
-            if (host === "" || host.startsWith("-") || !/^[A-Za-z0-9.\-\[\]:]+$/.test(host))
+            const at = authority.lastIndexOf("@");
+            const user = at < 0 ? "" : authority.slice(0, at);
+            // ssh would read a user name starting with "-" as an option
+            if (at >= 0 && kind !== "https" && (user === "" || user.startsWith("-") || !/^[A-Za-z0-9._-]+$/.test(user)))
+                return "The address names no valid user";
+            const hostAndPort = /^(\[[0-9A-Fa-f:.]+\]|[A-Za-z0-9.-]+)(?::(\d{1,5}))?$/.exec(authority.slice(at + 1));
+            if (!hostAndPort || hostAndPort[1].startsWith("-"))
                 return "The address names no valid host";
             if (slash < 0 || rest.slice(slash + 1) === "")
                 return "The address names no repository";
@@ -525,18 +534,24 @@ Singleton {
         return typeof ref === "string" && /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(ref);
     }
 
-    // The environment every git command of a download runs with: no credential prompt of any
-    // kind (git's, an askpass helper's, ssh's)
+    // The environment every git command of a download runs with: no terminal prompt, no
+    // askpass program, ssh in batch mode (with _gitConfig's options, no credential prompt of
+    // any kind), and git-lfs never fetching: its downloads would go past the protocol list and
+    // the size cap
     readonly property var gitEnvironment: ({
         GIT_TERMINAL_PROMPT: "0",
         GIT_ASKPASS: "",
         SSH_ASKPASS: "",
-        GIT_SSH_COMMAND: "ssh -o BatchMode=yes"
+        GIT_SSH_COMMAND: "ssh -o BatchMode=yes",
+        GIT_LFS_SKIP_SMUDGE: "1"
     })
 
-    // git's options before the subcommand: no hooks, only the listed protocols
+    // git's options before the subcommand: no hooks, no credential helper or askpass from the
+    // user's configuration (a helper can prompt), no git-lfs filter, only the listed protocols
     function _gitConfig() {
-        const config = ["-c", "core.hooksPath=/dev/null", "-c", "protocol.allow=never"];
+        const config = ["-c", "core.hooksPath=/dev/null", "-c", "credential.helper=", "-c", "core.askPass=",
+                        "-c", "filter.lfs.process=", "-c", "filter.lfs.smudge=", "-c", "filter.lfs.required=false",
+                        "-c", "protocol.allow=never"];
         for (const protocol of gitProtocols)
             config.push("-c", "protocol." + protocol + ".allow=always");
         return config;
@@ -716,13 +731,18 @@ Singleton {
 
     // ---- The list (§4) ----
 
+    // Whether a module counts as on (the card's main button, the list's first group): not
+    // turned off, not waiting for the user's confirmation or approval
+    function isOn(status) {
+        return status?.enabled !== false && !["disabled", "unconfirmed", "approval"].includes(status?.state);
+    }
+
     // The cards' order: the ids of `statuses` (statusOf), enabled modules first, then the
-    // disabled and unconfirmed ones, each group by name (case-insensitive), then by id.
+    // disabled, unconfirmed and held ones (isOn), each group by name (case-insensitive), then by id.
     // Duplicates are left out: they show inside their winner's card.
     function listOrder(statuses) {
         const shown = _list(statuses).filter(status => ModuleRules.isObject(status) && typeof status.id === "string"
                                                        && status.id !== "" && status.state !== "duplicate");
-        const isOn = status => status.enabled !== false && status.state !== "disabled" && status.state !== "unconfirmed";
         const nameOf = status => String(typeof status.name === "string" && status.name !== "" ? status.name : status.id).toLowerCase();
         return shown.slice().sort((first, second) => {
             const group = (isOn(first) ? 0 : 1) - (isOn(second) ? 0 : 1);

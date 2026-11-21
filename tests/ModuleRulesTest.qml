@@ -769,6 +769,12 @@ TestCase {
                     "incompatible failed duplicate", "… a module that cannot load says why first");
         assertEqual(state({ confirmed: false, programsKnown: false }), "unconfirmed", "… its programs are not looked for");
         assertEqual(ModuleMergeRules.contributes("unconfirmed"), false, "an unconfirmed module contributes nothing");
+        assert(rules.states.includes("approval"), "the states include approval");
+        assertEqual(state({ confirmed: "approval" }) + " " + state({ confirmed: "approval", enabled: false }), "approval approval",
+                    "held for approval: approval, whatever the lists say");
+        assertEqual(state({ confirmed: "approval", safeMode: true }) + " " + state({ confirmed: "approval", settingsKnown: false }), "safe-mode pending",
+                    "… safe mode and an unread config first");
+        assertEqual(ModuleMergeRules.contributes("approval"), false, "… contributes nothing");
         for (const each of rules.states)
             assertEqual(ModuleMergeRules.contributes(each), each === "loaded", "contributions count only when loaded: " + each);
         const status = ModuleMergeRules.statusOf({ manifest: tailscale, directory: "/m/ts", state: "missing-program", enabled: true,
@@ -1209,7 +1215,7 @@ TestCase {
         const fits = [module("app", { lib: "1.0" }), module("lib", {}, "1.0")];
         for (const [state, said] of [["disabled", "turned off"], ["failed", "failed"], ["incompatible", "incompatible with this shell"],
                                      ["missing-program", "missing a program"], ["safe-mode", "not loaded (safe mode)"],
-                                     ["unconfirmed", "new, not enabled yet"]]) {
+                                     ["unconfirmed", "new, not enabled yet"], ["approval", "waiting for approval"]]) {
             const states = all(["app", "lib"]);
             states.lib.state = state;
             plan = ModuleMergeRules.dependencyPlan(fits, states);

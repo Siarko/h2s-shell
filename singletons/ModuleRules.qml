@@ -499,9 +499,13 @@ Singleton {
     //                    not yet confirmed by the user (Config.acknowledgedModules): off until
     //                    the user enables it through the confirmation
     //                    (ModuleInstallRules.needsConfirmation)
+    //   approval         placed by hand and changed since it was confirmed (it now declares
+    //                    administrator actions, or names another author): off, "Approval
+    //                    required", until the user approves it
     // A module in a cycle of `uses` (itself included) is failed, the cycle named.
     readonly property var states: ["loaded", "disabled", "failed", "incompatible", "missing-program",
-                                   "missing-module", "duplicate", "pending", "safe-mode", "unconfirmed"]
+                                   "missing-module", "duplicate", "pending", "safe-mode", "unconfirmed",
+                                   "approval"]
 
     // ---- Small helpers ----
 

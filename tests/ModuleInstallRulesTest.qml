@@ -106,6 +106,7 @@ TestCase {
                            { entry: places.user + "/weather", isLink: true, target: places.versions + "/weather/1.2.0-abcdef1/sub" }), "user",
                     "… deeper than one version directory: user");
         assertEqual(userOf(home + "/elsewhere", _weatherLink()), "user", "… loaded from somewhere else than the link's target: user");
+        assertEqual(userOf(places.versions + "/weather/1.2.0-abcdef1/", _weatherLink()), "repository", "… the same directory with a trailing slash: still the shell's");
         assertEqual(userOf(places.versions + "/weather/1.2.0-abcdef1",
                            { entry: places.user + "/weather", isLink: true, target: places.versions + "/weather/../weather/1.2.0-abcdef1" }), "user",
                     "… a target with \"..\": user");
@@ -188,6 +189,8 @@ TestCase {
         assertEqual(labels(actions.row.slice(0, 1)), "Enable=enable", "disabled: Enable, no question");
         actions = rules.actionsFor(status("unconfirmed", true), repository, {});
         assertEqual(labels(actions.row.slice(0, 1)), "Enable=enable/confirmation", "unconfirmed: Enable through the confirmation");
+        actions = rules.actionsFor(status("approval", true), repository, {});
+        assertEqual(labels(actions.row.slice(0, 1)), "Enable=enable/approval", "held for approval: off, Enable through the consent box (never Disable)");
         actions = rules.actionsFor(status("disabled", false), repository, { needsConfirmation: true });
         assertEqual(labels(actions.row.slice(0, 1)), "Enable=enable/confirmation", "… or when needsConfirmation says so");
         assertEqual(labels(rules.actionsFor(status("failed", true), repository, {}).row.slice(0, 1)), "Disable=disable/button", "failed but on: Disable");
@@ -233,7 +236,7 @@ TestCase {
         for (const source of ["builtin", "system", "developer"])
             assertEqual(verdict({ source: source, address: "/x" }, manifest, {}), "false  ", source + ": never asked");
         assertEqual(verdict(user, manifest, undefined), "false   baseline", "no list yet: acknowledged as found (the baseline, written at the first start)");
-        assertEqual(verdict(user, manifest, null), "false   baseline", "… null too");
+        assertEqual(verdict(user, manifest, null), "true unconfirmed new", "a null list: read as empty, asks (only a list never written is the baseline)");
         assertEqual(verdict(user, manifest, {}), "true unconfirmed new", "a list without it: unconfirmed, new");
         assertEqual(verdict(user, manifest, []), "true unconfirmed new", "a list that is no object: read as empty, asks");
         assertEqual(verdict(user, manifest, "x"), "true unconfirmed new", "… a string too");
@@ -250,6 +253,9 @@ TestCase {
         assertEqual(verdict(user, manifest, { tailscale: "yes" }), "true unconfirmed new", "an acknowledgement that is no object: none");
         assertEqual(verdict(user, { id: "constructor" }, {}), "true unconfirmed new", "an id named like a prototype key: not acknowledged by the prototype");
 
+        assertEqual(rules.acknowledgementOf({ source: "user", address: "/home/anna/my#module" }, {}).address, "/home/anna/my#module",
+                    "a path with \"#\": kept whole (only a repository's address loses its ref)");
+        assertEqual(rules.acknowledgementOf({ source: "repository", address: "https://e.org/x#v1" }, {}).address, "https://e.org/x", "… a repository's does");
         // A new tag of the same repository is the same source
         const repository = _source(places.versions + "/weather/1.2.0-abcdef1", _weatherLink());
         const weather = { id: "weather" };
@@ -257,7 +263,8 @@ TestCase {
         assertEqual(verdict(repository, weather, given), "false  ", "installed by the shell, acknowledged by its address: fine");
         assertEqual(verdict(repository, weather, { weather: Object.assign({}, given.weather, { address: "https://github.com/x/weather.git" }) }),
                     "true unconfirmed source", "… installed from elsewhere: asks again");
-        assertEqual(verdict(null, null, null), "false   baseline", "nothing: no throw");
+        assertEqual(verdict(null, null, undefined), "false   baseline", "nothing: no throw");
+        assertEqual(verdict(null, null, null), "true unconfirmed new", "… a null list asks");
     }
 
     function _removal() {
@@ -347,6 +354,14 @@ TestCase {
         assertEqual(problem("https://x.org/" + "a".repeat(1000 - "https://x.org/".length)), "", "… exactly 1000: accepted");
         refusedWith("ssh://-oProxyCommand=touch%20x/y", "host", "an ssh host that is an option: refused");
         refusedWith("git@-oProxyCommand=x:y", "host", "… scp-like too");
+        refusedWith("ssh://-oProxyCommand=x@example.org/y", "user", "an ssh user part that is an option: refused");
+        refusedWith("ssh://us er@example.org/y", "user", "… with a character outside a user name: refused");
+        refusedWith("ssh://@example.org/y", "user", "… empty: refused");
+        refusedWith("git://-x@example.org/y", "user", "… on git:// too");
+        refusedWith("ssh://git@example.org:22a/y", "host", "a port that is not digits: refused");
+        refusedWith("ssh://git@example.org:-1/y", "host", "… a negative one: refused");
+        refusedWith("ssh://git@example.org:/y", "host", "… an empty one: refused");
+        assertEqual(problem("ssh://git.user_1@example.org:2222/y") + problem("https://user:token@example.org/y"), "", "a plain user and a port: accepted (https keeps its user:token)");
         refusedWith("git@host:-x", "repository", "a path starting with \"-\": refused");
         refusedWith("http://example.org/x", "Only", "plain http: refused");
         refusedWith("ftp://example.org/x", "Only", "another scheme: refused");
@@ -374,17 +389,22 @@ TestCase {
     function _download() {
         const rules = ModuleInstallRules;
         const staging = places.staging + "/k3j2";
-        const config = "-c core.hooksPath=/dev/null -c protocol.allow=never -c protocol.https.allow=always -c protocol.ssh.allow=always"
+        const config = "-c core.hooksPath=/dev/null -c credential.helper= -c core.askPass="
+                     + " -c filter.lfs.process= -c filter.lfs.smudge= -c filter.lfs.required=false -c protocol.allow=never -c protocol.https.allow=always -c protocol.ssh.allow=always"
                      + " -c protocol.git.allow=always -c protocol.file.allow=always";
         let download = rules.downloadCommands("https://codeberg.org/anna/weather.git#v1.2.0", staging);
         assert(download.ok && download.commands.length === 1, "a tag: one command");
         assertEqual(download.commands[0].argv.join(" "),
                     "git " + config + " clone --progress --depth 1 --no-recurse-submodules --branch v1.2.0 -- https://codeberg.org/anna/weather.git " + staging,
-                    "… a shallow clone of that tag, no hooks, no submodules, only four protocols, the address after \"--\"");
+                    "… a shallow clone of that tag, no hooks, no credential helper or askpass, no git-lfs filter, no submodules, only four protocols, the address after \"--\"");
+        const argv = download.commands[0].argv;
+        for (const option of ["credential.helper=", "core.askPass=", "filter.lfs.process=", "filter.lfs.smudge=", "filter.lfs.required=false"])
+            assert(argv.indexOf(option) > 0 && argv[argv.indexOf(option) - 1] === "-c" && argv.indexOf(option) < argv.indexOf("clone"),
+                   "… \"-c " + option + "\" before the subcommand");
         assert(Array.isArray(download.commands[0].argv), "… an argv array, never a shell string");
         assertEqual(JSON.stringify(download.commands[0].environment),
-                    JSON.stringify({ GIT_TERMINAL_PROMPT: "0", GIT_ASKPASS: "", SSH_ASKPASS: "", GIT_SSH_COMMAND: "ssh -o BatchMode=yes" }),
-                    "… with no credential prompt of any kind");
+                    JSON.stringify({ GIT_TERMINAL_PROMPT: "0", GIT_ASKPASS: "", SSH_ASKPASS: "", GIT_SSH_COMMAND: "ssh -o BatchMode=yes", GIT_LFS_SKIP_SMUDGE: "1" }),
+                    "… with no terminal prompt, no askpass program, ssh in batch mode, git-lfs not fetching");
         download.commands[0].environment.GIT_ASKPASS = "x";
         assertEqual(rules.gitEnvironment.GIT_ASKPASS, "", "… each command's environment its own copy");
         download = rules.downloadCommands("git@github.com:anna/weather.git", staging);
@@ -488,15 +508,19 @@ TestCase {
             { id: "zeta", name: "Zeta", state: "loaded", enabled: true },
             { id: "alpha", name: "alpha", state: "disabled", enabled: false },
             { id: "notes", name: "Notes", state: "unconfirmed", enabled: true },
+            { id: "maps", name: "Maps", state: "approval", enabled: true },
             { id: "beta", name: "Beta", state: "failed", enabled: true },
             { id: "dup", name: "Aaa", state: "duplicate", enabled: true },
             { id: "b2", name: "beta", state: "loaded", enabled: true },
             null, { id: 5 }, { id: "" }
         ];
-        assertEqual(rules.listOrder(statuses).join(","), "b2,beta,zeta,alpha,notes",
-                    "enabled first, then disabled and unconfirmed, each by name (case-insensitive) then id; no duplicates");
+        assertEqual(rules.listOrder(statuses).join(","), "b2,beta,zeta,alpha,maps,notes",
+                    "enabled first, then disabled, unconfirmed and held for approval, each by name (case-insensitive) then id; no duplicates");
         assertEqual(rules.listOrder([{ id: "x", state: "loaded" }, { id: "a", state: "loaded" }]).join(","), "a,x", "no name: by id");
         assertEqual(rules.listOrder(null).length, 0, "nothing: nothing");
+        assert(rules.isOn({ state: "loaded", enabled: true }) && rules.isOn({ state: "failed" }), "isOn: loaded or failed while enabled");
+        assert(!rules.isOn({ state: "approval", enabled: true }) && !rules.isOn({ state: "unconfirmed", enabled: true })
+               && !rules.isOn({ state: "loaded", enabled: false }) && !rules.isOn({ state: "disabled" }), "… not held, new or turned off");
 
         assertEqual(JSON.stringify(rules.marks({ warnings: ["a"], deprecations: ["b", "c"] })),
                     JSON.stringify([{ kind: "warning", count: 1, tip: "1 warning" }, { kind: "deprecation", count: 2, tip: "2 deprecated API uses" }]),
