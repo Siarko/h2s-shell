@@ -67,6 +67,18 @@ TestCase {
         }
     }
 
+    // `key` pressed until `answered()` holds, again every half second: a key sent before the
+    // dialog's window has the keyboard (the compositor hands it over a moment after mapping it)
+    // goes to the window that had it, and is lost
+    property real _lastPress: 0
+    function _pressUntil(key, answered) {
+        if (answered())
+            return true;
+        if (Date.now() - _lastPress >= 500 && _press(key))
+            _lastPress = Date.now();
+        return false;
+    }
+
     // The compositor lists a window with this title (the dialog's own)
     function _listed(title) {
         return ToplevelManager.toplevels.values.some(toplevel => toplevel.title === title);
@@ -172,8 +184,7 @@ TestCase {
             _press(Qt.Key_Down);
             return false;
         }, () => {});
-        _then("Return reaches it", () => _press(Qt.Key_Return), () => {});
-        _then("chosen", () => _answers.length === 1, () => {
+        _then("chosen", () => _pressUntil(Qt.Key_Return, () => _answers.length === 1), () => {
             const answer = _answers[0];
             assert(!answer.cancelled && answer.blocked === "" && answer.error === "" && answer.paths.length === 1,
                    "accepted: one path, nothing else said: " + JSON.stringify(answer));
@@ -192,8 +203,7 @@ TestCase {
                         "a second chooser while one is open: blocked busy, the first stays");
             assertEqual(FileChooser._dialog.fileMode, 1, "openMany: several files (FileDialog.OpenFiles)");
         });
-        _then("Escape reaches it", () => _press(Qt.Key_Escape), () => {});
-        _then("cancelled", () => _answers.length === 2, () => {
+        _then("cancelled", () => _pressUntil(Qt.Key_Escape, () => _answers.length === 2), () => {
             assertEqual(JSON.stringify(_answers[1]), "{\"paths\":[],\"cancelled\":true,\"blocked\":\"\",\"error\":\"\"}", "Escape: cancelled");
         });
         _then("gone after the cancel", () => _gone(), () => {
