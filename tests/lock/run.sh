@@ -18,8 +18,9 @@
 # end and waits, saying so, while another run has it (see "One run at a time", below).
 #
 # Exit status: 0 when every test passed (or failed exactly as expected, see below), 1
-# when one failed (a test that could not start its stack counts as failed), 2 when the
-# test bed itself could not be set up before any test ran, 130 when interrupted.
+# when one failed (a test that could not start its stack, or ended well without a PASS
+# line, counts as failed), 2 when the test bed itself could not be set up before any test
+# ran, 130 when interrupted.
 set -uo pipefail
 
 LOCKTEST_DIR=$(cd "$(dirname "$(readlink -f "$0")")" && pwd)
@@ -340,9 +341,15 @@ real_config_stamp() { stat -c '%Y %s' "$real_config" 2> /dev/null || echo absent
 real_config_before=$(real_config_stamp)
 touch "$ARTIFACTS/.started"
 
-# classify <name> <status>: PASS / FAIL / XFAIL / XPASS, from the exit status and the log
+# classify <name> <status>: PASS / FAIL / XFAIL / XPASS / EMPTY, from the exit status and the log
 classify() {
     local name=$1 status=$2 log=$ARTIFACTS/$1/test.log
+    # A test that checked nothing cannot fail, so it does not pass either: one that ends
+    # well without a PASS line is EMPTY, a failure
+    if [ "$status" = 0 ] && ! grep -q '^    PASS ' "$log"; then
+        echo EMPTY
+        return
+    fi
     if [ -z "${EXPECTED_TO_FAIL[$name]:-}" ]; then
         [ "$status" = 0 ] && echo PASS || echo FAIL
         return
@@ -541,6 +548,7 @@ for name in "${tests[@]}"; do
     case "$result" in
         XFAIL) echo "  XFAIL $name — expected for now: ${EXPECTED_TO_FAIL[$name]}" ;;
         XPASS) echo "  XPASS $name — passes now: remove it from EXPECTED_TO_FAIL in run.sh"; failed=1 ;;
+        EMPTY) echo "  FAIL  $name — ended well without a PASS line: it checked nothing"; failed=1 ;;
         FAIL)
             if [ -n "${EXPECTED_TO_FAIL[$name]:-}" ]; then
                 echo "  FAIL  $name — marked as expected to fail, but not (only) in the expected checks"

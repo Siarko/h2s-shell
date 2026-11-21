@@ -28,7 +28,8 @@
 # a suite must never meet the real one.
 #
 # Exit status as tests/run-unit.sh: 0 when every suite passed, 1 when a check FAILed, a
-# module did not load, a suite timed out or did not report, the runner never said how many
+# module did not load, a suite timed out, did not report, checked nothing (0/0) or checked
+# after it had reported, the runner never said how many
 # suites it would run, a TypeError / ReferenceError was
 # printed or Quickshell exited non-zero, 2 when the runner could not be set up (no module
 # directory given, one that does not exist or has no module.json, a missing tool) or a --suite name

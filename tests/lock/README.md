@@ -509,7 +509,8 @@ check a `head` that hangs (`H2S_SHELL_TEST_MODULE_CHECK_PATH`) and a 15 s deadli
 
 `check <description> <command…>` and `check_within <seconds> <description> <command…>`
 print PASS or FAIL and count; `abort` ends the test for a setup failure (`FAIL (setup)`);
-the test fails if any check failed. `check_within` re-runs its command, but its arguments
+the test fails if any check failed, and so does one that prints no PASS line (it checked
+nothing). `check_within` re-runs its command, but its arguments
 were expanded once: to wait on something that changes, pass a function (`no_finger_waiters`,
 `lines_more_than <count> <regex> <file>`), never `test "$(…)"`. Input: `type_text`, `press_key
 <keysym>` (any keysym of the stack's keymap: `Return`, `BackSpace`, `Escape`, `Tab`,

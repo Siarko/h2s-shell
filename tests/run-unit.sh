@@ -27,7 +27,8 @@
 # h2s-shell launcher runs, else qs or quickshell on PATH (tests/lock/resolve.sh). The first
 # lines printed say what was taken.
 #
-# Exit status: 0 when every suite passed, 1 when a check FAILed, a suite timed out, a
+# Exit status: 0 when every suite passed, 1 when a check FAILed, a suite timed out, checked
+# nothing (0/0) or checked after it had reported, a
 # TypeError / ReferenceError was printed, Quickshell exited non-zero (a crash after a
 # partial summary included) or fewer suites reported than tests.qml registers — with names:
 # a named or needed suite did not report, or another one did —, 2 when the runner could not

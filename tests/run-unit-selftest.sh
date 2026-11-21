@@ -5,6 +5,9 @@
 #   crash      one suite's summary, no FAIL line, then SIGSEGV (status 139)  → must fail
 #   partial    fewer suites than tests.qml registers, exit 0                  → must fail
 #   complete   every suite tests.qml registers, all passed, exit 0            → must pass
+#   empty      every suite reports, one of them 0/0: it checked nothing       → must fail
+#   late       every suite reports, and a PASS line no summary counts (a check
+#              made after its suite reported)                                 → must fail
 #
 # with suites named to the runner (the `obedient` stand-in reports the suites it is told to
 # run in H2S_TEST_SUITES, and no other):
@@ -29,6 +32,7 @@
 #   module-extra      (stand-in) more suites report than were selected        → must fail
 #   module-uncounted  (stand-in) a suite reports, but no line said how many   → must fail
 #                     would: with --suite and without
+#   module-empty      (stand-in) the one suite expected reports 0/0           → must fail
 #
 # the suite count against a small root file whose suites are written with and without
 # arguments (`arguments`: each one must count), the suites a suite is given, read from the
@@ -148,6 +152,17 @@ stand_in() {
 stand_in crash 1 'kill -SEGV $$'
 stand_in partial $((expected - 1)) 'exit 0'
 stand_in complete "$expected" 'exit 0'
+stand_in empty $((expected - 1)) "echo '  INFO: --- Empty: 0/0 passed ---'"
+# Each suite's three checks printed before its summary, and one more after the last
+{
+    echo "#!$(command -v bash)"
+    for ((i = 1; i <= expected; i++)); do
+        for check in 1 2 3; do echo "echo '  INFO:   PASS: check $check'"; done
+        echo "echo '  INFO: --- Suite$i: 3/3 passed ---'"
+    done
+    echo "echo '  INFO:   PASS: a check after its suite reported'"
+} > "$work/late"
+chmod +x "$work/late"
 
 # Reports the suites the runner selected (H2S_TEST_SUITES), under the names TestCase prints
 # (the type without "Test"); `silent` leaves the last one out, `extra` adds one, `renamed`
@@ -208,6 +223,10 @@ reports_nothing() { ! grep -q -- "passed" "$work/$1"; }
 verdict crash crash 1
 verdict partial partial 1
 verdict complete complete 0
+verdict empty empty 1
+check empty "said which suite" grep -q "^  Empty ran no check (0/0)" "$work/empty.log"
+verdict late late 1
+check late "said so" grep -q "checks passed, the suites' summaries count" "$work/late.log"
 
 verdict selected obedient 0 FormatTest LockRulesTest
 check selected "FormatTest reported" reports selected.log Format
@@ -280,6 +299,14 @@ chmod +x "$work/module-uncounted"
 verdict module-uncounted module-uncounted 1 --suite GoodStateTest "$good"
 check module-uncounted "said so" grep -q "no MODULE-SUITES-EXPECTED line" "$work/module-uncounted.log"
 verdict module-uncounted-all module-uncounted 1 "$good"
+{
+    echo "#!$(command -v bash)"
+    echo "echo 'MODULE-SUITES-EXPECTED: 1'"
+    echo "echo '  INFO: --- good: GoodState: 0/0 passed ---'"
+} > "$work/module-empty"
+chmod +x "$work/module-empty"
+verdict module-empty module-empty 1 "$good"
+check module-empty "said which suite" grep -q "^  good: GoodState ran no check (0/0)" "$work/module-empty.log"
 
 # unreadable: a tests.qml whose suites cannot be read reliably (the `unbalanced` file) ends
 # the runner with status 2 before anything is started, with and without a name. The runner

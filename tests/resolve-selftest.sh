@@ -15,7 +15,8 @@
 # in a run that ends at its first set-up check): it waits for another run and says so, does
 # not wait for a caller that holds the lock for it, and ends at once when interrupted; the
 # file it makes can be read by everybody; and, in a whole run of one stand-in test, neither
-# the programs of the set-up nor the test have the lock's open file.
+# the programs of the set-up nor the test have the lock's open file. In another such run, a
+# test that ends well without a PASS line fails it (it checked nothing).
 #
 #   tests/resolve-selftest.sh
 #
@@ -1011,6 +1012,19 @@ else
     pass "no program of the run had the lock's file, and the lock was held throughout"
 fi
 is "the lock is free again" flock -n "$bed_lock" true
+
+# A test that ends well without a PASS line checked nothing: it fails the run, and says so
+echo 'log "nothing checked"' > "$work/bed-tests/no-check.sh"
+case_name=bed-no-check
+env -i PATH="$bed_path" HOME="$work/bed-home" TMPDIR="$work/temp" LOCKTEST_LOCK_FILE="$bed_lock" \
+    LOCKTEST_PAM_MODULES="$work/pam-modules" LOCKTEST_EXTRA_TESTS="$work/bed-tests" \
+    timeout 120 "$REPO/tests/lock/run.sh" -j 1 no-check > "$work/$case_name.out" 2> "$work/$case_name.err" < /dev/null
+status=$?
+exits 1
+prints out "  FAIL  no-check — ended well without a PASS line: it checked nothing"
+# (A failed run keeps its artifacts, and says where)
+artifacts=$(sed -n 's|^artifacts (logs, screenshots): \(.*\)$|\1|p' "$work/$case_name.out")
+case "$artifacts" in "$work"/temp/h2s-locktest.*) rm -rf "$artifacts" ;; esac
 
 # ---- A caller that does not say what it needs ---
 resolve no-need "" "base session system qs"

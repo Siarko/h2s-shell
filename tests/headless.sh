@@ -32,7 +32,9 @@
 #                                          the summary; returns 1 on any FAIL line, a
 #                                          TypeError / ReferenceError, a non-zero exit of
 #                                          Quickshell (a crash after a partial summary
-#                                          included), a time-out, or fewer suites reporting
+#                                          included), a time-out, a suite reporting 0/0, more
+#                                          PASS lines than the summaries count (a check after
+#                                          its suite reported), or fewer suites reporting
 #                                          than <expected> (<where> says where they are
 #                                          registered, or "selected"); with `exactly` (a
 #                                          selection was run) also on more suites reporting
@@ -145,7 +147,7 @@ headless_run() {
 }
 
 headless_verdict() {
-    local title=$1 expected=$2 where=$3 status=$HEADLESS_STATUS failed=0 summary fails errors reported name
+    local title=$1 expected=$2 where=$3 status=$HEADLESS_STATUS failed=0 summary fails errors reported name empty passes counted
     shift 3
     summary=$(grep -E -- '^.*--- .*: [0-9]+/[0-9]+ passed' "$HEADLESS_LOG" | sed 's/^.*--- /--- /')
     fails=$(grep -c -E '  FAIL: ' "$HEADLESS_LOG")
@@ -161,6 +163,15 @@ headless_verdict() {
     [ "$status" != 0 ] && [ "$status" != 124 ] && { echo "  quickshell exited with status $status"; failed=1; }
     reported=$(printf '%s\n' "$summary" | grep -c -- '^--- ')
     [ "$reported" -lt "$expected" ] && { echo "  only $reported of the $expected suites $where reported"; failed=1; }
+    # A suite that checked nothing cannot fail, so it does not pass either
+    empty=$(printf '%s\n' "$summary" | sed -n 's/^--- \(.*\): 0\/0 passed.*$/\1/p')
+    [ -n "$empty" ] && { printf '%s\n' "$empty" | sed 's/^/  /; s/$/ ran no check (0\/0)/'; failed=1; }
+    # Every passed check is counted in its suite's summary: more PASS lines than the
+    # summaries count were checks made after a suite had reported (an asynchronous suite
+    # that went on after finish()), which nothing would see fail
+    passes=$(grep -c -E '  PASS: ' "$HEADLESS_LOG")
+    counted=$(printf '%s\n' "$summary" | sed -n 's/^--- .*: \([0-9][0-9]*\)\/[0-9][0-9]* passed.*$/\1/p' | awk '{ sum += $1 } END { print sum + 0 }')
+    [ "$passes" -gt "$counted" ] && { echo "  $passes checks passed, the suites' summaries count $counted: a suite checked after it had reported"; failed=1; }
     # A selection: each of its suites, and no other. A suite left out by mistake and one run
     # by mistake are both a wrong answer to "run these"
     if [ "${1:-}" = exactly ]; then
