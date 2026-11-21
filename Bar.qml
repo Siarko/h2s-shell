@@ -147,14 +147,13 @@ PanelWindow {
         // the entry in its section and shows nothing; back, it shows again.
         readonly property string _url: WidgetRegistry.widgetUrl(entry.type ?? "")
         on_UrlChanged: _load()
-        // The module looked up here, not bound: a binding of its own may not have caught up
-        // when the URL changes
+        // The module's handle looked up here, not bound: a binding of its own may not have
+        // caught up when the URL changes (Modules.initialProperties: {} for a core widget)
         function _load() {
-            const owner = WidgetRegistry.moduleOf(entry.type)
             if (_url === "")
                 source = ""
             else
-                setSource(_url, owner !== "" ? Modules.initialProperties(_url) : {})
+                setSource(_url, Modules.initialProperties(_url))
         }
         onStatusChanged: {
             const owner = WidgetRegistry.moduleOf(entry.type)
