@@ -71,6 +71,7 @@ QtObject {
     property var _lockView: LockViewTest {}
     property var _authPromptView: AuthPromptViewTest {}
     property var _moduleRules: ModuleRulesTest {}
+    property var _moduleInstallRules: ModuleInstallRulesTest {}
     property var _fileChooserRules: FileChooserRulesTest {}
     property var _fileChooser: FileChooserTest {}
     property var _commandRules: CommandRulesTest {}

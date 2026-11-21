@@ -19,7 +19,8 @@ import QtQuick
 // ModuleManifestRules (the manifest and the namespaces), ModuleFileRules (paths, the file
 // check, the start guard), ModuleSourceRules (what is read from a module's QML: the root's
 // properties, the import check) and ModuleMergeRules (several modules: precedence, states,
-// the merged lists).
+// the merged lists). ModuleInstallRules decides where a module comes from and what may be
+// done with it (sources, confirmation, removal, installing).
 Singleton {
     id: root
 
@@ -494,9 +495,13 @@ Singleton {
     //   pending          waiting for the check of its required programs, or for a module
     //                    it uses
     //   safe-mode        the shell started in safe mode: no module is loaded
+    //   unconfirmed      neither built in, the system's nor on the development path, and
+    //                    not yet confirmed by the user (Config.acknowledgedModules): off until
+    //                    the user enables it through the confirmation
+    //                    (ModuleInstallRules.needsConfirmation)
     // A module in a cycle of `uses` (itself included) is failed, the cycle named.
     readonly property var states: ["loaded", "disabled", "failed", "incompatible", "missing-program",
-                                   "missing-module", "duplicate", "pending", "safe-mode"]
+                                   "missing-module", "duplicate", "pending", "safe-mode", "unconfirmed"]
 
     // ---- Small helpers ----
 

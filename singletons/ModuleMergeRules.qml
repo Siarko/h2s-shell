@@ -38,6 +38,8 @@ Singleton {
     //   filesChecked       the check of the module's files has answered (false: pending)
     //   guardKnown         the start guard has answered (false: pending; see startGuard)
     //   dataDirectoryKnown making its data directory has answered (false: pending)
+    //   confirmed          false: a module that needs the user's confirmation and has none
+    //                      (ModuleInstallRules.needsConfirmation) — it stays off; absent: true
     function stateOf(facts) {
         // module.json not answered yet (the file check reads it): pending
         if (facts?.manifestRead === false)
@@ -58,6 +60,10 @@ Singleton {
             return "safe-mode";
         if (facts.settingsKnown === false)
             return "pending";
+        // Not confirmed: off whatever the lists say, and said apart from a module the user
+        // turned off
+        if (facts.confirmed === false)
+            return "unconfirmed";
         if (!facts.enabled)
             return "disabled";
         if (!facts.programsKnown)
@@ -94,6 +100,7 @@ Singleton {
         case "missing-program": return "missing a program";
         case "missing-module": return "missing a module";
         case "safe-mode": return "not loaded (safe mode)";
+        case "unconfirmed": return "new, not enabled yet";
         default: return "not loaded (" + ModuleRules.show(state) + ")";
         }
     }

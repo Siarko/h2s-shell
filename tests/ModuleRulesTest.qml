@@ -758,6 +758,17 @@ TestCase {
         assertEqual(state({ dataDirectoryKnown: false, enabled: false }), "disabled", "… nor for one turned off");
         assertEqual(state({ mainError: "Main.qml: syntax error" }), "failed", "a main that failed");
         assertEqual(ModuleMergeRules.stateOf(null), "failed", "nothing known: failed, no throw");
+        // Not confirmed by the user (modules-management §5)
+        assert(rules.states.includes("unconfirmed"), "the states include unconfirmed");
+        assertEqual(state({ confirmed: false }), "unconfirmed", "not confirmed: unconfirmed, though the lists say on");
+        assertEqual(state({ confirmed: false, enabled: false }), "unconfirmed", "… said apart from a module turned off");
+        assertEqual(state({ confirmed: true }) + " " + state({ confirmed: undefined }), "loaded loaded", "confirmed, or not said: as before");
+        assertEqual(state({ confirmed: false, settingsKnown: false }), "pending", "… the config not read yet: pending first");
+        assertEqual(state({ confirmed: false, safeMode: true }), "safe-mode", "… safe mode first");
+        assertEqual(state({ confirmed: false, compatible: false }) + " " + state({ confirmed: false, valid: false }) + " " + state({ confirmed: false, duplicate: true }),
+                    "incompatible failed duplicate", "… a module that cannot load says why first");
+        assertEqual(state({ confirmed: false, programsKnown: false }), "unconfirmed", "… its programs are not looked for");
+        assertEqual(ModuleMergeRules.contributes("unconfirmed"), false, "an unconfirmed module contributes nothing");
         for (const each of rules.states)
             assertEqual(ModuleMergeRules.contributes(each), each === "loaded", "contributions count only when loaded: " + each);
         const status = ModuleMergeRules.statusOf({ manifest: tailscale, directory: "/m/ts", state: "missing-program", enabled: true,
@@ -1197,7 +1208,8 @@ TestCase {
 
         const fits = [module("app", { lib: "1.0" }), module("lib", {}, "1.0")];
         for (const [state, said] of [["disabled", "turned off"], ["failed", "failed"], ["incompatible", "incompatible with this shell"],
-                                     ["missing-program", "missing a program"], ["safe-mode", "not loaded (safe mode)"]]) {
+                                     ["missing-program", "missing a program"], ["safe-mode", "not loaded (safe mode)"],
+                                     ["unconfirmed", "new, not enabled yet"]]) {
             const states = all(["app", "lib"]);
             states.lib.state = state;
             plan = ModuleMergeRules.dependencyPlan(fits, states);
