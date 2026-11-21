@@ -2450,3 +2450,19 @@ Moved out of the tracker as done; checked against the code and the sections abov
   suite's `timeLimitMs`; A12 ModulesTest's start guard waits on conditions; A13 stand-in `nmcli` /
   `notify-send` on the unit runner's PATH. Reviewed (nothing medium); `tests/run-all.sh` passed on
   both machines.
+- **Lock supervisor limit (step 9's first item)** — on `master` 2026-11-22. A shell that died
+  while locked is restarted at most 3 times per lock (the launcher's record
+  `$XDG_RUNTIME_DIR/h2s-shell-lock-restarts`, overwritten by the shell at each unlock); the 4th
+  death ends the launcher and leaves the session locked (marker and compositor lock untouched);
+  the next hand-started launcher hands its first shell a notice, shown once after the unlock and
+  after any lock restore (`LockNotice`, `LockIoRules.lockNotice`, `Lockscreen.startChecked` /
+  `restoring`); deaths while locked don't count toward the 5-in-2-minutes limit; the old
+  once-a-minute retry is gone. FEATURES "The limit while locked" (TTY recovery on NixOS and
+  Arch). Lock bed `restart-locked-limit`. Reviewed (security: the lock holds on every path);
+  `tests/run-all.sh` passed on both machines.
+- **Module clean-up B1–B2** — on the module's `main` 2026-11-22. `TailscaleRules.readsAfter`:
+  Taildrop progress, Health, SuggestedExitNode and ErrMessage messages trigger no read; the
+  devices page's poll reads status only. Dead code removed (`_prototypeKeys`, `fileGet`, an
+  old-shell check); `watchMask` from `notifyMask`; `LockClient`'s argv from its table. The lock
+  bed now announces the operator change on the bus, as a real daemon does. Reviewed; module
+  suites, stand-ins and the module's lock bed on both machines.
