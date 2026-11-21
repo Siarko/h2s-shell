@@ -69,6 +69,14 @@ import QtCore
 //                                            settings
 //   qs ipc call modules switchVersion <id> <version-dir>   another kept version made active
 //   qs ipc call modules deleteVersion <id> <version-dir>   a kept version that is not active
+//   qs ipc call modules backups <id>         JSON: { id, known, ok, backups: [{ name, version,
+//                                            commit, takenAt, reason, includesData, store,
+//                                            data }] (newest first), unknown } — as last read
+//                                            (at the start, after each change); read again now
+//   qs ipc call modules restore <id> <backup>  puts back the backup of that name (as `backups`
+//                                            shows it): the configuration backed up first, the
+//                                            module off, its settings, store and named data
+//                                            files written back, on again when it was on
 //   qs ipc call modules job                  JSON: { busy, phase, subject, progress, lastResult }
 //
 // Updating (ModuleUpdater, §6.3–§6.5; refused while the session is locked, but `updates`):
@@ -234,6 +242,7 @@ Singleton {
                 _installer.configHome = String(StandardPaths.writableLocation(StandardPaths.GenericConfigLocation)).replace(/^file:\/\//, "");
                 _installer.home = SystemFacts.home;
                 _installer.tidy();
+                _installer.refreshBackups("");
             }
             // The restart reminder names this process; one an earlier process left is closed
             _ownStat.reload();
@@ -349,6 +358,20 @@ Singleton {
 
         function deleteVersion(id: string, dir: string): string {
             return _installer.deleteVersion(id, dir);
+        }
+
+        function backups(id: string): string {
+            if (!ModuleManifestRules.validId(id))
+                return JSON.stringify({ id: "", known: false, ok: false, backups: [], unknown: [], error: "Not a module id" });
+            const listed = _installer.backupLists[id];
+            _installer.refreshBackups(id);
+            const known = listed !== undefined || _installer.backupsRead;
+            return JSON.stringify({ id: id, known: known, ok: listed?.ok ?? known, backups: listed?.backups ?? [],
+                                    unknown: listed?.unknown ?? [] });
+        }
+
+        function restore(id: string, backup: string): string {
+            return _installer.restore(id, backup);
         }
 
         function check(id: string): string {

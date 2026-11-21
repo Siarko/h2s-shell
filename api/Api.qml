@@ -9,7 +9,7 @@ import qs.singletons.network
 // The module API (notes/plans/modules.md, "Module API 1.0", 1.1, 1.2 and 1.3; notes/plans/api-next.md from 1.4): everything a
 // module may use of the shell. A module imports `qs.api` and reaches:
 //
-//   Api.version            "1.36" — this shell's module API, "major.minor". A module's manifest
+//   Api.version            "1.37" — this shell's module API, "major.minor". A module's manifest
 //                          asks for one ("api"); it loads when the major is the same, this
 //                          minor is at least the one asked for, and the one asked for is not
 //                          below the shell's floor (ModuleRules.apiFloor: the oldest version
@@ -384,6 +384,14 @@ import qs.singletons.network
 //                          the user can write there. In module test mode it lies in a private
 //                          temporary directory the shell made, never in the user's data home,
 //                          and setSystem does not move it
+//                          (1.37) Before the module moves to another version, and before a
+//                          restore, the shell backs up its configuration: its settings
+//                          (mod.<id>.* in every profile and the pinned globals) and its store
+//                          — never this directory, only the paths inside it that module.json's
+//                          "backup" names (["notes.db", "accounts"]: relative, no ".."). A
+//                          named path whose resolved place is outside the directory is left
+//                          out; a link inside a named folder is kept as a link. A restore
+//                          turns the module off, writes those back and turns it on again.
 //   module.icon            (1.26, on its handle) the module's icon as the shell draws it,
 //                          frozen: { kind: "glyph" | "svg" | "image", glyph, url (its file's
 //                          file:// URL, "" for a glyph), colors: "theme" | "own" }, or null.

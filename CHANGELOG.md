@@ -24,6 +24,10 @@ Settings → Lockscreen → "Lock before the computer sleeps" is on (below, unde
 ### Module API
 The interface modules are written against (`qs.api`), versioned on its own
 (`Api.version`, notes/plans/modules.md "Module API 1.0").
+- 1.37: module.json's `backup`, a list of paths inside the module's data directory
+  (`["notes.db", "accounts"]`: relative, no `..`, at most 32) that belong in its
+  configuration backups; the data directory itself never goes in one. A path that is not
+  such a path is dropped with a warning.
 - 1.36: module.json's `privileged` block, `{ "why": "…", "programs": [names] }`: a module
   says what it runs as administrator and why (`why` plain text on one line, at most 200
   characters; `programs` names among its `requires.programs` and `optionalPrograms`); a
@@ -473,6 +477,12 @@ The interface modules are written against (`qs.api`), versioned on its own
   (`removeWithData` with its data and settings) removes a module — only the link of one you
   linked by hand. Nothing installs while the screen is locked; `modules job` tells how the
   last one went.
+- A module's configuration is backed up before every update, switch of version and restore:
+  its settings, its store and only the data files its manifest names, in
+  `~/.local/share/h2s-shell/module-backups/<id>/<version>-<time>/`, the newest 5 kept.
+  `qs ipc call modules backups <id>` lists them; `modules restore <id> <backup>` turns the
+  module off, puts that configuration back and turns it on again. A backup that cannot be
+  taken stops the update. Not while the screen is locked.
 - Installed modules can be updated: `qs ipc call modules check <id>` (`checkAll` for every
   one) looks for a newer version where the module was installed from and downloads it beside
   the running one; `update <id>` / `updateAll` switch to it. An update that comes from another

@@ -314,6 +314,44 @@ Singleton {
         return result.removed
     }
 
+    // Whether the user's settings were read: the file, its profile list and its globals —
+    // what a backup takes or a restore writes over is never a guess
+    function _settingsReadable() {
+        if (!Config.ready || configFailed)
+            return false
+        try {
+            const pinned = JSON.parse(Config.globals || "{}")
+            return pinned !== null && typeof pinned === "object" && !Array.isArray(pinned)
+        } catch (error) {
+            return false
+        }
+    }
+
+    // A module's settings as stored ("mod.<id>."), in every profile and the pinned globals,
+    // for a configuration backup (ModuleBackupRules.settingsSnapshot); null when the user's
+    // settings could not be read
+    function moduleSettings(prefix) {
+        if (!_settingsReadable())
+            return null
+        const snapshot = ModuleBackupRules.settingsSnapshot(profiles, globals, prefix)
+        return snapshot.ok ? snapshot : null
+    }
+
+    // Puts a module's settings back as a backup has them (`saved`: { profiles, globals },
+    // ModuleBackupRules.parseSettings): every value under the prefix replaced. Never over
+    // settings that could not be read. → "" when written, else why not
+    function restoreModuleSettings(prefix, saved) {
+        if (!_settingsReadable())
+            return "your settings could not be read: nothing written"
+        const result = ModuleBackupRules.settingsRestored(profiles, globals, prefix, saved)
+        if (!result.ok)
+            return result.problem
+        if (!_commit(result.profiles))
+            return lastError
+        Config.globals = JSON.stringify(result.globals)
+        return ""
+    }
+
     // Later profiles win, so moving one down raises its priority
     function moveProfile(index, delta) {
         const target = index + delta

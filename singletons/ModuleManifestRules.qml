@@ -122,6 +122,12 @@ import QtQuick
 //                 author or privileged malformed: the module fails — what the user is told
 //                 and asked about is not guessed at. Both are read whatever the manifest's
 //                 `api`: a module written for an older API needs the block all the same.
+//   backup        optional (API 1.37): paths inside the module's data directory that belong
+//                 in its configuration backups (["notes.db", "accounts"]): a file or a folder,
+//                 relative, no "..", at most ModuleUpdateRules.maxBackupPaths. The data
+//                 directory itself never goes in a backup (what the module can fetch again);
+//                 the module's settings and store always do. A path that is not such a path
+//                 is dropped with a warning (ModuleUpdateRules.backupPlan reads the list).
 //
 // Files are paths inside the module's directory: relative, "/"-separated, no "..", no
 // leading "/", ending in .qml (an icon's in .svg, .png or .webp). Any other field is kept (in `raw`) and reported as a warning,
@@ -165,7 +171,7 @@ Singleton {
 
     readonly property var _topFields: ["id", "name", "version", "api", "description", "main", "widgets",
         "settingsPages", "settings", "facts", "slots", "anchors", "requires", "optionalPrograms", "testPrograms", "setupHints", "tests",
-        "exports", "uses", "icon", "author", "privileged"]
+        "exports", "uses", "icon", "author", "privileged", "backup"]
 
     // ---- Author and the privileged declaration (API 1.36) ----
 
@@ -739,6 +745,7 @@ Singleton {
     //   exports      (1.18) { version } or null; uses (1.18) [{ id, version, optional (1.30) }]
     //   icon         (1.26) { kind, glyph, file, colors } or null (readIcon)
     //   author       (1.36) "" for none; privileged (1.36) { why, programs } or null
+    //   backup       (1.37) the data paths named for a backup, each a clean relative path
     //   uses' entries carry `source` (1.36): "" for none
     //   unknownFields   names of top-level fields this shell does not know (kept in raw)
     //   raw          the parsed object as written, or null
@@ -749,7 +756,7 @@ Singleton {
             valid: false, id: "", name: "", version: "", api: "", description: "", main: "",
             widgets: [], settingsPages: [], settings: [], facts: [], slots: [], anchors: [],
             programs: [], optionalPrograms: [], testPrograms: "", setupHints: [], tests: [], unknownFields: [], raw: null,
-            exports: null, uses: [], icon: null, author: "", privileged: null,
+            exports: null, uses: [], icon: null, author: "", privileged: null, backup: [],
             errors: [], warnings: []
         };
         const errors = result.errors;
@@ -829,6 +836,20 @@ Singleton {
             else
                 result.author = author;
         }
+        const named = ModuleRules.get(raw, "backup");
+        if (named !== undefined && !Array.isArray(named))
+            warnings.push("backup: not a list of paths (ignored)");
+        else
+            (named ?? []).forEach((path, index) => {
+                const problem = ModuleUpdateRules._backupPathProblem(path);
+                const clean = problem === "" ? ModuleUpdateRules._cleanRelative(path) : "";
+                if (problem !== "")
+                    warnings.push("backup[" + index + "]: " + ModuleRules.show(path) + ": " + problem + " (dropped)");
+                else if (result.backup.length >= ModuleUpdateRules.maxBackupPaths)
+                    warnings.push("backup[" + index + "]: more than " + ModuleUpdateRules.maxBackupPaths + " paths (dropped)");
+                else if (!result.backup.includes(clean))
+                    result.backup.push(clean);
+            });
         _readExports(raw, result, errors, warnings);
         // A source that is no address voids that source only: reported once the rest is judged
         const sourceErrors = [];
@@ -836,7 +857,7 @@ Singleton {
         // Fields of a newer API than the manifest asks for: read all the same, and said —
         // the module is written against an API that does not have them
         const asked = ModuleRules.parseApi(result.api);
-        for (const [field, minor] of [["exports", 18], ["uses", 18], ["anchors", 20], ["icon", 26]]) {
+        for (const [field, minor] of [["exports", 18], ["uses", 18], ["anchors", 20], ["icon", 26], ["backup", 37]]) {
             if (asked && (asked.major < 1 || (asked.major === 1 && asked.minor < minor)) && ModuleRules.get(raw, field) !== undefined)
                 warnings.push(field + ": a field of API 1." + minor + ", the manifest asks for API " + result.api + " (read all the same)");
         }

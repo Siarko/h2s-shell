@@ -543,7 +543,7 @@ TestCase {
                     "backup: written beside it, then renamed in");
         assertEqual(JSON.stringify(plan.items), JSON.stringify([
             { what: "settings", prefix: "mod.weather." },
-            { what: "store", from: "/home/u/.config/h2s_shell/modules/weather", to: "store", noLinks: true },
+            { what: "store", from: "/home/u/.config/h2s_shell/modules/weather.json", to: "store.json", noLinks: true },
             { what: "data", from: "/home/u/.local/share/h2s-shell/module-data/weather/notes.db", to: "data/notes.db", noLinks: true },
             { what: "data", from: "/home/u/.local/share/h2s-shell/module-data/weather/sub/keep.json", to: "data/sub/keep.json", noLinks: true }
         ]), "backup: settings, store, and only the named files inside the data directory, none through links");

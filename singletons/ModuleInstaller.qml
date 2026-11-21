@@ -32,6 +32,11 @@ import qs.singletons.io
 // (ModuleDependencyRules.rollbackPlan: links, versions, the record's entries) so the user
 // root is as it was. Then the host searches again and loads (rediscover()); an updated module
 // that does not start goes back to its version before (ModuleInstallRules.backOnFailedStart).
+// Before a module moves to another version (an update, a switch, the way back after a failed
+// start) and before a restore, its configuration is backed up (ModuleBackups, §6.10): a
+// backup that cannot be taken stops an update or a switch before anything moves, and a
+// restore before anything is written. restore() puts one back: the module turned off, its
+// settings, store and named data files written back, and turned on again when it was on.
 // With `enable` (the default) the new modules are acknowledged and turned on — the preview,
 // or a typed IPC command, was the user's confirmation; without, they stay off. Both act only
 // on the module as loaded from the version directory this job made. tidy(), at the shell's
@@ -67,7 +72,7 @@ Scope {
     // A job runs (one at a time)
     readonly property bool busy: _job !== null
     // What it does now: "", "downloading", "verifying", "installing", "loading", "removing",
-    // "switching", "deleting"
+    // "switching", "deleting", "backingUp", "restoring"
     property string phase: ""
     // What the step is about (an address, a folder, a module's name), plain text
     property string subject: ""
@@ -76,6 +81,12 @@ Scope {
     property var progress: null
     // How the last job ended: { ok, action, message, ids }
     property var lastResult: null
+
+    // Each module's configuration backups as last read (ModuleBackupRules.listing's { ok,
+    // backups (newest first: { name, version, commit, takenAt, reason, includesData, store,
+    // data }), unknown }), by id — read at the start (refreshBackups("")) and after each change
+    readonly property var backupLists: _backups.lists
+    readonly property bool backupsRead: _backups.allRead
 
     signal finished(var result)
 
@@ -118,7 +129,7 @@ Scope {
         // `details` what a caller needs beyond the words (fetchUpdate's version, the modules
         // a switch took back)
         const result = { ok: ok, action: job.action, message: text, ids: job.ids.slice(), job: job.number,
-                         details: Object.assign({ back: (job.back ?? []).slice() }, job.details ?? {}) };
+                         details: Object.assign({ back: (job.back ?? []).slice(), backups: (job.backups ?? []).slice() }, job.details ?? {}) };
         _job = null;
         phase = "";
         subject = "";
@@ -186,8 +197,10 @@ Scope {
     }
 
     // Make another kept version of module `id` the active one (`dir`: its directory name, as
-    // the record lists it, or its path). → "" when it started
-    function switchVersion(id, dir) {
+    // the record lists it, or its path), its configuration backed up first. `options`:
+    // { reason: "update" (the updater's) | "switch" (the default) } — the backup's.
+    // → "" when it started; the outcome's `details.backups`: the backups taken ("<id>/<name>")
+    function switchVersion(id, dir, options) {
         const refusal = _refusal();
         if (refusal !== "")
             return refusal;
@@ -212,10 +225,16 @@ Scope {
                     _finish(job, false, id + " " + plan.dir + ": " + problem);
                     return;
                 }
-                _switchTo(job, id, plan.dir, plan.previousDir, directory => {
-                    const step = { id: id, kind: "switch", dir: plan.dir, previousDir: plan.previousDir, directory: directory };
-                    _reload(job, loaded => _afterStart(job, [step], loaded, () =>
-                        _finish(job, true, id + " switched to " + plan.dir + _notesText(job))));
+                _backUp(job, id, options?.reason === "update" ? "update" : "switch", job.records, backup => {
+                    if (!backup.ok) {
+                        _finish(job, false, id + ": its configuration could not be backed up (" + backup.problem + "); nothing switched");
+                        return;
+                    }
+                    _switchTo(job, id, plan.dir, plan.previousDir, directory => {
+                        const step = { id: id, kind: "switch", dir: plan.dir, previousDir: plan.previousDir, directory: directory };
+                        _reload(job, loaded => _afterStart(job, [step], loaded, () =>
+                            _finish(job, true, id + " switched to " + plan.dir + _notesText(job))));
+                    });
                 });
             });
         });
@@ -821,7 +840,7 @@ Scope {
         phase = "installing";
         progress = null;
         if (index >= items.length) {
-            _recordStaged(job, items);
+            _backUpUpdates(job, items.filter(each => each.target.kind === "update"), 0, () => _recordStaged(job, items));
             return;
         }
         const item = items[index];
@@ -860,6 +879,25 @@ Scope {
                 }
                 _installItems(job, items, index + 1);
             }
+        });
+    }
+
+    // The configuration of each module an install updates, backed up before any link moves;
+    // one that cannot be taken takes the run back
+    function _backUpUpdates(job, updates, index, next) {
+        if (!_alive(job))
+            return;
+        if (index >= updates.length) {
+            next();
+            return;
+        }
+        const id = updates[index].id;
+        _backUp(job, id, "update", job.records, backup => {
+            if (!backup.ok) {
+                _rollback(job, () => _finish(job, false, id + ": its configuration could not be backed up (" + backup.problem + "); nothing installed"));
+                return;
+            }
+            _backUpUpdates(job, updates, index + 1, next);
         });
     }
 
@@ -1025,6 +1063,19 @@ Scope {
         const reasons = back.map(step => step.id + " " + step.dir + " did not start ("
                                  + ModuleInstallRules._plain(String((_statusAt(step)?.errors ?? [])[0] ?? "failed"), 160)
                                  + "): back to " + step.previousDir);
+        // Each one's configuration backed up first ("rollback"); one that cannot be taken is
+        // said, the way back goes on
+        const backUpAll = index => {
+            if (index >= back.length) {
+                relinkAll(0);
+                return;
+            }
+            _backUp(job, back[index].id, "rollback", job.records, backup => {
+                if (!backup.ok)
+                    reasons[index] += " — its configuration could not be backed up first (" + backup.problem + ")";
+                backUpAll(index + 1);
+            });
+        };
         const relinkAll = index => {
             if (index >= back.length) {
                 let modules = job.records.modules;
@@ -1045,7 +1096,7 @@ Scope {
                 relinkAll(index + 1);
             });
         };
-        relinkAll(0);
+        backUpAll(0);
     }
 
     // ---- Switch version ----
@@ -1295,6 +1346,149 @@ Scope {
                     done(result.ok);
             }
         });
+    }
+
+    // ---- Configuration backups (§6.10) ----
+
+    // A backup of module `id` now, inside `job` (`records`: the record as the job read it —
+    // the active version's commit). → done({ ok, problem, name, meta }) while the job lives
+    function _backUp(job, id, reason, records, done, protect) {
+        const before = phase;
+        phase = "backingUp";
+        const status = host.status(id);
+        const record = records?.ok && ModuleRules.has(records.modules, id) ? records.modules[id] : null;
+        const active = (record?.versions ?? []).find(each => each.dir === record.active) ?? null;
+        _backups.take(id, status ? host.manifestOf(status.directory) : null,
+                      { version: status?.version || active?.version || "", commit: active?.commit ?? "", reason: reason, protect: protect ?? [] }, backup => {
+            if (!_alive(job))
+                return;
+            phase = before;
+            if (backup.ok)
+                job.backups = (job.backups ?? []).concat([id + "/" + backup.name]);
+            done(backup);
+        });
+    }
+
+    // Reads the backups of module `id` again ("" — every module's) into backupLists
+    function refreshBackups(id) {
+        if (typeof id === "string" && (id === "" || ModuleManifestRules.validId(id)))
+            _backups.refresh(id);
+    }
+
+    // Put back backup `name` of module `id` (its directory's name, as backupLists has it —
+    // the subject: a name the module has no readable backup of is refused): the current
+    // configuration backed up first ("restore"), the module turned off, its settings
+    // (through Profiles), its store and the data paths the backup names written back, and
+    // turned on again when it was on. The version does not change. → "" when it started
+    function restore(id, name) {
+        const refusal = _refusal();
+        if (refusal !== "")
+            return refusal;
+        if (!ModuleManifestRules.validId(id))
+            return "Not a module id: " + ModuleInstallRules._plain(String(id ?? ""), 60);
+        if (!ModuleBackupRules.validName(name))
+            return "Not a backup's name: " + ModuleInstallRules._plain(String(name ?? ""), 60);
+        if (!host.status(id))
+            return "No module \"" + id + "\"";
+        const job = _start("restore", {});
+        job.ids = [id];
+        phase = "restoring";
+        subject = host.status(id)?.name || id;
+        const prefix = "mod." + id + ".";
+        _backups.list(id, listed => {
+            if (!_alive(job))
+                return;
+            const plan = ModuleBackupRules.restorePlan(id, name, listed, host.status(id), host.isEnabled(id));
+            if (!plan.ok) {
+                _finish(job, false, plan.problem);
+                return;
+            }
+            _backups.readSettings(id, name, saved => {
+                if (!_alive(job))
+                    return;
+                if (!saved.ok) {
+                    _finish(job, false, id + " " + name + ": " + saved.problem + "; nothing restored");
+                    return;
+                }
+                _sourceCheck((sources, records) => {
+                    if (!_alive(job))
+                        return;
+                    _backUp(job, id, "restore", records, backup => {
+                        if (!backup.ok) {
+                            _finish(job, false, id + ": its configuration could not be backed up first (" + backup.problem + "); nothing restored");
+                            return;
+                        }
+                        if (host.locked) {
+                            _finish(job, false, "the session was locked: nothing restored");
+                            return;
+                        }
+                        phase = "restoring";
+                        if (plan.enableAfter)
+                            host.setEnabled(id, false);
+                        _whenStopped(job, id, stopped => {
+                            const turnBackOn = problems => {
+                                if (plan.enableAfter && !host.setEnabled(id, true))
+                                    problems.push("it could not be turned on again (" + ModuleInstallRules._plain(host.enableProblem(id) || "refused", 160) + ")");
+                                _backups.refresh(id);
+                                _finish(job, problems.length === 0, problems.length === 0
+                                        ? id + ": settings from " + plan.entry.version + " restored (" + name + ")"
+                                        : id + ": " + name + " not fully restored: " + problems.join("; "));
+                            };
+                            if (!stopped || host.locked) {
+                                turnBackOn([stopped ? "the session was locked: nothing restored" : "it did not stop in time: nothing restored"]);
+                                return;
+                            }
+                            const why = Profiles.restoreModuleSettings(prefix, saved);
+                            _backups.writeBack(id, plan, problems => {
+                                if (!_alive(job))
+                                    return;
+                                if (why !== "")
+                                    problems.unshift("settings: " + why);
+                                turnBackOn(problems);
+                            });
+                        });
+                    }, [name]);
+                });
+            });
+        });
+        return "";
+    }
+
+    // → next(true) once module `id` no longer runs (its main, and with it its store, gone:
+    // a store being destroyed writes what is waiting, which must come before the restore's
+    // write), false past stepTimeoutMs
+    function _whenStopped(job, id, next) {
+        _stopWatch.waiting = { job: job, id: id, next: next, deadline: Date.now() + stepTimeoutMs };
+        _stopWatch.start();
+    }
+
+    Timer {
+        id: _stopWatch
+        interval: 50
+        repeat: true
+        property var waiting: null
+        onTriggered: {
+            const waiting = _stopWatch.waiting;
+            if (!waiting || !root._alive(waiting.job)) {
+                stop();
+                _stopWatch.waiting = null;
+                return;
+            }
+            const stopped = root.host.mainOf(waiting.id) === null && root.host.status(waiting.id)?.state !== "loaded";
+            if (!stopped && Date.now() <= waiting.deadline)
+                return;
+            stop();
+            _stopWatch.waiting = null;
+            waiting.next(stopped);
+        }
+    }
+
+    ModuleBackups {
+        id: _backups
+        dataHome: root.dataHome
+        configHome: root.configHome
+        environment: root.environment
+        stepTimeoutMs: root.stepTimeoutMs
     }
 
     // ---- The load ----

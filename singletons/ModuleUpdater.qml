@@ -489,10 +489,11 @@ Scope {
                 _step({ type: "failed", id: action.id, run: run, reason: "the version to switch to was not checked" });
                 return;
             }
-            // (Configuration backups come with M3c: nothing to back up here yet)
+            // The installer's switch backs the configuration up first, inside its own job (a
+            // backup that cannot be taken fails the switch before anything moves)
             _step({ type: "backedUp", id: action.id, run: run });
             _setRow(action.id, { restartBefore: (host.restartNeededIds ?? []).includes(action.id) });
-            _startJob(action, () => installer.switchVersion(action.id, data.verifiedDir));
+            _startJob(action, () => installer.switchVersion(action.id, data.verifiedDir, { reason: "update" }));
             return;
         }
         case "rememberRefusal":

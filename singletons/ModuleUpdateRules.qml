@@ -1098,7 +1098,8 @@ Singleton {
     // backupReasons), nowMs }.
     // → { ok, problem, directory, staging, name, items, skipped, meta }
     //   items: { what: "settings", prefix: "mod.<id>." } (every profile, values as stored),
-    //          { what: "store", from: <stores>/<id>, to: "store", noLinks: true },
+    //          { what: "store", from: <stores>/<id>.json, to: "store.json", noLinks: true } (the
+    //            module's store is one file, api/ModuleStore.qml),
     //          { what: "data", from: <data>/<id>/<path>, to: "data/<path>", noLinks: true } —
     //            `noLinks`: copied without following links (a link is copied as a link, never
     //            what it points to), and `from` used only when its resolved path lies inside
@@ -1129,7 +1130,7 @@ Singleton {
                         && options.version.length <= ModuleInstallRules.maxVersionLength ? options.version : "unknown";
         const name = version + "-" + stamp;
         const items = [{ what: "settings", prefix: "mod." + id + "." },
-                       { what: "store", from: places.stores + "/" + id, to: "store", noLinks: true }];
+                       { what: "store", from: places.stores + "/" + id + ".json", to: "store.json", noLinks: true }];
         const skipped = [];
         const named = manifest?.backup;
         if (named !== undefined && !Array.isArray(named))
