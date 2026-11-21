@@ -20,11 +20,22 @@ declaration (M1c, API 1.36), the host (M2) — next the packaging of built-in mo
 the installer (M3); after it the owner chooses what follows (the idle
 plan and PAM are ready).
 
+**The owner's queue for the night 2026-11-21/22** (in this order): finish step 8 (the last page
+slices: install and update on the page; then the segment's full set on both machines, merge,
+deploy to both — the NixOS machine still ran the shell of 2026-11-17 and needs the module's
+`privileged` declaration together with the core); the test hygiene plan
+(`plans/test-hygiene.md`, approved: T0 done; T1, T2, T4, T9 first); the decided small fixes
+(the password prompt's layout, `SettingsRow` cutting its label, Taildrop's "N files" opening the
+side panel, Taildrop's preferences as settings); the remembered polkit authorization — analysis
+and plan only; then the idle and lock plan's slices without views (pure rules first), then the
+PAM plan's. Releases, tags and pushing stay the owner's.
+
 State on 2026-11-21: notifications with a progress bar, Taildrop's list of transfers,
 Taildrop's views reworked (side panel, status pills, the bar wave, Taildrop off, "Save in…")
 and the notification flow (three toast queues, moving and pinning, the HUD clear of the bar)
-are done and on `master` (core, module API 1.35) and `main` (module `h2s-shell-tailscale`
-0.6.0, manifest `api` 1.35), not released; the live shell runs them on both machines.
+are done and on `master` (core) and `main` (module `h2s-shell-tailscale` 0.6.0), not released.
+The Arch machine runs them; the NixOS machine was found on 2026-11-21 still running the shell
+of 2026-11-17 (deploys there had stopped) — the deploy check is to compare both machines.
 Development is on the Arch machine; runs that need `nix` go over SSH to the NixOS machine.
 
 Next, per the owner: the order of work below from step 0 up to and including step 8
