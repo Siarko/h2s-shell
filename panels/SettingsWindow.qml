@@ -55,7 +55,7 @@ FloatingWindow {
         { id: "notifications_appearance", label: "Notifications", tab: "appearance", component: notificationsLookComp,
           draftGroups: ["osdToast", "notificationCard", "osdVolume", "osdMessage"] },
         { id: "animations", label: "Animations", tab: "appearance", component: animationsComp, draftGroups: ["durations", "curves", "wallpaper"] },
-        { id: "other_appearance", label: "Other", tab: "appearance", component: otherLookComp, draftGroups: ["settings", "calendar", "lock"] },
+        { id: "other_appearance", label: "Other", tab: "appearance", component: otherLookComp, draftGroups: ["settings", "modal", "calendar", "lock"] },
         // System: this computer's settings, kept by the system or at least never per profile
         // (notes/plans/polkit.md, TODO 11.36)
         { id: "authentication", label: "Authentication", tab: "system", component: authenticationComp },
@@ -116,6 +116,9 @@ FloatingWindow {
     function _pageOf(id) {
         return pages[_pageIndex(id)] ?? pages[0];
     }
+
+    // Where a page asks a question that needs more than a button's word (SettingsModalHost.ask)
+    readonly property alias modalHost: _modalHost
 
     // The open page, by id
     property string selectedPage: "general"
@@ -545,6 +548,12 @@ FloatingWindow {
                 else
                     root._openList = null;
             }
+        }
+
+        // A question over the whole window, above everything in it (SettingsModalHost)
+        SettingsModalHost {
+            id: _modalHost
+            anchors.fill: parent
         }
     }
 

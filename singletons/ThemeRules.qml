@@ -42,7 +42,7 @@ Singleton {
         "powerMenu", "button", "saveButton", "cancelButton", "deleteButton", "warningButton",
         "successButton", "iconButton", "pill", "field",
         "notificationCard", "osdToast", "osdVolume", "osdMessage", "tooltip", "progress", "settings", "calendar",
-        "checkbox", "lock", "border", "target", "popupWidth"]
+        "checkbox", "lock", "border", "target", "popupWidth", "modal"]
 
     // A pill's least height for its `size`, from the theme's `pill` group: "s", "m" or
     // "l". Any other word is "s".
@@ -81,6 +81,23 @@ Singleton {
         if (state?.checked === true)
             return { group: group, fill: hot ? "accentHover" : "accent", label: "onAccent", border: "" };
         return { group: group, fill: plain, label: "textSecondary", border: "" };
+    }
+
+    // How a Settings modal of `kind` looks (SettingsModal), as names: `border` and `icon`'s
+    // colour (`tone`) and `titleColor` are colours of Theme, `icon` a glyph. Kinds: "danger"
+    // (deletes or stops), "warning" (goes on, but think), "success" (a good outcome), "info"
+    // (tells); any other word is "info".
+    readonly property var modalKinds: ["danger", "warning", "success", "info"]
+    function modalLook(kind) {
+        const looks = {
+            danger: { tone: "error", icon: "\uf057" },
+            warning: { tone: "warning", icon: "\uf071" },
+            success: { tone: "success", icon: "\uf00c" },
+            info: { tone: "accent", icon: "\uf05a" }
+        };
+        const known = typeof kind === "string" && Object.prototype.hasOwnProperty.call(looks, kind);
+        const look = looks[known ? kind : "info"];
+        return { kind: known ? kind : "info", border: look.tone, tone: look.tone, icon: look.icon, titleColor: "textPrimary" };
     }
 
     // The bar's geometry: sizes in pixels, corner radii in percent of half the bar's height
@@ -169,6 +186,7 @@ Singleton {
         { group: "Backgrounds", token: "surface", label: "Surface", hint: "An element: bar cell, card, field, row" },
         { group: "Backgrounds", token: "surfaceHover", label: "Surface, hovered", hint: "An element under the pointer, or whose popup is open" },
         { group: "Backgrounds", token: "scrim", label: "Scrim", hint: "Behind the screensaver and the lock screen" },
+        { group: "Backgrounds", token: "modalDim", label: "Modal dimming", hint: "Over the Settings window behind a question; keep it see-through" },
         { group: "Accent", token: "accent", label: "Accent", hint: "Selection, active state, progress, graphs" },
         { group: "Accent", token: "accentHover", label: "Accent, hovered", hint: "The accent under the pointer" },
         { group: "Accent", token: "accentDark", label: "Accent, dark", hint: "Filled accent: focused workspace, code buttons" },
@@ -348,6 +366,12 @@ Singleton {
                 { token: "tabRadius", label: "Tab radius", hint: "The Behaviour and Appearance tabs", from: 0, to: 20, suffix: px },
                 { token: "tabHorizontalPadding", label: "Tab padding", hint: "Between a tab's edge and its label", from: 0, to: 40, suffix: px },
                 { token: "cardRadius", label: "Card radius", hint: "Cards and boxes on settings pages", from: 0, to: 20, suffix: px }],
+            modal: [radius("The Settings modal's panel"),
+                { token: "padding", label: "Padding", hint: "Around the modal's content", from: 0, to: 40, suffix: px },
+                { token: "borderWidth", label: "Border width", hint: "Around the modal, in its kind's colour: error, warning, success or the accent", from: 0, to: 8, suffix: px },
+                { token: "spacing", label: "Spacing", hint: "Between the modal's title, text and buttons", from: 0, to: 30, suffix: px },
+                { token: "widthSmall", label: "Width, small", hint: "A small modal's width; never wider than the window", from: 200, to: 900, suffix: px },
+                { token: "widthMedium", label: "Width, medium", hint: "A medium modal's width; never wider than the window", from: 200, to: 900, suffix: px }],
             calendar: [{ token: "dayRadius", label: "Day radius", hint: "A day in the month, and the week's frame", from: 0, to: 20, suffix: px }],
             lock: [
                 { token: "cardRadius", label: "Card radius", hint: "The lock screen's password card", from: 0, to: 40, suffix: px },

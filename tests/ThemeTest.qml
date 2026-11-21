@@ -153,6 +153,27 @@ TestCase {
                     && [found.fill, found.label].concat(found.border === "" ? [] : [found.border]).every(name => Theme[name] !== undefined),
                     "the look of " + kind + " " + JSON.stringify(state) + " names a shape group and colours the theme has");
             }
+        // The Settings modal's looks: each kind's colour and icon, an unknown kind as info
+        const modalLook = kind => { const found = ThemeRules.modalLook(kind); return [found.kind, found.border, found.tone, found.titleColor].join(" "); };
+        assertEqual(modalLook("danger"), "danger error error textPrimary", "modalLook: danger wears the error colour");
+        assertEqual(modalLook("warning"), "warning warning warning textPrimary", "… warning the warning colour");
+        assertEqual(modalLook("success"), "success success success textPrimary", "… success the success colour");
+        assertEqual(modalLook("info"), "info accent accent textPrimary", "… info the accent");
+        for (const odd of ["delete", "", undefined, null, 3, "toString", "__proto__"])
+            assertEqual(modalLook(odd), "info accent accent textPrimary", "… " + JSON.stringify(odd) + " is no kind: info");
+        assertEqual(new Set(ThemeRules.modalKinds.map(kind => ThemeRules.modalLook(kind).icon)).size, 4, "… each kind its own icon");
+        for (const kind of ThemeRules.modalKinds) {
+            const found = ThemeRules.modalLook(kind);
+            assert([found.border, found.tone, found.titleColor].every(name => Theme[name] !== undefined) && found.icon !== "",
+                "the look of a " + kind + " modal names colours the theme has, and an icon");
+        }
+        assertEqual(Theme.builtin.colors.modalDim, "#8c000000", "the modal's dimming is built in: black at 55 %");
+        assert(Math.abs(Theme.modalDim.a - 0.55) < 0.01 && Theme.modalDim.r === 0 && Theme.modalDim.g === 0 && Theme.modalDim.b === 0,
+            "… and so the theme hands it out");
+        assert(!Qt.colorEqual(Theme.modalDim, Theme.scrim) && Theme.scrim.a === 1, "… never the scrim, which is opaque");
+        assertEqual(ThemeRules.colorTokens.find(entry => entry.token === "modalDim")?.group, "Backgrounds", "… a colour of its own, under Backgrounds");
+        assertEqual(JSON.stringify(Object.keys(Theme.modal).sort()), JSON.stringify(["borderWidth", "padding", "radius", "spacing", "widthMedium", "widthSmall"]),
+            "the modal's sizes are a theme group: Theme.modal");
         assertEqual(JSON.stringify(ThemeRules.barTokenInfo.map(entry => entry.token)), JSON.stringify(ThemeRules.barTokens),
             "the Bar shape page lists every geometry token, in order");
         for (const entry of ThemeRules.barTokenInfo)

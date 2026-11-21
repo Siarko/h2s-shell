@@ -5,6 +5,7 @@ ShapeSettings {
     title: "Other"
     sections: [
         { title: "Settings window", group: "settings" },
+        { title: "Settings modal", group: "modal" },
         { title: "Calendar", group: "calendar" },
         { title: "Lock screen", group: "lock" }
     ]

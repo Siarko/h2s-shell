@@ -496,6 +496,7 @@ Singleton {
     readonly property var settings: values.settings
     readonly property var calendar: values.calendar
     readonly property var checkbox: values.checkbox
+    readonly property var modal: values.modal
     readonly property var target: values.target
     readonly property var lock: values.lock
     readonly property var wallpaper: values.wallpaper
@@ -594,6 +595,9 @@ Singleton {
     readonly property color overlayOpaque: Qt.alpha(overlay, 1)
     property color scrim: _colors.scrim
     ThemeColorBehavior on scrim {}
+    // Over the Settings window while its modal is open; never the scrim, which is opaque
+    property color modalDim: _colors.modalDim
+    ThemeColorBehavior on modalDim {}
 
     // Accent
     property color accent: _colors.accent

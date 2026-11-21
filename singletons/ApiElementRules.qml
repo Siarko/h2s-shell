@@ -227,6 +227,92 @@ Singleton {
         return "";
     }
 
+    // ---- The Settings modal (components/SettingsModal.qml; the core's, not in the module API) ----
+
+    // The longest a modal's title and each line of its body may be, in characters
+    readonly property int modalTitleCap: 120
+    readonly property int modalLineCap: 400
+    // The modal's sizes → their width token in Theme.modal
+    readonly property var modalSizes: ({ s: "widthSmall", m: "widthMedium" })
+
+    // A modal's buttons as it draws them, in order: { buttons, informing }. Each button
+    // { id, label, kind, cancel }: label on one line, kind SmallButton's (ThemeRules.buttonLook),
+    // id what the answer names (the given id, else the label; the cancel's is "cancel"). A
+    // button is a cancel when it says so (`cancel: true`) or its kind is "cancel". There is
+    // always exactly one cancel, and it is last: the first one given is kept, the others
+    // dropped; none given, one is added, labelled `cancelLabel` (else "Cancel"). With no button
+    // but the cancel the modal only informs (`informing`): its one button, labelled
+    // `cancelLabel` (else "OK") unless the cancel given has a label, closes it as the "×"
+    // does. A button that is not an object or has no label is left out; not an array: no
+    // buttons of its own.
+    function modalButtons(buttons, cancelLabel) {
+        const given = (Array.isArray(buttons) ? buttons : [])
+            .filter(button => button !== null && typeof button === "object" && oneLine(button.label) !== "");
+        const isCancel = button => button.cancel === true || button.kind === "cancel";
+        const own = given.filter(button => !isCancel(button)).map(button => {
+            const label = oneLine(button.label);
+            const id = oneLine(button.id);
+            const kind = typeof button.kind === "string" && button.kind !== "" ? button.kind : "normal";
+            return { id: id !== "" && id !== "cancel" ? id : label, label: label, kind: kind, cancel: false };
+        });
+        const cancelGiven = given.find(isCancel) ?? null;
+        const informing = own.length === 0;
+        const fallback = oneLine(cancelLabel) !== "" ? oneLine(cancelLabel) : (informing ? "OK" : "Cancel");
+        const cancelKind = cancelGiven && typeof cancelGiven.kind === "string" && cancelGiven.kind !== "" ? cancelGiven.kind
+            : (informing ? "normal" : "cancel");
+        const cancel = { id: "cancel", label: cancelGiven ? oneLine(cancelGiven.label) : fallback, kind: cancelKind, cancel: true };
+        return { buttons: own.concat([cancel]), informing: informing };
+    }
+
+    // A modal's body as it draws it: one entry per line, { text, strong } — `strong` for a
+    // line drawn bold (a warning that leads the text). A line is a string, or { text, strong };
+    // each on one line (it wraps at the modal's width), cut at `modalLineCap`; an empty one is
+    // left out. A string body is one line; anything else: none.
+    function modalBody(body) {
+        const lines = typeof body === "string" ? [body] : (Array.isArray(body) ? body : []);
+        return lines.map(line => {
+            const given = line !== null && typeof line === "object" ? line : { text: line };
+            return { text: oneLine(given.text, modalLineCap), strong: given.strong === true };
+        }).filter(line => line.text !== "");
+    }
+
+    // A modal's checkboxes: { key, label } each, label on one line; one without a key or a
+    // label, or with a key seen before, is left out
+    function modalChecks(checks) {
+        const seen = {};
+        return (Array.isArray(checks) ? checks : []).filter(check => {
+            if (check === null || typeof check !== "object" || typeof check.key !== "string" || check.key === ""
+                || oneLine(check.label) === "" || seen[check.key] === true)
+                return false;
+            seen[check.key] = true;
+            return true;
+        }).map(check => ({ key: check.key, label: oneLine(check.label) }));
+    }
+
+    // A modal's width: its size's (`modal`: Theme.modal), at most the area's width less twice
+    // the modal's padding, never below 0. A size it does not have: m.
+    function modalWidth(size, areaWidth, modal) {
+        const token = pick(modalSizes, size, sizeDefault).value;
+        const wanted = Number(modal?.[token]) || 0;
+        const room = (Number(areaWidth) || 0) - 2 * (Number(modal?.padding) || 0);
+        return Math.max(0, Math.min(wanted, room));
+    }
+
+    // Whether a modal may open: "" when it may, else why not — the session locked, or another
+    // open (a question never replaces another under the user's pointer)
+    function modalRefusal(open, locked) {
+        if (locked === true)
+            return "the session is locked";
+        if (open === true)
+            return "another question is open";
+        return "";
+    }
+
+    // Whether two modal subjects are the same ids, compared by value; none is never the same
+    function sameSubject(first, second) {
+        return first !== undefined && first !== null && JSON.stringify(first) === JSON.stringify(second);
+    }
+
     // Whether a mark with this need shows anything: the lock, or "not allowed"
     function markShown(need) {
         const inside = markNeed(need).value;

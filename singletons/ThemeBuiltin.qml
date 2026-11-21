@@ -14,6 +14,7 @@ Singleton {
             "surface": "#3b3b3b",            // an element: bar cell, card, field, row
             "surfaceHover": "#5a5a5a",       // an element under the pointer, or whose popup is open
             "scrim": "#000000",              // behind the screensaver and lock screen
+            "modalDim": "#8c000000",         // over the Settings window behind its modal: black at 55 %
             // Accent
             "accent": "#44d47a",             // selection, active state, progress, graphs
             "accentHover": "#92db7a",        // accent under the pointer
@@ -118,6 +119,9 @@ Singleton {
         "settings": { "pageMargin": 14, "sidebarItemRadius": 6, "tabRadius": 6, "tabHorizontalPadding": 12, "cardRadius": 6 },
         "calendar": { "dayRadius": 4 },
         "checkbox": { "radius": 3 },
+        // The Settings modal (SettingsModal): its panel's corners, padding, border (in its
+        // kind's colour), the space between its parts, and its widths by size
+        "modal": { "radius": 6, "padding": 18, "borderWidth": 2, "spacing": 10, "widthSmall": 380, "widthMedium": 520 },
         // The least area a control takes a click or a tap in, centred on it, beyond its
         // look (PointerArea): room for a finger without the shell changing for it
         "target": { "minSize": 36 },
