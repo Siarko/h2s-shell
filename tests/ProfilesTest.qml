@@ -298,6 +298,18 @@ TestCase {
         assertEqual(ProfileRules.replacePreset(withPresets, {}, "clock", "a", "").profiles[1].set["bar.left"][0].preset, "",
             "deleting leaves the entries without a preset");
 
+        // --- a removed module's settings ---
+        const modProfiles = [{ name: "Full", set: { "mod.weather.city": "Oslo", "mod.weatherx.city": "Rome", "bar.left": [] } },
+                             { name: "Night", set: { "mod.weather.units": "c" } }];
+        const dropped = ProfileRules.withoutPrefix(modProfiles, { "mod.weather.loud": true, "general.debug": false }, "mod.weather.");
+        assertEqual(JSON.stringify(dropped.profiles.map(profile => Object.keys(profile.set))), JSON.stringify([["mod.weatherx.city", "bar.left"], []]),
+                    "withoutPrefix: the module's values go from every profile, another module's with a longer id stay");
+        assertEqual(JSON.stringify(dropped.globals) + " " + dropped.removed, "{\"general.debug\":false} 3", "… and from the globals; counted");
+        assertEqual(modProfiles[0].set["mod.weather.city"], "Oslo", "… the inputs are not modified");
+        assertEqual(ProfileRules.withoutPrefix(modProfiles, {}, "bar.").removed + ProfileRules.withoutPrefix(modProfiles, {}, "mod.").removed
+                    + ProfileRules.withoutPrefix(modProfiles, {}, "").removed + ProfileRules.withoutPrefix(null, null, null).removed, 0,
+                    "… only a module's own prefix: core settings never go this way");
+
         // --- the preset library ---
         assertEqual(WidgetPresets.value("clock", "", "format"), "hh:mm:ss", "no preset: the type's default");
         assertEqual(WidgetPresets.value("clock", "no such preset", "format"), "hh:mm:ss", "a missing preset: the default");

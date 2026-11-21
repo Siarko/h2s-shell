@@ -57,6 +57,7 @@ TestCase {
         _hostReads();
         _list();
         _checks();
+        _installerSteps();
     }
 
     function _paths() {
@@ -670,5 +671,154 @@ TestCase {
         assertEqual(rules.checkSummaryText(null), "", "… nothing: no line");
         assertEqual(rules.checkingText(2, 4), "Checking 2 of 4…", "while it runs");
         assertEqual(rules.checkingText(0, 4) + " " + rules.checkingText(9, 4) + " " + rules.checkingText(1, 0), "Checking 1 of 4… Checking 4 of 4… Checking…", "… kept in range");
+    }
+
+    // The installer's decisions (singletons/ModuleInstaller.qml)
+    function _installerSteps() {
+        const rules = ModuleInstallRules;
+        const records = rules.parseRecord(_recordText());
+
+        // What install was given
+        let source = rules.installSource("file:///srv/repos/weather.git#v1.2.0");
+        assertEqual(source.kind + " " + source.url + " " + source.ref, "repository file:///srv/repos/weather.git v1.2.0", "install: an address with its ref");
+        source = rules.installSource(home + "/src/notes/");
+        assertEqual(source.kind + " " + source.folder, "folder " + home + "/src/notes", "install: an absolute path is a folder, cleaned");
+        assertEqual(rules.installSource("/srv/../etc").kind, "", "… a path with \"..\": refused");
+        assertEqual(rules.installSource("/").kind, "", "… the root: refused");
+        assertEqual(rules.installSource("/srv/a\nb").kind, "", "… control characters: refused");
+        assertEqual(rules.installSource("ext::sh -c touch% /tmp/x").kind, "", "… a transport that runs commands: refused");
+        assert(rules.installSource("ext::sh").problem !== "", "… with why");
+        assertEqual(rules.installSource("").problem + "|" + rules.installSource(null).problem, "No address or folder given|No address or folder given", "… nothing given");
+        assertEqual(rules.fetchSource({ address: "file:///srv/clip.git", ref: "v0.2" }).address, "file:///srv/clip.git#v0.2", "a dependency's source: the address at its ref");
+        assertEqual(rules.fetchSource({ address: home + "/src/clip", ref: "" }).kind, "folder", "… a folder copy: the folder again");
+        assertEqual(rules.fetchSource({ address: "-oProxyCommand=x", ref: "" }).kind, "", "… refused as any address");
+
+        // Version directories
+        assertEqual(rules.versionDirectoryName("1.2.0", weatherCommit, 0), "1.2.0-abcdef1", "a version's directory: version and commit");
+        assertEqual(rules.versionDirectoryName("1.2.0", "", Date.UTC(2026, 10, 21, 14, 32, 5)), "1.2.0-20261121143205", "… a folder copy: the time, UTC");
+        assertEqual(rules.versionDirectoryName("../x y", weatherCommit, 0), "x-y-abcdef1", "… a version from outside made a plain name");
+        assertEqual(rules.versionDirectoryName("", "zz", NaN), "0-00000000000000", "… nothing usable: still a plain name");
+        assert(rules._versionDirectory(rules.versionDirectoryName("1.0.0-beta+7", weatherCommit, 0)), "… what parseRecord accepts as a directory");
+
+        // What an id finds in the user root
+        const entries = [{ entry: places.user + "/weather", isLink: true, target: places.versions + "/weather/1.2.0-abcdef1" },
+                         { entry: places.user + "/mine", isLink: false, target: places.user + "/mine" },
+                         { entry: places.user + "/elsewhere", isLink: true, target: home + "/src/elsewhere" },
+                         { entry: places.user + "/dangling", isLink: true, target: "" }];
+        const sources = { complete: true, roots: roots, entries: entries };
+        assertEqual(rules.installTarget("clipboard", sources, records).kind, "new", "target: nothing of that name: new");
+        let target = rules.installTarget("weather", sources, records);
+        assertEqual(target.kind + " " + target.previousDir + " " + target.previousRecord?.address, "update 1.2.0-abcdef1 https://codeberg.org/anna/weather.git",
+                    "… the shell's own link: an update, from the active version");
+        target = rules.installTarget("mine", sources, records);
+        assertEqual(target.kind, "taken", "… a folder placed by hand: taken, never replaced");
+        assert(target.problem.includes("not installed by the shell") && target.problem.includes("remove it first"), "… with why: " + target.problem);
+        assertEqual(rules.installTarget("elsewhere", sources, records).kind + " " + rules.installTarget("dangling", sources, records).kind, "taken taken", "… a hand-made link, a dangling one: taken");
+        assertEqual(rules.installTarget("weather", sources, { ok: false, modules: {}, dropped: [] }).kind, "taken", "… a record that cannot be read: taken (unknown, never fine)");
+        assertEqual(rules.installTarget("clipboard", { complete: false, roots: roots, entries: [] }, records).kind, "taken", "… a check that did not finish: taken");
+        assertEqual(rules.installTarget("../x", sources, records).kind, "taken", "… not a module id: taken");
+        assertEqual(rules.installedEntry("weather", sources, records)?.source, "repository", "installed entry: the shell's own");
+        assertEqual(rules.installedEntry("mine", sources, records), null, "… a hand-placed one: none");
+
+        // The staged module's check
+        const goodCheck = { manifest: { valid: true, id: "clipboard", errors: [] }, compatible: true, errors: [], mainFileError: "" };
+        assertEqual(rules.stagedProblem(goodCheck, "clipboard") + rules.stagedProblem(goodCheck, ""), "", "staged: valid, fits, files fine");
+        assert(rules.stagedProblem(goodCheck, "weather").includes("not weather"), "… another id than the chain asked for: refused");
+        assert(rules.stagedProblem({ manifest: { valid: false, errors: ["api: missing"] }, errors: ["api: missing"] }, "").startsWith("module.json: api: missing"), "… an invalid manifest");
+        assertEqual(rules.stagedProblem({ manifest: { valid: true, id: "a" }, compatible: false, errors: ["needs API 9.0"] }, ""), "needs API 9.0", "… an API that does not fit");
+        assertEqual(rules.stagedProblem({ manifest: { valid: true, id: "a" }, compatible: true, errors: [], mainFileError: "Main.qml leads out of the module" }, ""),
+                    "Main.qml leads out of the module", "… a file out of the module");
+        assertEqual(rules.stagedProblem({ manifest: { valid: true, id: "a" }, compatible: true, errors: ["x\ny"], mainFileError: "" }, ""), "x y", "… any error, on one line");
+        assertEqual(rules.stagedProblem(null, ""), "module.json: it could not be read", "… no check: refused");
+        assertEqual(rules.stagedSizeProblem("120\t/x"), "", "size: small");
+        assert(rules.stagedSizeProblem(String(200 * 1024) + "\t/x").includes("larger than 100 MiB"), "… too large");
+        assertEqual(rules.stagedSizeProblem(""), "its size could not be read", "… unreadable: refused");
+        assertEqual(rules.linkProblem(["/s/x/a\t/s/x/b"], "/s/x"), "", "links: inside the module");
+        assert(rules.linkProblem(["/s/x/a\t/etc/passwd"], "/s/x").includes("a link leads out of the module: a"), "… one out: refused, named");
+        assert(rules.linkProblem(["/s/x/a\t"], "/s/x") !== "" && rules.linkProblem(["/s/x/a\t/s/x"], "/s/x") !== "", "… dangling, or the module itself: refused");
+        assert(rules.linkProblem(["junk"], "/s/x") !== "" && rules.linkProblem([], "") !== "", "… unreadable: refused");
+
+        // A failed download, in one line
+        assertEqual(rules.downloadProblem({ timedOut: true }, "", { timeoutMs: 120000 }), "the server did not answer within 120 s", "download: no answer in time");
+        assertEqual(rules.downloadProblem({ code: 128 }, "fatal: repository 'x' not found", {}), "git: repository 'x' not found", "… git's own line");
+        assertEqual(rules.downloadProblem({ code: 1 }, "", {}), "git failed (status 1)", "… nothing said");
+        assertEqual(rules.downloadProblem({ code: -1, failedToStart: true }, "", {}), "git could not be run", "… git missing");
+        assertEqual(rules.downloadProblem({ cancelled: true }, "", { tooLarge: true }), "it is larger than 100 MiB", "… stopped for its size");
+        assertEqual(rules.downloadProblem({ code: 128 }, "fatal: <b>x</b>‮" + "y".repeat(300), {}).length <= 125, true, "… text from outside capped");
+
+        // The installed modules as the chain plan takes them
+        const installed = rules.installedModules([
+            { status: { id: "weather", name: "Weather", version: "1.2.0", api: "1.36", source: "repository", state: "loaded" },
+              manifest: { exports: { version: "1.2" }, uses: [] } },
+            { status: { id: "mine", name: "Mine", version: "0.1", api: "1.0", source: "user", state: "loaded" }, manifest: null },
+            { status: { id: "weather", name: "Weather copy", state: "duplicate", source: "builtin" }, manifest: {} }
+        ], records);
+        assertEqual(JSON.stringify(Object.keys(installed)), JSON.stringify(["weather", "mine"]), "installed: the ones that count, once");
+        assertEqual(installed.weather.address + " " + installed.weather.ref + " " + installed.weather.exports.version, "https://codeberg.org/anna/weather.git v1.2.0 1.2",
+                    "… the shell's own with its recorded address and its exports");
+        assertEqual(installed.mine.address + "|" + JSON.stringify(installed.mine.uses) + "|" + installed.mine.exports, "|[]|null", "… a hand-placed one: no address");
+
+        // The record, changed
+        let modules = rules.recordInstalled({}, "clipboard", { kind: "repository", address: "file:///srv/clip.git", ref: "v0.2", dir: "0.2.0-1234567",
+                                                              version: "0.2.0", commit: "1234567", fetchedAt: "t", installedFor: "notes" });
+        assertEqual(modules.clipboard.active + " " + modules.clipboard.installedFor + " " + modules.clipboard.versions.length, "0.2.0-1234567 notes 1", "record: a new module");
+        assert(rules.parseRecord(rules.recordText(modules)).modules.clipboard !== undefined, "… what parseRecord reads back");
+        const before = JSON.stringify(records.modules);
+        modules = rules.recordInstalled(records.modules, "weather", { kind: "repository", address: "https://codeberg.org/anna/weather.git", ref: "main",
+                                                                      dir: "1.3.0-7654321", version: "1.3.0", commit: "7654321", installedFor: "other" });
+        assertEqual(modules.weather.versions.map(each => each.dir).join(",") + " " + modules.weather.active + " " + modules.weather.ref + " " + modules.weather.installedFor,
+                    "1.2.0-abcdef1,1.1.0-1234567,1.3.0-7654321 1.3.0-7654321 main ", "… an update: kept versions stay, whom it was installed for stays");
+        assertEqual(JSON.stringify(records.modules), before, "… the map given is not changed");
+        assertEqual(rules.recordSwitched(modules, "weather", "1.1.0-1234567").weather.active, "1.1.0-1234567", "switched: another kept version active");
+        assertEqual(rules.recordSwitched(modules, "weather", "9.9.9-0000000"), null, "… a version not kept: none");
+        assertEqual(rules.recordWithoutVersions(modules, "weather", ["1.1.0-1234567", "1.3.0-7654321"]).weather.versions.map(each => each.dir).join(","),
+                    "1.2.0-abcdef1,1.3.0-7654321", "versions dropped, never the active one");
+        assertEqual(rules.recordWithout(modules, "weather").weather, undefined, "an entry gone");
+        assertEqual(rules.recordRestored(modules, "weather", records.modules.weather).weather.active, "1.2.0-abcdef1", "… restored as it was");
+        assertEqual(rules.recordRestored(modules, "clipboard", null).clipboard, undefined, "… none before: gone");
+        const text = rules.recordText({ b: records.modules.weather, a: records.modules.notes });
+        assert(text.indexOf("\"a\"") < text.indexOf("\"b\""), "record text: ids in order");
+        assertEqual(rules.recordChunks("x".repeat(70000)).map(chunk => chunk.length).join(","), "32768,32768,4464", "… handed over in pieces");
+        assertEqual(rules.recordChunks("😀".repeat(20000)).join(""), "😀".repeat(20000), "… never splitting a character");
+        assert(rules.recordChunks("😀".repeat(20000)).every(chunk => chunk.length <= rules.recordChunkLength && !/^[\udc00-\udfff]/.test(chunk)), "… each within the length");
+        assertEqual(rules.recordChunks("x".repeat(rules.maxRecordBytes + 1)), null, "… longer than the check reads: not written");
+
+        // What may be deleted
+        let deletion = rules.deletionTarget(places.user + "/weather", places);
+        assertEqual(deletion.ok + " " + deletion.root + " " + deletion.relative, "true " + places.user + " weather", "delete: a user root entry");
+        deletion = rules.deletionTarget(places.versions + "/weather/1.2.0-abcdef1", places);
+        assertEqual(deletion.relative, "weather/1.2.0-abcdef1", "… a version");
+        assertEqual(rules.deletionTarget(places.versions + "/weather", places).relative, "weather", "… a module's versions");
+        assertEqual(rules.deletionTarget(places.user + "/My.Module", places).ok, true, "… a folder placed by hand in the user root, under any plain name");
+        assertEqual(rules.deletionTarget(places.data + "/My.Module", places).ok, false, "… elsewhere only a module id");
+        assertEqual(rules.deletionTarget(places.staging + "/install.Ab12Cd", places).ok, true, "… a staging directory");
+        assertEqual(rules.deletionTarget(places.stores + "/weather", places).root + " " + rules.deletionTarget(places.data + "/weather", places).root,
+                    places.stores + " " + places.data, "… a store, a data directory");
+        assertEqual(rules.deletionTarget(places.user, places).ok || rules.deletionTarget(home, places).ok || rules.deletionTarget("/", places).ok
+                    || rules.deletionTarget(places.user + "/../x", places).ok || rules.deletionTarget(places.user + "/a/b", places).ok
+                    || rules.deletionTarget(places.versions + "/weather/..", places).ok || rules.deletionTarget(places.user + "/-x", places).ok
+                    || rules.deletionTarget("relative/x", places).ok || rules.deletionTarget(places.user + "/x", {}).ok, false,
+                    "… a place itself, the home, the root, \"..\", deeper, an option-like name, no places: never");
+
+        // Switch and delete a version
+        const found = rules.installedEntry("weather", sources, records);
+        let plan = rules.switchPlan("weather", "1.1.0-1234567", found, records.modules.weather);
+        assertEqual(plan.ok + " " + plan.dir + " " + plan.previousDir, "true 1.1.0-1234567 1.2.0-abcdef1", "switch: to a kept version");
+        assertEqual(rules.switchPlan("weather", places.versions + "/weather/1.1.0-1234567", found, records.modules.weather).dir, "1.1.0-1234567", "… given as its path");
+        assert(rules.switchPlan("weather", "1.2.0-abcdef1", found, records.modules.weather).problem.includes("already the active"), "… the active one: refused");
+        assert(rules.switchPlan("weather", "2.0.0-0000000", found, records.modules.weather).problem.includes("not a kept version"), "… one not kept: refused");
+        assert(!rules.switchPlan("weather", "../x", found, records.modules.weather).ok, "… not a version name: refused");
+        assert(!rules.switchPlan("mine", "1.0", null, null).ok, "… not installed by the shell: refused");
+        assertEqual(rules.deleteVersionPlan("weather", "1.1.0-1234567", found, records.modules.weather).ok, true, "delete a version: a kept one");
+        assert(rules.deleteVersionPlan("weather", "1.2.0-abcdef1", found, records.modules.weather).problem.includes("active"), "… the active one: refused");
+        assert(!rules.deleteVersionPlan("weather", "3.0.0-0000000", found, records.modules.weather).ok, "… one not kept: refused");
+
+        // Back on a failed start
+        assert(rules.backOnFailedStart({ kind: "update", dir: "1.3.0-7654321", previousDir: "1.2.0-abcdef1" }, { state: "failed" }), "a failed start after an update: back");
+        assert(rules.backOnFailedStart({ kind: "switch", dir: "1.1.0-1234567", previousDir: "1.2.0-abcdef1" }, { state: "failed" }), "… after a switch: back");
+        assert(!rules.backOnFailedStart({ kind: "install", dir: "1.0.0-1234567", previousDir: "" }, { state: "failed" }), "… a new module: keeps its files, shows Failed");
+        assert(!rules.backOnFailedStart({ kind: "update", dir: "1.3.0-7654321", previousDir: "1.2.0-abcdef1" }, { state: "loaded" }), "… one that started: stays");
+        assert(!rules.backOnFailedStart({ kind: "update", dir: "1.3.0-7654321", previousDir: "" }, { state: "failed" }), "… no version before known: stays");
+        assert(!rules.backOnFailedStart(null, null), "… nothing known: nothing done");
     }
 }

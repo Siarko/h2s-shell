@@ -1072,4 +1072,401 @@ Singleton {
         const now = Math.min(all, Math.max(1, Math.floor(Number(current) || 0)));
         return all === 0 ? "Checking…" : "Checking " + now + " of " + all + "…";
     }
+
+    // ---- The installer's steps (§6.2, §6.8, §6.9; singletons/ModuleInstaller.qml) ----
+
+    // A download (or a folder copy) larger than this is stopped: as git reports it while it
+    // receives, and as the staged directory measures once it is there
+    readonly property int maxDownloadBytes: 100 * 1024 * 1024
+    // The record the source check reads (sourceCheckScript: 256 KiB); a longer one is never
+    // written — what is written must be what the next read sees
+    readonly property int maxRecordBytes: 262144
+    // The record is handed to the writing process in pieces of at most this many characters:
+    // one argument may not be longer than 128 KiB, and a character takes up to three bytes
+    readonly property int recordChunkLength: 32768
+
+    function _utf8Length(text) {
+        let bytes = 0;
+        for (let i = 0; i < text.length; i++) {
+            const code = text.charCodeAt(i);
+            if (code < 0x80)
+                bytes += 1;
+            else if (code < 0x800)
+                bytes += 2;
+            else if (code >= 0xd800 && code < 0xdc00 && i + 1 < text.length) {
+                bytes += 4;
+                i++;
+            } else
+                bytes += 3;
+        }
+        return bytes;
+    }
+
+    // What `modules install` was given: an absolute path is a folder to copy, anything else a
+    // repository address (repositoryProblem). → { kind: "repository" | "folder" | "", problem,
+    // address (with its "#ref"), url, ref, folder }; kind "" with the problem when refused
+    function installSource(text) {
+        const result = { kind: "", problem: "", address: "", url: "", ref: "", folder: "" };
+        if (typeof text !== "string" || text.trim() === "") {
+            result.problem = "No address or folder given";
+            return result;
+        }
+        if (text.startsWith("/")) {
+            const folder = _cleanPath(text);
+            if (/[\u0000-\u001f\u007f]/.test(text) || text.length > maxAddressLength)
+                result.problem = "The folder's path contains control characters or is too long";
+            else if (folder === "" || folder === "/")
+                result.problem = "Not a folder path: " + _plain(text);
+            else {
+                result.kind = "folder";
+                result.folder = folder;
+                result.address = folder;
+            }
+            return result;
+        }
+        const problem = repositoryProblem(text);
+        if (problem !== "") {
+            result.problem = problem;
+            return result;
+        }
+        const parts = splitAddress(text);
+        result.kind = "repository";
+        result.address = text;
+        result.url = parts.url;
+        result.ref = parts.ref;
+        return result;
+    }
+
+    // The source of a dependency or an update the chain asks for (ModuleDependencyRules.plan's
+    // `fetch` entries, { address, ref }): a folder path for a module copied from a folder,
+    // else a repository at that ref — installSource's result
+    function fetchSource(entry) {
+        const address = typeof entry?.address === "string" ? entry.address : "";
+        const ref = typeof entry?.ref === "string" ? entry.ref : "";
+        if (address.startsWith("/"))
+            return installSource(address);
+        return installSource(ref !== "" ? address + "#" + ref : address);
+    }
+
+    // A version's directory name: "<version>-<commit7>" for a download, "<version>-<UTC
+    // yyyymmddhhmmss>" for a folder copy; the version made a plain name (anything but
+    // letters, digits, ".", "_", "+", "-" becomes "-"; "0" when nothing is left)
+    function versionDirectoryName(version, commit, nowMs) {
+        let text = (typeof version === "string" ? version : "").replace(/[^A-Za-z0-9._+-]/g, "-").replace(/^[^A-Za-z0-9]+/, "").slice(0, 60);
+        if (text === "")
+            text = "0";
+        if (typeof commit === "string" && /^[0-9a-f]{7,64}$/.test(commit))
+            return text + "-" + commit.slice(0, 7);
+        const date = new Date(Number(nowMs));
+        const stamp = Number.isFinite(date.getTime()) ? date.toISOString().slice(0, 19).replace(/[^0-9]/g, "") : "00000000000000";
+        return text + "-" + stamp;
+    }
+
+    // What a staged module's id finds in the user root, from the installer's own source check
+    // (parseSourceCheck's result) and the record (parseRecord's): → { kind, problem,
+    // previousDir, previousRecord }
+    //   "new"     nothing of that name there
+    //   "update"  the shell's own link to one of its versions (sourceOf: repository, folder):
+    //             a new version goes beside the kept ones and the link moves
+    //   "taken"   anything else — a folder or link placed by hand, a dangling link, a record that
+    //             cannot be read, a check that did not finish: never replaced (Remove it first)
+    function installTarget(id, sources, records) {
+        const result = { kind: "taken", problem: "", previousDir: "", previousRecord: null };
+        if (!ModuleManifestRules.validId(id)) {
+            result.problem = "Not a module id: " + _plain(String(id ?? ""), 60);
+            return result;
+        }
+        if (sources?.complete !== true) {
+            result.problem = "Your modules folder could not be read";
+            return result;
+        }
+        const entry = _list(sources.entries).find(each => _baseName(each?.entry) === id);
+        if (!entry) {
+            result.kind = "new";
+            return result;
+        }
+        const found = sourceOf(entry.target, entry, sources.roots, records);
+        if ((found.source === "repository" || found.source === "folder") && found.id === id) {
+            result.kind = "update";
+            result.previousDir = _baseName(entry.target);
+            result.previousRecord = records.modules[id];
+            return result;
+        }
+        result.problem = id + " is already in your modules folder (" + found.label + "), not installed by the shell: remove it first";
+        return result;
+    }
+
+    // The shell's own installed module of `id` as the installer's source check finds it now:
+    // sourceOf's result for its entry in the user root, or null
+    function installedEntry(id, sources, records) {
+        if (!ModuleManifestRules.validId(id) || sources?.complete !== true)
+            return null;
+        const entry = _list(sources.entries).find(each => _baseName(each?.entry) === id);
+        if (!entry)
+            return null;
+        const found = sourceOf(entry.target, entry, sources.roots, records);
+        return (found.source === "repository" || found.source === "folder") && found.id === id ? found : null;
+    }
+
+    // Why a staged module may not move in, "" when it may: the host's check of it
+    // (ModuleHost.checkDirectory's answer: { manifest, compatible, errors, mainFileError }) and
+    // the id it was fetched as ("" for the module asked for itself)
+    function stagedProblem(check, expectedId) {
+        const manifest = check?.manifest;
+        if (!ModuleRules.isObject(manifest) || manifest.valid !== true)
+            return "module.json: " + _plain(String(_list(check?.errors)[0] ?? _list(manifest?.errors)[0] ?? "it could not be read"));
+        if (typeof expectedId === "string" && expectedId !== "" && manifest.id !== expectedId)
+            return "it holds " + _plain(String(manifest.id), 60) + ", not " + _plain(expectedId, 60);
+        if (check.compatible !== true)
+            return _plain(String(_list(check.errors)[0] ?? "its API does not fit this shell"));
+        if (typeof check.mainFileError === "string" && check.mainFileError !== "")
+            return _plain(check.mainFileError);
+        if (_list(check.errors).length > 0)
+            return _plain(String(check.errors[0]));
+        return "";
+    }
+
+    // The staged directory's size from `du -sk`'s line ("<KiB>\t<path>"): "" when it is within
+    // maxDownloadBytes, else why not — a size that cannot be read is refused too
+    function stagedSizeProblem(line) {
+        const match = /^([0-9]{1,15})\s/.exec(typeof line === "string" ? line : "");
+        if (!match)
+            return "its size could not be read";
+        return Number(match[1]) * 1024 > maxDownloadBytes ? "it is larger than " + Math.round(maxDownloadBytes / 1024 / 1024) + " MiB" : "";
+    }
+
+    // The links inside a staged module that lead out of it, from lines "<path>\t<target>"
+    // (`find -type l`, each with `readlink -f`; "" for a target that cannot be resolved):
+    // "" when none, else why it is refused. A link inside is left to the file check.
+    function linkProblem(lines, directory) {
+        const base = _cleanPath(directory);
+        if (base === "")
+            return "the staged directory is not known";
+        for (const line of _list(lines)) {
+            const fields = String(line ?? "").split("\t");
+            if (fields.length !== 2)
+                return "its links could not be read";
+            const target = _cleanPath(fields[1]);
+            if (target === "" || !_inside(target, base) || target === base)
+                return "a link leads out of the module: " + _plain(fields[0].startsWith(base + "/") ? fields[0].slice(base.length + 1) : fields[0], 80);
+        }
+        return "";
+    }
+
+    // One line for a download that did not end well. `result`: the command's answer
+    // (CommandRunner); `lastLine`: git's last line on standard error; `context`: { timeoutMs,
+    // tooLarge — stopped for its size }
+    function downloadProblem(result, lastLine, context) {
+        if (context?.tooLarge === true)
+            return "it is larger than " + Math.round(maxDownloadBytes / 1024 / 1024) + " MiB";
+        if (result?.timedOut === true)
+            return "the server did not answer within " + Math.round(Number(context?.timeoutMs ?? 0) / 1000) + " s";
+        if (result?.failedToStart === true || (typeof result?.error === "string" && result.error !== ""))
+            return "git could not be run";
+        const line = _plain(String(lastLine ?? "").replace(/^(fatal|error):\s*/i, ""));
+        if (line !== "")
+            return "git: " + line;
+        return "git failed (status " + Number(result?.code ?? -1) + ")";
+    }
+
+    // The modules on disk as ModuleDependencyRules.plan takes them (`installed`). `modules`:
+    // [{ status, manifest }] — the host's statuses that count and their manifests;
+    // `records`: parseRecord's result. A copy the shell installed carries its recorded address
+    // and ref; anything else none (it cannot be updated here).
+    function installedModules(modules, records) {
+        const result = {};
+        for (const each of _list(modules)) {
+            const status = each?.status;
+            const id = status?.id;
+            if (!ModuleManifestRules.validId(id) || status.state === "duplicate" || ModuleRules.has(result, id))
+                continue;
+            const manifest = ModuleRules.isObject(each.manifest) ? each.manifest : {};
+            const record = records?.ok === true && ModuleRules.has(records.modules, id) ? records.modules[id] : null;
+            const installed = (status.source === "repository" || status.source === "folder") && record !== null;
+            result[id] = {
+                name: String(status.name ?? ""), version: String(status.version ?? ""), api: String(status.api ?? ""),
+                exports: ModuleRules.isObject(manifest.exports) ? manifest.exports : null,
+                uses: Array.isArray(manifest.uses) ? manifest.uses : [],
+                source: String(status.source ?? ""),
+                address: installed ? record.address : "", ref: installed ? record.ref : ""
+            };
+        }
+        return result;
+    }
+
+    // ---- The record, changed (§6.2): each a new modules map (parseRecord's `modules`), the
+    // given one untouched ----
+
+    function _recordCopy(modules) {
+        return ModuleRules.isObject(modules) ? JSON.parse(JSON.stringify(modules)) : {};
+    }
+
+    // A version moved in and made active. `given`: { kind, address, ref, dir, version, commit,
+    // fetchedAt, installedFor }. An entry there keeps its other versions, what was refused and
+    // whom it was installed for; its address and ref become the new ones.
+    function recordInstalled(modules, id, given) {
+        const result = _recordCopy(modules);
+        const previous = ModuleRules.has(result, id) && ModuleRules.isObject(result[id]) ? result[id] : null;
+        const versions = _list(previous?.versions).filter(each => each?.dir !== given?.dir);
+        versions.push({ dir: String(given?.dir ?? ""), version: String(given?.version ?? ""), commit: String(given?.commit ?? ""),
+                        fetchedAt: given?.fetchedAt ?? "" });
+        result[id] = {
+            kind: given?.kind === "folder" ? "folder" : "repository",
+            address: String(given?.address ?? ""), ref: String(given?.ref ?? ""),
+            versions: versions, active: String(given?.dir ?? ""),
+            refused: previous?.refused ?? null,
+            installedFor: previous ? (previous.installedFor ?? "") : String(given?.installedFor ?? ""),
+            checkedAt: previous?.checkedAt ?? ""
+        };
+        return result;
+    }
+
+    // Another kept version made active; null when the record has no such version
+    function recordSwitched(modules, id, dir) {
+        const result = _recordCopy(modules);
+        const entry = ModuleRules.has(result, id) ? result[id] : null;
+        if (!entry || !_list(entry.versions).some(each => each?.dir === dir))
+            return null;
+        entry.active = dir;
+        return result;
+    }
+
+    // Versions dropped (deleted from disk); the active one is never dropped
+    function recordWithoutVersions(modules, id, dirs) {
+        const result = _recordCopy(modules);
+        const entry = ModuleRules.has(result, id) ? result[id] : null;
+        if (entry)
+            entry.versions = _list(entry.versions).filter(each => each?.dir === entry.active || !_list(dirs).includes(each?.dir));
+        return result;
+    }
+
+    // The entry of `id` gone (removed, or a new install taken back)
+    function recordWithout(modules, id) {
+        const result = _recordCopy(modules);
+        delete result[id];
+        return result;
+    }
+
+    // The entry of `id` as it was before a run (`previous` null: none)
+    function recordRestored(modules, id, previous) {
+        const result = _recordCopy(modules);
+        if (ModuleRules.isObject(previous))
+            result[id] = JSON.parse(JSON.stringify(previous));
+        else
+            delete result[id];
+        return result;
+    }
+
+    // The record's text, ids in order; and the pieces the writing process takes it in — null
+    // when it is longer than the source check reads (then it is not written)
+    function recordText(modules) {
+        const copy = _recordCopy(modules);
+        const sorted = {};
+        for (const id of Object.keys(copy).sort())
+            sorted[id] = copy[id];
+        return JSON.stringify(sorted, null, 2) + "\n";
+    }
+
+    function recordChunks(text) {
+        if (typeof text !== "string" || _utf8Length(text) > maxRecordBytes)
+            return null;
+        const chunks = [];
+        let at = 0;
+        while (at < text.length) {
+            let end = Math.min(text.length, at + recordChunkLength);
+            // Never between the two halves of a character outside the BMP
+            const code = text.charCodeAt(end - 1);
+            if (end < text.length && code >= 0xd800 && code < 0xdc00)
+                end--;
+            chunks.push(text.slice(at, end));
+            at = end;
+        }
+        return chunks;
+    }
+
+    // ---- What the installer deletes ----
+
+    // A path the installer may delete or unlink: one entry right below one of the shell's
+    // places (`places`: paths()) — the user root (a plain name: hand-placed folders too),
+    // staging (a plain name), the data, stores and backups (a module id), or a module's
+    // versions directory or one version in it.
+    // → { ok, problem, root, relative } — the place and the path below it, which the deleting
+    // script checks again for links on the way
+    function deletionTarget(path, places) {
+        const clean = _cleanPath(path);
+        const refused = problem => ({ ok: false, problem: problem, root: "", relative: "" });
+        if (clean === "")
+            return refused("not an absolute path");
+        const parent = _parentOf(clean);
+        const name = _baseName(clean);
+        // The user root also holds folders and links placed by hand, under any plain name
+        const user = _cleanPath(places?.user);
+        if (user !== "" && parent === user)
+            return _versionDirectory(name) ? { ok: true, problem: "", root: user, relative: name } : refused("not a plain name: " + _plain(name, 60));
+        for (const place of ["data", "stores", "backups"]) {
+            const base = _cleanPath(places?.[place]);
+            if (base !== "" && parent === base)
+                return ModuleManifestRules.validId(name) ? { ok: true, problem: "", root: base, relative: name } : refused("not a module id: " + _plain(name, 60));
+        }
+        const staging = _cleanPath(places?.staging);
+        if (staging !== "" && parent === staging)
+            return _versionDirectory(name) ? { ok: true, problem: "", root: staging, relative: name } : refused("not a staging directory");
+        const versions = _cleanPath(places?.versions);
+        if (versions !== "" && parent === versions)
+            return ModuleManifestRules.validId(name) ? { ok: true, problem: "", root: versions, relative: name } : refused("not a module id: " + _plain(name, 60));
+        if (versions !== "" && _parentOf(parent) === versions && ModuleManifestRules.validId(_baseName(parent)))
+            return _versionDirectory(name) ? { ok: true, problem: "", root: versions, relative: _baseName(parent) + "/" + name } : refused("not a version directory");
+        return refused("not a place the shell writes: " + _plain(clean));
+    }
+
+    // ---- Switch version, delete a version (§6.8) ----
+
+    // A version as given ("1.2.0-abc1234", or its path in module-versions) → its name, "" for
+    // anything else
+    function versionName(given) {
+        const text = typeof given === "string" ? given : "";
+        const name = text.startsWith("/") ? _baseName(text) : text;
+        return _versionDirectory(name) ? name : "";
+    }
+
+    // Switching module `id` to a kept version. `found`: installedEntry's result now; `record`:
+    // its record entry. → { ok, problem, dir, previousDir }
+    function switchPlan(id, given, found, record) {
+        const dir = versionName(given);
+        const refused = problem => ({ ok: false, problem: problem, dir: dir, previousDir: "" });
+        if (!found || found.id !== id || !ModuleRules.isObject(record))
+            return refused(_plain(String(id ?? ""), 60) + " was not installed by the shell");
+        if (dir === "")
+            return refused("Not a version: " + _plain(String(given ?? ""), 60));
+        if (!_list(record.versions).some(each => each?.dir === dir))
+            return refused(dir + " is not a kept version of " + id);
+        const previousDir = _baseName(found.target);
+        if (dir === previousDir)
+            return refused(dir + " is already the active version");
+        return { ok: true, problem: "", dir: dir, previousDir: previousDir };
+    }
+
+    // Deleting a kept version of module `id` that is not active → { ok, problem, dir }
+    function deleteVersionPlan(id, given, found, record) {
+        const dir = versionName(given);
+        const refused = problem => ({ ok: false, problem: problem, dir: dir });
+        if (!found || found.id !== id || !ModuleRules.isObject(record))
+            return refused(_plain(String(id ?? ""), 60) + " was not installed by the shell");
+        if (dir === "")
+            return refused("Not a version: " + _plain(String(given ?? ""), 60));
+        if (!_list(record.versions).some(each => each?.dir === dir))
+            return refused(dir + " is not a kept version of " + id);
+        if (dir === _baseName(found.target) || dir === record.active)
+            return refused(dir + " is the active version");
+        return { ok: true, problem: "", dir: dir };
+    }
+
+    // Whether a module this run moved to another version (an update, a switch) goes back to
+    // the version before: it did not start ("failed") and that version is known. A new
+    // module that fails keeps its files and shows Failed (§6.9). `step`: { kind, dir,
+    // previousDir }; `status`: the host's status of it after the load
+    function backOnFailedStart(step, status) {
+        return (step?.kind === "update" || step?.kind === "switch") && _versionDirectory(step.previousDir)
+            && step.previousDir !== step.dir && status?.state === "failed";
+    }
 }

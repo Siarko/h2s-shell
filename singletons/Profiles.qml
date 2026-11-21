@@ -302,6 +302,18 @@ Singleton {
         return _commit(list)
     }
 
+    // Drops every value of a removed module's settings ("mod.<id>."), in every profile and
+    // the pinned globals (ProfileRules.withoutPrefix). → how many values went
+    function deleteSettings(prefix) {
+        const result = ProfileRules.withoutPrefix(profiles, globals, prefix)
+        if (result.removed === 0)
+            return 0
+        if (!_commit(result.profiles))
+            return 0
+        Config.globals = JSON.stringify(result.globals)
+        return result.removed
+    }
+
     // Later profiles win, so moving one down raises its priority
     function moveProfile(index, delta) {
         const target = index + delta

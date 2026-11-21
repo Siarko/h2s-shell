@@ -106,6 +106,9 @@ Scope {
     property int discoveryTimeoutMs: 5000
     // A search runs (rediscover())
     property bool discovering: false
+    // How many times load() was called: the installer waits for the load its search asked
+    // for (a search that failed loads nothing)
+    property int loadCount: 0
     // The names of the modules whose files changed in place since the engine first built
     // them: they run their old code until the shell restarts (ModuleFileRules.reloadPicksUpChanges).
     // Kept for the host's life: a restart clears it by being the restart
@@ -314,6 +317,7 @@ Scope {
     // itself unloads everything and is kept in hostError.
     function load(directoryList, options) {
         try {
+            loadCount++;
             unload();
             hostError = "";
             _askedSafeMode = options?.safeMode === true;
@@ -406,6 +410,17 @@ Scope {
         console.info("[Modules] " + id + " confirmed (" + (record.found?.label ?? "") + ")");
         _setLists(id, true);
         return "";
+    }
+
+    // Forgets the user's acknowledgement of a module (Remove): installed again, it asks
+    // again. Nothing when no list was written yet. → true when one was dropped
+    function dropAcknowledgement(id) {
+        if (!ModuleRules.isObject(acknowledgements) || !ModuleRules.has(acknowledgements, id) || Config.loadFailed)
+            return false;
+        const list = Object.assign({}, acknowledgements);
+        delete list[id];
+        Config.setAcknowledgedModules(list);
+        return true;
     }
 
     // Runs the launcher's search again and loads what it finds, in place, safe mode kept as
@@ -864,34 +879,21 @@ Scope {
         // First every manifest not read yet (precedence needs them all); their files in the
         // next run
         for (const record of _records) {
-            if (record.manifestRead)
-                continue;
-            for (const file of ["module.json", "qmldir"])
-                asked.push({ record: record, file: file, stage: "manifest", cap: ModuleRules.maxManifestBytes });
-            asked.push({ record: record, file: ModuleFileRules.listKey, stage: "manifest", cap: "list", optional: true });
+            if (!record.manifestRead)
+                asked.push(..._manifestAsks(record));
         }
         let settledAtOnce = false;
         if (asked.length === 0) {
             for (const record of _records) {
                 if (record.filesChecked)
                     continue;
-                const files = ModuleFileRules.filesToCheck(record.manifest, record.qmldirText);
-                const scanned = ModuleFileRules.scanOnly(record.scanListing?.files, files);
-                // (1.26) Its icon's file: checked as the others; of an SVG its text, of a
-                // picture its first bytes (ModuleFileRules.iconCheck)
-                const icon = ModuleFileRules.iconCheck(record.manifest);
+                const files = _fileAsks(record);
                 // Nothing to check: settled at once
-                if (files.length === 0 && scanned.length === 0 && icon === null) {
+                if (files.length === 0) {
                     _filesAnswered(record, {}, {});
                     settledAtOnce = true;
                 }
-                for (const entry of files)
-                    asked.push({ record: record, file: entry.file, stage: "files", cap: ModuleFileRules.maxFileBytes });
-                if (icon !== null)
-                    asked.push({ record: record, file: icon.file, stage: "files", cap: icon.cap });
-                // Only for the import scan: its header, whatever its size
-                for (const file of scanned)
-                    asked.push({ record: record, file: file, stage: "files", cap: "h" + ModuleRules.maxHeaderBytes, optional: true });
+                asked.push(...files);
             }
         }
         // Every module's required files first, the listings and the scan's reads after them
@@ -902,8 +904,50 @@ Scope {
                 _applyGuarded();
             return;
         }
-        const lines = [];
         _checkingFiles = true;
+        _runFileCheck(asked, lines => {
+            root._checkingFiles = false;
+            // What it did not answer, for whatever reason, counts as failed
+            root._fileCheckDone(asked, lines);
+            // The next stage (the files of the manifests just read), or what a load()
+            // during this run asked for; nothing when nothing is left to check
+            root._checkFiles();
+        });
+    }
+
+    // What the file check is asked of a module's manifest stage: module.json and qmldir at
+    // most maxManifestBytes, and the listing of its other QML files
+    function _manifestAsks(record) {
+        const asked = [];
+        for (const file of ["module.json", "qmldir"])
+            asked.push({ record: record, file: file, stage: "manifest", cap: ModuleRules.maxManifestBytes });
+        asked.push({ record: record, file: ModuleFileRules.listKey, stage: "manifest", cap: "list", optional: true });
+        return asked;
+    }
+
+    // … and of its files once its manifest is read: every file it names at most maxFileBytes,
+    // its icon, the headers of the other QML files for the import scan ([]: nothing to check)
+    function _fileAsks(record) {
+        const asked = [];
+        const files = ModuleFileRules.filesToCheck(record.manifest, record.qmldirText);
+        const scanned = ModuleFileRules.scanOnly(record.scanListing?.files, files);
+        // (1.26) Its icon's file: checked as the others; of an SVG its text, of a picture its
+        // first bytes (ModuleFileRules.iconCheck)
+        const icon = ModuleFileRules.iconCheck(record.manifest);
+        for (const entry of files)
+            asked.push({ record: record, file: entry.file, stage: "files", cap: ModuleFileRules.maxFileBytes });
+        if (icon !== null)
+            asked.push({ record: record, file: icon.file, stage: "files", cap: icon.cap });
+        // Only for the import scan: its header, whatever its size
+        for (const file of scanned)
+            asked.push({ record: record, file: file, stage: "files", cap: "h" + ModuleRules.maxHeaderBytes, optional: true });
+        return asked;
+    }
+
+    // One run of the file check (ModuleFileRules.fileCheckScript) over `asked`; `done(lines)`
+    // with what it printed — also when it ran out of time
+    function _runFileCheck(asked, done) {
+        const lines = [];
         _check(["sh", "-c", ModuleFileRules.fileCheckScript, "sh"]
                    .concat(...asked.map(entry => [String(entry.cap), entry.record.directory, entry.file])), {
             environment: checkEnvironment ?? {},
@@ -913,25 +957,17 @@ Scope {
                 if (stream === "stdout")
                     lines.push(line);
             },
-            done: result => {
-                root._checkingFiles = false;
-                // What it did not answer, for whatever reason, counts as failed
-                root._fileCheckDone(asked, lines);
-                // The next stage (the files of the manifests just read), or what a load()
-                // during this run asked for; nothing when nothing is left to check
-                root._checkFiles();
-            }
+            done: result => done(lines)
         });
     }
 
-    // The check answered (or ran out of time: what it did not answer counts as failed)
-    function _fileCheckDone(asked, lines) {
+    // The check's lines for `asked` → Map record → { stage, answers: { file: "ok" | why not },
+    // texts: { file: text } }; what it did not answer counts as failed
+    function _answersByRecord(asked, lines) {
         const answers = ModuleFileRules.parseFileCheck(lines);
         const texts = ModuleFileRules.fileTexts(lines);
         const byRecord = new Map();
         asked.forEach((entry, index) => {
-            if (!_records.includes(entry.record))
-                return;
             if (!byRecord.has(entry.record))
                 byRecord.set(entry.record, { stage: entry.stage, answers: {}, texts: {} });
             const answer = answers[String(index)];
@@ -939,23 +975,36 @@ Scope {
             if (texts[String(index)] !== undefined)
                 byRecord.get(entry.record).texts[entry.file] = texts[String(index)];
         });
-        let manifests = false;
-        for (const [record, answered] of byRecord) {
-            if (answered.stage === "manifest" && !record.manifestRead) {
-                record.scanListing = ModuleFileRules.listing(answered.answers[ModuleFileRules.listKey], answered.texts[ModuleFileRules.listKey]);
-                _manifestAnswered(record, answered.answers, answered.texts);
-                manifests = true;
-            } else if (answered.stage === "files" && !record.filesChecked) {
-                // (1.26) An icon whose content is refused (an SVG with an external
-                // reference, a file of another type than its name's) fails as a bad file
-                const judged = ModuleFileRules.withIconContent(record.manifest, answered.answers, answered.texts);
-                const bad = {};
-                for (const file of Object.keys(judged)) {
-                    if (judged[file] !== "ok")
-                        bad[file] = judged[file];
-                }
-                _filesAnswered(record, bad, answered.texts);
+        return byRecord;
+    }
+
+    // One record's answers taken: its manifest stage (→ true) or its files' (→ false)
+    function _takeAnswers(record, answered) {
+        if (answered.stage === "manifest" && !record.manifestRead) {
+            record.scanListing = ModuleFileRules.listing(answered.answers[ModuleFileRules.listKey], answered.texts[ModuleFileRules.listKey]);
+            _manifestAnswered(record, answered.answers, answered.texts);
+            return true;
+        }
+        if (answered.stage === "files" && !record.filesChecked) {
+            // (1.26) An icon whose content is refused (an SVG with an external reference, a
+            // file of another type than its name's) fails as a bad file
+            const judged = ModuleFileRules.withIconContent(record.manifest, answered.answers, answered.texts);
+            const bad = {};
+            for (const file of Object.keys(judged)) {
+                if (judged[file] !== "ok")
+                    bad[file] = judged[file];
             }
+            _filesAnswered(record, bad, answered.texts);
+        }
+        return false;
+    }
+
+    // The check answered (or ran out of time: what it did not answer counts as failed)
+    function _fileCheckDone(asked, lines) {
+        let manifests = false;
+        for (const [record, answered] of _answersByRecord(asked, lines)) {
+            if (_records.includes(record) && _takeAnswers(record, answered))
+                manifests = true;
         }
         if (manifests) {
             const order = ModuleMergeRules.precedence(_records.map(record => ({ directory: record.directory, id: record.manifest.id })));
@@ -965,6 +1014,49 @@ Scope {
             _records = _records.slice();
         }
         _applyGuarded();
+    }
+
+    // The host's own check of a directory that is not loaded — the installer's staged module
+    // (notes/plans/modules-management.md §6.2, "Verifying"): the same file check and manifest
+    // rules as a load, nothing built, nothing loaded, nothing of it kept. `done(answer)` once,
+    // never inside this call: { manifest, compatible, errors, warnings, mainFileError } — what
+    // could not be read counts as failed.
+    function checkDirectory(directory, done) {
+        const record = _newRecord(ModuleFileRules.canonicalPath(directory));
+        const answer = () => ({ manifest: record.manifest, compatible: record.compatible, errors: record.errors.slice(),
+                                warnings: record.warnings.slice(), mainFileError: record.mainFileError });
+        const finish = () => {
+            try {
+                done(answer());
+            } catch (error) {
+                console.warn("[Modules] a directory check's answer threw: " + String(error).slice(0, 300));
+            }
+        };
+        if (record.directory === "" || record.directory === "/") {
+            record.errors = ["not a directory path"];
+            Qt.callLater(finish);
+            return;
+        }
+        const manifestAsked = _manifestAsks(record);
+        _runFileCheck(manifestAsked, lines => {
+            for (const [each, answered] of _answersByRecord(manifestAsked, lines))
+                _takeAnswers(each, answered);
+            if (record.filesChecked) {
+                finish();
+                return;
+            }
+            const filesAsked = ModuleFileRules.checkOrder(_fileAsks(record));
+            if (filesAsked.length === 0) {
+                _filesAnswered(record, {}, {});
+                finish();
+                return;
+            }
+            _runFileCheck(filesAsked, more => {
+                for (const [each, answered] of _answersByRecord(filesAsked, more))
+                    _takeAnswers(each, answered);
+                finish();
+            });
+        });
     }
 
     // Drops the entries whose files failed, then takes the rest's texts (from the check) for

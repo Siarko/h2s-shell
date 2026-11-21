@@ -85,13 +85,16 @@ QtObject {
     property var _moduleContribution: ModuleContributionTest {}
     property var _networkCardGeometry: NetworkCardGeometryTest {}
     property var _quickshellPin: QuickshellPinTest {}
+    // Built before the module suites it waits for: registered after AnchorsTest, that suite's
+    // card layout check failed in the full run
+    property var _moduleInstaller: ModuleInstallerTest { after: _anchors }
     property var _modules: ModulesTest {}
     property var _moduleIcon: ModuleIconTest {}
     property var _moduleRegistries: ModuleRegistriesTest { after: _modules; vpnSuite: _vpnProviders }
     property var _anchors: AnchorsTest { after: _moduleRegistries }
 
     // The suites that run on the event loop (TestCase.asynchronous)
-    readonly property var _asyncSuites: [_pointerInput, _toastDrag, _settingsCard, _moduleContribution, _networkCardGeometry, _buttonKinds, _pillSizes, _apiElements, _sidePanel, _settingsModal, _statusPill, _lockView, _authPromptView, _commandRunner, _systemFacts, _modules, _moduleIcon, _moduleRegistries, _anchors, _vpnProviders, _testSeamsShape, _testTree, _deviceAddressReading, _sleepLockersReading, _network, _fileChooser]
+    readonly property var _asyncSuites: [_pointerInput, _toastDrag, _settingsCard, _moduleContribution, _networkCardGeometry, _buttonKinds, _pillSizes, _apiElements, _sidePanel, _settingsModal, _statusPill, _lockView, _authPromptView, _commandRunner, _systemFacts, _modules, _moduleIcon, _moduleRegistries, _anchors, _moduleInstaller, _vpnProviders, _testSeamsShape, _testTree, _deviceAddressReading, _sleepLockersReading, _network, _fileChooser]
     // How long an asynchronous suite may take, counted from the start of the suites, unless
     // it sets its own (TestCase.timeLimitMs); then it fails as timed out
     readonly property int _asyncLimitMs: 90000
@@ -101,9 +104,10 @@ QtObject {
     // FileChooserTest opens a real dialog, which takes the keyboard: it starts once the other
     // asynchronous suites are done, so that no key they send reaches it, nor its keys them.
     // It waits for them until the time it needs itself is all that is left of the limit, then
-    // fails without opening a dialog.
+    // fails without opening a dialog. ModuleInstallerTest is not waited for: it opens no window
+    // and sends no key, and runs long after the module suites it waits for itself.
     readonly property bool _chooserLast: {
-        _fileChooser.waitFor = _asyncSuites.filter(suite => suite !== _fileChooser);
+        _fileChooser.waitFor = _asyncSuites.filter(suite => suite !== _fileChooser && suite !== _moduleInstaller);
         _fileChooser.waitLimitMs = timeLimitOf(_fileChooser) - _fileChooser.ownTimeMs;
         return true;
     }

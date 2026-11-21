@@ -448,6 +448,16 @@ The interface modules are written against (`qs.api`), versioned on its own
   file inside the module's directory (≤ 1 MiB).
 
 ### Added
+- Modules can be installed, updated to another version and removed through IPC:
+  `qs ipc call modules install <address-or-folder>` (a git address, `#<tag|branch|commit>`
+  allowed, or a folder; `installKeepOff` keeps it off) downloads it with the modules it needs,
+  checks it and turns it on; each version is kept in
+  `~/.local/share/h2s-shell/module-versions/<id>/` and the modules folder links to the active
+  one, so `switchVersion <id> <version>` goes back and forth and `deleteVersion` drops one;
+  an update that does not start goes back to the version before. `remove <id> <directory>`
+  (`removeWithData` with its data and settings) removes a module — only the link of one you
+  linked by hand. Nothing installs while the screen is locked; `modules job` tells how the
+  last one went.
 - Settings → Appearance → Other has a "Settings modal" section: the corners, padding, border,
   spacing and widths of the questions that open over the Settings window; their dimming is
   a colour of its own, "Modal dimming" (Colors → Backgrounds).

@@ -365,6 +365,33 @@ Singleton {
         return { profiles: newProfiles, globals: newGlobals };
     }
 
+    // Profiles and globals with every setting whose key starts with `prefix` left out — a
+    // removed module's own ("mod.<id>."). Inputs are not modified; a prefix that is not
+    // "mod.<id>." changes nothing (core settings are never dropped this way).
+    // Returns { profiles, globals, removed } — `removed` how many values went.
+    function withoutPrefix(profiles, globals, prefix) {
+        const newProfiles = JSON.parse(JSON.stringify(Array.isArray(profiles) ? profiles : []));
+        const newGlobals = Object.assign({}, globals ?? {});
+        let removed = 0;
+        if (typeof prefix !== "string" || !/^mod\.[a-z][a-z0-9_-]{0,31}\.$/.test(prefix))
+            return { profiles: newProfiles, globals: newGlobals, removed: 0 };
+        for (const profile of newProfiles) {
+            for (const key of Object.keys(profile?.set ?? {})) {
+                if (key.startsWith(prefix)) {
+                    delete profile.set[key];
+                    removed++;
+                }
+            }
+        }
+        for (const key of Object.keys(newGlobals)) {
+            if (key.startsWith(prefix)) {
+                delete newGlobals[key];
+                removed++;
+            }
+        }
+        return { profiles: newProfiles, globals: newGlobals, removed: removed };
+    }
+
     // Every fact a condition reads
     function factsRead(condition) {
         if (!condition)

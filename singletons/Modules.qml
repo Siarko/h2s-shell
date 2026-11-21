@@ -52,10 +52,29 @@ import QtCore
 //   qs ipc call modules rediscover           searches for modules again and loads what it finds,
 //                                            without a restart
 //   qs ipc call modules loadWithoutSafeMode  the same, out of safe mode
+//
+// Installing, updating and removing (ModuleInstaller, notes/plans/modules-management.md §6;
+// a typed command counts as the user's click — never while the session is locked; each
+// answers "" when the job started, else why not, and the job's outcome goes to the log and
+// to `modules job`). Quickshell's IPC takes a fixed number of arguments, so each option is a
+// function of its own:
+//   qs ipc call modules install <address-or-folder>        installs it with the modules it
+//                                            needs, acknowledges and turns on what is new
+//   qs ipc call modules installKeepOff <address-or-folder> the same, everything new kept off
+//   qs ipc call modules remove <id> <directory>            removes a module (the directory as
+//                                            `modules list` shows it): the shell's own with
+//                                            its kept versions, a hand-placed folder, or only
+//                                            a hand-made link
+//   qs ipc call modules removeWithData <id> <directory>    … and its data, store, backups and
+//                                            settings
+//   qs ipc call modules switchVersion <id> <version-dir>   another kept version made active
+//   qs ipc call modules deleteVersion <id> <version-dir>   a kept version that is not active
+//   qs ipc call modules job                  JSON: { busy, phase, subject, progress, lastResult }
 Singleton {
     id: root
 
     readonly property ModuleHost host: _host
+    readonly property ModuleInstaller installer: _installer
     readonly property string apiVersion: _host.apiVersion
     readonly property bool safeMode: _host.safeMode
     readonly property string hostError: _host.hostError
@@ -123,6 +142,11 @@ Singleton {
         locked: !Config.readOnly && (Lockscreen.locked || Lockscreen.restoring)
     }
 
+    ModuleInstaller {
+        id: _installer
+        host: _host
+    }
+
     // The plain lists the core's registries read (ModuleLists: they never touch this
     // singleton, so nothing the lock screen needs constructs or waits for the host)
     Binding { target: ModuleLists; property: "widgetEntries"; value: _host.widgetEntries }
@@ -162,6 +186,14 @@ Singleton {
             // temporary one instead
             if (!Config.readOnly)
                 _host.dataRoot = SystemFactsRules.dataRoot(SystemFacts.dataHome);
+            // The installer works under the data and config homes; what an earlier run left in
+            // its staging place goes. Not under the test runners
+            if (!Config.readOnly) {
+                _installer.dataHome = SystemFacts.dataHome;
+                _installer.configHome = String(StandardPaths.writableLocation(StandardPaths.GenericConfigLocation)).replace(/^file:\/\//, "");
+                _installer.home = SystemFacts.home;
+                _installer.cleanStaging();
+            }
             // Sources, confirmations, the modules on and the search again: the shell's own, as
             // the launcher started it
             _ownStat.reload();
@@ -249,6 +281,35 @@ Singleton {
 
         function loadWithoutSafeMode(): string {
             return _host.loadWithoutSafeMode();
+        }
+
+        function install(source: string): string {
+            return _installer.install(source, { enable: true });
+        }
+
+        function installKeepOff(source: string): string {
+            return _installer.install(source, { enable: false });
+        }
+
+        function remove(id: string, directory: string): string {
+            return _installer.remove(id, directory, { withData: false });
+        }
+
+        function removeWithData(id: string, directory: string): string {
+            return _installer.remove(id, directory, { withData: true });
+        }
+
+        function switchVersion(id: string, dir: string): string {
+            return _installer.switchVersion(id, dir);
+        }
+
+        function deleteVersion(id: string, dir: string): string {
+            return _installer.deleteVersion(id, dir);
+        }
+
+        function job(): string {
+            return JSON.stringify({ busy: _installer.busy, phase: _installer.phase, subject: _installer.subject,
+                                    progress: _installer.progress, lastResult: _installer.lastResult });
         }
     }
 }

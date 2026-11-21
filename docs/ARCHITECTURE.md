@@ -710,6 +710,30 @@ the `qs.api` facade, the registries taking modules' contributions, slots and anc
   module whose files changed in place since the engine first built them runs its old code
   until the shell restarts (the engine keeps a file by URL for its life,
   `tests/QuickshellPinTest.qml` (h)): it is named in `restartNeeded`.
+- **The installer**: `singletons/ModuleInstaller.qml`, one instance in `Modules` beside the
+  host, everything as the user under the data and config homes. Installing (`qs ipc call
+  modules install <address-or-folder>`, `installKeepOff`): a git address (`#<ref>` allowed;
+  `ModuleInstallRules.installSource`, `downloadCommands` — no hooks, no submodules, no
+  credential prompt, only https/ssh/git/file) is cloned, a folder copied without following
+  links, into `<dataHome>/h2s-shell/module-staging/`, under a time limit and a size cap, with
+  git's progress read (`progressOf`); a link out of it refuses it; then the host's own file
+  check and manifest rules (`ModuleHost.checkDirectory`) and the id free or the shell's own
+  (`installTarget`: what was placed by hand is never replaced); then the chain
+  (`ModuleDependencyRules.plan`: each missing dependency with a `source` fetched and checked
+  the same way). Each module moves in by renames, providers first:
+  `module-versions/<id>/<version>-<commit7>` (a folder: `<version>-<time>`) and the link
+  `modules/<id>` moved onto it; a failure halfway takes back what moved
+  (`ModuleDependencyRules.rollbackPlan`). The record `module-sources.json` is written once, by
+  a temporary file and a rename; one that cannot be read is never written over. Then the host
+  searches and loads again; new modules are acknowledged and turned on (the command was the
+  confirmation), or kept off. `switchVersion <id> <version-dir>` relinks to a kept version and
+  `deleteVersion` drops one (at most three kept, `ModuleUpdateRules.keepPlan`); an update or
+  a switch whose module then fails to start goes back to the version before
+  (`backOnFailedStart`). `remove <id> <directory>` (`removeWithData`) follows
+  `ModuleInstallRules.removalPlan`: a hand-made link only the link, a hand-placed folder that
+  folder, the shell's own its link and versions; every deletion only where `deletionTarget`
+  allows, never through a link. One job at a time, never started while locked; `modules job`
+  says how the last ended.
 - **The registries** read the merged lists — through `ModuleLists` (plain values the
   `Modules` singleton feeds; never `Modules` itself, so the lock screen, which reads its
   settings through Profiles, never constructs or waits for the host; modules arrive after the
