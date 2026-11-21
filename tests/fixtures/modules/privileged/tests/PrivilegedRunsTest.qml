@@ -17,6 +17,13 @@ TestCase {
 
     readonly property var module: Api.moduleAt(Qt.resolvedUrl("."))
     property var _steps: []
+    // (1.36) An old-type object given elevating words beyond its stand-in, and what looks for
+    // the stand-in pkexec's mark
+    property PrivilegedAction extraWords: PrivilegedAction {
+        notifyFailures: false
+    }
+    property CommandRunner markRunner: CommandRunner {}
+    property var _markSeen: null
     // The old type, through the same queue (its stand-in pkexec set when it runs)
     property PrivilegedAction legacy: PrivilegedAction {
         notifyFailures: false
@@ -696,6 +703,38 @@ TestCase {
             assertEqual(JSON.stringify(_notices().map(entry => [entry.summary, entry.body, entry.format])),
                         JSON.stringify([["Module: Not named", "", "plain"]]), "one notification, as its announcement gives it");
             ModuleTestKit.setPolkitAgent("active");
+            _legacyRefusals();
+        });
+    }
+
+    // (1.36) The old type refuses before any prompt: a program its manifest does not declare,
+    // elevating words beyond the stand-in; and another module's handle is not to be had
+    function _legacyRefusals() {
+        ModuleTestKit.clearRecords();
+        const mark = module.dataDirectory + "/pkexec-ran";
+        const answers = {};
+        legacy.elevate = [_path("pkexec")];
+        legacy.run([_path("pkexec"), "x"], "Not declared", result => answers.undeclared = result, { PRIVILEGED_MARK: mark });
+        extraWords.elevate = [_path("pkexec"), "/bin/sh", "-c", "touch \"$0\"", mark];
+        extraWords.run([_path("talk"), "lines", "1", "0"], "Extra words", result => answers.extra = result, { PRIVILEGED_MARK: mark });
+        assertEqual(Api.module("privileged-undeclared"), null, "Api.module of another module: null, its privileged not to be had");
+        assertEqual(Api.module("privileged"), module, "… its own: its handle");
+        assertEqual(Api.moduleAt(Qt.resolvedUrl("../../privileged-undeclared/Main.qml")), null, "Api.moduleAt of another module's file: null");
+        _then("the refused old runs are answered", () => answers.undeclared && answers.extra, () => {
+            const undeclared = answers.undeclared;
+            assert(!undeclared.ok && undeclared.blocked === "undeclared" && undeclared.error.includes("privileged.programs does not name it"),
+                   "PrivilegedAction with an undeclared absolute path: blocked undeclared: " + JSON.stringify(undeclared));
+            assert((module.status?.errors ?? []).some(text => String(text).includes("runs \"" + _path("pkexec") + "\" as administrator; module.json's privileged.programs does not name it")),
+                   "… the reason in its status: " + JSON.stringify(module.status?.errors));
+            const extra = answers.extra;
+            assert(!extra.ok && extra.code === -1 && String(extra.error).startsWith("elevate must be"),
+                   "elevating words beyond the stand-in: refused, nothing run: " + JSON.stringify(extra));
+            assert(_idle(), "nothing queued");
+            suite._markSeen = null;
+            markRunner.start(["sh", "-c", "if [ -e \"$1\" ]; then echo ran; else echo never; fi", "sh", mark], { done: result => suite._markSeen = result.stdout.trim() });
+        });
+        _then("the mark is looked for", () => _markSeen !== null, () => {
+            assertEqual(_markSeen, "never", "the stand-in pkexec never ran for either");
             _lockedBeforeLookup();
         });
     }

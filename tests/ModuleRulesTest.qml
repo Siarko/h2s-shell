@@ -666,11 +666,11 @@ TestCase {
                     JSON.stringify(["Api.module(id) (in Main.qml): use `Api.moduleStatus(id)` for another module's state, and its `exports` through `uses`" + tightening]),
                     "Api.module(id): listed, with the file and what to use");
         assertEqual(JSON.stringify(ModuleSourceRules.codeDeprecations({ "Page.qml": "Item {\n    property var module: null\n    readonly property bool t: module.host.testMode\n}\n" })),
-                    JSON.stringify(["module.host (in Page.qml): use the handle's own properties and qs.api (in a suite, ModuleTestKit)" + tightening]),
+                    JSON.stringify(["module.host (in Page.qml): gone since API 1.36; use the handle's own properties and qs.api (in a suite, ModuleTestKit)"]),
                     "module.host: listed");
         assertEqual(ModuleSourceRules.codeDeprecations({ "A.qml": "Item { readonly property var h: root.module . host; property var t: module?.host?.testMode }",
                                                          "B.qml": "Item { readonly property var h: Api.moduleAt(Qt.resolvedUrl(\".\")).host }" }).join("|"),
-                    "module.host (in 2 files): use the handle's own properties and qs.api (in a suite, ModuleTestKit)" + tightening,
+                    "module.host (in 2 files): gone since API 1.36; use the handle's own properties and qs.api (in a suite, ModuleTestKit)",
                     "… through a property named module, spaced, optional, or straight from Api.moduleAt: one line, how many files");
         assertEqual(ModuleSourceRules.codeDeprecations({ "Both.qml": "QtObject { property var a: Api.module(\"x\"); property var b: module.host }" }).length, 2,
                     "both in one file: two lines");
@@ -687,7 +687,7 @@ TestCase {
         // Where a "/" starts a regex: after `=>` and the keywords that take an operand too, so
         // a quote inside it does not open a string that hides the rest of the file
         const apiModule = "Api.module(id) (in A.qml): use `Api.moduleStatus(id)` for another module's state, and its `exports` through `uses`" + tightening;
-        const hostLine = "module.host (in A.qml): use the handle's own properties and qs.api (in a suite, ModuleTestKit)" + tightening;
+        const hostLine = "module.host (in A.qml): gone since API 1.36; use the handle's own properties and qs.api (in a suite, ModuleTestKit)";
         assertEqual(ModuleSourceRules.codeDeprecations({ "A.qml": "QtObject {\n    function f(list) { return list.filter(x => /'/.test(x)); }\n"
                                                          + "    property string s: 'Api.module(id) is old'\n}\n" }).length, 0,
                     "a regex after `=>` with a quote in it: the string after it is still a string");

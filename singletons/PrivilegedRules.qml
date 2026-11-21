@@ -197,6 +197,31 @@ Singleton {
         return "";
     }
 
+    // Whose code asks (1.36): `callers` the module directories on the call's stack
+    // (ModuleRules.stackDirectories), `own` the module's directory. "" when the stack names
+    // that directory and no other: a run for another module's handle, or from code no module
+    // is seen in, is refused
+    function callerProblem(callers, own) {
+        const list = Array.isArray(callers) ? callers : [];
+        if (typeof own !== "string" || own === "" || list.length === 0)
+            return "a run as administrator from code the shell cannot trace to a module is refused";
+        if (list.length !== 1 || list[0] !== own)
+            return "a run as administrator that crosses modules is refused: only a module's own code may ask";
+        return "";
+    }
+
+    // The old PrivilegedAction's elevating words (1.36): exactly one word, and outside module
+    // test mode that word is "pkexec" (the shell's trusted pkexec). More words would run a
+    // program of their own as root, whatever the command declares. In test mode the one word
+    // is the module's stand-in, which the test-mode gate judges. "" when fine
+    function legacyElevateProblem(elevating, testMode) {
+        if (!Array.isArray(elevating) || elevating.length !== 1 || typeof elevating[0] !== "string" || elevating[0] === "")
+            return "elevate must be one word: \"pkexec\" (in module test mode, the module's stand-in pkexec)";
+        if (testMode !== true && elevating[0] !== "pkexec")
+            return "elevate must be \"pkexec\", the shell's trusted pkexec: " + JSON.stringify(elevating[0].slice(0, 200)) + " is refused";
+        return "";
+    }
+
     // The old PrivilegedAction's run (1.36): `moduleId` the module whose code is on the call's
     // stack ("" when none is seen), `declared` its declaration(), `program` the command's
     // first word. "" when it may go on. A run the shell cannot trace to a module is refused:

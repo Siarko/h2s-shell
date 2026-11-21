@@ -396,7 +396,9 @@ Scope {
             return null;
         }
         // Its identity is fixed here, for good (readonly in the handle)
-        const made = component.createObject(root, { moduleId: id, host: root });
+        if (_handleKey === "")
+            _handleKey = ModuleHandleHosts.register(root);
+        const made = component.createObject(root, { moduleId: id, _hostKey: _handleKey });
         if (made)
             _handles.set(id, made);
         return made;
@@ -1424,7 +1426,14 @@ Scope {
     // Component.onDestruction, newest first — a dependent's main is always newer than its
     // providers' (made after them, and gone before them) — and then deletes them. Nothing is
     // asked of the modules here, and nothing more is scheduled
-    Component.onDestruction: _dying = true
+    Component.onDestruction: {
+        _dying = true;
+        if (_handleKey !== "")
+            ModuleHandleHosts.forgetLater(_handleKey);
+    }
+
+    // What this host's handles find it by (ModuleHandleHosts): never handed to a module
+    property string _handleKey: ""
 
     function _publish() {
         const loaded = [];

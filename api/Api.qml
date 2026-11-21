@@ -194,9 +194,11 @@ import qs.singletons.network
 //                                                     list of networks in range
 //                          A saved Wi-Fi network's card is a place only once its details are
 //                          read (until then Api.networks leaves it out: it could be a hotspot)
-//   Api.module(id)         a module's handle (api/ModuleHandle.qml), or null. Deprecated
-//                          (1.19): a module keeps to its own handle — another module is
-//                          Api.moduleStatus(id) and its exports (`uses`, below). A module whose
+//   Api.module(id)         the calling module's own handle (api/ModuleHandle.qml) when `id`
+//                          is its id, or null. Deprecated (1.19): a module keeps to its own
+//                          handle — another module is Api.moduleStatus(id) and its exports
+//                          (`uses`, below). (1.36) Another module's id, or a call that does
+//                          not come from exactly one module's code: null. A module whose
 //                          code calls it has it listed in its `deprecations`; it goes with the
 //                          shell's next tightening
 //   Api.moduleStatus(id)   (1.19) another module's plain state, frozen { id, name, version,
@@ -205,7 +207,9 @@ import qs.singletons.network
 //                          id no module has. Nothing else of it: no handle, no directory, no
 //                          errors. It follows the module in a binding
 //   Api.moduleAt(url)      the handle of the module whose directory holds `url` — in any file
-//                          of a module: Api.moduleAt(Qt.resolvedUrl("."))
+//                          of a module: Api.moduleAt(Qt.resolvedUrl(".")). (1.36) Only for the
+//                          caller's own directory: a `url` of another module, or a call that
+//                          does not come from exactly that module's code, gives null
 //   module.main            (1.15, on its handle) the object made from the manifest's `main`
 //                          while the module is active, read-only, and it notifies: null while
 //                          the module is off, while the main itself is being built and for a
@@ -812,6 +816,10 @@ import qs.singletons.network
 //   the declared programs that is `trusted`. PrivilegedAction is refused the same way
 //   (command[0] for argv[0]), and also when the shell cannot trace the call to a module's
 //   code.
+//   Only the module's own code may ask: a call whose stack names another module's directory
+//   too, or none, is refused the same way (a handle handed to another module cannot be used
+//   for it). Code a module builds with Qt.createQmlObject under another module's URL looks
+//   like that module's to the shell: outside what this guard can see.
 //   This holds whatever API the manifest asks for. `"author"` (plain text on one line, at most
 //   100 characters) names who wrote the module; a new author asks the user again.
 //   What it is and what it is not: a guard against a module's mistakes and a statement for
@@ -933,9 +941,10 @@ import qs.singletons.network
 //                          command is read once. Its default `elevate: ["pkexec"]` (pkexec by
 //                          its bare name) is the shell's trusted, setuid pkexec, the one
 //                          `module.privileged` uses — never one found first on PATH; none
-//                          found: the run fails, not available. An `elevate` set to a path
-//                          outside test mode runs as given, unjudged — that ends in slice Z,
-//                          with the type.
+//                          found: the run fails, not available. (1.36) Any other `elevate`
+//                          outside test mode, and more than one word anywhere, is refused
+//                          before anything runs (`error`, the reason in the module's status):
+//                          extra words would run a program of their own as root.
 //
 // The file chooser (1.17), on a module's handle (api/ModuleHandle.qml; singletons/FileChooser.qml).
 //   module.chooseFiles(options, done)   asks the user for files or a folder → a handle
@@ -1057,13 +1066,12 @@ import qs.singletons.network
 //                          named ("uses form a cycle: a → b → a", "uses itself").
 //
 // Reaching into another module or the shell (1.19): a module uses its own handle, qs.api,
-// Api.moduleStatus(id) and the exports it `uses`. `Api.module(id)` and the handle's `host`
-// still work and are listed in the module's `deprecations` where its code uses them (read
-// from its QML and JavaScript files, comments and strings left out: `Api.module(`, and
-// `.host` on `module`
-// or straight on Api.moduleAt(…) — a handle kept under another name is not found, QML cannot
-// notice a property read); both go with the shell's next tightening (`host` then becomes
-// `_host`). Importing the shell's singletons (`qs.singletons` and below) or a directory
+// Api.moduleStatus(id) and the exports it `uses`. `Api.module(id)` still works for the
+// module's own id and is listed in the module's `deprecations` where its code uses it (read
+// from its QML and JavaScript files, comments and strings left out: `Api.module(`); it goes
+// with the shell's next tightening. (1.36) The handle's `host` is gone (undefined); a module
+// whose code still reads `.host` on `module` or straight on Api.moduleAt(…) has that listed
+// too — a handle kept under another name is not found, QML cannot notice a property read. Importing the shell's singletons (`qs.singletons` and below) or a directory
 // outside the module's own is an error in its status, in a JavaScript file's `.import` too;
 // the module still loads.
 //
@@ -1173,7 +1181,10 @@ Singleton {
     // Deprecated (1.19): listed in the calling module's `deprecations` (found in its code),
     // removed with the shell's next tightening
     function module(id) {
-        return Modules.handle(id);
+        // (1.36) Only the caller's own handle: the stack names its directory alone
+        const callers = ModuleRules.stackDirectories(new Error().stack, Modules.host.directories);
+        const handle = Modules.handle(id);
+        return handle && PrivilegedRules.callerProblem(callers, handle.directory) === "" ? handle : null;
     }
 
     // (1.19) Another module's plain state (above)
@@ -1182,7 +1193,10 @@ Singleton {
     }
 
     function moduleAt(url) {
-        return Modules.handleAt(url);
+        // (1.36) Only for the caller's own directory
+        const callers = ModuleRules.stackDirectories(new Error().stack, Modules.host.directories);
+        const handle = Modules.handleAt(url);
+        return handle && PrivilegedRules.callerProblem(callers, handle.directory) === "" ? handle : null;
     }
 
     function notify(summary, options) {

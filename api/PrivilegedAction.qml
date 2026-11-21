@@ -53,8 +53,8 @@ QtObject {
 
     // What runs the command as root. "pkexec" by its name (the default) is the shell's
     // trusted, setuid pkexec (PrivilegedRuns.pkexec), never one found first on PATH; none
-    // found: the run fails, not available. A path given here runs as given outside test mode
-    // (until slice Z). A module's suites put a stand-in here.
+    // found: the run fails, not available. (1.36) Anything else outside module test mode, or
+    // more than one word, is refused. A module's suites put its stand-in here.
     property var elevate: ["pkexec"]
     // "<what> failed" notifications for a command that ran and failed
     property bool notifyFailures: true
@@ -79,7 +79,8 @@ QtObject {
         // run it is (for the log)
         const stack = new Error().stack;
         const rule = Modules.host.testMode ? Modules.host.testCallRule(stack) : "strict";
-        const moduleId = _moduleOf(stack);
+        const callers = ModuleRules.stackDirectories(stack, Modules.host.directories);
+        const moduleId = _idOf(callers[0]);
         const givenElevate = elevate;
         const elevateSnapshot = CommandRules.argvSnapshot(givenElevate, false);
         const elevating = elevateSnapshot.argv ?? (Array.isArray(givenElevate) ? Array.from(givenElevate) : givenElevate);
@@ -98,11 +99,13 @@ QtObject {
             _notFound(request, command[0] + " is not an absolute path (pkexec needs one)");
             return;
         }
-        // (1.36) Only from a module's code, with its manifest's `privileged` block, approved,
-        // and command[0] one of the declared programs as its handle has it — refused before
-        // any prompt, the reason in the module's status (PrivilegedRules.legacyDeclarationProblem)
+        // (1.36) Only from one module's own code (the stack names its directory alone), with
+        // its manifest's `privileged` block, approved, and command[0] one of the declared,
+        // trusted programs as its handle has them — refused before any prompt, the reason in
+        // the module's status (PrivilegedRules.callerProblem, legacyDeclarationProblem)
         const handle = moduleId !== "" ? Modules.host.handle(moduleId) : null;
-        const undeclared = PrivilegedRules.legacyDeclarationProblem(moduleId,
+        const crossing = PrivilegedRules.callerProblem(callers, callers[0] ?? "");
+        const undeclared = crossing !== "" ? crossing : PrivilegedRules.legacyDeclarationProblem(moduleId,
             handle ? Modules.host.privilegedDeclaration(moduleId, handle.programs) : null, command[0]);
         if (undeclared !== "") {
             if (moduleId !== "")
@@ -111,6 +114,15 @@ QtObject {
                 console.warn("[Modules] PrivilegedAction refused " + JSON.stringify(label.slice(0, 100)) + ": " + undeclared);
             root._untracedWarned = moduleId === "" ? label : root._untracedWarned;
             done?.({ ok: false, code: -1, dismissed: false, refused: false, notFound: false, blocked: "undeclared", lines: [], error: undeclared });
+            return;
+        }
+        // (1.36) Only "pkexec" (test mode: the stand-in) as the elevating word — more words would
+        // run a program of their own as root (PrivilegedRules.legacyElevateProblem)
+        const elevateProblem = PrivilegedRules.legacyElevateProblem(elevating, Modules.host.testMode);
+        if (elevateProblem !== "") {
+            if (moduleId !== "")
+                Modules.host.reportError(moduleId, elevateProblem);
+            refuseRun(elevateProblem);
             return;
         }
         if (!Modules.host.testMode || rule !== "legacy") {
@@ -144,9 +156,8 @@ QtObject {
     property var _current: null
     property string _ownerKey: ""
 
-    // The id of the innermost module on a call's stack, for the log ("" when none is seen)
-    function _moduleOf(stack) {
-        const directory = ModuleRules.stackDirectories(stack, Modules.host.directories)[0];
+    // The id of the module in `directory` ("" for none)
+    function _idOf(directory) {
         return directory ? (Modules.host.statuses.find(status => status.directory === directory)?.id ?? "") : "";
     }
 

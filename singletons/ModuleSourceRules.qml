@@ -24,7 +24,7 @@ Singleton {
     // (API 1.19) The old ways of reaching another module or the shell's host in a module's
     // code, each listed among its `deprecations` (codeDeprecations) and removed with the
     // shell's next tightening: { what, pattern (matched against codeText: comments and
-    // strings do not count), use }. `module.host` is found where the handle is named
+    // strings do not count), use, removed (the API that removed it, when it is gone) }. `module.host` is found where the handle is named
     // `module` (not `$module` or `my_module`; or a handle comes straight from Api.moduleAt):
     // QML cannot notice a read of a
     // property, so a handle kept under another name is not found.
@@ -32,7 +32,7 @@ Singleton {
         { what: "Api.module(id)", pattern: /(?:^|[^\w$])Api\s*\.\s*module\s*\(/,
           use: "`Api.moduleStatus(id)` for another module's state, and its `exports` through `uses`" },
         { what: "module.host", pattern: /(?:^|[^\w$])(?:module|moduleAt\s*\((?:[^()]|\([^()]*\))*\))\s*\??\.\s*host\b/,
-          use: "the handle's own properties and qs.api (in a suite, ModuleTestKit)" }
+          use: "the handle's own properties and qs.api (in a suite, ModuleTestKit)", removed: "1.36" }
     ]
 
     // ---- What a module file's root object declares ----
@@ -415,7 +415,9 @@ Singleton {
             const files = Object.keys(codes).filter(file => old.pattern.test(codes[file]));
             if (files.length === 0)
                 continue;
-            lines.push(ModuleRules.deprecation(old.what + " (in " + (files.length === 1 ? nameLabel(files[0]) : files.length + " files") + ")", old.use));
+            const where = old.what + " (in " + (files.length === 1 ? nameLabel(files[0]) : files.length + " files") + ")";
+            // One already removed reads as gone, not as going
+            lines.push(old.removed ? where + ": gone since API " + old.removed + "; use " + old.use : ModuleRules.deprecation(where, old.use));
         }
         return lines;
     }

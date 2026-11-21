@@ -204,7 +204,7 @@ TestCase {
             assert(!_has(forbidden?.warnings, "qs.panels"), "… but not one in a hidden directory");
             assertEqual(JSON.stringify(forbidden?.deprecations.filter(line => !line.startsWith("import "))),
                         JSON.stringify(["Api.module(id) (in 2 files): use `Api.moduleStatus(id)` for another module's state, and its `exports` through `uses` (goes with the shell's next tightening)",
-                                        "module.host (in sections/OldWays.qml): use the handle's own properties and qs.api (in a suite, ModuleTestKit) (goes with the shell's next tightening)"]),
+                                        "module.host (in sections/OldWays.qml): gone since API 1.36; use the handle's own properties and qs.api (in a suite, ModuleTestKit)"]),
                         "… and the old ways of reaching another module and the host, from its code (a script's too): " + JSON.stringify(forbidden?.deprecations));
 
             _expectState("duplicate-id", "loaded");
@@ -549,9 +549,12 @@ TestCase {
             assertEqual(JSON.stringify(host.testProgramVerdicts), "{}", "… no stand-in verdicts");
             assertEqual(host.describe().testMode, false, "describe(): testMode false");
 
-            // A module cannot switch test mode: what its handle hands it (`host`) refuses
-            const reached = handle.host;
-            assert(reached === host, "a module's handle reaches the host");
+            // (1.36) The handle does not hand out its host; and the host itself refuses a
+            // switch of test mode (a module reaching it some other way)
+            assertEqual(handle.host, undefined, "a module's handle has no host on it");
+            assert(!Object.keys(handle).some(key => { try { return handle[key] === host; } catch (error) { return false; } }),
+                   "… nor under another name");
+            const reached = host;
             let threw = false;
             try {
                 reached.testMode = true;
@@ -585,9 +588,9 @@ TestCase {
         });
         _then("test-programs loads in test mode", () => _settled() && _status("test-programs")?.state === "loaded"
               && _status("test-programs-links")?.state === "loaded" && _status("test-programs-dir-out")?.state === "loaded", () => {
-            // A module cannot switch test mode off either: not through what its handle reaches
-            const reachedOn = host.handle("test-programs").host;
-            assert(reachedOn === host, "a module's handle reaches the host in test mode too");
+            // A module cannot switch test mode off either: the handle has no host, the host refuses
+            assertEqual(host.handle("test-programs").host, undefined, "no host on the handle in test mode either");
+            const reachedOn = host;
             let threwOff = false;
             try {
                 reachedOn.testMode = false;
@@ -670,15 +673,20 @@ TestCase {
             const queued = PrivilegedRuns.count;
             suite._privilegedAnswers = {};
             const options = name => ({ what: "Try", timeoutMs: 5000, notifyFailures: false, done: result => suite._privilegedAnswers[name] = result });
-            undeclaredHandle.privileged.start([root, "x"], options("undeclared"));
-            undeclaredHandle.privileged.start([root, "again"], options("undeclared again"));
-            declaredHandle.privileged.start([declaredHandle.programs.pkexec.path, "x"], options("not a declared program"));
+            // Through each module's own code (its main): only that may ask
+            const undeclaredMain = host.mainObject("privileged-undeclared");
+            const declaredMain = host.mainObject("privileged");
+            undeclaredMain.tryStart([root, "x"], options("undeclared"));
+            undeclaredMain.tryStart([root, "again"], options("undeclared again"));
+            declaredMain.tryStart([declaredHandle.programs.pkexec.path, "x"], options("not a declared program"));
+            // The declared module's handle used from code that is no module's (this suite): refused
+            declaredHandle.privileged.start([declaredHandle.programs.talk.path, "x"], options("from outside"));
             // An acknowledgement that does not say privileged: true (Config.acknowledgedModules)
             suite._savedAcknowledged = Config.acknowledgedModules;
             Config.acknowledgedModules = { privileged: { source: "user", address: fixtures + "/privileged", author: "", privileged: false } };
             assertEqual(host.privilegedDeclaration("privileged", declaredHandle.programs).problem,
                         "asks for administrator rights; the user has not approved its declaration", "an acknowledgement without privileged: true: not approved");
-            declaredHandle.privileged.start([declaredHandle.programs.talk.path, "x"], options("not approved"));
+            declaredMain.tryStart([declaredHandle.programs.talk.path, "x"], options("not approved"));
             Config.acknowledgedModules = suite._savedAcknowledged;
             // The old PrivilegedAction, from code the shell's own host cannot trace to a module
             // (this host's fixture): refused, fail closed
@@ -687,7 +695,10 @@ TestCase {
             assertEqual(PrivilegedRuns.count, queued, "nothing queued: no prompt can come");
             assertEqual(Object.keys(suite._privilegedAnswers).filter(name => name !== "legacy").length, 0, "… answered after start() returned");
         });
-        _then("the refused runs are answered", () => Object.keys(_privilegedAnswers).length === 5, () => {
+        _then("the refused runs are answered", () => Object.keys(_privilegedAnswers).length === 6, () => {
+            const outside = _privilegedAnswers["from outside"];
+            assert(outside.blocked === "undeclared" && outside.error === "a run as administrator from code the shell cannot trace to a module is refused",
+                   "a declared module's handle used from outside its code: blocked undeclared: " + JSON.stringify(outside));
             const notApproved = _privilegedAnswers["not approved"];
             assert(notApproved.blocked === "undeclared" && notApproved.error === "asks for administrator rights; the user has not approved its declaration",
                    "a declared program, its declaration not approved: blocked undeclared: " + JSON.stringify(notApproved));
@@ -706,6 +717,7 @@ TestCase {
             assert(stray.blocked === "undeclared" && stray.error.includes("privileged.programs does not name it") && stray.error.includes("/pkexec"),
                    "a declared module running a program it did not declare: blocked undeclared, which said: " + JSON.stringify(stray));
             assert(_has(_status("privileged")?.errors, "privileged.programs does not name it"), "… in its status");
+            assert(_has(_status("privileged")?.errors, "cannot trace to a module"), "… and the run from outside its code");
             assertEqual(PrivilegedRuns.count, 0, "the queue is empty");
             suite._exists = null;
             _sh("if [ -e \"$1\" ]; then echo ran; else echo never; fi", [_mark], (code, output) => suite._exists = output.trim());

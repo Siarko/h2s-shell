@@ -23,24 +23,24 @@ QtObject {
     id: root
 
     // Set by the host when it makes the handle, read-only from then on: a module cannot
-    // turn another's handle into its own. `host` is the shell's and deprecated for modules
-    // (API 1.19): a module's code reading `module.host` has it listed in its `deprecations`
-    // (ModuleSourceRules.codeDeprecations); it becomes `_host` with the shell's next tightening
+    // turn another's handle into its own. The host itself is not on the handle (API 1.36:
+    // `module.host` is gone): it is looked up by `_hostKey`, inline, wherever it is needed
+    // (ModuleHandleHosts), and never handed out
     readonly property string moduleId: ""
-    readonly property var host: null
+    readonly property string _hostKey: ""
 
     // ---- Who it is ---- (moduleId above: its id; QML reserves the name `id`)
     // Its status (Modules.status: state, errors, warnings, …), as `qs ipc call modules list`
-    readonly property var status: host ? (host.statuses.find(entry => entry.id === moduleId && entry.state !== "duplicate") ?? null) : null
+    readonly property var status: ModuleHandleHosts.hostOf(root._hostKey) ? (ModuleHandleHosts.hostOf(root._hostKey).statuses.find(entry => entry.id === moduleId && entry.state !== "duplicate") ?? null) : null
     // True while the module is enabled and loaded: everything that acts follows this
-    readonly property bool active: host ? host.activeIds.includes(moduleId) : false
+    readonly property bool active: ModuleHandleHosts.hostOf(root._hostKey) ? ModuleHandleHosts.hostOf(root._hostKey).activeIds.includes(moduleId) : false
     // (API 1.15) The object made from its manifest's `main` while the module is active: null
     // while it is off, before the main exists and while the main itself is being built, and
     // for a module without one. Set by the host right after the main is created, so before
     // any of its widgets, popups or pages are built; cleared before the main is destroyed, so
     // views read through it allowing null (`module.main?.client`). Turned on again, it is a
     // new object. The host's to set (ModuleHost.mainOf): not writable through the handle.
-    readonly property var main: host ? host.mainOf(moduleId, host.mainsRevision) : null
+    readonly property var main: ModuleHandleHosts.hostOf(root._hostKey) ? ModuleHandleHosts.hostOf(root._hostKey).mainOf(moduleId, ModuleHandleHosts.hostOf(root._hostKey).mainsRevision) : null
 
     // (API 1.18) The modules its manifest `uses`, each as the object that module offers
     // (its main's `exports`), frozen: { <id>: exports object } — `module.uses.tailscale`. Set
@@ -53,7 +53,7 @@ QtObject {
     // module's main off and on again, with the new module.uses. Empty for a module never
     // turned on. Nothing else of a provider is given. The host's to set (ModuleHost.usesOf):
     // not writable through the handle.
-    readonly property var uses: host ? host.usesOf(moduleId, host.usesRevision) : Object.freeze({})
+    readonly property var uses: ModuleHandleHosts.hostOf(root._hostKey) ? ModuleHandleHosts.hostOf(root._hostKey).usesOf(moduleId, ModuleHandleHosts.hostOf(root._hostKey).usesRevision) : Object.freeze({})
 
     // (API 1.2) The machine woke from sleep (logind's PrepareForSleep(false)), told only while
     // the module is active: re-read what may have changed while it slept, restart what a
@@ -68,12 +68,12 @@ QtObject {
     // status). The shell draws it itself (components/ModuleIcon.qml): the first letter of the
     // name where there is none
     readonly property var icon: {
-        const shown = host && ModuleRules.has(host.icons ?? {}, moduleId) ? host.icons[moduleId] : null;
+        const shown = ModuleHandleHosts.hostOf(root._hostKey) && ModuleRules.has(ModuleHandleHosts.hostOf(root._hostKey).icons ?? {}, moduleId) ? ModuleHandleHosts.hostOf(root._hostKey).icons[moduleId] : null;
         return shown ? Object.freeze(Object.assign({}, shown)) : null;
     }
     // Its manifest as the shell read and checked it (a frozen copy)
     readonly property var manifest: {
-        const read = host && directory !== "" ? host.manifestOf(directory) : null;
+        const read = ModuleHandleHosts.hostOf(root._hostKey) && directory !== "" ? ModuleHandleHosts.hostOf(root._hostKey).manifestOf(directory) : null;
         try {
             return read ? Object.freeze(JSON.parse(JSON.stringify(read))) : null;
         } catch (error) {
@@ -92,8 +92,8 @@ QtObject {
     // (API 1.10) In module test mode, when its manifest names testPrograms: every program is
     // taken from that directory — { path: "<directory>/<testPrograms>/<name>", trusted: true,
     // reason: "test stand-in" }, or path "" when it is not there — and never from PATH.
-    readonly property var _verdicts: ModuleRules.programSource(host?.testMode === true, manifest?.testPrograms) === "test"
-        ? (host?.testProgramVerdicts?.[moduleId] ?? {}) : (host?.programVerdicts ?? {})
+    readonly property var _verdicts: ModuleRules.programSource(ModuleHandleHosts.hostOf(root._hostKey)?.testMode === true, manifest?.testPrograms) === "test"
+        ? (ModuleHandleHosts.hostOf(root._hostKey)?.testProgramVerdicts?.[moduleId] ?? {}) : (ModuleHandleHosts.hostOf(root._hostKey)?.programVerdicts ?? {})
     readonly property string _programsText: {
         const verdicts = _verdicts;
         const own = {};
@@ -131,7 +131,7 @@ QtObject {
 
     function _recheckNow() {
         _lastRecheck = Date.now();
-        host?.recheckPrograms(moduleId);
+        ModuleHandleHosts.hostOf(root._hostKey)?.recheckPrograms(moduleId);
     }
 
     property Timer _recheckTimer: Timer {
@@ -145,8 +145,8 @@ QtObject {
     readonly property QtObject privileged: QtObject {
         // pkexec and a trusted `timeout` found: { available, reason, pkexec, timeout }
         readonly property var _tools: PrivilegedRules.availability({
-            testMode: root.host?.testMode === true,
-            standIn: root.host?.testProgramVerdicts?.[root.moduleId]?.pkexec?.path ?? "",
+            testMode: ModuleHandleHosts.hostOf(root._hostKey)?.testMode === true,
+            standIn: ModuleHandleHosts.hostOf(root._hostKey)?.testProgramVerdicts?.[root.moduleId]?.pkexec?.path ?? "",
             pkexecKnown: PrivilegedRuns.known, pkexec: PrivilegedRuns.pkexec, pkexecReason: PrivilegedRuns.pkexecReason,
             timeoutKnown: CommandTools.known, timeout: CommandTools.timeout
         })
@@ -157,10 +157,15 @@ QtObject {
             if (root._privilegedKey === "")
                 root._privilegedKey = PrivilegedRuns.newOwnerKey();
             // argv is read once, inside: the words judged are the ones that run. What the
-            // manifest declares (API 1.36) is the host's to say, never the module's
-            const declaration = root.host ? root.host.privilegedDeclaration(root.moduleId, root.programs) : null;
+            // manifest declares (API 1.36) is the host's to say, never the module's; and only
+            // this module's own code may use it: the call's stack names its directory alone
+            const shellHost = ModuleHandleHosts.hostOf(root._hostKey);
+            const callers = ModuleRules.stackDirectories(new Error().stack, shellHost?.directories ?? []);
+            const crossing = PrivilegedRules.callerProblem(callers, root.directory);
+            const declaration = crossing !== "" ? { problem: crossing, paths: [] }
+                : shellHost ? shellHost.privilegedDeclaration(root.moduleId, root.programs) : null;
             return PrivilegedRuns.start(root, argv, options, {
-                testMode: root.host?.testMode === true, tools: _tools, declaration: declaration
+                testMode: shellHost?.testMode === true, tools: _tools, declaration: declaration
             });
         }
     }
@@ -191,7 +196,7 @@ QtObject {
     // module loads; "" when it could not be (a warning in its status says so) — or, in module
     // test mode, the same below the shell's private temporary home. The user can write it:
     // nothing in it may be run as root
-    readonly property string dataDirectory: ModuleRules.has(host?.dataDirectories ?? {}, moduleId) ? String(host.dataDirectories[moduleId]) : ""
+    readonly property string dataDirectory: ModuleRules.has(ModuleHandleHosts.hostOf(root._hostKey)?.dataDirectories ?? {}, moduleId) ? String(ModuleHandleHosts.hostOf(root._hostKey).dataDirectories[moduleId]) : ""
 
     // A file of the module as a URL ("icons/x.svg" → file:///…/icons/x.svg)
     function url(relative) {
@@ -281,12 +286,12 @@ QtObject {
     // the profiles and re-evaluates every setting binding in the shell, so set one when its
     // value changes, never on a clock. Setting the value it already has does nothing.
     function setFact(name, newValue) {
-        return host ? host.setFact(moduleId, name, newValue) : "no host";
+        return ModuleHandleHosts.hostOf(root._hostKey) ? ModuleHandleHosts.hostOf(root._hostKey).setFact(moduleId, name, newValue) : "no host";
     }
 
     // Its facts as the profiles see them now
     readonly property var facts: {
-        const all = host?.factValues ?? {};
+        const all = ModuleHandleHosts.hostOf(root._hostKey)?.factValues ?? {};
         const own = {};
         for (const key of Object.keys(all)) {
             if (key.startsWith(moduleId + "."))
@@ -371,6 +376,6 @@ QtObject {
 
     // Something that failed at run time, shown among its status's errors (Settings → Modules)
     function reportError(text) {
-        host?.reportError(moduleId, text);
+        ModuleHandleHosts.hostOf(root._hostKey)?.reportError(moduleId, text);
     }
 }

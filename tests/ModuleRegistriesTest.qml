@@ -265,7 +265,8 @@ TestCase {
             // The handle and the A6 contract
             const handle = Modules.handle("good");
             assert(handle !== null && handle.active, "the handle: active");
-            assert(Api.module("good") === handle && Api.moduleAt("file://" + fixtures + "/good/x/Y.qml") === handle, "Api.module, Api.moduleAt: the same handle");
+            assert(Api.module("good") === null && Api.moduleAt("file://" + fixtures + "/good/x/Y.qml") === null,
+                   "(1.36) Api.module, Api.moduleAt from code that is no module's: null — only a module's own code gets its handle");
             _main = Modules.host.mainObject("good");
             _goodState = _main.goodState;
             assert(_goodState.ticking && _goodState.registrations.length === 1, "good's timer runs, its registration is in");
@@ -338,7 +339,7 @@ TestCase {
             try {
                 reached.host = null;
             } catch (error) {}
-            assert(handle.host === Modules.host && handle.active, "its host: read-only");
+            assert(handle.host === undefined && handle.active, "(1.36) no host on the handle");
 
             // API 1.15: what a popup panel is given
             _makeBar();

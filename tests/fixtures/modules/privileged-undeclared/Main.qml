@@ -14,6 +14,10 @@ QtObject {
         notifyFailures: false
     }
 
+    function tryStart(argv, options) {
+        return module.privileged.start(argv, options);
+    }
+
     // The old type, its stand-in pkexec as the elevating program; `mark`: a file the stand-in
     // pkexec would create if it ran
     function tryLegacy(mark, done) {

@@ -1,7 +1,11 @@
 import QtQuick
 
-// Nothing of its own: its suite runs its stand-ins as administrator
-// (tests/PrivilegedRunsTest.qml)
+// Its suite runs its stand-ins as administrator (tests/PrivilegedRunsTest.qml);
+// tests/ModulesTest.qml asks through tryStart, the module's own code
 QtObject {
     property var module: null
+
+    function tryStart(argv, options) {
+        return module.privileged.start(argv, options);
+    }
 }

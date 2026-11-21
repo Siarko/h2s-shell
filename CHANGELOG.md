@@ -38,7 +38,13 @@ The interface modules are written against (`qs.api`), versioned on its own
   the shell's process and can start programs by other means. `author` (plain text on one
   line, at most 100 characters, malformed fails the module); a `uses` entry's `source`
   (`"<repository address>#<ref>"`, where to get a missing provider; not an address: an
-  error, the entry kept without it).
+  error, the entry kept without it). Tightened with it: the handle's `host` is gone
+  (undefined); `Api.moduleAt(url)` answers only for the calling module's own directory and
+  `Api.module(id)` only with the caller's own handle (another module: null);
+  `module.privileged.start` and `PrivilegedAction` are refused for a call whose stack names
+  another module's directory too, or none; `PrivilegedAction`'s `elevate` must be the one
+  word `"pkexec"` (module test mode: its stand-in, one word) — any other words are refused
+  before anything runs.
 - 1.35: `ProgressBar`'s `wave` (default false): the owner says the bar is moving now, and
   bands of light pass through its filled part, a new one every theme duration
   `progressWave` (300 ms by default), each crossing in `progressWaveTravel` (1200 ms); none

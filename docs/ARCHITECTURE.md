@@ -751,12 +751,16 @@ the `qs.api` facade, the registries taking modules' contributions, slots and anc
   ids, in order), its entry `null`, warned about ("left out, a cycle of uses").
 - **Reaching another module or the host**: a module knows of another only its plain state,
   `Api.moduleStatus(id)` (frozen `{ id, name, version, state, active }`, or null), and its
-  `exports` through `uses`. The old ways still work and are listed among the module's
-  `deprecations`, found in its QML and JavaScript code by `ModuleSourceRules.codeDeprecations`
-  (comments and strings do not count; a file the module does not name, reached only by the
-  scan below, in its first 64 KB): `Api.module(id)`, and `module.host` (where the handle is named
-  `module` or comes straight from `Api.moduleAt`: QML cannot notice a property read, so a
-  handle under another name is not found). Both go with the shell's next tightening.
+  `exports` through `uses`. The old ways are listed among the module's `deprecations`, found
+  in its QML and JavaScript code by `ModuleSourceRules.codeDeprecations` (comments and strings
+  do not count; a file the module does not name, reached only by the scan below, in its first
+  64 KB): `Api.module(id)`, which (API 1.36) answers only with the calling module's own
+  handle and goes with the shell's next tightening, and `module.host` (where the handle is
+  named `module` or comes straight from `Api.moduleAt`: QML cannot notice a property read, so
+  a handle under another name is not found), gone since API 1.36 — the handle reaches its
+  host through `ModuleHandleHosts`, inline, never as a property or a function's answer.
+  `Api.moduleAt(url)` answers only for the caller's own directory (the call's stack names it
+  alone).
   Importing `qs.singletons` (and below) or a directory outside the module's own is an error
   in its status (a JavaScript file's `.import` too); the module still loads.
 - **Slots**: `components/ModuleSlot.qml` — `ModuleSlot { name; context }` where a core panel

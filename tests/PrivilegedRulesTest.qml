@@ -166,6 +166,24 @@ TestCase {
         assertEqual(rules.refusedResult(undeclared).blocked + " " + rules.refusedResult(undeclared).dismissed, "undeclared false",
                     "the answer: blocked undeclared, not dismissed");
         assert(rules.blockedReasons.includes("undeclared"), "undeclared is a blocked reason");
+        // Whose code asks: the stack names the module's directory alone
+        assertEqual(rules.callerProblem(["/m/a"], "/m/a"), "", "the module's own code alone: fine");
+        assertEqual(rules.callerProblem(["/m/b"], "/m/a"), "a run as administrator that crosses modules is refused: only a module's own code may ask",
+                    "another module's code with this handle: refused");
+        assert(rules.callerProblem(["/m/b", "/m/a"], "/m/a").includes("crosses modules") && rules.callerProblem(["/m/a", "/m/b"], "/m/a").includes("crosses modules"),
+               "two modules on the stack, either order: refused");
+        assert(rules.callerProblem([], "/m/a").includes("cannot trace") && rules.callerProblem(null, "/m/a").includes("cannot trace")
+               && rules.callerProblem(["/m/a"], "").includes("cannot trace"), "no module seen, or no directory of its own: refused");
+        // The old PrivilegedAction's elevating words
+        assertEqual(rules.legacyElevateProblem(["pkexec"], false), "", "\"pkexec\" alone outside test mode: the trusted pkexec, fine");
+        for (const [words, what] of [[["pkexec", "/bin/sh", "-c", "id", "--"], "pkexec then a shell"], [["/usr/bin/pkexec", "/home/u/evil"], "a path then a program"],
+                                     [["pkexec", "--user", "x"], "pkexec with words of its own"], [[], "none"], ["pkexec", "not a list"], [[""], "an empty word"], [[7], "not a string"]])
+            assert(rules.legacyElevateProblem(words, false).startsWith("elevate must be") && rules.legacyElevateProblem(words, true).startsWith("elevate must be"),
+                   what + ": refused, in test mode too: " + JSON.stringify(words));
+        assert(rules.legacyElevateProblem(["/usr/bin/pkexec"], false).includes("is refused"), "one path outside test mode: refused (only the trusted pkexec by name)");
+        assertEqual(rules.legacyElevateProblem(["/m/a/tests/programs/pkexec"], true), "", "test mode: one word, left to the test-mode gate");
+        assertEqual(rules.legacyElevateProblem(["/m/a/tests/programs/pkexec", "/bin/sh"], true).startsWith("elevate must be"), true, "test mode: a stand-in with more words: refused");
+
         // The old PrivilegedAction: a module on the stack, declared, approved, the program declared
         const approved = rules.declaration(block, undefined, "tailscale", programsFound);
         assertEqual(rules.legacyDeclarationProblem("tailscale", approved, "/usr/bin/tailscale"), "", "PrivilegedAction: a declared program from a declaring module: goes on");

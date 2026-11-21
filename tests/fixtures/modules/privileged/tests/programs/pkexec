@@ -6,6 +6,8 @@
 # named "dismiss" (exit 126, as pkexec for a dismissed prompt) or "refuse" (127, not
 # authorised). Prints PRIVILEGED_FIXTURE from its environment as "pkexec-env:<value>" on stderr
 # (module.privileged.start's options.environment, test mode only).
+# PRIVILEGED_MARK: a file it creates when it runs at all, for a suite to see that it did not.
+if [ -n "${PRIVILEGED_MARK-}" ]; then : > "$PRIVILEGED_MARK"; fi
 for word; do printf 'pkexec:%s\n' "$word" >&2; done
 printf 'pkexec-env:%s\n' "${PRIVILEGED_FIXTURE-}" >&2
 case "${5##*/}" in
