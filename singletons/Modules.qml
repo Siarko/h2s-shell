@@ -26,8 +26,9 @@ import QtCore
 // up. No module file is ever imported statically — a broken one would fail the whole config.
 //
 // The host confirms modules (ModuleHost.confirmations) only in a shell the launcher started
-// from this directory (H2S_SHELL_DISCOVERY names it: never a `quickshell` started by hand, even
-// one that inherited a launcher's environment) and never under the test runners
+// from this directory (H2S_SHELL_DISCOVERY names it and the launcher's pid, which must be this
+// process's or its parent's: never a `quickshell` started by hand, even one that inherited a
+// launcher's environment) and never under the test runners
 // (Config.readOnly); its first acknowledgements only from a list the launcher's search
 // answered with ("ok"):
 // the places a module's source is told by come from the same environment the launcher's
@@ -163,7 +164,9 @@ Singleton {
                 _host.dataRoot = SystemFactsRules.dataRoot(SystemFacts.dataHome);
             // Sources, confirmations, the modules on and the search again: the shell's own, as
             // the launcher started it
-            const discovery = ModuleInstallRules.discoveryOf(Quickshell.env("H2S_SHELL_DISCOVERY"), Quickshell.shellDir);
+            _ownStat.reload();
+            const discovery = ModuleInstallRules.discoveryOf(Quickshell.env("H2S_SHELL_DISCOVERY"), Quickshell.shellDir,
+                                                             Quickshell.processId, ModuleInstallRules.parentPidOf(_ownStat.text()));
             if (!Config.readOnly && discovery.launched) {
                 _host.sourcePlaces = ModuleInstallRules.sourcePlaces({
                     dataHome: SystemFacts.dataHome, modulePath: Quickshell.env("H2S_SHELL_MODULE_PATH"),
@@ -199,6 +202,13 @@ Singleton {
         } catch (error) {
             console.error("[Modules] the module host failed, running without modules:", error);
         }
+    }
+
+    // This process's stat, for its parent's pid (/proc never blocks)
+    FileView {
+        id: _ownStat
+        path: "/proc/" + Quickshell.processId + "/stat"
+        blockLoading: true
     }
 
     IpcHandler {

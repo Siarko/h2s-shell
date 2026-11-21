@@ -530,18 +530,32 @@ Singleton {
         + "printf '%s-state\\tok\\n' \"$1\"; }; "
         + "file builtin \"${builtin:+$builtin/builtin.json}\" 65536; file record \"$record\" 262144; echo end"
 
-    // What the launcher's H2S_SHELL_DISCOVERY says to the shell in `shellDirectory`:
-    // { launched — the launcher started this shell (its directory named), searched — and its
-    // search answered }. Anything else (unset, another directory: a shell started by hand that
-    // inherited it) is neither
-    function discoveryOf(value, shellDirectory) {
-        const text = typeof value === "string" ? value : "";
-        const cut = text.indexOf(" ");
-        const word = cut < 0 ? "" : text.slice(0, cut);
-        const directory = _cleanPath(cut < 0 ? "" : text.slice(cut + 1));
+    // What the launcher's H2S_SHELL_DISCOVERY ("ok|failed <pid> <dir>") says to the shell in
+    // `shellDirectory` whose process is `pid` with parent `parentPid`: { launched — the launcher
+    // started this shell (its directory named, its pid the shell's own or its parent's),
+    // searched — and its search answered }. Anything else (unset, another directory or pid: a
+    // shell started by hand that inherited it, from a terminal the bar opened) is neither
+    function discoveryOf(value, shellDirectory, pid, parentPid) {
+        const match = /^(ok|failed) ([1-9][0-9]{0,9}) (\/.*)$/.exec(typeof value === "string" ? value : "");
+        const none = { launched: false, searched: false };
+        if (!match)
+            return none;
+        const launcher = Number(match[2]);
+        const directory = _cleanPath(match[3]);
         const own = _cleanPath(String(shellDirectory ?? "").replace(/^file:\/\//, ""));
-        const launched = directory !== "" && directory === own && (word === "ok" || word === "failed");
-        return { launched: launched, searched: launched && word === "ok" };
+        const ours = (launcher === Number(pid) || launcher === Number(parentPid)) && Number.isInteger(launcher);
+        const launched = directory !== "" && directory === own && ours;
+        return { launched: launched, searched: launched && match[1] === "ok" };
+    }
+
+    // The parent's pid from a process's /proc/<pid>/stat text (the fields after the command's
+    // closing parenthesis: state, ppid); 0 when it cannot be read
+    function parentPidOf(statText) {
+        const text = typeof statText === "string" ? statText : "";
+        const close = text.lastIndexOf(")");
+        const fields = close < 0 ? [] : text.slice(close + 1).trim().split(/\s+/);
+        const parent = /^[0-9]{1,10}$/.test(fields[1] ?? "") ? Number(fields[1]) : 0;
+        return parent;
     }
 
     // The arguments of sourceCheckScript for sourcePlaces' result

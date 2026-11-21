@@ -13,6 +13,10 @@ TestCase {
         assert(!ProfileRules.configReadFailed("missing", "") && !ProfileRules.configReadFailed("", "") && !ProfileRules.configReadFailed("", "  \n"),
                "no config file yet, or an empty one: not a failure (the defaults are the user's)");
         assert(!ProfileRules.configReadFailed("", "{\"profiles\": \"[]\"}"), "a JSON object: read");
+        assert(ProfileRules.configSaveAllowed(false, false), "save: a file that was read, outside the test runners: written");
+        assert(!ProfileRules.configSaveAllowed(false, true), "save: a file that could not be read: never written over with the defaults");
+        assert(!ProfileRules.configSaveAllowed(true, false) && !ProfileRules.configSaveAllowed(true, true), "save: the test runners: never");
+        assert(!ProfileRules.configSaveAllowed(undefined, undefined), "save: nothing known: not written");
         assert(ProfileRules.configReadFailed("error", "") && ProfileRules.configReadFailed("", "{\"profiles\": ")
                && ProfileRules.configReadFailed("", "[]") && ProfileRules.configReadFailed("", "null") && ProfileRules.configReadFailed("", "\"x\""),
                "a file that could not be read, or is not a JSON object: failed");

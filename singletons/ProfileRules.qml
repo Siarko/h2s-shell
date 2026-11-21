@@ -388,6 +388,13 @@ Singleton {
         }
     }
 
+    // Whether the config file may be written: never from the test runners (`readOnly`), and
+    // never over a file that could not be read (`loadFailed`) — the defaults would replace the
+    // user's settings, which stay there to be repaired
+    function configSaveAllowed(readOnly, loadFailed) {
+        return readOnly === false && loadFailed === false;
+    }
+
     // Whether the config file could not be read: `loadError` is "" (read), "missing" (no file
     // yet: the defaults stand, not a failure) or another word (permission, not a file, …);
     // `text` what was read, which must be a JSON object (blank counts as an empty file)

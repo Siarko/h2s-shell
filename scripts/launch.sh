@@ -268,11 +268,14 @@ stop_shell() {
 #                           shell and all it starts inherit it, and a --restart run from there
 #                           must not take an old list (an updated module's old path, a removed
 #                           module) for a developer's entries.
-#   H2S_SHELL_DISCOVERY     output, the shell's: "ok <shell dir>" when the search answered,
-#                           "failed <shell dir>" when it did not (cut off, an error). The
-#                           shell writes its first acknowledgement of modules only after a
-#                           search that answered, and confirms modules only when the directory
-#                           is its own (not a shell started by hand that inherited this).
+#   H2S_SHELL_DISCOVERY     output, the shell's: "ok <pid> <shell dir>" when the search
+#                           answered, "failed <pid> <shell dir>" when it did not (cut off, an
+#                           error); <pid> this launcher's, which is the shell's parent (the
+#                           supervisor) or the shell itself (-d: exec). The shell writes its
+#                           first acknowledgement of modules only after a search that
+#                           answered, and confirms modules only when the directory is its own
+#                           and the pid its own or its parent's (not a shell started by hand
+#                           that inherited this).
 #   H2S_SHELL_BUILTIN_MODULES
 #                           input, the shell's installation's: the directory of its built-in
 #                           modules (an absolute path; unset or anything else: none).
@@ -358,15 +361,15 @@ discover_modules() {
     else
         list=$("$BASH" "$launcher_script" --discover-modules < /dev/null) || status=$?
     fi
-    export H2S_SHELL_DISCOVERY="ok $shell_dir"
+    export H2S_SHELL_DISCOVERY="ok $$ $shell_dir"
     if [ "$status" = 124 ] || [ "$status" = 137 ]; then
         say "module discovery took longer than $discovery_seconds s: starting the shell without modules"
         list=""
-        H2S_SHELL_DISCOVERY="failed $shell_dir"
+        H2S_SHELL_DISCOVERY="failed $$ $shell_dir"
     elif [ "$status" != 0 ]; then
         say "module discovery failed (status $status): starting the shell without modules"
         list=""
-        H2S_SHELL_DISCOVERY="failed $shell_dir"
+        H2S_SHELL_DISCOVERY="failed $$ $shell_dir"
     fi
     export H2S_SHELL_MODULES="$list"
 }

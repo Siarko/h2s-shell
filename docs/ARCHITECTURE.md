@@ -697,8 +697,8 @@ the `qs.api` facade, the registries taking modules' contributions, slots and anc
   `qs ipc call modules confirm <id> <directory>` (the directory as `modules list` shows it;
   refused when the id now names another) acknowledges it and turns it on; `setEnabled`
   refuses it, saying why. Confirmations hold only in a shell the launcher started from its
-  own directory (`H2S_SHELL_DISCOVERY`), never in a `quickshell` started by hand. The first
-  start that confirms finds no list and writes one from the hand-placed modules that are on,
+  own directory (`H2S_SHELL_DISCOVERY` names it and the launcher's pid, the shell's own or
+  its parent's), never in a `quickshell` started by hand. The first start that confirms finds no list and writes one from the hand-placed modules that are on,
   so they keep running without a question — only from a launcher search that answered, with
   at least one module read; otherwise nothing is written. A module counts as the system's
   only in a data directory root owns and the user cannot write (a user-writable one, such as

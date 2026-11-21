@@ -187,15 +187,12 @@ Singleton {
         id: _saveTimer
         interval: 1000
         onTriggered: {
-            if (root.readOnly)
-                return;
-            // A file that could not be read is never overwritten with the defaults: the
-            // user's settings stay in it to be repaired (and nothing reads defaults back as
-            // their choice at the next start)
-            if (root.loadFailed) {
-                if (!root._refusedSave)
+            // Never from the test runners, never over a file that could not be read
+            // (ProfileRules.configSaveAllowed)
+            if (!ProfileRules.configSaveAllowed(root.readOnly, root.loadFailed)) {
+                if (!root.readOnly && !root._refusedSave)
                     console.warn("[Config] " + _file.path + " could not be read: changes are not saved over it");
-                root._refusedSave = true;
+                root._refusedSave = !root.readOnly;
                 return;
             }
             _adapter.writtenBy = Version.number;

@@ -529,15 +529,21 @@ TestCase {
         assertEqual(read(JSON.stringify({ tailscale: given }), { writtenBy: "2.1.0", inFile: true }), JSON.stringify({ tailscale: given }), "read: a written list");
         assertEqual(read("", null), "\"undefined\"", "read: no facts: never written, no throw");
 
-        const discovered = (value, dir) => JSON.stringify(rules.discoveryOf(value, dir));
-        assertEqual(discovered("ok /home/anna/.config/quickshell/default", "/home/anna/.config/quickshell/default/"), JSON.stringify({ launched: true, searched: true }),
-                    "H2S_SHELL_DISCOVERY: the launcher started this shell and its search answered");
-        assertEqual(discovered("failed /home/anna/.config/quickshell/default", "/home/anna/.config/quickshell/default"), JSON.stringify({ launched: true, searched: false }),
-                    "… its search failed: launched, not searched");
-        assertEqual(discovered("ok /home/anna/.config/quickshell/default", "/home/anna/wt/m2"), JSON.stringify({ launched: false, searched: false }),
-                    "… another directory's (inherited by a shell started by hand): neither");
-        for (const junk of [null, "", "ok", "maybe /x", "ok relative"])
-            assertEqual(discovered(junk, "/x"), JSON.stringify({ launched: false, searched: false }), "… unset or garbage: neither — " + JSON.stringify(junk));
+        const dir = "/home/anna/.config/quickshell/default";
+        const discovered = (value, shell, pid, parent) => JSON.stringify(rules.discoveryOf(value, shell ?? dir, pid ?? 500, parent ?? 400));
+        assertEqual(discovered("ok 400 " + dir, dir + "/"), JSON.stringify({ launched: true, searched: true }),
+                    "H2S_SHELL_DISCOVERY: the launcher (the shell's parent, its supervisor) started this shell and its search answered");
+        assertEqual(discovered("ok 500 " + dir), JSON.stringify({ launched: true, searched: true }), "… the launcher's pid the shell's own (-d: exec)");
+        assertEqual(discovered("failed 400 " + dir), JSON.stringify({ launched: true, searched: false }), "… its search failed: launched, not searched");
+        assertEqual(discovered("ok 400 " + dir, "/home/anna/wt/m2"), JSON.stringify({ launched: false, searched: false }),
+                    "… another directory's: neither");
+        assertEqual(discovered("ok 400 " + dir, dir, 900, 800), JSON.stringify({ launched: false, searched: false }),
+                    "… inherited by a shell started by hand from a terminal the bar opened (another pid and parent): neither");
+        for (const junk of [null, "", "ok", "ok " + dir, "maybe 400 /x", "ok 400 relative", "ok -1 /x", "ok 0 " + dir])
+            assertEqual(discovered(junk), JSON.stringify({ launched: false, searched: false }), "… unset or garbage: neither — " + JSON.stringify(junk));
+        assertEqual(rules.parentPidOf("4242 (qs) S 400 4242 4242 0 -1"), 400, "parent pid: the field after the state");
+        assertEqual(rules.parentPidOf("4242 (a) b) (c) R 17 1 1"), 17, "… a command with parentheses and spaces in it");
+        assertEqual(rules.parentPidOf("") + rules.parentPidOf(null) + rules.parentPidOf("4242 (qs"), 0, "… unreadable: 0");
 
         const user = { source: "user", address: "/home/anna/src/ts" };
         const manifest = id => ({ id: id, author: "Anna", privileged: id === "tailscale" ? { why: "x", programs: [] } : null });
