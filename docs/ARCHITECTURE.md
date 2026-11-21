@@ -470,8 +470,12 @@ launcher agree on the contract described under "Recovery" below):
   `step(state, event, now) → { state, effects }` on plain objects that are replaced, never
   mutated; `view(state)` for the views, `describe(state)` for anything shown (no secret).
   Every decision is here — when a conversation starts, what a PAM answer means, where the
-  prompt is, when the field empties, what sleep does. Unit-tested in
-  `tests/LockRulesTest.qml` (behaviours, a seeded sweep, a liveness oracle).
+  prompt is, when the field empties, what sleep does. Below it, each pure as well:
+  `LockStepRules.qml` (the constants and the primitives every change of a state goes
+  through), `LockViewRules.qml` (`view`, `describe*`) and `LockParseRules.qml` (the
+  methods script's and logind's lines); `LockRules` forwards what callers use of them.
+  Unit-tested in `tests/LockRulesTest.qml` (behaviours, a seeded sweep, a liveness
+  oracle), `tests/LockViewRulesTest.qml` and `tests/LockParseRulesTest.qml`.
 - **Driver** — `singletons/Lockscreen.qml`, the one owner of the lock's state. It feeds
   events to the rules one at a time (`LockIoRules.serialQueue`: an event raised while a
   step's effects run is queued, never re-entered), stores the new state before running its

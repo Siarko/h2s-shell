@@ -53,6 +53,8 @@ QtObject {
     property var _privilegedRules: PrivilegedRulesTest {}
     property var _energyRules: EnergyRulesTest {}
     property var _lockRules: LockRulesTest {}
+    property var _lockParseRules: LockParseRulesTest {}
+    property var _lockViewRules: LockViewRulesTest {}
     property var _lockIoRules: LockIoRulesTest {}
     property var _testSeamRules: TestSeamRulesTest {}
     property var _testSeamsShape: TestSeamsShapeTest {}
