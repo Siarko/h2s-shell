@@ -1401,7 +1401,11 @@ checks that verdict against made-up parts. The deploy check, `tests/device/deplo
 is run by hand against a running shell after it was updated: it reads the module host's
 and the Tailscale module's state over the shell's IPC (reads only; no `tailscale` command)
 and fails on a line repeated in the shell's log; `tests/deploy-check-selftest.sh` checks it
-on canned answers. Each part runs alone too, and takes names for
+on canned answers. `tests/docs-check.sh` lints `README.md` and `docs/` for the
+documentation's hard rules (no link into `notes/` or to a missing file, no developer's home
+path or machine, a NixOS heading only with an Arch one beside it, English only);
+`tests/docs-check-selftest.sh`, a part of `--quick`, checks it on stand-in Markdown and then
+runs it on the checkout. Each part runs alone too, and takes names for
 a part of it; the rest of this section describes them.
 
 The tests are in two kinds of set. The **general** set gives the same verdict on every

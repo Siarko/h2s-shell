@@ -21,6 +21,8 @@
 #   tests/resolve-selftest.sh                           where the runners take their tools
 #   tests/launcher-selftest.sh                          the supervisor in scripts/launch.sh
 #   tests/deploy-check-selftest.sh                      the deploy check, on canned answers
+#   tests/docs-check-selftest.sh                        the documentation's rules lint, on
+#                                                       stand-ins and on README.md and docs/
 #   tests/run-unit-selftest.sh                          the unit runner's own verdict
 #   tests/run-system.sh                                 this system's set (NixOS or Arch)
 #   tests/lock/run.sh                                   the lock screen, end to end
@@ -62,6 +64,7 @@ parts=(
     "tool lookup self-test|tests/resolve-selftest.sh"
     "supervisor self-test|tests/launcher-selftest.sh"
     "deploy check self-test|tests/deploy-check-selftest.sh"
+    "docs rules lint|tests/docs-check-selftest.sh"
     "unit runner self-test|tests/run-unit-selftest.sh"
     "system set|tests/run-system.sh"
     "lock bed|tests/lock/run.sh"
