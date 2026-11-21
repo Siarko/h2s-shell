@@ -554,6 +554,19 @@ power-saver system profile). With no profiles, built-in defaults apply.
 Changes apply live and are written to `~/.config/h2s_shell/config.json`, debounced by
 one second.
 
+## Modules
+
+Integrations can come as modules, loaded into the shell (see
+[Modules](ARCHITECTURE.md#modules)). A module runs inside the shell with the user's rights:
+it could read anything the shell sees, the lock screen's password included. The shell's
+checks catch mistakes, not a module built to get around them. Built-in modules come with the
+shell; modules a system administrator installed are theirs to answer for; any other module
+is its author's work, and the shell waits for the user's confirmation before it first loads
+one, and again when it starts to declare administrator actions or names another author. A
+module asks for administrator rights only through the shell's password prompt, which names
+the module, what the action is for and the command — read it, and cancel when it does not
+match what you just did. Install a module only from someone you trust, pinned to a tag.
+
 ## External dependencies
 
 Beyond Quickshell and Qt 6, the shell shells out to:

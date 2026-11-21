@@ -15,6 +15,8 @@ settings window.
 - **Screensaver and lock screen**, from Wayland idle notifications.
 - **Settings**: what the bar shows, behaviour per profile (e.g. a power-saving
   profile on battery), and themes - colours, fonts, shapes, animations and their curves.
+- **Modules** add integrations. A module runs inside the shell with your rights, so install
+  only modules you trust: see [Modules](docs/FEATURES.md#modules).
 
 The full list is in [docs/FEATURES.md](docs/FEATURES.md).
 

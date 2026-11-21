@@ -646,6 +646,44 @@ Integrations as separate packages. The module API's reference
 the manifest schema is in `singletons/ModuleManifestRules.qml`. The parts: the rules, the host, discovery,
 the `qs.api` facade, the registries taking modules' contributions, slots and anchors.
 
+#### Modules and trust
+
+A module is QML and JavaScript that the shell loads into its own process. Nothing separates
+it from the shell: a module can do what the shell can — read and change the user's files,
+run programs as the user, use the network, and see what the shell shows and what is typed
+into it. The lock screen's password field and the password prompt for administrator actions
+run in the same process, so a module could read what is typed there too.
+
+**What the shell checks** before it loads a module: that its manifest is well formed and
+asks for an API version this shell has; that every file it names lies inside its own
+directory and is not too large; that its icon refers to nothing outside itself; which
+programs it needs and where they were found (and whether each is trusted); whether it
+reaches into the shell's internal parts; and that only a module whose manifest declares
+administrator actions (`privileged`, API 1.36) runs them, and only once the user approved
+that declaration. These checks catch mistakes. They do not make a module safe: a module that
+wants to get around them can, because it runs inside the shell — the declaration is a
+statement for the user and a guard against mistakes, not a sandbox. A shell that dies twice
+in a row within 30 s of starting loads no module the next time (safe mode).
+
+**What protects the user.** Built-in modules (the directory `H2S_SHELL_BUILTIN_MODULES`
+names, given by the shell's installation) come with the shell and are reviewed with it; they
+load without a question. Modules in a system data directory that root owns (a distribution
+package, a NixOS configuration) are the administrator's to answer for, and count as
+confirmed. Modules on the developer's `H2S_SHELL_MODULE_PATH` are not asked about either.
+Any other module is its author's work, not the project's: a module placed in the user's
+root loads only once the user has confirmed it, and waits for approval again when it starts
+to declare administrator actions or names another author; installing one with the shell's
+installer is the user's confirmation. A module asks for administrator rights only through
+the shell's password prompt, which names the module, says what the action is for and shows
+the command; for a module that is not the project's, that text is the only protection — it
+is to be read, and cancelled when it does not match what the user just did. The shell never
+installs or turns on a module without the user's action, and never asks for a password by
+itself.
+
+**What to install.** A module is like a program run as oneself: installed only from someone
+trusted, from a repository one could read, and pinned to a tag rather than a branch that can
+change underneath. What changed is read before updating.
+
 - A **module** is a directory with a `module.json` (the schema: `singletons/ModuleManifestRules.qml`'s
   header), a `qmldir` for its singletons, and QML loaded by `file://` URL —
   never imported statically (a broken one would fail the whole config). Every file the
