@@ -512,21 +512,34 @@ The owner, 2026-11-21 (`notes/decisions.md`, "Lock and PAM", to add with the fir
   switched on per row; the row's hint says the trade-off (§2.4).
 - Round 2, Q3: a shared list is two writes, one per service, "1 of 2" / "2 of 2"; with the
   planned remembered polkit authorization the second prompt usually does not appear (§2.6.6).
+- Round 3, Q1: "+ Add a row" offers "Raw line", last, marked "Not checked" (§2.9).
+- Round 3, Q2: for now Replace keeps the file's `account`, `password` and `session` lines
+  verbatim; only `auth` is edited. Later the editor handles the whole file (§8).
 
 ## 7b. Open questions for the owner
 
-Q1. **Can the user type a raw line from "+ Add a row", or do raw rows only come from taking a
-file in?** Example: someone with an LDAP account wants `auth sufficient pam_ldap.so
-use_first_pass` above the system's row. Offered in the add list, the line is checked only as
-far as §2.9 goes (it parses, its module is a system one, it does not let anyone in) and the
-trial runs it; the rest is the user's responsibility. Hidden, the only way to such a line is
-editing the file by hand and taking it in. Recommendation: offer "Raw line" in the add list,
-last, with its "Not checked" chip and warning; no extra switch.
+None open.
 
-Q2. **After Replace, does the shell keep a hand-made file's other lines (`account`,
-`password`, `session`) as they are?** Example: someone added `session optional
-pam_gnome_keyring.so auto_start` to `/etc/pam.d/sudo`. Kept, the file stays what the user made
-apart from the auth lines the editor now writes; reset, the file's other lines go back to the
-distribution's and that keyring line is lost (it is in the backup). The editor only ever
-changes `auth` lines. Recommendation: keep them verbatim, shown in the preview as "kept as it
-is".
+## 8. Later: the editor for the whole file
+
+The owner, round 3: the shell is to become a complete solution, the editor handling every
+phase of a service's file, not only `auth`. Not part of this plan's slices; what it would take:
+- **Rows per phase**: `account`, `password` and `session` lists beside `auth`, each with its
+  own fixed last row (the system's lines for that phase) and the raw row; taking a file in
+  (§2.9) already keeps those lines in order, so they become rows instead of kept text.
+- **Methods per phase**: the modules worth an editor row of their own (e.g. `pam_unix` and
+  `pam_pwquality` for `password`; `pam_systemd`, `pam_limits`, `pam_gnome_keyring`/
+  `pam_kwallet5` for `session`; `pam_access`, `pam_time` for `account`), each with its details
+  and ranges in `PamRuleRules`; anything else stays a raw line.
+- **Checks per phase**: new refusals where a phase can lock the user out (an `account` line
+  that denies, a `password` stack that cannot change a password, a `session` line that fails
+  as `required`), with unit cases as for `auth`.
+- **The trial** covers only `auth` today (Quickshell runs `pam_authenticate` only): the other
+  phases need `pam_acct_mgmt`/`pam_open_session` in the trial — an extension of the trial
+  adapter, or a Quickshell upstream request (`notes/upstream/`) — and `password` cannot be
+  tried without changing a password, so it gets a dry check only.
+- **Owned text**: the block grows to the whole file for sudo (as polkit-1 already is our own
+  file), with the same hash, backups, Undo and one service per run; NixOS options grow
+  `account`/`password`/`session` rule lists translated to `security.pam.services.<svc>.rules`.
+- **Scope** stays sudo and polkit until the login-manager analysis (tracker "Later") decides
+  otherwise.
