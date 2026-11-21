@@ -48,14 +48,17 @@ There is no build step:
 quickshell                 # reads shell.qml from the current directory
 tests/run-unit.sh FormatTest LockRulesTest   # while iterating: the suites the change touches
 tests/lock/run.sh relock fallback            # … the lock scenarios it touches
-tests/run-all.sh           # before committing: everything, about four minutes
-tests/run-all.sh --quick   # the same without the lock bed, under a minute
+tests/run-all.sh --quick   # a slice's commit: everything but the lock bed, under three minutes
+tests/run-all.sh           # the end of a segment of work: everything, both machines
 ```
 
 **While iterating** run the named suites or scenarios the change touches (a suite is named
 by its file in `tests/` without `.qml`, a lock scenario by its file in `tests/lock/tests/`
-without `.sh`; a wrong name is an error, nothing runs). **Before committing** run
-`tests/run-all.sh` (the general set and this system's): it stops at the first failing part
+without `.sh`; a wrong name is an error, nothing runs). **A slice's commit** needs those plus
+`tests/run-all.sh --quick` on one machine; the lock scenarios only when the slice touches the
+lock, the launcher or the supervisor. **The full `tests/run-all.sh`** runs on both machines at
+the end of a segment of work (a group of slices, before it is merged to `master` and deployed),
+not per slice. It stops at the first failing part
 (`--keep-going` goes on) and ends with a summary naming every part PASS, FAIL or NOT RUN with
 the reason — read it: a part that could not be set up is not a pass. Its parts, each
 runnable alone:
@@ -236,4 +239,5 @@ new kind.
   User-visible strings are the few plain words a person would put on a control. — History
   in comments goes stale; long hints read as machine-written.
 - **One slice = one change with its test.** While iterating run only the suites the change
-  touches; run the full set before committing. — Small reviewed steps, fast feedback.
+  touches, `--quick` before the commit; the full set at the end of a segment. — Small reviewed
+  steps, fast feedback; the full set on both machines took longer than the work it checked.

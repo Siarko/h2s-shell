@@ -86,10 +86,18 @@ only their own temporary files.
 ## Tests
 
 The commands, what each part needs and where the tools come from are in `CLAUDE.md`
-("Running", "Environment"). Before every merge to `master` / `main`: `tests/run-all.sh` on
-both machines; its summary names every part as PASS, FAIL or NOT RUN with the reason, and a
-report quotes it, with the tool source and the launcher the run had. While iterating: the
-named suites or scenarios the change touches.
+("Running", "Environment"). The owner, 2026-11-21:
+- **A slice:** the author runs the suites and scenarios the change touches, then
+  `tests/run-all.sh --quick` once before the commit (lock scenarios only when the slice touches
+  the lock, the launcher or the supervisor); after review fixes, only the touched suites
+  again. Authors never run the full set. The slice is merged into the segment's branch
+  (`segment-<name>`, made from `master`), not into `master`.
+- **The end of a segment** (a group of slices, or a whole step): the lead runs the full
+  `tests/run-all.sh` on both machines on the segment's branch, then fast-forwards `master` and
+  deploys once. Its summary names every part as PASS, FAIL or NOT RUN with the reason, and a
+  report quotes it, with the tool source and the launcher the run had.
+- Independent slices run side by side, each in its own working tree; a big slice is split
+  (one concern each) rather than reviewed in one piece.
 
 The module repository's own (not part of `tests/run-all.sh`):
 
