@@ -10,10 +10,13 @@ go to [done.md](done.md) in full. Plans are in [plans/](plans/); how sessions wo
 **The owner's answers of 2026-11-21 are in.** The modules management, PAM, documentation and
 architecture clean-up plans are decided and approved (each plan's "Decided" section, the short
 form in [decisions.md](decisions.md)); implementation follows in steps 8 and 11 (and 12, 7).
-The overnight run's work (done.md, "The overnight run") is on `master`. Open with the owner:
-the idle and lock flow plan's questions ([plans/idle-lock-flow.md](plans/idle-lock-flow.md),
-being answered) and the password prompt on NixOS. Next: step 8 (Modules closed for now) from
-its plan, starting with the views on the mockup.
+The overnight run's work (done.md, "The overnight run") is on `master`. The idle and lock flow
+plan ([plans/idle-lock-flow.md](plans/idle-lock-flow.md)) is decided too (option C: the shell
+owns idle, screensaver, lock and per-monitor screen-off; a C++/Qt helper for the D-Bus
+ScreenSaver service); its one new question is under "Open points". Open with the owner: the
+password prompt on NixOS. Next (the owner, 2026-11-21): step 8 (Modules closed for now) from
+its plan, pure rules first (M1 under way); after it the owner chooses what follows (the idle
+plan and PAM are ready).
 
 State on 2026-11-21: notifications with a progress bar, Taildrop's list of transfers,
 Taildrop's views reworked (side panel, status pills, the bar wave, Taildrop off, "Save in…")
@@ -56,13 +59,10 @@ For the owner. Until answered, the agent's choice stands.
 
 **To decide**
 
-- **Idle, screensaver, lock and screen-off** ([plans/idle-lock-flow.md](plans/idle-lock-flow.md),
-  §6, being answered): the plan replaces the open point "Lock before sleep, the notice"
-  (step 9's notices: the unlocked sleep, two lockers; hypridle says nothing). Its questions:
-  the sleep notice with hypridle (recommended: observe the outcome and say so after the
-  fact), who owns idle and screen-off, Super+L running hyprlock, `lockOnSleep` on for the Arch
-  machine, keys at the screensaver, telling the system about the shell's lock
-  (`SetLockedHint`), screen-off while locked, the Power save profile's `notify-send` commands.
+- **The helper on Arch after an update** ([plans/idle-lock-flow.md](plans/idle-lock-flow.md)
+  §6b): an update can change the C++/Qt helper's source while the built program stays old.
+  The plan's choice until answered: `launch.sh` rebuilds it at start when its source changed;
+  a failed build starts the shell without the helper and says so once.
 
 ## Left open by done work
 
@@ -177,8 +177,9 @@ Steps 3, 4, 5, 6 and 10 are done (done.md); the API plan's closing slice (Z) is 
    - [plans/documentation.md](plans/documentation.md) (§8) and
      [plans/architecture-cleanup.md](plans/architecture-cleanup.md) (§5): decided and approved
      2026-11-21; implementation in steps 12 and 7
-   - [ ] Idle, screensaver, lock and screen-off: [plans/idle-lock-flow.md](plans/idle-lock-flow.md),
-         its questions being answered (Open points)
+   - Idle, screensaver, lock and screen-off: [plans/idle-lock-flow.md](plans/idle-lock-flow.md),
+     decided and approved 2026-11-21 (mockup `~/src/h2s-mockups/idle-settings-planned/`);
+     when it is built is the owner's choice after step 8
 2. Before the release (cut after step 8, the owner 2026-11-21):
    - [ ] cut a minor release (today 2.0.0), the module's 0.7.0 with it
 7. Architecture clean-up per [plans/architecture-cleanup.md](plans/architecture-cleanup.md)
@@ -208,6 +209,9 @@ Steps 3, 4, 5, 6 and 10 are done (done.md); the API plan's closing slice (Z) is 
 What the API work must leave possible for 13–15: [plans/api-next/versioning.md](plans/api-next/versioning.md) §11.
 
 Later:
+- A status and logs section in Settings (the owner, 2026-11-21): everything happening in the
+  shell in one place, where the user sees whether all is well or something needs fixing (the
+  sleep notice's "waiting for a fix", module failures, safe mode, the helper's state).
 - Notification rules (the owner, 2026-11-20): properties given to notifications by rules
   ("from app X and containing text Y → property Z": stays, critical, hidden, its queue…).
 - A mockup gallery (the owner, 2026-11-20): mockups kept as code, a mode that opens a panel
