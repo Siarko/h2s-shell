@@ -20,10 +20,12 @@ import qs.singletons
 // goes on to the reader. The password is never logged or copied, and is cleared as it is
 // submitted, cancelled, or the request ends.
 //
-// A request that is a run of the shell's queue (`announcement`: PrivilegedRuns
-// .announcementFor) also says who asks and what for, under the title: "Module",
-// "Authorization" and the command one click away (polkit/AuthAnnouncement.qml). Every text
-// here is plain text: polkit's message and action, PAM's words and the accounts' names too.
+// Under the title, "As user" first (polkit/AuthAnnouncement.qml). A request that is a run of
+// the shell's queue (`announcement`: PrivilegedRuns.announcementFor) also says who asks and
+// what for: "Module", "Authorization" and the command one click away — for a module's prompt
+// polkit's message and action go there too, as they repeat the command; elsewhere they are
+// the description over the field (PolkitRules.promptLayout). Every text here is plain text:
+// polkit's message and action, PAM's words and the accounts' names too.
 PanelWindow {
     id: root
 
@@ -193,18 +195,24 @@ PanelWindow {
                     horizontalAlignment: Text.AlignHCenter
                 }
 
-                // Who asks and what for: a run of the shell's queue
+                // Who answers; who asks and what for, for a run of the shell's queue
                 AuthAnnouncement {
                     id: _announcement
                     Layout.fillWidth: true
                     announcement: root.announcement
+                    identityNames: root._identities.map(identity => root._nameOf(identity))
+                    identityIndex: root._identities.indexOf(root.flow?.selectedIdentity)
+                    polkitMessage: root.flow?.message ?? ""
+                    actionId: root.flow?.actionId ?? ""
                     onCommandToggled: _input.forceActiveFocus()
+                    onIdentityPicked: index => root.flow.selectedIdentity = root._identities[index]
                 }
 
-                // What asks
+                // What asks, where polkit's message is the description
                 Text {
                     textFormat: Text.PlainText
                     Layout.fillWidth: true
+                    visible: _announcement.layout.polkitMessage === "top"
                     text: root.flow?.message ?? ""
                     wrapMode: Text.WordWrap
                     color: Theme.textPrimary
@@ -215,28 +223,9 @@ PanelWindow {
                 Text {
                     textFormat: Text.PlainText
                     Layout.fillWidth: true
-                    visible: (root.flow?.actionId ?? "") !== ""
+                    visible: _announcement.layout.polkitMessage === "top" && (root.flow?.actionId ?? "") !== ""
                     text: root.flow?.actionId ?? ""
                     wrapMode: Text.WrapAnywhere
-                    color: Theme.glassTextMuted
-                    font.family: Theme.fontFamily
-                    font.pixelSize: Theme.fontSizeSmall
-                    horizontalAlignment: Text.AlignHCenter
-                }
-
-                // Which account answers, when several can
-                Dropdown {
-                    visible: root._identities.length > 1
-                    Layout.fillWidth: true
-                    options: root._identities.map((identity, index) => ({ value: index, label: root._nameOf(identity) }))
-                    value: root._identities.indexOf(root.flow?.selectedIdentity)
-                    onPicked: index => root.flow.selectedIdentity = root._identities[index]
-                }
-                Text {
-                    textFormat: Text.PlainText
-                    Layout.fillWidth: true
-                    visible: root._identities.length === 1
-                    text: "As " + root._nameOf(root._identities[0])
                     color: Theme.glassTextMuted
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.fontSizeSmall

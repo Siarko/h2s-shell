@@ -185,6 +185,27 @@ Singleton {
         });
     }
 
+    // What the polkit prompt shows where. `announcement`: announcement()'s, or null for a
+    // request that is not a run of the shell's queue; `identityCount`: how many accounts can
+    // answer → frozen { identity ("name": the "As user" row with the one account's name,
+    // "pick": the row with a choice, "none"), announced (the Module and Command rows),
+    // polkitMessage ("command": polkit's message and action id under the collapsed
+    // "Command", "top": as the description over the field) }. Only a module's prompt —
+    // a known module and a purpose — moves polkit's message away: there it repeats the
+    // command the Command section already shows. Elsewhere (no announcement, an old run
+    // naming no module or purpose) it is the only description.
+    function promptLayout(announcement, identityCount) {
+        const count = Number(identityCount) || 0;
+        const announced = announcement !== null && announcement !== undefined;
+        const fromModule = announced && String(announcement.authorization ?? "") !== ""
+            && String(announcement.moduleName ?? "") !== unnamedModule;
+        return Object.freeze({
+            identity: count > 1 ? "pick" : count === 1 ? "name" : "none",
+            announced: announced,
+            polkitMessage: fromModule ? "command" : "top"
+        });
+    }
+
     // Words for the screen, in their order whatever their script: a left-to-right mark first
     // (the paragraph's direction), each word between U+2066 (left-to-right isolate) and
     // U+2069 (pop directional isolate), so the bidirectional algorithm reorders inside a word

@@ -9,7 +9,10 @@ import qs.singletons
 // fed PolkitRules.announcement as the prompt feeds it): "Module" and "Authorization" one
 // line each, plain text; "Command" closed for every new request, opened by a click to the
 // command whole, in a box that scrolls; the click never takes the keyboard from the
-// password field. An old PrivilegedAction's run: "Not named", no Authorization line. The
+// password field. "As user" is the first row, the name or a choice; for a module's prompt
+// polkit's message and action id show only under an opened Command, for any other request
+// they are the prompt's description (the lines leave them out). An old PrivilegedAction's
+// run: "Not named", no Authorization line. The
 // prompt's card (polkit/AuthCard.qml) is opaque: nothing behind it shows through.
 //
 // Opens a small window in a corner for a moment (run it through tests/run-unit.sh).
@@ -21,7 +24,7 @@ TestCase {
     property var _window: PanelWindow {
         anchors { top: true; left: true }
         implicitWidth: 420
-        implicitHeight: 360
+        implicitHeight: 460
         color: "transparent"
         exclusionMode: ExclusionMode.Ignore
         WlrLayershell.layer: WlrLayer.Overlay
@@ -56,7 +59,7 @@ TestCase {
         AuthCard {
             id: card
             x: 10
-            y: 330
+            y: 430
             width: 40
             height: 20
         }
@@ -107,7 +110,23 @@ TestCase {
         const scroll = _find(lines, "commandScroll");
         assert(module && authorization && area && box && command && scroll, "the lines' parts are found");
 
-        assert(!lines.visible, "no announcement: nothing shown");
+        assert(!lines.visible, "no announcement, no account: nothing shown");
+
+        // Not from a module: only the As user row; polkit's words are the prompt's, not here
+        const identity = _find(lines, "identity");
+        const picker = _find(lines, "identityPicker");
+        const polkitMessage = _find(lines, "polkitMessage");
+        const actionId = _find(lines, "actionId");
+        assert(identity && picker && polkitMessage && actionId, "the identity and polkit parts are found");
+        lines.polkitMessage = "Authentication is needed to run `/usr/bin/timeout -k 3 30 /usr/bin/true' as the super user";
+        lines.actionId = "org.freedesktop.policykit.exec";
+        lines.identityNames = ["h2s"];
+        driver.wait(50);
+        assert(lines.visible, "one account: shown");
+        assertEqual(JSON.stringify(_visibleTexts(lines)), JSON.stringify(["As user", "h2s"]), "not from a module: As user and the name, nothing else");
+        assertEqual(lines.layout.polkitMessage, "top", "… polkit's message is the prompt's description");
+        assertEqual(identity.textFormat, Text.PlainText, "the name is plain text");
+        assertEqual(identity.font.pixelSize, Theme.fontSizeBody, "… in the normal size");
 
         const longWords = ["/usr/bin/timeout", "-k", "3", "30", "/usr/bin/tailscale", "file", "cp", "--"]
             .concat(Array.from({ length: 40 }, (_, i) => "report-" + i + ".pdf")).concat(["laptop:"]);
@@ -122,6 +141,11 @@ TestCase {
         assertEqual(module.textFormat + authorization.textFormat + command.textFormat, 3 * Text.PlainText, "every value plain text");
         assertEqual(module.maximumLineCount + authorization.maximumLineCount, 2, "one line per value");
         assert(!box.visible && !texts.includes(first.command), "the command is closed: not on the screen");
+        assertEqual(texts.slice(0, 4).join(" | "), "As user | h2s | Module | Tailscale", "As user is the first row, above Module");
+        assert(identity.mapToItem(lines, 0, 0).y < module.mapToItem(lines, 0, 0).y, "… drawn above it");
+        assert(!texts.includes(lines.polkitMessage) && !texts.includes(lines.actionId) && !polkitMessage.visible && !actionId.visible,
+               "a module's prompt: polkit's message and action id not on top, Command closed");
+        assertEqual(lines.layout.polkitMessage, "command", "… the prompt leaves them out of its description");
 
         // Opened by a click, the keyboard left in the password field
         const focusBefore = field.activeFocus;
@@ -133,6 +157,10 @@ TestCase {
         assertEqual(command.text, first.commandShown, "the command, whole, each word isolated left to right");
         assertEqual(command.text.replace(/[\u200e\u2066\u2069]/g, ""), first.command, "… the very command");
         assert(command.text.endsWith("report-39.pdf\u2069 \u2066laptop:\u2069"), "… to its last word");
+        assert(polkitMessage.visible && actionId.visible, "opened: polkit's message and action id shown with the command");
+        assertEqual(polkitMessage.text + " | " + actionId.text, lines.polkitMessage + " | " + lines.actionId, "… as polkit sent them");
+        assertEqual(polkitMessage.textFormat + actionId.textFormat, 2 * Text.PlainText, "… as plain text");
+        assert(polkitMessage.mapToItem(lines, 0, 0).y < box.mapToItem(lines, 0, 0).y, "… over the command box");
         assert(scroll.contentHeight > scroll.height, "a long one scrolls in its box");
         assert(box.height < 200, "… which stays small (" + box.height + " px)");
         assert(field.focus && field.activeFocus === focusBefore, "the click did not take the keyboard from the password field");
@@ -194,6 +222,21 @@ TestCase {
         const legacyTexts = _visibleTexts(lines);
         assertEqual(module.text, "Not named", "an old run: Not named");
         assert(!authorization.visible && !legacyTexts.includes("Authorization"), "… and no Authorization line");
+        lines.commandOpen = true;
+        driver.wait(50);
+        assert(box.visible && !polkitMessage.visible && !actionId.visible, "… its polkit message is not under Command: it stays the description");
+        assertEqual(lines.layout.polkitMessage, "top", "… on top");
+
+        // Several accounts: the As user row is a choice, in its place
+        lines.announcement = first;
+        lines.identityNames = ["h2s", "root"];
+        lines.identityIndex = 1;
+        driver.wait(50);
+        assert(picker.visible && !identity.visible, "several accounts: a choice in the As user row");
+        assertEqual(picker.options.map(option => option.label).join(","), "h2s,root", "… of their names");
+        assertEqual(picker.value, 1, "… the picked one shown");
+        assert(picker.mapToItem(lines, 0, 0).y < module.mapToItem(lines, 0, 0).y, "… above Module");
+        lines.identityNames = [];
 
         lines.announcement = null;
         driver.wait(50);

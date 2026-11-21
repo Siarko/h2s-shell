@@ -872,6 +872,9 @@ The interface modules are written against (`qs.api`), versioned on its own
   most), instead of one accent dot for the day.
 
 ### Changed
+- The password prompt names the account first, as an "As user" row above Module. For a
+  module's request polkit's own message and action move under Command, where they show with
+  the command; other requests keep them as their description.
 - A module that is not part of h2s-shell — one you put into `~/.local/share/h2s-shell/modules`
   yourself, linked or copied — starts off the first time the shell finds it, until you
   confirm it (`qs ipc call modules confirm <id> <directory>`, the directory as `modules list`

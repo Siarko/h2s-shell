@@ -59,6 +59,20 @@ TestCase {
         const legacy = rules.announcement({ legacy: true, moduleId: "tailscale", what: "Connect", pkexecArgv: ["/usr/bin/tailscale", "up"] });
         assertEqual(legacy.module + " | " + legacy.authorization + " | " + legacy.command, "Not named |  | /usr/bin/tailscale up", "legacy: Not named, no Authorization");
         assertEqual(legacy.summary + " | " + legacy.body, "Module: Not named | ", "… and its notification");
+        // --- the prompt's layout: the identity first; polkit's message under Command for a module ---
+        const layoutText = layout => layout.identity + " | " + layout.announced + " | " + layout.polkitMessage;
+        assertEqual(layoutText(rules.promptLayout(shown, 1)), "name | true | command",
+                    "a module's prompt, one account: the As user row with its name; polkit's message and action under Command");
+        assertEqual(layoutText(rules.promptLayout(shown, 2)), "pick | true | command", "… several accounts: the row is a choice");
+        assertEqual(layoutText(rules.promptLayout(null, 1)), "name | false | top",
+                    "not from a module: the As user row, polkit's message on top as the only description");
+        assertEqual(layoutText(rules.promptLayout(undefined, 0)), "none | false | top", "… no account known: no row");
+        assertEqual(layoutText(rules.promptLayout(legacy, 1)), "name | true | top",
+                    "an old run naming no module or purpose: announced, polkit's message stays on top");
+        assertEqual(rules.promptLayout(rules.announcement({ moduleName: "M", moduleId: "m", what: " ", pkexecArgv: ["/bin/true"] }), 1).polkitMessage,
+                    "top", "no purpose left after cleaning: polkit's message stays on top");
+        assert(Object.isFrozen(rules.promptLayout(shown, 1)), "the layout is frozen");
+
         // An unprintable word (only an old run can hand one): escaped, still one line
         assertEqual(rules.shellQuote("a\nb‮'c"), "$'a\\nb\\u202e\\'c'", "a control or format character: $'…' with escapes");
         assertEqual(rules.shellQuote("plain-1.0/x:y"), "plain-1.0/x:y", "a plain word: bare");
