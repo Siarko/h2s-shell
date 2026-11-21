@@ -193,8 +193,8 @@ TestCase {
     // reader would be one); then checks so
     function _noneLeft(description) {
         _then(description + ": the processes are looked for", () => true, () => _sh(
-            "for i in $(seq 1 50); do pgrep -f \"h2s-stand-in-[s]leep $1|$1/[f]ake/git\" > /dev/null || exit 0; sleep 0.2; done; "
-            + "pgrep -af \"h2s-stand-in-[s]leep $1|$1/[f]ake/git\"; exit 1", [temp]));
+            "for i in $(seq 1 50); do pgrep -f \"$1/[n]aps/sleep|$1/[f]ake/git\" > /dev/null || exit 0; sleep 0.2; done; "
+            + "pgrep -af \"$1/[n]aps/sleep|$1/[f]ake/git\"; exit 1", [temp]));
         _then(description + ": the processes were looked for", () => _out !== null, () =>
               assert(_out.ok, description + ": no stand-in git or its sleep left (" + _out.lines.join("; ") + ")"));
     }
@@ -518,8 +518,19 @@ TestCase {
         });
         _mode("hang");
         _then("a short time limit", () => true, () => installer.downloadTimeoutMs = 2000);
-        _job("git hangs", () => installer.install(_url("gamma"), {}), result =>
-             assert(!result.ok && result.message.includes("did not answer within 2 s"), "a server that never answers: stopped at the limit (" + result.message + ")"));
+        _then("git hangs: nothing runs", _idle, () => {
+            assertEqual(installer.install(_url("gamma"), {}), "", "git hangs: started");
+            // While it hangs: the stand-in's sleep runs under its own name, as every program
+            // the stand-ins start must (a multi-call coreutils picks its tool by that name)
+            _sh("for i in $(seq 1 50); do for p in $(pgrep -f \"$1/[n]aps/sleep 30\"); do "
+                + "a=$(tr '\\0' '\\n' < /proc/$p/cmdline | head -n 1); [ \"${a##*/}\" = sleep ] && { echo \"$a\"; exit 0; }; done; sleep 0.1; done; exit 1", [temp]);
+        });
+        _then("git hangs: its sleep is looked at", () => _out !== null, () =>
+              assert(_out.ok, "… the stand-in's sleep started as \"sleep\" (" + _out.lines.join(" ") + ")"));
+        _then("git hangs: done", () => !installer.busy, () => {
+            const result = installer.lastResult;
+            assert(!result.ok && result.message.includes("did not answer within 2 s"), "a server that never answers: stopped at the limit (" + result.message + ")");
+        }, 60000);
         _noneLeft("a download past its time limit");
         _then("the time limit back", () => true, () => installer.downloadTimeoutMs = 20000);
         _mode("");
