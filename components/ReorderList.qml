@@ -36,8 +36,27 @@ Item {
     // The rows shown: `items`, except while a row is dragged, and right after a move, before
     // the owner's new list comes back
     property var _shown: []
-    Component.onCompleted: _shown = (items ?? []).slice()
-    onItemsChanged: if (!_rowList.dragging) _shown = (items ?? []).slice()
+    Component.onCompleted: _show((items ?? []).slice())
+    onItemsChanged: if (!_rowList.dragging) _show((items ?? []).slice())
+
+    // The rows, keyed by value (a repeated value by its count: "clock", "clock#2"): the view's
+    // model is the keys' ScriptModel, never the bare array — see "The Repeater crash" in
+    // docs/ARCHITECTURE.md. A row's delegate stays with its value through moves and removals.
+    KeyedModel {
+        id: _keyed
+        values: root._shown
+    }
+
+    // A row's detail follows `expandedRows`, which is by index: a row that changes places
+    // takes its new index's state at once, unanimated, as a row built anew would. The view
+    // takes the change in now (forceLayout), while the animation is off.
+    property bool _rowsChanging: false
+    function _show(list) {
+        _rowsChanging = true;
+        _shown = list;
+        _rowList.forceLayout();
+        _rowsChanging = false;
+    }
 
     // Scrolls the settings page while a row is dragged near its edge
     DragAutoScroll {
@@ -46,9 +65,9 @@ Item {
         onScrolled: _rowList.trackPointer(sceneY)
     }
 
-    // Ending a drag and removing a row change `_shown`, which rebuilds the rows — the one
-    // whose handler is running too, after which nothing in it resolves. So the work is done
-    // here, in the list's own scope, and a row calls these last.
+    // Ending a drag and removing a row change `_shown`, which moves the rows or removes one —
+    // maybe the one whose handler is running, after which nothing in it resolves. So the work
+    // is done here, in the list's own scope, and a row calls these last.
     function _drop() {
         const from = _rowList.dragIndex;
         const to = _rowList.dropIndex;
@@ -61,21 +80,21 @@ Item {
         const target = to > from ? to - 1 : to;
         const shown = _shown.slice();
         shown.splice(target, 0, shown.splice(from, 1)[0]);
-        _shown = shown;
+        _show(shown);
         moved(from, target);
     }
 
     function _remove(index) {
         const shown = _shown.slice();
         shown.splice(index, 1);
-        _shown = shown;
+        _show(shown);
         removed(index);
     }
 
     // Adding changes what the add list offers, which may rebuild the option clicked
     function _add(value) {
         _picker.open = false;
-        _shown = _shown.concat([value]);
+        _show(_shown.concat([value]));
         added(value);
     }
 
@@ -83,7 +102,7 @@ Item {
     function _wire(item, row) {
         if (!item)
             return;
-        item.value = Qt.binding(() => row.modelData);
+        item.value = Qt.binding(() => row.value);
         item.index = Qt.binding(() => row.index);
     }
 
@@ -118,10 +137,11 @@ Item {
 
                 ListView {
                     id: _rowList
+                    objectName: "reorderRows"
                     width: parent.width
                     height: contentHeight
                     interactive: false
-                    model: root._shown
+                    model: _keyed.model
 
                     property bool dragging: false
                     property int dragIndex: -1
@@ -147,8 +167,10 @@ Item {
 
                     delegate: Item {
                         id: _row
-                        required property var modelData
+                        // The row's key; its value is looked up by it
+                        required property string modelData
                         required property int index
+                        readonly property var value: _keyed.byKey[modelData]
                         readonly property bool _expanded: root.rowDetail !== null && root.expandedRows[index] === true
 
                         width: _rowList.width
@@ -157,6 +179,7 @@ Item {
                         opacity: _rowList.dragging && _rowList.dragIndex === index ? 0.35 : 1.0
 
                         Behavior on height {
+                            enabled: !root._rowsChanging
                             NumberAnimation { duration: Theme.duration("expand"); easing: Theme.curve("expand") }
                         }
 

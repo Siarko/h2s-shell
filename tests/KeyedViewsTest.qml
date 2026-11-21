@@ -281,7 +281,75 @@ TestCase {
         home.passwordEdited("");
     }
 
+    // --- An editable list in a card (components/ReorderList.qml): the bar's sections, the
+    // hardware sources ---
+    property Component _reorderContent: Component {
+        Item {
+            objectName: "reorderContent"
+            property var value
+            property int index
+            // What a person typed into the row, say
+            property string typed: ""
+        }
+    }
+
+    function _reorderRows(list) {
+        const rows = [];
+        for (let i = 0; i < list.count; i++)
+            rows.push(list.itemAtIndex(i));
+        return rows;
+    }
+
+    function _reorderList() {
+        const view = _create("../components/ReorderList.qml", { width: 300, items: ["clock", "tray", "clock", "battery"], rowContent: _reorderContent });
+        if (!view)
+            return;
+        try {
+            const list = _find(view, "reorderRows");
+            list.forceLayout();
+            assert(list.model instanceof QtObject && !Array.isArray(list.model), "ReorderList: the rows' model is a ScriptModel, not the bare array");
+            let rows = _reorderRows(list);
+            assertEqual(rows.map(row => row?.value).join(","), "clock,tray,clock,battery", "ReorderList: a row per item, a repeated one twice");
+            assertEqual(_findAll(view, "reorderContent").map(content => content.value + content.index).sort().join(","),
+                        "battery3,clock0,clock2,tray1", "… each row's content given its value and index");
+            const battery = rows[3];
+            const secondClock = rows[2];
+            const tray = rows[1];
+            _find(battery, "reorderContent").typed = "kept";
+            const moves = [];
+            view.moved.connect((from, to) => moves.push(from + ">" + to));
+
+            // The battery dragged to the top, as a drop does
+            list.dragIndex = 3;
+            list.dropIndex = 0;
+            list.dragging = true;
+            view._drop();
+            assertEqual(moves.join(" "), "3>0", "ReorderList: a drop says moved(from, to)");
+            rows = _reorderRows(list);
+            assertEqual(rows.map(row => row?.value).join(","), "battery,clock,tray,clock", "… the rows in the new order at once");
+            assert(rows[0] === battery && rows[3] === secondClock, "… the moved row and the others keep their delegates");
+            assertEqual(_find(battery, "reorderContent").typed + _find(battery, "reorderContent").index, "kept0", "… the moved row's content with its state, at its new index");
+
+            // The owner's new list comes back: nothing changes
+            view.items = ["battery", "clock", "tray", "clock"];
+            assert(_reorderRows(list)[0] === battery, "ReorderList: the owner's list after the move keeps the rows");
+
+            // A row removed: the others stay
+            const removals = [];
+            view.removed.connect(index => removals.push(index));
+            view._remove(1);
+            rows = _reorderRows(list);
+            assertEqual(removals.join(" ") + " " + rows.map(row => row?.value).join(","), "1 battery,tray,clock", "ReorderList: a row removed");
+            // (A repeated value is keyed by its count, so the clock left is now the first and
+            // takes that row: the same value either way)
+            assert(rows[0] === battery && rows[1] === tray, "… the others keep their delegates");
+        } finally {
+            view.destroy();
+        }
+    }
+
     function run() {
+        _reorderList();
         _withSources(keep => _savedNetworks(keep));
         _withSources(keep => _networksInRange(keep));
         // The restore itself: a check that throws half-way still leaves the lists as they were
