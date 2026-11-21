@@ -57,6 +57,8 @@ TestCase {
     property var _savedDisabled: []
     property var _savedEnabled: []
     property bool _saved: false
+    property string _savedProfiles: ""
+    property real _largeStarted: 0
 
     // ---- A tiny scheduler: each step waits for its condition (or its deadline), then runs ----
 
@@ -97,6 +99,8 @@ TestCase {
     }
 
     function _end() {
+        if (_saved)
+            assertEqual(Config.profiles + "|" + Config.globals, _savedProfiles, "the profiles and globals untouched (a removal with data of a module without settings)");
         if (_saved) {
             Config.setAcknowledgedModulesText(_savedAcknowledged);
             Config.disabledModules = _savedDisabled;
@@ -126,7 +130,7 @@ TestCase {
 
     // The user root, the versions, the staging place and the record, as they are on disk
     readonly property string stateScript: "D=$1/data/h2s-shell; "
-        + "for e in \"$D\"/modules/*; do { [ -e \"$e\" ] || [ -L \"$e\" ]; } || continue; "
+        + "for e in \"$D\"/modules/* \"$D\"/modules/.[!.]*; do { [ -e \"$e\" ] || [ -L \"$e\" ]; } || continue; "
         + "if [ -L \"$e\" ]; then printf 'link\\t%s\\t%s\\n' \"${e##*/}\" \"$(readlink -- \"$e\")\"; else printf 'dir\\t%s\\n' \"${e##*/}\"; fi; done; "
         + "[ -d \"$D/module-versions\" ] && find \"$D/module-versions\" -mindepth 1 -maxdepth 2 -printf 'version\\t%P\\n' | sort; "
         + "n=0; [ -d \"$D/module-staging\" ] && n=$(ls -A \"$D/module-staging\" | wc -l); printf 'staging\\t%s\\n' \"$n\"; "
@@ -207,6 +211,7 @@ TestCase {
             _savedDisabled = host._plainList(Config.disabledModules);
             _savedEnabled = host._plainList(Config.enabledModules);
             _saved = true;
+            _savedProfiles = Config.profiles + "|" + Config.globals;
             // A list written (empty): what is new asks, nothing is acknowledged as a baseline
             Config.setAcknowledgedModules({});
             Config.disabledModules = [];
@@ -232,7 +237,7 @@ TestCase {
             installer.dataHome = temp + "/data";
             installer.configHome = temp + "/config";
             installer.home = temp;
-            installer.environment = { PATH: temp + "/fake:" + (Quickshell.env("PATH") ?? "") };
+            installer.environment = { PATH: temp + "/fake:" + (Quickshell.env("PATH") ?? ""), GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null" };
             assertEqual(host.rediscover(), "", "the host searches the temporary data home");
         });
         _then("the hand-placed modules are loaded", () => host.loadCount > 0 && _idle(), () => {
@@ -242,6 +247,7 @@ TestCase {
         _installs();
         _versions();
         _chains();
+        _linkFailure();
         _refused();
         _folders();
         _standIns();
@@ -308,6 +314,7 @@ TestCase {
             assertEqual(JSON.stringify(result?.ids), JSON.stringify(["alpha"]), "… the module it was about");
             const read = _progressSeen.find(each => each.percent === 50);
             assertEqual(read ? read.phase + " " + read.bytes + " " + read.rate : "none", "receiving 1048576 2097152", "… git's progress read while it downloaded");
+            assert(_progressSeen.some(each => each.percent === 25), "… each redraw on its own (git ends them with a carriage return, not a line break)");
         }, 60000);
         _mode("");
         _check("alpha at its tag", state => {
@@ -410,14 +417,38 @@ TestCase {
               assertEqual(_out.lines.slice(0, 2).join(" ").trim(), "keep 1", "… what the link led to is untouched"));
     }
 
+    // A failure once the record names the new versions: the links cannot be made (the user
+    // root not writable), so everything goes back — versions, staging, the record's entries
+    function _linkFailure() {
+        _then("the user root made read-only", _idle, () => _sh("chmod 555 \"$1/data/h2s-shell/modules\"", [temp]));
+        _then("the user root is read-only", () => _out !== null, () => assert(_out.ok, "the user root made read-only"));
+        _job("links that cannot be made", () => installer.install(_url("rho"), {}), result =>
+             assert(!result.ok && result.message.includes("its link could not be made"), "a link that cannot be made: nothing installed (" + result.message + ")"));
+        _then("the user root writable again", () => true, () => _sh("chmod 755 \"$1/data/h2s-shell/modules\"", [temp]));
+        _then("the user root is writable", () => _out !== null, () => {});
+        _check("taken back after the record", state => {
+            assert(state.record !== null && state.record !== "unreadable", "the record is there and reads");
+            assert(state.record?.pi === undefined && state.record?.rho === undefined, "… the entries written before the links taken out again");
+            assertEqual(state.versions.filter(each => each.startsWith("pi") || each.startsWith("rho")).join(","), "", "… the versions deleted");
+            assertEqual(state.staging, 0, "… staging emptied");
+            assert(state.record?.alpha !== undefined, "… the other entries as they were");
+        });
+    }
+
     function _refused() {
         _job("a module that fails the check", () => installer.install(_url("bad"), {}), result =>
              assert(!result.ok && result.message.includes("module.json"), "a manifest that fails the host's rules: not installed (" + result.message + ")"));
         _job("an id placed by hand", () => installer.install(_url("taken"), {}), result =>
              assert(!result.ok && result.message.includes("not installed by the shell"), "an id held by a folder placed by hand: never replaced (" + result.message + ")"));
+        _job("an id held under another name", () => installer.install(_url("zeta"), {}), result =>
+             assert(!result.ok && result.message.includes("as aaa"), "an id a hand-placed folder of another name holds: refused, naming it (" + result.message + ")"));
+        _then("zeta is not acknowledged", _idle, () => {
+            assert(!ModuleRules.has(host.acknowledgements, "zeta"), "… the hand-placed module of that id is not acknowledged");
+            assert(_status("zeta")?.state !== "loaded", "… nor turned on (" + _status("zeta")?.state + ")");
+        });
         _check("refused ones", state => {
-            assertEqual(state.dirs.join(","), "handmade", "the hand-placed folder is still there");
-            assert(!state.versions.some(each => each.startsWith("bad") || each.startsWith("handmade")), "… nothing of them moved in");
+            assertEqual(state.dirs.join(","), "aaa,handmade", "the hand-placed folders are still there");
+            assert(!state.versions.some(each => each.startsWith("bad") || each.startsWith("handmade") || each.startsWith("zeta")), "… nothing of them moved in");
             assertEqual(state.staging, 0, "… staging emptied");
         });
     }
@@ -425,6 +456,8 @@ TestCase {
     function _folders() {
         _job("a folder with a link out", () => installer.install(temp + "/folders/leaky", {}), result =>
              assert(!result.ok && result.message.includes("a link leads out of the module"), "a folder holding a link out: refused (" + result.message + ")"));
+        // Without confirmations a new module would load at once: kept off must keep it off
+        _then("confirmations off", _idle, () => host.confirmations = false);
         _job("a folder, kept off", () => installer.install(temp + "/folders/clean/", { enable: false }), result =>
              assert(result.ok && result.message.includes("kept off"), "a folder copied, kept off (" + result.message + ")"));
         _check("a folder", state => {
@@ -435,8 +468,10 @@ TestCase {
         });
         _then("the folder module is there, off", () => _idle() && _status("folded") !== null, () => {
             assertEqual(_status("folded").source, "folder", "the copy is the shell's own (folder)");
-            assert(_status("folded").state !== "loaded", "… and it is not running (" + _status("folded").state + ")");
+            assertEqual(_status("folded").state, "disabled", "… off, with confirmations off too");
+            assert(host._plainList(Config.disabledModules).includes("folded"), "… in the list of modules turned off");
             assert(!ModuleRules.has(host.acknowledgements, "folded"), "… not acknowledged");
+            host.confirmations = true;
         });
     }
 
@@ -446,8 +481,26 @@ TestCase {
              assert(!result.ok && result.message.endsWith("repos/gamma: download failed — git: repository 'stand-in' not found"),
                     "a refusing server: said in one line (" + result.message + ")"));
         _mode("large");
-        _job("too large", () => installer.install(_url("gamma"), {}), result =>
-             assert(!result.ok && result.message.includes("larger than 100 MiB"), "a download past the cap: stopped (" + result.message + ")"));
+        _then("too large: nothing runs", _idle, () => {
+            suite._largeStarted = Date.now();
+            assertEqual(installer.install(_url("gamma"), {}), "", "too large: started");
+        });
+        _then("too large: done", () => !installer.busy, () => {
+            const result = installer.lastResult;
+            assert(!result.ok && result.message.includes("larger than 100 MiB"), "a download git reports past the cap: stopped (" + result.message + ")");
+            assert(Date.now() - suite._largeStarted < 15000, "… while it runs, from a progress line redrawn without a line break — not at the time limit");
+        }, 60000);
+        _mode("grow");
+        _then("a small cap", () => true, () => {
+            installer.maxDownloadBytes = 256 * 1024;
+            installer.measureIntervalMs = 100;
+        });
+        _job("a download that grows past the cap", () => installer.install(_url("gamma"), {}), result =>
+             assert(!result.ok && result.message.includes("larger than 256 KiB"), "a download measured while git writes it: stopped past the cap (" + result.message + ")"));
+        _then("the cap back", () => true, () => {
+            installer.maxDownloadBytes = ModuleInstallRules.maxDownloadBytes;
+            installer.measureIntervalMs = 1000;
+        });
         _mode("hang");
         _then("a short time limit", () => true, () => installer.downloadTimeoutMs = 2000);
         _job("git hangs", () => installer.install(_url("gamma"), {}), result =>
@@ -463,7 +516,7 @@ TestCase {
         _then("the link's target is read", _idle, () => _sh("cat \"$1/outside/linked/module.json\" > /dev/null && echo there", [temp]));
         _then("the link's target was read", () => _out !== null, () => assertEqual(_out.lines[0], "there", "the link's target is untouched"));
         _check("hand-placed ones removed", state => {
-            assertEqual(state.links.linked + " " + state.dirs.length, "undefined 0", "the link and the folder are gone");
+            assertEqual(state.links.linked + " " + state.dirs.join(","), "undefined aaa", "the link and the folder are gone (the other hand-placed one stays)");
         });
 
         _job("the chain without its dependency", () => installer.remove("beta", _status("beta").directory, {}), result => {
@@ -483,6 +536,21 @@ TestCase {
             assert(state.record?.beta === undefined && state.record?.gamma === undefined, "… their records");
         });
 
+        _then("a run cut off", _idle, () => _sh("V=$1/data/h2s-shell/module-versions/alpha; a=$(readlink \"$1/data/h2s-shell/modules/alpha\"); "
+                                                + "cp -R \"$a\" \"$V/9.9.9-abcdef0\" && ln -s \"$V/9.9.9-abcdef0\" \"$1/data/h2s-shell/modules/.alpha.link.999\" "
+                                                + "&& ln -sfn \"$V/9.9.9-abcdef0\" \"$1/data/h2s-shell/modules/alpha\"", [temp]));
+        _then("the cut-off state is made", () => _out !== null, () => {
+            assert(_out.ok, "alpha linked to a version the record does not list, a temporary link left (a run cut off)");
+            assertEqual(installer.tidy(), "", "the start's tidying runs");
+        });
+        _then("tidied", () => !installer.busy, () => assert(installer.lastResult?.ok && installer.lastResult.message.includes("put right"), "… and puts the record right (" + installer.lastResult?.message + ")"));
+        _check("tidied", state => {
+            assertEqual(state.record?.alpha?.active, "9.9.9-abcdef0", "the linked version listed and active: alpha stays the shell's");
+            assertEqual(Object.keys(state.links).filter(name => name.startsWith(".")).length, 0, "… the temporary link gone");
+            assertEqual(host.rediscover(), "", "the host loads what is there now");
+        });
+        _then("alpha is loaded from the version linked", () => _idle() && _status("alpha")?.directory.endsWith("/9.9.9-abcdef0"),
+              () => assertEqual(_status("alpha").source, "repository", "… still the shell's own"));
         _then("alpha has data", _idle, () => _sh("mkdir -p \"$1/data/h2s-shell/module-data/alpha\" \"$1/config/h2s_shell/modules/alpha\" && touch \"$1/data/h2s-shell/module-data/alpha/x\"", [temp]));
         _then("alpha's data is made", () => _out !== null, () => assert(_out.ok, "alpha's data directory and store made"));
         _job("a module with its data", () => installer.remove("alpha", _status("alpha").directory, { withData: true }), result =>

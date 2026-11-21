@@ -16,23 +16,26 @@ import qs.singletons.io
 // comes back from outside (git's lines, a manifest's words) is plain text, capped.
 //
 // Installing, in steps (`phase`): "downloading" into a new directory under
-// <dataHome>/h2s-shell/module-staging (git's progress in `progress`; a download larger than
-// ModuleInstallRules.maxDownloadBytes is stopped, a folder or a download measured again once
-// there; a link out of the module refuses it); "verifying" — the host's own file check and
-// manifest rules on the staged directory (ModuleHost.checkDirectory), the id free or the
-// shell's own (ModuleInstallRules.installTarget: a folder or link placed by hand is never
-// replaced), then the dependency chain (ModuleDependencyRules.plan: each missing dependency
-// with a source downloaded and checked the same way, until nothing is left to fetch; one
-// that cannot be had stops the install unless `anyway`); "installing" — each module of the
-// chain in dependency order: its staged directory renamed to
-// module-versions/<id>/<version>-<commit7> and the link modules/<id> moved onto it in one
-// rename, then the record (module-sources.json) written once, by a temporary file and a
-// rename; a step that fails takes back the ones before (ModuleDependencyRules.rollbackPlan)
-// so the user root is as it was. Then the host searches again and loads (rediscover()); an
-// updated module that does not start goes back to its version before
-// (ModuleInstallRules.backOnFailedStart). With `enable` (the default) the new modules are
-// acknowledged and turned on — the preview, or a typed IPC command, was the user's
-// confirmation; without, they stay off.
+// <dataHome>/h2s-shell/module-staging (git's progress in `progress`, read as git redraws it;
+// the directory measured while git or the copy writes it and once it is there — past
+// `maxDownloadBytes` the download is stopped; a link out of the module refuses it);
+// "verifying" — the host's own file check and manifest rules on the staged directory
+// (ModuleHost.checkDirectory), the id free or the shell's own (ModuleInstallRules.installTarget:
+// a folder or link placed by hand, under any name, is never replaced or joined), then the
+// dependency chain (ModuleDependencyRules.plan: each missing dependency with a source
+// downloaded and checked the same way, until nothing is left to fetch; one that cannot be had
+// stops the install unless `anyway`); "installing" — each staged directory renamed to
+// module-versions/<id>/<version>-<commit7>, the record (module-sources.json, by a temporary
+// file and a rename) written listing the new versions, each link modules/<id> moved onto its
+// version in one rename (providers first), and the record written again with the new
+// versions active; a step that fails takes back the ones before
+// (ModuleDependencyRules.rollbackPlan: links, versions, the record's entries) so the user
+// root is as it was. Then the host searches again and loads (rediscover()); an updated module
+// that does not start goes back to its version before (ModuleInstallRules.backOnFailedStart).
+// With `enable` (the default) the new modules are acknowledged and turned on — the preview,
+// or a typed IPC command, was the user's confirmation; without, they stay off. Both act only
+// on the module as loaded from the version directory this job made. tidy(), at the shell's
+// start, puts right what a run cut off left (staging, temporary links, the record).
 //
 // Late answers lose: one job at a time, and every answer is checked against the job it was
 // started for. Nothing starts while the session is locked; a download that is still running
@@ -55,6 +58,10 @@ Scope {
     property int downloadTimeoutMs: 120000
     property int stepTimeoutMs: 30000
     property int loadTimeoutMs: 30000
+    // The largest download (ModuleInstallRules.maxDownloadBytes; the suites a smaller one),
+    // and how often a download's directory is measured while git writes it
+    property real maxDownloadBytes: ModuleInstallRules.maxDownloadBytes
+    property int measureIntervalMs: 1000
 
     readonly property var places: ModuleInstallRules.paths(dataHome, configHome)
     // A job runs (one at a time)
@@ -113,10 +120,11 @@ Scope {
         subject = "";
         progress = null;
         lastResult = result;
-        if (ok)
-            console.info("[Modules] " + text);
-        else
+        // A quiet job (the start's tidying) says only what it changed or what failed
+        if (!ok)
             console.warn("[Modules] " + job.action + " failed: " + text);
+        else if (job.quiet !== true)
+            console.info("[Modules] " + text);
         finished(result);
     }
 
@@ -140,7 +148,7 @@ Scope {
         _readSources(job, () => _download(job, given, "", staged => {
             job.root = staged;
             job.ids = [staged.manifest.id];
-            job.rootTarget = ModuleInstallRules.installTarget(staged.manifest.id, job.sources, job.records);
+            job.rootTarget = _target(job, staged.manifest.id);
             if (job.rootTarget.kind === "taken") {
                 _abandon(job, job.rootTarget.problem);
                 return;
@@ -200,8 +208,8 @@ Scope {
                     _finish(job, false, id + " " + plan.dir + ": " + problem);
                     return;
                 }
-                _switchTo(job, id, plan.dir, plan.previousDir, () => {
-                    const step = { id: id, kind: "switch", dir: plan.dir, previousDir: plan.previousDir };
+                _switchTo(job, id, plan.dir, plan.previousDir, directory => {
+                    const step = { id: id, kind: "switch", dir: plan.dir, previousDir: plan.previousDir, directory: directory };
                     _reload(job, loaded => _afterStart(job, [step], loaded, () =>
                         _finish(job, true, id + " switched to " + plan.dir + _notesText(job))));
                 });
@@ -240,16 +248,40 @@ Scope {
         return "";
     }
 
-    // Empties the staging place: what an earlier run left there (the shell's start)
-    function cleanStaging() {
-        if (_job !== null || places.staging === "")
-            return;
-        _run(["sh", "-c", "d=$1; { [ -d \"$d\" ] && [ ! -L \"$d\" ]; } || exit 0; "
-              + "for e in \"$d\"/* \"$d\"/.[!.]*; do { [ -e \"$e\" ] || [ -L \"$e\" ]; } || continue; rm -rf -- \"$e\"; done",
-              "sh", places.staging], { timeoutMs: stepTimeoutMs, done: result => {
-                  if (!result.ok)
-                      console.warn("[Modules] the staging place could not be emptied");
-              } });
+    // At the shell's start: what an earlier run left — the staging place emptied, temporary
+    // links in the user root removed, and the record put right where a run was cut off
+    // between moving a version in and writing it (ModuleInstallRules.reconcileRecord).
+    // → "" when it started, else why not
+    function tidy() {
+        const refusal = _refusal();
+        if (refusal !== "")
+            return refusal;
+        const job = _start("tidy", { quiet: true });
+        _run(["sh", "-c", "d=$1; u=$2; if [ -d \"$d\" ] && [ ! -L \"$d\" ]; then "
+              + "for e in \"$d\"/* \"$d\"/.[!.]*; do { [ -e \"$e\" ] || [ -L \"$e\" ]; } || continue; rm -rf -- \"$e\"; done; fi; "
+              + "if [ -d \"$u\" ] && [ ! -L \"$u\" ]; then for e in \"$u\"/.*.link.*; do [ -L \"$e\" ] && rm -f -- \"$e\"; done; fi; true",
+              "sh", places.staging, places.user], {
+            timeoutMs: stepTimeoutMs,
+            done: result => {
+                if (!_alive(job))
+                    return;
+                if (!result.ok)
+                    console.warn("[Modules] the staging place could not be emptied");
+                _readSources(job, () => {
+                    const fixed = ModuleInstallRules.reconcileRecord(job.sources, job.records);
+                    for (const note of fixed.notes)
+                        console.warn("[Modules] " + note);
+                    if (!fixed.changed) {
+                        _finish(job, true, "nothing to put right");
+                        return;
+                    }
+                    job.quiet = false;
+                    _writeRecord(job, fixed.modules, ok => _finish(job, ok, ok ? "the record of installed modules put right after a run that was cut off"
+                                                                              : "the record of installed modules could not be put right"));
+                });
+            }
+        });
+        return "";
     }
 
     // ---- Reading what is there ----
@@ -325,12 +357,19 @@ Scope {
     }
 
     function _copyFolder(job, label, folder, dir, next) {
-        _run(["sh", "-c", "[ -d \"$1\" ] || { echo 'not a folder' >&2; exit 1; }; cp -R --no-dereference -- \"$1/.\" \"$2/\" && rm -rf -- \"$2/.git\"",
-              "sh", folder, dir], {
+        const download = { job: job, dir: dir, handle: null, tooLarge: false, measuring: false };
+        download.handle = _run(["sh", "-c", "[ -d \"$1\" ] || { echo 'not a folder' >&2; exit 1; }; cp -R --no-dereference -- \"$1/.\" \"$2/\" && rm -rf -- \"$2/.git\"",
+                                "sh", folder, dir], {
             timeoutMs: downloadTimeoutMs,
             done: result => {
+                if (_downloading === download)
+                    _downloading = null;
                 if (!_alive(job))
                     return;
+                if (download.tooLarge) {
+                    _abandon(job, label + ": " + ModuleInstallRules.downloadProblem(result, "", { tooLarge: true, cap: maxDownloadBytes }));
+                    return;
+                }
                 if (!result.ok) {
                     _abandon(job, label + ": the folder could not be copied" + (result.timedOut ? " in time" : ""));
                     return;
@@ -338,10 +377,17 @@ Scope {
                 next();
             }
         });
+        // Measured while it copies, as a download is
+        _downloading = download;
+        _measureTimer.restart();
     }
 
     // The git commands of a download, one after the other, then the commit it got; .git goes
-    // (the version directory holds the module's files only)
+    // (the version directory holds the module's files only). git redraws its progress with
+    // carriage returns: each command runs behind a reader that ends a line there too, so the
+    // progress — and a size past the cap — is seen while it downloads, not once it is done.
+    // The directory is measured every measureIntervalMs as well (what git says is the pack;
+    // the checkout comes after it), and the command stopped once it is past the cap
     function _clone(job, label, address, dir, next) {
         const commands = ModuleInstallRules.downloadCommands(address, dir);
         if (!commands.ok) {
@@ -354,10 +400,9 @@ Scope {
                 return;
             }
             const command = commands.commands[index];
+            const download = { job: job, dir: dir, handle: null, tooLarge: false, measuring: false };
             let lastLine = "";
-            let tooLarge = false;
-            let handle = null;
-            handle = _run(command.argv, {
+            download.handle = _run(["bash", "-c", root._progressReader, "bash"].concat(command.argv), {
                 environment: command.environment, timeoutMs: downloadTimeoutMs, keepOutput: false,
                 onLine: (line, stream) => {
                     if (stream !== "stderr" || !_alive(job))
@@ -369,24 +414,68 @@ Scope {
                         return;
                     }
                     progress = { phase: read.phase, percent: read.percent, bytes: read.bytes, rate: read.rate };
-                    if (read.bytes !== null && read.bytes > ModuleInstallRules.maxDownloadBytes && !tooLarge) {
-                        tooLarge = true;
-                        handle?.cancel();
-                    }
+                    if (read.bytes !== null && read.bytes > maxDownloadBytes)
+                        _stopTooLarge(download);
                 },
                 done: result => {
+                    if (_downloading === download)
+                        _downloading = null;
                     if (!_alive(job))
                         return;
-                    if (!result.ok || tooLarge) {
+                    if (!result.ok || download.tooLarge) {
                         _abandon(job, label + ": download failed — "
-                                 + ModuleInstallRules.downloadProblem(result, lastLine, { timeoutMs: downloadTimeoutMs, tooLarge: tooLarge }));
+                                 + ModuleInstallRules.downloadProblem(result, lastLine, { timeoutMs: downloadTimeoutMs, tooLarge: download.tooLarge, cap: maxDownloadBytes }));
                         return;
                     }
                     runNext(index + 1);
                 }
             });
+            _downloading = download;
+            _measureTimer.restart();
         };
         runNext(0);
+    }
+
+    // Runs "$@" (a git command) with its standard error read in pieces ended by a carriage
+    // return or a line break, each written out as a line at once; its standard output goes;
+    // its exit status is the command's
+    readonly property string _progressReader: "set -o pipefail; \"$@\" 2>&1 >/dev/null | "
+        + "while IFS= read -r -d $'\\r' part || [ -n \"$part\" ]; do printf '%s\\n' \"$part\"; done >&2"
+
+    // The download running now, measured by _measureTimer
+    property var _downloading: null
+
+    function _stopTooLarge(download) {
+        if (download.tooLarge)
+            return;
+        download.tooLarge = true;
+        download.handle?.cancel();
+    }
+
+    Timer {
+        id: _measureTimer
+        interval: Math.max(50, root.measureIntervalMs)
+        repeat: true
+        onTriggered: {
+            const download = root._downloading;
+            if (!download || !root._alive(download.job)) {
+                stop();
+                return;
+            }
+            if (download.measuring)
+                return;
+            download.measuring = true;
+            root._run(["du", "-sk", "--", download.dir], {
+                timeoutMs: root.stepTimeoutMs,
+                done: result => {
+                    download.measuring = false;
+                    if (root._downloading !== download || !result.ok)
+                        return;
+                    if (ModuleInstallRules.stagedSizeProblem(String(result.stdout ?? ""), root.maxDownloadBytes) !== "")
+                        root._stopTooLarge(download);
+                }
+            });
+        }
     }
 
     function _commitOf(job, label, dir, next) {
@@ -432,7 +521,7 @@ Scope {
                     return;
                 const size = lines.find(line => line.startsWith("size\t"));
                 const problem = !result.ok ? "it could not be measured"
-                    : ModuleInstallRules.stagedSizeProblem(size ? size.slice(5) : "")
+                    : ModuleInstallRules.stagedSizeProblem(size ? size.slice(5) : "", maxDownloadBytes)
                       || ModuleInstallRules.linkProblem(lines.filter(line => line.startsWith("link\t")).map(line => line.slice(5)), dir);
                 if (problem !== "") {
                     _abandon(job, label + ": " + problem);
@@ -459,6 +548,13 @@ Scope {
     }
 
     // ---- The chain ----
+
+    // What module `id` finds in the user root (ModuleInstallRules.installTarget), with every
+    // module of that id the host has: one placed by hand under another name is never joined
+    function _target(job, id) {
+        const directories = host.statuses.filter(status => status.id === id).map(status => status.directory);
+        return ModuleInstallRules.installTarget(id, job.sources, job.records, directories);
+    }
 
     // The modules installed now, as the plan takes them
     function _installed(job) {
@@ -509,7 +605,7 @@ Scope {
             const staged = id === job.root.manifest.id ? job.root : job.fetched[id];
             if (!staged)
                 continue;
-            const target = id === job.root.manifest.id ? job.rootTarget : ModuleInstallRules.installTarget(id, job.sources, job.records);
+            const target = id === job.root.manifest.id ? job.rootTarget : _target(job, id);
             if (target.kind === "taken") {
                 _abandon(job, target.problem);
                 return;
@@ -530,13 +626,14 @@ Scope {
 
     // ---- Installing ----
 
+    // Each module's staged directory moved to its version directory (no link yet)
     function _installItems(job, items, index) {
         if (!_alive(job))
             return;
         phase = "installing";
         progress = null;
         if (index >= items.length) {
-            _recordInstall(job, items);
+            _recordStaged(job, items);
             return;
         }
         const item = items[index];
@@ -565,52 +662,91 @@ Scope {
                 const existed = lines.includes("existed");
                 if (existed || lines.includes("moved")) {
                     job.staged = job.staged.filter(each => each !== item.staged.dir);
-                    job.done.push({ id: item.id, kind: update ? "update" : "install", dir: dir, previousDir: item.target.previousDir,
-                                    existed: existed, previousRecord: item.target.previousRecord ?? null });
+                    item.step = { id: item.id, kind: update ? "update" : "install", dir: dir, previousDir: item.target.previousDir,
+                                  existed: existed, previousRecord: item.target.previousRecord ?? null, directory: "" };
+                    job.done.push(item.step);
                 }
                 if (!result.ok) {
                     _rollback(job, () => _finish(job, false, item.id + ": could not be moved into place; nothing installed"));
                     return;
                 }
-                _link(job, item.id, dir, ok => {
-                    if (!ok) {
-                        _rollback(job, () => _finish(job, false, item.id + ": its link could not be made; nothing installed"));
-                        return;
-                    }
-                    _installItems(job, items, index + 1);
-                });
+                _installItems(job, items, index + 1);
             }
         });
     }
 
-    // Moves the link modules/<id> onto version `dir` in one rename. → done(ok)
-    function _link(job, id, dir, done) {
-        _run(["sh", "-c", "v=$1; id=$2; dir=$3; u=$4; { [ -d \"$v/$id/$dir\" ] && [ ! -L \"$v/$id\" ] && [ ! -L \"$v/$id/$dir\" ]; } || exit 1; "
-              + "mkdir -p -- \"$u\" || exit 1; t=$u/.$id.link.$$; rm -f -- \"$t\"; ln -s -- \"$v/$id/$dir\" \"$t\" || exit 1; "
-              + "mv -T -- \"$t\" \"$u/$id\" || { rm -f -- \"$t\"; exit 1; }",
-              "sh", places.versions, id, dir, places.user], {
-            timeoutMs: stepTimeoutMs,
-            done: result => {
-                if (_alive(job))
-                    done(result.ok);
-            }
-        });
-    }
-
-    // Every module is in place: the record, written once; the versions beyond the kept ones
-    // go; then the load
-    function _recordInstall(job, items) {
+    // The record before any link moves: every new version listed, the active ones as they
+    // were (a run cut off after this leaves versions the record names, never a module that
+    // reads as placed by hand)
+    function _recordStaged(job, items) {
         let modules = job.records.modules;
         const fetchedAt = new Date().toISOString();
         const rootId = job.root.manifest.id;
-        const dropped = [];
         for (const item of items) {
             const source = item.staged.source;
-            modules = ModuleInstallRules.recordInstalled(modules, item.id, {
+            modules = ModuleInstallRules.recordStaged(modules, item.id, {
                 kind: source.kind, address: source.kind === "folder" ? source.folder : source.url, ref: source.ref,
                 dir: item.dir, version: item.staged.manifest.version, commit: item.staged.commit, fetchedAt: fetchedAt,
                 installedFor: item.id === rootId ? "" : rootId
             });
+        }
+        _writeRecord(job, modules, ok => {
+            if (!ok) {
+                _rollback(job, () => _finish(job, false, "the record of installed modules could not be written; nothing installed"));
+                return;
+            }
+            job.recordWritten = true;
+            job.records = { ok: true, modules: modules, dropped: [] };
+            _linkItems(job, items, 0);
+        });
+    }
+
+    // Each link moved onto its new version, providers first
+    function _linkItems(job, items, index) {
+        if (!_alive(job))
+            return;
+        if (index >= items.length) {
+            _recordActive(job, items);
+            return;
+        }
+        const item = items[index];
+        _link(job, item.id, item.dir, (ok, directory) => {
+            if (!ok) {
+                _rollback(job, () => _finish(job, false, item.id + ": its link could not be made; nothing installed"));
+                return;
+            }
+            item.step.directory = directory;
+            _linkItems(job, items, index + 1);
+        });
+    }
+
+    // Moves the link modules/<id> onto version `dir` in one rename. → done(ok, the version's
+    // canonical directory — what the host loads it from)
+    function _link(job, id, dir, done) {
+        const lines = [];
+        _run(["sh", "-c", "v=$1; id=$2; dir=$3; u=$4; { [ -d \"$v/$id/$dir\" ] && [ ! -L \"$v/$id\" ] && [ ! -L \"$v/$id/$dir\" ]; } || exit 1; "
+              + "mkdir -p -- \"$u\" || exit 1; t=$u/.$id.link.$$; rm -f -- \"$t\"; ln -s -- \"$v/$id/$dir\" \"$t\" || exit 1; "
+              + "mv -T -- \"$t\" \"$u/$id\" || { rm -f -- \"$t\"; exit 1; }; cd -P -- \"$v/$id/$dir\" && pwd",
+              "sh", places.versions, id, dir, places.user], {
+            timeoutMs: stepTimeoutMs,
+            onLine: (line, stream) => {
+                if (stream === "stdout")
+                    lines.push(line);
+            },
+            done: result => {
+                if (_alive(job))
+                    done(result.ok, result.ok ? ModuleFileRules.canonicalPath(lines[lines.length - 1] ?? "") : "");
+            }
+        });
+    }
+
+    // Every link is in place: the record names the new versions active; the versions beyond
+    // the kept ones go; then the load
+    function _recordActive(job, items) {
+        let modules = job.records.modules;
+        const dropped = [];
+        for (const item of items) {
+            modules = ModuleInstallRules.recordSwitched(modules, item.id, item.dir) ?? modules;
             if (item.target.kind === "update") {
                 const keep = ModuleUpdateRules.keepPlan(modules[item.id], { previousDir: item.target.previousDir });
                 if (keep.ok && keep.delete.length > 0) {
@@ -644,28 +780,37 @@ Scope {
         });
     }
 
+    // The host's status of the module a step put in place — loaded from the version directory
+    // this job made, nothing else of that id — or null
+    function _statusAt(step) {
+        return host.statuses.find(status => status.id === step.id && step.directory !== "" && status.directory === step.directory) ?? null;
+    }
+
     // The new modules acknowledged and turned on ("Install and enable": the preview, or the
-    // typed command, was the confirmation); updated ones keep their state
+    // typed command, was the confirmation) — each only as loaded from its version directory;
+    // updated ones keep their state
     function _turnOn(job, loaded) {
-        const installed = job.done.filter(step => step.kind === "install").map(step => step.id);
+        const installed = job.done.filter(step => step.kind === "install");
         const updated = job.done.filter(step => step.kind === "update").map(step => step.id);
         if (job.enable && loaded) {
-            for (const id of installed) {
-                const status = host.status(id);
-                if (!status)
+            for (const step of installed) {
+                const status = _statusAt(step);
+                if (!status) {
+                    job.notes.push(step.id + ": not loaded from the version installed");
                     continue;
+                }
                 if (host.confirmations && (status.state === "unconfirmed" || status.state === "approval")) {
-                    const why = host.confirm(id, status.directory);
+                    const why = host.confirm(step.id, step.directory);
                     if (why !== "")
-                        job.notes.push(id + ": " + why);
+                        job.notes.push(step.id + ": " + why);
                 } else if (!status.enabled) {
-                    host.setEnabled(id, true);
+                    host.setEnabled(step.id, true);
                 }
             }
         }
         const parts = [];
         if (installed.length > 0)
-            parts.push("installed " + installed.join(", ") + (job.enable ? "" : " (kept off)"));
+            parts.push("installed " + installed.map(step => step.id).join(", ") + (job.enable ? "" : " (kept off)"));
         if (updated.length > 0)
             parts.push("updated " + updated.join(", "));
         _finish(job, true, (parts.join("; ") || "nothing to install") + _notesText(job));
@@ -677,18 +822,19 @@ Scope {
 
     // ---- After the load: back on a failed start ----
 
-    // Each module this job moved to another version that did not start goes back to the one
-    // before (relinked, the record's active version back); then one more load
+    // Each module this job moved to another version that did not start — as loaded from that
+    // version's directory — goes back to the one before (relinked, the record's active
+    // version back); then one more load
     function _afterStart(job, steps, loaded, next) {
         if (!_alive(job))
             return;
-        const back = loaded ? steps.filter(step => ModuleInstallRules.backOnFailedStart(step, host.status(step.id))) : [];
+        const back = loaded ? steps.filter(step => ModuleInstallRules.backOnFailedStart(step, _statusAt(step))) : [];
         if (back.length === 0) {
             next();
             return;
         }
         const reasons = back.map(step => step.id + " " + step.dir + " did not start ("
-                                 + ModuleInstallRules._plain(String((host.status(step.id)?.errors ?? [])[0] ?? "failed"), 160)
+                                 + ModuleInstallRules._plain(String((_statusAt(step)?.errors ?? [])[0] ?? "failed"), 160)
                                  + "): back to " + step.previousDir);
         const relinkAll = index => {
             if (index >= back.length) {
@@ -716,7 +862,7 @@ Scope {
     // ---- Switch version ----
 
     function _switchTo(job, id, dir, previousDir, next) {
-        _link(job, id, dir, ok => {
+        _link(job, id, dir, (ok, directory) => {
             if (!ok) {
                 _finish(job, false, id + ": the link could not be moved to " + dir);
                 return;
@@ -733,13 +879,13 @@ Scope {
                 }
                 job.records = { ok: true, modules: modules, dropped: [] };
                 if (dropped.length === 0) {
-                    next();
+                    next(directory);
                     return;
                 }
                 _fileOps(job, dropped.map(each => ({ op: "tree", path: places.versions + "/" + id + "/" + each })), problems => {
                     if (problems.length > 0)
                         console.warn("[Modules] older versions could not be deleted: " + problems.join("; "));
-                    next();
+                    next(directory);
                 });
             });
         });
@@ -801,22 +947,26 @@ Scope {
                     _finish(job, problems.length === 0, problems.length === 0 ? words : words + "; " + problems.join("; "));
                 });
             };
-            if (dropRecords.length === 0 || !job.records.ok) {
+            if (dropRecords.length === 0 || job.sources.record.state !== "ok") {
                 afterRecord(true);
                 return;
             }
-            let modules = job.records.modules;
-            for (const other of dropRecords)
-                modules = ModuleInstallRules.recordWithout(modules, other);
-            _writeRecord(job, modules, afterRecord);
+            // Spliced from the text as read: only the removed entries go — what this shell
+            // does not read (an entry it drops, a field it does not know) stays as it was
+            const text = ModuleInstallRules.recordTextWithout(job.sources.record.text, dropRecords);
+            if (text === null) {
+                afterRecord(false);
+                return;
+            }
+            _writeRecordText(job, text, afterRecord);
         });
     }
 
     // ---- Taking back a run ----
 
     // ModuleDependencyRules.rollbackPlan on what this job moved in and staged, carried out:
-    // links removed or moved back, versions it made deleted, staging deleted. The record is
-    // written only after every module is in place, so it never needs taking back here
+    // links moved back, then links removed, versions it made and staging deleted, then — when
+    // this job wrote the record — the record's entries dropped or put back as they were
     function _rollback(job, next) {
         const plan = ModuleDependencyRules.rollbackPlan({ stagingRoot: places.staging, staged: job.staged, done: job.done });
         for (const problem of plan.problems)
@@ -837,14 +987,33 @@ Scope {
         for (const action of plan.actions)
             if (action.action === "unlink")
                 ops.push({ op: "prune", path: places.versions + "/" + action.id });
+        let modules = job.records?.modules ?? {};
+        for (const action of plan.actions) {
+            if (action.action === "dropRecord")
+                modules = ModuleInstallRules.recordWithout(modules, action.id);
+            else if (action.action === "restoreRecord")
+                modules = ModuleInstallRules.recordRestored(modules, action.id, action.previous);
+        }
+        const restoreRecord = job.recordWritten === true;
         job.done = [];
         job.staged = [];
+        job.recordWritten = false;
         const relinkAll = index => {
             if (index >= relinks.length) {
                 _fileOps(job, ops, problems => {
                     if (problems.length > 0)
                         console.warn("[Modules] taking back the install left: " + problems.join("; "));
-                    next();
+                    if (!restoreRecord) {
+                        next();
+                        return;
+                    }
+                    _writeRecord(job, modules, ok => {
+                        if (ok)
+                            job.records = { ok: true, modules: modules, dropped: [] };
+                        else
+                            console.warn("[Modules] taking back the install: the record of installed modules could not be put back");
+                        next();
+                    });
                 });
                 return;
             }
@@ -916,7 +1085,11 @@ Scope {
 
     // The record written by a temporary file and a rename. → done(ok)
     function _writeRecord(job, modules, done) {
-        const chunks = ModuleInstallRules.recordChunks(ModuleInstallRules.recordText(modules));
+        _writeRecordText(job, ModuleInstallRules.recordText(modules), done);
+    }
+
+    function _writeRecordText(job, text, done) {
+        const chunks = ModuleInstallRules.recordChunks(text);
         if (chunks === null || places.record === "") {
             Qt.callLater(() => {
                 if (_alive(job))

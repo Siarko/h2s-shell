@@ -4,8 +4,10 @@
 # a hand-placed folder and a hand-made link in the user root, and a stand-in `git` first on the
 # installer's PATH. The stand-in logs every command line it is given and then runs the real
 # git — or, for clone and fetch, does what the file `fake/mode` says: "hang", "refuse",
-# "large" (a progress line past the size cap, then hangs), "progress" (a progress line, then
-# the real git). Nothing here reaches the network or the user's own git configuration.
+# "large" (a progress line past the size cap, redrawn with carriage returns as git does and
+# no line break, then hangs), "progress" (progress redrawn the same way, a pause, then the
+# real git), "grow" (writes into the target directory, 64 KiB every tenth of a second, saying
+# nothing — what only measuring the directory catches). Nothing here reaches the network or the user's own git configuration.
 set -euo pipefail
 
 real_git=$(command -v git) || { echo "git is not on PATH" >&2; exit 2; }
@@ -79,6 +81,12 @@ module "$T/folders/clean" '{ "id": "folded", "name": "Folded", "version": "0.3.0
 module "$T/folders/leaky" '{ "id": "leaky", "name": "Leaky", "version": "0.1.0", "api": "1.36" }'
 ln -s /etc/hostname "$T/folders/leaky/hostname"
 
+# zeta: an id that a folder placed by hand under another name ("aaa") already holds
+start zeta
+module "$T/work/zeta" '{ "id": "zeta", "name": "Zeta", "version": "1.0.0", "api": "1.36" }'
+commit zeta "1.0.0"; publish zeta
+module "$T/data/h2s-shell/modules/aaa" '{ "id": "zeta", "name": "Zeta placed by hand", "version": "0.0.1", "api": "1.36" }'
+
 # The user root: a folder placed by hand, a link made by hand to a module elsewhere
 module "$T/data/h2s-shell/modules/handmade" '{ "id": "handmade", "name": "Handmade", "version": "0.1.0", "api": "1.36" }'
 module "$T/outside/linked" '{ "id": "linked", "name": "Linked", "version": "0.1.0", "api": "1.36" }'
@@ -95,8 +103,9 @@ case " \$* " in
         case "\$mode" in
             hang) exec sleep 30 ;;
             refuse) echo "fatal: repository 'stand-in' not found" >&2; exit 128 ;;
-            large) printf 'Receiving objects:  10%% (1/10), 300.00 MiB | 10.00 MiB/s\n' >&2; exec sleep 30 ;;
-            progress) printf 'Receiving objects:  50%% (1/2), 1.00 MiB | 2.00 MiB/s\n' >&2 ;;
+            large) printf 'Receiving objects:   5%% (1/20), 1.00 MiB | 1.00 MiB/s\rReceiving objects:  10%% (2/20), 300.00 MiB | 10.00 MiB/s\r' >&2; exec sleep 30 ;;
+            progress) printf 'Receiving objects:  25%% (1/4), 512.00 KiB | 1.00 MiB/s\rReceiving objects:  50%% (2/4), 1.00 MiB | 2.00 MiB/s\r' >&2; sleep 1 ;;
+            grow) for target; do :; done; mkdir -p "\$target"; for i in \$(seq 1 100); do head -c 65536 /dev/zero > "\$target/blob\$i"; sleep 0.1; done; exit 0 ;;
         esac ;;
 esac
 exec "$real_git" "\$@"

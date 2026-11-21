@@ -405,8 +405,9 @@ TestCase {
                    "… \"-c " + option + "\" before the subcommand");
         assert(Array.isArray(download.commands[0].argv), "… an argv array, never a shell string");
         assertEqual(JSON.stringify(download.commands[0].environment),
-                    JSON.stringify({ GIT_TERMINAL_PROMPT: "0", GIT_ASKPASS: "", SSH_ASKPASS: "", GIT_SSH_COMMAND: "ssh -o BatchMode=yes", GIT_LFS_SKIP_SMUDGE: "1" }),
-                    "… with no terminal prompt, no askpass program, ssh in batch mode, git-lfs not fetching");
+                    JSON.stringify({ GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null", GIT_TERMINAL_PROMPT: "0", GIT_ASKPASS: "", SSH_ASKPASS: "",
+                                    GIT_SSH_COMMAND: "ssh -o BatchMode=yes", GIT_LFS_SKIP_SMUDGE: "1" }),
+                    "… with none of the user's or the system's git configuration, no terminal prompt, no askpass program, ssh in batch mode, git-lfs not fetching");
         download.commands[0].environment.GIT_ASKPASS = "x";
         assertEqual(rules.gitEnvironment.GIT_ASKPASS, "", "… each command's environment its own copy");
         download = rules.downloadCommands("git@github.com:anna/weather.git", staging);
@@ -717,6 +718,13 @@ TestCase {
         assertEqual(rules.installTarget("weather", sources, { ok: false, modules: {}, dropped: [] }).kind, "taken", "… a record that cannot be read: taken (unknown, never fine)");
         assertEqual(rules.installTarget("clipboard", { complete: false, roots: roots, entries: [] }, records).kind, "taken", "… a check that did not finish: taken");
         assertEqual(rules.installTarget("../x", sources, records).kind, "taken", "… not a module id: taken");
+        target = rules.installTarget("weather", sources, records, [home + "/src/elsewhere"]);
+        assertEqual(target.kind, "taken", "… the same id held by a module in the user root under another name (a hand-made link): taken");
+        assert(target.problem.includes("as elsewhere"), "… naming the entry: " + target.problem);
+        assertEqual(rules.installTarget("mine", sources, records, [places.user + "/mine"]).kind, "taken", "… a folder of that name: still taken");
+        assertEqual(rules.installTarget("weather", sources, records, [places.versions + "/weather/1.2.0-abcdef1", "/usr/share/h2s-shell/modules/weather"]).kind,
+                    "update", "… its own copy, and copies outside the user root (system, built in): no hindrance");
+        assertEqual(rules.installTarget("clipboard", sources, records, [home + "/dev/modules/clipboard"]).kind, "new", "… a development copy: no hindrance");
         assertEqual(rules.installedEntry("weather", sources, records)?.source, "repository", "installed entry: the shell's own");
         assertEqual(rules.installedEntry("mine", sources, records), null, "… a hand-placed one: none");
 
@@ -733,6 +741,7 @@ TestCase {
         assertEqual(rules.stagedSizeProblem("120\t/x"), "", "size: small");
         assert(rules.stagedSizeProblem(String(200 * 1024) + "\t/x").includes("larger than 100 MiB"), "… too large");
         assertEqual(rules.stagedSizeProblem(""), "its size could not be read", "… unreadable: refused");
+        assertEqual(rules.stagedSizeProblem("65\t/x", 64 * 1024), "it is larger than 64 KiB", "… against a cap given");
         assertEqual(rules.linkProblem(["/s/x/a\t/s/x/b"], "/s/x"), "", "links: inside the module");
         assert(rules.linkProblem(["/s/x/a\t/etc/passwd"], "/s/x").includes("a link leads out of the module: a"), "… one out: refused, named");
         assert(rules.linkProblem(["/s/x/a\t"], "/s/x") !== "" && rules.linkProblem(["/s/x/a\t/s/x"], "/s/x") !== "", "… dangling, or the module itself: refused");
@@ -744,6 +753,7 @@ TestCase {
         assertEqual(rules.downloadProblem({ code: 1 }, "", {}), "git failed (status 1)", "… nothing said");
         assertEqual(rules.downloadProblem({ code: -1, failedToStart: true }, "", {}), "git could not be run", "… git missing");
         assertEqual(rules.downloadProblem({ cancelled: true }, "", { tooLarge: true }), "it is larger than 100 MiB", "… stopped for its size");
+        assertEqual(rules.downloadProblem({ cancelled: true }, "", { tooLarge: true, cap: 2 * 1024 * 1024 }), "it is larger than 2 MiB", "… against the cap given");
         assertEqual(rules.downloadProblem({ code: 128 }, "fatal: <b>x</b>‮" + "y".repeat(300), {}).length <= 125, true, "… text from outside capped");
 
         // The installed modules as the chain plan takes them
@@ -769,6 +779,31 @@ TestCase {
         assertEqual(modules.weather.versions.map(each => each.dir).join(",") + " " + modules.weather.active + " " + modules.weather.ref + " " + modules.weather.installedFor,
                     "1.2.0-abcdef1,1.1.0-1234567,1.3.0-7654321 1.3.0-7654321 main ", "… an update: kept versions stay, whom it was installed for stays");
         assertEqual(JSON.stringify(records.modules), before, "… the map given is not changed");
+        const staged = rules.recordStaged(records.modules, "weather", { kind: "repository", address: "https://codeberg.org/anna/weather.git", ref: "",
+                                                                        dir: "1.3.0-7654321", version: "1.3.0", commit: "7654321" });
+        assertEqual(staged.weather.active + " " + staged.weather.versions.length, "1.2.0-abcdef1 3", "staged: the new version listed, the active one kept until the link moves");
+        assertEqual(rules.recordStaged({}, "clipboard", { kind: "repository", address: "file:///srv/c.git", dir: "0.2.0-1234567", version: "0.2.0" }).clipboard.active,
+                    "0.2.0-1234567", "… a new module: its only version");
+        assert(rules.parseRecord(rules.recordText(staged)).modules.weather !== undefined, "… what parseRecord reads back");
+        const raw = JSON.stringify({ weather: { kind: "repository", future: 1 }, "Bad Id": { x: 1 }, notes: { kind: "folder" } });
+        const spliced = JSON.parse(rules.recordTextWithout(raw, ["notes"]));
+        assertEqual(JSON.stringify(Object.keys(spliced)) + " " + spliced.weather.future, "[\"weather\",\"Bad Id\"] 1",
+                    "remove's record: only the removed entry goes, unknown fields and entries parseRecord dropped stay");
+        assertEqual(rules.recordTextWithout("{", ["x"]) + " " + rules.recordTextWithout("[]", ["x"]), "null null", "… a text that is no object: nothing written");
+        const cutEntries = entries.concat([{ entry: places.user + "/notes", isLink: true, target: places.versions + "/notes/0.4.0-20261121120000" }]);
+        let reconciled = rules.reconcileRecord({ complete: true, roots: roots, entries: cutEntries }, records);
+        assertEqual(reconciled.changed + " " + reconciled.modules.notes.active + " " + reconciled.modules.notes.versions.map(each => each.version).join(","),
+                    "true 0.4.0-20261121120000 0.3.0,0.4.0", "reconcile: a link to a version the record does not list: listed and active");
+        assertEqual(reconciled.modules.weather.active, "1.2.0-abcdef1", "… the others as they were");
+        const switchedEntries = [{ entry: places.user + "/weather", isLink: true, target: places.versions + "/weather/1.1.0-1234567" }];
+        reconciled = rules.reconcileRecord({ complete: true, roots: roots, entries: switchedEntries }, records);
+        assertEqual(reconciled.changed + " " + reconciled.modules.weather.active + " " + reconciled.modules.weather.versions.length, "true 1.1.0-1234567 2",
+                    "… a link moved to a listed version the record does not have active: made active");
+        assertEqual(rules.reconcileRecord(sources, records).changed, false, "… everything as recorded: nothing changes");
+        reconciled = rules.reconcileRecord({ complete: true, roots: roots, entries: [{ entry: places.user + "/stray", isLink: true, target: places.versions + "/stray/1.0.0-1234567" }] }, records);
+        assertEqual(reconciled.changed + " " + reconciled.notes.length, "false 1", "… an id the record does not have: named, not invented");
+        assertEqual(rules.reconcileRecord({ complete: true, roots: roots, entries: cutEntries }, { ok: false, modules: {}, dropped: [] }).changed
+                    || rules.reconcileRecord({ complete: false, roots: roots, entries: cutEntries }, records).changed, false, "… an unreadable record or check: nothing");
         assertEqual(rules.recordSwitched(modules, "weather", "1.1.0-1234567").weather.active, "1.1.0-1234567", "switched: another kept version active");
         assertEqual(rules.recordSwitched(modules, "weather", "9.9.9-0000000"), null, "… a version not kept: none");
         assertEqual(rules.recordWithoutVersions(modules, "weather", ["1.1.0-1234567", "1.3.0-7654321"]).weather.versions.map(each => each.dir).join(","),

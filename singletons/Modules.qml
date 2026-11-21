@@ -186,13 +186,14 @@ Singleton {
             // temporary one instead
             if (!Config.readOnly)
                 _host.dataRoot = SystemFactsRules.dataRoot(SystemFacts.dataHome);
-            // The installer works under the data and config homes; what an earlier run left in
-            // its staging place goes. Not under the test runners
+            // The installer works under the data and config homes; what an earlier run left
+            // (staging, temporary links, a record a cut-off run did not finish) is put right.
+            // Not under the test runners
             if (!Config.readOnly) {
                 _installer.dataHome = SystemFacts.dataHome;
                 _installer.configHome = String(StandardPaths.writableLocation(StandardPaths.GenericConfigLocation)).replace(/^file:\/\//, "");
                 _installer.home = SystemFacts.home;
-                _installer.cleanStaging();
+                _installer.tidy();
             }
             // Sources, confirmations, the modules on and the search again: the shell's own, as
             // the launcher started it

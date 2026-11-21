@@ -715,18 +715,22 @@ the `qs.api` facade, the registries taking modules' contributions, slots and anc
   modules install <address-or-folder>`, `installKeepOff`): a git address (`#<ref>` allowed;
   `ModuleInstallRules.installSource`, `downloadCommands` — no hooks, no submodules, no
   credential prompt, only https/ssh/git/file) is cloned, a folder copied without following
-  links, into `<dataHome>/h2s-shell/module-staging/`, under a time limit and a size cap, with
-  git's progress read (`progressOf`); a link out of it refuses it; then the host's own file
+  links, into `<dataHome>/h2s-shell/module-staging/`, under a time limit and a size cap — git's
+  progress read as git redraws it (`progressOf`) and the directory measured while it is
+  written; a link out of it refuses it; then the host's own file
   check and manifest rules (`ModuleHost.checkDirectory`) and the id free or the shell's own
-  (`installTarget`: what was placed by hand is never replaced); then the chain
+  (`installTarget`: what was placed by hand, under any name, is never replaced or joined); then the chain
   (`ModuleDependencyRules.plan`: each missing dependency with a `source` fetched and checked
-  the same way). Each module moves in by renames, providers first:
-  `module-versions/<id>/<version>-<commit7>` (a folder: `<version>-<time>`) and the link
-  `modules/<id>` moved onto it; a failure halfway takes back what moved
-  (`ModuleDependencyRules.rollbackPlan`). The record `module-sources.json` is written once, by
-  a temporary file and a rename; one that cannot be read is never written over. Then the host
-  searches and loads again; new modules are acknowledged and turned on (the command was the
-  confirmation), or kept off. `switchVersion <id> <version-dir>` relinks to a kept version and
+  the same way). Each module moves in by renames: `module-versions/<id>/<version>-<commit7>`
+  (a folder: `<version>-<time>`); the record `module-sources.json` (by a temporary file and a
+  rename) then lists the new versions, the links `modules/<id>` move onto them (providers
+  first), and the record makes them active; a failure halfway takes back what moved and the
+  record's entries (`ModuleDependencyRules.rollbackPlan`). A record that cannot be read is
+  never written over; Remove takes its entries out of the text as read. At the shell's start
+  `tidy()` empties staging, removes temporary links and puts the record right after a run
+  that was cut off (`reconcileRecord`). Then the host searches and loads again; new modules
+  are acknowledged and turned on (the command was the confirmation), or kept off — each only
+  as loaded from the version directory the job made. `switchVersion <id> <version-dir>` relinks to a kept version and
   `deleteVersion` drops one (at most three kept, `ModuleUpdateRules.keepPlan`); an update or
   a switch whose module then fails to start goes back to the version before
   (`backOnFailedStart`). `remove <id> <directory>` (`removeWithData`) follows

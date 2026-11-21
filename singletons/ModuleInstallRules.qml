@@ -782,9 +782,12 @@ Singleton {
 
     // The environment every git command of a download runs with: no terminal prompt, no
     // askpass program, ssh in batch mode (with _gitConfig's options, no credential prompt of
-    // any kind), and git-lfs never fetching: its downloads would go past the protocol list and
-    // the size cap
+    // any kind), git-lfs never fetching (its downloads would go past the protocol list and
+    // the size cap), and none of the user's or the system's git configuration — no filter a
+    // module's .gitattributes could name, no "insteadOf" turning the address into another
     readonly property var gitEnvironment: ({
+        GIT_CONFIG_NOSYSTEM: "1",
+        GIT_CONFIG_GLOBAL: "/dev/null",
         GIT_TERMINAL_PROMPT: "0",
         GIT_ASKPASS: "",
         SSH_ASKPASS: "",
@@ -1170,7 +1173,10 @@ Singleton {
     //             a new version goes beside the kept ones and the link moves
     //   "taken"   anything else — a folder or link placed by hand, a dangling link, a record that
     //             cannot be read, a check that did not finish: never replaced (Remove it first)
-    function installTarget(id, sources, records) {
+    // `directories`: the canonical directories of every module the host has with this id —
+    // one of them in the user root under another name (a folder "aaa" holding id "zeta") is
+    // taken too: installing beside it would acknowledge and act on a module the user never saw
+    function installTarget(id, sources, records, directories) {
         const result = { kind: "taken", problem: "", previousDir: "", previousRecord: null };
         if (!ModuleManifestRules.validId(id)) {
             result.problem = "Not a module id: " + _plain(String(id ?? ""), 60);
@@ -1179,6 +1185,13 @@ Singleton {
         if (sources?.complete !== true) {
             result.problem = "Your modules folder could not be read";
             return result;
+        }
+        for (const directory of _list(directories)) {
+            const other = sourceOf(directory, linkFor(directory, sources.entries), sources.roots, records);
+            if (other.entry !== "" && _baseName(other.entry) !== id) {
+                result.problem = id + " is already in your modules folder as " + _plain(_baseName(other.entry), 60) + " (" + other.label + "): remove it first";
+                return result;
+            }
         }
         const entry = _list(sources.entries).find(each => _baseName(each?.entry) === id);
         if (!entry) {
@@ -1228,11 +1241,21 @@ Singleton {
 
     // The staged directory's size from `du -sk`'s line ("<KiB>\t<path>"): "" when it is within
     // maxDownloadBytes, else why not — a size that cannot be read is refused too
-    function stagedSizeProblem(line) {
+    // (`cap`: the size allowed, maxDownloadBytes when not given)
+    function stagedSizeProblem(line, cap) {
         const match = /^([0-9]{1,15})\s/.exec(typeof line === "string" ? line : "");
         if (!match)
             return "its size could not be read";
-        return Number(match[1]) * 1024 > maxDownloadBytes ? "it is larger than " + Math.round(maxDownloadBytes / 1024 / 1024) + " MiB" : "";
+        return Number(match[1]) * 1024 > _cap(cap) ? _tooLargeText(cap) : "";
+    }
+
+    function _cap(cap) {
+        return Number.isFinite(cap) && cap > 0 ? cap : maxDownloadBytes;
+    }
+
+    function _tooLargeText(cap) {
+        const bytes = _cap(cap);
+        return "it is larger than " + (bytes >= 1024 * 1024 ? Math.round(bytes / 1024 / 1024) + " MiB" : Math.round(bytes / 1024) + " KiB");
     }
 
     // The links inside a staged module that lead out of it, from lines "<path>\t<target>"
@@ -1255,10 +1278,10 @@ Singleton {
 
     // One line for a download that did not end well. `result`: the command's answer
     // (CommandRunner); `lastLine`: git's last line on standard error; `context`: { timeoutMs,
-    // tooLarge — stopped for its size }
+    // tooLarge — stopped for its size, cap — the size allowed }
     function downloadProblem(result, lastLine, context) {
         if (context?.tooLarge === true)
-            return "it is larger than " + Math.round(maxDownloadBytes / 1024 / 1024) + " MiB";
+            return _tooLargeText(context?.cap);
         if (result?.timedOut === true)
             return "the server did not answer within " + Math.round(Number(context?.timeoutMs ?? 0) / 1000) + " s";
         if (result?.failedToStart === true || (typeof result?.error === "string" && result.error !== ""))
@@ -1318,6 +1341,76 @@ Singleton {
             installedFor: previous ? (previous.installedFor ?? "") : String(given?.installedFor ?? ""),
             checkedAt: previous?.checkedAt ?? ""
         };
+        return result;
+    }
+
+    // A version moved in but not linked yet (written before the link, so that a version on
+    // disk is always listed): as recordInstalled, the active version kept where the entry has
+    // one — recordSwitched makes the new one active once its link is there
+    function recordStaged(modules, id, given) {
+        const previous = ModuleRules.isObject(modules) && ModuleRules.has(modules, id) && ModuleRules.isObject(modules[id]) ? modules[id] : null;
+        const result = recordInstalled(modules, id, given);
+        if (previous && _list(previous.versions).some(each => each?.dir === previous.active))
+            result[id].active = previous.active;
+        return result;
+    }
+
+    // The record's raw text with the entries of `ids` taken out and nothing else changed —
+    // entries parseRecord dropped and fields it does not know stay as they were. null when
+    // the text is no JSON object (then nothing is written)
+    function recordTextWithout(text, ids) {
+        let data;
+        try {
+            data = typeof text === "string" ? JSON.parse(text) : null;
+        } catch (error) {
+            data = null;
+        }
+        if (!ModuleRules.isObject(data))
+            return null;
+        for (const id of _list(ids))
+            if (typeof id === "string")
+                delete data[id];
+        return JSON.stringify(data, null, 2) + "\n";
+    }
+
+    // What a run that was cut off (the shell killed between moving a version in and writing
+    // the record) left, put right at the next start: each link in the user root that leads to
+    // `<versions>/<id>/<dir>` and is named `<id>`, where the record has an entry for `id`,
+    // makes `dir` listed and active — the module stays the shell's, not "placed by hand". An
+    // id with no entry cannot be told its source and is only named in `notes`.
+    // → { changed, modules, notes }; nothing changes from a record or a check that cannot be read
+    function reconcileRecord(sources, records) {
+        const result = { changed: false, modules: _recordCopy(records?.modules), notes: [] };
+        if (sources?.complete !== true || records?.ok !== true || _list(records?.dropped).length > 0)
+            return result;
+        const versionsRoot = _cleanPath(sources.roots?.versions);
+        if (versionsRoot === "")
+            return result;
+        for (const entry of _list(sources.entries)) {
+            const id = _baseName(entry?.entry);
+            const target = _cleanPath(entry?.target);
+            if (entry?.isLink !== true || !ModuleManifestRules.validId(id) || target === "" || _parentOf(target) !== versionsRoot + "/" + id)
+                continue;
+            const dir = _baseName(target);
+            if (!_versionDirectory(dir))
+                continue;
+            const record = ModuleRules.has(result.modules, id) ? result.modules[id] : null;
+            if (!record) {
+                result.notes.push(id + ": a version linked that the record does not name; it counts as placed by hand");
+                continue;
+            }
+            if (!_list(record.versions).some(each => each?.dir === dir)) {
+                const cut = dir.lastIndexOf("-");
+                const tail = cut > 0 ? dir.slice(cut + 1) : "";
+                record.versions = _list(record.versions).concat([{ dir: dir, version: cut > 0 ? dir.slice(0, cut) : dir,
+                                                                   commit: /^[0-9a-f]{7}$/.test(tail) ? tail : "", fetchedAt: "" }]);
+                result.changed = true;
+            }
+            if (record.active !== dir) {
+                record.active = dir;
+                result.changed = true;
+            }
+        }
         return result;
     }
 

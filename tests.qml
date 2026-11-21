@@ -85,13 +85,11 @@ QtObject {
     property var _moduleContribution: ModuleContributionTest {}
     property var _networkCardGeometry: NetworkCardGeometryTest {}
     property var _quickshellPin: QuickshellPinTest {}
-    // Built before the module suites it waits for: registered after AnchorsTest, that suite's
-    // card layout check failed in the full run
-    property var _moduleInstaller: ModuleInstallerTest { after: _anchors }
     property var _modules: ModulesTest {}
     property var _moduleIcon: ModuleIconTest {}
     property var _moduleRegistries: ModuleRegistriesTest { after: _modules; vpnSuite: _vpnProviders }
     property var _anchors: AnchorsTest { after: _moduleRegistries }
+    property var _moduleInstaller: ModuleInstallerTest { after: _anchors }
 
     // The suites that run on the event loop (TestCase.asynchronous)
     readonly property var _asyncSuites: [_pointerInput, _toastDrag, _settingsCard, _moduleContribution, _networkCardGeometry, _buttonKinds, _pillSizes, _apiElements, _sidePanel, _settingsModal, _statusPill, _lockView, _authPromptView, _commandRunner, _systemFacts, _modules, _moduleIcon, _moduleRegistries, _anchors, _moduleInstaller, _vpnProviders, _testSeamsShape, _testTree, _deviceAddressReading, _sleepLockersReading, _network, _fileChooser]
