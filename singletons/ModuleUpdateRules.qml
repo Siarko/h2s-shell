@@ -177,7 +177,8 @@ Singleton {
     // `record`: the record's entry (ModuleInstallRules.parseRecord's modules[id]);
     // `newManifest`: the staged manifest as ModuleManifestRules.parseManifest reads it ({ id,
     //   name, version, author, privileged: { why, programs } | null (none) or absent,
-    //   programs, optionalPrograms, uses });
+    //   programs, optionalPrograms, uses, valid, errors }; `valid` false, or an error about
+    //   `privileged`, is "unknown");
     // `newAddress`: where the new version comes from (a repository's "#ref" does not count:
     //   a new tag of the same repository is the same source);
     // `context`: { dependencyPlan — ModuleDependencyRules.plan's result for the new manifest,
@@ -195,10 +196,16 @@ Singleton {
         const version = _version(newManifest?.version);
         const title = name + (version !== "" ? " " + version : "");
         const add = (kind, line, detail) => reasons.push({ kind: kind, line: line, detail: detail ?? "" });
+        // parseManifest's `valid` false: what the user would be asked about is not known
         const readableManifest = ModuleRules.isObject(newManifest) && ModuleManifestRules.validId(newManifest.id)
-                                 && typeof newManifest.version === "string";
+                                 && typeof newManifest.version === "string" && newManifest.valid !== false;
         if (!readableManifest)
             add("unknown", title + ": its manifest could not be read.");
+        // A malformed declaration (parseManifest's privileged errors, privileged null) is not
+        // the same as none: it asks
+        if (ModuleRules.isObject(newManifest) && Array.isArray(newManifest.errors)
+                && newManifest.errors.some(text => String(text).startsWith("privileged")))
+            add("unknown", title + ": its administrator declaration could not be read.");
         const ack = ModuleRules.isObject(acknowledgement) && typeof acknowledgement.address === "string"
                     && typeof acknowledgement.source === "string" ? acknowledgement : null;
         const kind = ModuleRules.isObject(record) && ["repository", "folder"].includes(record.kind) ? record.kind : "";

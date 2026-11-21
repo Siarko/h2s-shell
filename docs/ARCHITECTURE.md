@@ -1191,9 +1191,9 @@ and a trusted `timeout` are found.
   (`singletons/ModuleManifestRules.qml`; a malformed block fails the module). The shell
   refuses `start()` with `blocked: "undeclared"` — before any prompt, the reason among the
   module's status errors, logged once — when the block is missing, not approved by the user,
-  or when argv[0] is not the path `module.programs` has for a declared program
-  (`PrivilegedRules.declaration`); `PrivilegedAction` from a module's code needs the block
-  and the approval too. This holds whatever API the manifest asks for. It is a guard against
+  or when argv[0] is not the path `module.programs` has for a declared, trusted program
+  (`PrivilegedRules.declaration`); `PrivilegedAction` the same (command[0] for argv[0]), and
+  refused outright when the call cannot be traced to a module's code. This holds whatever API the manifest asks for. It is a guard against
   mistakes and a statement for the user, not a sandbox: a module runs in the shell's process
   and can start programs by other means. `"author"` (plain text, one line) names who wrote
   the module.

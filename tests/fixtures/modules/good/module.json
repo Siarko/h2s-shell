@@ -25,8 +25,8 @@
     "slots": [
         { "slot": "network.vpn.page", "component": "GoodSlot.qml" }
     ],
-    "optionalPrograms": ["pkexec"],
-    "privileged": { "why": "Runs its stand-in as administrator through PrivilegedAction", "programs": [] },
+    "optionalPrograms": ["pkexec", "sh"],
+    "privileged": { "why": "Runs its stand-in as administrator through PrivilegedAction", "programs": ["sh"] },
     "testPrograms": "tests/programs",
     "tests": ["tests/GoodStateTest.qml", "tests/GoodApiTest.qml", "tests/GoodPanelTest.qml"]
 }

@@ -464,11 +464,12 @@ Scope {
 
     // What module `id` may run as administrator (PrivilegedRules.declaration): its manifest's
     // `privileged` block, approved, and the paths of the programs it names among `programs`
-    // (its handle's; null for none). No acknowledgements are recorded: every module found
-    // counts as acknowledged as it is (ModuleInstallRules.needsConfirmation's baseline).
+    // (its handle's; null for none), under the user's acknowledgements
+    // (Config.acknowledgedModules: undefined while none is written, the baseline — every
+    // module found counts as acknowledged as it is).
     function privilegedDeclaration(id, programs) {
         const record = _record(id);
-        return PrivilegedRules.declaration(record?.manifest?.privileged ?? null, undefined, id, programs ?? null);
+        return PrivilegedRules.declaration(record?.manifest?.privileged ?? null, Config.acknowledgedModules, id, programs ?? null);
     }
 
     // Of `wanted` ({ module, context, … }), the initial properties the root object of the

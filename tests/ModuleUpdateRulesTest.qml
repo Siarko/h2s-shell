@@ -131,6 +131,17 @@ TestCase {
         assertEqual(ModuleUpdateRules.consentFor(_acknowledgement(), _weatherRecord(), Object.assign({}, parsedNone, { uses: [] }), _address,
                                                  { dependencyPlan: _cleanPlan }).reasons.filter(reason => reason.kind === "unknown").length, 0,
                     "consent: a manifest as parseManifest reads it, no declaration: nothing unknown about it");
+        const parsedBroken = ModuleManifestRules.parseManifest(JSON.stringify({ id: "weather", name: "Weather", version: "1.3.0", api: "1.36",
+                                                                                 privileged: { why: "Print", programs: ["lpadmin"] } }));
+        assert(!parsedBroken.valid && parsedBroken.privileged === null, "a declaration naming a program the manifest lacks: invalid, privileged null");
+        const brokenParsed = ModuleUpdateRules.consentFor(_acknowledgement({ privileged: true, author: "" }), _weatherRecord(),
+                                                          Object.assign({}, parsedBroken, { uses: [] }), _address, { dependencyPlan: _cleanPlan });
+        assertEqual(brokenParsed.reasons.map(reason => reason.kind + ": " + reason.line).join(" | "),
+                    "unknown: Weather 1.3.0: its manifest could not be read. | unknown: Weather 1.3.0: its administrator declaration could not be read.",
+                    "consent: a malformed declaration as parseManifest reads it asks as unknown — not the same as none");
+        const invalidOther = ModuleUpdateRules.consentFor(_acknowledgement(), _weatherRecord(), _manifest({ valid: false, errors: ["author: empty"] }), _address,
+                                                          { dependencyPlan: _cleanPlan });
+        assertEqual(_kinds(invalidOther), "unknown", "consent: any manifest with valid false asks as unknown");
 
         const less = ModuleUpdateRules.consentFor(_acknowledgement({ privileged: true }), _weatherRecord(), _manifest(), _address,
                                                   { dependencyPlan: _cleanPlan });

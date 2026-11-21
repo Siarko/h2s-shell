@@ -26,6 +26,8 @@ TestCase {
     }
     property var _savedDisabled: []
     property var _privilegedAnswers: ({})
+    property var _savedAcknowledged: undefined
+    property string _mark: ""
     property var _steps: []
     property var _created: []
 
@@ -69,6 +71,7 @@ TestCase {
 
     function _end() {
         Config.disabledModules = _savedDisabled;
+        Config.acknowledgedModules = _savedAcknowledged;
         host.unload();
         for (const object of _created)
             object?.destroy();
@@ -670,10 +673,27 @@ TestCase {
             undeclaredHandle.privileged.start([root, "x"], options("undeclared"));
             undeclaredHandle.privileged.start([root, "again"], options("undeclared again"));
             declaredHandle.privileged.start([declaredHandle.programs.pkexec.path, "x"], options("not a declared program"));
+            // An acknowledgement that does not say privileged: true (Config.acknowledgedModules)
+            suite._savedAcknowledged = Config.acknowledgedModules;
+            Config.acknowledgedModules = { privileged: { source: "user", address: fixtures + "/privileged", author: "", privileged: false } };
+            assertEqual(host.privilegedDeclaration("privileged", declaredHandle.programs).problem,
+                        "asks for administrator rights; the user has not approved its declaration", "an acknowledgement without privileged: true: not approved");
+            declaredHandle.privileged.start([declaredHandle.programs.talk.path, "x"], options("not approved"));
+            Config.acknowledgedModules = suite._savedAcknowledged;
+            // The old PrivilegedAction, from code the shell's own host cannot trace to a module
+            // (this host's fixture): refused, fail closed
+            suite._mark = undeclaredHandle.dataDirectory + "/pkexec-ran";
+            host.mainObject("privileged-undeclared").tryLegacy(suite._mark, result => suite._privilegedAnswers.legacy = result);
             assertEqual(PrivilegedRuns.count, queued, "nothing queued: no prompt can come");
-            assertEqual(Object.keys(suite._privilegedAnswers).length, 0, "… answered after start() returned");
+            assertEqual(Object.keys(suite._privilegedAnswers).filter(name => name !== "legacy").length, 0, "… answered after start() returned");
         });
-        _then("the refused runs are answered", () => Object.keys(_privilegedAnswers).length === 3, () => {
+        _then("the refused runs are answered", () => Object.keys(_privilegedAnswers).length === 5, () => {
+            const notApproved = _privilegedAnswers["not approved"];
+            assert(notApproved.blocked === "undeclared" && notApproved.error === "asks for administrator rights; the user has not approved its declaration",
+                   "a declared program, its declaration not approved: blocked undeclared: " + JSON.stringify(notApproved));
+            const legacy = _privilegedAnswers.legacy;
+            assert(!legacy.ok && legacy.blocked === "undeclared" && legacy.error === "a run as administrator from code the shell cannot trace to a module is refused",
+                   "PrivilegedAction from code traced to no module: blocked undeclared: " + JSON.stringify(legacy));
             const answer = _privilegedAnswers.undeclared;
             assert(!answer.ok && answer.blocked === "undeclared" && !answer.dismissed && !answer.refused && answer.code === -1 && answer.stderr === ""
                    && answer.error === "asks for administrator rights; module.json does not declare it (privileged)",
@@ -687,6 +707,11 @@ TestCase {
                    "a declared module running a program it did not declare: blocked undeclared, which said: " + JSON.stringify(stray));
             assert(_has(_status("privileged")?.errors, "privileged.programs does not name it"), "… in its status");
             assertEqual(PrivilegedRuns.count, 0, "the queue is empty");
+            suite._exists = null;
+            _sh("if [ -e \"$1\" ]; then echo ran; else echo never; fi", [_mark], (code, output) => suite._exists = output.trim());
+        });
+        _then("the stand-in pkexec's mark is looked for", () => _exists !== null, () => {
+            assertEqual(_exists, "never", "… the undeclared fixture's stand-in pkexec never ran");
             host.unload();
             const testHost = host;
             suite.host = suite._mainHost;

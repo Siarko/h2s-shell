@@ -809,16 +809,15 @@ import qs.singletons.network
 //   nothing run, `blocked: "undeclared"`, the reason in `error` and among the module's
 //   status errors (logged once per text) — when the module has no such block, when the user
 //   has not approved it, or when `argv[0]` is not the path `module.programs` has for one of
-//   the declared programs. PrivilegedAction from a module's code is refused the same way
-//   without the block or the approval (its command is not checked against `programs`).
+//   the declared programs that is `trusted`. PrivilegedAction is refused the same way
+//   (command[0] for argv[0]), and also when the shell cannot trace the call to a module's
+//   code.
 //   This holds whatever API the manifest asks for. `"author"` (plain text on one line, at most
 //   100 characters) names who wrote the module; a new author asks the user again.
 //   What it is and what it is not: a guard against a module's mistakes and a statement for
 //   the user — an honest module cannot start asking for a password without saying so, and an
 //   update that starts asking stops at a question. It is not a sandbox: a module runs in the
-//   shell's process and can start programs, pkexec among them, by other means, and a run the
-//   shell cannot trace to a module's code (PrivilegedAction called from nowhere it can see)
-//   is not checked. Against a module that is not the project's, the user's protection is
+//   shell's process and can start programs, pkexec among them, by other means. Against a module that is not the project's, the user's protection is
 //   knowing what they install.
 //   module.privileged.available   a trusted pkexec, setuid root, and a trusted `timeout`
 //                          (coreutils) were found
@@ -891,7 +890,7 @@ import qs.singletons.network
 //                            blocked "locked"       the session is locked (dismissed too: the
 //                                            user clicks again once unlocked)
 //                            blocked "undeclared"   (1.36) not declared, not approved, or
-//                                            argv[0] not among the declared programs (the
+//                                            argv[0] not among the declared, trusted programs (the
 //                                            declaration, above); in the module's status too
 //                            notFound        argv[0] is "" (the path of a program not
 //                                            found), or not an absolute path, or — checked

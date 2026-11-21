@@ -118,9 +118,16 @@ TestCase {
                "argv[0] not absolute (root's PATH is never searched): notFound: " + JSON.stringify(relative));
         // The command is not parsed: whatever argv[0] is, an absolute path the manifest declares passes
         for (const argv of [["/bin/sh", "-c", "id"], ["/usr/bin/env", "tailscale"], ["/usr/bin/python3", "-c", "x"],
-                            ["/usr/bin/timeout", "5", "/bin/sh"], ["/nix/store/abc-coreutils-9.5/bin/coreutils", "--coreutils-prog=env", "/bin/sh"],
-                            ["/home/u/.local/bin/tool"]])
+                            ["/usr/bin/timeout", "5", "/bin/sh"], ["/nix/store/abc-coreutils-9.5/bin/coreutils", "--coreutils-prog=env", "/bin/sh"]])
             assertEqual(asked({ argv: argv, declaration: { problem: "", paths: [argv[0]] } }), null, "an absolute argv[0] declared passes, whatever it is: " + argv[0]);
+        // … but a declared program the user could change is no declared path: refused
+        const userWritable = rules.declaration({ why: "x", programs: ["tool"] }, undefined, "x",
+                                               { tool: { path: "/home/u/.local/bin/tool", trusted: false, reason: "the user can write it" } });
+        assertEqual(userWritable.paths.length, 0, "a declared program that is not trusted: no path");
+        assertEqual(asked({ argv: ["/home/u/.local/bin/tool"], declaration: userWritable }).blocked, "undeclared",
+                    "a declared program in a place the user can write: blocked undeclared");
+        assertEqual(rules.declaration({ why: "x", programs: ["tool"] }, undefined, "x", { tool: { path: "/usr/bin/tool" } }).paths.length, 0,
+                    "trusted not said: no path");
 
         // --- (1.36) the manifest's declaration ---
         const programsFound = { tailscale: { path: "/usr/bin/tailscale", trusted: true }, systemctl: { path: "/usr/bin/systemctl", trusted: true },
@@ -159,6 +166,17 @@ TestCase {
         assertEqual(rules.refusedResult(undeclared).blocked + " " + rules.refusedResult(undeclared).dismissed, "undeclared false",
                     "the answer: blocked undeclared, not dismissed");
         assert(rules.blockedReasons.includes("undeclared"), "undeclared is a blocked reason");
+        // The old PrivilegedAction: a module on the stack, declared, approved, the program declared
+        const approved = rules.declaration(block, undefined, "tailscale", programsFound);
+        assertEqual(rules.legacyDeclarationProblem("tailscale", approved, "/usr/bin/tailscale"), "", "PrivilegedAction: a declared program from a declaring module: goes on");
+        assertEqual(rules.legacyDeclarationProblem("", approved, "/usr/bin/tailscale"),
+                    "a run as administrator from code the shell cannot trace to a module is refused", "PrivilegedAction from no module seen: refused (fail closed)");
+        assertEqual(rules.legacyDeclarationProblem(undefined, approved, "/usr/bin/tailscale") !== "", true, "… no id at all: refused");
+        assert(rules.legacyDeclarationProblem("tailscale", approved, "/bin/sh").includes("privileged.programs does not name it"),
+               "PrivilegedAction: a program not declared: refused, which said");
+        assert(rules.legacyDeclarationProblem("tailscale", null, "/usr/bin/tailscale").includes("does not declare it"), "PrivilegedAction: no declaration: refused");
+        assert(rules.legacyDeclarationProblem("tailscale", rules.declaration(block, {}, "tailscale", programsFound), "/usr/bin/tailscale").includes("not approved"),
+               "PrivilegedAction: not approved: refused");
         // Its place in the order: after notFound and the module off, before the lock and the rest
         assert(asked({ argv: ["", "up"], declaration: undefined }).notFound, "notFound before undeclared");
         assertEqual(asked({ active: false, declaration: undefined }).error, "the module is off", "module off before undeclared");

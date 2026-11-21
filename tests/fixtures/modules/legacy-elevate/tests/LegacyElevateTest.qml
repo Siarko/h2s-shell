@@ -56,10 +56,11 @@ TestCase {
         assert((ModuleTestKit.status("legacy-elevate")?.deprecations ?? []).some(line => line.includes("will be removed")),
                "the gate is in its deprecations, which say it will be removed: " + JSON.stringify(ModuleTestKit.status("legacy-elevate")?.deprecations));
         outside.elevate = [outsideStandIn];
-        outside.run(["/bin/sh", "-c", "echo legacy"], "Outside stand-in", result => suite._results.outside = result);
-        system.run(["/bin/sh", "-c", "echo never"], "System pkexec", result => suite._results.system = result);
-        wrapper.run(["/bin/sh", "-c", "echo never"], "Setuid wrapper", result => suite._results.wrapper = result);
-        byName.run(["/bin/sh", "-c", "echo never"], "By name", result => suite._results.byName = result);
+        assert(module.programs.sh?.trusted === true, "its declared sh, from PATH, trusted: " + JSON.stringify(module.programs.sh));
+        outside.run([module.programs.sh.path, "-c", "echo legacy"], "Outside stand-in", result => suite._results.outside = result);
+        system.run([module.programs.sh.path, "-c", "echo never"], "System pkexec", result => suite._results.system = result);
+        wrapper.run([module.programs.sh.path, "-c", "echo never"], "Setuid wrapper", result => suite._results.wrapper = result);
+        byName.run([module.programs.sh.path, "-c", "echo never"], "By name", result => suite._results.byName = result);
         runner.start([outsideStandIn, "/bin/true"], { done: result => suite._results.plain = result });
         _wait.start();
     }

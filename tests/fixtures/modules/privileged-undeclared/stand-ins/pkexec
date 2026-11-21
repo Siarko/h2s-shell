@@ -1,4 +1,6 @@
 #!/bin/sh
-# Stands in for pkexec (module test mode); never reached: the fixture's runs are refused first
+# Stands in for pkexec (module test mode); never reached: the fixture's runs are refused
+# first. Were it run, it would leave UNDECLARED_MARK behind for the suite to find
+if [ -n "${UNDECLARED_MARK-}" ]; then : > "$UNDECLARED_MARK"; fi
 echo "the undeclared fixture's pkexec ran" >&2
 exit 1

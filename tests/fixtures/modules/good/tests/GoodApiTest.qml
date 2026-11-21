@@ -135,8 +135,9 @@ TestCase {
         assertEqual(ModuleTestKit.status("good")?.deprecations.length, 0, "a 1.10 module: no test-mode gate in its deprecations");
         // Its programs (API 1.9): pkexec, from its testPrograms in test mode, never from PATH
         assertEqual(JSON.stringify(module.programs),
-                    JSON.stringify({ pkexec: { path: module.directory + "/tests/programs/pkexec", trusted: true, reason: "test stand-in" } }),
-                    "programs: pkexec is the stand-in in its testPrograms, trusted as one");
+                    JSON.stringify({ pkexec: { path: module.directory + "/tests/programs/pkexec", trusted: true, reason: "test stand-in" },
+                                     sh: { path: module.directory + "/tests/programs/sh", trusted: true, reason: "test stand-in" } }),
+                    "programs: pkexec and sh are the stand-ins in its testPrograms, trusted as such");
         assert(module.programsReady && Object.isFrozen(module.programs), "… ready, frozen");
         assertEqual(ModuleTestKit.status("good")?.state, "loaded", "ModuleTestKit.status(id)");
         assertEqual(ModuleTestKit.status("no-such-module"), null, "… null for no module");
@@ -431,16 +432,17 @@ TestCase {
         outsider.elevate = [String(Qt.resolvedUrl("../../../legacy-tools/pkexec")).replace(/^file:\/\//, "")];
         outsider.run(["/bin/sh", standIn, "as root"], "Another elevating program", result => suite._results.outsider = result);
         admin.elevate = [module.programs.pkexec.path];
-        admin.run(["/bin/sh", standIn, "as root"], "Running the stand-in", result => suite._results.root = result);
+        admin.run([module.programs.sh.path, standIn, "as root"], "Running the stand-in", result => suite._results.root = result);
         // The command read once: a word that changes after its first read runs as first read
-        const switching = ["/bin/sh", standIn, "as root"];
+        const switching = [module.programs.sh.path, standIn, "as root"];
         let switchReads = 0;
         Object.defineProperty(switching, 2, { get() { return ++switchReads === 1 ? "as root" : "switched"; }, enumerable: true });
         admin.run(switching, "Read once", result => suite._results.readOnce = result);
-        admin.run(["/bin/sh", standIn], "Dismissing", result => suite._results.dismissed = result, { FAKE_PKEXEC_EXIT: "126" });
-        admin.run(["/bin/sh", standIn], "Refusing", result => suite._results.refused = result, { FAKE_PKEXEC_EXIT: "127" });
-        // API 1.2: a program that is not there, or not given by an absolute path, is notFound —
-        // never shown as "not authorised" (pkexec would exit 127 for it); pkexec not asked
+        admin.run([module.programs.sh.path, standIn], "Dismissing", result => suite._results.dismissed = result, { FAKE_PKEXEC_EXIT: "126" });
+        admin.run([module.programs.sh.path, standIn], "Refusing", result => suite._results.refused = result, { FAKE_PKEXEC_EXIT: "127" });
+        // API 1.2: a program not given by an absolute path is notFound — never shown as "not
+        // authorised" (pkexec would exit 127 for it); pkexec not asked. (1.36) One that is not
+        // a declared program is refused as undeclared, before it is looked for
         admin.run(["/nonexistent/h2s-no-such-program"], "Missing", result => suite._results.missing = result, { FAKE_PKEXEC_EXIT: "127" });
         admin.run(["sh", standIn], "Relative", result => suite._results.relative = result);
         admin.run("not a list", "Nothing", result => suite._results.bad = result);
@@ -496,7 +498,7 @@ TestCase {
             assertEqual(ModuleTestKit.cancelChooser("good"), "no chooser is open", "… none open now");
             ModuleTestKit.setChooserLocked(true);
             // The chooser's lock alone: a run as administrator started now is not refused
-            admin.run(["/bin/sh", standIn, "as root"], "During the chooser's lock", result => suite._results.duringChooserLock = result);
+            admin.run([module.programs.sh.path, standIn, "as root"], "During the chooser's lock", result => suite._results.duringChooserLock = result);
             module.chooseFiles({}, result => suite._chosen = suite._chosen.concat([result]));
             assert(!ModuleTestKit.chooserOpen && ModuleTestKit.chooserCalls.length === 2, "locked: nothing opens, nothing recorded");
         });
@@ -545,8 +547,9 @@ TestCase {
             assert(_results.dismissed.dismissed && !_results.dismissed.ok, "PrivilegedAction: 126 is dismissed");
             assert(_results.refused.refused && !_results.refused.dismissed, "PrivilegedAction: 127 is refused");
             assert(!_results.bad.ok, "PrivilegedAction: not a command — refused, answered");
-            assert(_results.missing.notFound && !_results.missing.refused && !_results.missing.dismissed && !_results.missing.ok,
-                   "PrivilegedAction: a missing program is notFound, not refused: " + JSON.stringify(_results.missing));
+            assert(_results.missing.blocked === "undeclared" && !_results.missing.refused && !_results.missing.dismissed && !_results.missing.ok
+                   && _results.missing.error.includes("privileged.programs does not name it"),
+                   "PrivilegedAction: a program it did not declare (a missing one) is blocked undeclared, not refused: " + JSON.stringify(_results.missing));
             assert(_results.relative.notFound && !_results.relative.refused, "PrivilegedAction: a relative path is notFound (an absolute path is required)");
             assert(!_results.root.notFound && _results.refused.notFound === false, "PrivilegedAction: notFound false when the program is there");
             assertEqual(JSON.stringify(_queried), "[\"queried\"]", "CommandQuery: its lines");

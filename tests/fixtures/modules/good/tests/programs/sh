@@ -1,0 +1,4 @@
+#!/bin/sh
+# The shell the good fixture's suite runs as "root" through PrivilegedAction (its testPrograms:
+# module.programs.sh, the program its manifest's privileged block declares)
+exec /bin/sh "$@"

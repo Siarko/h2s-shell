@@ -5,6 +5,7 @@
     "api": "1.9",
     "description": "A module written for API 1.9 whose suites put a stand-in pkexec of their own into PrivilegedAction's elevate (tests/fixtures/modules)",
     "main": "Main.qml",
-    "privileged": { "why": "Runs a shell as administrator through PrivilegedAction", "programs": [] },
+    "optionalPrograms": ["sh"],
+    "privileged": { "why": "Runs a shell as administrator through PrivilegedAction", "programs": ["sh"] },
     "tests": ["tests/LegacyElevateTest.qml"]
 }

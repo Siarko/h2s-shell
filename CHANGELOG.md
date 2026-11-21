@@ -29,9 +29,10 @@ The interface modules are written against (`qs.api`), versioned on its own
   characters; `programs` names among its `requires.programs` and `optionalPrograms`); a
   malformed block fails the module. The shell refuses `module.privileged.start` from a
   module without the block, without the user's approval of it, or with an `argv[0]` that is
-  not the path `module.programs` has for a declared program — before any prompt, nothing
-  run, `blocked: "undeclared"`, the reason among the module's status errors; and
-  `PrivilegedAction` from a module's code without the block or the approval. This holds for
+  not the path `module.programs` has for a declared, trusted program — before any prompt,
+  nothing run, `blocked: "undeclared"`, the reason among the module's status errors; and
+  `PrivilegedAction` the same way (its command[0] for argv[0]), and whenever its call cannot
+  be traced to a module's code. This holds for
   modules written for any API: one that runs anything as administrator must add the block.
   A guard against mistakes and a statement for the user, not a sandbox: a module runs in
   the shell's process and can start programs by other means. `author` (plain text on one

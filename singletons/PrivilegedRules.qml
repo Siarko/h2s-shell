@@ -160,7 +160,7 @@ Singleton {
     // → { problem: "" | why nothing may run, paths: [the declared programs' absolute paths] }
     //   no block: refused; a list that is no object, or an acknowledgement for the id that does
     //   not say privileged: true: refused (not approved); else the paths of the declared
-    //   programs that were found.
+    //   programs that were found and are trusted (module.programs' `trusted`).
     // A guard against a module's mistakes and a statement for the user, not a sandbox: a
     // module runs in the shell's process and can start programs by other means.
     function declaration(privileged, acknowledgements, moduleId, programs) {
@@ -173,14 +173,38 @@ Singleton {
             if (!ModuleRules.isObject(given) || given.privileged !== true)
                 return none("asks for administrator rights; the user has not approved its declaration");
         }
+        // Only a program only root can change: one the user can write, run as root, would let
+        // any of the user's processes become root
         const paths = [];
         for (const name of privileged.programs) {
-            const path = ModuleRules.isObject(programs) && typeof name === "string" && ModuleRules.has(programs, name)
-                ? programs[name]?.path : "";
-            if (typeof path === "string" && path.startsWith("/") && !paths.includes(path))
+            const verdict = ModuleRules.isObject(programs) && typeof name === "string" && ModuleRules.has(programs, name) ? programs[name] : null;
+            const path = verdict?.path;
+            if (verdict?.trusted === true && typeof path === "string" && path.startsWith("/") && !paths.includes(path))
                 paths.push(path);
         }
         return { problem: "", paths: paths };
+    }
+
+    // Why `program` (a run's argv[0]) may not run as administrator under `declared`
+    // (declaration()'s answer; anything else: nothing declared) — "" when it may
+    function declaredProblem(declared, program) {
+        if (!ModuleRules.isObject(declared) || typeof declared.problem !== "string" || !Array.isArray(declared.paths))
+            return "asks for administrator rights; module.json does not declare it (privileged)";
+        if (declared.problem !== "")
+            return declared.problem;
+        if (typeof program !== "string" || !declared.paths.includes(program))
+            return "runs " + JSON.stringify(String(program).slice(0, 200)) + " as administrator; module.json's privileged.programs does not name it";
+        return "";
+    }
+
+    // The old PrivilegedAction's run (1.36): `moduleId` the module whose code is on the call's
+    // stack ("" when none is seen), `declared` its declaration(), `program` the command's
+    // first word. "" when it may go on. A run the shell cannot trace to a module is refused:
+    // nothing would say who asks
+    function legacyDeclarationProblem(moduleId, declared, program) {
+        if (typeof moduleId !== "string" || moduleId === "")
+            return "a run as administrator from code the shell cannot trace to a module is refused";
+        return declaredProblem(declared, program);
     }
 
     // Why a run is refused before pkexec runs, or null when it may be queued. These checks
@@ -219,14 +243,9 @@ Singleton {
             return refuse("", ModuleRules.show(argv[0].slice(0, 200)) + " is not an absolute path (a program's path, as module.programs has it)", true);
         if (request.active !== true)
             return refuse("", "the module is off");
-        const declared = request.declaration;
-        if (!ModuleRules.isObject(declared) || typeof declared.problem !== "string" || !Array.isArray(declared.paths))
-            return refuse("undeclared", "asks for administrator rights; module.json does not declare it (privileged)");
-        if (declared.problem !== "")
-            return refuse("undeclared", declared.problem);
-        if (!declared.paths.includes(argv[0]))
-            return refuse("undeclared", "runs " + JSON.stringify(argv[0].slice(0, 200))
-                          + " as administrator; module.json's privileged.programs does not name it");
+        const undeclared = declaredProblem(request.declaration, argv[0]);
+        if (undeclared !== "")
+            return refuse("undeclared", undeclared);
         if (request.locked === true)
             return refuse("locked", "the session is locked");
         if (options.what === "")

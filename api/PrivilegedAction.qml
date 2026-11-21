@@ -29,6 +29,10 @@ import qs.singletons.io as Io
 // No time limit: the command decides how long it takes. The object destroyed (its module
 // turned off): its runs leave the queue, a started one is cancelled, nothing is called.
 // Replaced by `module.privileged.start` (1.11): a time limit, `what` in the prompt, live output.
+// (1.36) Runs only from a module's code (the call's stack names the module), with its
+// manifest's `privileged` block, approved, and command[0] the path of a declared, trusted
+// program (module.programs) — else answered { blocked: "undeclared", error } before any
+// prompt, the reason in the module's status.
 // What cannot be told apart: a command that itself exits 126 or 127 looks exactly like pkexec's
 // own 126 / 127 (pkexec passes the command's status through). Give a command that may exit
 // with those its own wrapper, or read its output, before taking `dismissed` / `refused` as
@@ -75,18 +79,7 @@ QtObject {
         // run it is (for the log)
         const stack = new Error().stack;
         const rule = Modules.host.testMode ? Modules.host.testCallRule(stack) : "strict";
-        // (1.36) A module seen on the stack runs as administrator only with its manifest's
-        // `privileged` block, approved — refused before any prompt, the reason in its status.
-        // Which program runs is not checked here: this type's commands name any absolute path
         const moduleId = _moduleOf(stack);
-        if (moduleId !== "") {
-            const declared = Modules.host.privilegedDeclaration(moduleId, null);
-            if (declared.problem !== "") {
-                Modules.host.reportError(moduleId, declared.problem);
-                done?.({ ok: false, code: -1, dismissed: false, refused: false, notFound: false, blocked: "undeclared", lines: [], error: declared.problem });
-                return;
-            }
-        }
         const givenElevate = elevate;
         const elevateSnapshot = CommandRules.argvSnapshot(givenElevate, false);
         const elevating = elevateSnapshot.argv ?? (Array.isArray(givenElevate) ? Array.from(givenElevate) : givenElevate);
@@ -103,6 +96,21 @@ QtObject {
                           systemPkexec: PrivilegedRules.legacySystemPkexec(elevating, Modules.host.testMode), moduleId: moduleId };
         if (!command[0].startsWith("/")) {
             _notFound(request, command[0] + " is not an absolute path (pkexec needs one)");
+            return;
+        }
+        // (1.36) Only from a module's code, with its manifest's `privileged` block, approved,
+        // and command[0] one of the declared programs as its handle has it — refused before
+        // any prompt, the reason in the module's status (PrivilegedRules.legacyDeclarationProblem)
+        const handle = moduleId !== "" ? Modules.host.handle(moduleId) : null;
+        const undeclared = PrivilegedRules.legacyDeclarationProblem(moduleId,
+            handle ? Modules.host.privilegedDeclaration(moduleId, handle.programs) : null, command[0]);
+        if (undeclared !== "") {
+            if (moduleId !== "")
+                Modules.host.reportError(moduleId, undeclared);
+            else if (root._untracedWarned !== label)
+                console.warn("[Modules] PrivilegedAction refused " + JSON.stringify(label.slice(0, 100)) + ": " + undeclared);
+            root._untracedWarned = moduleId === "" ? label : root._untracedWarned;
+            done?.({ ok: false, code: -1, dismissed: false, refused: false, notFound: false, blocked: "undeclared", lines: [], error: undeclared });
             return;
         }
         if (!Modules.host.testMode || rule !== "legacy") {
@@ -127,6 +135,9 @@ QtObject {
     // Test mode, the gate: the elevating programs the probe found to be stand-ins (REMOVED IN
     // SLICE Z with the gate)
     property var _checkedElevate: []
+
+    // The last run refused for want of a module, logged once while it repeats
+    property string _untracedWarned: ""
 
     // This object's runs, one at a time: the one in the shell's queue, and those after it
     property var _queue: []

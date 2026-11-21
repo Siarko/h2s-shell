@@ -37,6 +37,11 @@ Singleton {
     // unless listed here. Global, not per profile: which code runs in the shell is not a
     // preference a profile switches.
     property alias disabledModules: _adapter.disabledModules
+    // The user's acknowledgements of modules, { <id>: { source, address, author, privileged } }
+    // (ModuleInstallRules.needsConfirmation; PrivilegedRules.declaration reads `privileged`).
+    // Not kept in the file: undefined unless set in this run — every module found counts as
+    // acknowledged as it is
+    property var acknowledgedModules: undefined
     // The notice about locking before sleep last given (SleepLockNotice,
     // LockIoRules.sleepNoticeStep): remembered, so it is given once, not at every start
     property alias sleepLockNotice: _adapter.sleepLockNotice

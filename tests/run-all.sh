@@ -14,7 +14,7 @@
 #   tests/run-unit.sh                                   the unit suites
 #   tests/run-modules.sh tests/fixtures/modules/good tests/fixtures/modules/legacy-elevate
 #                                                       modules' suites, on the fixtures
-#   tests/run-modules.sh tests/fixtures/modules/privileged
+#   tests/run-modules.sh tests/fixtures/modules/privileged tests/fixtures/modules/privileged-undeclared
 #                                                       runs as administrator, on a fixture
 #                                                       (alone: its suite times the shell's
 #                                                       one queue)
@@ -60,7 +60,7 @@ parts=(
     "install.sh under stand-ins|tests/install-test.sh"
     "unit suites|tests/run-unit.sh"
     "module fixture suites|tests/run-modules.sh tests/fixtures/modules/good tests/fixtures/modules/legacy-elevate"
-    "privileged runs fixture|tests/run-modules.sh tests/fixtures/modules/privileged"
+    "privileged runs fixture|tests/run-modules.sh tests/fixtures/modules/privileged tests/fixtures/modules/privileged-undeclared"
     "tool lookup self-test|tests/resolve-selftest.sh"
     "supervisor self-test|tests/launcher-selftest.sh"
     "deploy check self-test|tests/deploy-check-selftest.sh"
