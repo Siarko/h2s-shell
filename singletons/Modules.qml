@@ -283,7 +283,7 @@ Singleton {
                 _host.setTestMode(true);
             _host.load(typeof value === "string" ? value : "", {
                 safeMode: safe, searched: discovery.searched,
-                safeModeReason: "the launcher started the shell in safe mode (H2S_SHELL_SAFE_MODE=1): it died within 30 s of starting twice in a row"
+                safeModeReason: "the launcher started the shell in safe mode (H2S_SHELL_SAFE_MODE=1): it died within 30 s of starting repeatedly, twice in a row or more"
             });
             if (safe)
                 console.warn("[Modules] safe mode (the shell died quickly twice): no module is loaded");

@@ -74,7 +74,8 @@ Rectangle {
 
             RowLayout {
                 id: _actions
-                Layout.topMargin: children.length > 0 ? 4 : 0
+                visible: children.length > 0
+                Layout.topMargin: 4
                 spacing: 6
             }
         }

@@ -86,7 +86,7 @@ TestCase {
         const words = rules.safeModeBanner({ cause: "launcher", previousModulesOn: ["tailscale", "weather", "exitmap"], statuses: statuses,
                                              record: record, nowMs: now });
         assertEqual(words.title, "Started without modules", "safe-mode banner: its title");
-        assertEqual(words.body, "The shell crashed twice within 30 seconds of starting. Modules on when it crashed: Tailscale, Weather, exitmap. "
+        assertEqual(words.body, "The shell crashed repeatedly within 30 seconds of starting. Modules on when it crashed: Tailscale, Weather, exitmap. "
                     + "Weather was updated 10 min ago. notes was installed 3 h ago.",
                     "… why, the modules on by name (an id without a status as it is), the last day's installs and updates, newest first");
         assertEqual(JSON.stringify(words.load), JSON.stringify({ label: "Load modules", available: true }), "… Load modules offered");
@@ -98,12 +98,12 @@ TestCase {
                     "… twice, the window in whole seconds");
         assertEqual(rules.safeModeBanner(null).body, "The shell was started in safe mode.", "… a cause not known: said plainly; nothing throws");
         assertEqual(rules.safeModeBanner({ cause: "launcher", previousModulesOn: ["a1", "a2", "a3", "a4", "a5", "a6", "a7", "a8"] }).body,
-                    "The shell crashed twice within 30 seconds of starting. Modules on when it crashed: a1, a2, a3, a4, a5, a6 and 2 more.",
+                    "The shell crashed repeatedly within 30 seconds of starting. Modules on when it crashed: a1, a2, a3, a4, a5, a6 and 2 more.",
                     "… a long list: the first " + rules.safeModeNamesShown + " named, the rest counted");
         const evil = rules.safeModeBanner({ cause: "launcher", previousModulesOn: ["evil"], statuses: statuses }).body;
         assert(evil.includes("<b>Evil</b> line.") && !evil.includes("\n"), "… a name from outside on one line, as written (shown as plain text)");
         assertEqual(rules.safeModeBanner({ cause: "launcher", previousModulesOn: ["x".repeat(300)] }).body.length < 200, true, "… capped");
-        assertEqual(rules.safeModeBanner({ cause: "launcher", record: record }).body, "The shell crashed twice within 30 seconds of starting.",
+        assertEqual(rules.safeModeBanner({ cause: "launcher", record: record }).body, "The shell crashed repeatedly within 30 seconds of starting.",
                     "… no moment known: no install or update named");
     }
 

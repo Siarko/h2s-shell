@@ -287,6 +287,9 @@ Scope {
     property int _discoveryGeneration: 0
     // What the last search's failure said (logged on a change)
     property string _discoveryOutcome: ""
+    // How the last search (rediscover(), loadWithoutSafeMode()) ended: "" when it loaded, else
+    // why nothing was loaded — the safe-mode banner says it
+    readonly property string discoveryOutcome: _discoveryOutcome
     // id → handle (api/ModuleHandle.qml), made on first use, kept for the host's life
     property var _handles: new Map()
     // "slot|module|url" → a holder of the Component that slotComponent() hands out

@@ -1084,7 +1084,7 @@ Singleton {
 
     // What the safe-mode banner says and offers, in the HUD and on the Modules page →
     // { title, body, load: { label, available } }. `facts`: { cause — "launcher" (the
-    // launcher's own safe mode), "relaunch" (the start guard: Quickshell relaunched a crashed
+    // launcher's own safe mode: two quick deaths in a row or more, not counted here), "relaunch" (the start guard: Quickshell relaunched a crashed
     // shell), anything else unknown; count (the guard's count), windowSeconds (the guard's
     // window), previousModulesOn ([ids] the last run wrote), statuses (the host's, for names),
     // record (parseRecord's { modules }: when the active version was fetched), nowMs,
@@ -1097,7 +1097,7 @@ Singleton {
         };
         const count = Number.isInteger(facts?.count) && facts.count > 2 ? facts.count : 2;
         const seconds = Number.isFinite(facts?.windowSeconds) && facts.windowSeconds > 0 ? Math.round(facts.windowSeconds) : 30;
-        const why = facts?.cause === "launcher" ? "The shell crashed twice within 30 seconds of starting."
+        const why = facts?.cause === "launcher" ? "The shell crashed repeatedly within 30 seconds of starting."
             : facts?.cause === "relaunch" ? "The shell crashed " + (count === 2 ? "twice" : count + " times") + " within " + seconds + " seconds of starting."
             : "The shell was started in safe mode.";
         const parts = [why];

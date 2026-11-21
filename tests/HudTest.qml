@@ -35,6 +35,7 @@ TestCase {
         property bool discovering: false
         property bool locked: false
         property string refusal: ""
+        property string discoveryOutcome: ""
         property var calls: []
 
         function loadWithoutSafeMode() {
@@ -152,7 +153,7 @@ TestCase {
         const banner = hud.warnings.safeModeBanner;
         assert(_until(() => hud.visible && banner.visible && banner.width > 0 && banner.height > 0), "in safe mode the banner shows");
         assertEqual(_named(banner, "warningTitle").text, "Started without modules", "… its title");
-        assertEqual(_named(banner, "warningBody").text, "The shell crashed twice within 30 seconds of starting. Modules on when it crashed: Tailscale, Weather. "
+        assertEqual(_named(banner, "warningBody").text, "The shell crashed repeatedly within 30 seconds of starting. Modules on when it crashed: Tailscale, Weather. "
                     + "Weather was updated 10 min ago.", "… why, the modules on when it crashed, the one updated in the last day");
         assertEqual(_named(banner, "warningBody").textFormat, Text.PlainText, "… as plain text");
         const open = _named(banner, "openModules");
@@ -186,6 +187,16 @@ TestCase {
         _driver.wait(50);
         assertEqual(_host.calls.length, 2, "… a click then does nothing");
 
+        // The search fails: said in the banner, Load modules offered again
+        _host.discoveryOutcome = "the module search failed (status 1): the modules stay as they are";
+        _host.discovering = false;
+        assert(_until(() => _named(banner, "warningBody").text.endsWith("\nThe module search failed (status 1): the modules stay as they are")),
+               "a search that failed says why in the banner");
+        assert(load.label === "Load modules" && load.available, "… Load modules offered again");
+        _host.discoveryOutcome = "";
+        _click(load);
+        assert(_until(() => _host.calls.length === 3 && !_named(banner, "warningBody").text.includes("\n")), "… clicked again: the old reason gone");
+
         _host.safeMode = false;
         _host.discovering = false;
         assert(_until(() => !banner.visible && hud.warnings.maskItem === null), "out of safe mode: no banner, nothing in the input mask");
@@ -204,5 +215,17 @@ TestCase {
         _host.safeMode = true;
         _driver.wait(50);
         assert(!banner.visible, "… it stays closed for the run");
+
+        // Out of safe mode, another warning shown: the mask is that warning alone
+        _host.safeMode = false;
+        Theme.nerdFontWarningDismissed = false;
+        if (Theme.nerdFontInstalled) {
+            // Fonts present here: the warning cannot show; the launch warning stands in
+            Theme.nerdFontWarningDismissed = true;
+            IconThemes.launchWarningDismissed = false;
+        }
+        const other = () => hud.warnings.children.find(child => child !== banner && child.visible && child.height > 0) ?? null;
+        assert(_until(() => other() !== null && hud.warnings.maskItem !== null), "another warning shown: in the mask");
+        assertEqual(_rect(hud.warnings.maskItem), _rect(other()), "… the mask is that warning's rectangle, not the banner's");
     }
 }
