@@ -1,0 +1,24 @@
+#!/bin/sh
+# A stand-in for hyprctl (tests/ScreenPowerReadingTest.qml), started through a link in the
+# suite's scratch directory: `-j monitors` prints that directory's `monitors.json` (fails
+# while `read-fails` is there); `dispatch <expression>` appends the expression to
+# `dispatches` and prints "ok" (or Hyprland's kind of refusal while `dispatch-fails` is
+# there). Anything else it is asked fails.
+here=$(dirname "$0")
+case "$1 $2" in
+    "-j monitors")
+        if [ -e "$here/read-fails" ]; then
+            echo "HYPRLAND_INSTANCE_SIGNATURE was not set! (Is Hyprland running?)" >&2
+            exit 1
+        fi
+        cat "$here/monitors.json" ;;
+    "dispatch "*)
+        [ $# -eq 2 ] || { echo "the stand-in takes one expression" >&2; exit 2; }
+        printf '%s\n' "$2" >> "$here/dispatches"
+        if [ -e "$here/dispatch-fails" ]; then
+            echo "error: dispatcher failed"
+        else
+            echo "ok"
+        fi ;;
+    *) echo "the stand-in only knows -j monitors and dispatch" >&2; exit 2 ;;
+esac

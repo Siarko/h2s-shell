@@ -1,0 +1,21 @@
+[{
+    "id": 1,
+    "name": "DP-2",
+    "description": "Samsung Electric Company C27JG5x H4ZMC00268",
+    "make": "Samsung Electric Company",
+    "model": "C27JG5x",
+    "serial": "H4ZMC00268",
+    "dpmsStatus": true,
+    "disabled": false,
+    "mirrorOf": "none"
+},{
+    "id": 0,
+    "name": "eDP-1",
+    "description": "BOE 0x0BCA",
+    "make": "BOE",
+    "model": "0x0BCA",
+    "serial": "",
+    "dpmsStatus": true,
+    "disabled": false,
+    "mirrorOf": "none"
+}]

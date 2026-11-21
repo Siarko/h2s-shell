@@ -480,9 +480,11 @@ connector name and model; its `serialNumber` is **empty** on Wayland (read here:
   that does not exist yet. GNOME and KDE offer no such protocol (they blank by themselves).
 - **Hyprland:** per monitor through its dispatcher, Lua API `hl.dsp.dpms({ action =
   "disable", monitor = "<connector>" })` / `"enable"` (0.57.2's `dpms(action, optional
-  monitor)`; the key name `monitor` is checked on the lock bed's private Hyprland before the
-  slice relies on it), classic config `hyprctl dispatch dpms off <connector>`. The power state
-  is `dpmsStatus` in `hyprctl -j monitors`, which also carries `make`, `model`, `serial`.
+  monitor)`; checked on a private nested Hyprland: `monitor` is the key, `hyprctl dispatch`
+  prints "ok" even for a bad action, and **a monitor name it does not know turns every monitor
+  off** — so only a connector of the last reading is ever dispatched), classic config
+  `hyprctl dispatch dpms off <connector>`. The power state is `dpmsStatus` in
+  `hyprctl -j monitors`, which also carries `make`, `model`, `serial`.
   Hyprland's `key_press_enables_dpms` / `mouse_move_enables_dpms` turn monitors on at input by
   themselves — kept: a wake works even when the shell hangs.
 - **What always needs the compositor:** cutting one output's power and reading its power
