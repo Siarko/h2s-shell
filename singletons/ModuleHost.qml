@@ -412,6 +412,29 @@ Scope {
         return "";
     }
 
+    // The user approved an update of a module (the consent box's "Update", `modules approve`):
+    // its acknowledgement becomes what the new version is (`acknowledgement`:
+    // ModuleInstallRules.acknowledgementOf's shape), before the switch, so the new version
+    // loads without asking again. Whether it is on stays as it was. → "" when done (or when
+    // this host confirms nothing), else why not
+    function acknowledgeUpdate(id, acknowledgement) {
+        if (locked)
+            return "Refused while the session is locked";
+        if (typeof id !== "string" || !ModuleRules.idPattern.test(id) || !ModuleRules.isObject(acknowledgement))
+            return "Not an acknowledgement";
+        if (!confirmations)
+            return "";
+        if (Config.loadFailed)
+            return "The config file could not be read: nothing can be saved";
+        const list = Object.assign({}, ModuleRules.isObject(acknowledgements) ? acknowledgements : {});
+        list[id] = { source: String(acknowledgement.source ?? ""), address: String(acknowledgement.address ?? ""),
+                     author: typeof acknowledgement.author === "string" ? acknowledgement.author : "",
+                     privileged: acknowledgement.privileged === true };
+        Config.setAcknowledgedModules(list);
+        console.info("[Modules] " + id + ": the update approved");
+        return "";
+    }
+
     // Forgets the user's acknowledgement of a module (Remove): installed again, it asks
     // again. Nothing when no list was written yet. → true when one was dropped
     function dropAcknowledgement(id) {

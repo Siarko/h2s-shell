@@ -310,6 +310,15 @@ Singleton {
           ],
           hint: "Asks for an administrator's password when a program needs one (polkit). Only one agent can answer: turn this off if you run your own (hyprpolkitagent, polkit-gnome)." },
 
+        // ── Modules ── how installed modules are updated (ModuleUpdater); which code runs is
+        // not a preference a profile switches
+        { key: "modules.autoUpdate", label: "Module updates", group: "modules",
+          type: "enum", default: "manual", global: true, options: [
+              { value: "manual", label: "By hand" },
+              { value: "automatic", label: "Automatically" }
+          ],
+          hint: "Automatically: once a day. An update that needs your approval waits for it." },
+
         // VPNs the shell brings up with a network: { networkUuid: [vpnUuid…] } (VpnManager;
         // NetworkManager's own connection.secondaries takes no WireGuard). Edited in a
         // profile's connection editor.

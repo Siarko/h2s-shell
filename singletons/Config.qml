@@ -53,6 +53,10 @@ Singleton {
     // The notice about locking before sleep last given (SleepLockNotice,
     // LockIoRules.sleepNoticeStep): remembered, so it is given once, not at every start
     property alias sleepLockNotice: _adapter.sleepLockNotice
+    // The daily automatic module update run's state ({ lastAttemptAt, failures, lastOutcome }
+    // as JSON, ModuleUpdateRules.autoRunRecord; "" never ran): remembered, so a restart does
+    // not run it again
+    property alias moduleUpdates: _adapter.moduleUpdates
     // The file itself, for the backup taken before a migration
     readonly property string path: _file.path
 
@@ -142,6 +146,7 @@ Singleton {
             // ModuleInstallRules.parseAcknowledgements' text: "" until first written
             property string acknowledgedModules: ""
             property string sleepLockNotice: ""
+            property string moduleUpdates: ""
             // The shell version that last wrote this file — for reference, and for
             // migrations that need to know what wrote it
             property string writtenBy: ""

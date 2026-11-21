@@ -114,7 +114,11 @@ Scope {
         if (!_alive(job))
             return;
         const text = ModuleInstallRules._plain(message, 400);
-        const result = { ok: ok, action: job.action, message: text, ids: job.ids.slice() };
+        // `job` names the job (its subject: whoever started it knows its answer by that);
+        // `details` what a caller needs beyond the words (fetchUpdate's version, the modules
+        // a switch took back)
+        const result = { ok: ok, action: job.action, message: text, ids: job.ids.slice(), job: job.number,
+                         details: Object.assign({ back: (job.back ?? []).slice() }, job.details ?? {}) };
         _job = null;
         phase = "";
         subject = "";
@@ -248,6 +252,147 @@ Scope {
         return "";
     }
 
+    // Download a new version of module `id` — the shell's own, from its recorded address at
+    // `ref` ("" the recorded ref) — and move it in beside the kept versions without linking it
+    // (the updater's background download, §6.3): verified as an install is, the record
+    // listing it, the active version and the recorded ref unchanged; the versions beyond the
+    // kept ones go (ModuleUpdateRules.keepPlan, the new one kept as waiting). A version the
+    // record keeps already (the same commit) is taken as it is. → "" when it started (its
+    // number: `jobNumber`); the outcome's `details`: { dir, version, commit, directory }
+    function fetchUpdate(id, ref) {
+        const refusal = _refusal();
+        if (refusal !== "")
+            return refusal;
+        if (!ModuleManifestRules.validId(id))
+            return "Not a module id: " + ModuleInstallRules._plain(String(id ?? ""), 60);
+        if (typeof ref !== "string" || (ref !== "" && ModuleInstallRules._refProblem(ref) !== ""))
+            return "Not a tag, branch or commit: " + ModuleInstallRules._plain(String(ref ?? ""), 60);
+        const job = _start("fetchUpdate", {});
+        job.ids = [id];
+        _readSources(job, () => {
+            const found = ModuleInstallRules.installedEntry(id, job.sources, job.records);
+            const record = found ? job.records.modules[id] : null;
+            if (!record || record.kind !== "repository") {
+                _finish(job, false, id + (record ? ": copied from a folder, nothing to download" : " was not installed by the shell"));
+                return;
+            }
+            const source = ModuleInstallRules.fetchSource({ address: record.address, ref: ref !== "" ? ref : record.ref });
+            if (source.kind !== "repository") {
+                _finish(job, false, id + ": " + (source.problem || "its recorded address cannot be used"));
+                return;
+            }
+            _download(job, source, id, staged => _moveInBeside(job, id, record, staged));
+        });
+        return "";
+    }
+
+    // fetchUpdate's download moved to its version directory and listed in the record, not linked
+    function _moveInBeside(job, id, record, staged) {
+        if (host.locked) {
+            _abandon(job, "the session was locked: nothing downloaded");
+            return;
+        }
+        phase = "installing";
+        const dir = ModuleInstallRules.versionDirectoryName(staged.manifest.version, staged.commit, Date.now());
+        const kept = record.versions.some(each => each.dir === dir);
+        _run(["sh", "-c", "s=$1; v=$2; id=$3; dir=$4; mode=$5; umask 077; mkdir -p -- \"$v/$id\" || exit 1; "
+              + "[ ! -L \"$v/$id\" ] || exit 1; d=$v/$id/$dir; [ ! -L \"$d\" ] || exit 1; "
+              + "if [ -e \"$d\" ]; then if [ \"$mode\" = reuse ]; then rm -rf -- \"$s\"; exit 0; fi; rm -rf -- \"$d\" || exit 1; fi; "
+              + "mv -T -- \"$s\" \"$d\"",
+              "sh", staged.dir, places.versions, id, dir, kept ? "reuse" : "replace"], {
+            timeoutMs: stepTimeoutMs,
+            done: result => {
+                if (!_alive(job))
+                    return;
+                if (!result.ok) {
+                    _abandon(job, id + ": the download could not be moved into place");
+                    return;
+                }
+                job.staged = job.staged.filter(each => each !== staged.dir);
+                let modules = ModuleInstallRules.recordStaged(job.records.modules, id, {
+                    kind: "repository", address: record.address, ref: record.ref, dir: dir,
+                    version: staged.manifest.version, commit: staged.commit, fetchedAt: new Date().toISOString(),
+                    installedFor: record.installedFor
+                });
+                const keep = ModuleUpdateRules.keepPlan(modules[id], { pendingDir: dir });
+                const dropped = keep.ok ? keep.delete : [];
+                modules = ModuleInstallRules.recordWithoutVersions(modules, id, dropped);
+                _writeRecord(job, modules, ok => {
+                    if (!ok) {
+                        _fileOps(job, kept ? [] : [{ op: "tree", path: places.versions + "/" + id + "/" + dir }], () =>
+                            _finish(job, false, "the record of installed modules could not be written; nothing downloaded"));
+                        return;
+                    }
+                    job.records = { ok: true, modules: modules, dropped: [] };
+                    job.details = { dir: dir, version: String(staged.manifest.version ?? ""), commit: staged.commit,
+                                    directory: places.versions + "/" + id + "/" + dir };
+                    _fileOps(job, dropped.map(each => ({ op: "tree", path: places.versions + "/" + id + "/" + each })), problems => {
+                        if (problems.length > 0)
+                            console.warn("[Modules] older versions could not be deleted: " + problems.join("; "));
+                        _finish(job, true, id + " " + dir + " downloaded");
+                    });
+                });
+            }
+        });
+    }
+
+    // Remember that the user refused version `version` (`commit`) of module `id` (§6.4): the
+    // record's `refused`, so it is never offered again nor switched to. → "" when it started
+    function rememberRefusal(id, version, commit) {
+        const refusal = _refusal();
+        if (refusal !== "")
+            return refusal;
+        if (!ModuleManifestRules.validId(id) || typeof version !== "string" || typeof commit !== "string" || !/^[0-9a-f]{0,64}$/.test(commit))
+            return "Not a version to refuse";
+        const job = _start("refuse", { quiet: true });
+        job.ids = [id];
+        _readSources(job, () => {
+            if (!ModuleInstallRules.installedEntry(id, job.sources, job.records)) {
+                _finish(job, false, id + " was not installed by the shell");
+                return;
+            }
+            const modules = JSON.parse(JSON.stringify(job.records.modules));
+            modules[id].refused = { version: version.slice(0, 64), commit: commit };
+            _writeRecord(job, modules, ok => _finish(job, ok, ok ? id + " " + version + " refused" : "the record of installed modules could not be written"));
+        });
+        return "";
+    }
+
+    // Stops the download of the job running now (`job`: its number — the subject: another
+    // job is never stopped): nothing moves in, staging is emptied. → true when there was
+    // one to stop
+    function cancelDownload(job) {
+        if (!_job || _job.number !== job || phase !== "downloading")
+            return false;
+        _job.cancelled = true;
+        _downloading?.handle?.cancel();
+        return true;
+    }
+
+    // The number of the job started last: right after a call that started one, its subject
+    // (lastResult.job names the job an outcome belongs to)
+    readonly property int jobNumber: _jobCount
+
+    // What the shell installed, read now without a job (the updater's checks): done({ ok,
+    // records: parseRecord's result, found: { id: installedEntry's result } }) — ok false when
+    // the modules folder or the record cannot be read
+    function readInstalled(done) {
+        if (!host || places.user === "") {
+            Qt.callLater(() => done({ ok: false, records: { ok: false, modules: {}, dropped: [] }, found: {} }));
+            return;
+        }
+        _sourceCheck((sources, records) => {
+            const found = {};
+            if (sources.complete && records.ok)
+                for (const id of Object.keys(records.modules)) {
+                    const entry = ModuleInstallRules.installedEntry(id, sources, records);
+                    if (entry)
+                        found[id] = entry;
+                }
+            done({ ok: sources.complete && records.ok && records.dropped.length === 0, records: records, found: found });
+        });
+    }
+
     // At the shell's start: what an earlier run left — the staging place emptied, temporary
     // links in the user root removed, and the record put right where a run was cut off
     // between moving a version in and writing it (ModuleInstallRules.reconcileRecord).
@@ -291,6 +436,26 @@ Scope {
     // record that cannot be read refuses anything that would write it, except a removal
     // (`forRemoval`), which then treats the module as placed by hand
     function _readSources(job, next, forRemoval) {
+        _sourceCheck((sources, records) => {
+            if (!_alive(job))
+                return;
+            job.sources = sources;
+            if (!job.sources.complete) {
+                _finish(job, false, "your modules folder could not be read");
+                return;
+            }
+            job.records = records;
+            if (!forRemoval && (!job.records.ok || job.records.dropped.length > 0)) {
+                _finish(job, false, "the record of installed modules (" + places.record + ") cannot be read: nothing is changed");
+                return;
+            }
+            next();
+        });
+    }
+
+    // The source check run → done(sources, records); records unreadable when the check did
+    // not finish
+    function _sourceCheck(done) {
         const given = ModuleRules.isObject(host.sourcePlaces) ? host.sourcePlaces : {};
         const placesNow = { user: places.user, versions: places.versions, record: places.record,
                             builtin: typeof given.builtin === "string" ? given.builtin : "",
@@ -302,22 +467,13 @@ Scope {
                 if (stream === "stdout")
                     lines.push(line);
             },
-            done: result => {
-                if (!_alive(job))
-                    return;
-                job.sources = ModuleInstallRules.parseSourceCheck(lines);
-                if (!job.sources.complete) {
-                    _finish(job, false, "your modules folder could not be read");
-                    return;
-                }
-                const record = job.sources.record;
-                job.records = record.state === "missing" ? { ok: true, modules: {}, dropped: [] }
-                            : record.state === "ok" ? ModuleInstallRules.parseRecord(record.text) : { ok: false, modules: {}, dropped: [] };
-                if (!forRemoval && (!job.records.ok || job.records.dropped.length > 0)) {
-                    _finish(job, false, "the record of installed modules (" + places.record + ") cannot be read: nothing is changed");
-                    return;
-                }
-                next();
+            done: () => {
+                const sources = ModuleInstallRules.parseSourceCheck(lines);
+                const record = sources.record;
+                const records = !sources.complete ? { ok: false, modules: {}, dropped: [] }
+                              : record.state === "missing" ? { ok: true, modules: {}, dropped: [] }
+                              : record.state === "ok" ? ModuleInstallRules.parseRecord(record.text) : { ok: false, modules: {}, dropped: [] };
+                done(sources, records);
             }
         });
     }
@@ -399,6 +555,10 @@ Scope {
             return;
         }
         const runNext = index => {
+            if (job.cancelled === true) {
+                _abandon(job, label + ": cancelled");
+                return;
+            }
             if (index >= commands.commands.length) {
                 _commitOf(job, label, dir, next);
                 return;
@@ -428,6 +588,10 @@ Scope {
                         return;
                     if (result.code === _fileTooLargeStatus)
                         download.tooLarge = true;
+                    if (job.cancelled === true) {
+                        _abandon(job, label + ": cancelled");
+                        return;
+                    }
                     if (!result.ok || download.tooLarge) {
                         _abandon(job, label + ": download failed — "
                                  + ModuleInstallRules.downloadProblem(result, lastLine, { timeoutMs: downloadTimeoutMs, tooLarge: download.tooLarge, cap: maxDownloadBytes }));
@@ -857,6 +1021,7 @@ Scope {
             next();
             return;
         }
+        job.back = (job.back ?? []).concat(back.map(step => step.id));
         const reasons = back.map(step => step.id + " " + step.dir + " did not start ("
                                  + ModuleInstallRules._plain(String((_statusAt(step)?.errors ?? [])[0] ?? "failed"), 160)
                                  + "): back to " + step.previousDir);

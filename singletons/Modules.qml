@@ -70,11 +70,29 @@ import QtCore
 //   qs ipc call modules switchVersion <id> <version-dir>   another kept version made active
 //   qs ipc call modules deleteVersion <id> <version-dir>   a kept version that is not active
 //   qs ipc call modules job                  JSON: { busy, phase, subject, progress, lastResult }
+//
+// Updating (ModuleUpdater, §6.3–§6.5; refused while the session is locked, but `updates`):
+//   qs ipc call modules check <id>           checks one module the shell installed from a
+//                                            repository (`git ls-remote`); what it finds is
+//                                            downloaded beside the kept versions, nothing switched
+//   qs ipc call modules checkAll             the same for every such module
+//   qs ipc call modules update <id>          queues the update the last check found: it
+//                                            switches unless it needs approval
+//   qs ipc call modules updateAll            queues every update the last checks found
+//   qs ipc call modules approve <id> <version-dir>   approves an update waiting for it (the
+//                                            version directory it asks about, as `updates` shows)
+//   qs ipc call modules refuse <id> <version-dir>    refuses it: the old version stays, the
+//                                            refusal is remembered, never offered again
+//   qs ipc call modules cancelUpdates        stops the check, the downloads, the rows not switched
+//   qs ipc call modules updates              JSON: { checking, checks, queue: { title, count,
+//                                            rows: [{ id, phase, text, dir }] }, approvals,
+//                                            restartOffer, restartNeeded, autoState }
 Singleton {
     id: root
 
     readonly property ModuleHost host: _host
     readonly property ModuleInstaller installer: _installer
+    readonly property ModuleUpdater updater: _updater
     readonly property string apiVersion: _host.apiVersion
     readonly property bool safeMode: _host.safeMode
     readonly property string hostError: _host.hostError
@@ -87,9 +105,10 @@ Singleton {
     readonly property var activeIds: _host.activeIds
     readonly property var slots: _host.slots
     readonly property int generation: _host.generation
-    // The modules whose files changed in place since the shell loaded them: a restart loads
-    // them (ModuleHost.restartNeeded; in memory, so a restart clears it)
-    readonly property var restartNeeded: _host.restartNeeded
+    // The modules whose files changed in place since the shell loaded them, or that an
+    // update left needing a restart: a restart loads them (ModuleHost.restartNeeded,
+    // ModuleUpdater.restartNeeded; in memory, so a restart clears it)
+    readonly property var restartNeeded: _host.restartNeeded.concat(_updater.restartNeeded.filter(name => !_host.restartNeeded.includes(name)))
 
     function slotContributions(name) {
         return _host.slotContributions(name);
@@ -147,6 +166,27 @@ Singleton {
         host: _host
     }
 
+    // Never by itself under the test runners (Config.readOnly); its state remembered in the
+    // config file (Config.moduleUpdates), read once the file is
+    ModuleUpdater {
+        id: _updater
+        host: _host
+        installer: _installer
+        automatic: !Config.readOnly && Profiles.value("modules.autoUpdate") === "automatic"
+        autoStateKnown: Config.ready && !Config.readOnly && !Config.loadFailed
+        autoState: root._autoStateOf(Config.moduleUpdates)
+        onAutoStateWritten: state => Config.moduleUpdates = JSON.stringify(state)
+    }
+
+    function _autoStateOf(text) {
+        try {
+            const state = JSON.parse(text);
+            return state !== null && typeof state === "object" && !Array.isArray(state) ? state : {};
+        } catch (error) {
+            return {};
+        }
+    }
+
     // The plain lists the core's registries read (ModuleLists: they never touch this
     // singleton, so nothing the lock screen needs constructs or waits for the host)
     Binding { target: ModuleLists; property: "widgetEntries"; value: _host.widgetEntries }
@@ -195,9 +235,12 @@ Singleton {
                 _installer.home = SystemFacts.home;
                 _installer.tidy();
             }
+            // The restart reminder names this process; one an earlier process left is closed
+            _ownStat.reload();
+            if (!Config.readOnly)
+                _updater.restartToken = ModuleUpdateRules.restartToken(Quickshell.processId, _ownStat.text());
             // Sources, confirmations, the modules on and the search again: the shell's own, as
             // the launcher started it
-            _ownStat.reload();
             const discovery = ModuleInstallRules.discoveryOf(Quickshell.env("H2S_SHELL_DISCOVERY"), Quickshell.shellDir,
                                                              Quickshell.processId, ModuleInstallRules.parentPidOf(_ownStat.text()));
             if (!Config.readOnly && discovery.launched) {
@@ -306,6 +349,48 @@ Singleton {
 
         function deleteVersion(id: string, dir: string): string {
             return _installer.deleteVersion(id, dir);
+        }
+
+        function check(id: string): string {
+            if (id === "")
+                return "Give a module's id: modules check <id> (modules checkAll for every one)";
+            return _updater.check(id);
+        }
+
+        function checkAll(): string {
+            return _updater.check("");
+        }
+
+        function update(id: string): string {
+            return _updater.update(id);
+        }
+
+        function updateAll(): string {
+            return _updater.updateAll(null);
+        }
+
+        function approve(id: string, dir: string): string {
+            return _updater.approve(id, dir);
+        }
+
+        function refuse(id: string, dir: string): string {
+            return _updater.refuse(id, dir);
+        }
+
+        function cancelUpdates(): string {
+            _updater.cancel();
+            return "";
+        }
+
+        function updates(): string {
+            return JSON.stringify({
+                checking: _updater.checking, checks: _updater.checks,
+                queue: { title: _updater.queueSummary.title, count: _updater.queueSummary.count,
+                         rows: _updater.queue.rows.map(row => ({ id: row.id, phase: row.phase, text: ModuleUpdateRules.rowText(row),
+                                                                 dir: _updater.approvals[row.id]?.dir ?? "" })) },
+                approvals: _updater.approvals, restartOffer: _updater.restartOffer, restartNeeded: root.restartNeeded,
+                autoState: _updater.autoState
+            });
         }
 
         function job(): string {

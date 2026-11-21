@@ -904,6 +904,147 @@ Singleton {
         return answer(true, "available", { sameVersion: version === active.version, downloadedDir: kept ? kept.dir : "" });
     }
 
+    // ---- Checking a repository (§6.3) ----
+
+    // The lines `git ls-remote` may print, and the longest one read
+    readonly property int maxListedRefs: 2000
+    readonly property int maxRefLineLength: 1100
+
+    // The command that checks module `id`'s recorded repository: `git ls-remote --symref` of
+    // the recorded address (never its "#ref": every ref is listed and checkFound picks), with
+    // the installer's git options and environment (no hooks, no credential prompt, only the
+    // https/ssh/git/file protocols), the address after "--". `record`: the record's entry.
+    // → { ok, problem, argv, environment } — refused for a folder copy (nothing to check) and
+    //   for an address ModuleInstallRules.repositoryProblem refuses
+    function checkCommand(record) {
+        const refused = problem => ({ ok: false, problem: problem, argv: [], environment: {} });
+        if (!ModuleRules.isObject(record) || record.kind !== "repository")
+            return refused(ModuleRules.isObject(record) && record.kind === "folder" ? "copied from a folder: nothing to check" : "not installed from a repository");
+        const address = typeof record.address === "string" ? record.address : "";
+        if (address.includes("#"))
+            return refused("the recorded address cannot be read");
+        const problem = ModuleInstallRules.repositoryProblem(address);
+        if (problem !== "")
+            return refused(problem);
+        return { ok: true, problem: "",
+                 argv: ["git"].concat(ModuleInstallRules._gitConfig(), ["ls-remote", "--symref", "--", address]),
+                 environment: Object.assign({}, ModuleInstallRules.gitEnvironment) };
+    }
+
+    // `git ls-remote --symref`'s lines → { ok, head: { branch, commit } | null (the default
+    // branch, from "ref: refs/heads/<b>\tHEAD" and HEAD's own line), branches: { name: commit },
+    // tags: [{ name, version, commit }] } — an annotated tag's commit is its peeled "^{}"
+    // line's; `version` the tag's name without a leading "v" when it parses as a version, else
+    // "". A line that is no ref line, too many lines or a too long one: ok false.
+    function parseLsRemote(lines) {
+        const failed = { ok: false, head: null, branches: {}, tags: [] };
+        const list = _list(lines).filter(line => typeof line === "string" && line.trim() !== "");
+        if (list.length > maxListedRefs)
+            return failed;
+        let headBranch = "";
+        let headCommit = "";
+        const branches = {};
+        const tagCommits = {};
+        const peeled = {};
+        for (const line of list) {
+            if (line.length > maxRefLineLength)
+                return failed;
+            const symbolic = /^ref: refs\/heads\/([^\t]+)\tHEAD$/.exec(line);
+            if (symbolic) {
+                headBranch = ModuleInstallRules._refProblem(symbolic[1]) === "" ? symbolic[1] : "";
+                continue;
+            }
+            const match = /^([0-9a-f]{40}|[0-9a-f]{64})\t(\S+)$/.exec(line);
+            if (!match)
+                return failed;
+            const commit = match[1];
+            const name = match[2];
+            if (name === "HEAD")
+                headCommit = commit;
+            else if (name.startsWith("refs/heads/") && ModuleInstallRules._refProblem(name.slice(11)) === "")
+                branches[name.slice(11)] = commit;
+            else if (name.startsWith("refs/tags/") && name.endsWith("^{}") && ModuleInstallRules._refProblem(name.slice(10, -3)) === "")
+                peeled[name.slice(10, -3)] = commit;
+            else if (name.startsWith("refs/tags/") && ModuleInstallRules._refProblem(name.slice(10)) === "")
+                tagCommits[name.slice(10)] = commit;
+            // Other refs (pull requests, notes) are not the module's versions
+        }
+        const tags = Object.keys(tagCommits).sort().map(name => ({
+            name: name, version: parseVersion(name) ? name.replace(/^v/, "") : "",
+            commit: ModuleRules.has(peeled, name) ? peeled[name] : tagCommits[name]
+        }));
+        const head = headCommit !== "" ? { branch: headBranch, commit: headCommit } : null;
+        return { ok: true, head: head, branches: branches, tags: tags };
+    }
+
+    // What a check found for a module, from its record and the listing (parseLsRemote's).
+    // → { ok, problem, mode, version, commit, ref, tags, head } — `mode` by the recorded ref:
+    //   "pinned" (a commit id: nothing newer is looked for; the active version's commit),
+    //   "tag" (the ref is a tag: the newest tag by version order, `ref` its name),
+    //   "branch" (the ref is a branch, or none — the default branch: its head, `ref` the
+    //   recorded ref, version unknown until it is downloaded);
+    //   ok false when the record cannot be read, the listing failed, or the ref is gone.
+    //   offerFor takes { version, commit }.
+    function checkFound(record, listing) {
+        const failed = problem => ({ ok: false, problem: problem, mode: "", version: "", commit: "", ref: "", tags: [], head: null });
+        const entry = _record(record);
+        if (!entry || entry.kind !== "repository")
+            return failed("the record of where it came from cannot be read");
+        if (!ModuleRules.isObject(listing) || listing.ok !== true)
+            return failed("the server's answer could not be read");
+        const tags = _list(listing.tags);
+        const head = ModuleRules.isObject(listing.head) ? listing.head : null;
+        const found = (mode, version, commit, ref) => ({ ok: true, problem: "", mode: mode, version: version, commit: commit, ref: ref,
+                                                        tags: tags, head: head });
+        const ref = typeof entry.ref === "string" ? entry.ref : "";
+        if (ModuleInstallRules.isCommitId(ref)) {
+            const active = _activeVersion(entry);
+            return found("pinned", active.version, _commit(active.commit) || ref, ref);
+        }
+        if (ref === "") {
+            if (!head || _commit(head.commit) === "")
+                return failed("the server names no default branch");
+            return found("branch", "", head.commit, "");
+        }
+        const tagged = tags.find(tag => tag.name === ref);
+        if (tagged) {
+            const newest = tags.filter(tag => tag.version !== "" && _commit(tag.commit) !== "")
+                .sort((first, second) => compareVersions(second.version, first.version))[0] ?? tagged;
+            return found("tag", newest.version || newest.name, newest.commit, newest.name);
+        }
+        if (ModuleRules.isObject(listing.branches) && ModuleRules.has(listing.branches, ref))
+            return found("branch", "", listing.branches[ref], ref);
+        return failed(_plain(ref, 60) + " is no longer on the server");
+    }
+
+    // ---- The restart reminder (§6.5) ----
+
+    // The value of the restart reminder's hint `x-h2s-restart-for`: this process's id and its
+    // start time (field 22 of /proc/<pid>/stat, in clock ticks since boot) — a new process,
+    // even with a reused id, has another. "" when either cannot be read.
+    function restartToken(pid, statText) {
+        if (!Number.isInteger(pid) || pid <= 0 || typeof statText !== "string")
+            return "";
+        // The command name (field 2) is in parentheses and may hold spaces: read after its end
+        const close = statText.lastIndexOf(")");
+        if (close < 0)
+            return "";
+        const fields = statText.slice(close + 1).trim().split(/\s+/);
+        // fields[0] is field 3 (the state): field 22 is fields[19]
+        const start = fields[19];
+        return typeof start === "string" && /^[0-9]{1,20}$/.test(start) ? pid + ":" + start : "";
+    }
+
+    // Whether a notification is a restart reminder that an earlier process left (its hint
+    // names another process): closed at start — the restart it asked for has happened.
+    // Not a reminder, or no token of our own to compare: false (nothing is closed on a guess)
+    function staleRestartReminder(hints, ownToken) {
+        const value = ModuleRules.isObject(hints) ? hints["x-h2s-restart-for"] : undefined;
+        if (typeof value !== "string" || typeof ownToken !== "string" || ownToken === "")
+            return false;
+        return value !== ownToken;
+    }
+
     // ---- The automatic run (§6.3) ----
 
     // Whether the daily automatic update run is due. `state`: what autoRunRecord keeps

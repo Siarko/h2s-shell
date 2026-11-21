@@ -68,6 +68,8 @@ TestCase {
         _changelog();
         _offer();
         _autoRun();
+        _checking();
+        _restartReminder();
         _backupPlan();
         _backupKeepPlan();
     }
@@ -564,6 +566,60 @@ TestCase {
         assert(!ModuleUpdateRules.backupPlan("weather", {}, Object.assign({}, options, { reason: "whim" })).ok, "backup: a reason is needed");
         assert(!ModuleUpdateRules.backupPlan("weather", {}, Object.assign({}, options, { dataHome: "relative" })).ok, "backup: homes must be absolute");
         assert(!ModuleUpdateRules.backupPlan("weather", {}, Object.assign({}, options, { nowMs: undefined })).ok, "backup: a time is needed");
+    }
+
+    function _checking() {
+        const record = _record([_version("1.2.0-aaaaaaa", "1.2.0", _commitA, 1000)], "1.2.0-aaaaaaa");
+        const command = ModuleUpdateRules.checkCommand(record);
+        assert(command.ok, "check: a repository's command");
+        assertEqual(command.argv.slice(-4).join(" "), "ls-remote --symref -- " + _address, "check: ls-remote of the recorded address, after \"--\"");
+        assert(command.argv.includes("core.hooksPath=/dev/null") && command.argv.includes("protocol.allow=never"), "check: the installer's git options");
+        assertEqual(command.environment.GIT_TERMINAL_PROMPT, "0", "check: never a credential prompt");
+        assert(!ModuleUpdateRules.checkCommand(Object.assign({}, record, { kind: "folder", address: "/x" })).ok, "check: a folder copy has nothing to check");
+        assert(!ModuleUpdateRules.checkCommand(Object.assign({}, record, { address: "ext::sh -c x" })).ok, "check: an address that runs commands is refused");
+        assert(!ModuleUpdateRules.checkCommand(Object.assign({}, record, { address: "-uhttps://x/y" })).ok, "check: a leading \"-\" is refused");
+        assert(!ModuleUpdateRules.checkCommand(null).ok, "check: no record, no command");
+
+        const lines = ["ref: refs/heads/main\tHEAD", _commitB + "\tHEAD", _commitB + "\trefs/heads/main", _commitC + "\trefs/heads/next",
+                       _commitA + "\trefs/tags/v1.2.0", _commitD + "\trefs/tags/v1.3.0", _commitE + "\trefs/tags/v1.3.0^{}",
+                       _commitC + "\trefs/tags/nightly", _commitC + "\trefs/pull/1/head"];
+        const listing = ModuleUpdateRules.parseLsRemote(lines);
+        assert(listing.ok, "ls-remote: read");
+        assertEqual(listing.head?.branch + " " + listing.head?.commit, "main " + _commitB, "ls-remote: the default branch and its head");
+        assertEqual(listing.branches.next, _commitC, "ls-remote: branches");
+        assertEqual(listing.tags.map(tag => tag.name + "=" + tag.version + "@" + tag.commit[0]).join(","), "nightly=@c,v1.2.0=1.2.0@a,v1.3.0=1.3.0@e",
+                    "ls-remote: tags, an annotated one by its peeled commit, versions where they parse");
+        assert(!ModuleUpdateRules.parseLsRemote(["not a ref line"]).ok, "ls-remote: a line that is no ref line fails the read");
+        assert(!ModuleUpdateRules.parseLsRemote(["x".repeat(2000)]).ok, "ls-remote: a too long line fails the read");
+        assert(ModuleUpdateRules.parseLsRemote([]).ok, "ls-remote: an empty repository reads as no refs");
+
+        const byTag = ModuleUpdateRules.checkFound(Object.assign({}, record, { ref: "v1.2.0" }), listing);
+        assertEqual(byTag.mode + " " + byTag.version + " " + byTag.ref + " " + byTag.commit, "tag 1.3.0 v1.3.0 " + _commitE, "found: a tag ref looks at the newest tag");
+        assertEqual(ModuleUpdateRules.offerFor(record, byTag).reason, "available", "found: … and it is offered");
+        const byBranch = ModuleUpdateRules.checkFound(record, listing);
+        assertEqual(byBranch.mode + " " + byBranch.ref + " " + byBranch.commit, "branch main " + _commitB, "found: a branch ref, its head");
+        const byDefault = ModuleUpdateRules.checkFound(Object.assign({}, record, { ref: "" }), listing);
+        assertEqual(byDefault.mode + " " + byDefault.ref + " " + byDefault.commit, "branch  " + _commitB, "found: no ref, the default branch's head");
+        const pinned = ModuleUpdateRules.checkFound(Object.assign({}, record, { ref: _commitA }), listing);
+        assertEqual(pinned.mode + " " + ModuleUpdateRules.offerFor(record, pinned).reason, "pinned current", "found: a commit id is pinned, nothing offered");
+        const gone = ModuleUpdateRules.checkFound(Object.assign({}, record, { ref: "removed" }), listing);
+        assert(!gone.ok && gone.problem.includes("no longer on the server"), "found: a ref gone from the server fails, said so");
+        assert(!ModuleUpdateRules.checkFound(record, { ok: false }).ok, "found: an unreadable listing is no answer");
+        assert(!ModuleUpdateRules.checkFound(null, listing).ok, "found: an unreadable record is no answer");
+        const refused = _record([_version("1.2.0-aaaaaaa", "1.2.0", _commitA, 1000)], "1.2.0-aaaaaaa", { version: "1.3.0", commit: _commitE });
+        assertEqual(ModuleUpdateRules.offerFor(refused, ModuleUpdateRules.checkFound(Object.assign({}, refused, { ref: "v1.2.0" }), listing)).reason,
+                    "refused", "found: the refused tag is not offered again");
+    }
+
+    function _restartReminder() {
+        const stat = "4242 (quickshell (x)) S 1 4242 4242 0 -1 4194560 1 2 3 4 5 6 7 8 20 0 9 0 987654 1000 200";
+        assertEqual(ModuleUpdateRules.restartToken(4242, stat), "4242:987654", "restart token: the pid and its start time (a name with spaces and parentheses)");
+        assertEqual(ModuleUpdateRules.restartToken(4242, "garbage"), "", "restart token: an unreadable stat gives none");
+        assertEqual(ModuleUpdateRules.restartToken(0, stat), "", "restart token: no pid, none");
+        assert(ModuleUpdateRules.staleRestartReminder({ "x-h2s-restart-for": "1:2" }, "4242:987654"), "reminder: another process's is stale");
+        assert(!ModuleUpdateRules.staleRestartReminder({ "x-h2s-restart-for": "4242:987654" }, "4242:987654"), "reminder: our own stays (a hot reload)");
+        assert(!ModuleUpdateRules.staleRestartReminder({ urgency: 1 }, "4242:987654"), "reminder: other notifications are not touched");
+        assert(!ModuleUpdateRules.staleRestartReminder({ "x-h2s-restart-for": "1:2" }, ""), "reminder: no token of our own, nothing closed");
     }
 
     function _backupKeepPlan() {

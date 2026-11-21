@@ -462,6 +462,16 @@ The interface modules are written against (`qs.api`), versioned on its own
   (`removeWithData` with its data and settings) removes a module — only the link of one you
   linked by hand. Nothing installs while the screen is locked; `modules job` tells how the
   last one went.
+- Installed modules can be updated: `qs ipc call modules check <id>` (`checkAll` for every
+  one) looks for a newer version where the module was installed from and downloads it beside
+  the running one; `update <id>` / `updateAll` switch to it. An update that comes from another
+  source, names another author, first asks for administrator rights or needs a module not
+  installed waits for `approve <id> <version-dir>`; `refuse` keeps the old version and that
+  version is never offered again. With the setting "Module updates" (`modules.autoUpdate`)
+  set to "Automatically" the shell does this once a day by itself, never while the screen is
+  locked. One notification tells what was updated and, when only a restart loads the new
+  files, asks for one; it goes away by itself once the shell has restarted. `modules updates`
+  tells where things stand.
 - Settings → Appearance → Other has a "Settings modal" section: the corners, padding, border,
   spacing and widths of the questions that open over the Settings window; their dimming is
   a colour of its own, "Modal dimming" (Colors → Backgrounds).
