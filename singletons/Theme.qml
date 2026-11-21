@@ -522,6 +522,9 @@ Singleton {
     // the page)
     readonly property var sidePanelWidths: ({ s: scaled(320), m: scaled(420), l: scaled(520) })
 
+    // How wide the lock screen's list of notifications is at most (LockSurface)
+    readonly property int lockNotificationsWidth: 360
+
     // ---- Animation ----
     // The profile decides how much motion there is; the theme how it looks
     readonly property real animationSpeed: Math.max(0.1, (Profiles.value("animation.speed") ?? 100) / 100)

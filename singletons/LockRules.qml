@@ -179,13 +179,13 @@ Singleton {
             return _ignored(state, "unknown event");
         if (typeof now !== "number" || !isFinite(now))
             return _ignored(state, "no time");
-        const tx = { state: state, now: now, effects: [] };
+        const transaction = { state: state, now: now, effects: [] };
         try {
-            const refused = _handlers[type](tx, event);
+            const refused = _handlers[type](transaction, event);
             if (typeof refused === "string")
                 return _ignored(state, refused);
-            _reconcile(tx);
-            return { state: tx.state, effects: tx.effects, ignored: "" };
+            _reconcile(transaction);
+            return { state: transaction.state, effects: transaction.effects, ignored: "" };
         } catch (error) {
             return _internalError(state, event, now, error);
         }
@@ -347,40 +347,40 @@ Singleton {
     }
 
     // ------------------------------------------------------------------------------------
-    // Events, one handler each. A handler changes `tx.state` through the helpers below and
+    // Events, one handler each. A handler changes `transaction.state` through the helpers below and
     // returns nothing, or a string saying why the event is ignored (its changes are then
     // dropped). `_reconcile` runs after every taken event.
     // ------------------------------------------------------------------------------------
 
     readonly property var _handlers: ({
-        started: (tx, event) => root._started(tx, event),
-        restored: (tx, event) => root._restored(tx, event),
-        lockRequested: (tx, event) => root._lockRequested(tx, event),
-        unlockRequested: (tx, event) => root._unlockRequested(tx, event),
-        compositorLocked: (tx, event) => root._compositorLocked(tx, event),
-        compositorFinished: (tx, event) => root._compositorFinished(tx, event),
-        surfaceAdded: (tx, event) => root._surfaceAdded(tx, event),
-        surfaceRemoved: (tx, event) => root._surfaceRemoved(tx, event),
-        activity: (tx, event) => root._activity(tx, event),
-        press: (tx, event) => root._press(tx, event),
-        key: (tx, event) => root._key(tx, event),
-        submit: (tx, event) => root._submit(tx, event),
-        methodsDetected: (tx, event) => root._methodsDetected(tx, event),
-        methodsFailed: (tx, event) => root._methodsFailed(tx, event),
-        pamMessage: (tx, event) => root._pamMessage(tx, event),
-        pamCompleted: (tx, event) => root._pamCompleted(tx, event),
-        pamStartFailed: (tx, event) => root._pamStartFailed(tx, event),
-        prepareForSleep: (tx, event) => root._prepareForSleep(tx, event),
-        resumed: (tx, event) => root._resumed(tx, event),
-        timer: (tx, event) => root._timer(tx, event),
-        settings: (tx, event) => root._settingsChanged(tx, event)
+        started: (transaction, event) => root._started(transaction, event),
+        restored: (transaction, event) => root._restored(transaction, event),
+        lockRequested: (transaction, event) => root._lockRequested(transaction, event),
+        unlockRequested: (transaction, event) => root._unlockRequested(transaction, event),
+        compositorLocked: (transaction, event) => root._compositorLocked(transaction, event),
+        compositorFinished: (transaction, event) => root._compositorFinished(transaction, event),
+        surfaceAdded: (transaction, event) => root._surfaceAdded(transaction, event),
+        surfaceRemoved: (transaction, event) => root._surfaceRemoved(transaction, event),
+        activity: (transaction, event) => root._activity(transaction, event),
+        press: (transaction, event) => root._press(transaction, event),
+        key: (transaction, event) => root._key(transaction, event),
+        submit: (transaction, event) => root._submit(transaction, event),
+        methodsDetected: (transaction, event) => root._methodsDetected(transaction, event),
+        methodsFailed: (transaction, event) => root._methodsFailed(transaction, event),
+        pamMessage: (transaction, event) => root._pamMessage(transaction, event),
+        pamCompleted: (transaction, event) => root._pamCompleted(transaction, event),
+        pamStartFailed: (transaction, event) => root._pamStartFailed(transaction, event),
+        prepareForSleep: (transaction, event) => root._prepareForSleep(transaction, event),
+        resumed: (transaction, event) => root._resumed(transaction, event),
+        timer: (transaction, event) => root._timer(transaction, event),
+        settings: (transaction, event) => root._settingsChanged(transaction, event)
     })
 
     // ---- Phase ----
 
     // Once, after initial(). It does nothing itself: being a taken event, it runs
     // _reconcile, which takes the sleep inhibitor if the settings want it
-    function _started(tx, event) {
+    function _started(transaction, event) {
     }
 
     // The compositor's lock is already held by this process: Quickshell reloaded the shell
@@ -398,21 +398,21 @@ Singleton {
     // `secure`: the compositor had confirmed that lock (exactly true); anything else is taken
     // as not confirmed (locking, the confirm timer runs), so an unconfirmed lock can never be
     // unlocked on this event's word (THE COMPOSITOR RULE).
-    function _restored(tx, event) {
-        if (tx.state.phase.status !== "unlocked" || tx.state.phase.session !== 0)
-            return tx.state.phase.status !== "unlocked" ? "already locked" : "not a fresh state";
+    function _restored(transaction, event) {
+        if (transaction.state.phase.status !== "unlocked" || transaction.state.phase.session !== 0)
+            return transaction.state.phase.status !== "unlocked" ? "already locked" : "not a fresh state";
         const secure = event.secure === true;
-        const session = tx.state.phase.session + 1;
-        _setTop(tx, Object.assign(_freshLockRegions(), {
+        const session = transaction.state.phase.session + 1;
+        _setTop(transaction, Object.assign(_freshLockRegions(), {
             phase: { status: secure ? "locked" : "locking", session: session, lastEnd: "", confirmLate: false, pending: null }
         }));
-        _emit(tx, "adoptCompositorLock", { session: session });
-        _emit(tx, "announceLocked", { locked: true });
-        _log(tx, "info", "the compositor's lock carried over (" + (secure ? "confirmed" : "not confirmed yet")
+        _emit(transaction, "adoptCompositorLock", { session: session });
+        _emit(transaction, "announceLocked", { locked: true });
+        _log(transaction, "info", "the compositor's lock carried over (" + (secure ? "confirmed" : "not confirmed yet")
             + "): locked as session " + session + ", a new authentication needed");
         if (!secure)
-            _startTimer(tx, "confirm", tx.state.settings.timings.confirm);
-        _detect(tx, true);
+            _startTimer(transaction, "confirm", transaction.state.settings.timings.confirm);
+        _detect(transaction, true);
     }
 
     // Locking or locked: a lock whose owner may authenticate (conversations run, input is
@@ -421,24 +421,24 @@ Singleton {
         return state.phase.status === "locking" || state.phase.status === "locked";
     }
 
-    function _lockRequested(tx, event) {
+    function _lockRequested(transaction, event) {
         const source = typeof event.source === "string" ? event.source : "";
         // Asked to lock while an unlock waits for the compositor: the latest word is "stay
         // locked". The pending unlock is dropped, and getting in needs a fresh
         // authentication
-        if (tx.state.phase.status === "unlocking") {
-            _cancelPendingUnlock(tx, "a lock request (" + (source || "request") + ")");
+        if (transaction.state.phase.status === "unlocking") {
+            _cancelPendingUnlock(transaction, "a lock request (" + (source || "request") + ")");
             return;
         }
         // A second Lock (logind, idle, IPC) while locked must not start a second session
         // or restart the conversations under way
-        if (tx.state.phase.status !== "unlocked")
+        if (transaction.state.phase.status !== "unlocked")
             return "already locked";
-        _enterLock(tx, source);
+        _enterLock(transaction, source);
     }
 
-    function _unlockRequested(tx, event) {
-        const status = tx.state.phase.status;
+    function _unlockRequested(transaction, event) {
+        const status = transaction.state.phase.status;
         if (status === "unlocked")
             return "not locked";
         if (status === "unlocking")
@@ -446,7 +446,7 @@ Singleton {
         // Defect 5: anything could unlock. Only the sources the owner named do
         if (!unlockSources.includes(event.source))
             return "unlock source not allowed: " + String(event.source);
-        _endLock(tx, event.source, "");
+        _endLock(transaction, event.source, "");
     }
 
     // The compositor's word counts only for the session in force when the driver set the
@@ -462,70 +462,70 @@ Singleton {
 
     // The compositor confirmed the lock: from now on (and only now) it may be unlocked.
     // An unlock decided meanwhile is carried out at once.
-    function _compositorLocked(tx, event) {
-        const refused = _checkCompositor(tx.state, event);
+    function _compositorLocked(transaction, event) {
+        const refused = _checkCompositor(transaction.state, event);
         if (refused !== "")
             return refused;
-        const phase = tx.state.phase;
+        const phase = transaction.state.phase;
         if (phase.status === "locked")
             return "not locking";
-        _stopTimer(tx, "confirm");
+        _stopTimer(transaction, "confirm");
         // On the way to sleep the inhibitor was held for exactly this
-        if (tx.state.sleep.status === "suspending" && tx.state.sleep.inhibitor === "held")
-            _releaseInhibitor(tx);
+        if (transaction.state.sleep.status === "suspending" && transaction.state.sleep.inhibitor === "held")
+            _releaseInhibitor(transaction);
         if (phase.status === "unlocking") {
-            _log(tx, "info", "the compositor confirmed the lock: carrying out the pending unlock (" + phase.pending.reason + ")");
-            _leaveLock(tx, phase.pending.reason, phase.pending.method, true);
+            _log(transaction, "info", "the compositor confirmed the lock: carrying out the pending unlock (" + phase.pending.reason + ")");
+            _leaveLock(transaction, phase.pending.reason, phase.pending.method, true);
             return;
         }
-        _set(tx, "phase", { status: "locked" });
+        _set(transaction, "phase", { status: "locked" });
     }
 
     // The compositor ended the lock (locked), or refused it (locking, unlocking). Either
     // way the lock is over — and there is nothing to unlock: Quickshell has destroyed the
     // lock object already (a `finished` lock, or a refusal that never made one), and
     // reset WlSessionLock.locked itself.
-    function _compositorFinished(tx, event) {
-        const refused = _checkCompositor(tx.state, event);
+    function _compositorFinished(transaction, event) {
+        const refused = _checkCompositor(transaction.state, event);
         if (refused !== "")
             return refused;
-        const phase = tx.state.phase;
+        const phase = transaction.state.phase;
         if (phase.status === "locked") {
-            _leaveLock(tx, "compositor", "", false);
+            _leaveLock(transaction, "compositor", "", false);
             return;
         }
-        _log(tx, "warning", "the compositor refused the lock"
+        _log(transaction, "warning", "the compositor refused the lock"
             + (phase.status === "unlocking" ? " (an unlock by " + phase.pending.reason + " was waiting for it)" : ""));
-        _leaveLock(tx, "denied", "", false);
+        _leaveLock(transaction, "denied", "", false);
     }
 
     // The lock's first effects are always lockCompositor and announceLocked(true), whatever
     // the event did before (a sleep's timers): the lock is what matters most on the way down
-    function _enterLock(tx, source) {
-        const session = tx.state.phase.session + 1;
-        const before = tx.effects;
-        tx.effects = [];
-        _setTop(tx, Object.assign(_freshLockRegions(), {
+    function _enterLock(transaction, source) {
+        const session = transaction.state.phase.session + 1;
+        const before = transaction.effects;
+        transaction.effects = [];
+        _setTop(transaction, Object.assign(_freshLockRegions(), {
             phase: { status: "locking", session: session, lastEnd: "", confirmLate: false, pending: null }
         }));
-        _emit(tx, "lockCompositor", { session: session });
-        _emit(tx, "announceLocked", { locked: true });
-        tx.effects = tx.effects.concat(before);
-        _log(tx, "info", "locking (" + (source || "request") + "), session " + session);
-        _startTimer(tx, "confirm", tx.state.settings.timings.confirm);
-        _detect(tx, true);
+        _emit(transaction, "lockCompositor", { session: session });
+        _emit(transaction, "announceLocked", { locked: true });
+        transaction.effects = transaction.effects.concat(before);
+        _log(transaction, "info", "locking (" + (source || "request") + "), session " + session);
+        _startTimer(transaction, "confirm", transaction.state.settings.timings.confirm);
+        _detect(transaction, true);
     }
 
     // No word from the compositor in `timings.confirm`: said once, shown in the view —
     // and nothing else. Setting the lock again or giving it up would both set `locked`
     // false before `locked` (THE COMPOSITOR RULE in the header). The owner can still
     // authenticate meanwhile; an unlock waits for the confirmation (_endLock).
-    function _confirmTimedOut(tx) {
-        const phase = tx.state.phase;
+    function _confirmTimedOut(transaction) {
+        const phase = transaction.state.phase;
         if (phase.status !== "locking" && phase.status !== "unlocking")
             return;
-        _set(tx, "phase", { confirmLate: true });
-        _log(tx, "warning", "the compositor has not confirmed the lock after " + tx.state.settings.timings.confirm
+        _set(transaction, "phase", { confirmLate: true });
+        _log(transaction, "warning", "the compositor has not confirmed the lock after " + transaction.state.settings.timings.confirm
             + " ms: still waiting (the password can be checked meanwhile; an unlock waits for the confirmation)");
     }
 
@@ -534,46 +534,46 @@ Singleton {
     // be a protocol error (the header) — so everything of the lock is wound down as for an
     // unlock, and the unlock itself waits, as `phase.pending`, for compositorLocked
     // (_compositorLocked); compositorFinished ends it with nothing to unlock.
-    function _endLock(tx, reason, method) {
-        if (tx.state.phase.status === "locked") {
-            _leaveLock(tx, reason, method, true);
+    function _endLock(transaction, reason, method) {
+        if (transaction.state.phase.status === "locked") {
+            _leaveLock(transaction, reason, method, true);
             return;
         }
-        _windDown(tx);
-        const prompt = tx.state.prompt;
-        _setTop(tx, Object.assign(_freshLockRegions(), {
-            phase: Object.assign({}, tx.state.phase, { status: "unlocking", pending: { reason: reason, method: method || "" } }),
+        _windDown(transaction);
+        const prompt = transaction.state.prompt;
+        _setTop(transaction, Object.assign(_freshLockRegions(), {
+            phase: Object.assign({}, transaction.state.phase, { status: "unlocking", pending: { reason: reason, method: method || "" } }),
             // The surfaces are still there; the prompt stays where it is, saying "Unlocking…"
             prompt: { surfaces: prompt.surfaces, owner: prompt.owner, awakeUntil: null, fieldEpoch: prompt.fieldEpoch + 1 }
         }));
-        _log(tx, "info", "unlock (" + reason + (method ? ", " + method : "") + ") decided before the compositor confirmed the lock: "
-            + "waiting for its confirmation, session " + tx.state.phase.session);
+        _log(transaction, "info", "unlock (" + reason + (method ? ", " + method : "") + ") decided before the compositor confirmed the lock: "
+            + "waiting for its confirmation, session " + transaction.state.phase.session);
     }
 
     // A lock request (or a sleep) while an unlock waits for the compositor: the lock stays,
     // as fresh as a new one — the methods asked again, and getting in needs a new
     // authentication. The compositor's lock is the same one, still in force: nothing is
     // set again, and nothing announced.
-    function _cancelPendingUnlock(tx, why) {
-        const pending = tx.state.phase.pending;
-        const prompt = tx.state.prompt;
-        _setTop(tx, Object.assign(_freshLockRegions(), {
-            phase: Object.assign({}, tx.state.phase, { status: "locking", pending: null }),
+    function _cancelPendingUnlock(transaction, why) {
+        const pending = transaction.state.phase.pending;
+        const prompt = transaction.state.prompt;
+        _setTop(transaction, Object.assign(_freshLockRegions(), {
+            phase: Object.assign({}, transaction.state.phase, { status: "locking", pending: null }),
             prompt: { surfaces: prompt.surfaces, owner: null, awakeUntil: null, fieldEpoch: prompt.fieldEpoch + 1 }
         }));
-        _log(tx, "info", "the pending unlock (" + pending.reason + ") is dropped by " + why
+        _log(transaction, "info", "the pending unlock (" + pending.reason + ") is dropped by " + why
             + ": the screen stays locked, a new authentication is needed");
-        _detect(tx, true);
+        _detect(transaction, true);
     }
 
     // Aborts every conversation and stops every timer of the lock — but the confirm timer,
     // which runs for as long as the compositor's word is awaited
-    function _windDown(tx) {
-        for (const conversation of running(tx.state).conversations)
-            _emit(tx, "abortPam", { method: conversation.method, conversation: conversation.conversation });
-        for (const name of running(tx.state).lockTimers) {
-            if (name !== "confirm" || tx.state.phase.status === "locked")
-                _stopTimer(tx, name);
+    function _windDown(transaction) {
+        for (const conversation of running(transaction.state).conversations)
+            _emit(transaction, "abortPam", { method: conversation.method, conversation: conversation.conversation });
+        for (const name of running(transaction.state).lockTimers) {
+            if (name !== "confirm" || transaction.state.phase.status === "locked")
+                _stopTimer(transaction, name);
         }
     }
 
@@ -582,24 +582,24 @@ Singleton {
     // this lock reaches the next one (defects 6 and the root cause in section 1).
     // `unlock`: the compositor's lock is to be unlocked (it confirmed this session); false
     // when the compositor itself ended or refused it.
-    function _leaveLock(tx, reason, method, unlock) {
-        _windDown(tx);
-        _stopTimer(tx, "confirm");
+    function _leaveLock(transaction, reason, method, unlock) {
+        _windDown(transaction);
+        _stopTimer(transaction, "confirm");
         // Held for the lock on the way to sleep: there is no lock to wait for any more
-        if (tx.state.sleep.status === "suspending" && tx.state.sleep.inhibitor === "held")
-            _releaseInhibitor(tx);
-        const session = tx.state.phase.session;
-        _setTop(tx, Object.assign(_freshLockRegions(), {
+        if (transaction.state.sleep.status === "suspending" && transaction.state.sleep.inhibitor === "held")
+            _releaseInhibitor(transaction);
+        const session = transaction.state.phase.session;
+        _setTop(transaction, Object.assign(_freshLockRegions(), {
             phase: { status: "unlocked", session: session, lastEnd: reason, confirmLate: false, pending: null }
         }));
         if (unlock) {
             const fields = { session: session, reason: reason };
             if (method)
                 fields.method = method;
-            _emit(tx, "unlockCompositor", fields);
+            _emit(transaction, "unlockCompositor", fields);
         }
-        _emit(tx, "announceLocked", { locked: false });
-        _log(tx, "info", (unlock ? "unlocked (" : "the lock ended (") + reason + (method ? ", " + method : "") + "), session " + session);
+        _emit(transaction, "announceLocked", { locked: false });
+        _log(transaction, "info", (unlock ? "unlocked (" : "the lock ended (") + reason + (method ? ", " + method : "") + "), session " + session);
     }
 
     // ---- Prompt ----
@@ -610,16 +610,16 @@ Singleton {
     // and lock in one pass, a reload). Keyed by screen, the old removal took the new
     // surface with it and the only screen stopped taking input. Followed also while an
     // unlock is pending: a cancelled unlock goes on with these surfaces.
-    function _surfaceAdded(tx, event) {
-        if (tx.state.phase.status === "unlocked")
+    function _surfaceAdded(transaction, event) {
+        if (transaction.state.phase.status === "unlocked")
             return "not locked";
         if (!_isSurfaceId(event.surface))
             return "no surface";
         if (typeof event.screen !== "string" || event.screen === "")
             return "no screen";
-        if (_findSurface(tx.state, event.surface) !== undefined)
+        if (_findSurface(transaction.state, event.surface) !== undefined)
             return "surface already known";
-        _set(tx, "prompt", { surfaces: tx.state.prompt.surfaces.concat([{ id: event.surface, screen: event.screen }]) });
+        _set(transaction, "prompt", { surfaces: transaction.state.prompt.surfaces.concat([{ id: event.surface, screen: event.screen }]) });
     }
 
     // A surface going away that owned the prompt hands it on, awake, the question (if any)
@@ -627,48 +627,48 @@ Singleton {
     // screen (its successor; an older one there is one being destroyed), else to the first
     // surface left. With none left the prompt sleeps. The old code left the prompt "active"
     // on a surface that no longer existed: the screen that came back never woke.
-    function _surfaceRemoved(tx, event) {
-        if (tx.state.phase.status === "unlocked")
+    function _surfaceRemoved(transaction, event) {
+        if (transaction.state.phase.status === "unlocked")
             return "not locked";
-        const removed = _findSurface(tx.state, event.surface);
+        const removed = _findSurface(transaction.state, event.surface);
         if (removed === undefined)
             return "unknown surface";
-        const remaining = tx.state.prompt.surfaces.filter(surface => surface !== removed);
-        _set(tx, "prompt", { surfaces: remaining });
-        if (tx.state.prompt.owner !== removed.id)
+        const remaining = transaction.state.prompt.surfaces.filter(surface => surface !== removed);
+        _set(transaction, "prompt", { surfaces: remaining });
+        if (transaction.state.prompt.owner !== removed.id)
             return;
         if (remaining.length === 0) {
-            _sleepPrompt(tx);
+            _sleepPrompt(transaction);
             return;
         }
         const sameScreen = remaining.filter(surface => surface.screen === removed.screen);
         const heir = sameScreen.length > 0 ? sameScreen[sameScreen.length - 1] : remaining[0];
-        _set(tx, "prompt", { owner: heir.id, fieldEpoch: tx.state.prompt.fieldEpoch + 1 });
+        _set(transaction, "prompt", { owner: heir.id, fieldEpoch: transaction.state.prompt.fieldEpoch + 1 });
     }
 
     // Pointer motion: wakes the prompt where it happens, or extends its time on the
     // surface that has it
-    function _activity(tx, event) {
-        const refused = _checkInput(tx.state, event.surface);
+    function _activity(transaction, event) {
+        const refused = _checkInput(transaction.state, event.surface);
         if (refused !== "")
             return refused;
-        _recoverSleep(tx);
-        _wake(tx, event.surface);
+        _recoverSleep(transaction);
+        _wake(transaction, event.surface);
     }
 
     // A pointer press: on a surface that does not own the prompt it brings the prompt
     // there — the only way to move it while somebody is active (the owner's decision). The
     // field starts empty there; a question is kept (it is in the state), a verification
     // goes on.
-    function _press(tx, event) {
-        const refused = _checkInput(tx.state, event.surface);
+    function _press(transaction, event) {
+        const refused = _checkInput(transaction.state, event.surface);
         if (refused !== "")
             return refused;
-        _recoverSleep(tx);
-        const owner = tx.state.prompt.owner;
+        _recoverSleep(transaction);
+        const owner = transaction.state.prompt.owner;
         if (owner !== null && owner !== event.surface)
-            _set(tx, "prompt", { owner: event.surface, fieldEpoch: tx.state.prompt.fieldEpoch + 1 });
-        _wake(tx, event.surface);
+            _set(transaction, "prompt", { owner: event.surface, fieldEpoch: transaction.state.prompt.fieldEpoch + 1 });
+        _wake(transaction, event.surface);
     }
 
     // Every key pressed on a lock surface: the field never takes focus, each surface's key
@@ -677,8 +677,8 @@ Singleton {
     // prompt and the ones right after are not lost (defect 9). A key on another surface
     // while the prompt is awake is forwarded there rather than moving the prompt: the
     // half-typed text lives in the owner's field (a press moves it).
-    function _key(tx, event) {
-        const refused = _checkInput(tx.state, event.surface);
+    function _key(transaction, event) {
+        const refused = _checkInput(transaction.state, event.surface);
         if (refused !== "")
             return refused;
         // A character belongs in `text`; a `key` outside the list is dropped, so that it can
@@ -688,7 +688,7 @@ Singleton {
         // and so on: its auto-repeats count for nothing
         if (key === "Escape" && event.autoRepeat === true)
             return "repeated Escape";
-        _recoverSleep(tx);
+        _recoverSleep(transaction);
         // Control characters (Enter's "\r", Backspace's "\b", Ctrl+letters) are not text
         const text = typeof event.text === "string" && !/[\u0000-\u001f\u007f]/.test(event.text) ? event.text : "";
         // Escape never unlocks (it did until 2026-11-15: plan, section 5). On a sleeping
@@ -696,15 +696,15 @@ Singleton {
         // the prompt exactly as its inactivity time-out does: the field empties, a question
         // left unanswered is cancelled, a verification under way goes on. Never forwarded.
         if (key === "Escape") {
-            if (tx.state.prompt.owner !== null)
-                _sleepPrompt(tx);
+            if (transaction.state.prompt.owner !== null)
+                _sleepPrompt(transaction);
             else
-                _wake(tx, event.surface);
+                _wake(transaction, event.surface);
             return;
         }
-        _wake(tx, event.surface);
+        _wake(transaction, event.surface);
         if (key !== "" || text !== "")
-            _emit(tx, "forwardKey", { surface: tx.state.prompt.owner, key: key, text: text });
+            _emit(transaction, "forwardKey", { surface: transaction.state.prompt.owner, key: key, text: text });
     }
 
     function _checkSurface(state, surface) {
@@ -726,17 +726,17 @@ Singleton {
         return state.phase.status === "unlocking" ? "unlock pending" : "";
     }
 
-    function _wake(tx, surface) {
-        const times = tx.state.settings.timings;
-        if (tx.state.prompt.owner !== null) {
+    function _wake(transaction, surface) {
+        const times = transaction.state.settings.timings;
+        if (transaction.state.prompt.owner !== null) {
             // No timer restart on every pointer move: the timer re-arms itself at expiry
             // when the deadline has moved
-            _set(tx, "prompt", { awakeUntil: tx.now + times.prompt });
+            _set(transaction, "prompt", { awakeUntil: transaction.now + times.prompt });
             return;
         }
-        _set(tx, "prompt", { owner: surface, awakeUntil: tx.now + times.prompt });
-        _startTimer(tx, "prompt", times.prompt);
-        _nudge(tx);
+        _set(transaction, "prompt", { owner: surface, awakeUntil: transaction.now + times.prompt });
+        _startTimer(transaction, "prompt", times.prompt);
+        _nudge(transaction);
     }
 
     // Somebody came back to the prompt: an eager method backing off after a failure or an
@@ -744,23 +744,23 @@ Singleton {
     // — not one waiting out MaxTries (somebody failing) — and one broken by Errors gets one
     // more round, at most `limits.revivals` times. A lock whose last detection FAILED asks
     // again, at most every `timings.redetect`.
-    function _nudge(tx) {
-        if (tx.state.sleep.status === "suspending")
+    function _nudge(transaction) {
+        if (transaction.state.sleep.status === "suspending")
             return;
         for (const method of passiveMethods) {
             if (!method.eager)
                 continue;
-            const passive = tx.state.passive[method.name];
+            const passive = transaction.state.passive[method.name];
             if (passive.status === "backoff" && passive.lastResult !== "maxTries") {
-                _stopTimer(tx, "retry:" + method.name);
-                _setPassive(tx, method.name, { status: "idle" });
+                _stopTimer(transaction, "retry:" + method.name);
+                _setPassive(transaction, method.name, { status: "idle" });
             } else if (passive.status === "broken" && passive.brokenBy === "error" && passive.revivals < limits.revivals) {
                 // Another Error breaks it again at once (errors stays at the limit)
-                _setPassive(tx, method.name, { status: "idle", brokenBy: "", revivals: passive.revivals + 1 });
+                _setPassive(transaction, method.name, { status: "idle", brokenBy: "", revivals: passive.revivals + 1 });
             }
         }
         // The configs known so far serve meanwhile: the eager retry above starts now
-        _redetectIfMissing(tx, true);
+        _redetectIfMissing(transaction, true);
     }
 
     // Asks the methods script again when a passive method is unavailable. `onlyAfterFailure`
@@ -768,36 +768,36 @@ Singleton {
     // and not more often than `timings.redetect` — a clean answer without the method means
     // it is not offered (no reader, no finger enrolled, no key registered), and asking at
     // every wake of the prompt only ran the script for nothing
-    function _redetectIfMissing(tx, onlyAfterFailure) {
-        const methods = tx.state.methods;
-        if (methods.status !== "known" || !_anyPassive(tx.state, "unavailable"))
+    function _redetectIfMissing(transaction, onlyAfterFailure) {
+        const methods = transaction.state.methods;
+        if (methods.status !== "known" || !_anyPassive(transaction.state, "unavailable"))
             return;
         if (onlyAfterFailure) {
             if (methods.lastResult !== "failed")
                 return;
-            const since = tx.now - methods.askedAt;
+            const since = transaction.now - methods.askedAt;
             // A wall clock set back counts as long enough
-            if (since >= 0 && since < tx.state.settings.timings.redetect)
+            if (since >= 0 && since < transaction.state.settings.timings.redetect)
                 return;
         }
-        _detect(tx, false);
+        _detect(transaction, false);
     }
 
     // The prompt's inactivity time-out, Escape at an awake prompt (and the last surface
     // gone): the prompt hides, its field empties, a QUESTION left unanswered (a one-time
     // code) is cancelled — but a verification under way is not touched (defect 8: the old
     // 10 s sleep aborted it)
-    function _sleepPrompt(tx) {
-        _stopTimer(tx, "prompt");
-        _set(tx, "prompt", { owner: null, awakeUntil: null, fieldEpoch: tx.state.prompt.fieldEpoch + 1 });
-        const password = tx.state.password;
+    function _sleepPrompt(transaction) {
+        _stopTimer(transaction, "prompt");
+        _set(transaction, "prompt", { owner: null, awakeUntil: null, fieldEpoch: transaction.state.prompt.fieldEpoch + 1 });
+        const password = transaction.state.password;
         if (password.status === "asking") {
-            _abort(tx, "password");
-            _set(tx, "password", { status: "idle", question: "", answerVisible: false, pamError: "" });
+            _abort(transaction, "password");
+            _set(transaction, "password", { status: "idle", question: "", answerVisible: false, pamError: "" });
         } else if (password.status === "failed" || password.status === "unavailable") {
-            _set(tx, "password", { status: "idle", error: "", pamError: "" });
+            _set(transaction, "password", { status: "idle", error: "", pamError: "" });
         }
-        _set(tx, "password", { refusal: "" });
+        _set(transaction, "password", { refusal: "" });
     }
 
     // ---- Password ----
@@ -807,65 +807,65 @@ Singleton {
     // (fieldEpoch); a refusal says why in `refusal` and leaves the field as it is (defect
     // 10: it emptied either way, which hid the root cause). The verify timer is armed by
     // _reconcile, which keeps it running exactly while the password waits for PAM.
-    function _submit(tx, event) {
-        const refused = _checkInput(tx.state, event.surface);
+    function _submit(transaction, event) {
+        const refused = _checkInput(transaction.state, event.surface);
         if (refused !== "")
             return refused;
-        if (tx.state.prompt.owner !== event.surface)
-            return tx.state.prompt.owner === null ? "prompt asleep" : "not the prompt's surface";
+        if (transaction.state.prompt.owner !== event.surface)
+            return transaction.state.prompt.owner === null ? "prompt asleep" : "not the prompt's surface";
         const text = typeof event.text === "string" ? event.text : "";
-        const password = tx.state.password;
-        _set(tx, "prompt", { awakeUntil: tx.now + tx.state.settings.timings.prompt });
+        const password = transaction.state.password;
+        _set(transaction, "prompt", { awakeUntil: transaction.now + transaction.state.settings.timings.prompt });
         if (password.status === "asking") {
             // At most one answer per prompt: PamContext hands a second respond() to the
             // next prompt. After this the state is "verifying" and a submit is refused.
-            _emit(tx, "respondPam", { method: "password", conversation: password.conversation.id, text: text });
-            _set(tx, "password", { status: "verifying", question: "", answerVisible: false, refusal: "" });
-            _takeInput(tx);
+            _emit(transaction, "respondPam", { method: "password", conversation: password.conversation.id, text: text });
+            _set(transaction, "password", { status: "verifying", question: "", answerVisible: false, refusal: "" });
+            _takeInput(transaction);
             return;
         }
         if (password.status === "pending" || password.status === "verifying") {
-            _set(tx, "password", { refusal: "busy" });
+            _set(transaction, "password", { refusal: "busy" });
             return;
         }
         // An empty password is never sent: with `nullok` it could unlock (defect 13), and
         // an Enter forwarded right after waking would otherwise count as a failed attempt
         if (text === "") {
-            _set(tx, "password", { refusal: "empty" });
+            _set(transaction, "password", { refusal: "empty" });
             return;
         }
         // Held until PAM asks for it — the conversation may not be startable yet (methods
         // unknown, an abort settling); _reconcilePassword starts it
-        _setTop(tx, { secret: text });
-        _set(tx, "password", { status: "pending", error: "", pamError: "", refusal: "" });
-        _takeInput(tx);
+        _setTop(transaction, { secret: text });
+        _set(transaction, "password", { status: "pending", error: "", pamError: "", refusal: "" });
+        _takeInput(transaction);
         // No password config known: the script is asked again before saying so (a config
         // that appeared since, or a detection that came back empty)
-        if (tx.state.methods.status === "known" && !tx.state.methods.configs.password)
-            _detect(tx, false);
+        if (transaction.state.methods.status === "known" && !transaction.state.methods.configs.password)
+            _detect(transaction, false);
     }
 
-    function _takeInput(tx) {
-        _set(tx, "prompt", { fieldEpoch: tx.state.prompt.fieldEpoch + 1 });
+    function _takeInput(transaction) {
+        _set(transaction, "prompt", { fieldEpoch: transaction.state.prompt.fieldEpoch + 1 });
     }
 
     // The password's conversation is over without success: secret dropped, nothing asked,
     // `status` (failed / unavailable) with `error` shown
-    function _passwordEnded(tx, status, error) {
-        _setTop(tx, { secret: null });
-        _set(tx, "password", { status: status, conversation: null, question: "", answerVisible: false, refusal: "", error: error });
+    function _passwordEnded(transaction, status, error) {
+        _setTop(transaction, { secret: null });
+        _set(transaction, "password", { status: status, conversation: null, question: "", answerVisible: false, refusal: "", error: error });
     }
 
     // A submitted password with no answer from PAM in `timings.verify`: a hung module, a
     // start that never came. Without this the owner could not try again for the rest of
     // the lock (the prompt's sleep deliberately never aborts a verification).
-    function _verifyTimedOut(tx) {
-        const status = tx.state.password.status;
+    function _verifyTimedOut(transaction) {
+        const status = transaction.state.password.status;
         if (status !== "pending" && status !== "verifying")
             return;
-        _log(tx, "warning", "the password check did not answer in time: aborted");
-        _abort(tx, "password");
-        _passwordEnded(tx, "failed", "Password check timed out");
+        _log(transaction, "warning", "the password check did not answer in time: aborted");
+        _abort(transaction, "password");
+        _passwordEnded(transaction, "failed", "Password check timed out");
     }
 
     // ---- Methods ----
@@ -874,25 +874,25 @@ Singleton {
     // carries an older generation and is ignored. `waitForAnswer`: passive methods wait for
     // this answer (at the lock, and after a wake — then the reader's service may have
     // changed); otherwise the configs known so far serve meanwhile.
-    function _detect(tx, waitForAnswer) {
-        const generation = _nextId(tx);
-        _set(tx, "methods", { status: "detecting", generation: generation, waitForAnswer: waitForAnswer, askedAt: tx.now });
-        _emit(tx, "detectMethods", { generation: generation });
-        _startTimer(tx, "detect", tx.state.settings.timings.detect);
+    function _detect(transaction, waitForAnswer) {
+        const generation = _nextId(transaction);
+        _set(transaction, "methods", { status: "detecting", generation: generation, waitForAnswer: waitForAnswer, askedAt: transaction.now });
+        _emit(transaction, "detectMethods", { generation: generation });
+        _startTimer(transaction, "detect", transaction.state.settings.timings.detect);
     }
 
-    function _methodsDetected(tx, event) {
-        const refused = _checkDetection(tx.state, event);
+    function _methodsDetected(transaction, event) {
+        const refused = _checkDetection(transaction.state, event);
         if (refused !== "")
             return refused;
-        _applyDetection(tx, parseMethods(event.lines), "answered");
+        _applyDetection(transaction, parseMethods(event.lines), "answered");
     }
 
-    function _methodsFailed(tx, event) {
-        const refused = _checkDetection(tx.state, event);
+    function _methodsFailed(transaction, event) {
+        const refused = _checkDetection(transaction.state, event);
         if (refused !== "")
             return refused;
-        _detectionFailed(tx, typeof event.reason === "string" && event.reason !== "" ? "failed (" + event.reason + ")" : "failed");
+        _detectionFailed(transaction, typeof event.reason === "string" && event.reason !== "" ? "failed (" + event.reason + ")" : "failed");
     }
 
     function _checkDetection(state, event) {
@@ -908,38 +908,38 @@ Singleton {
     // method the answer no longer names stops: aborted if running, unavailable (a broken
     // one stays broken — only a wake clears that). `result`: "answered", or "failed" when
     // this is what a failed detection kept.
-    function _applyDetection(tx, found, result) {
-        _stopTimer(tx, "detect");
+    function _applyDetection(transaction, found, result) {
+        _stopTimer(transaction, "detect");
         const detectedPassword = _copyConfig(found.password);
-        const fallback = tx.state.settings.passwordFallback;
+        const fallback = transaction.state.settings.passwordFallback;
         const configs = { password: detectedPassword ?? fallback ?? null };
         for (const method of passiveMethods)
             configs[method.name] = _copyConfig(found[method.name]);
-        _set(tx, "methods", {
-            status: "known", configs: configs, answered: tx.state.methods.answered || result === "answered",
+        _set(transaction, "methods", {
+            status: "known", configs: configs, answered: transaction.state.methods.answered || result === "answered",
             waitForAnswer: false, lastResult: result,
             // Where the password config came from: "detected", "fallback" or "none"
             passwordSource: detectedPassword !== null ? "detected" : fallback ? "fallback" : "none"
         });
         for (const method of passiveMethods) {
-            const passive = tx.state.passive[method.name];
+            const passive = transaction.state.passive[method.name];
             const config = configs[method.name];
             if (config === null && passive.status === "running") {
-                _abort(tx, method.name);
-                _setPassive(tx, method.name, { status: "unavailable" });
+                _abort(transaction, method.name);
+                _setPassive(transaction, method.name, { status: "unavailable" });
             } else if (config === null && passive.status === "backoff") {
-                _stopTimer(tx, "retry:" + method.name);
-                _setPassive(tx, method.name, { status: "unavailable" });
+                _stopTimer(transaction, "retry:" + method.name);
+                _setPassive(transaction, method.name, { status: "unavailable" });
             }
-            _setPassive(tx, method.name, { config: config });
+            _setPassive(transaction, method.name, { config: config });
         }
     }
 
     // No answer (script failed or timed out): go on with what this lock already knew, and
     // the password fallback where that names no password — a lock must never wait on
     // "verifying" for good (defect 7)
-    function _detectionFailed(tx, reason) {
-        const methods = tx.state.methods;
+    function _detectionFailed(transaction, reason) {
+        const methods = transaction.state.methods;
         const last = {};
         if (methods.answered) {
             for (const method of passiveMethods)
@@ -948,117 +948,117 @@ Singleton {
             if (methods.passwordSource === "detected")
                 last.password = methods.configs.password;
         }
-        _applyDetection(tx, last, "failed");
-        const source = tx.state.methods.passwordSource;
-        _log(tx, "warning", "detecting the methods " + reason + "; going on with "
+        _applyDetection(transaction, last, "failed");
+        const source = transaction.state.methods.passwordSource;
+        _log(transaction, "warning", "detecting the methods " + reason + "; going on with "
             + (methods.answered ? "this lock's last answer" : "nothing detected")
             + ", password config: " + (source === "detected" ? "from that answer" : source === "fallback" ? "the fallback" : "none"));
     }
 
     // ---- PAM ----
 
-    function _pamMessage(tx, event) {
-        const refused = _checkConversation(tx.state, event);
+    function _pamMessage(transaction, event) {
+        const refused = _checkConversation(transaction.state, event);
         if (refused !== "")
             return refused;
         const message = typeof event.message === "string" ? event.message.trim() : "";
         if (event.method === "password") {
-            _passwordMessage(tx, event, message);
+            _passwordMessage(transaction, event, message);
             return;
         }
         if (message !== "")
-            _setPassive(tx, event.method, { message: message, messageIsError: event.messageIsError === true });
+            _setPassive(transaction, event.method, { message: message, messageIsError: event.messageIsError === true });
         // Nothing is typed for a passive method. A prompt asking for input means a config
         // that is not passive (a password module, pam_u2f's "interactive") — and the old
         // empty answer, repeated every round, was a failed password attempt each time
         // (defect 12): faillock locks the account. So the method stops, broken for this
         // lock, and says so.
         if (event.responseRequired === true) {
-            _abort(tx, event.method);
-            _setPassive(tx, event.method, { status: "broken", brokenBy: "asks", message: "", messageIsError: false });
-            _log(tx, "warning", event.method + " asks for input, which a passive method never gives: not used");
+            _abort(transaction, event.method);
+            _setPassive(transaction, event.method, { status: "broken", brokenBy: "asks", message: "", messageIsError: false });
+            _log(transaction, "warning", event.method + " asks for input, which a passive method never gives: not used");
         }
     }
 
-    function _passwordMessage(tx, event, message) {
+    function _passwordMessage(transaction, event, message) {
         if (event.responseRequired !== true) {
             // PAM knows why it says no (an account locked, a password expired): shown on
             // failure instead of a plain "failed"
             if (event.messageIsError === true && message !== "")
-                _set(tx, "password", { pamError: message });
+                _set(transaction, "password", { pamError: message });
             return;
         }
-        const secret = tx.state.secret;
+        const secret = transaction.state.secret;
         // The typed password answers the first prompt that hides its answer. A prompt that
         // shows it is no password prompt: the password is dropped, not shown, and the
         // question asked.
         if (secret !== null && event.responseVisible !== true) {
-            _emit(tx, "respondPam", { method: "password", conversation: tx.state.password.conversation.id, text: secret });
-            _setTop(tx, { secret: null });
+            _emit(transaction, "respondPam", { method: "password", conversation: transaction.state.password.conversation.id, text: secret });
+            _setTop(transaction, { secret: null });
             return;
         }
-        _setTop(tx, { secret: null });
-        _set(tx, "password", {
+        _setTop(transaction, { secret: null });
+        _set(transaction, "password", {
             status: "asking",
             question: message.replace(/:$/, "").trim() || "Answer",
             answerVisible: event.responseVisible === true
         });
     }
 
-    function _pamCompleted(tx, event) {
-        const refused = _checkConversation(tx.state, event);
+    function _pamCompleted(transaction, event) {
+        const refused = _checkConversation(transaction.state, event);
         if (refused !== "")
             return refused;
         const result = pamResults.includes(event.result) ? event.result : "error";
         const method = event.method;
         if (result === "success") {
-            _endLock(tx, "authenticated", method);
+            _endLock(transaction, "authenticated", method);
             return;
         }
         if (method === "password") {
-            const password = tx.state.password;
-            _log(tx, "warning", "password not accepted (" + result + "), PAM config " + _where(password.config));
+            const password = transaction.state.password;
+            _log(transaction, "warning", "password not accepted (" + result + "), PAM config " + _where(password.config));
             if (result === "error")
-                _passwordConfigFailed(tx);
-            _passwordEnded(tx, result === "error" ? "unavailable" : "failed",
+                _passwordConfigFailed(transaction);
+            _passwordEnded(transaction, result === "error" ? "unavailable" : "failed",
                 result === "error" ? "Password check is not available"
                 : password.pamError !== "" ? password.pamError
                 : result === "maxTries" ? "Too many attempts" : "Authentication failed");
             return;
         }
-        const passive = tx.state.passive[method];
+        const passive = transaction.state.passive[method];
         if (result === "error") {
             // An Error after a full-length round is the module's own time-out with nobody
             // trying (pam_fprintd: PAM_AUTHINFO_UNAVAIL after its `timeout`, 30 s by
             // default), not a fault: counted, it broke the fingerprint after ~4.5 minutes
             // of an untouched lock. A wall clock set back makes the round look quick
             // (counted: fail towards "broken", which a wake clears)
-            if (tx.now - passive.startedAt >= tx.state.settings.timings.quickRound)
-                _passiveTimedOut(tx, method);
+            if (transaction.now - passive.startedAt >= transaction.state.settings.timings.quickRound)
+                _passiveTimedOut(transaction, method);
             else
-                _passiveErred(tx, method);
+                _passiveErred(transaction, method);
             return;
         }
-        const delay = retryDelay(passive.delay, tx.now - passive.startedAt, result, tx.state.settings.timings);
-        _setPassive(tx, method, { status: "backoff", conversation: null, errors: 0, delay: delay, lastResult: result });
-        _startTimer(tx, "retry:" + method, delay);
+        const delay = retryDelay(passive.delay, transaction.now - passive.startedAt, result, transaction.state.settings.timings);
+        _setPassive(transaction, method, { status: "backoff", conversation: null, errors: 0, delay: delay, lastResult: result });
+        _startTimer(transaction, "retry:" + method, delay);
     }
 
     // Quickshell's Error is every PAM code but success, auth error and max tries: a module
     // missing (for good) or a device not there yet (for now). A long wait, and broken only
     // after several in a row.
-    function _passiveErred(tx, method) {
-        const passive = tx.state.passive[method];
+    function _passiveErred(transaction, method) {
+        const passive = transaction.state.passive[method];
         const errors = passive.errors + 1;
         if (errors >= limits.errorLimit) {
-            _log(tx, "warning", method + " cannot be used (" + errors + " errors in a row), PAM config " + _where(passive.config));
-            _setPassive(tx, method, { status: "broken", brokenBy: "error", conversation: null, errors: errors, lastResult: "error" });
+            _log(transaction, "warning", method + " cannot be used (" + errors + " errors in a row), PAM config " + _where(passive.config));
+            _setPassive(transaction, method, { status: "broken", brokenBy: "error", conversation: null, errors: errors, lastResult: "error" });
             return;
         }
-        const wait = tx.state.settings.timings.errorRetry;
-        _log(tx, "warning", method + ": PAM error (" + errors + " of " + limits.errorLimit + "), trying again later");
-        _setPassive(tx, method, { status: "backoff", conversation: null, errors: errors, delay: wait, lastResult: "error" });
-        _startTimer(tx, "retry:" + method, wait);
+        const wait = transaction.state.settings.timings.errorRetry;
+        _log(transaction, "warning", method + ": PAM error (" + errors + " of " + limits.errorLimit + "), trying again later");
+        _setPassive(transaction, method, { status: "backoff", conversation: null, errors: errors, delay: wait, lastResult: "error" });
+        _startTimer(transaction, "retry:" + method, wait);
     }
 
     // A full-length round that ended in Error: nobody tried, the reader is fine. Not
@@ -1066,10 +1066,10 @@ Singleton {
     // round starts after `retryMin` — the shortest wait, as after a full-length failed
     // round. A completion is no abort, so no settle; the round ends by its retry timer,
     // never in this step.
-    function _passiveTimedOut(tx, method) {
-        const wait = tx.state.settings.timings.retryMin;
-        _setPassive(tx, method, { status: "backoff", conversation: null, errors: 0, delay: wait, lastResult: "timeout" });
-        _startTimer(tx, "retry:" + method, wait);
+    function _passiveTimedOut(transaction, method) {
+        const wait = transaction.state.settings.timings.retryMin;
+        _setPassive(transaction, method, { status: "backoff", conversation: null, errors: 0, delay: wait, lastResult: "timeout" });
+        _startTimer(transaction, "retry:" + method, wait);
     }
 
     // The password's config could not be used (start() refused, or PAM's Error): the next
@@ -1077,27 +1077,27 @@ Singleton {
     // detected one after the fallback (_passwordConfig) — and the methods are asked again.
     // Without this a detected config that cannot work was tried at every submit for the
     // rest of the lock, the fallback never.
-    function _passwordConfigFailed(tx) {
-        const config = tx.state.password.config;
+    function _passwordConfigFailed(transaction) {
+        const config = transaction.state.password.config;
         if (config === null)
             return;
-        _set(tx, "password", { avoid: _copyConfig(config) });
-        if (tx.state.methods.status !== "detecting")
-            _detect(tx, false);
+        _set(transaction, "password", { avoid: _copyConfig(config) });
+        if (transaction.state.methods.status !== "detecting")
+            _detect(transaction, false);
     }
 
     // PamContext.start() refused (a config that is not there): reported by the driver,
     // since start() says so only through its return value. Visible, never "verifying".
-    function _pamStartFailed(tx, event) {
-        const refused = _checkConversation(tx.state, event);
+    function _pamStartFailed(transaction, event) {
+        const refused = _checkConversation(transaction.state, event);
         if (refused !== "")
             return refused;
-        _log(tx, "warning", event.method + ": PAM refused to start the conversation");
+        _log(transaction, "warning", event.method + ": PAM refused to start the conversation");
         if (event.method === "password") {
-            _passwordConfigFailed(tx);
-            _passwordEnded(tx, "unavailable", "Password check could not start");
+            _passwordConfigFailed(transaction);
+            _passwordEnded(transaction, "unavailable", "Password check could not start");
         } else {
-            _setPassive(tx, event.method, { status: "broken", brokenBy: "start", conversation: null });
+            _setPassive(transaction, event.method, { status: "broken", brokenBy: "start", conversation: null });
         }
     }
 
@@ -1147,22 +1147,22 @@ Singleton {
             const method = event.method;
             const what = type + " for " + method + " (" + reason + ")";
             try {
-                const tx = { state: state, now: now, effects: [] };
+                const transaction = { state: state, now: now, effects: [] };
                 if (method === "password")
-                    _passwordEnded(tx, "failed", "Password check failed, try again");
+                    _passwordEnded(transaction, "failed", "Password check failed, try again");
                 else
-                    _passiveErred(tx, method);
-                _log(tx, "error", _withoutSecret("internal error on " + what + ": the conversation is ended, its result not believed", state));
-                _reconcile(tx);
-                return { state: tx.state, effects: tx.effects, ignored: "", error: true };
+                    _passiveErred(transaction, method);
+                _log(transaction, "error", _withoutSecret("internal error on " + what + ": the conversation is ended, its result not believed", state));
+                _reconcile(transaction);
+                return { state: transaction.state, effects: transaction.effects, ignored: "", error: true };
             } catch (again) {
-                const tx = { state: state, now: now, effects: [] };
+                const transaction = { state: state, now: now, effects: [] };
                 if (method === "password")
-                    _passwordEnded(tx, "failed", "Password check failed, try again");
+                    _passwordEnded(transaction, "failed", "Password check failed, try again");
                 else
-                    _setPassive(tx, method, { status: "broken", brokenBy: "internal", conversation: null });
-                _log(tx, "error", _withoutSecret("internal error on " + what + ", and again while ending it: the conversation is ended", state));
-                return { state: tx.state, effects: tx.effects, ignored: "", error: true };
+                    _setPassive(transaction, method, { status: "broken", brokenBy: "internal", conversation: null });
+                _log(transaction, "error", _withoutSecret("internal error on " + what + ", and again while ending it: the conversation is ended", state));
+                return { state: transaction.state, effects: transaction.effects, ignored: "", error: true };
             }
         } catch (again) {
             return ignored;
@@ -1180,160 +1180,160 @@ Singleton {
     // `resumed` lost) and this is a new sleep: the lock must happen again, not be ignored
     // with the machine going down unlocked. An unlock waiting for the compositor is
     // dropped: the machine goes down locked.
-    function _prepareForSleep(tx, event) {
-        const times = tx.state.settings.timings;
+    function _prepareForSleep(transaction, event) {
+        const times = transaction.state.settings.timings;
         // First the missed wake (a lock already there is woken: methods asked again), then
         // the new sleep: a lock entered or kept now asks for the methods itself
-        if (tx.state.sleep.status === "suspending") {
-            _log(tx, "warning", "PrepareForSleep while suspending: the resume signal was missed");
-            _resume(tx, false);
+        if (transaction.state.sleep.status === "suspending") {
+            _log(transaction, "warning", "PrepareForSleep while suspending: the resume signal was missed");
+            _resume(transaction, false);
         }
-        if (tx.state.phase.status === "unlocking")
-            _cancelPendingUnlock(tx, "going to sleep");
-        if (tx.state.phase.status === "unlocked" && tx.state.settings.lockOnSleep)
-            _enterLock(tx, "sleep");
-        const held = tx.state.sleep.inhibitor === "held";
-        _stopTimer(tx, "resumeGrace");
-        _set(tx, "sleep", { status: "suspending", minSuspendPassed: false });
-        _startTimer(tx, "missedResume", times.missedResume);
-        _startTimer(tx, "minSuspend", times.minSuspend);
+        if (transaction.state.phase.status === "unlocking")
+            _cancelPendingUnlock(transaction, "going to sleep");
+        if (transaction.state.phase.status === "unlocked" && transaction.state.settings.lockOnSleep)
+            _enterLock(transaction, "sleep");
+        const held = transaction.state.sleep.inhibitor === "held";
+        _stopTimer(transaction, "resumeGrace");
+        _set(transaction, "sleep", { status: "suspending", minSuspendPassed: false });
+        _startTimer(transaction, "missedResume", times.missedResume);
+        _startTimer(transaction, "minSuspend", times.minSuspend);
         if (!held)
             return;
         // logind waits while the inhibitor is held: until the compositor confirms the lock,
         // or the fallback lets the machine go
-        if (tx.state.phase.status === "locking")
-            _startTimer(tx, "inhibitor", times.inhibitorFallback);
+        if (transaction.state.phase.status === "locking")
+            _startTimer(transaction, "inhibitor", times.inhibitorFallback);
         else
-            _releaseInhibitor(tx);
+            _releaseInhibitor(transaction);
         // Passive methods running are aborted and none starts until the wake (reconcile):
         // their devices go away over a suspend, a conversation is dead when it wakes
     }
 
-    function _resumed(tx, event) {
-        _resume(tx, true);
+    function _resumed(transaction, event) {
+        _resume(transaction, true);
     }
 
     // After a wake — signalled, or recovered when the signal was lost: the sleep region,
     // and the lock (_wakeLock). `grace`: false when a new sleep follows in the same step
     // (no grace period to run)
-    function _resume(tx, grace) {
-        const times = tx.state.settings.timings;
-        _stopTimer(tx, "missedResume");
-        _stopTimer(tx, "minSuspend");
-        _stopTimer(tx, "inhibitor");
-        _set(tx, "sleep", { status: "resuming", minSuspendPassed: false });
+    function _resume(transaction, grace) {
+        const times = transaction.state.settings.timings;
+        _stopTimer(transaction, "missedResume");
+        _stopTimer(transaction, "minSuspend");
+        _stopTimer(transaction, "inhibitor");
+        _set(transaction, "sleep", { status: "resuming", minSuspendPassed: false });
         if (grace)
-            _startTimer(tx, "resumeGrace", times.resumeGrace);
-        if (_authenticating(tx.state))
-            _wakeLock(tx);
+            _startTimer(transaction, "resumeGrace", times.resumeGrace);
+        if (_authenticating(transaction.state))
+            _wakeLock(transaction);
     }
 
     // … and the lock: what the reader's service said before is not trusted — methods asked
     // again, broken ones given another chance, conversations started afresh once the
     // answer is in. Also when no prepareForSleep was seen: then running conversations may
     // be dead and are restarted.
-    function _wakeLock(tx) {
+    function _wakeLock(transaction) {
         for (const method of passiveMethods) {
-            const status = tx.state.passive[method.name].status;
+            const status = transaction.state.passive[method.name].status;
             if (status === "running")
-                _abort(tx, method.name);
+                _abort(transaction, method.name);
             else if (status === "backoff")
-                _stopTimer(tx, "retry:" + method.name);
+                _stopTimer(transaction, "retry:" + method.name);
             if (status === "running" || status === "backoff" || status === "broken")
-                _setPassive(tx, method.name, { status: "idle", brokenBy: "" });
-            _setPassive(tx, method.name, { errors: 0, revivals: 0 });
+                _setPassive(transaction, method.name, { status: "idle", brokenBy: "" });
+            _setPassive(transaction, method.name, { errors: 0, revivals: 0 });
         }
-        _detect(tx, true);
+        _detect(transaction, true);
     }
 
     // The resume signal was lost: activity after `minSuspend` of running time since going
     // down means the machine is up
-    function _recoverSleep(tx) {
-        const sleep = tx.state.sleep;
+    function _recoverSleep(transaction) {
+        const sleep = transaction.state.sleep;
         if (sleep.status === "suspending" && sleep.minSuspendPassed) {
-            _log(tx, "warning", "activity while suspending: the resume signal was missed");
-            _resume(tx, true);
+            _log(transaction, "warning", "activity while suspending: the resume signal was missed");
+            _resume(transaction, true);
         }
     }
 
-    function _releaseInhibitor(tx) {
-        _stopTimer(tx, "inhibitor");
-        if (tx.state.sleep.inhibitor !== "held")
+    function _releaseInhibitor(transaction) {
+        _stopTimer(transaction, "inhibitor");
+        if (transaction.state.sleep.inhibitor !== "held")
             return;
-        _set(tx, "sleep", { inhibitor: "released" });
-        _emit(tx, "releaseInhibitor", {});
+        _set(transaction, "sleep", { inhibitor: "released" });
+        _emit(transaction, "releaseInhibitor", {});
     }
 
     // ---- Timers ----
 
     // A timer's expiry counts only with the token of its latest start: one stopped or
     // restarted meanwhile reports a token no longer there
-    function _timer(tx, event) {
+    function _timer(transaction, event) {
         const name = event.name;
-        if (typeof name !== "string" || !Object.prototype.hasOwnProperty.call(tx.state.timers, name))
+        if (typeof name !== "string" || !Object.prototype.hasOwnProperty.call(transaction.state.timers, name))
             return "timer not running";
-        if (tx.state.timers[name].token !== event.token)
+        if (transaction.state.timers[name].token !== event.token)
             return "stale timer";
-        const timers = Object.assign({}, tx.state.timers);
+        const timers = Object.assign({}, transaction.state.timers);
         delete timers[name];
-        _setTop(tx, { timers: timers });
+        _setTop(transaction, { timers: timers });
         const [kind, method] = name.split(":");
         const handler = _timerHandlers[kind];
-        return handler ? handler(tx, method) : undefined;
+        return handler ? handler(transaction, method) : undefined;
     }
 
     readonly property var _timerHandlers: ({
-        confirm: tx => root._confirmTimedOut(tx),
-        detect: tx => {
-            if (tx.state.methods.status === "detecting")
-                root._detectionFailed(tx, "timed out");
+        confirm: transaction => root._confirmTimedOut(transaction),
+        detect: transaction => {
+            if (transaction.state.methods.status === "detecting")
+                root._detectionFailed(transaction, "timed out");
         },
-        verify: tx => root._verifyTimedOut(tx),
-        prompt: tx => {
-            const prompt = tx.state.prompt;
+        verify: transaction => root._verifyTimedOut(transaction),
+        prompt: transaction => {
+            const prompt = transaction.state.prompt;
             if (prompt.owner === null)
                 return;
             // A wall clock set back leaves the deadline far ahead: never more than one
             // full time-out from now
-            const promptTime = tx.state.settings.timings.prompt;
-            const left = Math.min(prompt.awakeUntil - tx.now, promptTime);
-            if (left > tx.state.settings.timings.promptSlack) {
-                root._set(tx, "prompt", { awakeUntil: tx.now + left });
-                root._startTimer(tx, "prompt", left);
+            const promptTime = transaction.state.settings.timings.prompt;
+            const left = Math.min(prompt.awakeUntil - transaction.now, promptTime);
+            if (left > transaction.state.settings.timings.promptSlack) {
+                root._set(transaction, "prompt", { awakeUntil: transaction.now + left });
+                root._startTimer(transaction, "prompt", left);
             } else {
-                root._sleepPrompt(tx);
+                root._sleepPrompt(transaction);
             }
         },
-        inhibitor: tx => {
-            if (tx.state.sleep.inhibitor === "held") {
-                root._log(tx, "warning", "the compositor did not confirm the lock in time: letting the machine sleep");
-                root._releaseInhibitor(tx);
+        inhibitor: transaction => {
+            if (transaction.state.sleep.inhibitor === "held") {
+                root._log(transaction, "warning", "the compositor did not confirm the lock in time: letting the machine sleep");
+                root._releaseInhibitor(transaction);
             }
         },
-        missedResume: tx => {
-            if (tx.state.sleep.status === "suspending") {
-                root._log(tx, "warning", "no resume signal: going on as awake");
-                root._resume(tx, true);
+        missedResume: transaction => {
+            if (transaction.state.sleep.status === "suspending") {
+                root._log(transaction, "warning", "no resume signal: going on as awake");
+                root._resume(transaction, true);
             }
         },
-        minSuspend: tx => {
-            if (tx.state.sleep.status === "suspending")
-                root._set(tx, "sleep", { minSuspendPassed: true });
+        minSuspend: transaction => {
+            if (transaction.state.sleep.status === "suspending")
+                root._set(transaction, "sleep", { minSuspendPassed: true });
         },
-        resumeGrace: tx => {
-            root._set(tx, "sleep", { status: "awake" });
-            if (root._authenticating(tx.state))
-                root._redetectIfMissing(tx, false);
+        resumeGrace: transaction => {
+            root._set(transaction, "sleep", { status: "awake" });
+            if (root._authenticating(transaction.state))
+                root._redetectIfMissing(transaction, false);
         },
-        retry: (tx, method) => {
-            if (tx.state.passive[method]?.status === "backoff")
-                root._setPassive(tx, method, { status: "idle" });
+        retry: (transaction, method) => {
+            if (transaction.state.passive[method]?.status === "backoff")
+                root._setPassive(transaction, method, { status: "idle" });
         },
-        settle: (tx, method) => {
+        settle: (transaction, method) => {
             if (method === "password")
-                root._set(tx, "password", { settling: false });
-            else if (tx.state.passive[method])
-                root._setPassive(tx, method, { settling: false });
+                root._set(transaction, "password", { settling: false });
+            else if (transaction.state.passive[method])
+                root._setPassive(transaction, method, { settling: false });
         }
     })
 
@@ -1341,7 +1341,7 @@ Singleton {
 
     // `values`: { lockOnSleep, passwordFallback } — either may be left out. The idle and
     // screensaver settings are the driver's (IdleMonitor), see the plan, section 7.
-    function _settingsChanged(tx, event) {
+    function _settingsChanged(transaction, event) {
         const values = event.values !== null && typeof event.values === "object" ? event.values : {};
         const changes = {};
         if (typeof values.lockOnSleep === "boolean")
@@ -1350,7 +1350,7 @@ Singleton {
             changes.passwordFallback = _copyConfig(values.passwordFallback);
         if (Object.keys(changes).length === 0)
             return "no known setting";
-        _set(tx, "settings", changes);
+        _set(transaction, "settings", changes);
     }
 
     // ------------------------------------------------------------------------------------
@@ -1361,77 +1361,77 @@ Singleton {
     // timer running exactly while a password waits for PAM.
     // ------------------------------------------------------------------------------------
 
-    function _reconcile(tx) {
-        _reconcileInhibitor(tx);
-        if (!_authenticating(tx.state))
+    function _reconcile(transaction) {
+        _reconcileInhibitor(transaction);
+        if (!_authenticating(transaction.state))
             return;
         for (const method of passiveMethods)
-            _reconcilePassive(tx, method.name);
-        _reconcilePassword(tx);
-        const status = tx.state.password.status;
+            _reconcilePassive(transaction, method.name);
+        _reconcilePassword(transaction);
+        const status = transaction.state.password.status;
         const busy = status === "pending" || status === "verifying";
-        if (busy && !("verify" in tx.state.timers))
-            _startTimer(tx, "verify", tx.state.settings.timings.verify);
+        if (busy && !("verify" in transaction.state.timers))
+            _startTimer(transaction, "verify", transaction.state.settings.timings.verify);
         else if (!busy)
-            _stopTimer(tx, "verify");
+            _stopTimer(transaction, "verify");
     }
 
     // Held while awake with lockOnSleep, so that logind waits for the lock before sleep;
     // taken again after every wake (the old code lost it for good once released)
-    function _reconcileInhibitor(tx) {
-        const sleep = tx.state.sleep;
-        const lockOnSleep = tx.state.settings.lockOnSleep;
+    function _reconcileInhibitor(transaction) {
+        const sleep = transaction.state.sleep;
+        const lockOnSleep = transaction.state.settings.lockOnSleep;
         if (sleep.inhibitor === "held" && !lockOnSleep) {
-            _releaseInhibitor(tx);
+            _releaseInhibitor(transaction);
         } else if (sleep.inhibitor !== "held" && lockOnSleep && sleep.status !== "suspending") {
-            _set(tx, "sleep", { inhibitor: "held" });
-            _emit(tx, "holdInhibitor", {});
+            _set(transaction, "sleep", { inhibitor: "held" });
+            _emit(transaction, "holdInhibitor", {});
         }
     }
 
-    function _reconcilePassive(tx, name) {
-        const suspending = tx.state.sleep.status === "suspending";
-        let passive = tx.state.passive[name];
+    function _reconcilePassive(transaction, name) {
+        const suspending = transaction.state.sleep.status === "suspending";
+        let passive = transaction.state.passive[name];
         if (passive.status === "running") {
             if (suspending) {
-                _abort(tx, name);
-                _setPassive(tx, name, { status: "paused" });
+                _abort(transaction, name);
+                _setPassive(transaction, name, { status: "paused" });
             }
             return;
         }
         if (passive.status === "backoff") {
             if (!suspending)
                 return;
-            _stopTimer(tx, "retry:" + name);
+            _stopTimer(transaction, "retry:" + name);
         }
         if (passive.status === "broken")
             return;
-        passive = tx.state.passive[name];
+        passive = transaction.state.passive[name];
         const status = passive.config === null ? "unavailable" : suspending ? "paused" : "idle";
         if (status !== passive.status)
-            _setPassive(tx, name, { status: status });
+            _setPassive(transaction, name, { status: status });
         // Not while the methods are being asked and their answer is awaited (after a wake:
         // it is what is trusted), or an abort is still settling. While locking too: the
         // owner can get in even if the compositor confirms late, the unlock then waits
-        const methods = tx.state.methods;
+        const methods = transaction.state.methods;
         const configsServe = methods.status === "known" || (methods.status === "detecting" && !methods.waitForAnswer);
         if (status === "idle" && configsServe && !passive.settling)
-            _startPassive(tx, name);
+            _startPassive(transaction, name);
     }
 
-    function _reconcilePassword(tx) {
-        const password = tx.state.password;
+    function _reconcilePassword(transaction) {
+        const password = transaction.state.password;
         if (password.status !== "pending" || password.settling)
             return;
         // A config known from an earlier answer serves while the methods are asked again
-        const config = _passwordConfig(tx.state);
+        const config = _passwordConfig(transaction.state);
         if (config !== null) {
-            const id = _nextId(tx);
-            _set(tx, "password", { status: "verifying", conversation: { id: id, session: tx.state.phase.session }, config: config });
-            _emit(tx, "startPam", { method: "password", conversation: id, configDirectory: config.directory, config: config.config });
-        } else if (tx.state.methods.status === "known") {
-            _log(tx, "warning", "no password config: the password cannot be checked");
-            _passwordEnded(tx, "unavailable", "Password check is not available");
+            const id = _nextId(transaction);
+            _set(transaction, "password", { status: "verifying", conversation: { id: id, session: transaction.state.phase.session }, config: config });
+            _emit(transaction, "startPam", { method: "password", conversation: id, configDirectory: config.directory, config: config.config });
+        } else if (transaction.state.methods.status === "known") {
+            _log(transaction, "warning", "no password config: the password cannot be checked");
+            _passwordEnded(transaction, "unavailable", "Password check is not available");
         }
     }
 
@@ -1447,32 +1447,32 @@ Singleton {
         return known;
     }
 
-    function _startPassive(tx, name) {
-        const passive = tx.state.passive[name];
-        const id = _nextId(tx);
-        _setPassive(tx, name, {
+    function _startPassive(transaction, name) {
+        const passive = transaction.state.passive[name];
+        const id = _nextId(transaction);
+        _setPassive(transaction, name, {
             status: "running",
-            conversation: { id: id, session: tx.state.phase.session },
-            startedAt: tx.now,
+            conversation: { id: id, session: transaction.state.phase.session },
+            startedAt: transaction.now,
             message: "",
             messageIsError: false
         });
-        _emit(tx, "startPam", { method: name, conversation: id, configDirectory: passive.config.directory, config: passive.config.config });
+        _emit(transaction, "startPam", { method: name, conversation: id, configDirectory: passive.config.directory, config: passive.config.config });
     }
 
     // Aborts a method's conversation within the lock. PamContext kills the child only at
     // the next event-loop pass: the method is not started again until its settle timer
     // has run — never in the step that aborts it.
-    function _abort(tx, method) {
-        const region = method === "password" ? tx.state.password : tx.state.passive[method];
+    function _abort(transaction, method) {
+        const region = method === "password" ? transaction.state.password : transaction.state.passive[method];
         if (region.conversation === null)
             return;
-        _emit(tx, "abortPam", { method: method, conversation: region.conversation.id });
+        _emit(transaction, "abortPam", { method: method, conversation: region.conversation.id });
         if (method === "password")
-            _set(tx, "password", { conversation: null, settling: true });
+            _set(transaction, "password", { conversation: null, settling: true });
         else
-            _setPassive(tx, method, { conversation: null, settling: true });
-        _startTimer(tx, "settle:" + method, tx.state.settings.timings.settle);
+            _setPassive(transaction, method, { conversation: null, settling: true });
+        _startTimer(transaction, "settle:" + method, transaction.state.settings.timings.settle);
     }
 
     // ------------------------------------------------------------------------------------
@@ -1483,56 +1483,56 @@ Singleton {
         return { state: state, effects: [], ignored: reason };
     }
 
-    function _emit(tx, type, fields) {
-        tx.effects.push(Object.assign({ type: type }, fields));
+    function _emit(transaction, type, fields) {
+        transaction.effects.push(Object.assign({ type: type }, fields));
     }
 
-    function _log(tx, level, message) {
-        _emit(tx, "log", { level: level, message: message });
+    function _log(transaction, level, message) {
+        _emit(transaction, "log", { level: level, message: message });
     }
 
-    function _setTop(tx, changes) {
-        tx.state = Object.assign({}, tx.state, changes);
+    function _setTop(transaction, changes) {
+        transaction.state = Object.assign({}, transaction.state, changes);
     }
 
-    function _set(tx, region, changes) {
+    function _set(transaction, region, changes) {
         const replaced = {};
-        replaced[region] = Object.assign({}, tx.state[region], changes);
-        _setTop(tx, replaced);
+        replaced[region] = Object.assign({}, transaction.state[region], changes);
+        _setTop(transaction, replaced);
     }
 
-    function _setPassive(tx, name, changes) {
-        const passive = Object.assign({}, tx.state.passive);
+    function _setPassive(transaction, name, changes) {
+        const passive = Object.assign({}, transaction.state.passive);
         passive[name] = Object.assign({}, passive[name], changes);
-        _setTop(tx, { passive: passive });
+        _setTop(transaction, { passive: passive });
     }
 
     // Conversation ids, timer tokens and detection generations: one counter, never reset
     // within a state's life, so that nothing of an earlier conversation, timer or lock can
     // pass for a current one
-    function _nextId(tx) {
-        const id = tx.state.serial + 1;
-        _setTop(tx, { serial: id });
+    function _nextId(transaction) {
+        const id = transaction.state.serial + 1;
+        _setTop(transaction, { serial: id });
         return id;
     }
 
     // Starts the timer, or restarts it if it runs
-    function _startTimer(tx, name, milliseconds) {
+    function _startTimer(transaction, name, milliseconds) {
         const ms = Math.max(0, Math.round(milliseconds));
-        const token = _nextId(tx);
-        const timers = Object.assign({}, tx.state.timers);
+        const token = _nextId(transaction);
+        const timers = Object.assign({}, transaction.state.timers);
         timers[name] = { token: token };
-        _setTop(tx, { timers: timers });
-        _emit(tx, "startTimer", { name: name, ms: ms, token: token });
+        _setTop(transaction, { timers: timers });
+        _emit(transaction, "startTimer", { name: name, ms: ms, token: token });
     }
 
-    function _stopTimer(tx, name) {
-        if (!Object.prototype.hasOwnProperty.call(tx.state.timers, name))
+    function _stopTimer(transaction, name) {
+        if (!Object.prototype.hasOwnProperty.call(transaction.state.timers, name))
             return;
-        const timers = Object.assign({}, tx.state.timers);
+        const timers = Object.assign({}, transaction.state.timers);
         delete timers[name];
-        _setTop(tx, { timers: timers });
-        _emit(tx, "stopTimer", { name: name });
+        _setTop(transaction, { timers: timers });
+        _emit(transaction, "stopTimer", { name: name });
     }
 
     function _anyPassive(state, status) {

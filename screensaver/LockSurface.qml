@@ -192,7 +192,7 @@ WlSessionLockSurface {
             topMargin: root._margin
             rightMargin: root._margin
         }
-        width: Math.min(360, root.width - 2 * root._margin)
+        width: Math.min(Theme.lockNotificationsWidth, root.width - 2 * root._margin)
         height: Math.min(contentHeight, root.height - 2 * root._margin)
         detail: Profiles.value("lockscreen.lockNotificationDetail") ?? "app"
     }
