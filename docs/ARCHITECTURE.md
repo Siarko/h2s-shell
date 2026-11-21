@@ -1635,7 +1635,9 @@ stand-ins for `nmcli` and `notify-send` first on `PATH` (`tests/fixtures/unit-pa
 suites that build the real settings window and with it the network readers; it finds labwc and
 Quickshell through `tests/lock/resolve.sh` ("Where the test tools come from", below) and fails on any `FAIL`, a
 `TypeError`/`ReferenceError`, a non-zero exit of Quickshell (a crash after a partial
-summary), or fewer suites reporting than `tests.qml` registers; `tests/run-unit-selftest.sh`
+summary), fewer suites reporting than `tests.qml` registers, a suite reporting 0/0, or more
+`PASS:` lines than the summaries count (a check made after its suite reported); the lock bed
+fails a scenario that ends well without a `PASS` line; `tests/run-unit-selftest.sh`
 checks that verdict against stand-in Quickshells, and the suite count (`tests/count-suites.sh`:
 a suite written with arguments counts too).
 
