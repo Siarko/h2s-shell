@@ -1812,6 +1812,42 @@ Everything else is verified by hand: run `quickshell` from the repo root and che
 the bar renders, the clock ticks, cells respond, and popups toggle. Apart from the lock
 screen, there is no automated coverage of any singleton that touches the system.
 
+### Running the tests on another machine
+
+`tests/remote-run.sh` runs a branch's tests on another machine over SSH — the way a change
+made on one system is tested on the other, NixOS and Arch alike:
+
+```
+H2S_REMOTE=<ssh destination> tests/remote-run.sh [<ref>] [-- <command…>]
+H2S_REMOTE=<ssh destination> tests/remote-run.sh --attach <id>
+```
+
+The destination comes from `H2S_REMOTE` (or `--host`) and is never written to a file, here
+or there; ssh runs with `BatchMode=yes`, so it never asks for a password. `<ref>` defaults
+to `HEAD`, which must then have no uncommitted changes; the command defaults to
+`tests/run-all.sh --keep-going`. The remote is asked which commits its repository has
+(`H2S_REMOTE_REPO`, or `--repo`; default `~/src/h2s-shell`), and what it lacks goes over as
+a `git bundle` — the whole history when they share none. It is fetched into that
+repository's objects under a ref of its own, and the run gets a detached working tree of
+its own in `~/.cache/h2s-shell-tests/remote-run/<id>/` on the remote, beside its log, so
+the remote's checkout and a shell running from it are never touched. The command starts in
+a new session (`setsid`), so a dropped connection does not end it, with SIGHUP at its
+default (`env --default-signal=HUP`, not `nohup`: the launcher's tests check it). The script
+polls for its end (every `H2S_REMOTE_POLL` seconds, default 15; for at most
+`H2S_REMOTE_WAIT` or `--wait-max` seconds, default 3600), brings the log back to
+`~/.cache/h2s-shell-tests/remote/<id>.log`, prints the tool lines, the log's last lines
+and the runner's summary, removes the remote tree and bundle, and exits with the remote
+command's status — 2 when the run could not be set up (no destination, the remote
+unreachable, no repository there), was lost, or was still going at the limit. Interrupted
+or cut off, it prints the run's id and the run goes on; `--attach <id>` collects it later.
+
+It needs git and ssh here, and git, bash, `setsid` and coreutils' `env` (8.31 or later) on
+the remote; the run there takes its test tools as any run on that system does.
+`tests/remote-run-selftest.sh`, a part of `--quick`, checks it against a stand-in `ssh` that
+runs the remote half locally in a temp directory: a pass and a failure status, a dropped
+connection and the time limit each picked up with `--attach`, an unreachable remote, a
+missing repository, and the destination in no file written.
+
 ### Where the test tools come from
 
 The unit and module suites need Quickshell, labwc, `setpriv` and `setsid` (util-linux) and

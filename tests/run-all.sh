@@ -66,6 +66,7 @@ parts=(
     "deploy check self-test|tests/deploy-check-selftest.sh"
     "docs rules lint|tests/docs-check-selftest.sh"
     "unit runner self-test|tests/run-unit-selftest.sh"
+    "remote run self-test|tests/remote-run-selftest.sh"
     "system set|tests/run-system.sh"
     "lock bed|tests/lock/run.sh"
 )
