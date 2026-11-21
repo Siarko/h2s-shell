@@ -20,6 +20,8 @@ TestCase {
     id: suite
     suiteName: "StatusPill"
     asynchronous: true
+    // The waves' bands are animations, timed by the theme
+    animations: true
 
     property var toggles: []
 

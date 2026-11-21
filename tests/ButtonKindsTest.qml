@@ -243,7 +243,10 @@ TestCase {
             driver.mouseClick(parts.face, 5, 5);
             driver.mouseClick(parts.face, 5, 5);
             assert(!button.asking && button.confirmations === 1, name + ": a second click acts");
-            _leave(() => parts.area.lit);
+            // A move over the button first: after the two clicks the pointer's move away alone
+            // is not seen as leaving it, and the wait ran out each time
+            driver.mouseMove(parts.face, 6, 6);
+            assert(_leave(() => parts.area.lit), name + ": the pointer gone");
         }
 
         // --- not available ---

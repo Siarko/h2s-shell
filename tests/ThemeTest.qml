@@ -3,6 +3,8 @@ import qs.singletons
 
 TestCase {
     suiteName: "Theme"
+    // Theme.duration at the theme's durations
+    animations: true
 
     function run() {
         const builtin = { colors: { accent: "#44d47a", surface: "#3b3b3b" }, fonts: { family: "Mono", sizeBody: 12 }, bar: { barHeight: 36 }, durations: { expand: 150 }, curves: { expand: "OutQuad" } };
@@ -263,6 +265,11 @@ TestCase {
         assertEqual(Theme.curve("no such role").type, Easing.OutQuad, "a role without a curve eases out");
         assert(Theme.duration("expand") >= 1, "a role has a duration");
         assertEqual(Theme.duration("no such role"), 1, "an unknown role is instant, but still runs");
+        Theme.instantAnimations = true;
+        assert(["expand", "hover", "fade", "no such role"].every(role => Theme.duration(role) === 1), "instant animations (the unit runner's): every role 1 ms, colours too");
+        assertEqual(Theme.duration("spin") + " " + Theme.duration("progressWaveTravel"), Theme.builtin.durations.spin + " " + Theme.builtin.durations.progressWaveTravel, "… but a looping one keeps its time");
+        Theme.instantAnimations = false;
+        assert(Theme.duration("hover") > 1, "… and back at the theme's durations");
 
         const toDefault = ThemeRules.chainFor("wallpaper", name => name === "wallpaper" ? { extends: "default" } : null);
         assertEqual(toDefault.errors.length, 0, "extending a default theme that has no file is not an error");

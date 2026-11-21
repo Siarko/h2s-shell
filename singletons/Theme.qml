@@ -532,12 +532,18 @@ Singleton {
     readonly property bool reduceMotion: Profiles.value("animation.reduceMotion") ?? false
     // Changes of colour or opacity stay with reduced motion: they do not move anything
     readonly property var _keptWhenReduced: ["hover", "state", "fade", "themeChange", "spin"]
+    // Every role that ends takes 1 ms, colours and fades too: set by the unit runner
+    // (tests.qml), so suites do not wait on motion; a suite that tests an animation keeps
+    // them (TestCase.animations). Not a preference, never set by the shell. Looping roles
+    // keep their time: nothing waits for them, and at 1 ms a loop would run many times a frame.
+    property bool instantAnimations: false
+    readonly property var _looping: ["progressWave", "progressWaveTravel", "pulse", "spin"]
 
     // How long an animation of `role` takes, in ms, at the profile's speed. With reduced
     // motion, movement takes 1 ms — not 0, so code waiting for an animation to finish
     // still sees it run. Looping animations (pulse) check reduceMotion themselves.
     function duration(role) {
-        if (reduceMotion && !_keptWhenReduced.includes(role))
+        if (instantAnimations && !_looping.includes(role) || reduceMotion && !_keptWhenReduced.includes(role))
             return 1;
         return Math.max(1, Math.round((values.durations[role] ?? 0) / animationSpeed));
     }

@@ -16,6 +16,16 @@ QtObject {
     // First, before any suite runs: the suites use the real Config singleton, whose
     // file is the user's
     readonly property bool _configReadOnly: { Config.readOnly = true; return true; }
+    // Animations instant, so suites do not wait on them, unless a suite selected here tests
+    // one (TestCase.animations). Set with the bindings, before any suite runs; in an object
+    // of its own, as listing this object's properties for _suites reads them all.
+    readonly property QtObject _motion: QtObject {
+        readonly property bool instant: {
+            const instant = !root._suites.some(suite => suite.selected && suite.animations);
+            Theme.instantAnimations = instant;
+            return instant;
+        }
+    }
 
     property var _promises: PromisesTest {}
     property var _fetch: FetchTest {}

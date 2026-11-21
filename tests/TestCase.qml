@@ -31,6 +31,10 @@ QtObject {
     // says so when it starts (OWN-PROCESS), and the runner's verdict fails a process where
     // other suites reported beside it: a plan that missed the line fails loudly.
     property bool ownProcess: false
+    // Whether this suite tests an animation itself: tests.qml makes every animation instant
+    // (Theme.instantAnimations) unless a suite selected in its process sets this; then the
+    // whole process runs them at the theme's durations
+    property bool animations: false
     // When it started (ms since the epoch), for the time its summary gives: tests/run-unit.sh
     // plans its shards from those times
     property real _startedMs: 0
