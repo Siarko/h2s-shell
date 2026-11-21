@@ -186,6 +186,9 @@ TestCase {
 
     function runAsync() {
         _savedDisabled = Modules.host._plainList(Config.disabledModules);
+        // Waits as long as the suite it follows may run (its runner's time limit fails it,
+        // and this one, if it never ends): a deadline of its own would fail this suite on a
+        // slower machine whenever ModulesTest takes longer than that
         _then("the module host suite is done, the config read", () => (after === null || after.done) && Config.ready, () => {
             Config.disabledModules = [];
             // The real window starts the shell's network readers: they must find the runner's
@@ -199,7 +202,7 @@ TestCase {
             const empty = _slot("settings.general.bottom");
             assertEqual(empty.count + "," + empty.implicitHeight + "," + empty.visible, "0,0,false", "a slot nobody fills: no size, invisible, nothing built");
             Modules.host.load([fixtures + "/good", fixtures + "/broken-slot"], {});
-        });
+        }, 600000);
         _then("good and broken-slot settle", _settled, () => {
             assertEqual(Modules.status("good")?.state, "loaded", "good: loaded in the shell's host");
             // WidgetRegistry
