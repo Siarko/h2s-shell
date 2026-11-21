@@ -356,4 +356,26 @@ Singleton {
         const current = typeof key === "string" && key !== "" ? key : "?";
         return written === "?" || current === "?" || written === current ? "lock" : "stale";
     }
+
+    // The notice of a launcher that gave up (scripts/launch.sh, "Restarts while locked"):
+    // `count` is H2S_SHELL_LOCK_NOTICE as the next launcher handed it on (the restarts made
+    // while the session stayed locked), `runtimeDirectory` XDG_RUNTIME_DIR, where the
+    // launcher's log is. → { summary, body } for one notification, or null when there is
+    // nothing to say: no count, or not a number from 1 to 999 (anything else in that
+    // variable is not the launcher's). The log's path is said only when it is an absolute
+    // path on one line, at most 200 characters.
+    function lockNotice(count, runtimeDirectory) {
+        const text = typeof count === "string" ? count : "";
+        if (!/^[0-9]{1,3}$/.test(text) || Number(text) < 1)
+            return null;
+        const restarts = Number(text);
+        const directory = typeof runtimeDirectory === "string" ? runtimeDirectory : "";
+        const pathUsable = directory.startsWith("/") && directory.length <= 200 && !/[\u0000-\u001f\u007f]/.test(directory);
+        return {
+            summary: "The shell stopped while locked",
+            body: "It stopped again after " + restarts + (restarts === 1 ? " restart" : " restarts")
+                + " and was left locked. "
+                + (pathUsable ? "Log: " + directory.replace(/\/+$/, "") + "/h2s-shell-launcher.log" : "Log: h2s-shell-launcher.log in XDG_RUNTIME_DIR")
+        };
+    }
 }

@@ -293,6 +293,26 @@ TestCase {
         assertEqual(rules.markerDecision("lockedx " + key, key), "none", "a word that is not exactly locked: nothing");
         assertEqual(rules.markerDecision("  locked   " + key + "  ", key), "lock", "spaces around do not matter");
 
+        // --- the notice of a launcher that gave up (scripts/launch.sh) ---
+        const notice = rules.lockNotice("3", "/run/user/1000");
+        assertEqual(notice.summary, "The shell stopped while locked", "a count: a notice");
+        assertEqual(notice.body, "It stopped again after 3 restarts and was left locked. Log: /run/user/1000/h2s-shell-launcher.log",
+                    "… saying how many restarts, and where the launcher's log is");
+        assertEqual(rules.lockNotice("1", "/run/user/1000/").body,
+                    "It stopped again after 1 restart and was left locked. Log: /run/user/1000/h2s-shell-launcher.log",
+                    "one restart: singular; a trailing slash dropped");
+        assertEqual(rules.lockNotice(undefined, "/run/user/1000"), null, "no variable: nothing to say");
+        assertEqual(rules.lockNotice("", "/run/user/1000"), null, "empty: nothing");
+        assertEqual(rules.lockNotice("0", "/run/user/1000"), null, "zero restarts: nothing");
+        assertEqual(rules.lockNotice("1000", "/run/user/1000"), null, "more than three digits: not the launcher's");
+        assertEqual(rules.lockNotice("3 <b>x</b>", "/run/user/1000"), null, "anything but digits: not the launcher's");
+        assertEqual(rules.lockNotice(3, "/run/user/1000"), null, "not a string: not the launcher's");
+        assertEqual(rules.lockNotice("3", "relative/dir").body, "It stopped again after 3 restarts and was left locked. Log: h2s-shell-launcher.log in XDG_RUNTIME_DIR",
+                    "a runtime dir that is not an absolute path is not shown");
+        assert(rules.lockNotice("3", "/run/user/1000\nforged line").body.indexOf("forged") < 0, "… nor one with a line break");
+        assert(rules.lockNotice("3", "/" + "x".repeat(250)).body.indexOf("xxx") < 0, "… nor one longer than 200 characters");
+        assert(rules.lockNotice("3", undefined).body.endsWith("in XDG_RUNTIME_DIR"), "no runtime dir: named by the variable");
+
         // --- Hyprland's word before a lock is taken back ---
         const said = (option, locked) => '{"option":"misc:allow_session_lock_restore","bool":' + option + ',"set":true}\n{"locked": ' + locked + "}";
         let hypr = rules.hyprlandLockFacts(said("false", "true"));

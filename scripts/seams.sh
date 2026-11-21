@@ -19,6 +19,6 @@ seam_system=
 seam_auth_methods=
 # The gdbus the methods script asks fprintd with (lock-auth-methods.sh)
 seam_gdbus=gdbus
-# The launcher's pauses, "first=S slow=S lockwait=S discoveryhang=S"; empty: its own
+# The launcher's pauses, "first=S lockwait=S discoveryhang=S"; empty: its own
 # (launch.sh)
 seam_launcher_timings=

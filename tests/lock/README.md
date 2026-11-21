@@ -359,7 +359,7 @@ value, one set to a value that cannot be used is ignored (and named in the log).
 | `H2S_SHELL_TEST_MODULE_CHECK_MS` | `TestSeams` | the module checks' deadline, ms |
 | `H2S_SHELL_TEST_MODULE_NOTIFY` | `TestSeams` | `1`: in module test mode notifications are sent all the same (to the bed's private bus), not only recorded |
 | `H2S_FAKE_VPN_PROVIDER` | `TestSeams` | `1`: the stand-in VPN provider (`tests/FakeVpnProvider.qml`, IPC target `fakevpn`) |
-| `H2S_LAUNCHER_TEST_TIMINGS` | `seams.sh` | the launcher's pauses, `first=S slow=S lockwait=S`, and `discoveryhang=S` |
+| `H2S_LAUNCHER_TEST_TIMINGS` | `seams.sh` | the launcher's pauses, `first=S lockwait=S`, and `discoveryhang=S` |
 
 When any of the QML ones is in force the shell logs `[TestSeams] test bed: <names>`, and
 `ipc call modules list` and the lock screen's `state` (its `driver` block) carry the names as
@@ -489,9 +489,9 @@ across a gap, `lock_watch_never_unlocked` says no poll saw it unlocked. `marker_
 <locked|unlocked>` reads the lock marker on disk; `protocol_errors` / `no_protocol_errors`
 look for a protocol error or a killed client in both logs. `launcher_ipc <target> <function>` calls the shell
 the way the owner's keybind does (`h2s-shell ipc call …`: the launcher's `ipc`, which tries a
-call again while the shell reloads). `stack_start --launcher-timings "first=0.2 slow=2
+call again while the shell reloads). `stack_start --launcher-timings "first=0.2
 lockwait=5"` shortens the launcher's pauses (`H2S_LAUNCHER_TEST_TIMINGS`: the first pause,
-the slow retry while locked, how long a second launcher waits for the lock; seconds), and
+how long a second launcher waits for the lock; seconds), and
 `--shell-path <dir>` puts a directory of stand-in programs first on the shell's PATH (a
 `hyprctl` that hangs: `restart-hyprctl-hang`). `--modules <list>` sets the launcher's
 `H2S_SHELL_MODULE_PATH` (its input: module directories or directories of modules;

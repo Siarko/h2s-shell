@@ -46,7 +46,8 @@ TestCase {
         "IpcHandler lockscreen",
         "CapsLockLed _capsLed",
         "PersistentProperties _helperSweepOnce",
-        "Process _helperSweep"
+        "Process _helperSweep",
+        "FileView _lockRestarts"
     ]
 
     // The root's direct children of a QML text, in order, as "Type name"

@@ -375,6 +375,7 @@ PanelWindow {
     //   qs ipc call shelltest cellRect clock
     //   qs ipc call shelltest popupItemRect calendarAdd
     //   qs ipc call shelltest popupState
+    //   qs ipc call shelltest notifierRecorded
     //   qs ipc call shelltest toastBadges
     //   qs ipc call shelltest notificationAction 7 cancel
     //   qs ipc call shelltest notificationDismiss 7
@@ -397,6 +398,14 @@ PanelWindow {
             if (!window)
                 return "{}";
             return bar._testRect(bar._testFind(window.contentItem, item => item.objectName === name && item.visible), window._screenOffset);
+        }
+
+        // What Notifier recorded instead of sending (module test mode, as in a test tree):
+        // [{ summary, body, urgency, format }], oldest first
+        function notifierRecorded(): string {
+            return JSON.stringify(Notifier.recorded.map(entry => ({
+                summary: entry.summary, body: entry.body, urgency: entry.urgency, format: entry.format
+            })));
         }
 
         // How many toasts wait in each queue, as the badges count them: { critical, staying,

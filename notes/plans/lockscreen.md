@@ -816,11 +816,12 @@ Ordering guarantees within one step:
       compositor leaves the socket file behind). Checked when the shell died and again
       after the pause.
     - Pauses 1, 2, 4, 8, 16 s while the shell keeps dying within 30 s; more than 5 restarts
-      in 2 minutes: given up — unless the marker says locked (and the compositor is alive):
-      then tried again every 60 s, each attempt logged, for as long as it stays so (giving
-      up left the owner at the compositor's dead-lock screen with no shell). A shell that
-      runs 30 s resets the count; the lock over (marker unlocked), deaths are counted
-      afresh. `H2S_LAUNCHER_TEST_TIMINGS` ("first=0.1 slow=2 lockwait=3", seconds) shortens
+      in 2 minutes: given up. A shell that died while the marker says locked (and the
+      compositor is alive): at most 3 restarts while the session stays locked, then the
+      launcher gives up and ends, the session left locked (notes/decisions.md; launch.sh,
+      "Restarts while locked": the count in `h2s-shell-lock-restarts`, which the shell
+      overwrites at an unlock; the notice the next launcher hands its first shell). A shell
+      that runs 30 s resets the quick count. `H2S_LAUNCHER_TEST_TIMINGS` ("first=0.1 lockwait=3", seconds) shortens
       the pauses for the test bed (inert unless set).
     - `--restart` sends SIGUSR1 to the supervisor holding the lock (checked: the pid in the
       lock file, the user's, running `launch.sh`, the lock really held) whether or not a
@@ -864,9 +865,8 @@ Ordering guarantees within one step:
   the lock back rather than a new one, the marker stays "locked", and it looks again after
   5 s, doubling to a minute (`_restoreTable`). A refusal by the compositor itself (without
   the Hyprland question) is handled the same. Without Hyprland's answer each attempt may
-  get the shell killed: the launcher slows down to one attempt a minute after 5 restarts in
-  2 minutes (the marker says locked), so no hot loop, and a shell comes back by itself once
-  the setting is on.
+  get the shell killed: the launcher gives up after 3 restarts while locked, so no hot
+  loop; the launcher is then started again by hand, after the setting is on.
   The owner's ways back, from another console (Ctrl+Alt+F2, log in):
   - `hyprctl -i 0 eval 'hl.config({ misc = { allow_session_lock_restore = true } })'` (with
     `XDG_RUNTIME_DIR` set, as a login sets it; `-i 0` is the first Hyprland instance) — the

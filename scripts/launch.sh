@@ -9,7 +9,8 @@
 # dies (a crash, a kill, the OOM killer) — above all a shell that dies while the screen is
 # locked: the compositor keeps the session locked, and only a new shell can show a prompt
 # again (it finds the lock marker and locks at once; notes/plans/lockscreen.md, section 7,
-# "Restart"). See supervise() for what counts as stopping on purpose. One supervisor per
+# "Restart") — at most 3 times while the session stays locked (see supervise()). See
+# supervise() for what counts as stopping on purpose. One supervisor per
 # session: it holds $XDG_RUNTIME_DIR/h2s-shell-launcher.lock (flock), and a second launcher
 # waits a little for it to end, then gives up. What it does is logged, timestamped, to
 # $XDG_RUNTIME_DIR/h2s-shell-launcher.log (scripts/lock-log.sh prints it).
@@ -445,16 +446,14 @@ clean_up_after() {
 }
 
 # The pauses, in milliseconds: the first after a quick death (doubling while the shell
-# keeps dying within 30 s of starting), and the slow retry of a shell that died while
-# locked and keeps dying; and how long a new launcher waits for an old one to end.
-# In a test tree the lock test bed shortens them ("first=0.1 slow=2 lockwait=3", seconds:
+# keeps dying within 30 s of starting); and how long a new launcher waits for an old one to
+# end. In a test tree the lock test bed shortens them ("first=0.1 lockwait=3", seconds:
 # seam_launcher_timings, from scripts/seams.sh — empty, a constant, in the shell itself),
 # and "discoveryhang=S" makes module discovery take S seconds, as on a hung mount
 # (find_modules). A seams.sh that cannot be read leaves the launcher's own pauses: the
 # shell must still start.
 source "$(dirname "$(readlink -f "$0")")/seams.sh" || echo "launch.sh: cannot read seams.sh: the launcher's own pauses" >&2
 pause_first_ms=1000
-pause_slow_ms=60000
 lock_wait=15
 discovery_hang_ms=""
 seconds_to_ms() { awk -v seconds="$1" 'BEGIN { if (seconds + 0 > 0) printf "%d", seconds * 1000 }'; }
@@ -463,7 +462,6 @@ for timing in ${seam_launcher_timings:-}; do
     [ -n "$value" ] || continue
     case "$timing" in
         first=*) pause_first_ms=$value ;;
-        slow=*) pause_slow_ms=$value ;;
         lockwait=*) lock_wait=$(( (value + 999) / 1000 )) ;;
         discoveryhang=*) discovery_hang_ms=$value ;;
     esac
@@ -561,6 +559,43 @@ wait_for_shell() {
     done
 }
 
+# Restarts while locked (notes/decisions.md, "Lock supervisor"): a shell that died while the
+# screen was locked is started again at most $max_locked_restarts times while the session
+# stays locked. Then the launcher gives up and ends; the compositor keeps the session locked
+# (never unlocked), and the owner starts the launcher again by hand from a text console. A
+# shell that keeps dying under the lock would otherwise be started for good, each start
+# a new lock client the owner cannot use.
+#
+# "While the session stays locked": counted from the last unlock. The launcher sees the
+# shell only when it dies, so the shell tells it of an unlock through the record: at each
+# restart while locked the launcher writes its count there, and the shell overwrites it when a
+# lock ends (singletons/Lockscreen.qml, writeMarker "unlocked"). A new launcher starts at 0
+# (a start by hand gives a new budget). Giving up, the launcher leaves the notice: the next
+# launcher reads it, removes it and hands its count to the first shell it starts
+# (H2S_SHELL_LOCK_NOTICE), which shows one notification once the session is unlocked
+# (singletons/LockNotice.qml).
+max_locked_restarts=3
+locked_restarts_file=$runtime_dir/h2s-shell-lock-restarts
+lock_notice_file=$runtime_dir/h2s-shell-lock-notice
+
+# locked_restarts_standing <counted> <record> <written>: of the restarts this launcher made
+# while the screen was locked (<counted>), how many still stand — the session not unlocked
+# since. <record> is what the record holds now. The number the launcher last wrote there:
+# not unlocked since, <counted>. Anything else (the shell's "unlocked …", missing, garbage):
+# unlocked since, 0. When the launcher could not write the record (<written> empty),
+# nothing tells an unlock apart: <counted> stands — the safe side: fewer restarts, the
+# session locked either way.
+locked_restarts_standing() {
+    if [ -z "$3" ] || [ "$2" = "$1" ]; then echo "$1"; else echo 0; fi
+}
+
+# The record as it is now (one line, at most a few characters taken)
+locked_restarts_record() {
+    local record=""
+    [ -f "$locked_restarts_file" ] && { IFS= read -r -n 16 record < "$locked_restarts_file"; } 2> /dev/null
+    printf '%s' "$record"
+}
+
 # Runs the shell as a child and starts it again when it dies — not when it was stopped on
 # purpose. On purpose: it quit cleanly (`qs kill`, exit status 0) or by SIGTERM / SIGINT /
 # SIGHUP — unless the screen was locked (the marker says so), since then only a new shell
@@ -570,15 +605,19 @@ wait_for_shell() {
 # stop: the shell runs on, supervised. Anything else — a crash Quickshell's own handler
 # gave up on (it restarts a crashed shell in the same process unless it crashed within 10 s
 # of starting, then it exits with 255), SIGKILL, the OOM killer — starts it again after a
-# pause: 1 s, doubling while it keeps dying within 30 s of starting. More than 5 restarts
-# in 2 minutes: given up — unless the screen was locked when it died and the compositor is
-# still there, since giving up then leaves the owner at the compositor's dead-lock screen
-# for good: tried again every minute, until one runs (a later fix, a setting switched on).
+# pause: 1 s, doubling while it keeps dying within 30 s of starting. Died while the screen
+# was locked: at most $max_locked_restarts restarts while the session stays locked (above),
+# then given up, the session left locked. Otherwise more than 5 restarts in 2 minutes:
+# given up.
 supervise() {
     prepare_environment
     export H2S_SHELL_SUPERVISOR=$$
-    local child="" stopping="" status=0 started delay_ms=$pause_first_ms slow="" lock_fd=""
+    # (Inherited from a shell that was handed it: a --restart run from inside the shell)
+    unset H2S_SHELL_LOCK_NOTICE
+    local child="" stopping="" status=0 started delay_ms=$pause_first_ms lock_fd=""
     local recent=()
+    # Restarts while locked: how many stand, and whether the record holds the count
+    local locked_restarts=0 record_written="" notice=""
     # Deaths within 30 s of starting, in a row: from two on, the next start is in safe mode
     local quick_deaths=0
     [ -f "$launcher_log" ] && [ "$(stat -c %s "$launcher_log" 2> /dev/null || echo 0)" -gt 524288 ] \
@@ -586,6 +625,14 @@ supervise() {
     become_supervisor
     # (Without the lock, a descriptor of no consequence: the redirections below close it)
     [ -n "$lock_fd" ] || exec {lock_fd}< /dev/null
+    # A launcher that gave up left its notice: for this one's first shell. And a fresh budget
+    if [ -f "$lock_notice_file" ]; then
+        { IFS= read -r -n 16 notice < "$lock_notice_file"; } 2> /dev/null
+        rm -f "$lock_notice_file"
+        [[ "$notice" =~ ^[0-9]{1,3}$ ]] || notice=""
+        [ -z "$notice" ] || say "the last launcher gave up on a shell that died while the screen was locked: the shell will say so"
+    fi
+    rm -f "$locked_restarts_file"
     compositor_identity=$(socket_identity)
     say "supervising the shell in $shell_dir (compositor socket $(compositor_socket)${compositor_identity:+, $compositor_identity})"
     trap 'stopping=1; say "told to let the shell go (SIGUSR1)"' USR1
@@ -611,8 +658,11 @@ supervise() {
         started=$SECONDS
         # Not the lock's descriptor (a shell outliving this launcher would keep the next one
         # out), nor a terminal's input (a background job reading it is stopped)
+        [ -z "$notice" ] || export H2S_SHELL_LOCK_NOTICE=$notice
         qs --log-times -p "$shell_dir" "$@" < /dev/null {lock_fd}>&- &
         child=$!
+        unset H2S_SHELL_LOCK_NOTICE
+        notice=""
         say "started the shell: pid $child"
         wait_for_shell
         clean_up_after "$child"
@@ -628,7 +678,6 @@ supervise() {
         local now=$SECONDS kept=() time
         if [ $((now - started)) -ge 30 ]; then
             delay_ms=$pause_first_ms
-            slow=""
             recent=()
         fi
         # What this counter can see: how long the PROCESS it started lived. Not how long the
@@ -646,28 +695,38 @@ supervise() {
         fi
         for time in "${recent[@]}"; do [ $((now - time)) -lt 120 ] && kept+=("$time"); done
         recent=("${kept[@]}" "$now")
-        # The slow retries were for a locked screen; that over (a shell came up and was
-        # unlocked), deaths are counted afresh
-        if [ -n "$slow" ] && ! died_locked; then
-            slow=""
-            recent=("$now")
-            delay_ms=$pause_first_ms
-        fi
-        if [ -z "$slow" ] && [ "${#recent[@]}" -gt 5 ]; then
-            if died_locked; then
-                slow=1
-                say "the shell died $((${#recent[@]} - 1)) times in 2 minutes while the screen was locked: trying again every $(ms_to_seconds "$pause_slow_ms") s"
+        local why=""
+        if died_locked; then
+            locked_restarts=$(locked_restarts_standing "$locked_restarts" "$(locked_restarts_record)" "$record_written")
+            if [ "$locked_restarts" -ge "$max_locked_restarts" ]; then
+                say "the shell exited (status $status) while the screen was locked, after $locked_restarts restarts since the" \
+                    "last unlock: not starting it again. The session stays locked. From a text console (Ctrl+Alt+F2):" \
+                    "the log (h2s-shell --lock-log, or this file), then start the launcher again in the session"
+                printf '%s\n' "$locked_restarts" > "$lock_notice_file" 2> /dev/null \
+                    || say "cannot write $lock_notice_file: the next shell will not say what happened"
+                rm -f "$locked_restarts_file"
+                say "supervisor ends"
+                exit 1
+            fi
+            locked_restarts=$((locked_restarts + 1))
+            if printf '%s\n' "$locked_restarts" > "$locked_restarts_file" 2> /dev/null; then
+                record_written=1
             else
+                record_written=""
+                say "cannot write $locked_restarts_file: an unlock will not reset the count of restarts while locked"
+            fi
+            why=" while the screen was locked"
+        else
+            if [ "${#recent[@]}" -gt 5 ]; then
                 say "the shell died $((${#recent[@]} - 1)) times in 2 minutes: not starting it again"
                 exit 1
             fi
         fi
-        [ -n "$slow" ] && delay_ms=$pause_slow_ms
-        say "the shell exited (status $status)$(died_locked && echo ' while the screen was locked'): starting it again in $(ms_to_seconds "$delay_ms") s"
+        say "the shell exited (status $status)$why: starting it again in $(ms_to_seconds "$delay_ms") s${why:+ (restart $locked_restarts of $max_locked_restarts while locked)}"
         sleep "$(ms_to_seconds "$delay_ms")" {lock_fd}>&- &
         wait $! 2> /dev/null
         kill $! 2> /dev/null
-        [ -z "$slow" ] && [ $((now - started)) -lt 30 ] && delay_ms=$((delay_ms * 2))
+        [ $((now - started)) -lt 30 ] && delay_ms=$((delay_ms * 2))
         [ -n "$stopping" ] && break
         compositor_alive || { say "the compositor is gone: not starting the shell again"; break; }
     done
@@ -729,7 +788,7 @@ case "$1" in
         # nothing to supervise (and a supervisor would take that exit for the shell's)
         for argument in "$@"; do
             case "$argument" in
-                -d | --daemonize) prepare_environment; discover_modules; exec qs -p "$shell_dir" "$@" ;;
+                -d | --daemonize) prepare_environment; unset H2S_SHELL_LOCK_NOTICE; discover_modules; exec qs -p "$shell_dir" "$@" ;;
             esac
         done
         supervise "$@"

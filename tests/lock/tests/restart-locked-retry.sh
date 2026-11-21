@@ -1,14 +1,14 @@
 # The shell dies while locked and cannot start again (here: its shell.qml broken in the
-# run's copy — as a bad edit, a missing library). The launcher's quick restarts all fail;
-# while the screen was locked it must not give up (the owner would be left at the
-# compositor's dead-lock screen with no shell at all): it goes on trying every minute (2 s
-# here), and logs each attempt. Once the shell can start again (the file mended), the next
-# attempt comes up LOCKED, and the compositor never showed unlocked. Unlocked, the launcher
-# gives up as before: a shell that cannot start is not started forever.
+# run's copy — as a bad edit, a missing library). The launcher's restarts all fail; each
+# counts towards its limit while locked (scripts/launch.sh, "Restarts while locked"): after
+# 3 it gives up and ends, and the compositor keeps the session locked — it never showed
+# unlocked. Once the shell can start again (the file mended), the owner starts the launcher
+# by hand: the shell comes up LOCKED (the marker). Unlocked, the launcher gives up on a
+# shell that cannot start after 5 restarts in 2 minutes, as before.
 #
-# The launcher's pauses are shortened (H2S_LAUNCHER_TEST_TIMINGS: first 0.1 s, slow 2 s).
+# The launcher's first pause is shortened (H2S_LAUNCHER_TEST_TIMINGS: 0.1 s).
 
-stack_start --launcher-timings "first=0.1 slow=2"
+stack_start --launcher-timings "first=0.1"
 
 shell_qml=$LOCKTEST_SHELL/shell.qml
 cp "$shell_qml" "$WORK/shell.qml.good"
@@ -25,22 +25,21 @@ supervisor=$SUPERVISOR_PID
 break_shell
 old_shell=$SHELL_PID
 signal_shell KILL
-check_within 60 "after the quick restarts failed, the launcher goes on slowly" \
-    grep -aq "while the screen was locked: trying again every 2 s" "$WORK/shell.log"
-slow_attempts() { grep -ac "while the screen was locked: starting it again in 2 s" "$WORK/shell.log"; }
-attempts_before=$(slow_attempts)
-more_slow_attempts() { [ "$(slow_attempts)" -ge $((attempts_before + 2)) ]; }
-check_within 40 "… each attempt logged, two more of them" more_slow_attempts
-check "the launcher is still there" kill -0 "$supervisor"
-check "it did not give up" test "$(shell_log_count "not starting it again")" = 0
+check_within 30 "after 3 failed restarts while locked, the launcher gives up" \
+    grep -aq "after 3 restarts since the last unlock: not starting it again. The session stays locked." "$WORK/shell.log"
+check_within 5 "… and ends" test ! -e "/proc/$supervisor"
+check "each failed start counted" test "$(shell_log_count "while locked)")" = 3
 check "the compositor is still locked" compositor_locked
 check "the marker still says locked" marker_file_is locked
+stop_lock_watch
+check "the compositor never reported unlocked" lock_watch_never_unlocked
+cp "$WORK/shell.log" "$WORK/shell-first-launcher.log"
 
 mend_shell
-# A shell whose IPC answers (the broken attempts never get that far)
-shell_up() { local pid; pid=$(_find_shell_pid) || return 1; SHELL_PID=$pid; shell_ipc lockscreen status > /dev/null 2>&1; }
-check_within 15 "the next attempt starts a shell that stays" shell_up
-_track_shell_group
+start_lock_watch by-hand
+start_launcher
+log "a launcher started by hand: pid $SUPERVISOR_PID, its shell $SHELL_PID"
+supervisor=$SUPERVISOR_PID
 check_within 10 "it comes up locked (the marker)" state_is phase locked
 check_within 5 "confirmed" state_is secure true
 sleep 1

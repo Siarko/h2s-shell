@@ -167,6 +167,9 @@ Singleton {
     // there is no marker and a restarted shell cannot know (logged once).
     readonly property string _runtimeDirectory: Quickshell.env("XDG_RUNTIME_DIR") ?? ""
     readonly property string _markerPath: _runtimeDirectory !== "" ? _runtimeDirectory + "/h2s-shell-lock" : ""
+    // The launcher's record of its restarts while locked (scripts/launch.sh, "Restarts while
+    // locked"): overwritten here when a lock ends, which tells the launcher of the unlock
+    readonly property string _lockRestartsPath: _runtimeDirectory !== "" ? _runtimeDirectory + "/h2s-shell-lock-restarts" : ""
     // Taking the lock back after the compositor refused it: 5 s, doubling up to a minute
     // (under Hyprland each attempt is first a question to it — cheap, and asking for the lock
     // only once it would be given)
@@ -571,6 +574,12 @@ Singleton {
             markerState = word;
             _marker.setText(word === "locked" ? "locked " + lockKey + "\n" : "unlocked\n");
             log("info", "lock marker: " + (word === "locked" ? "locked " + lockKey : "unlocked"));
+            // The session is unlocked: the launcher's count of restarts while locked starts
+            // afresh (scripts/launch.sh, "Restarts while locked"). Anything but its count
+            // says so; the time makes each write differ from the last (FileView skips a
+            // write of the text it already holds, and the launcher writes behind its back)
+            if (word === "unlocked" && root._lockRestartsPath !== "")
+                _lockRestarts.setText("unlocked " + Date.now() + "\n");
         }
 
         // "unlocked" goes on disk a moment after the step that ended the lock, not in it:
@@ -1235,5 +1244,18 @@ Singleton {
             splitMarker: "\n"
             onRead: line => root._log("warning", "killed a PAM helper this process left before it was restarted in place: " + line)
         }
+    }
+
+    // The launcher's record of restarts while locked, overwritten at an unlock (writeMarker).
+    // Never read here. Last among the children: the ones before keep their positions
+    FileView {
+        id: _lockRestarts
+        path: root._lockRestartsPath
+        preload: false
+        blockWrites: true
+        atomicWrites: true
+        printErrors: false
+        onSaveFailed: error => root._log("warning", "could not write the launcher's record " + root._lockRestartsPath + ": "
+            + FileViewError.toString(error))
     }
 }

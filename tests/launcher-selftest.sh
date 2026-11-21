@@ -66,7 +66,8 @@ for name in bash env dirname readlink id date stat mv flock awk sed timeout slee
     real=$(type -P "$name") || { echo "launcher-selftest.sh: $name not found on PATH (launch.sh calls it)" >&2; exit 2; }
     ln -s "$real" "$work/bin/$name"
 done
-# The shell: notes its pid in its supervisor's directory, then does what the file `mode`
+# The shell: notes its pid in its supervisor's directory (and the notice it was handed,
+# H2S_SHELL_LOCK_NOTICE, or "unset", in `notices`), then does what the file `mode`
 # there says — "run" (it sleeps), "exit <status>", or "hangup-and-die" (once: it sends its
 # supervisor SIGHUP and is killed at the same moment; the next one runs). It sleeps for a
 # minute, more than any case takes: one that clean_up missed (its launcher killed before it
@@ -74,6 +75,7 @@ done
 {
     echo "#!$bash_path"
     echo 'echo $$ >> "$LAUNCHER_SELFTEST_DIR/starts"'
+    echo 'echo "${H2S_SHELL_LOCK_NOTICE-unset}" >> "$LAUNCHER_SELFTEST_DIR/notices"'
     echo 'read -r what status < "$LAUNCHER_SELFTEST_DIR/mode"'
     echo '[ "$what" = exit ] && exit "$status"'
     echo 'if [ "$what" = hangup-and-die ]; then'
@@ -137,6 +139,7 @@ start_launcher() {
     at=$work/$1
     mkdir -p "$at/run"
     : > "$at/starts"
+    : > "$at/notices"
     echo run > "$at/mode"
     (
         ulimit -f 2048
@@ -278,6 +281,60 @@ signal TERM "$launcher"
 within 5 "SIGTERM to the supervisor: the shell is stopped" gone "$running"
 within 5 "… and the supervisor ends" gone "$launcher"
 is "… without starting another" test "$(starts)" = 1
+
+# ---- (6) Died while locked: at most 3 restarts while the session stays locked ---
+# The lock marker says locked (the stand-in shell never writes it); the record of restarts
+# while locked is the launcher's, overwritten by the shell at an unlock — here emptied by this script
+echo "== died while locked"
+start_launcher locked
+up
+marker=$at/run/h2s-shell-lock
+record=$at/run/h2s-shell-lock-restarts
+echo "locked selftest-key" > "$marker"
+record_is() { [ "$(cat "$record" 2> /dev/null)" = "$1" ]; }
+kill_and_restart() { local before; before=$(starts); signal KILL "$(shell_pid)"; wait_until 10 started $((before + 1)); }
+kill_and_restart
+is "killed while locked: started again" test "$(starts)" = 2
+is "… the first restart while locked, said so" said "while the screen was locked: starting it again in 0.1 s (restart 1 of 3 while locked)"
+within 3 "… and recorded" record_is 1
+kill_and_restart
+is "the second, recorded" record_is 2
+: > "$record"
+
+echo "    (the record emptied: an unlock, as the shell overwrites it)"
+kill_and_restart
+is "after an unlock the count starts afresh" test "$(said_times "(restart 1 of 3 while locked)")" = 2
+is "… recorded" record_is 1
+echo garbage > "$record"
+kill_and_restart
+is "a record that is not the launcher's count counts as an unlock" test "$(said_times "(restart 1 of 3 while locked)")" = 3
+kill_and_restart
+kill_and_restart
+is "the third restart since the last unlock" said "(restart 3 of 3 while locked)"
+is "… recorded" record_is 3
+last=$(shell_pid)
+signal KILL "$last"
+within 10 "the fourth death while locked: not started again, the supervisor ends" gone "$launcher"
+is "… which said so" said "after 3 restarts since the last unlock: not starting it again. The session stays locked."
+is "… after 7 starts in all" test "$(starts)" = 7
+is "… it left the notice for the next launcher" test "$(cat "$at/run/h2s-shell-lock-notice" 2> /dev/null)" = 3
+is "… and removed its record" test ! -e "$record"
+is "… and never touched the marker" test "$(cat "$marker")" = "locked selftest-key"
+is "no notice was handed to any of those shells" test "$(grep -cx unset "$at/notices")" = 7
+
+# The next launcher, started by hand: its first shell is handed the notice, the next not
+start_launcher locked
+up
+is "the next launcher hands its first shell the notice" test "$(head -n 1 "$at/notices")" = 3
+is "… and removed it" test ! -e "$at/run/h2s-shell-lock-notice"
+is "… and said so" said "the last launcher gave up on a shell that died while the screen was locked"
+kill_and_restart
+is "its next shell is not handed it" test "$(sed -n 2p "$at/notices")" = unset
+is "a new launcher starts a fresh count" said "(restart 1 of 3 while locked)"
+echo unlocked > "$marker"
+echo "exit 0" > "$at/mode"
+signal KILL "$(shell_pid)"
+within 5 "unlocked, a shell that quits ends the supervisor as before" gone "$launcher"
 
 echo
 if [ "$failures" = 0 ]; then

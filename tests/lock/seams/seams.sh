@@ -16,6 +16,6 @@ seam_auth_methods=${H2S_LOCK_AUTH_METHODS:-}
 # H2S_LOCK_TOOLS: a directory whose gdbus stands in (a stand-in fprintd behind it)
 seam_gdbus=${H2S_LOCK_TOOLS:+$H2S_LOCK_TOOLS/gdbus}
 seam_gdbus=${seam_gdbus:-gdbus}
-# H2S_LAUNCHER_TEST_TIMINGS: the launcher's pauses, shortened ("first=0.1 slow=2 lockwait=3",
+# H2S_LAUNCHER_TEST_TIMINGS: the launcher's pauses, shortened ("first=0.1 lockwait=3",
 # seconds), and "discoveryhang=S", a module search that takes S seconds
 seam_launcher_timings=${H2S_LAUNCHER_TEST_TIMINGS:-}

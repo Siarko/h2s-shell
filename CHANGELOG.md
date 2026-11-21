@@ -765,6 +765,12 @@ The interface modules are written against (`qs.api`), versioned on its own
   most), instead of one accent dot for the day.
 
 ### Changed
+- A shell that keeps dying while the screen is locked is started again at most 3 times
+  while the session stays locked (an unlock starts the count afresh), no longer once a
+  minute for good. Then the launcher gives up and the session stays locked; the way back is
+  a text console, where the launcher is started again (docs/FEATURES.md, "The limit while
+  locked"). Once unlocked, the new shell says in one notification what happened and where
+  the log is.
 - "Lock before the computer sleeps" (Settings → Lockscreen) is off by default: a change of
   behaviour people rely on. A configuration that holds no value for it — a new one, or one
   made before the setting came — no longer locks the screen before sleep; turn it on to keep

@@ -329,14 +329,30 @@ Two independent stages, both driven by Wayland idle notifications:
   (with lock before sleep on) as long as the lock is up within a few seconds.
   A shell that dies while locked — a crash, a kill, the OOM killer, `qs kill`,
   `h2s-shell --restart` — is started again by the launcher (`h2s-shell`, which stays as its
-  supervisor, one per session; 5 quick restarts in 2 minutes, then once a minute for as long
-  as the screen is locked) or by Quickshell's own crash handler, and
+  supervisor, one per session) or by Quickshell's own crash handler, and
   locks again at once: it finds the lock marker it left in `$XDG_RUNTIME_DIR`. A shell
-  stopped on purpose while unlocked is not started again. What it left behind (a
+  stopped on purpose while unlocked is not started again; one that keeps dying while
+  unlocked is given up after 5 quick restarts in 2 minutes. What it left behind (a
   fingerprint conversation holding the reader) is killed. Under Hyprland this needs
   `misc:allow_session_lock_restore = true` in the Hyprland config; without it Hyprland
   keeps its "lockscreen app died" screen, the shell says `compositor-locked` and waits for
   the setting.
+- **The limit while locked** — the launcher starts a shell that died while locked at most 3
+  times while the session stays locked (an unlock starts the count afresh; Quickshell's own
+  restarts in place are not counted). When it dies a fourth time the launcher gives up and
+  ends: the session stays locked, at the compositor's own screen (Hyprland: "lockscreen app
+  died"), and is never unlocked by this. The way back is a text console (Ctrl+Alt+F2, log
+  in): read what happened (`h2s-shell --lock-log`, or the launcher's log
+  `$XDG_RUNTIME_DIR/h2s-shell-launcher.log`), fix what kills the shell if it is known, and
+  start the launcher again inside the session — with `WAYLAND_DISPLAY` and
+  `HYPRLAND_INSTANCE_SIGNATURE` set to the session's (`hyprctl instances` lists both):
+  - NixOS: `h2s-shell --restart`
+  - Arch: `~/.config/quickshell/default/scripts/launch.sh --restart` (the checkout
+    `install.sh` made; its `--lock-log` is the log command)
+
+  The new shell locks again at once (the marker), so the password or finger unlocks the
+  session as usual. Once it is unlocked, one notification says that the shell stopped
+  while locked, after how many restarts, and where the launcher's log is.
 - **Other ways out** — logind's Unlock for the shell's session (`loginctl
   unlock-session`, from another console), and the compositor ending the lock. There is no
   unlock over IPC, and no key unlocks: Escape shows a hidden prompt (as any key) and hides a

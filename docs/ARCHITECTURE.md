@@ -562,8 +562,18 @@ session):
   dies, not when it was stopped on purpose (clean exit or SIGTERM/INT/HUP while unlocked;
   SIGUSR1 to the launcher lets the shell go, which `--restart` does — to the lock's holder
   even when no shell is alive), nor once its compositor is gone (another socket, or nobody
-  holding `<socket>.lock`); with a growing pause, at most 5 restarts in 2 minutes — then,
-  if the screen was locked, once a minute; it kills what the dead shell left of
+  holding `<socket>.lock`); with a growing pause. A shell that died while the screen was
+  locked (the marker says so) is started again at most 3 times while the session stays
+  locked; the fourth death ends the launcher, the compositor keeping the session locked
+  (`notes/decisions.md`: the owner starts the launcher by hand from a text console; FEATURES,
+  "The limit while locked"). "While the session stays locked": the launcher writes its count
+  to `$XDG_RUNTIME_DIR/h2s-shell-lock-restarts` at each such restart, and the shell overwrites
+  it when a lock ends (`writeMarker("unlocked")`) — anything but the launcher's own number
+  there is an unlock; a new launcher starts at 0. Giving up, it leaves its count in
+  `$XDG_RUNTIME_DIR/h2s-shell-lock-notice`; the next launcher removes that file and hands
+  the count to its first shell only (`H2S_SHELL_LOCK_NOTICE`), where `LockNotice` sends one
+  notification (`LockIoRules.lockNotice`) once the session is unlocked. Otherwise (unlocked)
+  at most 5 restarts in 2 minutes. It kills what the dead shell left of
   Quickshell's own binary in that group (PAM helpers, which would keep a fingerprint reader
   claimed; not the crash reporter). SIGHUP (its terminal closed) does not stop it. Quickshell's own crash handler restarts a crashed shell
   in the same process (unless it crashed within 10 s of starting): no second shell, and the

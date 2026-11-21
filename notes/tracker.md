@@ -222,8 +222,8 @@ Steps 3, 4, 5, 6 and 10 are done (done.md); the API plan's closing slice (Z) is 
    written down honestly (no isolation; review covers the project's own modules; for others
    the prompt's text is the only protection); Settings → Modules (enable, disable, reload,
    install, update, remove from a repository); the safe-mode banner
-9. Lock — open: supervisor limit (3 restarts while locked, then stay locked, tell the user);
-   lock-before-sleep conflict detection; screensaver and lock screen together checked
+9. Lock — open: lock-before-sleep conflict detection; screensaver and lock screen together
+   checked
 11. PAM configuration from the shell — open
 12. Documentation per [plans/documentation.md](plans/documentation.md); architecture and API
     chapters — open
