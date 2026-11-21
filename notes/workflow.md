@@ -87,10 +87,11 @@ only their own temporary files.
 
 The commands, what each part needs and where the tools come from are in `CLAUDE.md`
 ("Running", "Environment"). The owner, 2026-11-21:
-- **A slice:** the author runs the suites and scenarios the change touches, then
-  `tests/run-all.sh --quick` once before the commit (lock scenarios only when the slice touches
-  the lock, the launcher or the supervisor); after review fixes, only the touched suites
-  again. Authors never run the full set. The slice is merged into the segment's branch
+- **A slice:** the author runs `tests/affected.sh --run` while iterating (the suites,
+  scenarios and self-tests the change needs, lock scenarios included where it selects them),
+  then `tests/run-all.sh --quick` once before the commit; after review fixes,
+  `tests/affected.sh --run` again. A file it cannot place gets a line in
+  `tests/affected-map.txt` (a test, or `none`) in the same slice. Authors never run the full set. The slice is merged into the segment's branch
   (`segment-<name>`, made from `master`), not into `master`.
 - **The end of a segment** (a group of slices, or a whole step): the lead runs the full
   `tests/run-all.sh` on both machines on the segment's branch, then fast-forwards `master` and

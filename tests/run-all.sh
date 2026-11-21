@@ -32,6 +32,8 @@
 #                                                       stand-ins and on README.md and docs/
 #   tests/run-unit-selftest.sh                          the unit runner's own verdict
 #   tests/remote-run-selftest.sh                        the remote runner, on a stand-in ssh
+#   tests/affected-selftest.sh                          the tests a change needs: every file
+#                                                       placed, on made-up repositories
 #   tests/lock/selftest.sh                              the lock bed's runner: its lint, FLAKY reruns
 #   tests/run-system.sh                                 this system's set (NixOS or Arch)
 #   tests/lock/run.sh                                   the lock screen, end to end
@@ -93,6 +95,7 @@ parts=(
     "docs rules lint|tests/docs-check-selftest.sh"
     "unit runner self-test|tests/run-unit-selftest.sh"
     "remote run self-test|tests/remote-run-selftest.sh"
+    "affected tests self-test|tests/affected-selftest.sh"
     "lock bed self-test|tests/lock/selftest.sh"
     "system set|tests/run-system.sh"
     "lock bed|tests/lock/run.sh"

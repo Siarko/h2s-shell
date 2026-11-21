@@ -1,0 +1,117 @@
+# What tests/affected.sh cannot see by itself: which tests cover a file no QML closure
+# reaches (scripts, runners, shell files, fixtures read by a runner), what the lock scenarios
+# that are not about the lock screen itself cover, and what needs no test. Read by
+# tests/affected.sh; tests/affected-selftest.sh (affected.sh --check) fails on a tracked file
+# placed nowhere, on a line here whose pattern matches no file, and on a target that names
+# nothing.
+#
+#   <pattern> <target>…    `*` matches any characters, `/` included; every line that
+#                          matches a changed file adds its targets
+# Targets:
+#   unit:<Suite>  unit:all       unit suites (tests/run-unit.sh)
+#   modules:all                  every module fixture part of tests/run-all.sh
+#   lock:<scenario glob>  lock:all
+#                                lock scenarios (tests/lock/run.sh); a scenario named here
+#                                (lock:all aside) no longer runs on every change in the
+#                                lock closure: give it the pattern `@lock` for that
+#   self:<script>                a self-test or a runner, run as it is
+#   none                         no test needed (a decision, written down)
+# Directives:
+#   @lock-roots <pattern>…       the lock closure starts from these
+#   @lazy <file>…                lists of views loaded when shown: followed only from a
+#                                suite that names the file itself
+
+@lock-roots screensaver/* singletons/lock/* singletons/Lockscreen.qml pam/* scripts/launch.sh tests/lock/launcher.sh
+@lazy singletons/WidgetRegistry.qml singletons/ModuleRules.qml
+
+# ---- No test needed ------------------------------------------------------------------
+notes/* none
+site/* none
+CLAUDE.md none
+.gitignore none
+.github/* none
+tests/manual/* none
+tests/lock/README.md none
+tests/device/README.md none
+# The shader's source: the .qsb built from it is what runs, and is placed
+wallpaper/shaders/transition.frag none
+# The session's own actions (log out, restart, shut down): no stand-in can take them
+scripts/logout.sh none
+scripts/restart.sh none
+scripts/shutdown.sh none
+# No suite runs them yet (the visualiser's cava, the energy sampler): a gap, written down
+scripts/cava.ini none
+scripts/energy-sample.py none
+# Tools for testing on a device by hand
+tests/device/keyboard-popup.sh none
+tests/device/touchtap.py none
+
+# ---- Documentation ---------------------------------------------------------------------
+README.md self:tests/docs-check-selftest.sh
+docs/* self:tests/docs-check-selftest.sh
+tests/docs-check.sh self:tests/docs-check-selftest.sh
+
+# ---- Runners and their tools -----------------------------------------------------------
+tests.qml unit:all
+tests/TestCase.qml unit:all modules:all
+tests/run-unit.sh unit:all self:tests/run-unit-selftest.sh
+tests/count-suites.sh unit:all self:tests/run-unit-selftest.sh
+tests/headless.sh unit:all modules:all self:tests/run-unit-selftest.sh
+tests/run-modules.sh modules:all self:tests/run-unit-selftest.sh
+tests/fixtures/pkexec-on-path/* modules:all
+tests/run-all.sh self:tests/run-all-selftest.sh
+tests/remote-run.sh self:tests/remote-run-selftest.sh
+tests/run-system.sh self:tests/run-system.sh self:tests/run-system-selftest.sh
+tests/system/* self:tests/run-system.sh
+tests/device/deploy-check.sh self:tests/deploy-check-selftest.sh
+tests/lock/resolve.sh unit:all modules:all lock:all self:tests/resolve-selftest.sh
+tests/lock/tools.nix unit:all modules:all lock:all self:tests/resolve-selftest.sh
+tests/lock/run.sh lock:all self:tests/lock/selftest.sh
+tests/lock/lint.sh self:tests/lock/selftest.sh
+tests/lock/lib.sh lock:all
+tests/lock/pam/* lock:all
+tests/lock/input/* lock:all
+tests/lock/protocols/* lock:all
+tests/lock/seams/seams.sh self:tests/launcher-selftest.sh
+tests/test-tree.sh unit:TestTreeTest lock:all
+tests/lock-closure.sh unit:ModuleRegistriesTest
+tests/affected.sh self:tests/affected-selftest.sh
+tests/affected-map.txt self:tests/affected-selftest.sh
+
+# ---- The shell's entry, install and packaging ------------------------------------------
+shell.qml unit:all lock:all
+install.sh self:tests/install-test.sh
+flake.nix self:tests/run-system.sh
+flake.lock self:tests/run-system.sh unit:QuickshellPinTest
+nix/* self:tests/run-system.sh
+
+# ---- Started only by shell.qml ---------------------------------------------------------
+singletons/SleepLockNotice.qml unit:SleepNoticeRulesTest lock:sleep-lockers
+# (no suite: the shell starting is its check)
+singletons/DictationMusicPause.qml lock:harness
+# (nothing instantiates it: a description of what each hardware source provides)
+singletons/hardware/HardwareSource.qml unit:HardwareTest
+
+# ---- Lock scenarios that are not about the lock screen itself --------------------------
+scripts/launch.sh self:tests/launcher-selftest.sh lock:restart-* lock:supervisor lock:modules-discovery lock:modules-launcher
+singletons/Lockscreen.qml lock:restart-*
+singletons/LockRecoveryRules.qml lock:restart-*
+scripts/lock-auth-methods.sh lock:methods-*
+singletons/lock/MethodDetector.qml lock:methods-*
+@lock lock:methods-* lock:lock-log lock:modules-hung lock:sleep-* lock:notification* lock:notifier-progress
+scripts/lock-log.sh lock:lock-log
+singletons/Module* lock:modules*
+api/* lock:modules*
+tests/fixtures/modules/* lock:modules
+singletons/Notifications.qml lock:notification* lock:notifier-progress lock:modules-notify
+singletons/Notifier.qml lock:notifier-progress lock:modules-notify
+singletons/NotificationRules.qml lock:notification* lock:notifier-progress
+singletons/io/NotificationHandle.qml lock:notifier-progress lock:modules-notify
+components/notification/* lock:notification*
+components/NotificationCard.qml lock:notification* lock:toast-*
+Hud.qml lock:toast-* lock:hud-bar-bottom
+hud/* lock:toast-* lock:hud-bar-bottom
+singletons/Toast* lock:toast-* lock:hud-bar-bottom
+singletons/BarGeometry.qml lock:hud-bar-bottom lock:toast-*
+singletons/SleepNoticeRules.qml lock:sleep-*
+singletons/SystemSleep.qml lock:sleep-*

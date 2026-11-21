@@ -46,17 +46,24 @@ There is no build step:
 
 ```
 quickshell                 # reads shell.qml from the current directory
-tests/run-unit.sh FormatTest LockRulesTest   # while iterating: the suites the change touches
-tests/lock/run.sh relock fallback            # … the lock scenarios it touches
+tests/affected.sh --run    # while iterating: the suites, scenarios and self-tests the change needs
+tests/run-unit.sh FormatTest LockRulesTest   # … or named suites
+tests/lock/run.sh relock fallback            # … or named lock scenarios
 tests/run-all.sh --quick   # a slice's commit: everything but the lock bed, under three minutes
 tests/run-all.sh           # the end of a segment of work: everything, both machines
 ```
 
-**While iterating** run the named suites or scenarios the change touches (a suite is named
+**While iterating** run `tests/affected.sh --run`: it runs the unit suites, module fixture
+parts, self-tests and lock scenarios the change needs — the branch against its merge-base with
+the nearest `segment-*` or `master`, the working tree included (a git range as its argument
+names another change; without `--run` it prints the commands, `--why` what each file selects).
+The selection is mechanical: each suite covers the QML it uses, transitively, and
+`tests/affected-map.txt` places what that cannot see (scripts, runners, the lock scenarios'
+subjects, what needs no test); a file placed nowhere fails `tests/affected-selftest.sh` until
+the map gives it a test or `none`. Named suites or scenarios run as well (a suite is named
 by its file in `tests/` without `.qml`, a lock scenario by its file in `tests/lock/tests/`
 without `.sh`; a wrong name is an error, nothing runs). **A slice's commit** needs those plus
-`tests/run-all.sh --quick` on one machine; the lock scenarios only when the slice touches the
-lock, the launcher or the supervisor. **The full `tests/run-all.sh`** runs on both machines at
+`tests/run-all.sh --quick` on one machine. **The full `tests/run-all.sh`** runs on both machines at
 the end of a segment of work (a group of slices, before it is merged to `master` and deployed),
 not per slice. It stops at the first failing part
 (`--keep-going` goes on) and ends with a summary naming every part PASS, FAIL or NOT RUN with
@@ -69,7 +76,7 @@ tests/run-modules.sh <dir> # a module's suites, against this tree (--suite <name
 tests/install-test.sh      # install.sh under stand-ins: what it would do, nothing done
 tests/run-system.sh        # this system's set (tests/system/nixos, tests/system/arch)
 tests/lock/run.sh          # the lock screen, end to end, in an invisible compositor
-tests/*-selftest.sh        # self-tests: the runners' own verdicts, the deploy check's
+tests/*-selftest.sh        # self-tests: the runners' own verdicts, the deploy check's, affected.sh's map
 ```
 
 Never run `quickshell -p tests.qml` directly: five suites open a small window.
