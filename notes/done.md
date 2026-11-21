@@ -2443,3 +2443,10 @@ Moved out of the tracker as done; checked against the code and the sections abov
   developer's environment (home paths, machine models), a NixOS heading without an Arch one and
   the other way round, non-English text; its self-test runs in `tests/run-all.sh`. Read by the
   lead; the self-test passed on both machines.
+- **Architecture clean-up A7–A13** — on `master` 2026-11-22. A7 `Toasts` singleton out of
+  `Notifications` (pure move); A8 `NotificationCard` into parts under `components/notification/`
+  (pure move; headless screenshots identical); A9 `notificationState` moved to the test tree
+  (`locktest.notifications`); A10 `ReorderList` through a KeyedModel; A11 `tests.qml` honours each
+  suite's `timeLimitMs`; A12 ModulesTest's start guard waits on conditions; A13 stand-in `nmcli` /
+  `notify-send` on the unit runner's PATH. Reviewed (nothing medium); `tests/run-all.sh` passed on
+  both machines.
