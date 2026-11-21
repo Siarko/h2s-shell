@@ -196,19 +196,14 @@ Known risks and leftovers, one line each; the detail is in [done.md](done.md).
 Steps 3, 4, 5, 6 and 10 are done (done.md); the API plan's closing slice (Z) is above.
 
 0. Workflow:
-   - [ ] (b) own working trees and test bed per agent; modules tested against a pinned core tree
    - [ ] (d) flaky live tests first: the Tailscale stand-in's event replay
          (`tools/stand-in/curl`); the tailnet-lock read not retried (`module/LockClient.qml`)
-   - [ ] (e) a read-only check against the real Tailscale daemon at deploy (state, devices,
-         no repeated log lines)
 1. Planning, no code:
    - [ ] analysis + plan: PAM configuration from the shell (polkit and lock, NixOS and Arch)
    - [ ] plan: installing, updating and removing modules, with Settings → Modules
    - [ ] revise [plans/documentation.md](plans/documentation.md) and
          [plans/architecture-cleanup.md](plans/architecture-cleanup.md) for the decisions
 2. Before the release (cut after step 8, the owner 2026-11-21):
-   - [ ] `lockscreen.lockOnSleep` default off (`singletons/SettingsSchema.qml`, today `true`)
-   - [ ] versioning rule corrected (`CHANGELOG.md` header, `singletons/Version.qml` comment)
    - [ ] cut a minor release (today 2.0.0), the module's 0.7.0 with it
 7. Architecture clean-up per [plans/architecture-cleanup.md](plans/architecture-cleanup.md)
    (splits, hubs, test hooks, the module's read/clock performance, the network editor's

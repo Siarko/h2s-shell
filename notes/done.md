@@ -2401,3 +2401,21 @@ Moved out of the tracker as done; checked against the code and the sections abov
   N2, the run token in `gdbus`'s argv, `Api.module` handing out handles, a `TaildropLiveTest`
   check during D7) stood twice.
 - **"Running a session cheaply"** (the owner's advice) moved to `notes/workflow.md`.
+
+## The overnight run (2026-11-21/22)
+
+- **Lock before sleep off by default; the versioning rule; the deploy check; worktrees (order of
+  work 0(b), 0(e), step 2's first two items)** — on `master` 2026-11-21. `lockscreen.lockOnSleep`
+  defaults to off (schema, `LockRules.initial`, `Lockscreen` through the pure
+  `LockRules.lockOnSleepSetting`); an unreadable config fails safe to on (`Profiles.configFailed`,
+  `ProfileRules.configReadFailed` / `profilesBroken`); existing configs keep their stored value.
+  Lock-bed scenario `sleep-default`. The versioning rule says the same in the CHANGELOG header,
+  `Version.qml` and CLAUDE.md. `tests/device/deploy-check.sh`: two read-only shell IPC calls
+  (`modules list`, `tailscale state`), the reached instance's log scanned for repeated lines,
+  python3 from `tests/lock/resolve.sh`; self-test in run-all; the last step of "Deploying".
+  workflow.md: a worktree per agent, modules against `~/src/core-pin`. Reviewed (the default
+  untested end to end, the unreadable config — fixed); `tests/run-all.sh` passed on both
+  machines; the deploy check PASSED on the live shell.
+- **Two flaky core tests fixed** — `AnchorsTest` (waits for the General page's layout, earlier)
+  and `ToastDragTest` (waits for the toast to settle before reading its start; reproduced 6/6
+  under load before, 0/6 after).
