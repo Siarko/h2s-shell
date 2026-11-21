@@ -124,6 +124,7 @@ TestCase {
         "components/notification/NotificationBody.qml",
         "components/RoundedImage.qml",
         "hud/StartupWarning.qml",
+        "hud/SafeModeBanner.qml",
         "panels/widget_settings/NotificationsWidgetSettings.qml",
         "widgets/NotificationsWidget.qml",
         "components/NotificationReply.qml",

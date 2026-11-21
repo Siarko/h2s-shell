@@ -70,6 +70,7 @@ QtObject {
     property var _settingsModal: SettingsModalTest { after: _sidePanel }
     property var _statusPill: StatusPillTest {}
     property var _modulesPage: ModulesPageTest { after: _settingsModal }
+    property var _hud: HudTest { after: _modulesPage }
     property var _lockView: LockViewTest {}
     property var _authPromptView: AuthPromptViewTest {}
     property var _moduleRules: ModuleRulesTest {}
@@ -96,7 +97,7 @@ QtObject {
     property var _moduleBackup: ModuleBackupTest { after: _moduleUpdater }
 
     // The suites that run on the event loop (TestCase.asynchronous)
-    readonly property var _asyncSuites: [_pointerInput, _toastDrag, _settingsCard, _moduleContribution, _networkCardGeometry, _buttonKinds, _pillSizes, _apiElements, _sidePanel, _settingsModal, _modulesPage, _statusPill, _lockView, _authPromptView, _commandRunner, _systemFacts, _modules, _moduleIcon, _moduleRegistries, _anchors, _moduleInstaller, _moduleUpdater, _moduleBackup, _vpnProviders, _testSeamsShape, _testTree, _deviceAddressReading, _sleepLockersReading, _network, _fileChooser]
+    readonly property var _asyncSuites: [_pointerInput, _toastDrag, _settingsCard, _moduleContribution, _networkCardGeometry, _buttonKinds, _pillSizes, _apiElements, _sidePanel, _settingsModal, _modulesPage, _hud, _statusPill, _lockView, _authPromptView, _commandRunner, _systemFacts, _modules, _moduleIcon, _moduleRegistries, _anchors, _moduleInstaller, _moduleUpdater, _moduleBackup, _vpnProviders, _testSeamsShape, _testTree, _deviceAddressReading, _sleepLockersReading, _network, _fileChooser]
     // How long an asynchronous suite may take, unless it sets its own (TestCase.timeLimitMs);
     // then it fails as timed out. Counted from the start of the suites, or, for one that waits
     // for others (its `after`, FileChooserTest's `waitFor`), from when they are all done: a

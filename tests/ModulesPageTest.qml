@@ -13,7 +13,8 @@ import qs.singletons
 // Enable straight away, or through the confirmation in the Settings modal (and nothing on its
 // Cancel); Disable through the button's own question, or through the modal listing the
 // running modules that need it (those disabled too); a question withdrawn when its module
-// changes. Opened, a card shows its dependencies and the copies it replaces.
+// changes. Opened, a card shows its dependencies and the copies it replaces. In safe mode,
+// the safe-mode banner at the top (why, Load modules; no Open Modules, no ×).
 //
 // Opens a window for a moment, an ordinary one (the modal takes the keyboard in it), in the
 // runner's headless compositor.
@@ -36,6 +37,14 @@ TestCase {
         property string confirmRefusal: ""
         // Ids setEnabled refuses to turn off
         property var refuseOff: []
+        // Safe mode, for the page's banner (SafeModeBanner)
+        property bool safeMode: false
+        property string safeModeCause: "relaunch"
+        property var guard: ({ count: 2 })
+        property int guardClearMs: 30000
+        property var previousModulesOn: ["tailscale"]
+        property var sourceRecords: null
+        property bool discovering: false
 
         function manifestOf(directory) {
             return manifests[directory] ?? null;
@@ -59,6 +68,10 @@ TestCase {
             return "";
         }
         function iconFailed(id, why) {}
+        function loadWithoutSafeMode() {
+            calls = calls.concat(["loadWithoutSafeMode"]);
+            return "";
+        }
     }
 
     // The stand-in installer: Remove's preview and remove, recorded
@@ -474,6 +487,7 @@ TestCase {
 
         _remove();
         _checks();
+        _safeModeBanner();
     }
 
     function _modalChecked(key) {
@@ -606,5 +620,27 @@ TestCase {
         assert(_until(() => _card("exitmap").open));
         assertEqual(_in(_card("exitmap"), "checkButton"), null, "a copied folder: no check");
         page.openId = "";
+    }
+
+    // In safe mode, the banner at the top of the page: why, with Load modules — no Open
+    // Modules (this is the page) and no × (it stays while safe mode does)
+    function _safeModeBanner() {
+        _fixture();
+        assert(_until(() => _cards().length === 7));
+        assertEqual(_named(page, "safeModeBanner").length, 0, "out of safe mode: no banner on the page");
+        _host.safeMode = true;
+        assert(_until(() => (_named(page, "safeModeBanner")[0]?.height ?? 0) > 0), "in safe mode: the banner on the page");
+        const banner = _named(page, "safeModeBanner")[0];
+        assert(banner.mapToItem(page, 0, 0).y < _cards()[0].mapToItem(page, 0, 0).y, "… above the cards");
+        assertEqual(_named(banner, "warningTitle")[0].text, "Started without modules", "… its title");
+        assertEqual(_named(banner, "warningBody")[0].text, "The shell crashed twice within 30 seconds of starting. Modules on when it crashed: Tailscale.",
+                    "… why, and the modules on when it crashed by name");
+        assert(!_named(banner, "openModules")[0].visible && !_named(banner, "warningClose")[0].visible, "… no Open Modules, no ×");
+        _host.calls = [];
+        _click(_named(banner, "loadModules")[0]);
+        assert(_until(() => _host.calls.length === 1), "Load modules calls the host");
+        assertEqual(_host.calls[0], "loadWithoutSafeMode", "… to load without safe mode");
+        _host.safeMode = false;
+        assert(_until(() => _named(page, "safeModeBanner").length === 0), "out of safe mode: the banner gone");
     }
 }

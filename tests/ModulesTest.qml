@@ -277,6 +277,7 @@ TestCase {
         });
         _then("safe mode settles", () => _settled() && _goodState.mains === 0, () => {
             assert(host.safeMode, "safe mode on");
+            assertEqual(host.safeModeCause, "launcher", "… asked for: the launcher's, for the banner's words");
             _expectState("good", "safe-mode");
             _expectState("needs-program", "safe-mode");
             _expectState("broken", "safe-mode");
@@ -348,6 +349,7 @@ TestCase {
             assert(host.safeMode, "a second relaunch after a crash in a row: safe mode");
             assertEqual(host.guard?.count, 2, "… the count");
             assert(_has([host.safeModeReason], "relaunched the shell after a crash 2 times"), "… and why, for `modules list`: " + host.safeModeReason);
+            assertEqual(host.safeModeCause, "relaunch", "… the start guard's, for the banner's words");
             _expectState("good", "safe-mode");
             assertEqual(host.describe().safeModeReason, host.safeModeReason, "describe() tells it");
             // A reload of the same relaunched process: counted once, not again

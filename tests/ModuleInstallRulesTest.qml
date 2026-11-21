@@ -65,6 +65,46 @@ TestCase {
         _card();
         _checks();
         _installerSteps();
+        _safeModeBanner();
+    }
+
+    // The safe-mode banner's words: why in plain words, the modules on when it crashed (by
+    // name, capped), one installed or updated in the last day; the load button's label
+    function _safeModeBanner() {
+        const rules = ModuleInstallRules;
+        const now = Date.parse("2026-11-21T12:00:00Z");
+        const statuses = [{ id: "tailscale", name: "Tailscale", state: "safe-mode" }, { id: "weather", name: "Weather", state: "safe-mode" },
+                          { id: "weather", name: "Old weather", state: "duplicate" }, { id: "evil", name: "<b>Evil</b>\nline", state: "safe-mode" }];
+        const record = { modules: {
+            weather: { versions: [{ dir: "1.2.0-a", fetchedAt: "2026-11-21T11:50:00Z" }, { dir: "1.1.0-b", fetchedAt: "2026-11-01T10:00:00Z" }], active: "1.2.0-a" },
+            notes: { versions: [{ dir: "0.3.0-c", fetchedAt: "2026-11-21T09:00:00Z" }], active: "0.3.0-c" },
+            old: { versions: [{ dir: "1.0.0-d", fetchedAt: "2026-11-19T09:00:00Z" }], active: "1.0.0-d" },
+            future: { versions: [{ dir: "1.0.0-e", fetchedAt: "2026-11-22T09:00:00Z" }], active: "1.0.0-e" },
+            garbage: { versions: [{ dir: "x", fetchedAt: "yesterday" }], active: "x" },
+            notActive: { versions: [{ dir: "y", fetchedAt: "2026-11-21T11:00:00Z" }], active: "z" }
+        } };
+        const words = rules.safeModeBanner({ cause: "launcher", previousModulesOn: ["tailscale", "weather", "exitmap"], statuses: statuses,
+                                             record: record, nowMs: now });
+        assertEqual(words.title, "Started without modules", "safe-mode banner: its title");
+        assertEqual(words.body, "The shell crashed twice within 30 seconds of starting. Modules on when it crashed: Tailscale, Weather, exitmap. "
+                    + "Weather was updated 10 min ago. notes was installed 3 h ago.",
+                    "… why, the modules on by name (an id without a status as it is), the last day's installs and updates, newest first");
+        assertEqual(JSON.stringify(words.load), JSON.stringify({ label: "Load modules", available: true }), "… Load modules offered");
+        assertEqual(JSON.stringify(rules.safeModeBanner({ cause: "launcher", discovering: true }).load), JSON.stringify({ label: "Loading…", available: false }),
+                    "… while a search runs: Loading…, not offered again");
+        assertEqual(rules.safeModeBanner({ cause: "relaunch", count: 3, windowSeconds: 30 }).body, "The shell crashed 3 times within 30 seconds of starting.",
+                    "… the start guard's count and window; nothing else known, nothing else said");
+        assertEqual(rules.safeModeBanner({ cause: "relaunch", count: 2, windowSeconds: 4.2 }).body, "The shell crashed twice within 4 seconds of starting.",
+                    "… twice, the window in whole seconds");
+        assertEqual(rules.safeModeBanner(null).body, "The shell was started in safe mode.", "… a cause not known: said plainly; nothing throws");
+        assertEqual(rules.safeModeBanner({ cause: "launcher", previousModulesOn: ["a1", "a2", "a3", "a4", "a5", "a6", "a7", "a8"] }).body,
+                    "The shell crashed twice within 30 seconds of starting. Modules on when it crashed: a1, a2, a3, a4, a5, a6 and 2 more.",
+                    "… a long list: the first " + rules.safeModeNamesShown + " named, the rest counted");
+        const evil = rules.safeModeBanner({ cause: "launcher", previousModulesOn: ["evil"], statuses: statuses }).body;
+        assert(evil.includes("<b>Evil</b> line.") && !evil.includes("\n"), "… a name from outside on one line, as written (shown as plain text)");
+        assertEqual(rules.safeModeBanner({ cause: "launcher", previousModulesOn: ["x".repeat(300)] }).body.length < 200, true, "… capped");
+        assertEqual(rules.safeModeBanner({ cause: "launcher", record: record }).body, "The shell crashed twice within 30 seconds of starting.",
+                    "… no moment known: no install or update named");
     }
 
     function _paths() {

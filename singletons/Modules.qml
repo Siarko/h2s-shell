@@ -206,7 +206,11 @@ Singleton {
     // in a test tree that asks for them on its private bus (TestSeams.moduleNotify)
     Binding { target: Notifier; property: "recordOnly"; value: _host.testMode && !TestSeams.moduleNotify }
 
-    // Entering safe mode, once: a notification says so (`modules list` says why)
+    // The safe-mode banner under the bar closed (×), for this run; the Modules page keeps its own
+    property bool safeModeBannerDismissed: false
+
+    // Entering safe mode, once: a notification says so; the banner under the bar says why and
+    // offers to load the modules (Hud.qml, SafeModeBanner)
     property bool _safeModeNotified: false
     readonly property bool _inSafeMode: _host.safeMode
     on_InSafeModeChanged: _notifySafeMode()
@@ -216,7 +220,7 @@ Singleton {
             return;
         _safeModeNotified = true;
         Notifier.send("Started without modules: " + (_host.safeModeReason || "safe mode"),
-                      { body: "qs ipc call modules list tells more", urgency: "normal" });
+                      { body: "The banner under the bar tells why and can load them again", urgency: "normal" });
     }
 
     Component.onCompleted: {

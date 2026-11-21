@@ -1075,6 +1075,64 @@ Singleton {
         }
     }
 
+    // ---- The safe-mode banner (§7) ----
+
+    // Modules named in the banner's "on when it crashed" line; the rest are counted
+    readonly property int safeModeNamesShown: 6
+    // A module installed or updated this long ago or less is named as a suspect
+    readonly property int recentChangeMs: 24 * 3600 * 1000
+
+    // What the safe-mode banner says and offers, in the HUD and on the Modules page →
+    // { title, body, load: { label, available } }. `facts`: { cause — "launcher" (the
+    // launcher's own safe mode), "relaunch" (the start guard: Quickshell relaunched a crashed
+    // shell), anything else unknown; count (the guard's count), windowSeconds (the guard's
+    // window), previousModulesOn ([ids] the last run wrote), statuses (the host's, for names),
+    // record (parseRecord's { modules }: when the active version was fetched), nowMs,
+    // discovering (a search already runs) }. Names and ids come from outside: one line, capped.
+    function safeModeBanner(facts) {
+        const statuses = _list(facts?.statuses);
+        const nameOf = id => {
+            const status = statuses.find(each => each?.id === id && each?.state !== "duplicate");
+            return _plain(typeof status?.name === "string" && status.name !== "" ? status.name : String(id ?? ""), 40);
+        };
+        const count = Number.isInteger(facts?.count) && facts.count > 2 ? facts.count : 2;
+        const seconds = Number.isFinite(facts?.windowSeconds) && facts.windowSeconds > 0 ? Math.round(facts.windowSeconds) : 30;
+        const why = facts?.cause === "launcher" ? "The shell crashed twice within 30 seconds of starting."
+            : facts?.cause === "relaunch" ? "The shell crashed " + (count === 2 ? "twice" : count + " times") + " within " + seconds + " seconds of starting."
+            : "The shell was started in safe mode.";
+        const parts = [why];
+        const onIds = _list(facts?.previousModulesOn).filter(id => typeof id === "string" && id !== "");
+        if (onIds.length > 0) {
+            const names = onIds.slice(0, safeModeNamesShown).map(nameOf);
+            const more = onIds.length - names.length;
+            parts.push("Modules on when it crashed: " + names.join(", ") + (more > 0 ? " and " + more + " more" : "") + ".");
+        }
+        const now = typeof facts?.nowMs === "number" && Number.isFinite(facts.nowMs) ? facts.nowMs : NaN;
+        const modules = facts?.record?.modules;
+        if (!Number.isNaN(now) && modules && typeof modules === "object") {
+            const recent = [];
+            for (const id of Object.keys(modules)) {
+                const entry = modules[id];
+                const versions = _list(entry?.versions);
+                const active = versions.find(each => each?.dir === entry?.active);
+                const raw = active?.fetchedAt;
+                const time = typeof raw === "number" ? raw : typeof raw === "string" && raw !== "" ? Date.parse(raw) : NaN;
+                // A moment in the future (a clock set back) is no evidence either way
+                if (!Number.isFinite(time) || time > now + 60000 || now - time > recentChangeMs)
+                    continue;
+                recent.push({ id: id, time: time, updated: versions.length > 1 });
+            }
+            recent.sort((first, second) => second.time - first.time);
+            for (const change of recent.slice(0, 3))
+                parts.push(nameOf(change.id) + " was " + (change.updated ? "updated " : "installed ") + Format.agoMs(Math.min(change.time, now), now) + ".");
+        }
+        return {
+            title: "Started without modules",
+            body: parts.join(" "),
+            load: facts?.discovering === true ? { label: "Loading…", available: false } : { label: "Load modules", available: true }
+        };
+    }
+
     // What the confirmation says (§2), the words after the first line
     readonly property string trustText: "It runs inside the shell with your rights and could read anything the shell sees, "
         + "your lock screen password included. Enable it only if you trust where it comes from."

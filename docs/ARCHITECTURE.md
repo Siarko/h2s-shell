@@ -24,7 +24,7 @@ terminated by its process id; `--list` and `--resolve` print the installed theme
 the one that would be used, `--preview <theme>` the files of a few sample icons, which
 the settings show as images (`singletons/IconThemes.qml` asks it). The script marks the
 shell it starts with `H2S_SHELL_LAUNCHER=1`; a shell started without it (plain `qs`)
-shows a banner under the bar (`hud/StartupWarning.qml`, placed by `Hud.qml`) explaining that the icon theme
+shows a banner under the bar (`hud/StartupWarning.qml`, stacked by `hud/StartupWarnings.qml`) explaining that the icon theme
 cannot apply — it does not restart itself, which would drop the arguments it was given.
 
 The target compositor is Hyprland on Wayland. The shell uses Wayland layer-shell
@@ -711,7 +711,12 @@ close this section.
   confirmed, searched for or loaded again over IPC while the session is locked. The host
   writes the ids of the modules loaded to `$XDG_RUNTIME_DIR/h2s-shell-modules-on` (never in
   safe mode) and reads at its first load what the last run wrote (`previousModulesOn`);
-  `qs ipc call modules loadWithoutSafeMode` loads the modules in place out of safe mode. A
+  `qs ipc call modules loadWithoutSafeMode` loads the modules in place out of safe mode. In
+  safe mode a banner (`hud/SafeModeBanner.qml`, its words from
+  `ModuleInstallRules.safeModeBanner`) stands under the bar (`hud/StartupWarnings.qml`, ×
+  closes it for the run) and at the top of Settings → Modules: why, the modules on when it
+  crashed, one installed or updated in the last day, "Open Modules" and "Load modules" (the
+  same load); never while the session is locked, and `tests/lock-closure.sh` names it. A
   module whose files changed in place since the engine first built them runs its old code
   until the shell restarts (the engine keeps a file by URL for its life,
   `tests/QuickshellPinTest.qml` (h)): it is named in `restartNeeded`.

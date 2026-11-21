@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
 import qs.components
+import qs.hud
 import qs.singletons
 
 // System → Modules → Installed (notes/plans/modules-management.md §4): every module as a card,
@@ -248,9 +249,25 @@ Item {
 
     KeyedModel { id: _cards; values: ModuleInstallRules.listOrder(root.statuses) }
 
+    // In safe mode, the banner at the top of the page (SafeModeBanner: why, "Load modules")
+    Component {
+        id: _safeModeBanner
+        Item {
+            implicitHeight: _banner.implicitHeight + 16
+            SafeModeBanner {
+                id: _banner
+                objectName: "safeModeBanner"
+                width: parent.width
+                onPage: true
+                host: root.host
+            }
+        }
+    }
+
     SettingsPage {
         anchors.fill: parent
         title: "Modules"
+        banner: root.host?.safeMode ? _safeModeBanner : null
 
         SettingsSection {
             anchor: "installed"

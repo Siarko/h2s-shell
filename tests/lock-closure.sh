@@ -4,7 +4,8 @@
 # SettingsPage, SettingsSection, SettingsCard, SettingsRow, PopupRow, PopupSection — that
 # host modules' elements; ModuleContribution, Modules., PrivilegedRuns —
 # the modules' queue of runs as administrator, which reads Modules — and FileChooser, the
-# modules' file chooser, which reads Modules and the lock's state): printed as
+# modules' file chooser, which reads Modules and the lock's state — and SafeModeBanner, the
+# banner about the shell started without modules): printed as
 # "LOCK:<file>", nothing when clean (notes/plans/modules.md §4 item 1; ModuleRegistriesTest).
 #
 #   tests/lock-closure.sh <shell tree>
@@ -40,7 +41,7 @@ while [ -n "$queue" ]; do
     done
 done
 for file in $seen; do
-    if grep -qE 'ModuleSlot|AnchorContent|AnchorBlock|SettingsPage|SettingsSection|SettingsCard|SettingsRow|PopupRow|PopupSection|ModuleContribution|Modules\.|PrivilegedRuns|FileChooser' "$file"; then
+    if grep -qE 'ModuleSlot|AnchorContent|AnchorBlock|SettingsPage|SettingsSection|SettingsCard|SettingsRow|PopupRow|PopupSection|ModuleContribution|Modules\.|PrivilegedRuns|FileChooser|SafeModeBanner' "$file"; then
         echo "LOCK:$file"
     fi
 done

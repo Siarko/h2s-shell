@@ -77,6 +77,9 @@ Scope {
     property bool safeMode: false
     // Why, when the start guard decided it ("" otherwise)
     property string safeModeReason: ""
+    // What put it there, for the banner's words (ModuleInstallRules.safeModeBanner): "launcher"
+    // (asked for by load()), "relaunch" (the start guard), "" out of safe mode
+    property string safeModeCause: ""
     // The ids turned off (Config.disabledModules); a module is on unless listed — or, built
     // in and listed as off by builtin.json, unless Config.enabledModules lists it
     readonly property var disabledIds: _plainList(Config.disabledModules)
@@ -333,6 +336,7 @@ Scope {
             discovering = false;
             safeMode = _askedSafeMode;
             safeModeReason = _askedSafeMode ? (options?.safeModeReason ?? "asked for (H2S_SHELL_SAFE_MODE=1)") : "";
+            safeModeCause = _askedSafeMode ? (options?.safeModeCause ?? "launcher") : "";
             const parsed = ModuleFileRules.moduleDirectories(directoryList);
             // Test mode is what it is now, for the host's life: from the first load that names
             // a module directory on — before it, no module's code exists to change it
@@ -503,7 +507,7 @@ Scope {
             return;
         console.info("[Modules] loading the modules found again" + (leaveSafeMode ? ", out of safe mode" : ""));
         load(output, leaveSafeMode ? { safeMode: false, ignoreGuard: true, searched: true }
-                                   : { safeMode: safeMode, safeModeReason: safeModeReason, searched: true });
+                                   : { safeMode: safeMode, safeModeReason: safeModeReason, safeModeCause: safeModeCause, searched: true });
     }
 
     function _setLists(id, enabled) {
@@ -1295,6 +1299,9 @@ Scope {
     property var _sources: ModuleInstallRules.parseSourceCheck(["end"])
     property bool _sourcesKnown: true
     property var _sourceRecords: ({ ok: false, modules: {}, dropped: [] })
+    // The record of what the shell installed, as read at the last load (parseRecord): the
+    // safe-mode banner names a module installed or updated in the last day
+    readonly property var sourceRecords: _sourceRecords
     property var _builtinOffIds: []
     property int _sourceGeneration: 0
     // What the last check said was wrong (logged on a change)
@@ -1494,6 +1501,7 @@ Scope {
         if (decision.safeMode && !_askedSafeMode && !_ignoreGuard) {
             safeMode = true;
             safeModeReason = decision.reason;
+            safeModeCause = "relaunch";
             console.warn("[Modules] " + decision.reason);
         } else if (decision.reason !== "") {
             console.warn("[Modules] start guard: " + decision.reason);

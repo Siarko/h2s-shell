@@ -454,6 +454,11 @@ The interface modules are written against (`qs.api`), versioned on its own
   file inside the module's directory (≤ 1 MiB).
 
 ### Added
+- Safe mode has a banner, under the bar and at the top of Settings → Modules: why the shell
+  started without modules, the modules on when it crashed and one installed or updated in
+  the last day, with "Open Modules" and "Load modules" (loads them again without a
+  restart); × hides it under the bar for this run. Never on the lock screen. The safe-mode
+  notification points to it.
 - Settings → System → Modules → Installed: every module as a card, enabled ones first (their
   names in colour), then the ones turned off ("Off" under the name); a pill only for a state
   that needs attention (Failed, Needs …, New — off, Approval required), warnings and
