@@ -7,11 +7,16 @@ go to [done.md](done.md) in full. Plans are in [plans/](plans/); how sessions wo
 
 ## Now
 
-**Overnight run 2026-11-21/22 (the owner's rules):** do everything without bigger interface
-changes first; for steps with views, prepare plans and mockups and stop there. Merging,
-restarting and testing are allowed also while the screen is locked (the machines are in a safe
-place; the PC has no lock screen). No computer should sleep (the laptop is plugged in), so
-`lockOnSleep` off by default needs no pinning on these machines. No usage limit set.
+**The overnight run 2026-11-21/22 is over** (done.md, "The overnight run"). Built and merged:
+order of work step 0 (worktrees, flaky module tests, the deploy check), step 2's first two items
+(`lockOnSleep` off by default, the versioning rule), step 9 whole (the supervisor's limit while
+locked, other lockers before sleep, the screensaver with the lock), architecture clean-up A1–A13,
+B1–B2, D1–D4, docs D0–D1, two flaky core tests. Waiting for the owner (nothing more can be done
+without them): the PAM plan (8 questions), the modules management plan and its mockup
+(`~/src/h2s-mockups/modules-settings-planned/`, 8 questions), the revised documentation and
+architecture plans (4 + 2 questions), the sleep-lock notices' wording and hypridle; the rest of
+the order of work (steps 8, 11, 12 …) depends on those answers, and clean-up groups C and E on
+step 8 and the module's release.
 
 State on 2026-11-21: notifications with a progress bar, Taildrop's list of transfers,
 Taildrop's views reworked (side panel, status pills, the bar wave, Taildrop off, "Save in…")
