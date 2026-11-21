@@ -188,6 +188,10 @@ TestCase {
         _savedDisabled = Modules.host._plainList(Config.disabledModules);
         _then("the module host suite is done, the config read", () => (after === null || after.done) && Config.ready, () => {
             Config.disabledModules = [];
+            // The real window starts the shell's network readers: they must find the runner's
+            // stand-ins, never a real NetworkManager or notification daemon
+            assert(String(Quickshell.env("PATH")).startsWith(Quickshell.shellDir + "/tests/fixtures/unit-path:"),
+                   "the runner's stand-ins for nmcli and notify-send come first on PATH");
             const component = Qt.createComponent(Qt.resolvedUrl("../panels/SettingsWindow.qml"), Component.PreferSynchronous);
             _window = component.status === Component.Ready ? component.createObject(suite, { visible: false }) : null;
             assert(_window !== null, "the settings window can be made (" + component.errorString() + ")");

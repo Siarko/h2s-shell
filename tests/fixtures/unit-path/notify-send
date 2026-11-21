@@ -1,0 +1,4 @@
+#!/bin/sh
+# A stand-in for notify-send on the unit suites' PATH (tests/run-unit.sh): nothing a suite
+# does reaches a real notification daemon. It takes any arguments and shows nothing.
+exit 0

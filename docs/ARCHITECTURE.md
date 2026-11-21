@@ -1417,7 +1417,9 @@ below).
 the suites `tests.qml` lists. `tests/run-unit.sh` (and `tests/run-modules.sh`, for modules'
 own suites — see [Modules](#modules); both share `tests/headless.sh`) runs them in a private headless labwc
 (private runtime dir, HOME and XDG dirs, D-Bus addresses that lead nowhere, no new
-privileges), so the suites' windows never show on the real screen; it finds labwc and
+privileges), so the suites' windows never show on the real screen — `run-unit.sh` also puts
+stand-ins for `nmcli` and `notify-send` first on `PATH` (`tests/fixtures/unit-path`), for the
+suites that build the real settings window and with it the network readers; it finds labwc and
 Quickshell through `tests/lock/resolve.sh` ("Where the test tools come from", below) and fails on any `FAIL`, a
 `TypeError`/`ReferenceError`, a non-zero exit of Quickshell (a crash after a partial
 summary), or fewer suites reporting than `tests.qml` registers; `tests/run-unit-selftest.sh`

@@ -1,0 +1,11 @@
+#!/bin/sh
+# A stand-in for nmcli on the unit suites' PATH (tests/run-unit.sh): suites that build the
+# real settings window start the shell's network readers, which must not reach a real
+# NetworkManager. `nmcli monitor` stays quiet until the shell is gone; anything else fails as
+# nmcli does when NetworkManager is not running (status 8), so a read is "unknown".
+if [ "$1" = monitor ]; then
+    while kill -0 "$PPID" 2> /dev/null; do sleep 1; done
+    exit 0
+fi
+echo "Error: NetworkManager is not running." >&2
+exit 8

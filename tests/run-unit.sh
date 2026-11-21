@@ -17,7 +17,9 @@
 #
 # The isolation (a headless labwc in a private runtime dir, D-Bus addresses that lead
 # nowhere, a private HOME and XDG directories, no new privileges) and the verdict are
-# tests/headless.sh's, shared with tests/run-modules.sh.
+# tests/headless.sh's, shared with tests/run-modules.sh. On PATH first: stand-ins for nmcli
+# and notify-send (tests/fixtures/unit-path), for the suites that build the real settings
+# window.
 #
 # Needs Quickshell, labwc, setpriv, setsid and timeout. labwc and setpriv are the pinned
 # ones of tests/lock/tools.nix where there is a `nix` command, else those on PATH
@@ -69,12 +71,15 @@ fi
 # shellcheck source=headless.sh
 source "$REPO/tests/headless.sh"
 headless_setup
+# Stand-ins for nmcli and notify-send first on PATH: suites that build the real settings
+# window start the shell's network readers and may notify, and must reach no real daemon
+unit_path=PATH="$REPO/tests/fixtures/unit-path:${LOCKTEST_TOOLS:+$LOCKTEST_TOOLS/bin:}$PATH"
 if [ ${#selected[@]} -gt 0 ]; then
-    headless_run "$REPO/tests.qml" "$output_copy" H2S_TEST_SUITES="$(IFS=:; echo "${selected[*]}")"
+    headless_run "$REPO/tests.qml" "$output_copy" "$unit_path" H2S_TEST_SUITES="$(IFS=:; echo "${selected[*]}")"
     # Exactly the selected suites must report, under the names TestCase gives them
     headless_verdict "Unit suites" ${#selected[@]} "selected" exactly "${selected[@]%Test}"
 else
-    headless_run "$REPO/tests.qml" "$output_copy"
+    headless_run "$REPO/tests.qml" "$output_copy" "$unit_path"
     # Every suite tests.qml registers (`property var _name: SomethingTest {…}`) must report
     headless_verdict "Unit suites" "$(count_suites "$REPO/tests.qml")" "in tests.qml"
 fi
