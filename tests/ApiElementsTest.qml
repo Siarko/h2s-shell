@@ -169,7 +169,7 @@ TestCase {
     property var _window: PanelWindow {
         anchors { top: true; left: true }
         implicitWidth: 700
-        implicitHeight: 1000
+        implicitHeight: 1060
         color: "transparent"
         exclusionMode: ExclusionMode.Ignore
         WlrLayershell.layer: WlrLayer.Overlay
@@ -620,6 +620,27 @@ TestCase {
             SettingsRow { visible: false; label: "Hidden" }
         }
 
+        // A value longer than the row has room for: in a narrow row and in a wide one
+        Column {
+            x: 10; y: 995
+            width: 680
+            spacing: 6
+            Public.SettingsRow {
+                id: narrowLongRow
+                width: 300
+                label: "Save to"
+                value: "/home/someone/Downloads/a/folder/with/a/long/path/in/it"
+                Public.SmallButton { id: narrowLongButton; label: "Change" }
+            }
+            Public.SettingsRow {
+                id: wideLongRow
+                width: 680
+                label: "Save to"
+                value: "/home/someone/Downloads/a/folder/with/a/long/path/in/it/and/more"
+                Public.SmallButton { id: wideLongButton; label: "Change" }
+            }
+        }
+
         // --- the base types ---
         Public.PopupWidget {
             id: popupWidget
@@ -1055,6 +1076,23 @@ TestCase {
         driver.mouseClick(rowButton, 5, 5);
         assertEqual(rowButton.clicks, 1, "and take their clicks");
         driver.mouseMove(away, 5, 5);
+
+        // --- a long value ---
+        for (const entry of [{ row: narrowLongRow, button: narrowLongButton }, { row: wideLongRow, button: wideLongButton }]) {
+            const texts = _texts(_within(entry.row));
+            const label = texts.find(text => text.text === "Save to");
+            const value = texts.find(text => text.text === entry.row.value);
+            const name = "a long value in a row " + entry.row.width + " wide: ";
+            assert(_until(() => entry.button.width > 0 && value.width > 0), name + "laid out");
+            assert(!label.truncated && label.width >= label.implicitWidth, name + "the label keeps its full width");
+            assert(value.truncated && value.width <= 220, name + "the value elides, at most 220 wide (" + value.width + ")");
+            const valueRight = value.mapToItem(entry.row, 0, 0).x + value.width;
+            const buttonLeft = entry.button.mapToItem(entry.row, 0, 0).x;
+            assert(value.mapToItem(entry.row, 0, 0).x >= label.mapToItem(entry.row, 0, 0).x + label.width && buttonLeft >= valueRight,
+                name + "label, value, button, one after another");
+            assertEqual(Math.round(buttonLeft + entry.button.width), entry.row.width, name + "the button whole, at the row's right edge");
+        }
+        assertEqual(_texts(_within(wideLongRow)).find(text => text.text === wideLongRow.value).width, 220, "in a wide row, the value takes its 220");
 
         // --- the row that opens ---
         const opening = _within(expandingRow);

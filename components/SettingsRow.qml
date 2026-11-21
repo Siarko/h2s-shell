@@ -21,9 +21,13 @@ RowLayout {
 
     ColumnLayout {
         Layout.fillWidth: true
+        // The label keeps its width; a long value gives way instead. Whole pixels: a
+        // fractional implicit width would cut the last letters
+        Layout.minimumWidth: Math.ceil(_label.implicitWidth)
         spacing: 0
         // Filling the width, or the column could not grow and the controls sat by the label
         Text {
+            id: _label
             Layout.fillWidth: true
             text: root.label
             textFormat: Text.PlainText
@@ -47,8 +51,12 @@ RowLayout {
     Text {
         visible: root.value !== ""
         // A constant cap, not one derived from the row's width, which the layout would
-        // chase
-        Layout.maximumWidth: 220
+        // chase. Filling, or the layout would hold it at its preferred width: up to its
+        // text's width, less (eliding) when the row is short of room
+        Layout.fillWidth: true
+        Layout.minimumWidth: 0
+        Layout.preferredWidth: Math.min(Math.ceil(implicitWidth), 220)
+        Layout.maximumWidth: Math.min(Math.ceil(implicitWidth), 220)
         horizontalAlignment: Text.AlignRight
         text: root.value
         textFormat: Text.PlainText
