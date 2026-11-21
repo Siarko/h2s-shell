@@ -200,8 +200,6 @@ Known risks and leftovers, one line each; the detail is in [done.md](done.md).
 Steps 3, 4, 5, 6 and 10 are done (done.md); the API plan's closing slice (Z) is above.
 
 0. Workflow:
-   - [ ] (d) flaky live tests first: the Tailscale stand-in's event replay
-         (`tools/stand-in/curl`); the tailnet-lock read not retried (`module/LockClient.qml`)
 1. Planning, no code:
    - [ ] PAM configuration from the shell: plan written ([plans/pam-config.md](plans/pam-config.md),
          2026-11-22), waits for the owner's approval and its 8 questions

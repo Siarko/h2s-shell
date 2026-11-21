@@ -2428,3 +2428,12 @@ Moved out of the tracker as done; checked against the code and the sections abov
   `NetworkProfileCard` without I/O; A6 `Bar.qml` through `Modules.initialProperties` (the same
   owner check stays in WidgetSettingsPane.qml:228 and Popup.qml:636). Reviewed (an older save
   overwriting a newer — fixed); `tests/run-all.sh` passed on both machines.
+- **The module's flaky live tests (order of work 0(d))** — on the module's `main` 2026-11-22.
+  The stand-in `file cp` copies aside and renames (two devices, one name); a send still being
+  checked holds its device's turn (`TaildropTransferRules.schedule`, a product fix: sends to one
+  device start in order); the tailnet-lock read retried at 2 s doubling to 60 s
+  (`LockRules.retryMs`, logged on change of outcome), a key change or account switch makes it
+  unknown at once (`LockRules.keepsStatus`); stand-ins exit when their state directory goes.
+  Under load: 27/36 → 36/36 and 32/40 → 40/40. Still seen once alone: "save-killed: no save
+  process left". Reviewed (the old key's status kept — fixed); module suites and stand-ins on
+  both machines, the module's lock bed on NixOS.
