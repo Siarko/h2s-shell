@@ -91,7 +91,15 @@ Scope {
     // ---- Internals ----
 
     property int _generation: 0
-    property var _info: ({})        // id → { dir, ref, commit, version, manifest, record }
+    property var _info: ({})        // id → what the last check found: { dir, ref, commit, version, record }
+    // id → what its row of the queue works on, for that row's run only: { run, ref, dir (the
+    // download), verifiedDir (the one the host checked and consentFor judged — the only one a
+    // switch or an approval takes), manifest, record, ackWritten, ackPrevious, restartBefore }
+    property var _rowData: ({})
+    property var _failedCommits: ({})   // id → the commit whose update last failed (not re-tried by the daily run)
+    property var _announced: []         // what a notification already told, by row ("phase|id|commit|reason")
+    property var _offeredIds: []        // modules a restart offer named
+    property var _changelogAsked: ({})  // id → the token of the newest changelog read
     property var _pending: []       // queue actions and background downloads waiting for the installer
     property var _current: null     // the action in flight: { action, id, run, job, generation, … }
     property var _autoRun: null     // the daily run in progress: { failedChecks, ids }
@@ -202,7 +210,9 @@ Scope {
                 }
                 const offer = ModuleUpdateRules.offerFor(record, found);
                 const available = offer.offer === true;
-                // A row of the queue keeps what it was queued with until it ends
+                // A module whose row of the queue has not ended is not downloaded again: the
+                // row works on what it was queued with
+                const fetchNow = available && !automatically && offer.downloadedDir === "" && !_rowBusy(id);
                 if (!_rowBusy(id))
                     _info = Object.assign({}, _info, { [id]: { dir: offer.downloadedDir, ref: found.mode === "tag" ? found.ref : "",
                                                                commit: offer.commit, version: offer.version, record: record } });
@@ -210,9 +220,8 @@ Scope {
                                 checkedAt: checkedAt, version: offer.version, commit: offer.commit, ref: found.ref,
                                 reason: offer.reason === "unknown" ? "the answer could not be judged" : "",
                                 refused: offer.reason === "refused",
-                                downloading: available && !automatically && offer.downloadedDir === "",
-                                downloadedDir: offer.downloadedDir });
-                if (available && !automatically && offer.downloadedDir === "")
+                                downloading: fetchNow, downloadedDir: offer.downloadedDir });
+                if (fetchNow)
                     _enqueue({ action: "fetch", id: id, generation: generation });
                 done({ id: id, outcome: available ? "available" : "current" });
             }
@@ -295,16 +304,27 @@ Scope {
             return ModuleInstallRules._plain(String(id ?? ""), 60) + " waits for no approval";
         if (asked.dir !== dir)
             return "The update changed: " + id + " now asks about " + asked.dir;
+        const data = _rowData[id];
+        if (!data || data.run !== row.run || data.verifiedDir !== dir)
+            return "The update changed: " + id + " " + dir + " is not the version checked";
+        let previous = null;
         if (approved) {
-            const info = _info[id];
+            // Written before the switch, so the new version loads without asking again; put
+            // back when the update does not go through (_settleRows)
+            previous = ModuleRules.isObject(host.acknowledgements) && ModuleRules.has(host.acknowledgements, id)
+                ? Object.assign({}, host.acknowledgements[id]) : null;
             const why = host.acknowledgeUpdate(id, ModuleInstallRules.acknowledgementOf(
-                { source: info?.record?.kind ?? "", address: info?.record?.address ?? "" }, info?.manifest ?? {}));
+                { source: data.record?.kind ?? "", address: data.record?.address ?? "" }, data.manifest ?? {}));
             if (why !== "")
                 return why;
+            _setRow(id, { ackWritten: true, ackPrevious: previous });
         }
         const result = _step({ type: approved ? "approved" : "refused", id: id, to: row.to, commit: row.commit });
-        if (result.ignored)
+        if (result.ignored) {
+            if (approved)
+                _restoreAcknowledgement(id);
             return "The update changed";
+        }
         const left = Object.assign({}, approvals);
         delete left[id];
         approvals = left;
@@ -349,19 +369,72 @@ Scope {
         if (result.ignored)
             return result;
         queue = result.queue;
+        _settleRows();
         for (const action of result.actions)
             _enqueue(action);
         if (result.offer) {
             restartOffer = result.offer;
+            _offeredIds = _offeredIds.concat(result.offer.ids.filter(each => !_offeredIds.includes(each)));
             const names = result.offer.ids.map(each => queue.rows.find(row => row.id === each)?.name || each);
             restartNeeded = restartNeeded.concat(names.filter(name => !restartNeeded.includes(name)));
         }
-        if (result.notification)
+        if (result.notification && _newsIn(result.notification))
             _notify(result.notification);
-        if (queue.ended)
+        if (queue.ended) {
             Qt.callLater(_autoRunEnded);
+            Qt.callLater(_lateRestarts);
+        }
         Qt.callLater(_pump);
         return result;
+    }
+
+    function _setRow(id, changes) {
+        _rowData = Object.assign({}, _rowData, { [id]: Object.assign({}, _rowData[id], changes) });
+    }
+
+    // Each row's own data, made when the row is (from what the check found then); an update
+    // that did not go through puts back the acknowledgement its approval wrote, and is not
+    // tried again by the daily run at the same commit
+    function _settleRows() {
+        for (const row of queue.rows) {
+            const data = _rowData[row.id];
+            if (!data || data.run !== row.run)
+                _setRow(row.id, { run: row.run, ref: _info[row.id]?.ref ?? "", dir: _info[row.id]?.dir ?? "", verifiedDir: "", manifest: null,
+                                  record: _info[row.id]?.record ?? null, ackWritten: false, ackPrevious: null, restartBefore: false });
+            if (row.phase === "failed" || row.phase === "notFinished")
+                _restoreAcknowledgement(row.id);
+            if (row.phase === "failed" && row.reason !== "cancelled" && _failedCommits[row.id] !== row.commit)
+                _failedCommits = Object.assign({}, _failedCommits, { [row.id]: row.commit });
+            if (row.phase === "done" && _failedCommits[row.id] !== undefined) {
+                const left = Object.assign({}, _failedCommits);
+                delete left[row.id];
+                _failedCommits = left;
+            }
+        }
+    }
+
+    function _restoreAcknowledgement(id) {
+        const data = _rowData[id];
+        if (!data?.ackWritten)
+            return;
+        _setRow(id, { ackWritten: false });
+        if (ModuleRules.isObject(data.ackPrevious))
+            host.acknowledgeUpdate(id, data.ackPrevious);
+        else
+            host.dropAcknowledgement(id);
+        console.info("[Modules] " + id + ": the update did not go through, its earlier approval is back");
+    }
+
+    // Whether a queue's notification tells anything not told before: the same module failing
+    // the same way at the same commit, or still waiting, is not told again
+    function _newsIn(note) {
+        if (note.opens === "restart")
+            return true;
+        const keys = queue.rows.filter(row => ["done", "failed", "notFinished", "approval"].includes(row.phase))
+            .map(row => row.phase + "|" + row.id + "|" + row.commit + "|" + (row.phase === "failed" ? row.reason : ""));
+        const fresh = keys.filter(key => !_announced.includes(key));
+        _announced = _announced.concat(fresh).slice(-200);
+        return fresh.length > 0;
     }
 
     function _enqueue(action) {
@@ -385,28 +458,43 @@ Scope {
         const run = action.subject?.run ?? 0;
         switch (action.action) {
         case "fetch":
-            if (action.generation !== _generation || checks[action.id]?.downloading !== true) {
+            if (action.generation !== _generation || checks[action.id]?.downloading !== true || _rowBusy(action.id)) {
+                if (checks[action.id]?.downloading)
+                    checks = Object.assign({}, checks, { [action.id]: Object.assign({}, checks[action.id], { downloading: false }) });
                 Qt.callLater(_pump);
                 return;
             }
             _startJob(action, () => installer.fetchUpdate(action.id, _info[action.id]?.ref ?? ""));
             return;
-        case "download":
-            if ((_info[action.id]?.dir ?? "") !== "") {
+        case "download": {
+            const data = _rowData[action.id];
+            if (data?.run !== run) {
+                Qt.callLater(_pump);
+                return;
+            }
+            if (data.dir !== "") {
                 _step({ type: "downloaded", id: action.id, run: run });
                 return;
             }
-            _startJob(action, () => installer.fetchUpdate(action.id, _info[action.id]?.ref ?? ""));
+            _startJob(action, () => installer.fetchUpdate(action.id, data.ref));
             return;
+        }
         case "verify":
             _verify(action, run);
             return;
-        case "switch":
+        case "switch": {
+            // Only the version the host checked and consentFor judged
+            const data = _rowData[action.id];
+            if (data?.run !== run || data.verifiedDir === "") {
+                _step({ type: "failed", id: action.id, run: run, reason: "the version to switch to was not checked" });
+                return;
+            }
             // (Configuration backups come with M3c: nothing to back up here yet)
             _step({ type: "backedUp", id: action.id, run: run });
-            _startJob(Object.assign({}, action, { restartBefore: host.restartNeeded.slice() }),
-                      () => installer.switchVersion(action.id, _info[action.id]?.dir ?? ""));
+            _setRow(action.id, { restartBefore: (host.restartNeededIds ?? []).includes(action.id) });
+            _startJob(action, () => installer.switchVersion(action.id, data.verifiedDir));
             return;
+        }
         case "rememberRefusal":
             _startJob(action, () => installer.rememberRefusal(action.id, action.version, action.commit));
             return;
@@ -458,7 +546,8 @@ Scope {
         const run = action.subject?.run ?? 0;
         switch (action.action) {
         case "fetch": {
-            if (result.ok)
+            // A row queued meanwhile keeps its own
+            if (result.ok && !_rowBusy(id))
                 _info = Object.assign({}, _info, { [id]: Object.assign({}, _info[id], { dir: result.details.dir }) });
             if (checks[id])
                 checks = Object.assign({}, checks, { [id]: Object.assign({}, checks[id], {
@@ -473,7 +562,8 @@ Scope {
                 _step({ type: "failed", id: id, run: run, reason: result.message });
                 return;
             }
-            _info = Object.assign({}, _info, { [id]: Object.assign({}, _info[id], { dir: result.details.dir }) });
+            if (_rowData[id]?.run === run)
+                _setRow(id, { dir: result.details.dir });
             _step({ type: "downloaded", id: id, run: run });
             return;
         case "switch": {
@@ -487,8 +577,7 @@ Scope {
                                                                   + (row?.from || "the version before") + " is active again" });
                 return;
             }
-            const name = row?.name ?? id;
-            const restart = host.restartNeeded.includes(name) && !(action.restartBefore ?? []).includes(name);
+            const restart = (host.restartNeededIds ?? []).includes(id) && _rowData[id]?.restartBefore !== true;
             _step({ type: "installed", id: id, run: run, restart: restart });
             return;
         }
@@ -515,8 +604,9 @@ Scope {
             if (!stillAsked())
                 return;
             const record = read.ok ? read.records.modules[id] : null;
-            const dir = _info[id]?.dir ?? "";
-            if (!record || !read.found[id] || !record.versions.some(each => each.dir === dir)) {
+            const data = _rowData[id];
+            const dir = data?.run === run ? data.dir : "";
+            if (dir === "" || !record || !read.found[id] || !record.versions.some(each => each.dir === dir)) {
                 answer({ type: "failed", id: id, run: run, reason: "the downloaded version is no longer there" });
                 return;
             }
@@ -541,7 +631,7 @@ Scope {
                 const consent = ModuleUpdateRules.consentFor(host.acknowledgements?.[id], record, manifest, record.address, {
                     dependencyPlan: plan, currentManifest: status ? host.manifestOf(status.directory) : null, found: {}, names: names
                 });
-                _info = Object.assign({}, _info, { [id]: Object.assign({}, _info[id], { manifest: manifest, record: record }) });
+                _setRow(id, { verifiedDir: dir, manifest: manifest, record: record });
                 afterNotes = Object.assign({}, afterNotes, { [id]: consent.after.map(note => note.line) });
                 if (consent.needed)
                     approvals = Object.assign({}, approvals, { [id]: { dir: dir, version: String(manifest.version ?? ""), reasons: consent.reasons } });
@@ -556,10 +646,15 @@ Scope {
     // after the version running now (a file that is a link is not read)
     function _readChangelog(id, directory, from, to) {
         const name = host.status(id)?.name || id;
+        // Late answers lose: only the newest read of a module's changelog is taken
+        const token = (_changelogAsked[id] ?? 0) + 1;
+        _changelogAsked = Object.assign({}, _changelogAsked, { [id]: token });
         _runner.start(["sh", "-c", "f=$1/CHANGELOG.md; [ -f \"$f\" ] && [ ! -L \"$f\" ] || exit 3; head -c \"$2\" -- \"$f\"", "sh",
                        directory, String(ModuleUpdateRules.maxChangelogBytes)], {
             timeoutMs: 10000,
             done: result => {
+                if (_changelogAsked[id] !== token)
+                    return;
                 const shown = ModuleUpdateRules.changelogSince(result.ok ? String(result.stdout ?? "") : null, from, to);
                 changelogs = Object.assign({}, changelogs, { [id]: Object.assign({ name: name, from: from, to: to }, shown) });
             }
@@ -576,10 +671,9 @@ Scope {
         if (restart && _restartHandle?.open)
             _restartHandle.close();
         const handle = notifier?.send(note.title, {
-            body: note.body, format: "plain", progress: 100, hints: hints,
+            body: note.body, format: "plain", handle: true, hints: hints,
             actions: [{ id: "default", label: "Open", onTriggered: () => root.open(request) }]
         });
-        handle?.update?.({ state: "done" });
         if (restart)
             _restartHandle = handle ?? null;
     }
@@ -616,7 +710,9 @@ Scope {
             if (run === null)
                 return;
             run.failedChecks = results.filter(each => each.outcome === "failed").length;
-            const found = results.filter(each => each.outcome === "available").map(each => each.id);
+            // An update that failed at this commit is not downloaded again by the daily run
+            const found = results.filter(each => each.outcome === "available" && _failedCommits[each.id] !== checks[each.id]?.commit)
+                .map(each => each.id);
             run.ids = found;
             // Queued even when the session locked meanwhile: the actions wait for the unlock
             if (found.length > 0)
@@ -634,7 +730,8 @@ Scope {
         if (rows.some(row => !["done", "failed", "notFinished", "approval", "held"].includes(row.phase)))
             return;
         _autoRun = null;
-        const failed = run.failedChecks > 0 || rows.some(row => row.phase === "failed");
+        // A cancel is the user's: the run counts as made, not failed
+        const failed = run.failedChecks > 0 || rows.some(row => row.phase === "failed" && row.reason !== "cancelled");
         const record = ModuleUpdateRules.autoRunRecord(autoState, failed ? "failed" : "ok", run.startedAt);
         autoState = record.state;
         autoStateWritten(record.state);
@@ -653,9 +750,38 @@ Scope {
         onTriggered: root.autoTick()
     }
 
+    // The host names a module whose new files only a restart loads after the installer
+    // already said the switch was done: its own offer
+    function _lateRestarts() {
+        const late = (host?.restartNeededIds ?? []).filter(id => !_offeredIds.includes(id) && _rowData[id]?.restartBefore === false
+                                                             && queue.rows.some(row => row.id === id && row.phase === "done"));
+        if (late.length === 0)
+            return;
+        // While the queue runs, the row takes it: the queue's one offer at its end names it
+        if (!queue.ended) {
+            const copy = JSON.parse(JSON.stringify(queue));
+            for (const row of copy.rows)
+                if (late.includes(row.id) && row.phase === "done")
+                    row.restart = true;
+            queue = copy;
+            return;
+        }
+        _offeredIds = _offeredIds.concat(late);
+        const ids = (restartOffer?.ids ?? []).concat(late);
+        const nameOf = id => queue.rows.find(row => row.id === id)?.name || id;
+        const names = ModuleUpdateRules._joinNames(ids.map(nameOf));
+        restartOffer = { text: "Restart the shell to load the new files of " + names + ".", ids: ids };
+        restartNeeded = restartNeeded.concat(late.map(nameOf).filter(name => !restartNeeded.includes(name)));
+        _notify({ title: "Restart needed", body: "Restart the shell to finish updating " + ModuleUpdateRules._joinNames(late.map(nameOf)) + ".",
+                  opens: "restart", ids: late });
+    }
+
     // The lock ends: what waited goes on, and a run that was due runs
     Connections {
         target: root.host
+        function onRestartNeededIdsChanged() {
+            Qt.callLater(root._lateRestarts);
+        }
         function onLockedChanged() {
             if (!root.host.locked) {
                 Qt.callLater(root._pump);

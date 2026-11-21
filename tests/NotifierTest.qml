@@ -295,6 +295,11 @@ TestCase {
         assert(forged[16] === "@a{sv} {'urgency': <byte 1>, 'resident': <true>, 'value': <int32 1>, 'x-qs-progress-state': <'running'>, 'x-qs-progress-run': <'run1'>, "
                + "'x-qs-progress-handle': <'3'>}", "x-qs- keys judged as the server receives them: a NUL or a lone surrogate in front does not pass; "
                + "a caller's value is replaced; the handle's mark sent (" + forged[16] + ")");
+        const plain = Notifier.progressCommand(Notifier.progressContent("Modules updated", { handle: true, hints: { "x-h2s-restart-for": "1:2" },
+            actions: [{ id: "default", label: "Open" }] }, "run1", "4"), 0);
+        assertEqual(plain[16], "@a{sv} {'x-h2s-restart-for': <'1:2'>, 'urgency': <byte 1>, 'x-qs-progress-handle': <'4'>}",
+                    "a plain handle: no bar, not resident, no run token; the caller's hints and the handle's mark (" + plain[16] + ")");
+        assertEqual(plain[15], "@as ['default', 'Open']", "… its actions");
         const urgent = Notifier.progressCommand(Notifier.progressContent("s", { progress: 1, hints: { urgency: 2 } }, "run1"), 0);
         assert(urgent[16].includes("'urgency': <byte 1>") && !urgent[16].includes("int32 2"),
                "a caller's urgency hint is replaced by the content's urgency, normal when none (" + urgent[16] + ")");

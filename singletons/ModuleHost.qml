@@ -113,6 +113,8 @@ Scope {
     // them: they run their old code until the shell restarts (ModuleFileRules.reloadPicksUpChanges).
     // Kept for the host's life: a restart clears it by being the restart
     property var restartNeeded: []
+    // The same modules by id (what the updater matches its rows by)
+    property var restartNeededIds: []
     // The file the ids of the modules loaded are written to ("" — the suites' default — none;
     // the shell's: $XDG_RUNTIME_DIR/h2s-shell-modules-on), and what it held at the first load:
     // the modules on in the last run (safe mode tells them)
@@ -1394,6 +1396,9 @@ Scope {
 
     function _needRestart(record) {
         const name = record.manifest.name || record.manifest.id || record.directory;
+        const id = record.manifest.id || "";
+        if (id !== "" && !restartNeededIds.includes(id))
+            restartNeededIds = restartNeededIds.concat([id]);
         if (restartNeeded.includes(name))
             return;
         restartNeeded = restartNeeded.concat([name]);

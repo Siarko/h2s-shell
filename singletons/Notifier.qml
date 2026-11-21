@@ -24,6 +24,11 @@ import qs.singletons.io as Io
 //   progress:    number                           — 0–100, or -1 for a run of unknown length:
 //                                                   send() returns a handle (below)
 //   toast:       "brief" | "whileRunning"         — with progress: how long its toast shows
+//   handle:      true                             — without progress: send() returns a handle
+//                                                   all the same, for a plain notification
+//                                                   (no bar, not resident) whose actions and
+//                                                   dismissal the shell's own server reports
+//                                                   in-process and that close() takes away
 // }
 // No inline reply: notify-send has no option to ask for one (libnotify 0.8.8).
 //
@@ -216,7 +221,9 @@ Singleton {
             actions: Object.freeze(actions), actionsKey: JSON.stringify(actions),
             progress: typeof options.progress === "number" && !isNaN(options.progress) ? options.progress : 0,
             state: "running", toast: options.toast === "whileRunning" ? "whileRunning" : "brief",
-            announce: 0, run: String(run ?? ""), handle: String(handle ?? "")
+            announce: 0, run: String(run ?? ""), handle: String(handle ?? ""),
+            // "plain": a notification with no progress (send's `handle` without `progress`)
+            kind: typeof options.progress === "number" && !isNaN(options.progress) ? "progress" : "plain"
         });
     }
 
@@ -276,10 +283,14 @@ Singleton {
             entries.push({ key: "category", type: "string", value: content.category });
         if (content.transient)
             entries.push({ key: "transient", type: "boolean", value: true });
-        entries.push({ key: "resident", type: "boolean", value: true });
-        entries.push({ key: "value", type: "int32", value: NotificationRules.progressValue(content.progress) });
-        entries.push({ key: "x-qs-progress-state", type: "string", value: content.state });
-        entries.push({ key: "x-qs-progress-run", type: "string", value: content.run });
+        // A plain one carries no progress, is not resident, and has no run token (nothing of
+        // it is left running for a reload to dismiss as an orphan)
+        if (content.kind !== "plain") {
+            entries.push({ key: "resident", type: "boolean", value: true });
+            entries.push({ key: "value", type: "int32", value: NotificationRules.progressValue(content.progress) });
+            entries.push({ key: "x-qs-progress-state", type: "string", value: content.state });
+            entries.push({ key: "x-qs-progress-run", type: "string", value: content.run });
+        }
         if (content.handle !== "")
             entries.push({ key: "x-qs-progress-handle", type: "string", value: content.handle });
         if (content.announce > 0)
@@ -393,7 +404,7 @@ Singleton {
     }
 
     function send(givenSummary, opts) {
-        if (typeof opts?.progress === "number" && !isNaN(opts.progress))
+        if ((typeof opts?.progress === "number" && !isNaN(opts.progress)) || opts?.handle === true)
             return _sendProgress(givenSummary, opts);
         const ready = prepared(givenSummary, opts);
         const summary = ready.summary;

@@ -5,7 +5,7 @@
 # updater's PATH. The stand-in logs every command line it is given and then runs the real
 # git — or does what the file `fake/mode` says: "lsrefuse" (ls-remote fails as a server that
 # is not there), "lsslow" (ls-remote answers after a pause, then logs "answered ls-remote"),
-# "cloneslow" (clone and fetch start after a pause). Its sleeps run as naps/sleep, a link to
+# "cloneslow" (clone and fetch start after a pause), "clonerefuse" (clone and fetch fail). Its sleeps run as naps/sleep, a link to
 # the system's sleep, so a suite can see none is left. Nothing here reaches the network or
 # the user's own git configuration.
 set -euo pipefail
@@ -79,6 +79,7 @@ case " \$* " in
     *" clone "* | *" fetch "*)
         case "\$mode" in
             cloneslow) "$T/naps/sleep" 2 ;;
+            clonerefuse) echo "fatal: repository 'stand-in' not found" >&2; exit 128 ;;
         esac ;;
 esac
 exec "$real_git" "\$@"

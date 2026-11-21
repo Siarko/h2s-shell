@@ -255,6 +255,7 @@ TestCase {
         _lockedRun();
         _backoff();
         _cancelled();
+        _runsAfterCancelAndFailure();
         _staleReminders();
         _then("nothing runs", _idle, () => _sh("cat \"$1/git.log\"", [temp]));
         _then("the git log is read", () => _out !== null, () => {
@@ -291,8 +292,10 @@ TestCase {
                 return;
             for (const id of ["wx", "cl"]) {
                 const status = suite.host.status(id);
-                if (status?.version === "1.1.0" && !suite.host.restartNeeded.includes(status.name))
+                if (status?.version === "1.1.0" && !suite.host.restartNeededIds.includes(id)) {
+                    suite.host.restartNeededIds = suite.host.restartNeededIds.concat([id]);
                     suite.host.restartNeeded = suite.host.restartNeeded.concat([status.name]);
+                }
             }
         }
     }
@@ -354,7 +357,8 @@ TestCase {
                    && note.options.body.includes("Restart the shell to finish updating"), "… naming the updated, the one waiting, the restart: " + note.options.body);
             assertEqual(note.options.hints["x-h2s-restart-for"], "test:1", "… the reminder names this process");
             assertEqual(note.options.format, "plain", "… plain text");
-            assertEqual(note.handle.updates[0]?.state, "done", "… a finished job");
+            assert(note.options.handle === true && note.options.progress === undefined && note.handle.updates.length === 0,
+                   "… a plain notification with a handle, no progress bar");
             assert(updater.restartOffer !== null && updater.restartOffer.ids.slice().sort().join(",") === "cl,wx", "one restart offer, for Weather and Clock");
             assert(updater.restartOffer.text.includes("Weather") && updater.restartOffer.text.includes("Clock") && !updater.restartOffer.text.includes("Notes"),
                    "… its words: " + updater.restartOffer.text);
@@ -426,12 +430,48 @@ TestCase {
             assert(sent.length === 1 && sent[0].options.body.includes("Printers: approval required."), "… told once");
         }, 60000);
         _countLsRemote("unlocked", count => assert(count > _lsRemotes, "… it checked"));
-        _then("approve Printers 1.2.0", _idle, () => assertEqual(updater.approve("pv", updater.approvals.pv.dir), "", "approved"));
+
+        // An approved update whose switch fails puts the earlier approval back
+        _run("the user root made read-only", "chmod 555 \"$1/data/h2s-shell/modules\"", () => [temp]);
+        _then("approve, the switch to fail", _idle, () => {
+            assertEqual(host.acknowledgements.pv?.privileged, false, "before: approved without administrator rights");
+            assertEqual(updater.approve("pv", updater.approvals.pv.dir), "", "approved");
+        });
+        _then("the switch failed", () => _idle() && updater.queue.rows.find(row => row.id === "pv")?.phase === "failed", () => {
+            assertEqual(host.acknowledgements.pv?.privileged, false, "the switch failed: the earlier approval is back");
+            assertEqual(_status("pv").version, "1.0.0", "… 1.0.0 still runs");
+        }, 60000);
+        _run("the user root writable again", "chmod 755 \"$1/data/h2s-shell/modules\"", () => [temp]);
+        _then("queue Printers 1.2.0 again", _idle, () => assertEqual(updater.update("pv"), "", "queued again"));
+        _then("Printers 1.2.0 waits again", () => _idle() && updater.queue.rows.find(row => row.id === "pv")?.phase === "approval", () => {
+            assertEqual(updater.approvals.pv?.version, "1.2.0", "… for approval of 1.2.0");
+            _stamp = { dir: updater.approvals.pv.dir, at: _stamp.at };
+        });
+
+        // While it waits, a check finds a newer version: nothing is downloaded for it, and the
+        // approval switches to the version checked and judged, never another
+        _publish("pv", "Printers", "1.3.0", "yes", "privileged");
+        _then("check while waiting: nothing runs", _idle, () => assertEqual(updater.check("pv"), "", "check Printers while it waits"));
+        _then("checked while waiting", _idle, () => {
+            assertEqual(updater.checks.pv.outcome + " " + updater.checks.pv.version + " " + updater.checks.pv.downloading, "available 1.3.0 false",
+                        "1.3.0 found, not downloaded while the row waits");
+            assertEqual(updater.approvals.pv.dir, _stamp.dir, "… the question still about 1.2.0");
+        });
+        _disk("checked while waiting", state => assert(!state.versions.some(each => /^pv\/1\.3\.0-/.test(each)), "nothing of 1.3.0 on disk"));
+        _then("approve Printers 1.2.0", _idle, () => assertEqual(updater.approve("pv", _stamp.dir), "", "approved"));
         _then("Printers 1.2.0 runs", () => _idle() && _status("pv")?.version === "1.2.0" && _status("pv")?.state === "loaded", () => {
             assertEqual(updater.queue.rows.find(row => row.id === "pv")?.phase, "done", "the approved update switched");
             assertEqual(host.acknowledgements.pv?.privileged, true, "… the acknowledgement now says it asks for administrator rights");
             assertEqual(host.status("pv").enabled, true, "… still on");
+            // The host's finding that only a restart loads it comes after the switch was told done
+            sent = [];
+            host.restartNeededIds = host.restartNeededIds.concat(["pv"]);
+            host.restartNeeded = host.restartNeeded.concat(["Printers"]);
         }, 60000);
+        _then("a late restart finding", () => sent.length > 0, () => {
+            assertEqual(sent.length + " " + sent[0].summary, "1 Restart needed", "a finding after the switch: its own restart notification");
+            assert(updater.restartOffer.ids.includes("pv") && updater.restartNeeded.includes("Printers"), "… the offer and restartNeeded name it");
+        });
     }
 
     function _backoff() {
@@ -502,6 +542,45 @@ TestCase {
             assert(!state.versions.some(each => /^cl\/1\.2\.0-/.test(each)), "nothing of Clock 1.2.0 moved in");
             assertEqual(state.staging, 0, "… staging emptied");
         });
+        _mode("");
+    }
+
+    // A cancel during the daily run is no failure; an update that fails is not downloaded or
+    // told again by the next run at the same commit
+    function _runsAfterCancelAndFailure() {
+        _mode("cloneslow");
+        _then("a daily run to cancel", _idle, () => {
+            clockMs += ModuleUpdateRules.dayMs + 60000;
+            _stamp = { at: clockMs };
+            updater.autoTick();
+        });
+        _then("its download runs", () => installer.phase === "downloading", () => updater.cancel());
+        _then("the cancelled run", () => _idle() && updater.autoState.lastAttemptAt === _stamp.at, () =>
+              assertEqual(updater.autoState.failures + " " + updater.autoState.lastOutcome, "0 ok", "a cancelled run counts as made, not failed"));
+        _mode("clonerefuse");
+        _then("a daily run that fails", _idle, () => {
+            sent = [];
+            clockMs += ModuleUpdateRules.dayMs + 60000;
+            _stamp = { at: clockMs };
+            updater.autoTick();
+        });
+        _then("the failing run", () => _idle() && updater.autoState.lastAttemptAt === _stamp.at && updater.queue.ended, () => {
+            assertEqual(updater.autoState.failures, 1, "its downloads failed: a failed run");
+            assert(sent.length === 1 && sent[0].options.body.includes("Clock: failed."), "… told once: " + sent.map(each => each.options.body).join(" / "));
+        });
+        _then("the clones counted", _idle, () => _sh("grep -c ' clone ' \"$1/git.log\" || true", [temp]));
+        _then("the retry", () => _out !== null, () => {
+            _stamp = { at: _stamp.at, clones: Number(_out.lines[0] ?? 0) };
+            clockMs = _stamp.at + 16 * 60000;
+            updater.autoTick();
+        });
+        _then("the retried run", () => _idle() && updater.autoState.lastAttemptAt === _stamp.at + 16 * 60000, () => {
+            assertEqual(sent.length, 1, "the same failure is not told again");
+            assertEqual(updater.autoState.failures, 0, "… the run had nothing new to try: made");
+            _sh("grep -c ' clone ' \"$1/git.log\" || true", [temp]);
+        });
+        _then("the clones counted again", () => _out !== null, () =>
+              assertEqual(Number(_out.lines[0] ?? 0), _stamp.clones, "… nor downloaded again at the same commit"));
         _mode("");
     }
 
