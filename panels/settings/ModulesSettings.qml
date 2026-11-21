@@ -41,6 +41,21 @@ Item {
     property var updater: Modules.updater
     // Where a question that needs more than a button's word is asked (SettingsModalHost)
     property var modalHost: null
+    // The file chooser "Choose folder…" opens (FileChooser) and where it starts
+    property var chooser: FileChooser
+    property string home: SystemFacts.home ?? ""
+
+    // An install waiting at its preview goes with the page: nobody is left to answer it
+    Component.onDestruction: {
+        if (_install.preview)
+            installer?.cancelPreview(_install.job);
+    }
+
+    // The side panel: the changelogs of an install's chain ({ title, sections })
+    property var _panel: null
+    // … closed with the preview it belongs to
+    readonly property bool _previewShown: _install.preview !== null
+    on_PreviewShownChanged: if (!_previewShown) _panel = null
 
     // The card open, by module id
     property string openId: ""
@@ -269,10 +284,20 @@ Item {
         title: "Modules"
         banner: root.host?.safeMode ? _safeModeBanner : null
 
+        ModuleInstallSection {
+            id: _install
+            Layout.fillWidth: true
+            visible: !(root.host?.safeMode ?? false)
+            installer: root.installer
+            chooser: root.chooser
+            home: root.home
+            onChangelogsRequested: (title, sections) => root._panel = { title: title, sections: sections }
+        }
+
         SettingsSection {
             anchor: "installed"
             title: "Installed"
-            topMargin: 0
+            topMargin: _install.visible ? 16 : 0
             spacing: 6
             Layout.fillWidth: true
 
@@ -580,5 +605,54 @@ Item {
                 }
             }
         }
+    }
+
+    // "What's new": each changelog of the chain, plain text, in the standard side panel
+    KeyedModel { id: _panelSections; values: root._panel?.sections ?? []; keyProp: "key" }
+    Component {
+        id: _changelogComp
+        ColumnLayout {
+            spacing: 12
+            Repeater {
+                model: _panelSections.model
+                ColumnLayout {
+                    id: _section
+                    required property string modelData
+                    readonly property var section: _panelSections.byKey[modelData] ?? ({ title: "", text: "" })
+                    objectName: "changelogSection"
+                    Layout.fillWidth: true
+                    spacing: 4
+                    Text {
+                        Layout.fillWidth: true
+                        text: _section.section.title
+                        textFormat: Text.PlainText
+                        elide: Text.ElideRight
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.fontSizeBody
+                        font.bold: true
+                        color: Theme.textPrimary
+                    }
+                    Text {
+                        objectName: "changelogText"
+                        Layout.fillWidth: true
+                        text: _section.section.text
+                        textFormat: Text.PlainText
+                        wrapMode: Text.Wrap
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.fontSizeSmall
+                        color: Theme.textSecondary
+                    }
+                }
+            }
+        }
+    }
+    SideDrawer {
+        id: _drawer
+        objectName: "changelogPanel"
+        anchors.fill: parent
+        open: root._panel !== null
+        title: root._panel?.title ?? ""
+        content: _changelogComp
+        onRequested: event => root._panel = null
     }
 }

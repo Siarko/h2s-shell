@@ -81,6 +81,14 @@ Scope {
     property var progress: null
     // How the last job ended: { ok, action, message, ids }
     property var lastResult: null
+    // An install's downloads, one row each as they come: { key, label, state "downloading" |
+    // "verifying" | "verified" | "failed", percent (null: no number yet), rate (bytes/s or
+    // null) } — the page's rows (Settings → Modules, "Add a module")
+    property var steps: []
+    // An install started with `preview`, waiting at phase "preview" for proceed() or
+    // cancelPreview(): ModuleInstallRules.installPreview's answer plus `job` (its number) and
+    // `changelogs` ([{ key, title, text, none }] for each module of the chain), else null
+    property var preview: null
 
     // Each module's configuration backups as last read (ModuleBackupRules.listing's { ok,
     // backups (newest first: { name, version, commit, takenAt, reason, includesData, store,
@@ -114,6 +122,8 @@ Scope {
         phase = "";
         subject = "";
         progress = null;
+        steps = [];
+        preview = null;
         return job;
     }
 
@@ -129,8 +139,12 @@ Scope {
         // `details` what a caller needs beyond the words (fetchUpdate's version, the modules
         // a switch took back)
         const result = { ok: ok, action: job.action, message: text, ids: job.ids.slice(), job: job.number,
-                         details: Object.assign({ back: (job.back ?? []).slice(), backups: (job.backups ?? []).slice() }, job.details ?? {}) };
+                         details: Object.assign({ back: (job.back ?? []).slice(), backups: (job.backups ?? []).slice(),
+                                                  cancelled: job.cancelled === true }, job.details ?? {}) };
         _job = null;
+        preview = null;
+        if (!ok)
+            steps = steps.map(step => step.state === "verified" ? step : Object.assign({}, step, { state: "failed" }));
         phase = "";
         subject = "";
         progress = null;
@@ -146,8 +160,10 @@ Scope {
     // Install a module from `source` — a git address ("<url>#<ref>" allowed) or an absolute
     // folder path — with the modules it needs. `options`: { enable (default true): acknowledge
     // and turn on what is new; anyway: install what resolves when a dependency cannot be had;
-    // alsoInstall: [ids] — soft dependencies to install too }. → "" when it started, else why
-    // not (the outcome: lastResult, finished(), the log)
+    // alsoInstall: [ids] — soft dependencies to install too; preview: stop once the chain is
+    // downloaded and checked, at phase "preview" with `preview` set, until proceed() or
+    // cancelPreview() — nothing moves in before }. → "" when it started, else why not (the
+    // outcome: lastResult, finished(), the log)
     function install(source, options) {
         const refusal = _refusal();
         if (refusal !== "")
@@ -158,7 +174,7 @@ Scope {
         const job = _start("install", {
             enable: options?.enable !== false, anyway: options?.anyway === true,
             alsoInstall: Array.isArray(options?.alsoInstall) ? options.alsoInstall.filter(id => typeof id === "string") : [],
-            source: given
+            source: given, preview: options?.preview === true, previewed: false
         });
         _readSources(job, () => _download(job, given, "", staged => {
             job.root = staged;
@@ -409,6 +425,41 @@ Scope {
         return "";
     }
 
+    // Goes on with the install waiting at its preview (`job`: its number — the subject).
+    // `options`: { enable (default true): acknowledge and turn on what is new; anyway: install
+    // what resolves when a dependency cannot be had }. → "" when it went on, else why not
+    function proceed(job, options) {
+        if (!_job || _job.number !== job || phase !== "preview")
+            return "The install changed";
+        if (host.locked)
+            return "Refused while the session is locked";
+        _job.enable = options?.enable !== false;
+        _job.anyway = options?.anyway === true;
+        preview = null;
+        _resolve(_job);
+        return "";
+    }
+
+    // Drops the install waiting at its preview: every staging directory goes, nothing moved
+    // in; it ends as cancelled. → true when there was one
+    function cancelPreview(job) {
+        if (!_job || _job.number !== job || phase !== "preview")
+            return false;
+        _job.cancelled = true;
+        _abandon(_job, "cancelled");
+        return true;
+    }
+
+    // An install waiting at its preview is dropped when the session locks: the window that
+    // asked is gone, and nothing may move in meanwhile
+    Connections {
+        target: root.host
+        function onLockedChanged() {
+            if (root.host.locked && root._job && root.phase === "preview")
+                root.cancelPreview(root._job.number);
+        }
+    }
+
     // Stops the download of the job running now (`job`: its number — the subject: another
     // job is never stopped): nothing moves in, staging is emptied. → true when there was
     // one to stop
@@ -539,10 +590,12 @@ Scope {
             _abandon(job, "the chain has more than " + ModuleDependencyRules.maxModules + " modules");
             return;
         }
-        const label = expectedId !== "" ? expectedId : ModuleInstallRules.addressShown(source.address);
+        const label = expectedId !== "" ? expectedId : (source.kind === "folder" ? ModuleInstallRules._plain(source.folder) : ModuleInstallRules.addressShown(source.address));
         phase = "downloading";
         subject = label;
         progress = null;
+        job.stepKey = (job.stepKey ?? 0) + 1;
+        _setStep(job, { key: String(job.stepKey), label: label, state: "downloading", percent: null, rate: null });
         _run(["sh", "-c", "umask 077; mkdir -p -- \"$1\" && mktemp -d -p \"$1\" install.XXXXXXXX", "sh", places.staging], {
             timeoutMs: stepTimeoutMs,
             done: result => {
@@ -629,6 +682,7 @@ Scope {
                         return;
                     }
                     progress = { phase: read.phase, percent: read.percent, bytes: read.bytes, rate: read.rate };
+                    _setStep(job, { percent: read.percent, rate: read.rate });
                     if (read.bytes !== null && read.bytes > maxDownloadBytes)
                         _stopTooLarge(download);
                 },
@@ -771,9 +825,20 @@ Scope {
         });
     }
 
+    // The current download's row: `fields` merged into it, or a new row (with a `key`)
+    function _setStep(job, fields) {
+        if (!_alive(job))
+            return;
+        const key = fields.key ?? String(job.stepKey ?? 0);
+        const known = steps.some(step => step.key === key);
+        steps = known ? steps.map(step => step.key === key ? Object.assign({}, step, fields) : step)
+                      : steps.concat([Object.assign({ key: key, label: "", state: "downloading", percent: null, rate: null }, fields)]);
+    }
+
     function _verify(job, label, dir, expectedId, commit, source, done) {
         phase = "verifying";
         progress = null;
+        _setStep(job, { state: "verifying", rate: null });
         host.checkDirectory(dir, check => {
             if (!_alive(job))
                 return;
@@ -782,6 +847,7 @@ Scope {
                 _abandon(job, label + ": " + problem);
                 return;
             }
+            _setStep(job, { state: "verified", percent: 100, label: String(check.manifest.name || label) + (check.manifest.version ? " " + check.manifest.version : "") });
             done({ dir: dir, manifest: check.manifest, commit: commit, source: source });
         });
     }
@@ -831,6 +897,11 @@ Scope {
             });
             return;
         }
+        if (job.preview && !job.previewed) {
+            job.previewed = true;
+            _showPreview(job, plan);
+            return;
+        }
         if (plan.blocking.length > 0 && !job.anyway) {
             _abandon(job, "not installed: " + plan.blocking.join("; "));
             return;
@@ -854,6 +925,77 @@ Scope {
         job.ids = items.map(item => item.id);
         job.notes.push(...plan.blocking);
         _installItems(job, items, 0);
+    }
+
+    // The chain downloaded and checked: the programs looked up, each changelog read, then the
+    // install waits at phase "preview"
+    function _showPreview(job, plan) {
+        const manifest = job.root.manifest;
+        const names = (manifest.programs ?? []).concat(manifest.optionalPrograms ?? []);
+        _findPrograms(names, found => {
+            if (!_alive(job))
+                return;
+            const installed = _installed(job);
+            const previous = {};
+            for (const id of Object.keys(installed))
+                previous[id] = installed[id].version;
+            const chain = [{ id: manifest.id, staged: job.root }]
+                .concat(plan.entries.filter(entry => (entry.kind === "download" || entry.kind === "update") && job.fetched[entry.id])
+                        .map(entry => ({ id: entry.id, staged: job.fetched[entry.id] })));
+            const changelogs = [];
+            const readNext = index => {
+                if (!_alive(job))
+                    return;
+                if (index >= chain.length) {
+                    const replaced = host.statuses.filter(status => status.id === manifest.id && ["builtin", "system"].includes(status.source))
+                        .map(status => ({ directory: status.directory, source: status.source, version: status.version }));
+                    preview = Object.assign(ModuleInstallRules.installPreview({
+                        root: job.root, fetched: job.fetched, plan: plan, rootTarget: job.rootTarget, replaced: replaced,
+                        shellApi: host.apiVersion, programs: found, previous: previous,
+                        goesTo: ModuleInstallRules._shownPath(places.user + "/" + manifest.id, home)
+                    }), { job: job.number, changelogs: changelogs });
+                    phase = "preview";
+                    subject = String(manifest.name || manifest.id);
+                    progress = null;
+                    return;
+                }
+                const item = chain[index];
+                const from = previous[item.id] ?? "";
+                _run(["sh", "-c", "f=$1/CHANGELOG.md; [ -f \"$f\" ] && [ ! -L \"$f\" ] || exit 3; head -c \"$2\" -- \"$f\"", "sh",
+                      item.staged.dir, String(ModuleUpdateRules.maxChangelogBytes)], {
+                    timeoutMs: stepTimeoutMs,
+                    done: result => {
+                        const name = ModuleInstallRules._plain(String(item.staged.manifest.name || item.id), 60);
+                        const to = ModuleInstallRules._plain(String(item.staged.manifest.version ?? ""), 40);
+                        const shown = ModuleUpdateRules.changelogSince(result.ok ? String(result.stdout ?? "") : null, from, to);
+                        changelogs.push(Object.assign({ key: item.id, title: name + " " + (from !== "" ? from + " → " + to : to) }, shown));
+                        readNext(index + 1);
+                    }
+                });
+            };
+            readNext(0);
+        });
+    }
+
+    // Which of the programs `names` are found on the PATH modules' programs are looked up on
+    // (the host's program environment's, else the shell's) → done({ <name>: found })
+    function _findPrograms(names, done) {
+        const wanted = (Array.isArray(names) ? names : []).filter(name => typeof name === "string" && ModuleRules.isString(name, 200)
+                                                                     && !name.includes("/") && name !== "").slice(0, 64);
+        if (wanted.length === 0) {
+            Qt.callLater(() => done({}));
+            return;
+        }
+        const path = host.programEnvironment?.PATH;
+        const found = {};
+        _run(["sh", "-c", "for p do command -v -- \"$p\" > /dev/null 2>&1 && printf '%s\\n' \"$p\"; done", "sh"].concat(wanted), {
+            timeoutMs: stepTimeoutMs, environment: typeof path === "string" && path !== "" ? { PATH: path } : {},
+            onLine: (line, stream) => {
+                if (stream === "stdout" && wanted.includes(line))
+                    found[line] = true;
+            },
+            done: () => done(found)
+        });
     }
 
     // A failure before anything moved in: every staging directory goes

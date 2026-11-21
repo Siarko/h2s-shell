@@ -468,6 +468,15 @@ The interface modules are written against (`qs.api`), versioned on its own
   its data folder. "Enable" asks first for a module that is not part of h2s-shell; "Disable"
   asks on the button, or in a dialog listing the modules that need it and go off with it.
   The Modules group is always there; modules' own pages follow under it.
+- Settings → Modules: "Add a module" installs from a repository address or a folder ("Choose
+  folder…" opens the system's folder dialog). Each download shows a bar with its percent and
+  speed, then the preview says what the module is, where it comes from (the commit), whether
+  its API fits, whether it runs administrator actions, which of its programs were found, the
+  modules it also installs, updates or can use and any that cannot be had, what it replaces
+  and where it goes, with the statement for every module that is not part of h2s-shell and
+  "What's new" in the side panel. "Install and enable", "Install, keep off" — or "Install
+  anyway" when a module it needs cannot be had — and "Cancel", which deletes the downloads.
+  A failure says what happened and why.
 - Settings → Modules → Installed: "Remove" on a module in your modules folder (never on a
   built-in or system one) asks first, saying what is deleted — only the link for a module you
   linked, the folder for one you placed there by hand ("Not installed by the shell") — which

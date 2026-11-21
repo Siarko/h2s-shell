@@ -90,6 +90,55 @@ TestCase {
             jobNumber++;
             return "";
         }
+        // Installing: the suite sets the job's state as the installer would
+        property bool busy: false
+        property string phase: ""
+        property var steps: []
+        property var preview: null
+        property string installRefusal: ""
+        function install(source, options) {
+            calls = calls.concat(["install " + source + " " + JSON.stringify(options)]);
+            if (installRefusal !== "")
+                return installRefusal;
+            jobNumber++;
+            busy = true;
+            phase = "downloading";
+            steps = [];
+            preview = null;
+            return "";
+        }
+        function proceed(job, options) {
+            calls = calls.concat(["proceed " + job + " " + JSON.stringify(options)]);
+            phase = "installing";
+            preview = null;
+            return "";
+        }
+        function cancelPreview(job) {
+            calls = calls.concat(["cancelPreview " + job]);
+            return true;
+        }
+        function cancelDownload(job) {
+            calls = calls.concat(["cancelDownload " + job]);
+            return true;
+        }
+        // The job ends as the installer ends it
+        function end(ok, message, cancelled) {
+            busy = false;
+            phase = "";
+            preview = null;
+            finished({ ok: ok, job: jobNumber, message: message, ids: [], details: { cancelled: cancelled === true } });
+        }
+    }
+
+    // The stand-in file chooser: records the call, answers with `answer`
+    property var _chooser: QtObject {
+        property var calls: []
+        property var answer: ({ paths: ["/home/you/src/h2s-notes"], cancelled: false, blocked: "", error: "" })
+        function choose(handle, options, done, home) {
+            calls = calls.concat([options.mode + " " + home]);
+            Qt.callLater(() => done(answer));
+            return { open: true, cancel: () => {} };
+        }
     }
 
     // The stand-in updater: its state set by the suite, its calls recorded
@@ -137,6 +186,8 @@ TestCase {
                     host: suite._host
                     installer: suite._installer
                     updater: suite._updater
+                    chooser: suite._chooser
+                    home: "/home/you"
                     modalHost: modal
                 }
             }
@@ -487,6 +538,7 @@ TestCase {
 
         _remove();
         _checks();
+        _installing();
         _safeModeBanner();
     }
 
@@ -642,5 +694,118 @@ TestCase {
         assertEqual(_host.calls[0], "loadWithoutSafeMode", "… to load without safe mode");
         _host.safeMode = false;
         assert(_until(() => _named(page, "safeModeBanner").length === 0), "out of safe mode: the banner gone");
+    }
+
+    function _top() {
+        _all(page, child => child.toString().startsWith("QQuickFlickable"))[0].contentY = 0;
+        driver.wait(20);
+    }
+
+    // --- Add a module: the field, the steps, the preview, the outcome ---
+    function _installing() {
+        _fixture();
+        _installer.busy = false;
+        _installer.phase = "";
+        _installer.installRefusal = "";
+        assert(_until(() => _cards().length === 7));
+        _all(page, child => child.toString().startsWith("QQuickFlickable"))[0].contentY = 0;
+        driver.wait(20);
+        const field = _named(page, "installField")[0];
+        const install = _named(page, "installButton")[0];
+        const error = _named(page, "installError")[0];
+        assert(field !== undefined && !install.available, "\"Add a module\": the field; Install waits for an address");
+
+        _click(_named(page, "chooseFolder")[0]);
+        assert(_until(() => field.text === "/home/you/src/h2s-notes"), "Choose folder…: the folder chosen lands in the field");
+        assertEqual(_chooser.calls.join(","), "folder /home/you", "… the shell's chooser, for a folder, starting at home");
+
+        field.text = "ext::sh -c touch% /tmp/x";
+        _installer.installRefusal = "ext:: addresses run commands";
+        assert(_until(() => install.available));
+        _click(install);
+        assert(_until(() => error.visible && error.text === "ext:: addresses run commands"), "a refused address: why, on one line");
+        assert(Qt.colorEqual(error.color, Theme.error), "… in the error colour");
+        _installer.installRefusal = "";
+
+        field.text = "https://codeberg.org/anna/h2s-notes#v0.4.0";
+        assert(_until(() => !error.visible), "a new address: the error goes");
+        _click(install);
+        assertEqual(_installer.calls[_installer.calls.length - 1], "install https://codeberg.org/anna/h2s-notes#v0.4.0 {\"preview\":true}", "Install: with a preview");
+        const job = _installer.jobNumber;
+        _installer.steps = [{ key: "1", label: "Notes 0.4.0", state: "verified", percent: 100, rate: null },
+                            { key: "2", label: "clipboard", state: "downloading", percent: 45, rate: 2516582 }];
+        assert(_until(() => _named(page, "installStep").filter(row => row.visible).length === 2), "downloading: a row per module");
+        assertEqual(_named(page, "installPhase")[0].text, "Downloading", "… the step");
+        assertEqual(_named(page, "stepText").map(text => text.text).join("|"), "Verified|45% · " + Format.rate(2516582), "… each row's words, the speed");
+        const bars = _named(page, "stepBar");
+        assert(bars[1].wave && !bars[0].wave && Math.abs(bars[1].value - 0.45) < 0.001, "… the bar of the download waves, at its percent");
+        _click(_named(page, "cancelDownload")[0]);
+        assertEqual(_installer.calls[_installer.calls.length - 1], "cancelDownload " + job, "… Cancel stops this job's download");
+
+        // The preview
+        const plan = { complete: true, refused: "", blocking: [], offers: [],
+                       entries: [{ id: "clipboard", name: "Clipboard", kind: "download", neededBy: ["notes"], address: "https://github.com/anna/h2s-clipboard" }] };
+        const given = { root: { manifest: { id: "notes", name: "Notes", version: "0.4.0", api: "1.30", description: "Sticky notes in a popup.", programs: ["xclip"] },
+                                commit: "4f2a9c1", source: { kind: "repository", address: "https://codeberg.org/anna/h2s-notes#v0.4.0", ref: "v0.4.0" } },
+                        fetched: { clipboard: { manifest: { id: "clipboard", name: "Clipboard", version: "0.2.0" } } }, plan: plan, rootTarget: { kind: "new" },
+                        replaced: [], shellApi: "1.36", programs: { xclip: true }, goesTo: "~/.local/share/h2s-shell/modules/notes", previous: {} };
+        _installer.phase = "preview";
+        _installer.preview = Object.assign(ModuleInstallRules.installPreview(given), { job: job,
+            changelogs: [{ key: "notes", title: "Notes 0.4.0", text: "## 0.4.0\n- Copy a note.", none: false },
+                         { key: "clipboard", title: "Clipboard 0.2.0", text: "No changelog", none: true }] });
+        assert(_until(() => _named(page, "installPreview")[0].visible), "the preview");
+        assertEqual(_named(page, "previewName")[0].text, "Notes", "… its name");
+        assertEqual(_named(page, "installStep").filter(row => row.visible).length, 0, "… the rows give way to it");
+        assertEqual(_named(page, "trustTitle")[0].text, "Notes and Clipboard are not part of h2s-shell.", "… the statement for both");
+        const rows = label => _all(_named(page, "installPreview")[0], child => child.label === label && child.visible)[0]?.value ?? "";
+        assertEqual(rows("Also installs") + " | " + rows("Programs") + " | " + rows("Source"),
+                    "Clipboard 0.2.0 — from github.com/anna/h2s-clipboard (Notes needs it) | xclip — found | From codeberg.org/anna/h2s-notes @ v0.4.0\ncommit 4f2a9c1",
+                    "… the chain, the programs, the source");
+        assert(_named(page, "installEnable")[0].visible && _named(page, "installKeepOff")[0].visible && !_named(page, "installAnyway")[0].visible,
+               "… Install and enable, Install keep off; no Install anyway");
+        _show(_named(page, "whatsNew")[0]);
+        _click(_named(page, "whatsNew")[0]);
+        const drawer = _named(page, "changelogPanel")[0];
+        assert(_until(() => drawer.open && _named(drawer, "changelogSection").length === 2), "What's new: the side panel, a section per module");
+        assertEqual(_named(drawer, "changelogText").map(text => text.text).join("|"), "## 0.4.0\n- Copy a note.|No changelog", "… their text, plain");
+        drawer.requested("closeButton");
+        assert(_until(() => !drawer.open), "… closed");
+        _show(_named(page, "installKeepOff")[0]);
+        _click(_named(page, "installKeepOff")[0]);
+        assertEqual(_installer.calls[_installer.calls.length - 1], "proceed " + job + " {\"enable\":false,\"anyway\":false}", "Install, keep off: goes on, off");
+        assert(_until(() => _named(page, "installPhase")[0].visible && _named(page, "installPhase")[0].text === "Installing"), "… installing");
+        _installer.end(true, "installed notes, clipboard (kept off)");
+        assert(_until(() => field.text === "" && !error.visible), "installed: the field emptied, no error");
+
+        // A dependency that cannot be had; Cancel
+        field.text = "https://github.com/olek/h2s-todo";
+        _top();
+        _click(install);
+        const second = _installer.jobNumber;
+        _installer.phase = "preview";
+        _installer.preview = Object.assign(ModuleInstallRules.installPreview(Object.assign({}, given, {
+            plan: Object.assign({}, plan, { blocking: ["Needs Sync 1.0 — not installed, no address given"] }) })), { job: second, changelogs: [] });
+        assert(_until(() => _named(page, "installAnyway")[0].visible), "a dependency that cannot be had: Install anyway");
+        assert(!_named(page, "installEnable")[0].visible && !_named(page, "installKeepOff")[0].visible, "… instead of the two");
+        assertEqual(_named(page, "previewBlocking").map(row => row.modelData).join(""), "Needs Sync 1.0 — not installed, no address given", "… which, and why");
+        _show(_named(page, "installCancel")[0]);
+        _click(_named(page, "installCancel")[0]);
+        assertEqual(_installer.calls[_installer.calls.length - 1], "cancelPreview " + second, "Cancel: the downloads deleted");
+        _installer.end(false, "cancelled", true);
+        assert(_until(() => !_named(page, "installPreview")[0].visible), "… the preview gone");
+        assertEqual(error.text, "", "… no error for a cancel");
+
+        // A failure: what and why, nothing more
+        _top();
+        _click(install);
+        _installer.end(false, "clipboard: download failed — the server did not answer; nothing installed");
+        assert(_until(() => error.visible), "a failure: said");
+        assertEqual(error.text, "Clipboard: download failed — the server did not answer", "… what happened and why, nothing more");
+        assertEqual(field.text, "https://github.com/olek/h2s-todo", "… the address kept to try again");
+        // Another job's answer is not this section's
+        _installer.jobNumber += 5;
+        _installer.finished({ ok: false, job: 1, message: "old" });
+        driver.wait(20);
+        assertEqual(error.text, "Clipboard: download failed — the server did not answer", "a late answer of another job: ignored");
     }
 }

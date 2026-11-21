@@ -63,6 +63,7 @@ TestCase {
         _hostReads();
         _list();
         _card();
+        _installPage();
         _checks();
         _installerSteps();
         _safeModeBanner();
@@ -772,6 +773,62 @@ TestCase {
                                                                          return line.text + "/" + line.tone; }).join("|"),
                     "Up to date · checked 14:32/textMuted|1.3.0 available/accent|Check failed: no answer/error", "… each outcome in its colour");
         assertEqual(rules.checkLineOf(undefined, false).text, "", "… never checked: none");
+    }
+
+    function _installPage() {
+        const rules = ModuleInstallRules;
+        assertEqual(rules.trustStatement(["Notes"]).title + "|" + rules.trustStatement(["Notes"]).text, "Notes is not part of h2s-shell.|" + rules.trustText,
+                    "trust: one module, the statement");
+        const two = rules.trustStatement(["Notes", "Clipboard"]);
+        assertEqual(two.title, "Notes and Clipboard are not part of h2s-shell.", "… two: are");
+        assert(two.text.startsWith("They run inside the shell") && two.text.includes("Enable them only"), "… the words for several");
+        assertEqual(rules.trustStatement(["A", "B", "C"]).title, "A, B and C are not part of h2s-shell.", "… three");
+        assertEqual(rules.trustStatement([]), null, "… none: none");
+
+        assertEqual(rules.installErrorText({ ok: false, message: "rho: could not be moved into place; nothing installed" }), "Rho: could not be moved into place",
+                    "error: what and why, the \"nothing installed\" tail gone");
+        assertEqual(rules.installErrorText({ ok: false, message: "the session was locked: nothing installed" }), "The session was locked", "… another tail");
+        assertEqual(rules.installErrorText({ ok: false, message: "not installed: Needs Sync 1.0 — not installed, no address given" }),
+                    "Needs Sync 1.0 — not installed, no address given", "… a refused chain: its reason");
+        assertEqual(rules.installErrorText({ ok: false, message: "notes: cancelled", details: { cancelled: true } }), "", "… a cancel: nothing");
+        assertEqual(rules.installErrorText({ ok: false, message: "a\nb<b>" }), "A b<b>", "… one line, as written");
+
+        assertEqual(rules.stepText({ state: "downloading", percent: 45.4, rate: 1 }, "2.4 MiB/s") + "|" + rules.stepText({ state: "downloading", percent: null }, "")
+                    + "|" + rules.stepText({ state: "verifying" }) + "|" + rules.stepText({ state: "verified" }) + "|" + rules.stepText({ state: "failed" }) + "|" + rules.stepText(null),
+                    "45% · 2.4 MiB/s|Downloading…|Verifying…|Verified|Failed|", "step words");
+
+        const plan = { complete: true, refused: "", blocking: [], offers: [{ id: "calendar", name: "Calendar" }],
+                       entries: [{ id: "clipboard", name: "Clipboard", kind: "download", neededBy: ["notes"], address: "https://github.com/anna/h2s-clipboard#v0.2.0" },
+                                 { id: "weather", name: "Weather", kind: "update", from: "1.2.0", to: "1.3.0", reason: "Notes needs 1.3", neededBy: ["notes"] },
+                                 { id: "tailscale", name: "Tailscale", kind: "there", neededBy: ["notes"] }] };
+        const given = {
+            root: { manifest: { id: "notes", name: "Notes", version: "0.4.0", api: "1.30", description: "Sticky notes.", author: "Anna",
+                                programs: ["xclip"], optionalPrograms: ["wl-copy"], icon: { kind: "glyph", glyph: "" }, privileged: null },
+                    commit: "4f2a9c1aaaa", source: { kind: "repository", address: "https://codeberg.org/anna/h2s-notes#v0.4.0", ref: "v0.4.0" } },
+            fetched: { clipboard: { manifest: { id: "clipboard", name: "Clipboard", version: "0.2.0" } } },
+            plan: plan, rootTarget: { kind: "new" }, replaced: [{ directory: "/b/notes", source: "builtin", version: "0.1.0" }], shellApi: "1.36",
+            programs: { xclip: true }, goesTo: "~/.local/share/h2s-shell/modules/notes", previous: { tailscale: "0.6.0", weather: "1.2.0" }
+        };
+        const preview = rules.installPreview(given);
+        assertEqual(preview.name + "|" + preview.id + "|" + preview.version + "|" + preview.icon, "Notes|notes|0.4.0|", "preview: name, id, version, icon");
+        assertEqual(preview.source.join("|"), "From codeberg.org/anna/h2s-notes @ v0.4.0|commit 4f2a9c1", "… the source with its commit");
+        assertEqual(preview.api, "asks for 1.30 · this shell has 1.36 — fits", "… the API");
+        assertEqual(preview.programs.map(program => program.name + "=" + program.found).join(","), "xclip=true,wl-copy=false", "… programs found and not");
+        assertEqual(preview.alsoInstalls.join("|"), "Clipboard 0.2.0 — from github.com/anna/h2s-clipboard (Notes needs it)", "… what it also installs, from where, for whom");
+        assertEqual(preview.updates.join("|"), "Weather 1.2.0 → 1.3.0 (Notes needs 1.3)", "… what it updates");
+        assertEqual(preview.already.join("|") + "|" + preview.canUse.join("|"), "Tailscale 0.6.0 — installed|Calendar — not installed", "… what is there, what it can use");
+        assertEqual(preview.replaces, "Replaces the built-in copy (0.1.0)", "… what it replaces");
+        assertEqual(preview.trust.title, "Notes and Clipboard are not part of h2s-shell.", "… the statement for every module new to the folder");
+        assertEqual(preview.privileged + "|" + preview.choice, "never asks|ready", "… administrator; ready to install");
+        const blocked = rules.installPreview(Object.assign({}, given, { plan: Object.assign({}, plan, { blocking: ["Needs Sync 1.0 — not installed, no address given"] }) }));
+        assertEqual(blocked.choice + "|" + blocked.blocking.join(""), "anyway|Needs Sync 1.0 — not installed, no address given", "… a dependency that cannot be had: anyway");
+        assertEqual(rules.installPreview(Object.assign({}, given, { plan: Object.assign({}, plan, { refused: "a cycle" }) })).choice, "none", "… refused: nothing");
+        const update = rules.installPreview(Object.assign({}, given, { rootTarget: { kind: "update" }, previous: { notes: "0.3.0" },
+                                                                       plan: Object.assign({}, plan, { entries: [] }) }));
+        assertEqual(update.replaces + "|" + update.trust, "Updates Notes 0.3.0 → 0.4.0|null", "… an update of its own: said, no statement");
+        const folder = rules.installPreview(Object.assign({}, given, { root: Object.assign({}, given.root, { source: { kind: "folder", folder: "/src/notes" },
+                                                                                                          manifest: { id: "notes", name: "No<b>tes\n" } }) }));
+        assertEqual(folder.source.join("|") + "|" + folder.name + "|" + folder.icon, "Copied from /src/notes|No<b>tes|N", "… a folder; a name as written, on one line; the letter");
     }
 
     function _checks() {

@@ -586,7 +586,11 @@ hand), names the modules that stop working, and offers to delete the module's da
 settings and the modules installed only for it — all unchecked. "Check all" and a card's
 "Check for updates" look for newer versions of the modules installed from a repository; each
 card shows the result under its name, and a downloaded update an "Update to …" button.
-Modules' own settings pages follow under the Modules group.
+"Add a module" installs one from a repository address or a folder: the downloads with their
+progress, then a preview — what it is and where it comes from, its programs, the modules it
+brings or needs, the statement for each module not part of h2s-shell, the changelog in the side
+panel — before anything moves in; "Cancel" deletes the downloads. Modules' own settings pages
+follow under the Modules group.
 
 ## External dependencies
 

@@ -1207,6 +1207,122 @@ Singleton {
         return { text: text, tone: check?.outcome === "failed" ? "error" : check?.outcome === "available" ? "accent" : "textMuted" };
     }
 
+    // ---- Installing on the page (§4 "Add a module", §6.2, §6.9) ----
+
+    // The statement for the modules an install brings that are not part of h2s-shell (§2, the
+    // preview's box): { title, text } — "Notes is not part of h2s-shell." / "Notes and
+    // Clipboard are not part of h2s-shell.", the words after it for one or several; null for
+    // no names
+    function trustStatement(names) {
+        const shown = _list(names).map(each => _plain(String(each ?? ""), 60)).filter(each => each !== "");
+        if (shown.length === 0)
+            return null;
+        const joined = shown.length === 1 ? shown[0] : shown.slice(0, -1).join(", ") + " and " + shown[shown.length - 1];
+        const several = shown.length > 1;
+        return { title: joined + (several ? " are" : " is") + " not part of h2s-shell.",
+                 text: several ? trustText.replace("It runs", "They run").replace("Enable it", "Enable them") : trustText };
+    }
+
+    // An install's outcome as the page says it: what happened and why, nothing more — the
+    // installer's "nothing installed" tails go (a failure installs nothing; it is not said).
+    // "" for a cancel by the user
+    function installErrorText(result) {
+        if (result?.details?.cancelled === true)
+            return "";
+        let text = _plain(String(result?.message ?? ""), 300);
+        text = text.replace(/[;:,]?\s*nothing (?:was )?installed\.?$/i, "").replace(/^not installed:\s*/i, "");
+        return text.charAt(0).toUpperCase() + text.slice(1);
+    }
+
+    // A download row's words on its right: "45% · 2.4 MiB/s", "Downloading…" (no numbers yet),
+    // "Verifying…", "Verified", "Failed". `step`: { state, percent, rate } (the installer's
+    // `steps`); `rateText`: a rate in bytes/s as text (Format.rate)
+    function stepText(step, rateText) {
+        switch (step?.state) {
+        case "downloading": {
+            const percent = Number(step.percent);
+            if (!Number.isFinite(percent) || step.percent === null)
+                return "Downloading…";
+            return Math.round(percent) + "%" + (typeof rateText === "string" && rateText !== "" ? " · " + rateText : "");
+        }
+        case "verifying": return "Verifying…";
+        case "verified": return "Verified";
+        case "failed": return "Failed";
+        default: return "";
+        }
+    }
+
+    // The preview of an install (§6.2, §6.9) from what the installer staged and planned.
+    // `given`: { root: { manifest, commit, source (installSource's) }, fetched: { <id>: { manifest,
+    // commit, source } }, plan (ModuleDependencyRules.plan's), rootTarget (installTarget's),
+    // replaced: [{ directory, source, version }] — the copies of its id it would replace (a
+    // built-in or system one), shellApi, programs: { <name>: found }, goesTo (the path shown),
+    // previous: { <id>: installed version } }.
+    // → { id, name, version, description, author, icon, api, source: [lines], privileged,
+    //     programs, alsoInstalls, updates, already, canUse, blocking, replaces, goesTo, trust,
+    //     choice: "ready" | "anyway" | "none" — Install (and keep off) / Install anyway / only
+    //     Cancel }. Texts plain, on one line, capped.
+    function installPreview(given) {
+        const plan = given?.plan ?? {};
+        const manifest = given?.root?.manifest ?? {};
+        const id = _plain(String(manifest.id ?? ""), 60);
+        const name = _plain(String(manifest.name ?? ""), 60) || id;
+        const version = _plain(String(manifest.version ?? ""), maxVersionLength);
+        const entries = _list(plan.entries);
+        const fetched = ModuleRules.isObject(given?.fetched) ? given.fetched : {};
+        const nameOf = other => {
+            if (other === manifest.id)
+                return name;
+            const entry = entries.find(each => each?.id === other);
+            return _plain(String(entry?.name ?? fetched[other]?.manifest?.name ?? ""), 60) || _plain(String(other ?? ""), 60);
+        };
+        const source = given?.root?.source ?? {};
+        const commit = typeof given?.root?.commit === "string" ? given.root.commit.slice(0, 7) : "";
+        const sourceLines = source.kind === "folder"
+            ? ["Copied from " + _plain(String(source.folder ?? ""))]
+            : ["From " + addressShown(source.address) + (source.ref ? " @ " + _plain(String(source.ref), maxVersionLength) : "")]
+                .concat(commit !== "" ? ["commit " + commit] : []);
+        const api = _plain(String(manifest.api ?? ""), 20);
+        const programs = _list(manifest.programs).concat(_list(manifest.optionalPrograms))
+            .filter((each, index, list) => typeof each === "string" && list.indexOf(each) === index)
+            .map(each => ({ name: _plain(each, 60), found: given?.programs?.[each] === true }));
+        const neededBy = entry => {
+            const users = _list(entry?.neededBy).map(nameOf).filter(each => each !== "");
+            return users.length > 0 ? " (" + users.join(", ") + " needs it)" : "";
+        };
+        const alsoInstalls = entries.filter(entry => entry?.kind === "download").map(entry => {
+            const staged = fetched[entry.id]?.manifest;
+            const shownVersion = _plain(String(staged?.version ?? ""), maxVersionLength);
+            const from = entry.address ? " — from " + addressShown(entry.address) : "";
+            return nameOf(entry.id) + (shownVersion !== "" ? " " + shownVersion : "") + from + neededBy(entry);
+        });
+        const updates = entries.filter(entry => entry?.kind === "update")
+            .map(entry => nameOf(entry.id) + " " + _plain(String(entry.from ?? ""), maxVersionLength) + " → "
+                 + _plain(String(entry.to ?? fetched[entry.id]?.manifest?.version ?? ""), maxVersionLength)
+                 + (entry.reason ? " (" + _plain(String(entry.reason)) + ")" : ""));
+        const already = entries.filter(entry => entry?.kind === "there")
+            .map(entry => nameOf(entry.id) + (given?.previous?.[entry.id] ? " " + _plain(String(given.previous[entry.id]), maxVersionLength) : "") + " — installed");
+        const canUse = _list(plan.offers).map(offer => (_plain(String(offer?.name ?? ""), 60) || nameOf(offer?.id)) + " — not installed");
+        const blocking = _list(plan.blocking).map(line => _plain(String(line ?? ""), 200));
+        const target = given?.rootTarget?.kind;
+        const replaces = target === "update"
+            ? "Updates " + name + " " + _plain(String(given?.previous?.[manifest.id] ?? ""), maxVersionLength) + " → " + version
+            : replacesText(given?.replaced);
+        // Every module new to the modules folder: the root unless it updates, and each download
+        const newNames = (target === "update" ? [] : [name]).concat(entries.filter(entry => entry?.kind === "download").map(entry => nameOf(entry.id)));
+        const why = ModuleRules.isObject(manifest.privileged) ? _plain(String(manifest.privileged.why ?? ""), 200) : "";
+        const icon = manifest.icon?.kind === "glyph" ? ApiElementRules.iconText(String(manifest.icon.glyph ?? "")) : ModuleRules.iconLetter(name, id);
+        return {
+            id: id, name: name, version: version, description: _plain(String(manifest.description ?? ""), 300),
+            author: _plain(String(manifest.author ?? ""), 100), icon: icon,
+            api: (api !== "" ? "asks for " + api + " · " : "") + "this shell has " + _plain(String(given?.shellApi ?? ""), 20) + " — fits",
+            source: sourceLines, privileged: why !== "" ? "asks for your password to: " + why : "never asks",
+            programs: programs, alsoInstalls: alsoInstalls, updates: updates, already: already, canUse: canUse, blocking: blocking,
+            replaces: replaces, goesTo: _plain(String(given?.goesTo ?? "")), trust: trustStatement(newNames),
+            choice: plan.refused || plan.complete !== true ? "none" : blocking.length > 0 ? "anyway" : "ready"
+        };
+    }
+
     // ---- A check's result (§6.3) ----
 
     // A moment as the local "14:32"

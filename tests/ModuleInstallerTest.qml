@@ -393,10 +393,38 @@ TestCase {
     }
 
     function _chains() {
-        _job("a chain of two", () => installer.install(_url("beta"), {}), result => {
+        // With a preview: the chain downloaded and checked, then it waits; Cancel deletes it
+        _then("a chain of two, previewed: nothing runs", _idle, () => assertEqual(installer.install(_url("beta"), { preview: true }), "", "an install with a preview: started"));
+        _then("the preview is ready", () => installer.phase === "preview" && installer.preview !== null, () => {
+            const preview = installer.preview;
+            assertEqual(preview.job, installer.jobNumber, "the preview names its job");
+            assertEqual(preview.id + " " + preview.choice, "beta ready", "… the module and its choice");
+            assert(preview.alsoInstalls.length === 1 && preview.alsoInstalls[0].startsWith("Gamma ") && preview.alsoInstalls[0].includes("(Beta needs it)"),
+                   "… the dependency it also installs (" + preview.alsoInstalls.join(" | ") + ")");
+            assertEqual(preview.trust?.title, "Beta and Gamma are not part of h2s-shell.", "… the statement for both");
+            assert(preview.source[0].startsWith("From ") && /^commit [0-9a-f]{7}$/.test(preview.source[1] ?? ""), "… where it comes from, with the commit (" + preview.source.join(" | ") + ")");
+            assertEqual(preview.changelogs.map(each => each.key).join(","), "beta,gamma", "… a changelog section for each");
+            assertEqual(installer.steps.map(step => step.state).join(","), "verified,verified", "… both downloads verified");
+            assert(installer.busy, "… the job waits");
+            assertEqual(installer.proceed(installer.jobNumber + 1, {}), "The install changed", "proceed for another job: refused");
+            assert(installer.cancelPreview(installer.jobNumber), "Cancel: taken");
+        });
+        _then("the preview cancelled", () => !installer.busy, () => {
+            const result = installer.lastResult;
+            assert(!result.ok && result.details.cancelled === true, "… ends cancelled (" + result.message + ")");
+        });
+        _check("a cancelled preview", state => {
+            assertEqual(state.staging, 0, "nothing left in staging");
+            assert(state.links.beta === undefined && state.links.gamma === undefined, "… nothing moved in");
+        });
+        _then("previewed again: nothing runs", _idle, () => assertEqual(installer.install(_url("beta"), { preview: true }), "", "previewed again"));
+        _then("the preview again", () => installer.phase === "preview", () =>
+              assertEqual(installer.proceed(installer.jobNumber, { enable: true }), "", "Install and enable: goes on"));
+        _then("a chain of two: done", () => !installer.busy, () => {
+            const result = installer.lastResult;
             assert(result.ok, "beta installed with gamma (" + result.message + ")");
             assertEqual(JSON.stringify(result.ids), JSON.stringify(["gamma", "beta"]), "… the provider first");
-        });
+        }, 60000);
         _check("a chain of two", state => {
             assert(state.links.beta !== undefined && state.links.gamma !== undefined, "both linked");
             assertEqual(state.record?.gamma?.installedFor + "|" + state.record?.beta?.installedFor, "beta|", "… gamma recorded as installed for beta");
@@ -405,6 +433,13 @@ TestCase {
         _then("the chain runs", () => _status("beta")?.state === "loaded" && _status("gamma")?.state === "loaded",
               () => assertEqual(_status("gamma").installedFor, "beta", "both loaded; gamma's status says whom it was installed for"));
 
+        _then("a missing dependency, previewed: nothing runs", _idle, () => assertEqual(installer.install(_url("delta"), { preview: true }), "", "previewed"));
+        _then("a missing dependency's preview", () => installer.phase === "preview", () => {
+            const preview = installer.preview;
+            assertEqual(preview.choice, "anyway", "a dependency that cannot be had: only Install anyway");
+            assert(preview.blocking.length === 1 && preview.blocking[0].includes("nothere"), "… said which (" + preview.blocking.join(" | ") + ")");
+            installer.cancelPreview(installer.jobNumber);
+        });
         _job("a missing dependency", () => installer.install(_url("delta"), {}), result =>
              assert(!result.ok && result.message.includes("Needs nothere"), "a dependency with no source: not installed, said why (" + result.message + ")"));
         _check("a missing dependency", state => {

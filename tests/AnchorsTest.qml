@@ -1069,7 +1069,7 @@ TestCase {
                                                "settings.network_wifi.hotspots.card", "settings.network_wifi.hotspots.card.settings",
                                                "settings.network_wifi.hotspots.card.actions", "settings.network_wifi.hotspots.card.title",
                                                "settings.network_ethernet.profiles", "settings.network_ethernet.profiles.card",
-                                               "settings.modules_installed", "settings.modules_installed.installed", "settings.modules_installed.installed.card",
+                                               "settings.modules_installed", "settings.modules_installed.add", "settings.modules_installed.installed", "settings.modules_installed.installed.card",
                                                "settings.modules_installed.installed.card.settings", "settings.modules_installed.installed.card.actions",
                                                "settings.modules_installed.installed.card.title"]
     function _popupLiveProblems(prefix) {
