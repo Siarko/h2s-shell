@@ -24,7 +24,7 @@ check "the conversation's PAM helper is a child of the shell" test "$(awk '{ pri
 
 # Quickshell restarts in place only a shell that ran for 10 s or more
 started=$(stat -c %Y "/proc/$SHELL_PID")
-until [ $(($(date +%s) - started)) -ge 12 ]; do sleep 0.5; done
+until [ $(($(date +%s) - started)) -ge 12 ]; do sleep 0.5; done # fixed sleep: Quickshell restarts a crashed shell in place only after it ran 10 s: waited out
 crashes_before=$(shell_log_count "Quickshell has been restarted")
 failed_relaunches_before=$(shell_log_count 'Launching config: ""')
 crashed_shell=$SHELL_PID
@@ -66,7 +66,7 @@ relaunched_in_place() { tr '\0' '\n' < "/proc/$SHELL_PID/environ" 2> /dev/null |
 if [ "$in_place" = 0 ]; then
     log "the relaunch was not in place: crashing once more, for a shell relaunched in place"
     started=$(stat -c %Y "/proc/$SHELL_PID")
-    until [ $(($(date +%s) - started)) -ge 12 ]; do sleep 0.5; done
+    until [ $(($(date +%s) - started)) -ge 12 ]; do sleep 0.5; done # fixed sleep: Quickshell restarts a crashed shell in place only after it ran 10 s: waited out
     crashes_before=$(shell_log_count "Quickshell has been restarted")
     failed_relaunches_before=$(shell_log_count 'Launching config: ""')
     crashed_shell=$SHELL_PID

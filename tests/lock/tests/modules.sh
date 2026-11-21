@@ -158,7 +158,7 @@ check "no protocol error" no_protocol_errors
 # mode yet (2 in a row would be). A fresh process (this start) counted 0 (checked above).
 ulimit -c 0
 started=$(stat -c %Y "/proc/$SHELL_PID")
-until [ $(($(date +%s) - started)) -ge 12 ]; do sleep 0.5; done
+until [ $(($(date +%s) - started)) -ge 12 ]; do sleep 0.5; done # fixed sleep: Quickshell restarts a crashed shell in place only after it ran 10 s: waited out
 crashed_shell=$SHELL_PID
 failed_relaunches_before=$(shell_log_count 'Launching config: ""')
 crashes_before=$(shell_log_count "Quickshell has been restarted")

@@ -70,11 +70,15 @@ supervisor_environment "$old_supervisor"
 dying=$SHELL_PID
 ( while :; do instances >> "$WORK/instance-count"; sleep 0.1; done ) &
 counter=$!
+old_starts() { grep -ac "launcher\[$old_supervisor\]: started the shell" "$WORK/shell.log"; }
+old_starts_before=$(old_starts)
 signal_shell KILL
 wait_until 3 test ! -e "/proc/$dying"
 check_within "$GUARD" "the supervisor is in its pause" grep -aq "starting it again in 3 s" "$WORK/shell.log"
 spawn "$WORK/restart.log" env --default-signal=HUP -i "${environment[@]}" "$LOCKTEST_LAUNCHER" --restart
-check_within "$GUARD" "the old supervisor was told and ended (during its pause)" test ! -e "/proc/$old_supervisor"
+check_within "$GUARD" "the old supervisor was told and ended" test ! -e "/proc/$old_supervisor"
+old_started_none_since() { [ "$old_starts_before" -ge 1 ] && [ "$(old_starts)" = "$old_starts_before" ]; }
+check "… during its pause: it started no shell after the kill (its own log lines, which show its earlier start)" old_started_none_since
 new_supervisor() { local pid; for pid in $(launchers_of_run); do [ "$pid" != "$old_supervisor" ] && echo "$pid" && return 0; done; return 1; }
 check_within 10 "a new supervisor runs" new_supervisor
 SUPERVISOR_PID=$(new_supervisor)

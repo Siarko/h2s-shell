@@ -11,7 +11,9 @@
 #   tests/lock/lint.sh --selftest    the lint's own cases
 #
 # A poll loop on one line (`until …; do sleep 0.5; done`, a sampler `( while :; do …;
-# sleep 0.1; done ) &`) is a wait on a condition, not a fixed sleep. Exit status: 0 clean,
+# sleep 0.1; done ) &`) is a wait on a condition, not a fixed sleep — unless its condition is
+# the clock (`date`, `uptime`, `SECONDS`, `EPOCHREALTIME`): that is a fixed wait written as
+# a loop, and says why as a sleep does. Exit status: 0 clean,
 # 1 a sleep without its reason (each printed as file:line: text).
 set -uo pipefail
 
@@ -19,20 +21,25 @@ LINT_DIR=$(cd "$(dirname "$(readlink -f "$0")")" && pwd)
 
 # A `sleep` run as a command: at the start of a line or after ; & | ( { do then else
 SLEEP_COMMAND='(^|[;&|({]|(^|[[:space:]])(do|then|else))[[:space:]]*sleep[[:space:]]'
-ONE_LINE_LOOP='(while|until)[[:space:]].*;[[:space:]]*do[[:space:]].*done'
+ONE_LINE_LOOP='(while|until)[[:space:]]([^;]*);[[:space:]]*do[[:space:]].*done'
+# A loop whose condition is the clock
+CLOCK='(date|uptime|SECONDS|EPOCHREALTIME|EPOCHSECONDS)'
 # The reason: at least a few words
 REASON='# fixed sleep: .{10,}'
 
 # lint_files <file...>: prints each offending line, non-zero when there is one
 lint_files() {
-    local file line number found=0
+    local file line number condition found=0
     for file in "$@"; do
         number=0
         while IFS= read -r line || [ -n "$line" ]; do
             number=$((number + 1))
             [[ "$line" =~ ^[[:space:]]*# ]] && continue
             [[ "$line" =~ $SLEEP_COMMAND ]] || continue
-            [[ "$line" =~ $ONE_LINE_LOOP ]] && continue
+            if [[ "$line" =~ $ONE_LINE_LOOP ]]; then
+                condition=${BASH_REMATCH[2]}
+                [[ "$condition" =~ $CLOCK ]] || continue
+            fi
             [[ "$line" =~ $REASON ]] && continue
             echo "$file:$number: $line"
             found=1
@@ -70,6 +77,9 @@ selftest() {
     expect refused 'sleep 1 # fixed sleep: '
     expect passed 'sleep 1 # fixed sleep: a negative claim: nothing unlocks it'
     expect passed 'until [ -e x ]; do sleep 0.5; done'
+    expect refused 'until [ $(($(date +%s) - started)) -ge 12 ]; do sleep 0.5; done'
+    expect refused 'until [ "$(uptime_ticks)" -ge 32 ]; do sleep 0.5; done'
+    expect passed 'until [ $(($(date +%s) - started)) -ge 12 ]; do sleep 0.5; done # fixed sleep: Quickshell restarts in place only after 10 s'
     expect passed '( while :; do date >> log; sleep 0.1; done ) &'
     expect passed '# sleep 3 in a comment'
     expect passed 'check_within "$GUARD" "the prompt sleeps" state_is prompt_awake false'

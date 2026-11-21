@@ -143,7 +143,7 @@ third=$SHELL_PID
 started_at=$(awk '{ print $22 }' "/proc/$third/stat" 2> /dev/null)
 clock_ticks=$(getconf CLK_TCK)
 uptime_ticks() { awk -v hz="$clock_ticks" '{ printf "%d", $1 * hz }' /proc/uptime; }
-until [ $(( ($(uptime_ticks) - started_at) / clock_ticks )) -ge 32 ]; do sleep 0.5; done
+until [ $(( ($(uptime_ticks) - started_at) / clock_ticks )) -ge 32 ]; do sleep 0.5; done # fixed sleep: the launcher's quick-death window (30 s) is lived out: it has no seam (scripts/launch.sh)
 log "the safe-mode shell has run for 32 s"
 signal_shell KILL
 wait_for_new_shell "$third" 10 || abort "no new shell after the third kill"

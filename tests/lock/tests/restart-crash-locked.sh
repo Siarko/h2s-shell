@@ -26,7 +26,7 @@ lock_by_ipc
 check_within "$GUARD" "locked" compositor_locked
 check_within "$GUARD" "confirmed" state_is secure true
 started=$(stat -c %Y "/proc/$SHELL_PID")
-until [ $(($(date +%s) - started)) -ge 12 ]; do sleep 0.5; done
+until [ $(($(date +%s) - started)) -ge 12 ]; do sleep 0.5; done # fixed sleep: Quickshell restarts a crashed shell in place only after it ran 10 s: waited out
 crashes_before=$(shell_log_count "Quickshell has been restarted")
 failed_relaunches_before=$(shell_log_count 'Launching config: ""')
 crashed_shell=$SHELL_PID

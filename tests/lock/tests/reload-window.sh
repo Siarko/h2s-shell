@@ -56,6 +56,10 @@ unlock_for_test || fail "logind's Unlock did not unlock"
 wait_until 5 inhibitor_held
 logind_signal sleep
 check_within "$GUARD" "a PrepareForSleep right after an unlock locks" compositor_locked
+wait_until "$GUARD" inhibitor_released
+log "PrepareForSleep to the release (the lock confirmed before it): $(release_seconds_after_signal) s"
+check "… locked and let go within 4 s of the PrepareForSleep (logind sleeps 5 s after it at the latest)" \
+    released_after_signal_within 4
 wake_and_settle
 unlock_for_test || fail "logind's Unlock did not unlock"
 check "still no reload" test "$(reloads)" = "$reloads_before"

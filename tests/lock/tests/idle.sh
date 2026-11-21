@@ -23,7 +23,7 @@ no_screensaver_layer() { ! screensaver_layer; }
 idle_lock_safe() { compositor_locked && _password_stack_is_ours_and_safe; }
 
 check "not idle at start" state_is screensaver false
-check_within "$GUARD" "3 s without input: the screensaver shows" state_is screensaver true
+check_timed 8 "3 s without input: the screensaver shows" state_is screensaver true
 check_within "$GUARD" "its layer is on the screen" screensaver_layer
 check "not locked by it" compositor_unlocked
 
@@ -32,8 +32,8 @@ move_pointer 720 410
 check_within "$GUARD" "the pointer moves: the screensaver goes" state_is screensaver false
 check_within "$GUARD" "its layer is gone (after the fade out)" no_screensaver_layer
 
-check_within "$GUARD" "idle again: it shows again" state_is screensaver true
-check_within "$GUARD" "3 s later the screen locks" compositor_locked
+check_timed 8 "idle again: it shows again" state_is screensaver true
+check_timed 8 "3 s later the screen locks" compositor_locked
 check_within "$GUARD" "the lock is ready for a password (test stack)" idle_lock_safe
 check "locked by idle" test "$(grep -c 'lockRequested.*idle' "$WORK/shell.log")" -ge 1
 
@@ -44,9 +44,9 @@ check_within 10 "the password unlocks" compositor_unlocked
 check_within "$GUARD" "the screensaver is not up after the unlock" state_is screensaver false
 
 # After the first lock: both again (the regression)
-check_within "$GUARD" "idle after the unlock: the screensaver shows AGAIN" state_is screensaver true
+check_timed 8 "idle after the unlock: the screensaver shows AGAIN" state_is screensaver true
 check_within "$GUARD" "its layer is on the screen again" screensaver_layer
-check_within "$GUARD" "and the screen locks AGAIN" compositor_locked
+check_timed 8 "and the screen locks AGAIN" compositor_locked
 check_within "$GUARD" "the second lock is ready for a password" idle_lock_safe
 wake_prompt || fail "the prompt did not wake"
 type_text "$LOCKTEST_PASSWORD"

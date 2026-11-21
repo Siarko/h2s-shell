@@ -32,12 +32,21 @@ else
 fi
 
 mkdir -p "$work/tests" "$work/cache" "$work/temp"
+# (Its first run edits its copy of the shell, as some tests do: the second must get a fresh one)
 cat > "$work/tests/self-flaky.sh" << EOF
-if [ -e '$work/flaky-ran' ]; then pass "the second time"; else : > '$work/flaky-ran'; fail "the first time"; fi
+if [ ! -e '$work/flaky-ran' ]; then
+    : > '$work/flaky-ran'
+    : > "\$LOCKTEST_SHELL/edited-by-the-first-run"
+    fail "the first time"
+elif [ -e "\$LOCKTEST_SHELL/edited-by-the-first-run" ]; then
+    fail "the second time, in the first run's copy of the shell"
+else
+    pass "the second time, in a fresh copy of the shell"
+fi
 EOF
 echo 'fail "every time"' > "$work/tests/self-failing.sh"
 echo 'pass "always"' > "$work/tests/self-passing.sh"
-env LOCKTEST_LOCK_FILE="$work/bed.flock" LOCKTEST_EXTRA_TESTS="$work/tests" XDG_CACHE_HOME="$work/cache" \
+env LOCKTEST_KEEP=1 LOCKTEST_LOCK_FILE="$work/bed.flock" LOCKTEST_EXTRA_TESTS="$work/tests" XDG_CACHE_HOME="$work/cache" \
     TMPDIR="$work/temp" timeout 300 "$LOCKTEST_DIR/run.sh" -j 2 self-flaky self-failing self-passing \
     > "$work/run.out" 2>&1 < /dev/null
 status=$?
@@ -59,6 +68,10 @@ grep -qE '^[0-9-]+T[0-9:]+ self-flaky commit=[0-9a-z]+ load=[0-9.]+ jobs=2 first
 first_log=$(sed -n 's/^  FLAKY self-flaky .*first run.s log: //p' <<< "$summary")
 grep -q '^    FAIL the first time$' "$first_log" 2> /dev/null \
     && pass "the first run's log is kept" || failed "the first run's log ($first_log)"
+artifacts=${first_log%/self-flaky.first/test.log}
+[ -e "$artifacts/shells/self-flaky.first/edited-by-the-first-run" ] && [ ! -e "$artifacts/shells/self-flaky/edited-by-the-first-run" ] \
+    && pass "LOCKTEST_KEEP=1: the second run had a fresh copy of the shell, the first's kept aside" \
+    || failed "the copies of the shell under $artifacts/shells"
 [ "$failures" = 0 ] || { echo "--- run.sh's output:"; cat "$work/run.out"; }
 
 echo

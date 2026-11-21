@@ -437,6 +437,9 @@ start_test() {
     RUNTIME[$name]=$(mktemp -d /tmp/lt.XXXXXX) || { setup_failed "$name" "cannot create a runtime dir"; return; }
     runtime=${RUNTIME[$name]}
     chmod 700 "$runtime"
+    # (A fresh copy: one left by an earlier run of this test, kept with LOCKTEST_KEEP=1, holds
+    # that run's edits, and cp would copy into it)
+    rm -rf "$copy"
     cp -a "$shell_template" "$copy" || { setup_failed "$name" "cannot copy the shell to $copy"; return; }
     # The test gets nothing of the caller's environment but what is named here: where
     # programs and temp files are, who runs it, the time zone, the locale data and the data
@@ -583,6 +586,9 @@ if [ ${#again[@]} -gt 0 ]; then
     for name in "${again[@]}"; do
         rm -rf "${ARTIFACTS:?}/$name.first"
         mv "$ARTIFACTS/$name" "$ARTIFACTS/$name.first"
+        # Its copy of the shell, kept with LOCKTEST_KEEP=1, with the first run's edits in it
+        rm -rf "${ARTIFACTS:?}/shells/$name.first"
+        [ -e "$ARTIFACTS/shells/$name" ] && mv "$ARTIFACTS/shells/$name" "$ARTIFACTS/shells/$name.first"
         flaky_first_log[$name]=$ARTIFACTS/$name.first/test.log
     done
     total=${#again[@]}

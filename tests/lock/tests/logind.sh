@@ -32,6 +32,9 @@ sleep_line=$(($(wc -l < "$WORK/shell.log") + 1))
 logind_signal sleep
 check_within "$GUARD" "PrepareForSleep locks" compositor_locked
 check_within "$GUARD" "the inhibitor is let go" inhibitor_released
+log "PrepareForSleep to the release (the lock confirmed before it): $(release_seconds_after_signal) s"
+check "… locked and let go within 4 s of the PrepareForSleep (logind sleeps 5 s after it at the latest)" \
+    released_after_signal_within 4
 check "the rules say suspending, inhibitor released" test "$(state_field sleep) $(state_field inhibitor)" = "suspending released"
 # The order, from the shell's own log after the PrepareForSleep: the compositor's
 # confirmation first, the release after it

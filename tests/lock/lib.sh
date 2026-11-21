@@ -721,8 +721,24 @@ logind_signal() {
     esac
     # logind's PreparingForSleep property follows, as logind sets it around the signal
     case "$1" in sleep) echo true > "$WORK/logind/preparing" ;; wake) echo false > "$WORK/logind/preparing" ;; esac
+    LOGIND_SIGNAL_AT=${EPOCHREALTIME/,/.}
     echo "$line" >> "$WORK/logind/signals"
     log "logind stand-in: $1"
+}
+
+# released_after_signal_within <seconds>: the stand-in's first inhibitor release after the
+# last logind_signal came less than <seconds> after it — from the stand-in's own record, not
+# from a poll. Before sleep the shell releases only once the compositor confirmed the lock,
+# so this times the lock too: logind sleeps at the latest InhibitDelayMaxSec (5 s) after
+# PrepareForSleep, and the screen must be locked by then
+released_after_signal_within() {
+    awk -v since="${LOGIND_SIGNAL_AT:-0}" -v limit="$1" '
+        $1 == "release" && $3 + 0 >= since + 0 { found = 1; exit !($3 - since < limit) }
+        END { if (!found) exit 1 }' "$WORK/logind/log"
+}
+# The same, as a number for the log ("" when none)
+release_seconds_after_signal() {
+    awk -v since="${LOGIND_SIGNAL_AT:-0}" '$1 == "release" && $3 + 0 >= since + 0 { printf "%.2f", $3 - since; exit }' "$WORK/logind/log"
 }
 # logind_signals <signal>...: several at once, in one write — the monitor reads them in one
 # go, so the shell handles them in the same pass of its event loop (e.g. `lock unlock`:

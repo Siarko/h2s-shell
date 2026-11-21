@@ -15,14 +15,14 @@ done
 check "kept busy: not locked" compositor_unlocked
 check "and no screensaver (it is off)" state_is screensaver false
 
-check_within "$GUARD" "3 s without input: locked" compositor_locked
+check_timed 8 "3 s without input: locked" compositor_locked
 check_within "$GUARD" "ready for a password (test stack)" idle_lock_safe
 wake_prompt || fail "the prompt did not wake"
 type_text "$LOCKTEST_PASSWORD"
 press_key Return
 check_within 10 "the password unlocks" compositor_unlocked
 
-check_within "$GUARD" "idle again: locked AGAIN" compositor_locked
+check_timed 8 "idle again: locked AGAIN" compositor_locked
 check_within "$GUARD" "the second lock is ready for a password" idle_lock_safe
 wake_prompt || fail "the prompt did not wake"
 type_text "$LOCKTEST_PASSWORD"
