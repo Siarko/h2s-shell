@@ -124,11 +124,11 @@ plan_shards() {
     for name in "$@"; do
         file=$(dirname "$root")/tests/$name.qml
         own=0
-        grep -q -E '^[[:space:]]*ownProcess: true[[:space:]]*$' "$file" 2> /dev/null && own=1
+        grep -q -E '^[[:space:]]*ownProcess:[[:space:]]*true([^A-Za-z0-9_]|$)' "$file" 2> /dev/null && own=1
         weight=""
         [ -n "$times" ] && [ -r "$times" ] && weight=$(awk -v name="$name" '$1 == name && $2 ~ /^[0-9]+$/ { found = $2 } END { print found }' "$times")
         if [ -z "$weight" ]; then
-            if grep -q -E '^[[:space:]]*asynchronous: true[[:space:]]*$' "$file" 2> /dev/null; then weight=5000; else weight=100; fi
+            if grep -q -E '^[[:space:]]*asynchronous:[[:space:]]*true([^A-Za-z0-9_]|$)' "$file" 2> /dev/null; then weight=5000; else weight=100; fi
         fi
         given=$(awk -v name="$name" '$1 == name { $1 = ""; print }' <<< "$table")
         echo "$name $own $weight $given"

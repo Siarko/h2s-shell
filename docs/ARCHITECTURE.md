@@ -1635,12 +1635,14 @@ own suites — see [Modules](#modules); both share `tests/headless.sh`) runs the
 (private runtime dir, HOME and XDG dirs, D-Bus addresses that lead nowhere, no new
 privileges), so the suites' windows never show on the real screen. `run-unit.sh` runs the
 suites in parallel **shards**, each a Quickshell process with a compositor of its own and
-only its suites selected: a suite whose file says `ownProcess: true` runs alone (it changes
+only its suites selected: a suite whose file says `ownProcess: true` runs alone (and a
+process where others report beside it fails) (it changes
 what is shared in one process — the module host, `Config`'s list of modules turned off, the
 keyboard its window takes); the others are packed by the time each took last
 (`~/.cache/h2s-shell-tests/unit-times.txt`, rewritten after each run; without it 5 s for an
 asynchronous suite, 0.1 s for another) into as many shards as it takes for none to run longer
-than the longest suite, at most half the processors' worth at once (`-j <n>` says how many).
+than the longest suite, at most half the processors' worth at once, and no more than the
+memory available holds at about 1.1 GB a shard (`-j <n>` says how many).
 The plan is computed (`plan_shards` in `tests/count-suites.sh`), never kept by hand. Each
 shard is the runner again on its suites, with its own verdict, printed when it ends; the
 verdict over them wants every suite run to report exactly once. The whole set takes about

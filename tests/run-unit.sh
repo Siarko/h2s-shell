@@ -9,7 +9,9 @@
 #                                                type, the file in tests/ without ".qml")
 #   tests/run-unit.sh --log <file> [<suite>…]    the suites' output also saved to <file>
 #   tests/run-unit.sh -j <n> [<suite>…]          at most <n> shards at once (default: half
-#                                                the processors, at most 16)
+#                                                the processors, at most 16, and no more
+#                                                than the memory available holds, at about
+#                                                1.1 GB a shard; at least 1)
 #
 # The shards are computed, never kept by hand (plan_shards, tests/count-suites.sh): a suite
 # whose file says `ownProcess: true` runs alone; the others are packed by the time each took
@@ -68,10 +70,23 @@ while [ $# -gt 0 ]; do
         *) break ;;
     esac
 done
+# What one shard takes, measured: Quickshell with every suite built about 0.8 GB resident,
+# its labwc about 0.3 GB
+shard_memory_kb=1100000
+jobs_note=""
 if [ -z "$jobs" ]; then
     jobs=$(( $(nproc 2> /dev/null || echo 2) / 2 ))
     [ "$jobs" -ge 1 ] || jobs=1
     [ "$jobs" -le 16 ] || jobs=16
+    available_kb=$(awk '$1 == "MemAvailable:" { print $2 }' /proc/meminfo 2> /dev/null)
+    if [[ "$available_kb" =~ ^[0-9]+$ ]]; then
+        memory_jobs=$((available_kb / shard_memory_kb))
+        [ "$memory_jobs" -ge 1 ] || memory_jobs=1
+        if [ "$memory_jobs" -lt "$jobs" ]; then
+            jobs_note=" (fewer than the processors allow: $((available_kb / 1024)) MB of memory available, about $((shard_memory_kb / 1024)) MB a shard)"
+            jobs=$memory_jobs
+        fi
+    fi
 fi
 
 # The expected count and the selection both come from tests.qml's registration lines: when
@@ -128,8 +143,11 @@ record_times() {
         && mv -f "$new" "$times_file" 2> /dev/null || rm -f "$new"
 }
 
-# A shard: its suites, here (started by the runner below, which printed the tools)
-if [ -n "${H2S_UNIT_SHARD:-}" ]; then
+# A shard: its suites, here (started by the runner below, which printed the tools). Only
+# when this runner's parent is the runner that started it (H2S_UNIT_SHARD is "<its pid>:<n>"):
+# a variable inherited from elsewhere does not turn a whole run into one shard
+shard_mark=${H2S_UNIT_SHARD:-}
+if [ -n "$shard_mark" ] && [ "${shard_mark%%:*}" = "$PPID" ]; then
     run_here
     exit $?
 fi
@@ -151,12 +169,16 @@ if [ ${#shards[@]} = 1 ]; then
     exit $status
 fi
 
+# Shards are waited for as each ends (wait -n -p: bash 5.1)
+if [ "${BASH_VERSINFO[0]}" -lt 5 ] || { [ "${BASH_VERSINFO[0]}" = 5 ] && [ "${BASH_VERSINFO[1]}" -lt 1 ]; }; then
+    setup_error "running shards side by side needs bash 5.1 or later (wait -n -p); this is bash $BASH_VERSION"
+fi
 headless_resolve
 # Short, as headless_setup's: the shards' outputs, removed with the rest (headless_cleanup)
 work=$(mktemp -d /tmp/ut.XXXXXX) || setup_error "cannot create a temp dir"
 chmod 700 "$work"
 started=$SECONDS
-echo "run-unit.sh: ${#run[@]} suites in ${#shards[@]} shards, at most $jobs at once"
+echo "run-unit.sh: ${#run[@]} suites in ${#shards[@]} shards, at most $jobs at once$jobs_note"
 
 declare -A shard_of=()
 shard_status=()
@@ -180,7 +202,7 @@ start_shard() {
     local index=$1
     local -a suites
     read -r -a suites <<< "${shards[$index]}"
-    H2S_UNIT_SHARD=$((index + 1)) HEADLESS_QUIET_RESOLVE=1 LOCKTEST_QS=$LOCKTEST_QS H2S_TEST_TOOLS=$LOCKTEST_TOOL_SOURCE \
+    H2S_UNIT_SHARD=$$:$((index + 1)) HEADLESS_QUIET_RESOLVE=1 LOCKTEST_QS=$LOCKTEST_QS H2S_TEST_TOOLS=$LOCKTEST_TOOL_SOURCE \
         H2S_UNIT_TIMES=$times_file "$REPO/tests/run-unit.sh" --log "$work/shard-$index.log" "${suites[@]}" \
         > "$work/shard-$index.out" 2>&1 < /dev/null &
     shard_of[$!]=$index
@@ -204,7 +226,9 @@ while [ "$next" -lt ${#shards[@]} ] || [ ${#running[@]} -gt 0 ]; do
     finished=""
     wait -n -p finished "${running[@]}"
     status=$?
-    [ -n "$finished" ] || continue
+    # Not one of ours ended: none is left to wait for (127), which cannot be while some are
+    # listed as running — said, not waited for again and again
+    [ -n "$finished" ] || setup_error "lost track of the shards (wait said $status, ${#running[@]} listed as running)"
     index=${shard_of[$finished]}
     shard_status[index]=$status
     remaining=()
@@ -240,5 +264,7 @@ for name in "${run[@]}"; do
     times_reported=$(printf '%s\n' "$summary" | grep -c -F -- "--- ${name%Test}: ")
     [ "$times_reported" = 1 ] || { echo "  ${name%Test} reported $times_reported times"; failed=1; }
 done
+# A failure is a failure even when another shard could not be set up: never "not run"
+[ "$failed" = 1 ] && exit 1
 [ "$set_up" = 1 ] && exit 2
-exit $failed
+exit 0

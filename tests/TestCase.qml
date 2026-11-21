@@ -27,7 +27,9 @@ QtObject {
     // Whether this suite needs a Quickshell process of its own: tests/run-unit.sh reads it
     // from the suite's file (a line `ownProcess: true`) and never puts another suite in that
     // shard. Set by a suite that changes what is shared in one process with others that do
-    // too (the module host, Config's module list, the keyboard a window takes).
+    // too (the module host, Config's module list, the keyboard a window takes). Such a suite
+    // says so when it starts (OWN-PROCESS), and the runner's verdict fails a process where
+    // other suites reported beside it: a plan that missed the line fails loudly.
     property bool ownProcess: false
     // When it started (ms since the epoch), for the time its summary gives: tests/run-unit.sh
     // plans its shards from those times
@@ -78,6 +80,8 @@ QtObject {
     Component.onCompleted: {
         if (!selected)
             return;
+        if (ownProcess)
+            console.log("OWN-PROCESS: " + suiteName);
         if (asynchronous) {
             Qt.callLater(() => {
                 console.log("\n=== " + suite.suiteName + " ===");

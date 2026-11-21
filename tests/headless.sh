@@ -37,7 +37,9 @@
 #                                          Quickshell (a crash after a partial summary
 #                                          included), a time-out, a suite reporting 0/0, more
 #                                          PASS lines than the summaries count (a check after
-#                                          its suite reported), or fewer suites reporting
+#                                          its suite reported), a suite that needs a
+#                                          process of its own (OWN-PROCESS) beside others,
+#                                          or fewer suites reporting
 #                                          than <expected> (<where> says where they are
 #                                          registered, or "selected"); with `exactly` (a
 #                                          selection was run) also on more suites reporting
@@ -186,6 +188,10 @@ headless_verdict() {
     passes=$(grep -c -E '  PASS: ' "$HEADLESS_LOG")
     counted=$(printf '%s\n' "$summary" | sed -n 's/^--- .*: \([0-9][0-9]*\)\/[0-9][0-9]* passed.*$/\1/p' | awk '{ sum += $1 } END { print sum + 0 }')
     [ "$passes" -gt "$counted" ] && { echo "  $passes checks passed, the suites' summaries count $counted: a suite checked after it had reported"; failed=1; }
+    # A suite that needs a process of its own (TestCase.ownProcess) with others reporting in it
+    local own
+    own=$(sed -n 's/^.*OWN-PROCESS: \([A-Za-z0-9]*\).*$/\1/p' "$HEADLESS_LOG" | sort -u | paste -s -d ' ')
+    [ -n "$own" ] && [ "$reported" -gt 1 ] && { echo "  $own needs a process of its own, and $reported suites reported in it"; failed=1; }
     # A selection: each of its suites, and no other. A suite left out by mistake and one run
     # by mistake are both a wrong answer to "run these"
     if [ "${1:-}" = exactly ]; then

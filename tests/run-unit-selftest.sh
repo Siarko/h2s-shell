@@ -14,6 +14,12 @@
 #   empty      Format reports 0/0: it checked nothing                         → must fail
 #   late       a PASS line no summary counts (a check made after its suite
 #              reported)                                                      → must fail
+#   mixed      -j 1: SidePanel's shard crashes, the shards after it cannot be
+#              set up (the stand-in made itself unusable): a failure, not
+#              "not run"                                                      → status 1
+#   own-beside FormatTest and LockRulesTest in one shard, Format saying it
+#              needs a process of its own (OWN-PROCESS)                       → must fail
+#   inherited  H2S_UNIT_SHARD set from outside: a whole run still in shards   → must pass
 #
 # with suites named to the runner (the `obedient` stand-in, which ends well everywhere):
 #
@@ -164,7 +170,7 @@ mkdir -p "$work/plan/tests"
     echo '}'
 } > "$work/plan/root.qml"
 for type in Alone ShortA ShortB Long MidA MidB Giver Taker; do echo "TestCase {}" > "$work/plan/tests/${type}Test.qml"; done
-printf 'TestCase {\n    ownProcess: true\n}\n' > "$work/plan/tests/AloneTest.qml"
+printf 'TestCase {\n    ownProcess:  true // a comment after it\n}\n' > "$work/plan/tests/AloneTest.qml"
 printf 'LongTest 20000\nMidATest 10000\nMidBTest 10000\n' > "$work/plan/times"
 planned=$(plan_shards "$work/plan/root.qml" "$work/plan/times" AloneTest ShortATest ShortBTest LongTest MidATest MidBTest GiverTest TakerTest | paste -s -d '|')
 if [ "$planned" = "LongTest|MidATest GiverTest TakerTest|MidBTest ShortATest ShortBTest|AloneTest" ]; then
@@ -217,6 +223,9 @@ selecting_stand_in timeout '' '[ -n "$format" ] && exit 124; exit 0'
 selecting_stand_in partial '[ -n "$format" ] && names=("${names[@]/FormatTest/}") && names=(${names[@]})'
 selecting_stand_in empty '' '[ -n "$format" ] && echo "  INFO: --- Empty: 0/0 passed ---"; exit 0'
 selecting_stand_in late '' '[ -n "$format" ] && echo "  INFO:   PASS: a check after its suite reported"; exit 0'
+selecting_stand_in own-beside '' '[ -n "$format" ] && echo "  INFO: OWN-PROCESS: Format"; exit 0'
+# Crashes in SidePanel's shard, and makes itself no executable for the shards after it
+selecting_stand_in mixed '' '[[ ":${H2S_TEST_SUITES:-}:" == *:SidePanelTest:* ]] && { chmod -x "$0"; kill -SEGV $$; }; exit 0'
 three=(FormatTest SidePanelTest ModulesTest)
 
 # verdict <case> <stand-in, or "real" for the Quickshell the runners find> <expected status>
@@ -276,6 +285,13 @@ verdict empty empty 1 "${three[@]}"
 check empty "said which suite" grep -q "^  Empty ran no check (0/0)" "$work/empty.log"
 verdict late late 1 "${three[@]}"
 check late "said so" grep -q "checks passed, the suites' summaries count" "$work/late.log"
+verdict mixed mixed 1 -j 1 "${three[@]}"
+check mixed "said which shard failed" grep -q "^  shard [0-9] (SidePanelTest) failed (status 1)" "$work/mixed.log"
+check mixed "… and which could not be set up" grep -q "^  shard [0-9] (.*) could not be set up" "$work/mixed.log"
+verdict own-beside own-beside 1 FormatTest LockRulesTest
+check own-beside "said so" grep -q "^  Format needs a process of its own, and 2 suites reported in it" "$work/own-beside.log"
+H2S_UNIT_SHARD=1:1 verdict inherited obedient 0 "${three[@]}"
+check inherited "still three shards" grep -q "^run-unit.sh: 3 suites in 3 shards" "$work/inherited.log"
 
 verdict selected obedient 0 FormatTest LockRulesTest
 check selected "FormatTest reported" reports selected.log Format
