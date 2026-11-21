@@ -62,6 +62,9 @@ and `plans/documentation.md` predate the decisions of 2026-11-17: step 1 revises
 
 **To decide**
 
+- **Modules management plan** ([plans/modules-management.md](plans/modules-management.md)):
+  8 open questions — among them: a module not shipped would start off until confirmed, and
+  Tailscale is in use on both machines (question 2).
 - **PAM plan** ([plans/pam-config.md](plans/pam-config.md)): 8 open questions; found while
   reading: on Arch the polkit hint in Settings is always empty (the shell reads only /etc/pam.d
   and doesn't follow includes; polkit's stack is /usr/lib/pam.d/polkit-1), and pam_faillock makes
@@ -203,7 +206,10 @@ Steps 3, 4, 5, 6 and 10 are done (done.md); the API plan's closing slice (Z) is 
 1. Planning, no code:
    - [ ] PAM configuration from the shell: plan written ([plans/pam-config.md](plans/pam-config.md),
          2026-11-22), waits for the owner's approval and its 8 questions
-   - [ ] plan: installing, updating and removing modules, with Settings → Modules
+   - [ ] Installing, updating and removing modules, Settings → Modules, the trust text, the
+         safe-mode banner: plan written ([plans/modules-management.md](plans/modules-management.md),
+         2026-11-22) with a mockup (`~/src/h2s-mockups/modules-settings-planned/`); waits for
+         the owner's approval and its 8 questions
    - [ ] revise [plans/documentation.md](plans/documentation.md) and
          [plans/architecture-cleanup.md](plans/architecture-cleanup.md) for the decisions
 2. Before the release (cut after step 8, the owner 2026-11-21):
