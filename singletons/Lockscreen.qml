@@ -61,6 +61,11 @@ Singleton {
     readonly property bool startChecked: _markerChecked
     readonly property bool restoring: _restoring
     readonly property bool screensaverVisible: _screensaverMonitor.isIdle || locked
+    // The screensaver's idle time has passed (the user is away), locked or not. What the
+    // screensaver's window follows, with `locked`: from screensaverVisible, which changes
+    // with `locked` too, a binding could read the new `locked` beside the old
+    // screensaverVisible at an unlock and map the window for a moment
+    readonly property bool idle: _screensaverMonitor.isIdle
     // Whether Caps Lock is on, from the keyboards' LEDs (singletons/lock/CapsLockLed.qml):
     // true, false, or null while unknown (no LED, or none readable: no indicator). Read
     // when the prompt wakes and at each key on an awake prompt. Shown on the prompt; no

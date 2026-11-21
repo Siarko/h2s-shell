@@ -21,7 +21,9 @@ PanelWindow {
     // full black at once, and only the notifications on top of it faded
     color: "transparent"
 
-    readonly property bool _show: Lockscreen.screensaverVisible && !Lockscreen.locked
+    // Idle and not locked: under a lock the lock screen is what shows. Not from
+    // Lockscreen.screensaverVisible (see Lockscreen.idle)
+    readonly property bool _show: Lockscreen.idle && !Lockscreen.locked
     // The window is shown, still clear, before the fade in starts: mapping it and its
     // first frame took so long the first time that the start of the fade was lost
     property bool _mapped: false
