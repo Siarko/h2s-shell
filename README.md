@@ -1,7 +1,5 @@
 # h2s-shell
 
-**THIS IS ALL WORK IN PROGRESS. README AS WELL**
-
 A desktop shell for Hyprland, built with [Quickshell](https://quickshell.org) (Qt 6, QML):
 a bar with popups, notifications, on-screen toasts, a lock screen and a
 settings window.
@@ -109,7 +107,7 @@ hl.bind("switch:on:Tablet Mode Switch", hl.dsp.exec_cmd(shell .. " ipc call tabl
 hl.bind("switch:off:Tablet Mode Switch", hl.dsp.exec_cmd(shell .. " ipc call tablet set false"), { locked = true })
 ```
 
-The switch's name differs between machines (`gpio-keys` on the Framework 12): see the
+The switch's name differs between machines (`gpio-keys` on some): see the
 "Switches" in `hyprctl devices`. Hyprland reports only changes, so the shell starts as a
 laptop until the next one; `ipc call tablet set true` by hand corrects it.
 
@@ -179,7 +177,8 @@ the [privacy policy](https://siarko.github.io/h2s-shell/privacy.html).
 ## Development
 
 There is no build step: the shell runs from a git checkout, and reloads itself when a
-file changes. `quickshell -p tests.qml` runs the test suites. On NixOS, run a checkout
-with the package's programs: `H2S_SHELL_DIR=~/src/h2s-shell h2s-shell`. How the shell is
+file changes. `tests/run-all.sh` runs every test before a commit (`--quick` leaves out
+the lock screen's end-to-end tests); `tests/run-unit.sh` runs the unit suites. On NixOS,
+run a checkout with the package's programs: `H2S_SHELL_DIR=~/src/h2s-shell h2s-shell`. How the shell is
 put together: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md); changes:
 [CHANGELOG.md](CHANGELOG.md).

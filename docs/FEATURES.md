@@ -341,7 +341,7 @@ Two independent stages, both driven by Wayland idle notifications:
   unlock-session`, from another console), and the compositor ending the lock. There is no
   unlock over IPC, and no key unlocks: Escape shows a hidden prompt (as any key) and hides a
   showing one, emptying the field (as the prompt's time-out does); a held Escape's repeats
-  count for nothing. (Escape at a showing prompt unlocked until 2026-11-15.)
+  count for nothing.
 - **Sleep** — with Settings → Lockscreen → "Lock before the computer sleeps" on
   (`lockscreen.lockOnSleep`, off by default; on while the settings file cannot be read), the
   screen locks before the computer sleeps, the
@@ -467,8 +467,9 @@ has (read from `/etc/pam.d/polkit-1`).
 A separate floating window, reachable from the Settings widget, from
 `Shell.openSettings(pageId)`, or over IPC — which also works with no Settings widget on
 the bar: `qs ipc call settings open`, `openPage <id>` (a page's id, e.g. `openPage profiles`,
-`openPage bar_appearance`), `currentPage` (the open page's id), `itemRect <objectName>` (where a shown item is in the window, for tests), `toggle`, `close`. Two tabs: **Behaviour**, whose pages edit
-a profile, and **Appearance**, whose pages edit a theme. The sidebar shows which profiles
+`openPage bar_appearance`), `currentPage` (the open page's id), `itemRect <objectName>` (where a shown item is in the window, for tests), `toggle`, `close`. Three tabs: **Behaviour**, whose pages edit
+a profile; **Appearance**, whose pages edit a theme; and **System** (Authentication,
+Network), whose pages change this computer's settings, at once and in every profile. The sidebar shows which profiles
 are active right now, and picks what the tab's pages edit — the profile (with the theme it
 uses, a click away) or the theme (with the profiles that use it, and Preview to show it
 on the whole shell while editing).

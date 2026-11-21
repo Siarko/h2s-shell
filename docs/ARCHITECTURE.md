@@ -5,7 +5,7 @@ a user's point of view see [FEATURES.md](FEATURES.md).
 
 ## Runtime model
 
-This is not a compiled application. [Quickshell](https://quickshell.outfoxxed.me/)
+This is not a compiled application. [Quickshell](https://quickshell.org)
 interprets the QML directly, so there is no build step:
 
 ```
@@ -608,7 +608,7 @@ one singleton reads the seams, `TestSeams` (the lock screen's above, the module 
 
 Integrations as separate packages. The module API's reference
 (the facade, the slot table, the anchors, the handle, the lifetime rules) is the header of `api/Api.qml`;
-the manifest schema is in `singletons/ModuleManifestRules.qml`. What exists: the rules, the host, discovery,
+the manifest schema is in `singletons/ModuleManifestRules.qml`. The parts: the rules, the host, discovery,
 the `qs.api` facade, the registries taking modules' contributions, slots and anchors.
 
 - A **module** is a directory with a `module.json` (the schema: `singletons/ModuleManifestRules.qml`'s
@@ -845,9 +845,7 @@ the `qs.api` facade, the registries taking modules' contributions, slots and anc
   | `popup.network.connections.wired.row.title` | `append` | as the wired profile's `settings`, for the wired profile up on the Ethernet device; with none up `networkId` and `name` `""` (`ModuleRules.wiredRowContext`) | the network popup's Ethernet part, the wired row's name line, the same (`panels/NetworkPanel.qml`) | 1.32 |
 
   A module's icon (the manifest's `icon`) is its face in Settings → Modules; the shell puts
-  it on no card. The marks of API 1.27 (`module.setMark`, `clearMark`, a card row's `marks`)
-  were removed in 1.28, before any release: a module shows what it adds to a network in that
-  card's `title` place.
+  it on no card. A module shows what it adds to a network in that card's `title` place.
 
   A saved Wi-Fi network's card is a place only while `Api.networks` names its network
   (`ModuleRules.networkListed`): until its details are read it could be a hotspot, so its
@@ -1295,8 +1293,8 @@ blocked ("" | "locked" | "busy"), error }`; it returns `{ open, cancel() }`.
   other than a module's `<testPrograms>/pkexec` (one its manifest names among its
   programs), and `PrivilegedAction`'s `elevate` must be that stand-in
   (`ModuleRules.testRunProblem`, `testElevateProblem`). A module written for an API below
-  1.10 may still put a stand-in that lies anywhere into `elevate`, until slice Z removes
-  that gate: it runs unless a check finds it is the system's pkexec (the same file as
+  1.10 may still put a stand-in that lies anywhere into `elevate`: it runs unless a check
+  finds it is the system's pkexec (the same file as
   `/run/wrappers/bin/pkexec`, `/usr/bin/pkexec` or what `command -v pkexec` finds on the
   system's directories) or a setuid or setgid file, and a check that fails counts as the
   real one. Which rule a run is under is read from the code that called it (the modules
@@ -1337,17 +1335,18 @@ logind lines. The rest of the shell:
 `components/Logger.qml` gives each subsystem a prefixed, individually switchable logger:
 
 ```qml
-Logger { id: logger; prefix: "[STT]"; enabled: Config.stt.debug }
+Logger { id: logger; prefix: "[STT]"; enabled: Profiles.value("stt.debug") ?? false }
 ```
 
-`log()` and `warn()` respect `enabled`; `error()` always prints. Debug switches exist as
-`Config.general.debug`, `Config.general.fetch_debug`, `Config.gcal.debug` and
-`Config.stt.debug`. A handful of files still call `console.log` directly, bypassing this.
+`log()` and `warn()` respect `enabled`; `error()` always prints. The debug switches are
+the global settings `general.debug`, `general.fetchDebug`, `gcal.debug` and `stt.debug`
+(`singletons/SettingsSchema.qml`), read with `Profiles.value`. A handful of files call
+`console.log` directly, bypassing this.
 
 ## Conventions
 
 - **Colours and type sizes come from `singletons/Theme.qml`.** Nothing else should
-  contain a literal colour. ~37 places still do.
+  contain a literal colour.
 - **Full variable names.** `calendar`, `response`, `calendarId` — not `c`, `r`, `cid`.
   Loop indices (`i`, `j`) are the exception.
 - **Comments in English**, explaining *why* rather than restating the code.
@@ -1383,9 +1382,9 @@ section editor's picker and names, the widget settings pane and the popup all re
    comment at the top of that file.
 
 Then run `tests/run-unit.sh`: the WidgetRegistry suite checks that every file the
-registry names exists and compiles. Global settings (a page under `panels/settings/`)
-are still wired by hand in `SettingsWindow`'s navigation model and `sourceComponent`
-if-chain.
+registry names exists and compiles. A settings page of the shell's own (under
+`panels/settings/`) is one entry in `SettingsWindow.corePages`: its id, label, tab and
+component.
 
 ## Testing
 
