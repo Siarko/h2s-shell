@@ -6,7 +6,8 @@ the code, `~/.config/hypr/hypridle.conf`, `~/.config/hypr/hyprland.lua`,
 properties over `busctl`, the user journal. Quickshell 0.3.2, Hyprland 0.57.2, hypridle 0.1.8,
 hyprlock 0.9.7. Since then, on the owner's machine: Super+L and hypridle's `lock_cmd` call the
 shell's IPC lock, and the Power save profile's test commands are cleared (§6). The owner
-decided (§6); the design is §7–§14, the new questions §6b. The settings' mockup:
+decided (§6, two rounds); the design is §7–§18, the one new question §6b. The settings'
+mockup:
 `~/src/h2s-mockups/idle-settings-planned/` (`shoot.sh` for headless shots, `qs -p` on its
 `shell.qml` to open it).
 
@@ -326,41 +327,39 @@ The questions of the analysis, answered:
 9. **The times are the owner's** to set; what matters is the settings: readable, grouped,
    never everything in one place.
 
-## 6b. New open questions
+Second round, on the design (the owner, 2026-11-21):
 
-1. **Turning monitors off outside Hyprland.** Quickshell 0.3.2 cannot do it (§9), so the
-   shell would use Hyprland's own command and nothing else. Example: someone runs the shell on
-   sway or labwc; "Turn off" is greyed out there with "Not supported here" and the monitor
-   gets the black screensaver instead. Options: (a) Hyprland only, plus a feature request to
-   Quickshell for the standard protocol (wlr-output-power-management); (b) also use the
-   program `wlopm` when it is installed (an optional dependency, both systems); (c) write a
-   protocol client ourselves (not possible from QML; a C++ plugin is outside the project's
-   way). **Recommendation: (a)** now; (b) when someone on another compositor asks.
-2. **Apps keeping the screen on while it is locked.** A video player or a browser asks the
-   system to keep the screen awake (§3 point 5). Example: a video plays, you lock with Super+L
-   and walk away: should the monitors stay on behind the lock screen until the video ends?
-   hypridle keeps them on; nobody can see the video. **Recommendation:** at the lock screen
-   such requests are ignored and the screens go off after the lock screen's own time; while
-   unlocked they are respected (no screensaver, no screen-off, no idle lock).
-3. **A new dependency for the screensaver interface.** Offering
-   `org.freedesktop.ScreenSaver` (apps' "keep awake" requests, `ActiveChanged`) needs a program
-   that owns a D-Bus name; Quickshell cannot from QML and the shell's Python helpers use the
-   standard library only. Example: Brave's "Video Wake Lock" only arrives this way. Options:
-   (a) a small helper on PyGObject (Arch `python-gobject`, NixOS `python3Packages.pygobject3`,
-   both common), (b) a helper speaking D-Bus by hand on the standard library (more code to
-   keep correct), (c) no interface: only Wayland's own inhibitors count, as today (point 5
-   stays). **Recommendation: (a).**
-4. **How often the sleep notice speaks.** Example: the desktop PC sleeps at night unlocked by
-   choice; a notice after every wake would nag. Options: (a) after every sleep that left the
-   screen unlocked, with two buttons, "Lock before sleep" and "Don't tell me again", and a
-   switch for it on the Lock screen page; (b) once, ever, then only the line on the page.
-   **Recommendation: (a)** — one click ends it for good, and a laptop that should lock keeps
-   being told until it does.
-5. **The lock screen's screen-off by default.** Example: a fresh install locks (Super+L) and
-   the lock screen stays lit until something else turns the monitor off — on an OLED a static
-   picture for hours. **Recommendation:** on by default after 1 min (new behaviour, only at
-   the lock screen); every other new time defaults to off, so nothing else changes for anyone
-   until they set it.
+10. **Turning monitors off**: Hyprland is an integration, not a requirement — natively
+    through Hyprland; elsewhere through `wlopm` when it is installed; without either, "Turn
+    off" is unavailable and says why.
+11. **Keep-awake requests are ignored while locked**; the lock screen's own screen-off applies.
+12. **The screensaver interface in full, no Python**: a small C++/Qt helper (QtDBus; Qt is
+    already a dependency) owns `org.freedesktop.ScreenSaver`, and later whatever else
+    Quickshell cannot do (the Google sign-in's local server, replacing the Python one). The
+    project gets its first build step: the NixOS package builds it, `install.sh` builds it on
+    Arch (later the AUR); tests on a stand-in bus; `CLAUDE.md`'s "no build step" and the docs
+    change. In parallel a feature request or contribution to Quickshell for D-Bus services
+    from QML (`notes/upstream/quickshell-dbus-service.md`); once it lands, the helper's D-Bus
+    part goes. Python leaves the project over time.
+13. **The sleep notice is a cycle**: shown once as a critical notification; closing it means
+    acknowledged; then "waiting for a fix", with a line on the Lock screen page; a later sleep
+    that locked means fixed; the next unlocked sleep is told again. No "Don't tell me again".
+    A pure rule with cases (§14).
+14. **The lock screen's screen-off is on by default after 1 min**; every other new time
+    defaults to off.
+
+## 6b. Open question
+
+1. **Arch: the helper after an update.** On Arch the shell runs from a git checkout; an
+   update (`git pull`, or the lead's fast-forward) can change the helper's source while the
+   built program stays old. Example: an update adds a method to the screensaver interface; the
+   old helper answers without it until someone rebuilds. Options: (a) `launch.sh` rebuilds
+   at start when the source changed (a stamp of its files beside the build; ~10 s once, with
+   cmake and a compiler, which `install.sh` installs anyway), and on a failed build starts the
+   shell without the helper and says so once; (b) only `install.sh` builds, and the shell
+   says "helper out of date — run install.sh"; (c) a prebuilt binary from releases.
+   **Recommendation: (a)** — an update keeps working without a step to remember. NixOS is
+   unaffected (the package builds it).
 
 ## 7. The design in short
 
@@ -416,7 +415,7 @@ control and a way `slideshow` (not built yet) both fall back to `saver`.
 - `wanted(state, config, now)` → `{ monitorId: "on" | "saver" | "off" }`
   - sleeping: nothing changes (the shown picture stays);
   - locked: `off` for every monitor once `now − lockQuietSince ≥ lockedScreenOffAfter`
-    (inhibitors ignored, question 6b.2), else what idle had reached (never back to `on`
+    (inhibitors ignored, §6.11), else what idle had reached (never back to `on`
     without input), shown under the lock surface;
   - unlocked and held (a Wayland, bus or logind inhibitor, not forced): what was reached stays,
     nothing further;
@@ -445,7 +444,7 @@ control and a way `slideshow` (not built yet) both fall back to `saver`.
 | input at the lock screen | `powerOn`; the lock's quiet time starts again |
 | locked, no input for the lock screen's time | `powerOff(all)`; with no power control, the lock surface goes black instead |
 | inhibitor (bus, logind, Wayland) while unlocked | the next stage waits; released → counting starts at the release (as hypridle) |
-| inhibitor while locked | ignored (6b.2) |
+| inhibitor while locked | ignored (§6.11) |
 | a profile changes during idle (unplugging, battery level, `screen.locked`) | `wanted` recomputed: reached stages stay unless switched off (a screensaver turned off is hidden, **without** the end command: the user is still away), later stages take the new times; no IdleMonitor is remade (defect 6) |
 | a monitor's way changes during idle | applied at once (the OLED switched to `off` goes off now) |
 | a monitor is plugged in during idle | gets the stage's picture for its way |
@@ -489,19 +488,30 @@ connector name and model; its `serialNumber` is **empty** on Wayland (read here:
   screensaver surfaces (layer shell).
 
 **`ScreenPower`** (`singletons/ScreenPower.qml`, I/O; decisions in `MonitorRules`): picks a
-backend at start — Hyprland (`hyprctl -j monitors` to read, `hyprctl dispatch` to act, through
-`Process`, so a stand-in `hyprctl` serves the tests), else none (`canPowerOff` false: the page
-greys "Turn off" with "Not supported here", 6b.1). It re-reads the monitors on Hyprland's
-`monitoradded`/`monitorremoved` events and after each action (a failed read = power state
-unknown: the shell does not assume a monitor is off). It powers on only what it turned off.
+backend at start (§6.10), each through `Process` so a stand-in program serves the tests:
+
+| Backend | When | Read | Act |
+|---|---|---|---|
+| Hyprland | `HYPRLAND_INSTANCE_SIGNATURE` set | `hyprctl -j monitors` (power, make, model, serial) | `hyprctl dispatch` (§9 above) |
+| wlopm | elsewhere, `wlopm` on `PATH` | `wlopm --json` (outputs and their power) | `wlopm --off <connector>` / `--on` |
+| none | neither | — | — |
+
+With none, `canPowerOff` is false: the page greys "Turn off" and "Turn screens off" with
+"Not supported here" (the hint names `wlopm` once: "Install wlopm to turn monitors off"),
+and such monitors get the black screensaver. `wlopm` is an optional program: listed in the
+docs under both systems (NixOS: in `pkgs` as `wlopm`, not added to the package's `PATH` since
+Hyprland users do not need it; Arch: AUR `wlopm`), never installed by `install.sh`. It
+re-reads the monitors on Hyprland's `monitoradded`/`monitorremoved` events, on Qt's screen
+list changing elsewhere, and after each action (a failed read = power state unknown: the
+shell does not assume a monitor is off). It powers on only what it turned off.
 
 ### Monitors identified stably
 
 `MonitorRules.identity(monitor)` → `make|model|serial` from Hyprland (`Samsung Electric
 Company|C27JG5x|H4ZMC00268`), never the connector (a cable moved to another port keeps its
 settings). Without a serial (some panels report none) the key is `make|model|` plus the
-connector when two connected monitors share make and model. Off Hyprland: `|model|connector`
-from Qt. `MonitorRules.isBuiltIn(connector)` — `eDP-`, `LVDS-`, `DSI-` — names it "Built-in
+connector when two connected monitors share make and model. Off Hyprland (wlopm gives names
+only): `|model|connector` from Qt. `MonitorRules.isBuiltIn(connector)` — `eDP-`, `LVDS-`, `DSI-` — names it "Built-in
 screen" on the page. Overrides for monitors not connected are kept and listed, greyed, with
 "Not connected" and a "×" (DeleteButton) to forget them. Mirrors and disabled outputs are
 skipped.
@@ -523,20 +533,20 @@ skipped.
 
 ## 11. Apps keeping the screen on (inhibitors)
 
-Three sources, all respected while unlocked (hypridle's set), all ignored at the lock (6b.2):
+Three sources, all respected while unlocked (hypridle's set), all ignored at the lock (§6.11):
 
 - **Wayland idle-inhibit**: `awayIdle` (§8) — no names are known; the page says "an app".
-- **`org.freedesktop.ScreenSaver`**: a helper `scripts/screensaver-bus.py` (PyGObject, 6b.3),
-  started by `Idle` with the Process/SplitParser idiom, owns the name on the session bus at
-  `/org/freedesktop/ScreenSaver` and `/ScreenSaver`: `Inhibit(app, reason)` → cookie,
-  `UnInhibit(cookie)`, `GetActive`, `GetActiveTime`, `SetActive`, `SimulateUserActivity`,
-  signal `ActiveChanged`. It drops a client's cookies when its bus name vanishes
-  (`NameOwnerChanged`). It prints JSON lines (`inhibitors` with app and reason, `activity`,
-  `setActive`) and reads `active` lines; the shell treats app names and reasons as text from
-  outside (plain, capped, one line). It asks for the name **without replacing** another owner:
-  name taken → a line on the Screensaver page, "<owner's process name> handles idle requests
-  from apps. Stop it to let the shell do it." (the name read from the bus, no list), and the
-  shell works on without bus inhibitors.
+- **`org.freedesktop.ScreenSaver`**: the helper's `screensaver` service (§18), started by
+  `Idle`, owns the name on the session bus at `/org/freedesktop/ScreenSaver` and
+  `/ScreenSaver`: `Inhibit(app, reason)` → cookie, `UnInhibit(cookie)`, `GetActive`,
+  `GetActiveTime`, `GetSessionIdleTime`, `SetActive`, `SimulateUserActivity`, signal
+  `ActiveChanged`. It drops a client's cookies when its bus name vanishes
+  (`NameOwnerChanged`). The shell treats app names and reasons as text from outside (plain,
+  capped, one line). It asks for the name **without replacing** another owner: name taken →
+  a line on the Screensaver page, "<owner's process name> answers apps that ask to keep the
+  screen on. Stop it to let the shell do it." (the name read from the bus, no list), and the
+  shell works on without bus inhibitors; when the name frees up the helper takes it (it
+  stays queued for it).
 - **logind `idle` block inhibitors** (`systemd-inhibit --what=idle`, mpv and others): read with
   `ListInhibitors` at each deadline that would start a stage (logind sends no signal when one
   appears); a failed read counts as "not held" for the screensaver but is logged once — it
@@ -577,8 +587,8 @@ global) unless marked global. The mockup shows them.
 
 | Section | Rows | Keys |
 |---|---|---|
-| **Locking** | "Lock before the computer sleeps"; "Tell me when sleep left the screen unlocked" with the last result under it ("Last sleep: today 07:58, unlocked"); hint "Locking when idle: Screensaver page" with a link | `lockOnSleep`; **new** `sleepNotice` (bool, true) |
-| **On the lock screen** | "Turn screens off after" pills (30 s, 1 min, 2 min, 5 min, Never); notifications and their detail | **new** `lockedScreenOffTimeout` (60 s, 0 = never; 6b.5); as today |
+| **Locking** | "Lock before the computer sleeps"; under it, while the sleep notice waits for a fix, the line "The last sleep left the screen unlocked (today 07:58). Waiting for a sleep that locks."; "Locking when idle" with a button to the Screensaver page | `lockOnSleep`; the cycle's state is remembered data in `Config`, not a setting |
+| **On the lock screen** | "Turn screens off after" pills (30 s, 1 min, 2 min, 5 min, Never); notifications and their detail | **new** `lockedScreenOffTimeout` (60 s, 0 = never; §6.14); as today |
 | **Sign-in** | (from `plans/pam-config.md`: not offering fingerprint / a security key) | later |
 
 Profiles: the per-monitor map is one structured value, so a profile that changes one monitor's
@@ -596,13 +606,30 @@ delay inhibitor always (`h2s-shell`, "Checks the screen is locked before sleep")
 with `lockOnSleep`. At `PrepareForSleep(true)` it looks: own lock, else `hyprctl -j locked` on
 Hyprland, else `LockedHint`; once more after 500 ms if unlocked; then releases (at once when
 already locked; ≤ 1 s otherwise; `lockOnSleep` keeps today's longer hold until the lock is
-confirmed). It records `locked` / `unlocked` / `unknown` with the time. After the resume, an
-`unlocked` sleep that started from an unlocked session, with `sleepNotice` on, gives one
-notification: "The screen was not locked while the computer slept." — buttons "Lock before
-sleep" (turns `lockOnSleep` on; keyed to that setting) and "Don't tell me again" (turns
-`sleepNotice` off). `unknown` says nothing. With `lockOnSleep` on and the shell's own lock
-refused at that moment, the "two programs lock" notice stays as today. The Lock screen page
-shows the last result.
+confirmed). The outcome of a sleep is `locked`, `unlocked` or `unknown`; a sleep that started
+from an already locked session is `locked`.
+
+### The cycle: `SleepNoticeRules.step(state, event)`
+
+Pure, in `singletons/SleepNoticeRules.qml`, cases in `tests/SleepNoticeRulesTest.qml`. The
+state (`quiet`, `shown`, `waiting`, with the time of the unlocked sleep) is remembered in
+`Config` (data, not a preference), so a restart neither repeats nor loses it.
+
+| State | Event | Next | Action |
+|---|---|---|---|
+| quiet | slept `unlocked` (after the resume) | shown | the critical notification "Not locked while asleep" — "The screen was not locked while the computer slept." (stays until closed; its default action opens the Lock screen page) |
+| shown | notification closed (×, or its action) | waiting | — (acknowledged) |
+| shown | slept `unlocked` again before it was closed | shown | the notification replaced (one, never two), its time updated |
+| shown | slept `locked` | quiet | the notification withdrawn (fixed before it was read) |
+| waiting | slept `unlocked` | waiting | nothing (still not fixed; the page's line takes the new time) |
+| waiting | slept `locked` | quiet | the page's line goes (fixed) |
+| any | slept `unknown` | same | nothing (no lock state could be read: never an alarm) |
+| quiet | slept `locked` | quiet | nothing |
+| shown | the shell restarts | shown | the notification shown again (it was never closed) |
+
+So a system that was fixed and fails again is told again; no "Don't tell me again". With
+`lockOnSleep` on and the shell's own lock refused at that moment, the "two programs lock"
+notice stays as today.
 
 ## 15. hypridle, retired in steps
 
@@ -613,8 +640,9 @@ shows the last result.
    subsections: NixOS `services.hypridle.enable = false` (Home Manager) or dropping it from
    the compositor's autostart; Arch removing its `exec-once` / `systemctl --user disable
    hypridle`.
-3. **The screensaver interface lands:** the shell takes `org.freedesktop.ScreenSaver` when it
-   is free; while hypridle (or anything) holds it, the page says who, as in §11.
+3. **The screensaver interface lands** (the helper, §18): the shell takes
+   `org.freedesktop.ScreenSaver` when it is free; while hypridle (or anything) holds it, the
+   page says who, as in §11.
 4. `docs/FEATURES.md` and `docs/ARCHITECTURE.md` lose the hypridle/swayidle/xss-lock passages
    about guessing lockers; they describe the outcome check.
 
@@ -668,19 +696,122 @@ outputs, stand-in `gdbus` / `systemd-inhibit`, never the session's compositor.
    element. `SettingsPagesTest`; the mockup re-run on the real code for the owner.
 9. **logind idle inhibitors (I9)** — `ListInhibitors` read and parsed (`LockParseRules`).
    Parse cases; a reading suite on a stand-in `gdbus`.
-10. **Screensaver interface (I10)** — the helper, `Idle`'s holder list, `ActiveChanged`, the
-    name-taken line. Tests: the helper on a private `dbus-daemon` started by the suite (a test
-    bus, not the session's) with a stand-in client calling Inhibit / UnInhibit / exiting
-    without UnInhibit; parse cases for its lines.
-11. **Sleep notice by outcome (I11)** — §14; `SleepLockers` and the name lists removed.
-    `LockIoRulesTest` cases; lock bed `logind.sh`: stand-in `PrepareForSleep` with the shell
+10. **The helper and its build (I10a)** — §18: the source tree, `scripts/build-helper.sh`,
+    the NixOS package and `install.sh` building it, `launch.sh` finding it (and §6b),
+    `CLAUDE.md` and the docs. Tests: `tests/run-helper.sh` builds it and runs a `--version`
+    check; `tests/install-test.sh` sees the build step; the package builds on NixOS.
+11. **Screensaver interface (I10b)** — the `screensaver` service, `Idle`'s holder list,
+    `ActiveChanged`, the name-taken line. Tests: `tests/run-helper.sh` on a private bus (§18);
+    a reading suite running the shell's side against the real helper on that bus.
+12. **Sleep notice by outcome (I11)** — §14; `SleepLockers` and the name lists removed.
+    `SleepNoticeRulesTest` (the cycle), `LockIoRulesTest` cases; lock bed `logind.sh`: stand-in `PrepareForSleep` with the shell
     unlocked → the notice after resume; locked → none; the inhibitor released within 1 s.
-12. **Foreign lock seen (I12)** — `hyprctl -j locked` at a refusal and at deadlines. Lock bed:
+13. **Foreign lock seen (I12)** — `hyprctl -j locked` at a refusal and at deadlines. Lock bed:
     a second locker client in the bed's Hyprland; the shell neither tries the idle lock nor
     says "unlocked".
-13. **hypridle retired (I13)** — docs (§15), both systems; a draft feature request in
+14. **hypridle retired (I13)** — docs (§15), both systems; a draft feature request in
     `notes/upstream/` for an output-power type in Quickshell.
+15. **The wlopm backend (I14)** — `ScreenPower` on `wlopm` (§9). A reading suite on a stand-in
+    `wlopm` (JSON in, `--off`/`--on` recorded); `canPowerOff` false with neither program.
 
 Order: 1–4 first (they help the desktop PC today: the screensaver ↔ lock flow, the keyboard),
-then 5–8 (screen-off; after 6 the owner can drop hypridle's listener), then 9–13. Views (8)
+then 5–8 (screen-off; after 6 the owner can drop hypridle's listener), then 9–15. Views (8)
 wait for the owner's notes on the mockup.
+
+## 18. The helper: `h2s-helper` (C++/Qt)
+
+The project's first compiled part (§6.12): one small program for what Quickshell cannot do
+from QML, starting with the screensaver interface. Not a daemon of its own and not a module:
+the shell starts it and it ends with the shell.
+
+### Source and shape
+
+- `helper/` at the top of the tree: `CMakeLists.txt`, `src/main.cpp` (subcommands),
+  `src/ScreenSaverService.{h,cpp}`, `src/LineChannel.{h,cpp}` (the protocol below),
+  `tests/` (its own test client, built only for the tests). C++17, Qt 6 **Core and DBus only**
+  (no GUI; `find_package(Qt6 REQUIRED COMPONENTS Core DBus)`), no other library.
+- One binary, subcommands: `h2s-helper screensaver` now; `h2s-helper oauth-callback` later
+  (the Google sign-in's local server, replacing `scripts/google_auth.py`), and so on.
+  `h2s-helper --version` prints the shell's version and a protocol number the shell checks
+  (a mismatch = "helper out of date", the feature off, said once).
+- Decisions stay in QML `*Rules.qml`: the helper is I/O only — it owns the name, keeps the
+  cookies, follows `NameOwnerChanged`, and reports; what the shell does with an inhibitor is
+  `IdleRules`'.
+
+### How it talks to the shell: stdin/stdout lines
+
+The shell starts it with `Process` and reads it with `SplitParser`, the shell's usual idiom;
+one JSON object per line each way:
+
+- helper → shell: `{"event":"ready","protocol":1}`, `{"event":"name","owned":true}` /
+  `{"event":"name","owned":false,"owner":"hypridle"}`, `{"event":"inhibitors","list":[{"app":…,
+  "reason":…,"cookie":…}]}`, `{"event":"activity"}` (SimulateUserActivity),
+  `{"event":"setActive","active":true}`, `{"event":"error","message":…}`;
+- shell → helper: `{"active":true,"since":<epoch s>}` (for `GetActive`, `GetActiveTime`,
+  `ActiveChanged`), `{"idleSeconds":…}` (for `GetSessionIdleTime`, sent when asked through a
+  `{"event":"askIdle"}`).
+
+Why not a socket: the pipe ties the helper's life to the shell's (the shell dies → stdin
+closes → the helper exits and the bus name is released at once, so another program can take
+it); there is no socket path, no permissions and no stale file to handle, and nothing else
+on the machine can talk to it; the tests drive it the same way the shell does. A second
+client is never needed — anything else talks to the helper through D-Bus, the interface it
+exists for. The shell restarts a helper that exits, with a backoff, logging a change of
+outcome only.
+
+### Building
+
+- **The checkout:** `scripts/build-helper.sh` → `cmake -S helper -B build/helper && cmake
+  --build build/helper`; `/build/` is ignored by git. `launch.sh` looks for the helper in
+  this order: `H2S_HELPER` (a path), the package's (`$H2S_SHELL_LIBEXEC/h2s-helper`, set by
+  the NixOS launcher), `build/helper/h2s-helper` in the tree being run. Not found → the shell
+  runs without the screensaver interface; the Screensaver page says "Not built" in the
+  "Keeping the screen on" section. Rebuilding after an update: §6b.
+- **NixOS:** `nix/package.nix` becomes two derivations: `h2s-helper` (`stdenv.mkDerivation`,
+  `nativeBuildInputs = [ cmake ]`, `buildInputs = [ qt6.qtbase ]`, `dontWrapQtApps = true` —
+  no QPA plugin is loaded) installed to `$out/libexec/h2s-shell/`, and the shell's files as
+  today, its launcher exporting `H2S_SHELL_LIBEXEC`. The `qt6.qtbase` should be the one
+  Quickshell is built with (the same nixpkgs), so one Qt is in memory per machine.
+  `H2S_SHELL_DIR=<checkout>` keeps using the package's helper unless the checkout has built
+  its own.
+- **Arch:** `install.sh` adds `cmake` and `base-devel` (the compiler; Qt's headers and
+  `Qt6DBus` come with `qt6-base`, already a dependency through Quickshell) to its packages
+  and runs `scripts/build-helper.sh` after cloning. Later an AUR package builds it as NixOS
+  does.
+
+### Tests (a stand-in bus only)
+
+`tests/run-helper.sh`, a new part of `tests/run-all.sh` (general set, both systems):
+
+1. builds the helper into a temporary directory (cmake, a compiler and Qt's development
+   files from `tests/lock/tools.nix` where there is `nix` — added there — else from the
+   system; missing → status 2 with the name, as every runner);
+2. starts a **private `dbus-daemon`** with the suite's own config
+   (`tests/helper/session.conf`: a session-type bus on a socket in the run's directory,
+   no service activation, no system policy) — never the session's bus;
+3. runs `h2s-helper screensaver` on it, fed and read by the suite like the shell does, and
+   the test client (`helper/tests/client.cpp`: Inhibit and hold until told, UnInhibit, exit
+   without UnInhibit, GetActive, call SimulateUserActivity) plus `gdbus` for one-shot calls.
+
+Cases: the name is taken and `ready` / `name owned` reported; Inhibit → `inhibitors` with app
+and reason; UnInhibit → empty; a client exiting while holding → its cookie dropped; two
+clients, one leaves; a cookie of another client cannot be removed; `active` from the shell →
+`GetActive` true and one `ActiveChanged`; the name held by another connection first →
+`owned:false` with its owner, then taken when it leaves; stdin closed → the helper exits and
+the name is free; markup and a 10 kB reason in `app`/`reason` come through as plain text
+(the shell caps them). On the QML side, a reading suite runs `Idle`'s helper client against
+the real helper on the same private bus.
+
+### What the docs and `CLAUDE.md` say
+
+- `CLAUDE.md` "Running": "There is no build step" becomes "QML needs no build; one helper is
+  compiled: `scripts/build-helper.sh` (NixOS: the package builds it; Arch: `install.sh`)";
+  "Conventions": the helper is I/O only, decisions stay in `*Rules.qml`; a new capability goes
+  into the helper only when Quickshell cannot do it, and leaves it when Quickshell can.
+- `docs/ARCHITECTURE.md`: the runtime model (the shell and its helper process, the line
+  protocol), the directory layout (`helper/`), "Where the test tools come from" (cmake, a
+  compiler, Qt's development files, the private bus), each with NixOS and Arch subsections.
+- `docs/FEATURES.md`: "Keeping the screen on" and the dependencies (`cmake`, `base-devel`
+  on Arch; nothing extra on NixOS; `wlopm` optional off Hyprland).
+- `notes/upstream/quickshell-dbus-service.md`: the request to Quickshell (drafted with this
+  plan).
