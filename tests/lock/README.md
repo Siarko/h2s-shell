@@ -90,8 +90,9 @@ labwc        headless (wlroots' headless backend): only gives the nested composi
    ├─ input/ltinput.py   one virtual keyboard + one virtual pointer, alive for the whole
    │                     test, fed commands through a FIFO; the keymap is the test's
    ├─ input/ltwindow.py  (stack_start --window) a solid magenta window: the desktop the
-   │                     lock must hide; it logs each pointer press it receives (window.log),
-   │                     so a test sees a click pass the shell's surfaces (toast-modal)
+   │                     lock must hide; it logs each pointer press and key it receives
+   │                     (window.log), so a test sees a click pass the shell's surfaces
+   │                     (toast-modal) or a key reach the desktop (key-wake)
    ├─ dbus-daemon        (stack_start --session-bus) a private session bus, no activation
    └─ the launcher       `H2S_SHELL_DIR=<the run's copy> h2s-shell` (or launcher.sh), a plain
       │                  start: the copy's scripts/launch.sh, which stays as the shell's supervisor

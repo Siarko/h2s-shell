@@ -9,7 +9,9 @@ PanelWindow {
     screen: modelData
 
     WlrLayershell.layer: WlrLayer.Overlay
-    WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+    // The keyboard while shown: the key that wakes the screen goes nowhere (into a terminal
+    // it would run a line). Given back the moment it hides, before the fade out ends
+    WlrLayershell.keyboardFocus: _show ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
     WlrLayershell.namespace: "screensaver"
     WlrLayershell.exclusiveZone: -1
 

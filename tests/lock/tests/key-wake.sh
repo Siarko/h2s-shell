@@ -2,8 +2,43 @@
 # is the first character, then a wrong character, Backspace, the rest of the password and
 # Enter, all typed at once while the prompt is still fading in — and it unlocks. Then an
 # Enter right after a key wake, alone, is refused as empty rather than sent.
+#
+# First the screensaver (after 5 s idle) takes the keyboard: a key at it wakes the screen and
+# reaches no window — the stand-in desktop window, focused, records every key it gets — and
+# once it has gone, keys reach the window again.
 
-stack_start
+stack_start --window --settings '{"lockscreen.screensaverEnabled": true, "lockscreen.screensaverTimeout": 5}'
+
+screensaver_layer() {
+    hyprctl -j layers | python3 -I -c '
+import json, sys
+layers = json.load(sys.stdin)
+found = any(surface.get("namespace") == "screensaver"
+            for monitor in layers.values() for level in monitor["levels"].values() for surface in level)
+sys.exit(0 if found else 1)'
+}
+window_keys() { grep -c '^key' "$WORK/window.log"; }
+window_keys_above() { [ "$(window_keys)" -gt "$1" ]; }
+# window_keys_stay <seconds> <count>: the window got no key beyond <count>, polled for that long
+window_keys_stay() {
+    local deadline=$((${EPOCHREALTIME/[.,]/} + $1 * 1000000))
+    while [ "${EPOCHREALTIME/[.,]/}" -lt "$deadline" ]; do
+        [ "$(window_keys)" -le "$2" ] || return 1
+    done
+    return 0
+}
+
+# ---- The screensaver takes the keyboard ----
+press_key a
+check_within "$GUARD" "a key on the desktop reaches the window (it has the keyboard)" window_keys_above 0
+before=$(window_keys)
+check_within "$GUARD" "5 s without input: the screensaver shows" state_is screensaver true
+check_within "$GUARD" "… its layer is on the screen" screensaver_layer
+press_key a
+check_within "$GUARD" "a key at the screensaver wakes the screen" state_is screensaver false
+check "… and reaches no window" window_keys_stay 1 "$before"
+press_key a
+check_within "$GUARD" "the screensaver gone: keys reach the window again" window_keys_above "$before"
 
 lock_by_ipc
 check_within "$GUARD" "locked" compositor_locked

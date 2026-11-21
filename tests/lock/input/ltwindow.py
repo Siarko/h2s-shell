@@ -10,7 +10,9 @@ whatever size it is configured to, and runs until it is killed.
 
 Every pointer press it receives is printed as "press <x> <y>" (surface coordinates, where the
 pointer last was): a test sees from window.log whether a click went past the shell's
-surfaces to the window beneath (their input masks).
+surfaces to the window beneath (their input masks). Every key press it receives is printed
+as "key <code>" (the evdev code): a test sees whether a key reached the desktop past a
+shell surface that should take the keyboard (the screensaver).
 """
 import mmap
 import os
@@ -85,6 +87,7 @@ def main():
 
     pointer_at = {"x": 0.0, "y": 0.0}
     pointers = []
+    keyboards = []
 
     def on_seat_capabilities(seat, capabilities):
         if capabilities & WlSeat.capability.pointer.value and not pointers:
@@ -104,6 +107,19 @@ def main():
             pointer.dispatcher["motion"] = on_motion
             pointer.dispatcher["button"] = on_button
             pointers.append(pointer)
+        if capabilities & WlSeat.capability.keyboard.value and not keyboards:
+            keyboard = seat.get_keyboard()
+
+            def on_keymap(keyboard, format, fd, size):
+                os.close(fd)
+
+            def on_key(keyboard, serial, time, key, state):
+                if state == 1:
+                    print("key %d" % key, flush=True)
+
+            keyboard.dispatcher["keymap"] = on_keymap
+            keyboard.dispatcher["key"] = on_key
+            keyboards.append(keyboard)
 
     if "seat" in found:
         found["seat"].dispatcher["capabilities"] = on_seat_capabilities

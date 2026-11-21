@@ -1014,6 +1014,8 @@ The interface modules are written against (`qs.api`), versioned on its own
   action used to be an empty button.
 
 ### Fixed
+- The key that wakes the screen from the screensaver no longer reaches the window under it
+  (an Enter into a terminal ran the line): the screensaver takes the keyboard while it shows.
 - A profile switch while the screensaver showed (unplugging the charger, a battery level)
   took the screensaver down and ran its end command, as if you had come back; it now stays,
   and a screensaver switched off by the profile goes without the end command. Waking the

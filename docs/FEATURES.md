@@ -268,7 +268,8 @@ Two stages, both driven by Wayland idle notifications and both counted from the 
 ("Screensaver after", "Lock after"):
 
 - **Screensaver** — after `screensaverTimeout` the screen is covered by a black surface
-  that fades in, optionally showing the notification list. Commands can be configured to
+  that fades in, optionally showing the notification list. It takes the keyboard while it
+  shows: the key that wakes the screen reaches no window. Commands can be configured to
   run when it activates and deactivates (on idleness: under a lock too, the end command
   when the user is back, at the prompt as well). A lock while it shows takes the screen
   and the screensaver goes; an unlock counts as the user being back, with or without input
