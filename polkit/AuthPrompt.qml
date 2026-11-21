@@ -210,6 +210,7 @@ PanelWindow {
 
                 // What asks, where polkit's message is the description
                 Text {
+                    objectName: "topMessage"
                     textFormat: Text.PlainText
                     Layout.fillWidth: true
                     visible: _announcement.layout.polkitMessage === "top"
@@ -221,6 +222,7 @@ PanelWindow {
                     horizontalAlignment: Text.AlignHCenter
                 }
                 Text {
+                    objectName: "topActionId"
                     textFormat: Text.PlainText
                     Layout.fillWidth: true
                     visible: _announcement.layout.polkitMessage === "top" && (root.flow?.actionId ?? "") !== ""

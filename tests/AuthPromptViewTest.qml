@@ -13,7 +13,9 @@ import qs.singletons
 // polkit's message and action id show only under an opened Command, for any other request
 // they are the prompt's description (the lines leave them out). An old PrivilegedAction's
 // run: "Not named", no Authorization line. The
-// prompt's card (polkit/AuthCard.qml) is opaque: nothing behind it shows through.
+// prompt's card (polkit/AuthCard.qml) is opaque: nothing behind it shows through. The whole
+// prompt (polkit/AuthPrompt.qml), on a stand-in flow: polkit's message and action id on top
+// for a request not from a module and for an old run, not on top for a module's.
 //
 // Opens a small window in a corner for a moment (run it through tests/run-unit.sh).
 TestCase {
@@ -71,6 +73,44 @@ TestCase {
         }
     }
 
+    // A polkit request as the prompt reads it; nothing is sent anywhere
+    component StandInFlow: QtObject {
+        property string message: "Authentication is needed to run `/usr/bin/true' as the super user"
+        property string actionId: "org.freedesktop.policykit.exec"
+        property var identities: [{ displayName: "h2s" }]
+        property var selectedIdentity: identities[0]
+        property bool isResponseRequired: false
+        property bool responseVisible: false
+        property string supplementaryMessage: ""
+        property bool supplementaryIsError: false
+        property string inputPrompt: ""
+        signal authenticationFailed()
+        function submit(text) {}
+        function cancelAuthenticationRequest() {}
+    }
+    property Component _flowComponent: Component { StandInFlow {} }
+    property Component _promptComponent: Component { AuthPrompt {} }
+
+    // Whether polkit's message and action id are on the prompt's top, for `announcement`
+    function _polkitOnTop(announcement) {
+        const flow = _flowComponent.createObject(root);
+        const prompt = _promptComponent.createObject(root, { flow: flow, announcement: announcement });
+        const message = _find(prompt.contentItem, "topMessage");
+        const actionId = _find(prompt.contentItem, "topActionId");
+        const identity = _find(prompt.contentItem, "identity");
+        assert(message && actionId && identity, "the prompt's message, action id and As user lines are found");
+        // Shown on the screen: its As user row is (`visible` is false while the window is not)
+        for (let i = 0; i < 100 && !identity.visible; i++)
+            driver.wait(20);
+        assert(identity.visible, "the prompt is shown");
+        assertEqual(message.text + " | " + actionId.text, flow.message + " | " + flow.actionId, "… holding polkit's words");
+        const shown = { message: message.visible, actionId: actionId.visible };
+        prompt.destroy();
+        flow.destroy();
+        driver.wait(50);
+        return shown;
+    }
+
     function _find(item, name) {
         if (!item)
             return null;
@@ -124,7 +164,6 @@ TestCase {
         driver.wait(50);
         assert(lines.visible, "one account: shown");
         assertEqual(JSON.stringify(_visibleTexts(lines)), JSON.stringify(["As user", "h2s"]), "not from a module: As user and the name, nothing else");
-        assertEqual(lines.layout.polkitMessage, "top", "… polkit's message is the prompt's description");
         assertEqual(identity.textFormat, Text.PlainText, "the name is plain text");
         assertEqual(identity.font.pixelSize, Theme.fontSizeBody, "… in the normal size");
 
@@ -145,7 +184,6 @@ TestCase {
         assert(identity.mapToItem(lines, 0, 0).y < module.mapToItem(lines, 0, 0).y, "… drawn above it");
         assert(!texts.includes(lines.polkitMessage) && !texts.includes(lines.actionId) && !polkitMessage.visible && !actionId.visible,
                "a module's prompt: polkit's message and action id not on top, Command closed");
-        assertEqual(lines.layout.polkitMessage, "command", "… the prompt leaves them out of its description");
 
         // Opened by a click, the keyboard left in the password field
         const focusBefore = field.activeFocus;
@@ -225,7 +263,6 @@ TestCase {
         lines.commandOpen = true;
         driver.wait(50);
         assert(box.visible && !polkitMessage.visible && !actionId.visible, "… its polkit message is not under Command: it stays the description");
-        assertEqual(lines.layout.polkitMessage, "top", "… on top");
 
         // Several accounts: the As user row is a choice, in its place
         lines.announcement = first;
@@ -241,6 +278,14 @@ TestCase {
         lines.announcement = null;
         driver.wait(50);
         assert(!lines.visible, "no announcement again: nothing");
+
+        // The whole prompt: where polkit's message and action id stand
+        const notModule = _polkitOnTop(null);
+        assert(notModule.message && notModule.actionId, "a request not from a module: polkit's message and action id on top");
+        const oldRun = _polkitOnTop(PolkitRules.announcement({ legacy: true, moduleId: "tailscale", what: "Connect", pkexecArgv: ["/usr/bin/tailscale", "up"] }));
+        assert(oldRun.message && oldRun.actionId, "an old run naming no module or purpose: on top too");
+        const fromModule = _polkitOnTop(first);
+        assert(!fromModule.message && !fromModule.actionId, "a module's request: not on top (under Command)");
         finish();
     }
 }
