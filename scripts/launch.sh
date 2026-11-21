@@ -268,14 +268,18 @@ stop_shell() {
 #                           shell and all it starts inherit it, and a --restart run from there
 #                           must not take an old list (an updated module's old path, a removed
 #                           module) for a developer's entries.
+#   H2S_SHELL_BUILTIN_MODULES
+#                           input, the shell's installation's: the directory of its built-in
+#                           modules (an absolute path; unset or anything else: none).
 #   H2S_SHELL_MODULE_DATA_DIRS
 #                           the data directories searched instead of $XDG_DATA_DIRS (which the
 #                           shell needs as it is: icons, fonts, mime data); set and empty: none.
 #                           The lock test bed points it away from the caller's system.
 # Search order: 1. H2S_SHELL_MODULE_PATH's entries, 2. $XDG_DATA_HOME/h2s-shell/modules/*
-# (~/.local/share), 3. each data dir's h2s-shell/modules/*. Worked out before every start of
-# the shell (a module installed since is picked up by the next one), in a process of its own
-# under a hard bound ($discovery_seconds s): a hung mount under a data dir must not keep the
+# (~/.local/share), 3. H2S_SHELL_BUILTIN_MODULES/*, 4. each data dir's h2s-shell/modules/*
+# (so a user's copy of an id wins over the built-in one, which wins over the system's).
+# Worked out before every start of the shell (and when the shell asks for it again), in a
+# process of its own under a hard bound ($discovery_seconds s; the shell keeps its own): a hung mount under a data dir must not keep the
 # shell — perhaps a locked session's only prompt — from starting. Late or failed: no modules,
 # logged. At most $max_modules modules and $max_modules_length bytes (a longer environment
 # string fails the shell's execve with E2BIG: no shell at all); the rest is dropped, logged.
@@ -286,12 +290,14 @@ max_modules=200
 max_modules_length=65536
 module_roots() {
     echo "${XDG_DATA_HOME:-$HOME/.local/share}/h2s-shell/modules"
+    case "${H2S_SHELL_BUILTIN_MODULES-}" in /*) echo "$H2S_SHELL_BUILTIN_MODULES" ;; esac
     local IFS=:
     for dir in ${H2S_SHELL_MODULE_DATA_DIRS-${XDG_DATA_DIRS:-/usr/local/share:/usr/share}}; do
         [ -n "$dir" ] && echo "$dir/h2s-shell/modules"
     done
 }
-# The search itself, run as `launch.sh --discover-modules` (by discover_modules): the list on
+# The search itself, run as `launch.sh --discover-modules` (by discover_modules, and by the
+# running shell to load modules again without a restart, ModuleHost.rediscover): the list on
 # standard output. It forks nothing per entry: module.json is looked for first, and the
 # canonical path is the working directory after a `cd -P`, in this throwaway process.
 find_modules() {

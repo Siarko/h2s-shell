@@ -26,7 +26,8 @@ TestCase {
     }
     property var _savedDisabled: []
     property var _privilegedAnswers: ({})
-    property var _savedAcknowledged: undefined
+    property string _savedAcknowledged: ""
+    property var _savedEnabled: []
     property string _mark: ""
     property var _steps: []
     property var _created: []
@@ -71,7 +72,8 @@ TestCase {
 
     function _end() {
         Config.disabledModules = _savedDisabled;
-        Config.acknowledgedModules = _savedAcknowledged;
+        Config.setAcknowledgedModulesText(_savedAcknowledged);
+        Config.enabledModules = _savedEnabled;
         host.unload();
         for (const object of _created)
             object?.destroy();
@@ -105,6 +107,8 @@ TestCase {
     function runAsync() {
         _savedDisabled = host._plainList(Config.disabledModules);
         Config.disabledModules = [];
+        _savedAcknowledged = Config.acknowledgedModulesText;
+        _savedEnabled = host._plainList(Config.enabledModules);
 
         // Every fixture, and good twice more in other spellings of its directory
         _then("the config is read", () => Config.ready, () => {
@@ -681,13 +685,12 @@ TestCase {
             declaredMain.tryStart([declaredHandle.programs.pkexec.path, "x"], options("not a declared program"));
             // The declared module's handle used from code that is no module's (this suite): refused
             declaredHandle.privileged.start([declaredHandle.programs.talk.path, "x"], options("from outside"));
-            // An acknowledgement that does not say privileged: true (Config.acknowledgedModules)
-            suite._savedAcknowledged = Config.acknowledgedModules;
-            Config.acknowledgedModules = { privileged: { source: "user", address: fixtures + "/privileged", author: "", privileged: false } };
+            // An acknowledgement that does not say privileged: true (Config.acknowledgedModulesText)
+            Config.setAcknowledgedModules({ privileged: { source: "user", address: fixtures + "/privileged", author: "", privileged: false } });
             assertEqual(host.privilegedDeclaration("privileged", declaredHandle.programs).problem,
                         "asks for administrator rights; the user has not approved its declaration", "an acknowledgement without privileged: true: not approved");
             declaredMain.tryStart([declaredHandle.programs.talk.path, "x"], options("not approved"));
-            Config.acknowledgedModules = suite._savedAcknowledged;
+            Config.setAcknowledgedModulesText(suite._savedAcknowledged);
             // The old PrivilegedAction, from code the shell's own host cannot trace to a module
             // (this host's fixture): refused, fail closed
             suite._mark = undeclaredHandle.dataDirectory + "/pkexec-ran";
@@ -1186,7 +1189,202 @@ TestCase {
             assertEqual(host._going.length, 0, "a restarting main deleted from outside: nothing left waiting");
             host.unload();
         }, 3000);
+        _trustSteps();
         _clock.start();
+    }
+
+    // ---- Sources and confirmations (notes/plans/modules-management.md §3, §5) ----
+    //
+    // A host that confirms, its places in the test's own directory: a development path, a user
+    // root (a folder, a folder turned off, a link to a privileged module), a built-in root
+    // with builtin.json. Found by the launcher's own search (rediscover), read by the source
+    // check: the first start acknowledges what is on; a module put there later starts
+    // unconfirmed; a changed author or a first privileged declaration holds one for approval;
+    // confirm() turns it on; nothing acts while locked; a late search loses; safe mode left in
+    // place; the modules on written and read back.
+
+    readonly property string _trustRoot: _scratch + "/trust"
+    property var _trustHost: null
+    property var _trustReader: null
+    property bool _trustWritten: false
+    property var _trustAll: []
+    // A file's text as last read, and whether a read is under way (a step's condition)
+    property var _fileTexts: ({})
+    property var _fileReading: ({})
+
+    function _fileReads(path, expected) {
+        if (!_fileReading[path]) {
+            _fileReading[path] = true;
+            _sh("cat \"$1\" 2>/dev/null || echo '(none)'", [path], (code, output) => {
+                suite._fileTexts[path] = output.trim();
+                suite._fileReading[path] = false;
+            });
+        }
+        return _fileTexts[path] === expected;
+    }
+
+    // Writes files ({ path below the root: text }) and links ([[link, target]]) under the root
+    function _writeTree(files, links) {
+        suite._trustWritten = false;
+        const argv = [_trustRoot];
+        for (const path of Object.keys(files))
+            argv.push("f", path, files[path]);
+        for (const link of links ?? [])
+            argv.push("l", link[0], link[1]);
+        _sh("T=$1; shift; while [ $# -ge 3 ]; do mkdir -p \"$(dirname \"$T/$2\")\"; "
+            + "if [ \"$1\" = f ]; then printf '%s\\n' \"$3\" > \"$T/$2\"; else ln -sfn \"$T/$3\" \"$T/$2\"; fi; shift 3; done", argv,
+            () => suite._trustWritten = true);
+    }
+
+    function _manifest(id, extra) {
+        return JSON.stringify(Object.assign({ id: id, name: id.charAt(0).toUpperCase() + id.slice(1), version: "1.0.0", api: "1.36" }, extra ?? {}));
+    }
+
+    function _trust(id) {
+        return _trustHost?.status(id) ?? null;
+    }
+
+    function _trustSettled() {
+        return _trustHost !== null && _trustHost.settled && !_trustHost.checkingPrograms && !_trustHost.discovering;
+    }
+
+    function _trustSteps() {
+        const user = "data/h2s-shell/modules/";
+        const privileged = { optionalPrograms: ["sh"], privileged: { why: "Test", programs: ["sh"] } };
+        _then("the main host is done", () => true, () => {
+            _writeTree({
+                [user + "old/module.json"]: _manifest("old", { author: "Anna" }),
+                [user + "off/module.json"]: _manifest("off"),
+                ["src/linked/module.json"]: _manifest("linked", privileged),
+                ["builtin/shipped/module.json"]: _manifest("shipped"),
+                ["builtin/shipped-off/module.json"]: _manifest("shipped-off"),
+                ["builtin/builtin.json"]: JSON.stringify({ off: ["shipped-off"] }),
+                ["dev/devmod/module.json"]: _manifest("devmod", { main: "Main.qml" }),
+                ["dev/devmod/Main.qml"]: "import QtQuick\nQtObject {}"
+            }, [[user + "linked", "src/linked"]]);
+        });
+        _then("the trust tree is written", () => _trustWritten, () => {
+            const places = ModuleInstallRules.sourcePlaces({ dataHome: _trustRoot + "/data", modulePath: _trustRoot + "/dev", moduleDataDirs: "",
+                                                             builtin: _trustRoot + "/builtin" });
+            suite._trustHost = _hostComponent.createObject(suite, {
+                confirmations: true, sourcePlaces: places, modulesOnFile: _trustRoot + "/modules-on",
+                discoveryCommand: ["bash", Quickshell.shellDir + "/scripts/launch.sh", "--discover-modules"],
+                discoveryEnvironment: { XDG_DATA_HOME: _trustRoot + "/data", H2S_SHELL_MODULE_PATH: _trustRoot + "/dev",
+                                        H2S_SHELL_MODULE_DATA_DIRS: "", H2S_SHELL_BUILTIN_MODULES: _trustRoot + "/builtin" }
+            });
+            _created.push(_trustHost);
+            // Never written: the first start's baseline
+            Config.setAcknowledgedModules(undefined);
+            Config.disabledModules = ["off"];
+            Config.enabledModules = [];
+            assertEqual(_trustHost.rediscover(), "", "the launcher's search started");
+        });
+        _then("the first start settles and writes its baseline", () => _trustSettled() && _trustHost.acknowledgements !== undefined
+              && _trust("off")?.state === "unconfirmed" && _trust("old")?.state === "loaded", () => {
+            assertEqual(_trustHost.statuses.map(status => status.id).join(" "), "devmod linked off old shipped shipped-off",
+                        "the launcher's search, loaded in place: development path, user root, built-in root");
+            suite._trustAll = _trustHost.directories.slice();
+            const label = id => _trust(id)?.source + " | " + _trust(id)?.sourceLabel;
+            assertEqual(label("devmod"), "developer | Development path", "a module on the development path: developer");
+            assertEqual(label("old"), "user | Your copy", "a folder placed in the user root: user, \"Your copy\"");
+            assertEqual(label("linked"), "user | Your link → " + _trust("linked").directory, "a link placed there: user, where it leads");
+            assertEqual(label("shipped"), "builtin | Built-in", "in the built-in root: builtin");
+            assertEqual(_trust("shipped")?.state, "loaded", "… loaded, never asked about");
+            assertEqual(_trust("shipped-off")?.state + " " + _trust("shipped-off")?.enabled, "disabled false", "listed off by builtin.json: off");
+            const list = _trustHost.acknowledgements;
+            assertEqual(Object.keys(list).sort().join(" "), "linked old", "the baseline: the hand-placed modules that were on, acknowledged as found");
+            assertEqual(JSON.stringify(list.linked), JSON.stringify({ source: "user", address: _trust("linked").directory, author: "", privileged: true }),
+                        "… the link with its privileged declaration consented (it stays on, with no prompt)");
+            assertEqual(list.old.author, "Anna", "… with its author");
+            assertEqual(_trust("linked")?.state, "loaded", "the privileged link stays loaded");
+            assertEqual(_trustHost.privilegedDeclaration("linked", _trustHost.handle("linked").programs).problem, "",
+                        "… and its runs as administrator are approved");
+            const off = _trust("off");
+            assertEqual(off?.state + " " + JSON.stringify(off?.confirmation), "unconfirmed [\"new\"]",
+                        "one that was off at the first start: unconfirmed once the list is written");
+            assertEqual(_trustHost.setEnabled("off", true), false, "setEnabled refuses a module that waits for confirmation");
+            assertEqual(_trustHost.enableProblem("off"), "Off is new and not part of h2s-shell: confirm it first (modules confirm off)", "… and says why");
+            assert(_trustHost.setEnabled("shipped-off", true), "a built-in module that starts off: turned on");
+            assertEqual(_trustHost._plainList(Config.enabledModules).join(" "), "shipped-off", "… remembered in enabledModules");
+        });
+        _then("the built-in module turned on loads", () => _trust("shipped-off")?.state === "loaded", () => {
+            assert(_trustHost.setEnabled("shipped-off", false), "… and off again");
+            assertEqual(_trustHost._plainList(Config.enabledModules).length, 0, "… gone from enabledModules");
+            assertEqual(_trustHost.confirm("off"), "", "confirm: done");
+            assertEqual(_trustHost.acknowledgements.off?.source, "user", "… its acknowledgement written");
+        });
+        _then("confirming turns it on", () => _trust("off")?.state === "loaded" && _trust("shipped-off")?.state === "disabled", () => {
+            assert(!_trustHost._plainList(Config.disabledModules).includes("off"), "confirm took it off the disabled list");
+        });
+        _then("the modules on are written", () => _fileReads(_trustRoot + "/modules-on", "devmod\nlinked\noff\nold\nshipped"), () => {
+            // A module put there later, an author changed, a main changed in place
+            _writeTree({
+                [user + "fresh/module.json"]: _manifest("fresh"),
+                [user + "old/module.json"]: _manifest("old", { author: "Bob" }),
+                ["dev/devmod/Main.qml"]: "import QtQuick\nQtObject { property int changed: 1 }"
+            });
+        });
+        _then("the changes are written", () => _trustWritten, () => {
+            assertEqual(_trustHost.rediscover(), "", "searched again without a restart");
+        });
+        _then("the search again loads what changed", () => _trustSettled() && _trust("fresh")?.state === "unconfirmed" && _trust("old")?.state === "approval", () => {
+            assertEqual(JSON.stringify(_trust("fresh").confirmation), "[\"new\"]", "a module put on disk after the first start: unconfirmed, new");
+            assertEqual(JSON.stringify(_trust("old").confirmation), "[\"author\"]", "a hand-placed module whose author changed: held for approval");
+            assertEqual(_trustHost.enableProblem("old"), "Old now names another author: approve it first (modules confirm old)", "… said");
+            assertEqual(JSON.stringify(_trustHost.restartNeeded), "[\"Devmod\"]", "a main changed in place since the engine built it: a restart needed");
+            assertEqual(JSON.stringify(_trustHost.describe().restartNeeded), "[\"Devmod\"]", "… in modules list");
+            assertEqual(_trust("devmod")?.state, "loaded", "… it keeps running");
+            _trustHost.locked = true;
+            assertEqual(_trustHost.confirm("fresh"), "Refused while the session is locked", "locked: confirm refused");
+            assertEqual(_trustHost.rediscover(), "Refused while the session is locked", "locked: the search refused");
+            _trustHost.locked = false;
+            assertEqual(_trustHost.confirm("devmod"), "devmod needs no confirmation", "confirm on a module that needs none: said, nothing done");
+            assertEqual(_trustHost.confirm("nope"), "No module \"nope\"", "confirm on no module: said");
+            assertEqual(_trustHost.confirm("fresh", "/elsewhere/fresh"), "The module changed: fresh is now " + _trust("fresh").directory,
+                        "confirm for another directory than the id's now: refused");
+            assertEqual(_trust("fresh")?.state, "unconfirmed", "… nothing done");
+            assertEqual(_trustHost.confirm("fresh") + _trustHost.confirm("old"), "", "confirm both");
+        });
+        _then("both load once confirmed", () => _trust("fresh")?.state === "loaded" && _trust("old")?.state === "loaded", () => {
+            assertEqual(_trustHost.acknowledgements.old.author, "Bob", "the approval took the new author");
+            _writeTree({ [user + "fresh/module.json"]: _manifest("fresh", privileged) });
+        });
+        _then("fresh now declares privileged", () => _trustWritten, () => _trustHost.rediscover());
+        _then("a first privileged declaration is held", () => _trustSettled() && _trust("fresh")?.state === "approval", () => {
+            assertEqual(JSON.stringify(_trust("fresh").confirmation), "[\"privileged\"]", "a hand-placed module that starts declaring administrator actions: approval");
+            assertEqual(_trustHost.privilegedDeclaration("fresh", _trustHost.handle("fresh").programs).problem,
+                        "asks for administrator rights; the user has not approved its declaration", "… its runs as administrator refused");
+            // A search started before a load answers for nothing
+            _trustHost.discoveryCommand = ["sh", "-c", "sleep 0.3; printf %s \"$1\"; : > \"$2\"", "sh", _trustAll.join(":"), _trustRoot + "/searched"];
+            assertEqual(_trustHost.rediscover(), "", "a slow search started");
+            _trustHost.load([_trustAll[0]], {});
+        });
+        _then("the slow search has answered", () => _fileReads(_trustRoot + "/searched", ""), () => {
+            assertEqual(_trustHost.directories.join(":"), _trustAll[0], "… its answer lost to the load after it");
+        });
+        _then("the modules on follow", () => _trustSettled() && _fileReads(_trustRoot + "/modules-on", "devmod"), () => {
+            assertEqual(_trustHost.loadWithoutSafeMode(), "Not in safe mode", "out of safe mode: nothing to leave");
+            _trustHost.discoveryCommand = ["bash", Quickshell.shellDir + "/scripts/launch.sh", "--discover-modules"];
+            _trustHost.load(_trustAll, { safeMode: true });
+        });
+        _then("safe mode settles", () => _trustSettled() && _trust("devmod")?.state === "safe-mode", () => {
+            assertEqual(_trustHost.loadWithoutSafeMode(), "", "load without safe mode: the search started");
+        });
+        _then("the modules load out of safe mode, in place", () => _trustSettled() && !_trustHost.safeMode && _trust("old")?.state === "loaded", () => {
+            assertEqual(_trust("devmod")?.state + " " + _trust("fresh")?.state, "loaded approval", "… each in its own state");
+            suite._fileTexts = ({});
+        });
+        _then("the modules on are written again", () => _fileReads(_trustRoot + "/modules-on", "devmod\nlinked\noff\nold\nshipped"), () => {
+            suite._trustReader = _hostComponent.createObject(suite, { modulesOnFile: _trustRoot + "/modules-on" });
+            _created.push(_trustReader);
+            _trustReader.load([], {});
+        });
+        _then("a new host reads the modules on in the last run", () => _trustReader.previousModulesOn.length > 0, () => {
+            assertEqual(_trustReader.previousModulesOn.join(" "), "devmod linked off old shipped", "previousModulesOn: what the last run wrote");
+            assertEqual(JSON.stringify(_trustReader.describe().previousModulesOn), JSON.stringify(_trustReader.previousModulesOn), "… in modules list");
+            _trustHost.unload();
+            _trustReader.unload();
+        });
     }
 
     property var _providerProbe: null

@@ -784,8 +784,16 @@ TestCase {
         assertEqual(ModuleMergeRules.statusOf({ manifest: tailscale, state: "loaded" }).setupHints.length, 0, "… not otherwise");
         assertEqual(ModuleMergeRules.statusOf(null).state, "failed", "a status of nothing: failed, no throw");
         assertEqual(Object.keys(status).sort().join(","),
-                    "api,deprecations,description,directory,enabled,errors,id,missingPrograms,name,setupHints,shadowedBy,state,version,warnings",
+                    "api,confirmation,deprecations,description,directory,enabled,errors,id,installedFor,missingPrograms,name,replaces,setupHints,shadowedBy,source,sourceLabel,state,version,warnings",
                     "a status holds exactly these fields (plain data)");
+        const sourced = ModuleMergeRules.statusOf({ manifest: tailscale, state: "unconfirmed", source: "user", sourceLabel: "Your copy",
+                                                    replaces: [{ directory: "/b/ts", source: "builtin", version: "1.0.0", extra: 1 }],
+                                                    installedFor: "notes", confirmation: ["new"] });
+        assertEqual(JSON.stringify([sourced.source, sourced.sourceLabel, sourced.replaces, sourced.installedFor, sourced.confirmation]),
+                    JSON.stringify(["user", "Your copy", [{ directory: "/b/ts", source: "builtin", version: "1.0.0" }], "notes", ["new"]]),
+                    "a status carries its source, what it replaces, what it was installed for and why it waits");
+        assertEqual(JSON.stringify([status.source, status.replaces, status.installedFor, status.confirmation]), JSON.stringify(["", [], "", []]),
+                    "… none of them given: empty");
         assertEqual(status.deprecations.length, 0, "a status of a module that uses no old way: no deprecations");
         const oldWays = [rules.deprecation("slots", "`anchors`")];
         const deprecated = ModuleMergeRules.statusOf({ manifest: tailscale, state: "loaded", warnings: [], deprecations: oldWays });
@@ -2092,6 +2100,17 @@ TestCase {
         for (const junk of ["", "abc", "2", "-3 1:2", "99999 1:2", null, "refused", "1\n2", "2 x:y"])
             assert(!ModuleFileRules.startGuard(junk).safeMode, "guard: garbage counts as 0 — " + JSON.stringify(junk));
         assertEqual(ModuleFileRules.guardClearMs, 30000, "the guard's window is the launcher's quick-death window (30 s)");
+
+        // A module's files fingerprinted (a change in place needs a restart), the modules on
+        const print = ModuleFileRules.fingerprint({ "Main.qml": "Item {}", "qmldir": "x" });
+        assertEqual(print, ModuleFileRules.fingerprint({ "qmldir": "x", "Main.qml": "Item {}" }), "fingerprint: the same files, the same, whatever the order");
+        assert(print !== ModuleFileRules.fingerprint({ "Main.qml": "Item { }", "qmldir": "x" }), "fingerprint: a changed text, another");
+        assert(print !== ModuleFileRules.fingerprint({ "Other.qml": "Item {}", "qmldir": "x" }), "fingerprint: a renamed file, another");
+        assert(ModuleFileRules.fingerprint({ "a": "bc" }) !== ModuleFileRules.fingerprint({ "ab": "c" }), "fingerprint: names and texts kept apart");
+        assertEqual(typeof ModuleFileRules.fingerprint(null), "string", "fingerprint: nothing, no throw");
+        assertEqual(JSON.stringify(ModuleFileRules.parseModulesOn(["tailscale", " weather ", "tailscale", "Bad", "", "x;y", null])),
+                    JSON.stringify(["tailscale", "weather"]), "the modules on: valid ids, each once");
+        assertEqual(JSON.stringify(ModuleFileRules.parseModulesOn("tailscale")), "[]", "… not lines: none");
 
         // What a root object declares (the initial properties the core gives it)
         const declared = ModuleSourceRules.rootProperties("import QtQuick\n// property var top\nItem {\n    property var module: null\n    readonly property int x: 1\n"

@@ -25,12 +25,26 @@ import QtCore
 // line in the log): the host must never be what keeps the bar or the lock screen from coming
 // up. No module file is ever imported statically — a broken one would fail the whole config.
 //
-// Over IPC:
+// The host confirms modules (ModuleHost.confirmations) unless Config.readOnly (the test runners):
+// the places a module's source is told by come from the same environment the launcher's
+// search reads (ModuleInstallRules.sourcePlaces; the built-in root from
+// H2S_SHELL_BUILTIN_MODULES), the modules loaded are written to
+// $XDG_RUNTIME_DIR/h2s-shell-modules-on, and the search itself is the launcher's
+// (`launch.sh --discover-modules`, ModuleHost.rediscover).
+//
+// Over IPC (refused while the session is locked, but `list`):
 //   qs ipc call modules list                 JSON: { api, safeMode, safeModeReason, hostError,
 //                                            testMode, checkingPrograms, checkingFiles, startGuard,
-//                                            ignoredEntries, modules: [status…] }
+//                                            ignoredEntries, confirmations, discovering,
+//                                            restartNeeded, previousModulesOn, modules: [status…] }
 //   qs ipc call modules setEnabled <id> <on> turns a module on or off, as Settings → Modules
-//                                            will (Config.disabledModules); "" or why not
+//                                            will (Config.disabledModules); "" or why not — a
+//                                            module waiting for confirmation is not turned on
+//   qs ipc call modules confirm <id>         acknowledges a module that waits for the user's
+//                                            confirmation or approval, and turns it on
+//   qs ipc call modules rediscover           searches for modules again and loads what it finds,
+//                                            without a restart
+//   qs ipc call modules loadWithoutSafeMode  the same, out of safe mode
 Singleton {
     id: root
 
@@ -47,6 +61,9 @@ Singleton {
     readonly property var activeIds: _host.activeIds
     readonly property var slots: _host.slots
     readonly property int generation: _host.generation
+    // The modules whose files changed in place since the shell loaded them: a restart loads
+    // them (ModuleHost.restartNeeded; in memory, so a restart clears it)
+    readonly property var restartNeeded: _host.restartNeeded
 
     function slotContributions(name) {
         return _host.slotContributions(name);
@@ -95,6 +112,8 @@ Singleton {
 
     ModuleHost {
         id: _host
+        // (The lock screen is never read under the test runners, which build no lock)
+        locked: !Config.readOnly && (Lockscreen.locked || Lockscreen.restoring)
     }
 
     // The plain lists the core's registries read (ModuleLists: they never touch this
@@ -136,6 +155,18 @@ Singleton {
             // temporary one instead
             if (!Config.readOnly)
                 _host.dataRoot = SystemFactsRules.dataRoot(SystemFacts.dataHome);
+            // Sources, confirmations, the modules on and the search again: the shell's own
+            if (!Config.readOnly) {
+                _host.sourcePlaces = ModuleInstallRules.sourcePlaces({
+                    dataHome: SystemFacts.dataHome, modulePath: Quickshell.env("H2S_SHELL_MODULE_PATH"),
+                    moduleDataDirs: Quickshell.env("H2S_SHELL_MODULE_DATA_DIRS"), dataDirs: Quickshell.env("XDG_DATA_DIRS"),
+                    builtin: Quickshell.env("H2S_SHELL_BUILTIN_MODULES")
+                });
+                _host.confirmations = true;
+                _host.discoveryCommand = ["bash", Quickshell.shellDir + "/scripts/launch.sh", "--discover-modules"];
+                if (typeof runtime === "string" && runtime.startsWith("/"))
+                    _host.modulesOnFile = runtime + "/h2s-shell-modules-on";
+            }
             // Test seams (TestSeams): the guard's window, shortened by the lock test bed; a
             // directory put first on the file check's PATH (a `head` that hangs) and the
             // checks' deadline (tests/lock/tests/modules-hung.sh)
@@ -174,10 +205,26 @@ Singleton {
         }
 
         function setEnabled(id: string, on: bool): string {
+            if (_host.locked)
+                return "Refused while the session is locked";
             if (!_host.statuses.some(status => status.id === id))
-                return "No module \"" + id + "\"";
+                return "No module \"" + ModuleInstallRules._plain(id, 60) + "\"";
+            if (on && _host.enableProblem(id) !== "")
+                return _host.enableProblem(id);
             _host.setEnabled(id, on);
             return "";
+        }
+
+        function confirm(id: string): string {
+            return _host.confirm(id);
+        }
+
+        function rediscover(): string {
+            return _host.rediscover();
+        }
+
+        function loadWithoutSafeMode(): string {
+            return _host.loadWithoutSafeMode();
         }
     }
 }

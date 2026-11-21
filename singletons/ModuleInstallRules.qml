@@ -338,7 +338,8 @@ Singleton {
 
     // Whether turning a module on needs the user's confirmation. `found`: sourceOf's result;
     // `manifest`: its checked manifest ({ id, author, privileged }); `acknowledgements`:
-    // Config.acknowledgedModules — undefined when it was never written.
+    // ModuleHost.acknowledgements (Config.acknowledgedModulesText read) — undefined when it was
+    // never written.
     // → { needed, state, reasons, baseline }
     //   built-in, system, development copies: never needed;
     //   no list yet: not needed, `baseline` true — the first start acknowledges everything it
@@ -371,6 +372,180 @@ Singleton {
         if (wanted.author !== (typeof given.author === "string" ? given.author : ""))
             reasons.push("author");
         return reasons.length > 0 ? { needed: true, state: "approval", reasons: reasons, baseline: false } : fine;
+    }
+
+    // The acknowledgements as the config file keeps them (a JSON text) → what
+    // needsConfirmation takes: undefined for "" (never written: the baseline), else an object
+    // of the well-formed entries, { <id>: { source, address, author, privileged } }. A text
+    // that is not a JSON object reads as {}, and an entry that is not well formed is left out:
+    // what cannot be read asks again, never trusts.
+    function parseAcknowledgements(text) {
+        if (text === "" || text === undefined || text === null)
+            return undefined;
+        let data;
+        try {
+            data = typeof text === "string" ? JSON.parse(text) : null;
+        } catch (error) {
+            data = null;
+        }
+        const list = {};
+        if (!ModuleRules.isObject(data))
+            return list;
+        for (const id of Object.keys(data)) {
+            const entry = data[id];
+            if (!ModuleManifestRules.validId(id) || !ModuleRules.isObject(entry) || !sources.includes(entry.source)
+                    || typeof entry.address !== "string" || typeof entry.author !== "string" || typeof entry.privileged !== "boolean")
+                continue;
+            list[id] = { source: entry.source, address: entry.address, author: entry.author, privileged: entry.privileged };
+        }
+        return list;
+    }
+
+    // What the first start of a shell that confirms modules acknowledges, so that what ran
+    // before keeps running without a question (§5): `modules` [{ found, manifest, enabled }],
+    // the modules that count (not shadowed, a valid manifest). → { <id>: acknowledgementOf }
+    // for each one that is on and needs a confirmation by its source; built-in, system and
+    // development copies are never asked about and need none; one that is off then is asked
+    // about when it is turned on.
+    function baselineAcknowledgements(modules) {
+        const list = {};
+        for (const module of _list(modules)) {
+            const id = module?.manifest?.id;
+            if (!ModuleManifestRules.validId(id) || module.enabled !== true || exemptSources.includes(module.found?.source)
+                    || !sources.includes(module.found?.source) || ModuleRules.has(list, id))
+                continue;
+            list[id] = acknowledgementOf(module.found, module.manifest);
+        }
+        return list;
+    }
+
+    // Why a module cannot be turned on yet (needsConfirmation's answer `confirmation`), in a
+    // few words for `modules setEnabled`, with the command that confirms it; "" when it can.
+    // `name` and `id` from its manifest (shown as plain text, capped)
+    function confirmationText(name, id, confirmation) {
+        if (confirmation?.needed !== true)
+            return "";
+        const shown = _plain(typeof name === "string" && name !== "" ? name : String(id ?? ""), 60);
+        const command = " (modules confirm " + _plain(String(id ?? ""), 60) + ")";
+        const reasons = _list(confirmation.reasons);
+        if (confirmation.state === "approval") {
+            const what = reasons.includes("privileged") && reasons.includes("author") ? "now asks for administrator rights and names another author"
+                       : reasons.includes("privileged") ? "now asks for administrator rights" : "now names another author";
+            return shown + " " + what + ": approve it first" + command;
+        }
+        return shown + (reasons.includes("source") ? " comes from another place than the one confirmed" : " is new and not part of h2s-shell")
+             + ": confirm it first" + command;
+    }
+
+    // ---- What the host reads to tell sources apart (§3) ----
+
+    // The places sourceOf compares a module's directory with, as given (not yet canonical),
+    // from the shell's environment: { dataHome, modulePath (H2S_SHELL_MODULE_PATH),
+    // moduleDataDirs (H2S_SHELL_MODULE_DATA_DIRS: undefined when not set, which is not the
+    // same as set and empty), dataDirs (XDG_DATA_DIRS), builtin (H2S_SHELL_BUILTIN_MODULES) }
+    // — the launcher's own search (scripts/launch.sh, module_roots). → { user, versions,
+    // record, builtin, developer: [paths], system: [paths] }; only absolute paths, "" / [] else
+    function sourcePlaces(environment) {
+        const env = ModuleRules.isObject(environment) ? environment : {};
+        const places = paths(env.dataHome, "/");
+        const absolute = value => typeof value === "string" && value.startsWith("/") && !value.includes("\u0000") ? value : "";
+        const split = value => typeof value === "string" ? value.split(":").map(absolute).filter(path => path !== "") : [];
+        const dataDirs = typeof env.moduleDataDirs === "string" ? env.moduleDataDirs
+                       : typeof env.dataDirs === "string" && env.dataDirs !== "" ? env.dataDirs : "/usr/local/share:/usr/share";
+        return {
+            user: places.user, versions: places.versions, record: places.record,
+            builtin: absolute(env.builtin),
+            developer: split(env.modulePath),
+            system: split(dataDirs).map(path => path.replace(/\/+$/, "") + "/h2s-shell/modules")
+        };
+    }
+
+    // The shell script that reads them (the host's source check, run as the user, under a
+    // time limit): arguments the user root, the versions root, the built-in root, the record
+    // file, then pairs "developer <path>" / "system <path>". Prints, tab-separated:
+    //   root <kind> <canonical path>           each root that resolves (cd -P)
+    //   entry <link|dir> <path> <canonical>    each entry of the user root (at most 400), its
+    //                                          path under the canonical root, where it leads
+    //                                          ("" when nowhere: a dangling link, a file)
+    //   builtin <line> / builtin-state <missing|ok|unreadable>   builtin.json (64 KiB at most)
+    //   record <line> / record-state <…>       the record (256 KiB at most)
+    //   end                                    it got to the end
+    // A path holding a tab or a line break is left out.
+    readonly property string sourceCheckScript: "tab=$(printf '\\t'); nl=$(printf '\\nx'); nl=${nl%x}; "
+        + "canon() { (cd -P -- \"$1\" 2>/dev/null && pwd); }; "
+        + "plain() { case \"$1\" in *\"$tab\"*|*\"$nl\"*) return 1 ;; esac; return 0; }; "
+        + "root() { [ -n \"$2\" ] || return 0; real=$(canon \"$2\") || return 0; "
+        + "if plain \"$real\"; then printf 'root\\t%s\\t%s\\n' \"$1\" \"$real\"; fi; }; "
+        + "user=$1; versions=$2; builtin=$3; record=$4; shift 4; "
+        + "root user \"$user\"; root versions \"$versions\"; root builtin \"$builtin\"; "
+        + "while [ $# -ge 2 ]; do root \"$1\" \"$2\"; shift 2; done; "
+        + "base=; if [ -n \"$user\" ]; then base=$(canon \"$user\") || base=; fi; "
+        + "if [ -n \"$base\" ] && plain \"$base\"; then count=0; for path in \"$base\"/*; do "
+        + "[ -e \"$path\" ] || [ -L \"$path\" ] || continue; count=$((count + 1)); [ \"$count\" -le 400 ] || break; "
+        + "plain \"$path\" || continue; kind=dir; [ -L \"$path\" ] && kind=link; "
+        + "target=$(canon \"$path\") || target=; plain \"$target\" || target=; "
+        + "printf 'entry\\t%s\\t%s\\t%s\\n' \"$kind\" \"$path\" \"$target\"; done; fi; "
+        + "file() { if [ -z \"$2\" ] || { [ ! -e \"$2\" ] && [ ! -L \"$2\" ]; }; then printf '%s-state\\tmissing\\n' \"$1\"; return 0; fi; "
+        + "if [ ! -f \"$2\" ] || ! text=$(head -c \"$3\" -- \"$2\" 2>/dev/null); then printf '%s-state\\tunreadable\\n' \"$1\"; return 0; fi; "
+        + "printf '%s\\n' \"$text\" | while IFS= read -r line; do printf '%s\\t%s\\n' \"$1\" \"$line\"; done; "
+        + "printf '%s-state\\tok\\n' \"$1\"; }; "
+        + "file builtin \"${builtin:+$builtin/builtin.json}\" 65536; file record \"$record\" 262144; echo end"
+
+    // The arguments of sourceCheckScript for sourcePlaces' result
+    function sourceCheckArguments(places) {
+        const given = ModuleRules.isObject(places) ? places : {};
+        const text = value => typeof value === "string" ? value : "";
+        const pairs = [];
+        for (const path of _list(given.developer))
+            pairs.push("developer", text(path));
+        for (const path of _list(given.system))
+            pairs.push("system", text(path));
+        return [text(given.user), text(given.versions), text(given.builtin), text(given.record)].concat(pairs);
+    }
+
+    // What sourceCheckScript printed (its lines) → { complete, roots: { developer: [], user,
+    // versions, builtin, system: [] } (canonical), entries: [{ entry, isLink, target }],
+    // builtin: { state, text }, record: { state, text } }. Not `complete` (cut off, failed):
+    // nothing in it is used — every module is then "user", the unknown, never trusted.
+    function parseSourceCheck(lines) {
+        const empty = () => ({
+            complete: false, roots: { developer: [], user: "", versions: "", builtin: "", system: [] }, entries: [],
+            builtin: { state: "missing", text: "" }, record: { state: "missing", text: "" }
+        });
+        const result = empty();
+        const texts = { builtin: [], record: [] };
+        for (const raw of _list(lines)) {
+            const line = typeof raw === "string" ? raw : "";
+            const fields = line.split("\t");
+            if (line === "end") {
+                result.complete = true;
+            } else if (fields[0] === "root" && fields.length === 3 && _cleanPath(fields[2]) !== "") {
+                if (fields[1] === "developer" || fields[1] === "system") {
+                    if (!result.roots[fields[1]].includes(fields[2]))
+                        result.roots[fields[1]].push(fields[2]);
+                } else if (["user", "versions", "builtin"].includes(fields[1])) {
+                    result.roots[fields[1]] = fields[2];
+                }
+            } else if (fields[0] === "entry" && fields.length === 4 && _cleanPath(fields[2]) !== "" && result.entries.length < 400) {
+                result.entries.push({ entry: fields[2], isLink: fields[1] === "link", target: _cleanPath(fields[3]) });
+            } else if ((fields[0] === "builtin" || fields[0] === "record") && fields.length >= 2) {
+                texts[fields[0]].push(line.slice(fields[0].length + 1));
+            } else if ((fields[0] === "builtin-state" || fields[0] === "record-state") && ["missing", "ok", "unreadable"].includes(fields[1])) {
+                const which = fields[0].replace("-state", "");
+                result[which] = { state: fields[1], text: fields[1] === "ok" ? texts[which].join("\n") : "" };
+            }
+        }
+        return result.complete ? result : empty();
+    }
+
+    // The user root's entry a module's canonical directory was found through (an entry of
+    // parseSourceCheck's), as sourceOf takes it: { entry, isLink, target }, or null
+    function linkFor(directory, entries) {
+        const dir = _cleanPath(directory);
+        if (dir === "")
+            return null;
+        const found = _list(entries).find(each => each?.target === dir);
+        return found ? { entry: found.entry, isLink: found.isLink === true, target: found.target } : null;
     }
 
     // ---- Remove (§4, "Remove") ----

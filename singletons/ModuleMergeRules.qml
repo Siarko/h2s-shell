@@ -443,6 +443,11 @@ Singleton {
     // Every field plain data; nothing the module itself computed (no secrets).
     // `deprecations`: the old ways of the API the module still uses, one line each
     // (ModuleRules.deprecation) — they work, and go with the shell's next tightening.
+    // Where it comes from (ModuleInstallRules.sourceOf): `source` (the kind, "" while not
+    // known), `sourceLabel` (the card's words), `replaces` (the copies of its id it wins over,
+    // ModuleInstallRules.replaces), `installedFor` (the module it was installed for, from the
+    // record; "" for none); `confirmation`: why it waits for the user ([reasons] of
+    // ModuleInstallRules.needsConfirmation, [] when it does not).
     function statusOf(record) {
         const manifest = record?.manifest ?? null;
         const state = typeof record?.state === "string" ? record.state : "failed";
@@ -460,7 +465,12 @@ Singleton {
             deprecations: (record?.deprecations ?? []).slice(),
             missingPrograms: (record?.missingPrograms ?? []).slice(),
             setupHints: state === "missing-program" ? (manifest?.setupHints ?? []).slice() : [],
-            shadowedBy: record?.shadowedBy ?? ""
+            shadowedBy: record?.shadowedBy ?? "",
+            source: typeof record?.source === "string" ? record.source : "",
+            sourceLabel: typeof record?.sourceLabel === "string" ? record.sourceLabel : "",
+            replaces: (record?.replaces ?? []).map(each => ({ directory: String(each?.directory ?? ""), source: String(each?.source ?? ""), version: String(each?.version ?? "") })),
+            installedFor: typeof record?.installedFor === "string" ? record.installedFor : "",
+            confirmation: (record?.confirmation ?? []).slice()
         };
     }
 

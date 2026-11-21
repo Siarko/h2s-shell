@@ -142,6 +142,41 @@ TestCase {
                && keys.repeater.itemAt(3) === keyRows[2] && keys.repeater.itemAt(2).modelData === "X",
                "(g) … and through a move and an insert");
 
+        // (h) What turning a module off and on (Reload) can pick up: its main made again by
+        // URL after its file changed on disk, everything made from the old file gone. What
+        // this finds is ModuleFileRules.reloadPicksUpChanges, which decides whether a module
+        // whose files changed in place needs a restart of the shell (ModuleHost.restartNeeded);
+        // a new version in another directory (another URL) never does
+        const reloadDirectory = (Quickshell.env("XDG_RUNTIME_DIR") || "/tmp") + "/h2s-pin-reload-" + Date.now();
+        const writer = Qt.createQmlObject("import Quickshell.Io\nFileView { blockWrites: true; atomicWrites: false }", suite, "ReloadWriterPin.qml");
+        const write = (directory, value) => {
+            writer.path = directory + "/Reloaded.qml";
+            writer.setText("import QtQuick\nQtObject { property int value: " + value + " }\n");
+        };
+        const make = directory => {
+            const component = Qt.createComponent(ModuleFileRules.fileUrl(directory, "Reloaded.qml"), Component.PreferSynchronous);
+            return { error: component.errorString().trim(), object: component.status === Component.Ready ? component.createObject(suite) : null };
+        };
+        write(reloadDirectory, 1);
+        const before = make(reloadDirectory);
+        assertEqual(before.object?.value, 1, "(h) a file written at run time loads by URL: " + before.error);
+        before.object?.destroy();
+        gc();
+        write(reloadDirectory, 2);
+        const again = make(reloadDirectory);
+        console.log("  INFO: a module file changed on disk, made again by URL: value " + again.object?.value
+                    + (again.object?.value === 1 ? " (the old code: a module edited in place needs a restart)" : " (the new code: a reload picks it up)"));
+        assertEqual(again.object?.value, ModuleFileRules.reloadPicksUpChanges ? 2 : 1,
+                    "(h) a file changed on disk and made again by URL gives " + (ModuleFileRules.reloadPicksUpChanges ? "the new" : "the old")
+                    + " code (ModuleFileRules.reloadPicksUpChanges) — if this fails after an upgrade, what Reload picks up changed: set reloadPicksUpChanges to what the INFO line says");
+        write(reloadDirectory + "/next", 3);
+        const moved = make(reloadDirectory + "/next");
+        assertEqual(moved.object?.value, 3, "(h) … the file in another directory (a new version's) loads its own code: " + moved.error);
+        again.object?.destroy();
+        moved.object?.destroy();
+        writer.destroy();
+        Quickshell.execDetached(["rm", "-rf", "--", reloadDirectory]);
+
         for (const object of _held)
             object.destroy();
         _held = [];

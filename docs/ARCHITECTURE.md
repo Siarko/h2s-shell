@@ -665,8 +665,11 @@ the `qs.api` facade, the registries taking modules' contributions, slots and anc
 - **Discovery**: `scripts/launch.sh` (`discover_modules`, before every start of the shell)
   builds `H2S_SHELL_MODULES` (the shell's input; the launcher's output) — canonical module
   directories from `H2S_SHELL_MODULE_PATH` (the developer's list), then
-  `~/.local/share/h2s-shell/modules/*`, then the system data directories'
-  `h2s-shell/modules/*` (`H2S_SHELL_MODULE_DATA_DIRS`). Safe mode (no module loads): after
+  `~/.local/share/h2s-shell/modules/*`, then the built-in modules' directory
+  (`H2S_SHELL_BUILTIN_MODULES`, given by the shell's installation), then the system data
+  directories' `h2s-shell/modules/*` (`H2S_SHELL_MODULE_DATA_DIRS`). The running shell runs
+  the same search again (`launch.sh --discover-modules`) on `qs ipc call modules rediscover`
+  and loads its list in place. Safe mode (no module loads): after
   two deaths within 30 s of starting in a row (the launcher: `H2S_SHELL_SAFE_MODE=1`), or two of
   Quickshell's in-place relaunches after a crash in a row, neither living 30 s — which the
   launcher does not see; the shell counts them (`$XDG_RUNTIME_DIR/h2s-shell-module-starts`).
@@ -680,7 +683,27 @@ the `qs.api` facade, the registries taking modules' contributions, slots and anc
   `singletons/io/CommandRunner`, under
   the host's `checkTimeoutMs`), keeps a handle per module (`api/ModuleHandle.qml`) and each one's facts, and
   exposes the statuses and the merged contributions. `qs ipc call modules list` prints them;
-  `qs ipc call modules setEnabled <id> <bool>` turns one off or on (`Config.disabledModules`).
+  `qs ipc call modules setEnabled <id> <bool>` turns one off or on (`Config.disabledModules`;
+  `Config.enabledModules` for a built-in one its `builtin.json` lists as off).
+- **Sources and confirmations**: at each load a process reads where the modules lie — the
+  user root and its entries (links or folders), the built-in directory and its
+  `builtin.json`, the record of what the shell installed — and each module's status says
+  where it comes from (`source`, `sourceLabel`, `replaces`, `installedFor`;
+  `ModuleInstallRules.sourceOf`). A module that is not built in, the system's or on the
+  development path loads only once the user has acknowledged it (`Config.acknowledgedModules`,
+  kept in the config file: source, address, author, whether it runs administrator actions):
+  a new one is `unconfirmed`, a hand-placed one that now declares administrator actions or
+  names another author waits for `approval` (`ModuleInstallRules.needsConfirmation`).
+  `qs ipc call modules confirm <id>` acknowledges it and turns it on; `setEnabled` refuses
+  it, saying why. The first start that confirms finds no list and writes one from the
+  hand-placed modules that are on, so they keep running without a question. Nothing is
+  confirmed, searched for or loaded again over IPC while the session is locked. The host
+  writes the ids of the modules loaded to `$XDG_RUNTIME_DIR/h2s-shell-modules-on` (never in
+  safe mode) and reads at its first load what the last run wrote (`previousModulesOn`);
+  `qs ipc call modules loadWithoutSafeMode` loads the modules in place out of safe mode. A
+  module whose files changed in place since the engine first built them runs its old code
+  until the shell restarts (the engine keeps a file by URL for its life,
+  `tests/QuickshellPinTest.qml` (h)): it is named in `restartNeeded`.
 - **The registries** read the merged lists — through `ModuleLists` (plain values the
   `Modules` singleton feeds; never `Modules` itself, so the lock screen, which reads its
   settings through Profiles, never constructs or waits for the host; modules arrive after the

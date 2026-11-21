@@ -12,6 +12,13 @@
 #     H2S_SHELL_SAFE_MODE=1, loads no module, and the lock still works; a start that lives
 #     past the quick-death window (30 s) ends it, and the next start picks up a module
 #     installed meanwhile (discovery runs before every start).
+# (3) Sources and confirmations (notes/plans/modules-management.md §3, §5): each module's
+#     source in `modules list`; the first start acknowledges the hand-placed modules it finds
+#     on (the config file keeps them) and writes the modules on to the runtime directory; the
+#     safe-mode start tells them and loads them in place on `modules loadWithoutSafeMode`; the
+#     module installed meanwhile starts unconfirmed — `modules setEnabled` refuses it, `modules
+#     confirm` turns it on and the config file keeps it; one put there while the shell runs is
+#     found by `modules rediscover`, without a restart.
 #
 # The launcher's first pause is 0.2 s here (H2S_LAUNCHER_TEST_TIMINGS): the schedule of the
 # restarts is not the subject.
@@ -75,6 +82,24 @@ check_within 15 "beta (data home): loaded" module_state_is beta loaded
 check "beta-copy (data dirs, same id): reported as a duplicate" module_state_is beta-copy duplicate
 check_within 15 "zeta: loaded" module_state_is zeta loaded
 check "the launcher logged what it found" grep -aq "modules: 5 (" "$RUN/h2s-shell-launcher.log"
+check "sources: the development path's, the user root's, the system's" \
+    test "$(module_field explicit source) $(module_field alpha source) $(module_field beta source) $(module_field zeta source)" = "developer user user system"
+config_file=$XDG_CONFIG_HOME/h2s_shell/config.json
+# The ids the config file holds acknowledgements for, sorted ("none" while never written)
+acknowledged() {
+    python3 -I -c '
+import json, sys
+try:
+    text = json.load(open(sys.argv[1])).get("acknowledgedModules", "")
+except Exception:
+    text = ""
+print(" ".join(sorted(json.loads(text))) if text else "none")' "$config_file"
+}
+acknowledged_are() { [ "$(acknowledged)" = "$1" ]; }
+check_within 5 "the first start acknowledged the hand-placed modules it found on, in the config file" acknowledged_are "alpha beta"
+modules_on() { tr '\n' ' ' < "$RUN/h2s-shell-modules-on" 2> /dev/null; }
+modules_on_are() { [ "$(modules_on)" = "$1" ]; }
+check_within 5 "the modules on are written to the runtime directory" modules_on_are "alpha beta explicit zeta "
 
 # ---- (2) safe mode ----
 first=$SHELL_PID
@@ -94,6 +119,8 @@ check_within 15 "… none of them: each is in safe-mode, the duplicate a duplica
     module_states_are "explicit: safe-mode, alpha: safe-mode, beta: safe-mode, beta-copy: duplicate, zeta: safe-mode"
 log "modules in safe mode: $(module_states)"
 check "… the launcher said so" grep -aq "starting it in safe mode (no modules)" "$RUN/h2s-shell-launcher.log"
+check "… it tells the modules on in the last run" test "$(module_field - previousModulesOn)" = "['alpha', 'beta', 'explicit', 'zeta']"
+check "… which safe mode left as they were" test "$(modules_on)" = "alpha beta explicit zeta "
 lock_by_ipc
 check_within 5 "in safe mode the lock locks" compositor_locked
 wake_prompt || fail "the prompt did not wake"
@@ -101,6 +128,9 @@ check_within 5 "the methods are known" state_is armed true
 type_text "$LOCKTEST_PASSWORD"
 press_key Return
 check_within 10 "… and the password unlocks" compositor_unlocked
+check "modules loadWithoutSafeMode: started" test -z "$(shell_ipc modules loadWithoutSafeMode)"
+check_within 15 "… out of safe mode in place, the modules load" module_state_is alpha loaded
+check "… the same shell" test "$(module_field - safeMode)" = false
 
 # A start that lives past the quick-death window ends safe mode; a module installed meanwhile
 # is found at the next start
@@ -115,5 +145,17 @@ signal_shell KILL
 wait_for_new_shell "$third" 10 || abort "no new shell after the third kill"
 check "a start that lived 30 s ended safe mode" test -z "$(safe_mode_of_shell)"
 check_within 15 "… the modules load again" module_state_is alpha loaded
-check_within 15 "… and the module installed meanwhile is found" module_state_is gamma loaded
+check_within 15 "… and the module installed meanwhile is found: off until confirmed" module_state_is gamma unconfirmed
+check "… its source: user" test "$(module_field gamma source)" = user
+check "modules setEnabled refuses it, saying why" \
+    test "$(shell_ipc modules setEnabled gamma true)" = "gamma is new and not part of h2s-shell: confirm it first (modules confirm gamma)"
+check "modules confirm: done" test -z "$(shell_ipc modules confirm gamma)"
+check_within 15 "… it loads" module_state_is gamma loaded
+check_within 5 "… the config file keeps its acknowledgement" acknowledged_are "alpha beta gamma"
+fourth=$SHELL_PID
+make_module "$home_modules/delta" delta
+check "modules rediscover: started" test -z "$(shell_ipc modules rediscover)"
+check_within 15 "… the module put there while the shell runs is found, off until confirmed" module_state_is delta unconfirmed
+check "… without a restart" test "$SHELL_PID" = "$fourth"
+check "… the others still loaded" module_states_are "explicit: loaded, alpha: loaded, beta: loaded, delta: unconfirmed, gamma: loaded, beta-copy: duplicate, zeta: loaded"
 check "the supervisor is still the first one" kill -0 "$SUPERVISOR_PID"

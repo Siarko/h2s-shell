@@ -496,7 +496,7 @@ Singleton {
     //                    it uses
     //   safe-mode        the shell started in safe mode: no module is loaded
     //   unconfirmed      neither built in, the system's nor on the development path, and
-    //                    not yet confirmed by the user (Config.acknowledgedModules): off until
+    //                    not yet confirmed by the user (ModuleHost.acknowledgements): off until
     //                    the user enables it through the confirmation
     //                    (ModuleInstallRules.needsConfirmation)
     //   approval         placed by hand and changed since it was confirmed (it now declares

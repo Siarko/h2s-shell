@@ -54,6 +54,7 @@ TestCase {
         _progress();
         _record();
         _builtin();
+        _hostReads();
         _list();
         _checks();
     }
@@ -500,6 +501,97 @@ TestCase {
         assertEqual(on("clock", "user"), true, "builtin.json speaks for built-in modules only");
         assertEqual(on("weather", "user", ["weather"]), false, "disabledModules: off");
         assertEqual(rules.enabledByLists("x", "builtin", null, null, null), true, "no lists: on, no throw");
+    }
+
+    // What the host reads and keeps: the acknowledgements' text, the first start's baseline,
+    // the refusal's words, the places from the environment, the source check's output
+    function _hostReads() {
+        const rules = ModuleInstallRules;
+        const given = { source: "user", address: "/home/anna/src/ts", author: "Anna", privileged: true };
+        assertEqual(rules.parseAcknowledgements(""), undefined, "acknowledgements never written: undefined (the baseline)");
+        assertEqual(rules.parseAcknowledgements(undefined), undefined, "… also when absent");
+        assertEqual(JSON.stringify(rules.parseAcknowledgements(JSON.stringify({ tailscale: given }))), JSON.stringify({ tailscale: given }),
+                    "a written list reads back");
+        for (const broken of ["{", "[]", "null", "3", "\"x\""])
+            assertEqual(JSON.stringify(rules.parseAcknowledgements(broken)), "{}", "a text that is not a JSON object: {} (asks again, never trusts) — " + broken);
+        const mixed = rules.parseAcknowledgements(JSON.stringify({ tailscale: given, Bad: given, weather: { source: "user", address: 3 },
+                                                                     clock: Object.assign({}, given, { source: "elsewhere" }), notes: "yes" }));
+        assertEqual(Object.keys(mixed).join(","), "tailscale", "entries not well formed are left out: a bad id, a bad field, an unknown source");
+
+        const user = { source: "user", address: "/home/anna/src/ts" };
+        const manifest = id => ({ id: id, author: "Anna", privileged: id === "tailscale" ? { why: "x", programs: [] } : null });
+        const baseline = rules.baselineAcknowledgements([
+            { found: user, manifest: manifest("tailscale"), enabled: true },
+            { found: { source: "user", address: "/x/off" }, manifest: manifest("off"), enabled: false },
+            { found: { source: "builtin", address: "/b/clock" }, manifest: manifest("clock"), enabled: true },
+            { found: { source: "developer", address: "/d/dev" }, manifest: manifest("dev"), enabled: true },
+            { found: { source: "repository", address: "https://codeberg.org/anna/w.git#v1" }, manifest: manifest("weather"), enabled: true },
+            { found: user, manifest: { id: "Bad" }, enabled: true },
+            null
+        ]);
+        assertEqual(JSON.stringify(baseline), JSON.stringify({
+            tailscale: { source: "user", address: "/home/anna/src/ts", author: "Anna", privileged: true },
+            weather: { source: "repository", address: "https://codeberg.org/anna/w.git", author: "Anna", privileged: false }
+        }), "baseline: what is on and would be asked about, as it is (privileged included); off, built-in, development: not");
+        assertEqual(JSON.stringify(rules.needsConfirmation(user, manifest("tailscale"), baseline)), JSON.stringify({ needed: false, state: "", reasons: [], baseline: false }),
+                    "… after it, the module that ran before needs no confirmation");
+        assertEqual(rules.needsConfirmation({ source: "user", address: "/x/off" }, manifest("off"), baseline).state, "unconfirmed",
+                    "… one that was off asks when turned on");
+
+        const text = (state, reasons) => rules.confirmationText("Tailscale", "tailscale", { needed: true, state: state, reasons: reasons });
+        assertEqual(text("unconfirmed", ["new"]), "Tailscale is new and not part of h2s-shell: confirm it first (modules confirm tailscale)", "refusal: new");
+        assertEqual(text("unconfirmed", ["source"]), "Tailscale comes from another place than the one confirmed: confirm it first (modules confirm tailscale)", "refusal: another source");
+        assertEqual(text("approval", ["privileged"]), "Tailscale now asks for administrator rights: approve it first (modules confirm tailscale)", "refusal: privileged");
+        assertEqual(text("approval", ["author"]), "Tailscale now names another author: approve it first (modules confirm tailscale)", "refusal: author");
+        assertEqual(text("approval", ["privileged", "author"]), "Tailscale now asks for administrator rights and names another author: approve it first (modules confirm tailscale)", "refusal: both");
+        assertEqual(rules.confirmationText("T", "t", { needed: false }) + rules.confirmationText("T", "t", null), "", "nothing to confirm: no words");
+        assert(!rules.confirmationText("A\nB\u202e", "t", { needed: true, state: "unconfirmed", reasons: ["new"] }).includes("\n"), "a name from outside: one line");
+
+        const places = rules.sourcePlaces({ dataHome: "/home/anna/.local/share", modulePath: "/home/anna/dev:relative::/x/y",
+                                            dataDirs: "/usr/local/share:/usr/share/", builtin: "/home/anna/.local/share/h2s-shell/builtin" });
+        assertEqual(JSON.stringify(places), JSON.stringify({
+            user: "/home/anna/.local/share/h2s-shell/modules", versions: "/home/anna/.local/share/h2s-shell/module-versions",
+            record: "/home/anna/.local/share/h2s-shell/module-sources.json", builtin: "/home/anna/.local/share/h2s-shell/builtin",
+            developer: ["/home/anna/dev", "/x/y"], system: ["/usr/local/share/h2s-shell/modules", "/usr/share/h2s-shell/modules"]
+        }), "places: as the launcher searches — the user root, the built-in root, the development path's absolute entries, each data dir's");
+        assertEqual(JSON.stringify(rules.sourcePlaces({ dataHome: "/h", moduleDataDirs: "", dataDirs: "/usr/share" }).system), "[]",
+                    "H2S_SHELL_MODULE_DATA_DIRS set and empty: no system places");
+        assertEqual(JSON.stringify(rules.sourcePlaces({ dataHome: "/h", moduleDataDirs: null, dataDirs: "" }).system),
+                    JSON.stringify(["/usr/local/share/h2s-shell/modules", "/usr/share/h2s-shell/modules"]), "neither set: the spec's default data dirs");
+        assertEqual(rules.sourcePlaces({ builtin: "relative" }).builtin + rules.sourcePlaces(null).user, "", "a relative built-in root, no environment: none");
+        assertEqual(JSON.stringify(rules.sourceCheckArguments(places)), JSON.stringify([places.user, places.versions, places.builtin, places.record,
+                    "developer", "/home/anna/dev", "developer", "/x/y", "system", "/usr/local/share/h2s-shell/modules", "system", "/usr/share/h2s-shell/modules"]),
+                    "the check's arguments: the roots, the record, then kind and path pairs");
+        assertEqual(JSON.stringify(rules.sourceCheckArguments(null)), JSON.stringify(["", "", "", ""]), "… none: four empty ones");
+
+        const checked = rules.parseSourceCheck([
+            "root\tuser\t/home/anna/.local/share/h2s-shell/modules", "root\tbuiltin\t/opt/builtin", "root\tdeveloper\t/home/anna/dev",
+            "root\tsystem\t/usr/share/h2s-shell/modules", "root\tsystem\t/usr/share/h2s-shell/modules", "root\tuser\trelative",
+            "entry\tlink\t/home/anna/.local/share/h2s-shell/modules/tailscale\t/home/anna/src/ts",
+            "entry\tdir\t/home/anna/.local/share/h2s-shell/modules/player\t/home/anna/.local/share/h2s-shell/modules/player",
+            "entry\tlink\t/home/anna/.local/share/h2s-shell/modules/gone\t",
+            "builtin\t{\"off\":", "builtin\t [\"player\"]}", "builtin-state\tok", "record-state\tmissing", "noise", "end"
+        ]);
+        assertEqual(JSON.stringify(checked.roots), JSON.stringify({ developer: ["/home/anna/dev"], user: "/home/anna/.local/share/h2s-shell/modules",
+                    versions: "", builtin: "/opt/builtin", system: ["/usr/share/h2s-shell/modules"] }), "the check's roots, canonical, each once; a relative one dropped");
+        assertEqual(checked.entries.length + " " + checked.entries[0].isLink + " " + checked.entries[1].isLink + " " + JSON.stringify(checked.entries[2].target),
+                    "3 true false \"\"", "its entries: links and folders, a dangling link leading nowhere");
+        assertEqual(JSON.stringify(rules.builtinOff(checked.builtin.text)), JSON.stringify({ ok: true, off: ["player"] }), "builtin.json's lines joined back");
+        assertEqual(checked.record.state, "missing", "no record: missing");
+        const cut = rules.parseSourceCheck(["root\tuser\t/home/anna/.local/share/h2s-shell/modules", "entry\tdir\t/a/b\t/a/b"]);
+        assertEqual(cut.complete + " " + cut.roots.user + cut.entries.length, "false 0", "cut off before its end: nothing of it is used");
+        assertEqual(rules.parseSourceCheck(null).complete, false, "nothing: not complete, no throw");
+
+        assertEqual(JSON.stringify(rules.linkFor("/home/anna/src/ts", checked.entries)),
+                    JSON.stringify({ entry: "/home/anna/.local/share/h2s-shell/modules/tailscale", isLink: true, target: "/home/anna/src/ts" }),
+                    "the entry a directory was found through: the link to it");
+        assertEqual(rules.linkFor("/elsewhere", checked.entries), null, "found through none: null");
+        const viaLink = rules.sourceOf("/home/anna/src/ts", rules.linkFor("/home/anna/src/ts", checked.entries), checked.roots, rules.parseRecord(""));
+        assertEqual(viaLink.source + " | " + viaLink.label + " | " + viaLink.address, "user | Your link → /home/anna/src/ts | /home/anna/src/ts",
+                    "a hand-made link in the user root: user, its address the directory it leads to");
+        assertEqual(rules.sourceOf("/home/anna/src/ts", null, checked.roots, rules.parseRecord("")).address, "/home/anna/src/ts",
+                    "… the same address when the entry is not known (an acknowledgement stays good)");
+        assertEqual(rules.sourceOf("/opt/builtin/clock", null, checked.roots, rules.parseRecord("")).source, "builtin", "in the built-in root: builtin");
     }
 
     function _list() {

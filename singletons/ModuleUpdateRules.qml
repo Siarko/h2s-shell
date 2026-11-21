@@ -172,7 +172,7 @@ Singleton {
     // ---- Consent for an update (§6.4) ----
 
     // Whether updating a module needs the user's approval, by hand and automatically alike.
-    // `acknowledgement`: Config.acknowledgedModules[id] (ModuleInstallRules.acknowledgementOf's
+    // `acknowledgement`: the acknowledgement of the id, ModuleHost.acknowledgements[id] (ModuleInstallRules.acknowledgementOf's
     //   shape: { source, address, author, privileged });
     // `record`: the record's entry (ModuleInstallRules.parseRecord's modules[id]);
     // `newManifest`: the staged manifest as ModuleManifestRules.parseManifest reads it ({ id,

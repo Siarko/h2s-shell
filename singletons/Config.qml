@@ -33,15 +33,18 @@ Singleton {
     // Settings already copied from their old place in this file into the profiles, once
     // each (notes/plans/global-profiles.md)
     property alias migratedKeys: _adapter.migratedKeys
-    // The ids of the modules turned off over IPC, `modules setEnabled` (ModuleHost): a module is on
-    // unless listed here. Global, not per profile: which code runs in the shell is not a
+    // The ids of the modules turned off (ModuleHost.setEnabled, `modules setEnabled`): a module
+    // is on unless listed here. Global, not per profile: which code runs in the shell is not a
     // preference a profile switches.
     property alias disabledModules: _adapter.disabledModules
+    // The ids of the built-in modules builtin.json lists as off that the user turned on
+    // (ModuleInstallRules.enabledByLists): the counterpart of disabledModules
+    property alias enabledModules: _adapter.enabledModules
     // The user's acknowledgements of modules, { <id>: { source, address, author, privileged } }
-    // (ModuleInstallRules.needsConfirmation; PrivilegedRules.declaration reads `privileged`).
-    // Not kept in the file: undefined unless set in this run — every module found counts as
-    // acknowledged as it is
-    property var acknowledgedModules: undefined
+    // as JSON (ModuleInstallRules.parseAcknowledgements reads it: ModuleHost.acknowledgements),
+    // "" while never written — the first start of the module host that confirms modules writes
+    // it (the baseline). Written with setAcknowledgedModules
+    readonly property string acknowledgedModulesText: _adapter.acknowledgedModules
     // The notice about locking before sleep last given (SleepLockNotice,
     // LockIoRules.sleepNoticeStep): remembered, so it is given once, not at every start
     property alias sleepLockNotice: _adapter.sleepLockNotice
@@ -60,6 +63,17 @@ Singleton {
     property bool readOnly: false
 
     signal saved
+
+    // Writes the acknowledgements (an object as ModuleHost.acknowledgements reads it; undefined writes
+    // "never written", as a suite restoring the text does)
+    function setAcknowledgedModules(list) {
+        _adapter.acknowledgedModules = list === undefined ? "" : JSON.stringify(list);
+    }
+
+    // Puts back a text acknowledgedModulesText gave (a suite's restore)
+    function setAcknowledgedModulesText(text) {
+        _adapter.acknowledgedModules = typeof text === "string" ? text : "";
+    }
 
     // The file holds a long-lived Google refresh token, and was created world-readable
     // (umask 022). Locking the directory keeps out every file in it, whatever its own mode
@@ -110,6 +124,9 @@ Singleton {
             property string globals: "{}"
             property list<string> migratedKeys: []
             property list<string> disabledModules: []
+            property list<string> enabledModules: []
+            // ModuleInstallRules.parseAcknowledgements' text: "" until first written
+            property string acknowledgedModules: ""
             property string sleepLockNotice: ""
             // The shell version that last wrote this file — for reference, and for
             // migrations that need to know what wrote it

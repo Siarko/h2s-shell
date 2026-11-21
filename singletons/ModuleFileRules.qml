@@ -399,6 +399,64 @@ Singleton {
         return { manifest: copy, errors: errors, fatal: fatal };
     }
 
+    // ---- What a reload can pick up ----
+
+    // Whether a module file changed on disk gives its new code when the module is turned off
+    // and on (its main made again by the same URL, in the same engine). Measured by
+    // tests/QuickshellPinTest.qml (h); false: the engine keeps a compiled file by URL for its
+    // life, so a module whose files changed in place needs a restart of the shell
+    // (ModuleHost.restartNeeded) — a new version in another directory does not
+    readonly property bool reloadPicksUpChanges: false
+
+    // A short fingerprint of a module's files as the file check read them (`texts`: { file:
+    // text }): two reads of the same files give the same one, a change in any gives another
+    // (a 53-bit hash of the names and texts in name order; not for anything but noticing a change)
+    function fingerprint(texts) {
+        let first = 0xdeadbeef;
+        let second = 0x41c6ce57;
+        const add = text => {
+            for (let i = 0; i < text.length; i++) {
+                const code = text.charCodeAt(i);
+                first = Math.imul(first ^ code, 2654435761);
+                second = Math.imul(second ^ code, 1597334677);
+            }
+        };
+        const given = texts !== null && typeof texts === "object" ? texts : {};
+        for (const name of Object.keys(given).sort()) {
+            add(name + "\u0000");
+            add(typeof given[name] === "string" ? given[name] : "");
+            add("\u0001");
+        }
+        first = Math.imul(first ^ (first >>> 16), 2246822507) ^ Math.imul(second ^ (second >>> 13), 3266489909);
+        second = Math.imul(second ^ (second >>> 16), 2246822507) ^ Math.imul(first ^ (first >>> 13), 3266489909);
+        return (4294967296 * (2097151 & second) + (first >>> 0)).toString(16);
+    }
+
+    // ---- The modules on at the last load (safe mode tells them) ----
+    //
+    // $XDG_RUNTIME_DIR/h2s-shell-modules-on: the ids of the modules loaded, one per line,
+    // written by the host each time that set changes once a load has settled — never in safe
+    // mode, so after a crash loop it still names the modules that were on when the shell died.
+
+    // Writes it: arguments the file, then the ids. Only a plain file (or none) is written, by
+    // a temporary file and a rename, mode 600
+    readonly property string modulesOnWriteScript: "file=$1; shift; "
+        + "if [ -L \"$file\" ] || { [ -e \"$file\" ] && [ ! -f \"$file\" ]; }; then exit 1; fi; "
+        + "umask 077; printf '%s\\n' \"$@\" > \"$file.$$\" && mv -f -- \"$file.$$\" \"$file\""
+    // Reads it (16 KiB at most; only a plain file): argument the file
+    readonly property string modulesOnReadScript: "if [ -f \"$1\" ] && [ ! -L \"$1\" ]; then head -c 16384 -- \"$1\"; fi"
+
+    // Its lines → the ids in it: valid ids only, each once, at most 200
+    function parseModulesOn(lines) {
+        const ids = [];
+        for (const line of Array.isArray(lines) ? lines : []) {
+            const id = typeof line === "string" ? line.trim() : "";
+            if (ModuleManifestRules.validId(id) && !ids.includes(id) && ids.length < 200)
+                ids.push(id);
+        }
+        return ids;
+    }
+
     // ---- The start guard (crash loops the launcher cannot see) ----
     //
     // Quickshell restarts a crashed shell in place — the same process, exec'd again — unless

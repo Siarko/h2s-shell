@@ -5,9 +5,13 @@
 # 60 s first; no real mount is involved.
 #
 # (1) The first start: the shell is up within the bound, with no modules although one is
-#     installed, the launcher said why, and the search left nothing running.
+#     installed, the launcher said why, and the search left nothing running. The shell's own
+#     search again (`modules rediscover`, which runs the launcher's search: it hangs too) is
+#     bounded as well: cut off, said in the shell's log, the modules left as they are, nothing
+#     left running.
 # (2) Killed while locked: the new shell comes up through the same bounded search and locks
-#     again; the password unlocks it.
+#     again — while locked it refuses to search again or to confirm a module over IPC; the
+#     password unlocks it.
 # (3) A stop request (SIGUSR1, as a --restart's stop_shell sends) while the search runs:
 #     the supervisor ends without starting a shell — one started then would be a shell the
 #     restarting launcher never sees, and the restart would not happen.
@@ -44,6 +48,13 @@ check "no modules for the shell" test -z "$(process_env "$SHELL_PID" H2S_SHELL_M
 check "… so the installed one is not loaded" test "$(shell_ipc modules list | grep -c '"state":"loaded"')" = 0
 check "the cut-off search left nothing running" test -z "$(hung_searches)"
 
+# ---- (1b) the shell's own search again ----
+shell_logged() { [ "$(shell_log_count "$1")" -gt 0 ]; }
+check "modules rediscover: started" test -z "$(shell_ipc modules rediscover)"
+check_within 10 "… cut off by the shell's bound, said in its log" shell_logged "the module search took longer than"
+check "… the modules left as they are: none loaded" test "$(shell_ipc modules list | grep -c '"state":"loaded"')" = 0
+check_within 5 "… the cut-off search left nothing running" test -z "$(hung_searches)"
+
 # ---- (2) killed while locked: the re-lock goes through the bounded search ----
 lock_by_ipc
 check_within 5 "locked" compositor_locked
@@ -57,6 +68,9 @@ check_within 10 "the new shell locks again" state_is phase locked
 check_within 5 "the compositor confirmed the new shell's lock" state_is secure true
 stop_lock_watch
 check "the compositor never reported unlocked across the restart" lock_watch_never_unlocked
+check "locked: modules rediscover refused" test "$(shell_ipc modules rediscover)" = "Refused while the session is locked"
+check "locked: modules confirm refused" test "$(shell_ipc modules confirm alpha)" = "Refused while the session is locked"
+check "locked: modules setEnabled refused" test "$(shell_ipc modules setEnabled alpha true)" = "Refused while the session is locked"
 check "the search was cut off again" test "$(grep -ac "module discovery took longer than 3 s" "$launcher_log")" -ge 2
 wake_prompt || fail "the new shell's prompt did not wake"
 check_within 5 "the methods are known" state_is armed true

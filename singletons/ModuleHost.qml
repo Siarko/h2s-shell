@@ -31,6 +31,28 @@ import qs.singletons.io
 // null. A soft provider coming or going while it is on turns its main off and on again
 // (pending meanwhile), so module.uses always says what is there.
 //
+// Where each module comes from (notes/plans/modules-management.md §3, §5): at each load a
+// process (ModuleInstallRules.sourceCheckScript, under checkTimeoutMs) reads the places in
+// `sourcePlaces` — the user root and its entries (links or folders), the built-in root and its
+// builtin.json, the record of what the shell installed — and every module's source follows
+// (ModuleInstallRules.sourceOf: builtin, system, repository, folder, user, developer). With
+// `confirmations` on (the shell's host; the suites' default is off) a module that is not
+// built in, the system's or on the development path loads only once the user has
+// acknowledged it (`acknowledgements`, ModuleInstallRules.needsConfirmation): a new
+// one is "unconfirmed", a hand-placed one that now declares administrator actions or names
+// another author is held for "approval"; confirm() acknowledges it and turns it on. The first
+// start that confirms (no list written yet) writes the list from what it finds on, so what
+// ran before keeps running without a question. Nothing here asks: the questions are the
+// views' (and `modules confirm` over IPC, a typed command being a click).
+// rediscover() runs the launcher's own search again (`launch.sh --discover-modules`) and
+// loads its list in place; loadWithoutSafeMode() does so out of safe mode. Neither acts while
+// the session is locked (`locked`), and an answer that comes after another load loses.
+// A module's files are fingerprinted as the file check reads them: one whose files changed in
+// place since the engine first built them keeps running the old code (the engine keeps a file
+// by URL for its life, tests/QuickshellPinTest.qml (h)) — it is named in `restartNeeded`.
+// The ids of the modules loaded are written to `modulesOnFile` (never in safe mode), and the
+// first load reads what the last run wrote (`previousModulesOn`), for safe mode to tell.
+//
 // The shell's one instance is in Modules (the singleton, fed from the environment); the
 // suites make their own (tests/ModulesTest.qml), so this takes its directories through load()
 // and its start counter through `guardFile`, never from the environment.
@@ -55,8 +77,42 @@ Scope {
     property bool safeMode: false
     // Why, when the start guard decided it ("" otherwise)
     property string safeModeReason: ""
-    // The ids turned off (Config.disabledModules); a module is on unless listed
+    // The ids turned off (Config.disabledModules); a module is on unless listed — or, built
+    // in and listed as off by builtin.json, unless Config.enabledModules lists it
     readonly property var disabledIds: _plainList(Config.disabledModules)
+    readonly property var enabledListIds: _plainList(Config.enabledModules)
+    // Whether a module that is not built in, the system's or on the development path needs
+    // the user's acknowledgement before it loads (the shell's host; off — the suites'
+    // default — every module is taken as acknowledged and nothing is written)
+    property bool confirmations: false
+    // The user's acknowledgements (Config.acknowledgedModulesText,
+    // ModuleInstallRules.parseAcknowledgements): undefined while never written, {} when the
+    // config file could not be read (what cannot be read asks again)
+    readonly property var acknowledgements: Config.loadFailed ? ({}) : ModuleInstallRules.parseAcknowledgements(Config.acknowledgedModulesText)
+    // The places a module's source is told by (ModuleInstallRules.sourcePlaces: { user,
+    // versions, record, builtin, developer: [], system: [] }, as given; {} — the suites'
+    // default — none: every module is "user")
+    property var sourcePlaces: ({})
+    // The session is locked (Modules binds it): confirm(), rediscover() and
+    // loadWithoutSafeMode() refuse, and a search's answer that comes then is dropped
+    property bool locked: false
+    // The launcher's search, run by rediscover(): an argv whose standard output is the
+    // colon-separated list H2S_SHELL_MODULES is ([] — the suites' default — none), its added
+    // environment and its time limit
+    property var discoveryCommand: []
+    property var discoveryEnvironment: ({})
+    property int discoveryTimeoutMs: 5000
+    // A search runs (rediscover())
+    property bool discovering: false
+    // The names of the modules whose files changed in place since the engine first built
+    // them: they run their old code until the shell restarts (ModuleFileRules.reloadPicksUpChanges).
+    // Kept for the host's life: a restart clears it by being the restart
+    property var restartNeeded: []
+    // The file the ids of the modules loaded are written to ("" — the suites' default — none;
+    // the shell's: $XDG_RUNTIME_DIR/h2s-shell-modules-on), and what it held at the first load:
+    // the modules on in the last run (safe mode tells them)
+    property string modulesOnFile: ""
+    property var previousModulesOn: []
     // Until the config is read the host cannot know which modules are off: none is
     // created before (one turned off because it misbehaves must not run even briefly)
     readonly property bool settingsKnown: Config.ready
@@ -216,6 +272,11 @@ Scope {
     property var _recheckNames: []
     property bool _guardKnown: true
     property bool _askedSafeMode: false
+    property bool _ignoreGuard: false
+    // Raised by each load and search: a search's answer for an older one is dropped
+    property int _discoveryGeneration: 0
+    // What the last search's failure said (logged on a change)
+    property string _discoveryOutcome: ""
     // id → handle (api/ModuleHandle.qml), made on first use, kept for the host's life
     property var _handles: new Map()
     // "slot|module|url" → a holder of the Component that slotComponent() hands out
@@ -252,6 +313,13 @@ Scope {
             unload();
             hostError = "";
             _askedSafeMode = options?.safeMode === true;
+            // Out of safe mode by the user's choice (loadWithoutSafeMode): the start guard's
+            // count no longer decides it, for the host's life
+            if (options?.ignoreGuard === true)
+                _ignoreGuard = true;
+            // A search started before this load answers for nothing
+            _discoveryGeneration++;
+            discovering = false;
             safeMode = _askedSafeMode;
             safeModeReason = _askedSafeMode ? (options?.safeModeReason ?? "asked for (H2S_SHELL_SAFE_MODE=1)") : "";
             const parsed = ModuleFileRules.moduleDirectories(directoryList);
@@ -268,6 +336,8 @@ Scope {
             _forgetData();
             _loadCalled = true;
             _startGuard();
+            _checkSources();
+            _readModulesOn();
             _makeStoreDirectory();
             _checkFiles();
             _apply();
@@ -288,11 +358,109 @@ Scope {
         _publish();
     }
 
-    // Turns a module on or off (Config.disabledModules; written to the config file unless
-    // Config.readOnly). → true when the id is a module id
+    // Turns a module on or off (Config.disabledModules, and Config.enabledModules for a
+    // built-in one that starts off; written to the config file unless Config.readOnly).
+    // → true when the id is a module id and it was done; turning on a module that waits for
+    // the user's confirmation or approval is refused (enableProblem says why)
     function setEnabled(id, enabled) {
         if (typeof id !== "string" || !ModuleRules.idPattern.test(id))
             return false;
+        if (enabled && enableProblem(id) !== "")
+            return false;
+        _setLists(id, enabled);
+        return true;
+    }
+
+    // Why turning a module on is refused now ("" when it is not): it waits for the user's
+    // confirmation or approval (confirm())
+    function enableProblem(id) {
+        const record = _record(id);
+        return record ? ModuleInstallRules.confirmationText(record.manifest.name, id, record.confirmation) : "";
+    }
+
+    // The user acknowledges a module that waits for confirmation or approval (`modules
+    // confirm`, the confirmation's "Enable"): its acknowledgement written
+    // (ModuleInstallRules.acknowledgementOf) and the module turned on. `directory` (optional):
+    // the directory the question was about — refused when the id now names another.
+    // → "" when done, else why not
+    function confirm(id, directory) {
+        if (locked)
+            return "Refused while the session is locked";
+        const record = typeof id === "string" ? _record(id) : null;
+        if (!record || !record.manifest.valid)
+            return "No module \"" + ModuleInstallRules._plain(String(id ?? ""), 60) + "\"";
+        if (typeof directory === "string" && directory !== "" && ModuleFileRules.canonicalPath(directory) !== record.directory)
+            return "The module changed: " + id + " is now " + ModuleInstallRules._plain(record.directory);
+        if (!confirmations || !record.confirmation?.needed)
+            return id + " needs no confirmation";
+        if (Config.loadFailed)
+            return "The config file could not be read: nothing can be saved";
+        const list = Object.assign({}, ModuleRules.isObject(acknowledgements) ? acknowledgements : {});
+        list[id] = ModuleInstallRules.acknowledgementOf(record.found, record.manifest);
+        Config.setAcknowledgedModules(list);
+        console.info("[Modules] " + id + " confirmed (" + (record.found?.label ?? "") + ")");
+        _setLists(id, true);
+        return "";
+    }
+
+    // Runs the launcher's search again and loads what it finds, in place, safe mode kept as
+    // it is. → "" when the search started, else why not (its own outcome goes to the log)
+    function rediscover() {
+        return _rediscover(false);
+    }
+
+    // Out of safe mode in place: the search again, its modules loaded (the start guard's
+    // count no longer decides safe mode for this host). → "" when the search started
+    function loadWithoutSafeMode() {
+        if (!safeMode)
+            return "Not in safe mode";
+        return _rediscover(true);
+    }
+
+    function _rediscover(leaveSafeMode) {
+        if (locked)
+            return "Refused while the session is locked";
+        const argv = _plainList(discoveryCommand);
+        if (argv.length === 0)
+            return "No module search here";
+        const generation = ++_discoveryGeneration;
+        let output = "";
+        discovering = true;
+        _check(argv, {
+            environment: discoveryEnvironment ?? {},
+            timeoutMs: Math.max(1, discoveryTimeoutMs),
+            onLine: (line, stream) => {
+                if (stream === "stdout")
+                    output += line;
+            },
+            done: result => root._discoveryAnswered(generation, result, output, leaveSafeMode)
+        });
+        return "";
+    }
+
+    function _discoveryAnswered(generation, result, output, leaveSafeMode) {
+        // Late: a load since (or another search) answers for this one
+        if (generation !== _discoveryGeneration || _dying)
+            return;
+        discovering = false;
+        let outcome = "";
+        if (locked)
+            outcome = "the module search answered while the session was locked: nothing loaded";
+        else if (!result.ok)
+            outcome = "the module search " + (result.timedOut ? "took longer than " + discoveryTimeoutMs / 1000 + " s" : "failed (status " + result.code + ")")
+                      + ": the modules stay as they are";
+        if (outcome !== _discoveryOutcome) {
+            _discoveryOutcome = outcome;
+            if (outcome !== "")
+                console.warn("[Modules] " + outcome);
+        }
+        if (outcome !== "")
+            return;
+        console.info("[Modules] loading the modules found again" + (leaveSafeMode ? ", out of safe mode" : ""));
+        load(output, leaveSafeMode ? { safeMode: false, ignoreGuard: true } : { safeMode: safeMode, safeModeReason: safeModeReason });
+    }
+
+    function _setLists(id, enabled) {
         const list = _plainList(Config.disabledModules).filter(entry => entry !== id);
         if (!enabled)
             list.push(id);
@@ -313,13 +481,21 @@ Scope {
                 }
             }
         }
+        // A built-in module builtin.json lists as off: on only while enabledModules names it
+        const record = _record(id);
+        const startsOff = record?.found?.source === "builtin" && _builtinOffIds.includes(id);
+        const enabledList = _plainList(Config.enabledModules).filter(entry => entry !== id);
+        if (enabled && startsOff)
+            enabledList.push(id);
+        if (JSON.stringify(enabledList) !== JSON.stringify(_plainList(Config.enabledModules)))
+            Config.enabledModules = enabledList;
         Config.disabledModules = list;
         _applyGuarded();
-        return true;
     }
 
     function isEnabled(id) {
-        return !disabledIds.includes(id);
+        const record = _record(id);
+        return record ? _enabledFor(record) : !disabledIds.includes(id);
     }
 
     // The status of the module with this id that counts (not one shadowed by it), or null
@@ -467,11 +643,14 @@ Scope {
     // What module `id` may run as administrator (PrivilegedRules.declaration): its manifest's
     // `privileged` block, approved, and the paths of the programs it names among `programs`
     // (its handle's; null for none), under the user's acknowledgements
-    // (Config.acknowledgedModules: undefined while none is written, the baseline — every
-    // module found counts as acknowledged as it is).
+    // (`acknowledgements`: undefined while none is written, the baseline — every module found
+    // counts as acknowledged as it is).
+    // A built-in, system or development copy is never asked about: its declaration counts as
+    // approved.
     function privilegedDeclaration(id, programs) {
         const record = _record(id);
-        return PrivilegedRules.declaration(record?.manifest?.privileged ?? null, Config.acknowledgedModules, id, programs ?? null);
+        const exempt = confirmations && ModuleInstallRules.exemptSources.includes(record?.found?.source);
+        return PrivilegedRules.declaration(record?.manifest?.privileged ?? null, exempt ? undefined : acknowledgements, id, programs ?? null);
     }
 
     // Of `wanted` ({ module, context, … }), the initial properties the root object of the
@@ -544,16 +723,40 @@ Scope {
     function describe() {
         return { api: apiVersion, safeMode: safeMode, safeModeReason: safeModeReason, hostError: hostError, testMode: testMode,
                  checkingPrograms: checkingPrograms, checkingFiles: checkingFiles, startGuard: guard, dataRoot: dataRootInUse,
-                 ignoredEntries: ignoredEntries, modules: statuses };
+                 ignoredEntries: ignoredEntries, confirmations: confirmations, discovering: discovering,
+                 restartNeeded: restartNeeded, previousModulesOn: previousModulesOn, modules: statuses };
     }
 
     onDisabledIdsChanged: _applyGuarded()
+    onEnabledListIdsChanged: _applyGuarded()
+    onAcknowledgementsChanged: _applyGuarded()
     onSettingsKnownChanged: _applyGuarded()
 
     // ---- Reading ----
 
     function _record(id) {
         return _records.find(entry => entry.manifest.id === id && entry.shadowedBy === "") ?? null;
+    }
+
+    // Whether a module is on by the user's lists (ModuleInstallRules.enabledByLists)
+    function _enabledFor(record) {
+        return ModuleInstallRules.enabledByLists(record.manifest.id, record.found?.source ?? "", _builtinOffIds, enabledListIds, disabledIds);
+    }
+
+    // Where a module comes from (ModuleInstallRules.sourceOf), once the source check answered
+    function _foundOf(record) {
+        if (!_sourcesKnown)
+            return null;
+        return ModuleInstallRules.sourceOf(record.directory, ModuleInstallRules.linkFor(record.directory, _sources.entries),
+                                           _sources.roots, _sourceRecords);
+    }
+
+    // Whether it waits for the user (ModuleInstallRules.needsConfirmation): only with
+    // confirmations on, for a module that counts and whose source is known
+    function _confirmationOf(record) {
+        if (!confirmations || !record.found || !record.manifest.valid || record.shadowedBy !== "")
+            return { needed: false, state: "", reasons: [], baseline: false };
+        return ModuleInstallRules.needsConfirmation(record.found, record.manifest, acknowledgements);
     }
 
     // A list-like value (a QML list<string>) as a plain array of strings
@@ -602,7 +805,10 @@ Scope {
             // drawn ("" drawn, or not tried)
             iconChecked: false, iconError: "",
             // Test mode: its stand-ins' verdicts, { <name>: verdict } (null until looked at)
-            testVerdicts: null
+            testVerdicts: null,
+            // Where it comes from (sourceOf, null until known), whether it waits for the user
+            // (needsConfirmation), and its files' fingerprint as the file check read them
+            found: null, confirmation: { needed: false, state: "", reasons: [], baseline: false }, fingerprint: ""
         };
     }
 
@@ -818,6 +1024,13 @@ Scope {
             importLines.push(...ModuleSourceRules.importWarnings(name, text, name.startsWith("tests/")));
             reachLines.push(...ModuleSourceRules.importErrors(name, text));
         }
+        // What the engine would build: changed in place since it first built them, the old
+        // code runs until a restart (only as far as the check reads them: a scanned file's
+        // header)
+        record.fingerprint = ModuleFileRules.fingerprint(Object.assign({ "\u0000qmldir": record.qmldirText }, read));
+        const built = _builtFingerprints.get(record.directory);
+        if (!ModuleFileRules.reloadPicksUpChanges && built !== undefined && built !== record.fingerprint)
+            _needRestart(record);
         record.warnings.push(...ModuleSourceRules.cappedLines(importLines, ModuleSourceRules.maxImportWarnings));
         record.errors.push(...ModuleSourceRules.cappedLines(reachLines, ModuleSourceRules.maxImportWarnings));
         const scanWarning = ModuleFileRules.scanWarning(record.scanListing, unread);
@@ -951,6 +1164,166 @@ Scope {
         _applyGuarded();
     }
 
+    // ---- Where the modules come from (§3) ----
+
+    // What the source check found (ModuleInstallRules.parseSourceCheck), the record it read
+    // (parseRecord) and the built-in modules builtin.json lists as off. Until it answers every
+    // module is pending; one that does not answer in time leaves every module "user"
+    property var _sources: ModuleInstallRules.parseSourceCheck(["end"])
+    property bool _sourcesKnown: true
+    property var _sourceRecords: ({ ok: false, modules: {}, dropped: [] })
+    property var _builtinOffIds: []
+    property int _sourceGeneration: 0
+    // What the last check said was wrong (logged on a change)
+    property string _sourceProblem: ""
+
+    function _checkSources() {
+        // (Plain arrays: a list handed in through createObject reads back as a sequence)
+        const given = ModuleRules.isObject(sourcePlaces) ? sourcePlaces : {};
+        const places = Object.assign({}, given, { developer: _plainList(given.developer), system: _plainList(given.system) });
+        const argv = ModuleInstallRules.sourceCheckArguments(places);
+        const generation = ++_sourceGeneration;
+        // No place given (the suites' default): nothing to read
+        if (argv.slice(0, 4).every(entry => entry === "") && argv.length === 4) {
+            _sourcesAnswered(generation, ["builtin-state\tmissing", "record-state\tmissing", "end"]);
+            return;
+        }
+        _sourcesKnown = false;
+        const lines = [];
+        _check(["sh", "-c", ModuleInstallRules.sourceCheckScript, "sh"].concat(argv), {
+            onLine: (line, stream) => {
+                if (stream === "stdout")
+                    lines.push(line);
+            },
+            done: result => {
+                root._sourcesAnswered(generation, lines);
+                root._applyGuarded();
+            }
+        });
+    }
+
+    function _sourcesAnswered(generation, lines) {
+        // A load since asked again: this answer is for nothing
+        if (generation !== _sourceGeneration)
+            return;
+        _sources = ModuleInstallRules.parseSourceCheck(lines);
+        _sourcesKnown = true;
+        const problems = [];
+        if (!_sources.complete)
+            problems.push("where the modules come from could not be read within " + checkTimeoutMs / 1000 + " s: each counts as placed by hand");
+        _sourceRecords = _sources.record.state === "ok" ? ModuleInstallRules.parseRecord(_sources.record.text) : { ok: false, modules: {}, dropped: [] };
+        if (_sources.record.state === "unreadable" || (_sources.record.state === "ok" && !_sourceRecords.ok))
+            problems.push("the record of installed modules cannot be read: each counts as placed by hand");
+        else if (_sourceRecords.dropped.length > 0)
+            problems.push("the record of installed modules has entries that are not well formed: " + _sourceRecords.dropped.join(", "));
+        const off = _sources.builtin.state === "ok" ? ModuleInstallRules.builtinOff(_sources.builtin.text) : { ok: true, off: [] };
+        if (_sources.builtin.state === "unreadable" || !off.ok)
+            problems.push("builtin.json is not { \"off\": [ids] }: no built-in module starts off");
+        if (JSON.stringify(off.off) !== JSON.stringify(_builtinOffIds))
+            _builtinOffIds = off.off;
+        const problem = problems.join("; ");
+        if (problem !== _sourceProblem) {
+            _sourceProblem = problem;
+            if (problem !== "")
+                console.warn("[Modules] " + problem);
+        }
+    }
+
+    // ---- The first start that confirms modules (§5) ----
+
+    property bool _baselineAsked: false
+
+    // No acknowledgement written yet: once every module of this load is read and its source
+    // known, what is on is acknowledged as it is (ModuleInstallRules.baselineAcknowledgements)
+    // — written after this pass, never inside it (the write applies again)
+    function _askBaseline() {
+        if (_baselineDue() && !_baselineAsked) {
+            _baselineAsked = true;
+            Qt.callLater(root._writeBaseline);
+        }
+    }
+
+    function _baselineDue() {
+        return confirmations && _loadCalled && settingsKnown && _sourcesKnown && acknowledgements === undefined
+            && _records.every(record => record.manifestRead);
+    }
+
+    function _writeBaseline() {
+        _baselineAsked = false;
+        if (_dying || !_baselineDue())
+            return;
+        const list = ModuleInstallRules.baselineAcknowledgements(_records.filter(record => record.shadowedBy === "" && record.manifest.valid)
+            .map(record => ({ found: record.found, manifest: record.manifest, enabled: _enabledFor(record) })));
+        Config.setAcknowledgedModules(list);
+        const ids = Object.keys(list);
+        console.info("[Modules] the first start that confirms modules: " + (ids.length > 0 ? ids.join(", ") + " acknowledged as found" : "none to acknowledge"));
+    }
+
+    // ---- Files changed in place ----
+
+    // directory → the fingerprint of its files when the engine first built one of them: what
+    // it keeps for the host's life
+    property var _builtFingerprints: new Map()
+
+    function _needRestart(record) {
+        const name = record.manifest.name || record.manifest.id || record.directory;
+        if (restartNeeded.includes(name))
+            return;
+        restartNeeded = restartNeeded.concat([name]);
+        console.warn("[Modules] " + (record.manifest.id || record.directory) + ": its files changed since the shell first loaded them; "
+                     + "it runs the old code until the shell restarts");
+    }
+
+    // ---- The modules on (safe mode tells them) ----
+
+    property bool _modulesOnKnown: true
+    property bool _modulesOnAsked: false
+    property bool _writingModulesOn: false
+    // What was last written (null: nothing yet)
+    property var _modulesOnWritten: null
+
+    // Once per host, at its first load: what the last run wrote
+    function _readModulesOn() {
+        if (modulesOnFile === "" || _modulesOnAsked)
+            return;
+        _modulesOnAsked = true;
+        _modulesOnKnown = false;
+        const lines = [];
+        _check(["sh", "-c", ModuleFileRules.modulesOnReadScript, "sh", modulesOnFile], {
+            onLine: (line, stream) => {
+                if (stream === "stdout")
+                    lines.push(line);
+            },
+            done: result => {
+                root.previousModulesOn = ModuleFileRules.parseModulesOn(lines);
+                root._modulesOnKnown = true;
+                Qt.callLater(root._writeModulesOn);
+            }
+        });
+    }
+
+    // The ids loaded, when they changed and the load has settled; never in safe mode (the
+    // file keeps the modules on when the shell last ran with them)
+    function _writeModulesOn() {
+        if (_dying || modulesOnFile === "" || safeMode || !settled || !_modulesOnKnown || _writingModulesOn)
+            return;
+        const ids = activeIds.slice().sort();
+        const text = ids.join("\n");
+        if (text === _modulesOnWritten)
+            return;
+        _writingModulesOn = true;
+        _check(["sh", "-c", ModuleFileRules.modulesOnWriteScript, "sh", modulesOnFile].concat(ids), {
+            done: result => {
+                root._writingModulesOn = false;
+                // Written or not, not tried again for the same ids (logged once)
+                if (!result.ok && root._modulesOnWritten !== text)
+                    console.warn("[Modules] " + root.modulesOnFile + " could not be written");
+                root._modulesOnWritten = text;
+                Qt.callLater(root._writeModulesOn);
+            }
+        });
+    }
+
     // ---- The start guard ----
 
     function _startGuard() {
@@ -986,7 +1359,7 @@ Scope {
         _guardKnown = true;
         const decision = ModuleFileRules.startGuard(output);
         guard = { count: decision.count, identity: decision.identity, reason: decision.reason };
-        if (decision.safeMode && !_askedSafeMode) {
+        if (decision.safeMode && !_askedSafeMode && !_ignoreGuard) {
             safeMode = true;
             safeModeReason = decision.reason;
             console.warn("[Modules] " + decision.reason);
@@ -1031,14 +1404,18 @@ Scope {
         const own = new Map();
         for (const record of _records) {
             const manifest = record.manifest;
+            record.found = _foundOf(record);
+            record.confirmation = _confirmationOf(record);
             // Every one is looked up before the module loads; only a required one missing
             // stops it
             const programs = _programNames(manifest);
             const facts = {
                 valid: manifest.valid, compatible: record.compatible, duplicate: record.shadowedBy !== "",
                 manifestRead: record.manifestRead,
-                filesChecked: record.filesChecked, mainFileError: record.mainFileError, guardKnown: _guardKnown && _storeDirectoryKnown,
-                safeMode: safeMode, settingsKnown: settingsKnown, enabled: !disabledIds.includes(manifest.id),
+                filesChecked: record.filesChecked, mainFileError: record.mainFileError,
+                guardKnown: _guardKnown && _storeDirectoryKnown && _sourcesKnown,
+                safeMode: safeMode, settingsKnown: settingsKnown, enabled: _enabledFor(record),
+                confirmed: !record.confirmation.needed ? true : record.confirmation.state === "approval" ? "approval" : false,
                 programsKnown: programs.every(program => _verdictFor(record, program) !== undefined),
                 missingPrograms: (manifest.programs ?? []).filter(program => _verdictFor(record, program)?.path === ""),
                 dataDirectoryKnown: _dataDirectoryKnown(manifest.id),
@@ -1058,7 +1435,7 @@ Scope {
             if (going)
                 waitingForGoing = true;
             own.set(record, { base: base, state: going ? "pending" : base === "loaded" && record.mainError !== "" ? "failed" : base, facts: facts });
-            if (base === "pending" && record.filesChecked && _guardKnown && _storeDirectoryKnown && settingsKnown) {
+            if (base === "pending" && record.filesChecked && _guardKnown && _storeDirectoryKnown && _sourcesKnown && settingsKnown) {
                 if (!_fromStandIns(record))
                     unknownPrograms.push(...programs.filter(program => !_programs.has(program) && !unknownPrograms.includes(program)));
                 else if (programs.some(program => _verdictFor(record, program) === undefined))
@@ -1154,6 +1531,7 @@ Scope {
         if (unknownData.length > 0)
             _makeDataDirectories(unknownData);
         _waitingForGoing = waitingForGoing;
+        _askBaseline();
         _publish();
     }
 
@@ -1257,6 +1635,9 @@ Scope {
 
     function _createMain(record) {
         const url = ModuleFileRules.fileUrl(record.directory, record.manifest.main);
+        // From here the engine keeps what it builds of this directory for its life
+        if (!_builtFingerprints.has(record.directory))
+            _builtFingerprints.set(record.directory, record.fingerprint);
         let component = null;
         try {
             component = Qt.createComponent(url, Component.PreferSynchronous);
@@ -1437,7 +1818,10 @@ Scope {
 
     function _publish() {
         const loaded = [];
-        statuses = _records.map(record => {
+        const replaced = ModuleInstallRules.replaces(_records.map(record => ({
+            directory: record.directory, id: record.manifest.id ?? "", source: record.found?.source ?? "", version: record.manifest.version ?? ""
+        })));
+        statuses = _records.map((record, index) => {
             const errors = record.errors.slice();
             // Against the table now, so a suite's table set later counts (onAnchorTableChanged)
             if (record.manifest.valid && record.compatible)
@@ -1468,14 +1852,21 @@ Scope {
                     + (record.manifest.version ? " (" + record.manifest.version + ", " + record.directory + ")" : "");
                 if (record.state === "loaded" || record.state === "disabled" || record.state === "safe-mode")
                     console.info(what + (record.warnings.length > 0 ? ": " + record.warnings.join("; ") : ""));
+                else if (record.state === "unconfirmed" || record.state === "approval")
+                    console.info(what + ": " + ModuleInstallRules.confirmationText(record.manifest.name, record.manifest.id, record.confirmation)
+                                 + " — " + (record.found?.label ?? ""));
                 else
                     console.warn(what + ": " + errors.join("; "));
             }
             const warnings = (record.shadowedBy === "" && _dataFailed(record.manifest.id)
                 ? record.warnings.concat([_dataWarning(record.manifest.id)]) : record.warnings).concat(record.dependencyNotes ?? []);
+            const installed = ["repository", "folder"].includes(record.found?.source);
             return ModuleMergeRules.statusOf({
                 manifest: record.manifest, directory: record.directory, state: record.state || "failed",
-                enabled: !disabledIds.includes(record.manifest.id), errors: errors, warnings: warnings,
+                enabled: _enabledFor(record), errors: errors, warnings: warnings,
+                source: record.found?.source ?? "", sourceLabel: record.found?.label ?? "", replaces: replaced[index],
+                installedFor: installed && ModuleRules.has(_sourceRecords.modules, record.manifest.id) ? _sourceRecords.modules[record.manifest.id].installedFor : "",
+                confirmation: record.confirmation.needed ? record.confirmation.reasons : [],
                 deprecations: record.deprecations.concat(ModuleRules.testGateDeprecations(testMode, record.manifest.api),
                                                          ModuleMergeRules.slotDeprecations(record.manifest, anchorTable)),
                 missingPrograms: record.missingPrograms, shadowedBy: record.shadowedBy
@@ -1515,6 +1906,8 @@ Scope {
         _publishFacts();
         generation++;
         modulesChanged();
+        if (modulesOnFile !== "")
+            Qt.callLater(root._writeModulesOn);
     }
 
     function _publishFacts() {
