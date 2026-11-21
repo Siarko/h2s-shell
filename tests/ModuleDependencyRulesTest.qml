@@ -419,6 +419,17 @@ TestCase {
         const soft = ModuleDependencyRules.disableList("weather", [{ id: "weather", uses: [] },
             { id: "a", uses: [{ id: "weather", optional: true }], state: "loaded" }]);
         assertEqual(soft.disabled.length, 0, "disable: soft users stay on");
+        const chain = [{ id: "c", name: "C", uses: [], state: "loaded" }, { id: "b", name: "B", uses: [{ id: "c" }], state: "loaded" },
+                       { id: "z", name: "Z", uses: [{ id: "b" }], state: "loaded" }, { id: "a", name: "A", uses: [{ id: "c" }], state: "loaded" }];
+        const chainList = ModuleDependencyRules.disableList("c", chain).disabled;
+        assertEqual(chainList.join(","), "a,b,z", "disable order: the list by name");
+        assertEqual(ModuleDependencyRules.disableOrder(chainList, chain).join(","), "a,z,b",
+                    "disable order: each before what it needs (Z needs B), else by name");
+        assertEqual(ModuleDependencyRules.disableOrder(["b", "z", "c"], chain).join(","), "z,b,c", "… through a chain of three");
+        assertEqual(ModuleDependencyRules.disableOrder(["x", "b", "b"], chain).join(","), "b,x", "… one not known at the end, each once");
+        const loop = [{ id: "p", name: "P", uses: [{ id: "q" }] }, { id: "q", name: "Q", uses: [{ id: "p" }] }];
+        assertEqual(ModuleDependencyRules.disableOrder(["p", "q"], loop).length, 2, "… a cycle: each once, no endless walk");
+        assertEqual(ModuleDependencyRules.disableOrder(null, null).length, 0, "… nothing: nothing");
     }
 
     function _cardLines() {

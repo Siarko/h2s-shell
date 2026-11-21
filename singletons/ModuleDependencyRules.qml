@@ -552,6 +552,32 @@ Singleton {
                  missing: missing ? _name(byId.get(missing.id)?.name, missing.id) : "" };
     }
 
+    // The order the modules `ids` (disableList's `disabled`) are turned off in: each before
+    // the modules among them it needs through hard uses, directly or through others among
+    // them — so none is left running without its provider; otherwise by name. `modules` as
+    // disableList's. Ids not among `modules` keep their place at the end.
+    function disableOrder(ids, modules) {
+        const known = _modules(modules);
+        const wanted = (Array.isArray(ids) ? ids : []).filter((id, index, list) => typeof id === "string" && list.indexOf(id) === index);
+        const inSet = new Set(wanted.filter(id => known.byId.has(id)));
+        const result = [];
+        const visited = new Set();
+        const visit = id => {
+            if (visited.has(id))
+                return;
+            visited.add(id);
+            // Who needs it comes first
+            for (const user of _byName(new Set(Array.from(inSet).filter(other => other !== id
+                    && (known.byId.get(other).uses ?? []).some(use => !use.optional && use.id === id))), known))
+                visit(user);
+            result.push(id);
+        };
+        // The ones nothing else in the set needs start each chain
+        for (const id of _byName(inSet, known))
+            visit(id);
+        return result.concat(wanted.filter(id => !inSet.has(id)));
+    }
+
     // The dependencies installed for module `id` that nothing else needs once it is removed
     // — each offered unchecked with its removal ("Also remove Clipboard (installed for Notes,
     // nothing else uses it)"). `modules`: [{ id, name, uses, source, installedFor }] —

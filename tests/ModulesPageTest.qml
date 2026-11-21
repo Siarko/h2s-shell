@@ -34,6 +34,8 @@ TestCase {
         property var manifests: ({})
         property var calls: []
         property string confirmRefusal: ""
+        // Ids setEnabled refuses to turn off
+        property var refuseOff: []
 
         function manifestOf(directory) {
             return manifests[directory] ?? null;
@@ -43,6 +45,8 @@ TestCase {
         }
         function setEnabled(id, on) {
             calls = calls.concat(["setEnabled " + id + " " + on]);
+            if (!on && refuseOff.includes(id))
+                return false;
             statuses = statuses.map(status => status.id === id && status.state !== "duplicate"
                 ? Object.assign({}, status, { enabled: on, state: on ? "loaded" : "disabled", confirmation: [] }) : status);
             return true;
@@ -117,6 +121,7 @@ TestCase {
         };
         _host.calls = [];
         _host.confirmRefusal = "";
+        _host.refuseOff = [];
         _host.statuses = [
             _status({ id: "tailscale", name: "Tailscale", version: "0.6.0", directory: "/mods/tailscale", source: "repository",
                       sourceLabel: "From github.com/x/h2s-tailscale @ v0.6.0", deprecations: ["Uses Api.module()"] }),
@@ -253,6 +258,9 @@ TestCase {
         assertEqual(_tipOver(mark).text, "1 deprecated API use", "… saying what it counts");
         driver.mouseMove(area, 5, area.height - 5);
         assert(_until(() => !(_tipOver(mark)?.visible ?? false)), "… gone with the pointer");
+        _click(mark);
+        driver.wait(50);
+        assertEqual(page.openId + " " + tailscale.open, " false", "a click on a mark opens nothing");
 
         // --- text from outside: as written ---
         const evil = _card("evil");
@@ -369,5 +377,49 @@ TestCase {
                                                 ? Object.assign({}, status, { directory: "/mods/tailscale-0.7.0" }) : status);
         assert(_until(() => !modal.open), "its module changed: the question withdrawn");
         assertEqual(_host.calls.length, 0, "… and nothing done");
+
+        // --- Disable through a chain: each before what it needs, whatever the names ---
+        const chainStatuses = [
+            _status({ id: "c", name: "C", directory: "/mods/c" }),
+            _status({ id: "b", name: "B", directory: "/mods/b" }),
+            _status({ id: "z", name: "Z", directory: "/mods/z" })];
+        _host.manifests = { "/mods/c": { uses: [] }, "/mods/b": { uses: [{ id: "c", version: "1.0", optional: false }] },
+                            "/mods/z": { uses: [{ id: "b", version: "1.0", optional: false }] } };
+        _host.calls = [];
+        _host.statuses = chainStatuses;
+        assert(_until(() => _cards().length === 3 && _in(_card("c"), "mainButton") !== null), "a chain: Z needs B, B needs C");
+        driver.wait(100);
+        _show(_card("c"));
+        _click(_in(_card("c"), "mainButton"));
+        assert(_until(_modalReady), "disabling C asks");
+        assertEqual(_modalLines()[1], "B, Z", "… both named");
+        _click(_modalButton("Disable"));
+        assert(_until(() => _host.calls.length === 3), "… answered");
+        assertEqual(_host.calls.join(","), "setEnabled z false,setEnabled b false,setEnabled c false", "… Z first, then B, then C");
+
+        // One that cannot be turned off: the others go back on, the card says so
+        _host.calls = [];
+        _host.statuses = chainStatuses;
+        _host.refuseOff = ["b"];
+        assert(_until(() => _in(_card("c"), "mainButton") !== null));
+        driver.wait(100);
+        _show(_card("c"));
+        _click(_in(_card("c"), "mainButton"));
+        assert(_until(_modalReady), "asked again");
+        _click(_modalButton("Disable"));
+        assert(_until(() => _host.calls.length === 3), "… answered");
+        assertEqual(_host.calls.join(","), "setEnabled z false,setEnabled b false,setEnabled z true", "B refused: stopped there, Z back on, C left on");
+        assert(_until(() => _card("c").notice === "Could not be disabled: B could not be turned off"), "… the reason on the card");
+
+        // A name with a line break stands on one line
+        _host.refuseOff = [];
+        _host.statuses = [_status({ id: "two", name: "Two\nlines", directory: "/mods/two" }),
+                          _status({ id: "dep", name: "Dep", directory: "/mods/dep", installedFor: "two" })];
+        assert(_until(() => _card("two") !== null && _card("dep") !== null));
+        assertEqual(_card("two").titleText.text, "Two lines", "a name with a line break: on one line");
+        page.openId = "dep";
+        assert(_until(() => _card("dep").open));
+        assertEqual(_all(_card("dep"), child => child.label === "Installed for" && child.visible)[0]?.value, "Two lines", "… in Installed for too");
+        page.openId = "";
     }
 }

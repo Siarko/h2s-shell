@@ -60,6 +60,12 @@ Item {
         uses: root.host?.manifestOf?.(status.directory)?.uses ?? null
     }))
 
+    // A module's name as it stands in a line: one line, capped
+    function nameOf(id) {
+        const status = statusById[id];
+        return ApiElementRules.oneLine(status?.name || id, ModuleDependencyRules.maxNameLength);
+    }
+
     // The marks' looks: the icon and the colour of each kind (ModuleInstallRules.marks)
     readonly property var _markLooks: ({ warning: { icon: "", tone: "warning" }, deprecation: { icon: "", tone: "textMuted" } })
     // A text from outside in a card's opened part: on one line, capped
@@ -106,14 +112,22 @@ Item {
             _setProblem(subject.id, "Could not be enabled");
     }
 
+    // `dependents` in ModuleDependencyRules.disableOrder's order: each before what it needs,
+    // so none is left running without its provider. One that cannot be turned off stops it:
+    // those already turned off go back on, last first, and the card says so
     function _disable(subject, dependents) {
         if (!_current(subject))
             return;
-        // Those that need it first: none of them is left running without it
-        for (const id of dependents)
-            host.setEnabled(id, false);
-        if (!host.setEnabled(subject.id, false))
-            _setProblem(subject.id, "Could not be disabled");
+        const done = [];
+        for (const id of dependents.concat([subject.id])) {
+            if (!host.setEnabled(id, false)) {
+                for (const back of done.reverse())
+                    host.setEnabled(back, true);
+                _setProblem(subject.id, id === subject.id ? "Could not be disabled" : "Could not be disabled: " + nameOf(id) + " could not be turned off");
+                return;
+            }
+            done.push(id);
+        }
     }
 
     function _ask(spec, onAnswer) {
@@ -124,7 +138,7 @@ Item {
     }
 
     function _askConfirmation(subject, status) {
-        _ask(Object.assign(ModuleInstallRules.confirmationQuestion(status.name || status.id), { subject: subject }), answer => {
+        _ask(Object.assign(ModuleInstallRules.confirmationQuestion(nameOf(subject.id)), { subject: subject }), answer => {
             root._asked = null;
             if (answer.cancelled || answer.button !== "enable" || !root._current(answer.subject))
                 return;
@@ -136,9 +150,9 @@ Item {
 
     function _askDisable(subject, status) {
         const plan = ModuleDependencyRules.disableList(subject.id, dependencyModules);
-        const nameOf = id => statusById[id]?.name || id;
-        const question = ModuleInstallRules.disableQuestion(status.name || status.id, plan.disabled.map(nameOf), plan.unknown.map(nameOf));
-        _ask(Object.assign(question, { subject: { id: subject.id, directory: subject.directory, dependents: plan.disabled } }), answer => {
+        const question = ModuleInstallRules.disableQuestion(nameOf(subject.id), plan.disabled.map(nameOf), plan.unknown.map(nameOf));
+        const order = ModuleDependencyRules.disableOrder(plan.disabled, dependencyModules);
+        _ask(Object.assign(question, { subject: { id: subject.id, directory: subject.directory, dependents: order } }), answer => {
             root._asked = null;
             if (answer.cancelled || answer.button !== "disable" || !root._current(answer.subject))
                 return;
@@ -181,7 +195,7 @@ Item {
                     readonly property var disabling: ModuleDependencyRules.disableList(modelData, root.dependencyModules)
                     readonly property var pill: ModuleInstallRules.pillOf(status, { shellApi: root.host?.apiVersion ?? "", missingModule: dependencies.missing })
                     readonly property var actions: ModuleInstallRules.actionsFor(status, { source: status.source ?? "" }, {
-                        runningDependents: disabling.disabled.concat(disabling.unknown).map(id => root.statusById[id]?.name || id),
+                        runningDependents: disabling.disabled.concat(disabling.unknown).map(id => root.nameOf(id)),
                         needsConfirmation: (status.confirmation ?? []).length > 0
                     })
                     // The main button: Enable or Disable (the held-for-approval's Enable asks in
@@ -198,7 +212,7 @@ Item {
 
                     anchor: "card"
                     Layout.fillWidth: true
-                    title: status.name || modelData
+                    title: root.nameOf(modelData)
                     subtitle: ModuleInstallRules.cardSubtitle(status)
                     titleColor: on ? Theme.accent : Theme.textMuted
                     titleBold: on
@@ -216,32 +230,45 @@ Item {
                     // Marks: a count each, its tip on hover; no click
                     titleItems: Repeater {
                         model: _marks.model
-                        Row {
+                        Item {
                             id: _mark
 
                             required property string modelData
                             readonly property var mark: _marks.byKey[modelData] ?? ({ kind: "", count: 0, tip: "" })
                             readonly property var look: root._markLooks[mark.kind] ?? { icon: "", tone: "textMuted" }
                             objectName: "mark"
-                            spacing: 3
+                            implicitWidth: _markRow.implicitWidth
+                            implicitHeight: _markRow.implicitHeight
 
-                            Text {
-                                anchors.verticalCenter: parent.verticalCenter
-                                text: _mark.look.icon
-                                textFormat: Text.PlainText
-                                font.family: Theme.fontFamily
-                                font.pixelSize: Theme.fontSizeSmall
-                                color: Theme[_mark.look.tone]
-                            }
-                            Text {
-                                anchors.verticalCenter: parent.verticalCenter
-                                text: String(_mark.mark.count)
-                                textFormat: Text.PlainText
-                                font.family: Theme.fontFamily
-                                font.pixelSize: Theme.fontSizeSmall
-                                color: Theme[_mark.look.tone]
+                            Row {
+                                id: _markRow
+                                spacing: 3
+
+                                Text {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: _mark.look.icon
+                                    textFormat: Text.PlainText
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: Theme.fontSizeSmall
+                                    color: Theme[_mark.look.tone]
+                                }
+                                Text {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: String(_mark.mark.count)
+                                    textFormat: Text.PlainText
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: Theme.fontSizeSmall
+                                    color: Theme[_mark.look.tone]
+                                }
                             }
 
+                            // A mark takes no click: it stops here, short of the header that
+                            // opens the card
+                            PointerArea {
+                                centred: false
+                                anchors.fill: parent
+                                cursorShape: Qt.ArrowCursor
+                            }
                             HoverHandler { id: _markHover }
                             HoverTip {
                                 target: _mark
@@ -346,7 +373,7 @@ Item {
                     }
                     DetailRow {
                         label: "Installed for"
-                        value: card.status.installedFor ? (root.statusById[card.status.installedFor]?.name || card.status.installedFor) : ""
+                        value: card.status.installedFor ? root.nameOf(card.status.installedFor) : ""
                     }
                     DetailRow {
                         label: "API"
