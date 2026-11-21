@@ -448,7 +448,8 @@ gives a pinned modal its first place (`pinSpot`). A toast drags by its title lin
 `DragHandler` while `canMove` allows it; on release it is clamped inside its screen, off
 the bar (`clampToScreen`), and becomes a modal (`moveOut`). A modal whose screen goes
 waits in its queue again (`returnToQueue`); places are not kept over a restart. The card
-itself is `components/NotificationCard.qml`, shared with the centre
+itself is `components/NotificationCard.qml` (its header, pictures, progress bar, body and
+swipe in `components/notification/`), shared with the centre
 (`panels/NotificationPanel.qml`), which adds the pin (`pinToast`/`unpinToast`,
 `ToastRules.pinLook`); a toast's countdown is an animation that pauses while held and
 drives the card's timer bar (`ToastRules.showsTimer`). Nothing pauses under the lock

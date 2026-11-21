@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Widgets
+import qs.components.notification
 import qs.singletons
 
 // A notification as a card — in the panel, and as a toast: its app, summary, body and
@@ -33,7 +34,7 @@ Rectangle {
     // whole body (the notification centre)
     property int bodyMaxLines: 0
     // The body has more lines than it may show, and is cut; the height it shows
-    readonly property bool bodyCut: _body.length > 0 && bodyMaxLines > 0 && _bodyEdit.lineCount > bodyMaxLines
+    readonly property bool bodyCut: _body.length > 0 && bodyMaxLines > 0 && _bodyBox.edit.lineCount > bodyMaxLines
     readonly property real bodyShownHeight: _bodyBox.implicitHeight
 
     property bool timerVisible: false
@@ -48,14 +49,10 @@ Rectangle {
     // no dismissal is asked — a toast still leaves
     signal actionInvoked()
 
-    // ---- Swiped away with a finger, as on Android ----
-    // Dragged sideways the card follows the finger and fades; let go past a third of its
-    // width, or flung, it goes on out that way and asks to be dismissed (`swipedAway` set,
-    // so the owner skips its own slide out); short of that it comes back. A finger only:
-    // the mouse keeps selecting text and its dismiss button. An overlay above the content
-    // watches (the press reaches the buttons, the reply and the text beneath), taking the
-    // touch only once it moves sideways.
-    readonly property bool swiping: _swipe.active
+    // ---- Swiped away with a finger, as on Android (NotificationSwipe) ----
+    // Let go far enough, the card goes on out and asks to be dismissed, `swipedAway` set so
+    // the owner skips its own slide out
+    readonly property bool swiping: _swipeLayer.active
     property bool swipedAway: false
 
     implicitHeight: _contentCol.implicitHeight + contentPadding * 2
@@ -113,28 +110,6 @@ Rectangle {
     // The image's square, cropped thumbnail beside the text
     property int thumbnailSize: 44
 
-    // A notification carries up to two pictures: the app's icon (app_icon, or the icon of
-    // its desktop entry — Quickshell fills that in) and an image (image-data or
-    // image-path: an avatar, album art, a screenshot — or, from many apps, their logo).
-    // The icon sits in the header; a square image is a thumbnail beside the text, anything
-    // else a preview across the card.
-    //
-    // An icon name the theme lacks still loads, as Quickshell's purple checkerboard, so
-    // names are looked up first and a missing one shows nothing. A path given as a name
-    // (image-path without "file:") becomes a file URL.
-    function _pictureSource(picture) {
-        const value = (picture ?? "").toString();
-        if (value === "")
-            return "";
-        const iconPrefix = "image://icon/";
-        const name = value.startsWith(iconPrefix) ? value.slice(iconPrefix.length) : value;
-        if (name.startsWith("/"))
-            return "file://" + name;
-        if (value.startsWith(iconPrefix) || !/^[a-z]+:/.test(value))
-            return Quickshell.iconPath(name, true);
-        return value;
-    }
-
     // What the card shows, kept when the notification goes: running an action closes it
     // (unless it is resident), and the card must not empty while it slides away
     property string _appName
@@ -156,85 +131,20 @@ Rectangle {
     // counts down no bar of its own — the countdown is the only bar (NotificationRules.progressView)
     readonly property var progressView: NotificationRules.progressView(progress, timerVisible)
 
-    // The bar's wave: while the job runs and its value grew lately
-    // (NotificationRules.progressWave). A sender updates the same notification as its job
-    // goes; a value that stands still (a stall) lets the wave stop on its own.
+    // The bar's wave: while the job runs and its value grew lately (NotificationProgress)
     property int progressWaveMs: NotificationRules.progressWaveMs
-    readonly property bool progressWave: NotificationRules.progressWave(progress.state, _grewAt, _waveNow, progressWaveMs)
-    property double _grewAt: 0
-    property double _waveNow: 0
-    // Whose value the last one is: another notification in the card starts again
-    property var _waveFor: null
-    // The last value the bar showed; NaN while it showed none (the first value is no growth)
-    property real _lastValue: NaN
-    onProgressChanged: {
-        const value = progress.shown ? progress.value : NaN;
-        if (notification !== _waveFor) {
-            _waveFor = notification;
-            _grewAt = 0;
-            _waveEnd.stop();
-        } else if (progress.state === "running" && value > _lastValue) {
-            _grewAt = Date.now();
-            _waveNow = _grewAt;
-            _waveEnd.interval = progressWaveMs;
-            _waveEnd.restart();
-        }
-        _lastValue = value;
-    }
-    Component.onCompleted: {
-        _waveFor = notification;
-        _lastValue = progress.shown ? progress.value : NaN;
-    }
-    // When the window after the last growth has passed; a timer that fires early waits on
-    Timer {
-        id: _waveEnd
-        onTriggered: {
-            notifCard._waveNow = Date.now();
-            const left = notifCard._grewAt + notifCard.progressWaveMs - notifCard._waveNow;
-            if (left > 0) {
-                interval = left;
-                restart();
-            }
-        }
-    }
+    readonly property bool progressWave: _progressBar.grewLately
 
-    readonly property string _appIconSource: _pictureSource(_appIcon)
-    // The same picture as the icon is shown once, in the header
-    readonly property string _imageSource: {
-        const source = _pictureSource(_image);
-        return source === _appIconSource ? "" : source;
-    }
-    // "thumbnail", "preview", or "" — known once the image has loaded and its shape is known
-    readonly property string _imageKind: {
-        if (_imageSource === "" || _imageProbe.status !== Image.Ready)
-            return "";
-        const width = _imageProbe.sourceSize.width, height = _imageProbe.sourceSize.height;
-        if (width <= 0 || height <= 0)
-            return "";
-        const aspect = width / height;
-        return aspect >= 0.8 && aspect <= 1.25 ? "thumbnail" : "preview";
-    }
+    // The app's icon in the header, the image as a thumbnail or a preview (NotificationPicture)
+    readonly property string _appIconSource: _picture.appIconSource
+    readonly property string _imageSource: _picture.imageSource
+    readonly property string _imageKind: _picture.imageKind
 
-    // Loads the image at its own size, only to learn its shape
-    Image {
-        id: _imageProbe
-        visible: false
-        source: notifCard._imageSource
-        asynchronous: true
+    NotificationPicture {
+        id: _picture
+        appIcon: notifCard._appIcon
+        image: notifCard._image
     }
-
-    // Colours for the body's links and image rows (NotificationMarkup.richText): plain
-    // "#rrggbb" — the image row's tint mixed with the card, as Qt's table background takes
-    // no alpha
-    readonly property var _markupColors: ({
-        link: Theme.accent.toString(),
-        unusualLink: Theme.warning.toString(),
-        imageRow: Qt.tint(Theme.surface, Qt.alpha(Theme.accent, 0.12)).toString(),
-        imageGlyph: Theme.accent.toString(),
-        address: Theme.textMuted.toString()
-    })
-
-    readonly property var _imageLinks: NotificationMarkup.imageLinks(_body)
 
     // A link clicked in the body: a web or mail one opens; any other waits for a yes
     property string _pendingLink: ""
@@ -242,14 +152,10 @@ Rectangle {
     // reply; and, after a swipe (a toast's next one), back in place
     onNotificationChanged: {
         // Its first value is no growth, whichever of this and its hints comes first
-        _waveFor = notification;
-        _grewAt = 0;
-        _lastValue = NaN;
-        _waveEnd.stop();
+        _progressBar.startAgain();
         _pendingLink = "";
         _reply.clear();
-        _swipeBack.stop();
-        _swipeOut.stop();
+        _swipeLayer.stop();
         x = 0;
         opacity = 1;
         swipedAway = false;
@@ -286,98 +192,8 @@ Rectangle {
         spacing: 4
 
         // Header: app icon + app name + [timestamp] + dismiss control
-        RowLayout {
-            TapHandler {
-                enabled: notifCard._defaultAction !== null
-                onTapped: notifCard._activateDefault()
-            }
-            Layout.fillWidth: true
-
-            Image {
-                visible: notifCard._appIconSource !== ""
-                source: notifCard._appIconSource
-                sourceSize: Qt.size(32, 32)
-                Layout.preferredWidth: 16
-                Layout.preferredHeight: 16
-                Layout.maximumWidth: 16
-                Layout.maximumHeight: 16
-                fillMode: Image.PreserveAspectFit
-                Layout.alignment: Qt.AlignVCenter
-            }
-
-            Text {
-                text: notifCard._appName
-                textFormat: Text.PlainText
-                font.family: Theme.fontFamily
-                font.pixelSize: Theme.fontSizeSmall
-                font.bold: true
-                color: Theme.textSecondary
-                Layout.fillWidth: true
-                elide: Text.ElideRight
-            }
-
-            Text {
-                visible: notifCard.timestamp !== ""
-                text: notifCard.timestamp
-                font.family: Theme.fontFamily
-                font.pixelSize: Theme.fontSizeSmall
-                color: Theme.textMuted
-            }
-
-            Text {
-                id: _pinButton
-                objectName: "pinButton"
-                visible: notifCard.pinnable
-                text: notifCard.pinLook.glyph
-                textFormat: Text.PlainText
-                font.family: Theme.fontFamily
-                font.pixelSize: Theme.fontSizeSmall
-                color: _pinArea.lit || notifCard.pinLook.action === "unpin" ? Theme.accent : Theme.textMuted
-
-                PointerArea {
-                    id: _pinArea
-                    cursorShape: Qt.PointingHandCursor
-                    onPressed: notifCard._dismissPressed = true
-                    onReleased: Qt.callLater(() => notifCard._dismissPressed = false)
-                    onClicked: notifCard.togglePin()
-                }
-
-                HoverTip {
-                    target: _pinButton
-                    shown: _pinArea.containsMouse
-                    text: notifCard.pinLook.tip
-                }
-            }
-
-            Text {
-                text: notifCard.compactDismiss ? "×" : "dismiss"
-                font.family: Theme.fontFamily
-                font.pixelSize: notifCard.compactDismiss ? Theme.fontSizeSection : Theme.fontSizeSmall
-                color: notifCard.compactDismiss ? Theme.textSecondary : Theme.textMuted
-
-                MouseArea {
-                    id: _dismissArea
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onPressed: notifCard._dismissPressed = true
-                    // Whether or not the tap came, the mark ends with this click
-                    onReleased: Qt.callLater(() => notifCard._dismissPressed = false)
-                    onClicked: {
-                        notifCard.closeClicked();
-                        notifCard.dismissRequested();
-                    }
-                }
-
-                // On a toast, "×" dismisses the notification: for one of the shell's jobs,
-                // that it does not stop the job
-                HoverTip {
-                    target: parent
-                    shown: notifCard.compactDismiss && _dismissArea.containsMouse
-                        && typeof notifCard.notification?.hints?.["x-qs-progress-run"] === "string"
-                    text: "Dismiss. The job goes on."
-                }
-            }
+        NotificationHeader {
+            card: notifCard
         }
 
         // Thumbnail (a square image) beside the summary and body
@@ -462,113 +278,16 @@ Rectangle {
 
                 // Body (optional — hidden when empty), in a box that cuts it at
                 // bodyMaxLines lines (a toast)
-                Item {
+                NotificationBody {
                     id: _bodyBox
-                    Layout.fillWidth: true
-                    visible: notifCard._body.length > 0
-                    // A line's height as the text lays it out (taller than the font's line
-                    // spacing, which would cut the last line that fits)
-                    implicitHeight: notifCard.bodyCut
-                        ? notifCard.bodyMaxLines * _bodyEdit.implicitHeight / _bodyEdit.lineCount : _bodyEdit.implicitHeight
-                    clip: notifCard.bodyMaxLines > 0
-
-                    TextEdit {
-                        id: _bodyEdit
-                        selectionColor: Theme.selection
-                        selectedTextColor: Theme.selectedText
-                        // The body's markup, made safe: formatting, links, image rows
-                        // (NotificationMarkup)
-                        textFormat: TextEdit.RichText
-                        text: NotificationMarkup.richText(notifCard._body, notifCard._markupColors)
-                        font.family: Theme.fontFamily
-                        font.pixelSize: Theme.fontSizeBody
-                        color: Theme.textSecondary
-                        anchors.left: parent.left
-                        anchors.right: parent.right
-                        anchors.top: parent.top
-                        // A word longer than the line is broken, not cut off at the side
-                        wrapMode: TextEdit.WrapAtWordBoundaryOrAnywhere
-                        readOnly: true
-                        selectByMouse: true
-
-                        onSelectedTextChanged: {
-                            if (selectedText !== "")
-                                notifCard._activeEdit = _bodyEdit;
-                            else if (notifCard._activeEdit === _bodyEdit)
-                                notifCard._selectionClearedAt = Date.now();
-                        }
-
-                        // Text stays selectable by dragging, but over a link, or on a card
-                        // that is clicked, the pointer is a hand, not a text cursor
-                        MouseArea {
-                            anchors.fill: parent
-                            acceptedButtons: Qt.NoButton
-                            cursorShape: notifCard._defaultAction !== null || _bodyEdit.hoveredLink !== ""
-                                ? Qt.PointingHandCursor : Qt.IBeamCursor
-                        }
-
-                        // A link clicked: rich text takes that click itself and reports it
-                        // here — opened, or asked about — and it is not the card's default
-                        // action
-                        onLinkActivated: link => notifCard._openLink(link)
-
-                        // On the text itself: the text takes the press for selecting, so a
-                        // handler further up never sees the click. A handler of the same item
-                        // sees it first, and a drag (a selection) is no tap. Not on a link.
-                        TapHandler {
-                            enabled: notifCard._defaultAction !== null
-                            onTapped: eventPoint => {
-                                if (_bodyEdit.linkAt(eventPoint.position.x, eventPoint.position.y) === "")
-                                    notifCard._activateDefault();
-                            }
-                        }
-
-                        // Where a link goes, on hover — a link's text can say anything
-                        HoverTip {
-                            target: _bodyEdit
-                            // Not on an image row's link: the row shows its address
-                            shown: _bodyEdit.hoveredLink !== "" && !notifCard._imageLinks.includes(_bodyEdit.hoveredLink)
-                            text: _bodyEdit.hoveredLink
-                            // Room for an address, broken anywhere when it is longer
-                            maxWidth: 420
-                            delay: 300
-                            // Over the line of the link under the pointer, at the pointer
-                            anchorRect: {
-                                const point = _bodyHover.point.position;
-                                const line = _bodyEdit.positionToRectangle(_bodyEdit.positionAt(point.x, point.y));
-                                return Qt.rect(point.x, line.y, 0, line.height);
-                            }
-                        }
-
-                        HoverHandler {
-                            id: _bodyHover
-                        }
-                    }
-
-                    // A cut body fades out into the card over its last line
-                    Rectangle {
-                        anchors.left: parent.left
-                        anchors.right: parent.right
-                        anchors.bottom: parent.bottom
-                        height: _bodyEdit.implicitHeight / Math.max(1, _bodyEdit.lineCount)
-                        visible: notifCard.bodyCut
-                        gradient: Gradient {
-                            GradientStop { position: 0.0; color: Qt.rgba(notifCard.color.r, notifCard.color.g, notifCard.color.b, 0) }
-                            GradientStop { position: 1.0; color: notifCard.color }
-                        }
-                    }
+                    card: notifCard
                 }
 
                 // The sender's progress (NotificationRules.progress); the bar's own
                 // animation smooths a sender that updates fast
-                ProgressBar {
-                    objectName: "progress"
-                    visible: notifCard.progressView.bar
-                    Layout.fillWidth: true
-                    Layout.topMargin: 4
-                    value: notifCard.progress.value
-                    tone: notifCard.progress.tone
-                    wave: notifCard.progressWave
+                NotificationProgress {
+                    id: _progressBar
+                    card: notifCard
                 }
             }
         }
@@ -582,7 +301,7 @@ Rectangle {
             visible: notifCard._imageKind === "preview"
             Layout.fillWidth: true
             Layout.preferredHeight: Math.min(notifCard.imageMaxHeight,
-                width * _imageProbe.sourceSize.height / Math.max(1, _imageProbe.sourceSize.width))
+                width * _picture.sourceSize.height / Math.max(1, _picture.sourceSize.width))
             Layout.topMargin: 4
             radius: Theme.notificationCard.controlRadius
             source: visible ? notifCard._imageSource : ""
@@ -747,53 +466,9 @@ Rectangle {
         }
     }
 
-    Item {
-        anchors.fill: parent
-        z: 20
-
-        SwipeGesture {
-            id: _swipe
-            yAxis.enabled: false
-            property real _restX: 0
-            onActiveChanged: {
-                if (active) {
-                    _swipeBack.stop();
-                    _restX = notifCard.x;
-                    return;
-                }
-                if (meant(deltaX, velocity().x, notifCard.width / 3)) {
-                    _swipeOut.to = _restX + (deltaX > 0 ? 1 : -1) * notifCard.width * 1.2;
-                    _swipeOut.start();
-                } else {
-                    _swipeBack.to = _restX;
-                    _swipeBack.start();
-                }
-            }
-            onDeltaXChanged: {
-                if (!active)
-                    return;
-                notifCard.x = _restX + deltaX;
-                notifCard.opacity = Math.max(0.2, 1 - Math.abs(deltaX) / notifCard.width);
-            }
-        }
-    }
-
-    ParallelAnimation {
-        id: _swipeBack
-        property alias to: _backX.to
-        NumberAnimation { id: _backX; target: notifCard; property: "x"; duration: Theme.duration("move"); easing: Theme.curve("move") }
-        NumberAnimation { target: notifCard; property: "opacity"; to: 1; duration: Theme.duration("move"); easing: Theme.curve("move") }
-    }
-
-    ParallelAnimation {
-        id: _swipeOut
-        property alias to: _outX.to
-        NumberAnimation { id: _outX; target: notifCard; property: "x"; duration: Theme.duration("exit"); easing: Theme.curve("exit") }
-        NumberAnimation { target: notifCard; property: "opacity"; to: 0; duration: Theme.duration("exit"); easing: Theme.curve("exit") }
-        onFinished: {
-            notifCard.swipedAway = true;
-            notifCard.closeClicked();
-            notifCard.dismissRequested();
-        }
+    // Swiped away with a finger (NotificationSwipe): over the content, above everything
+    NotificationSwipe {
+        id: _swipeLayer
+        card: notifCard
     }
 }

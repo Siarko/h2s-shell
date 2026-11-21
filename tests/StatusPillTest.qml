@@ -312,7 +312,7 @@ TestCase {
         assert(bar.wave, "running again, grown: the wave");
         const next = _standIn.createObject(suite, { hints: { value: 30 } });
         card.notification = next;
-        assert(!bar.wave && card._grewAt === 0, "another notification in the card: its growth forgotten at once");
+        assert(!bar.wave && bar._grewAt === 0, "another notification in the card: its growth forgotten at once");
         next.hints = { value: 20 };
         assert(!bar.wave, "another notification in the card, its value going down: no wave");
         card.destroy();
