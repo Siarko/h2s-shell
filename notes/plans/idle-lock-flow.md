@@ -452,6 +452,7 @@ control and a way `slideshow` (not built yet) both fall back to `saver`.
 | `sleep` | the Timer stops; nothing is changed (the lock before sleep is `LockRules`') |
 | `resumed` | counts as input: `idleSince` = now, screensaver hidden, monitors the shell turned off powered on (defect 11); the lock, if any, stays (defect 10: no screensaver over an unlocked session after a wake) |
 | forced (IPC / `SetActive(true)`) | `idleSince` = now − `saverAfter` (or the screensaver now if it is off), held stages ignored until input |
+| idle reaches "Screensaver after" while locked | the stages run on under the lock (inhibitors ignored): the start command runs, as today; the pictures stay under the lock surface |
 
 ### Wiring: `Idle` (I/O)
 

@@ -22,7 +22,7 @@ TestCase {
         assertEqual(result.state.phase, "shown", "quiet, slept unlocked: shown");
         assertEqual(_actions(result), "notify@1000", "… the notification, with the sleep's time");
 
-        result = rules.step(shown, { type: "closed" });
+        result = rules.step(shown, { type: "closed", at: 1000 });
         assertEqual(result.state.phase, "waiting", "shown, closed: waiting (acknowledged)");
         assertEqual(result.state.at, 1000, "… the time kept for the page's line");
         assertEqual(_actions(result), "", "… nothing to do");
@@ -30,6 +30,12 @@ TestCase {
         result = rules.step(shown, slept("unlocked", 3000));
         assertEqual(result.state.phase, "shown", "shown, slept unlocked again: still shown");
         assertEqual(_actions(result), "notify@3000", "… the notification replaced, its time updated");
+
+        const replaced = rules.step(shown, slept("unlocked", 3000)).state;
+        result = rules.step(replaced, { type: "closed", at: 1000 });
+        assertEqual(result.state.phase, "shown", "a close of the notification since replaced: ignored, the new one still shown");
+        assertEqual(rules.step(replaced, { type: "closed", at: 3000 }).state.phase, "waiting", "… its own close acknowledges it");
+        assertEqual(rules.step(shown, { type: "closed" }).state.phase, "shown", "a close naming no notification: ignored");
 
         result = rules.step(shown, slept("locked"));
         assertEqual(result.state.phase, "quiet", "shown, slept locked: quiet (fixed before it was read)");
@@ -89,7 +95,7 @@ TestCase {
             told.push(_actions(next));
         };
         send(slept("unlocked", 10));
-        send({ type: "closed" });
+        send({ type: "closed", at: 10 });
         send(slept("unlocked", 20));
         send(slept("locked", 30));
         send(slept("unlocked", 40));

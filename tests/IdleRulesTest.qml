@@ -100,8 +100,10 @@ TestCase {
                     "a time without its switch: never");
         assertEqual(rules.config({ screensaverEnabled: true, screensaverTimeout: "junk" }, [], false).saverAfter, 300,
                     "a time not understood: the default");
-        assertEqual(rules.config({}, ["a", "a", "", { id: "b" }, 7], false).monitors.join(" "), "a b",
-                    "monitors by id, once each, objects with an id too");
+        const twins = rules.config({}, ["a", "a", "", { id: "b" }, 7, "b", "a"], false);
+        assertEqual(twins.monitors.join(" "), "a b", "monitors by id, once each, objects with an id too");
+        assertEqual(twins.duplicates.join(" "), "a b", "… two monitors with one id reported, once each");
+        assertEqual(rules.config({}, ["a", "b"], false).duplicates.length, 0, "distinct ids: no duplicates");
 
         const ways = values => rules.config(values, ["oled", "lcd"], true).ways;
         assertEqual(ways({}).oled, "screensaver", "the default way: the screensaver");
@@ -263,6 +265,26 @@ TestCase {
                     "input at the lock screen: on again, still active (locked)");
         machine.idle(95000, 90000);
         assertEqual(machine.next(), 150000, "… the lock's quiet time starts again from that input");
+
+        // A read from before the shell changed the power is not trusted
+        machine.deadline();
+        assertEqual(machine.actions, "showSaver:lcd+oled,powerOff:lcd+oled,lockBlack:true",
+                    "off again after the input: black, the earlier \"off\" read no longer trusted");
+        assertEqual(machine.state.power.lcd, "unknown", "… the power unknown until a fresh read");
+        machine.at(151000, { type: "power", power: { lcd: "off", oled: "off" } });
+        assertEqual(machine.actions, "lockBlack:false", "… a fresh read: not black");
+
+        // Video players send SimulateUserActivity every ~30 s: the lock screen ignores it
+        const player = _machine({}, ["lcd"], true);
+        player.at(10000, { type: "locked" });
+        player.idle(15000, 10000);
+        player.at(40000, { type: "activity" });
+        assertEqual(player.actions, "", "activity while locked: nothing");
+        assertEqual(player.next(), 70000, "… the lock screen's screen-off still comes at its time");
+        player.deadline();
+        player.at(100000, { type: "activity" });
+        assertEqual(player.actions, "", "… and once off, activity powers nothing on");
+        assertEqual(player.shown(), "lcd=off", "… still off");
 
         const noPower = _machine({}, ["lcd"], false);
         noPower.at(10000, { type: "locked" });
@@ -450,6 +472,13 @@ TestCase {
         assertEqual(machine.actions, "hideSaver:lcd,endCommand,active:false", "input ends it");
         machine.idle(15000, 10000);
         assertEqual(machine.next(), -1, "… then the inhibitor holds again");
+
+        // Input on the forced screensaver before the base time: no inputIdle(true) came, so
+        // no inputIdle(false) will; its surface sends activity
+        const early = _machine(saver, ["lcd"], true);
+        early.at(1000, { type: "force" });
+        early.at(4000, { type: "activity" });
+        assertEqual(early.actions, "hideSaver:lcd,endCommand,active:false", "forced, then a key within 5 s (activity): hidden");
 
         const off = _machine({}, ["lcd"], true);
         off.at(1000, { type: "force" });

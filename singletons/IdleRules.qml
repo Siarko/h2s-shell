@@ -64,10 +64,17 @@ Singleton {
             return Math.max(0, number);
         };
         const ids = [];
+        // Two connected monitors with one id (MonitorRules should have told them apart):
+        // kept once, and reported, not merged silently
+        const duplicates = [];
         for (const monitor of monitors ?? []) {
             const id = typeof monitor === "string" ? monitor : monitor?.id;
-            if (typeof id === "string" && id !== "" && !ids.includes(id))
+            if (typeof id !== "string" || id === "")
+                continue;
+            if (!ids.includes(id))
                 ids.push(id);
+            else if (!duplicates.includes(id))
+                duplicates.push(id);
         }
         const defaultWay = ways.includes(given.blanking) ? given.blanking : "screensaver";
         const perMonitor = flag(given.perMonitor, false);
@@ -90,7 +97,8 @@ Singleton {
             ways: resolved,
             canPowerOff: power,
             commands: flag(given.screensaverCommands, false),
-            monitors: ids
+            monitors: ids,
+            duplicates: duplicates
         };
     }
 
@@ -263,7 +271,10 @@ Singleton {
     // `event`: { type, … } — inputIdle { idle, since? }, awayIdle { idle, since? },
     // busInhibitors { count }, logindIdleBlock { held: true | false | "unknown" }, power
     // { power: { id: "on" | "off" | other } }, deadline, config, monitors, locked,
-    // unlocked, sleep, resumed, force, activity. `config`: from config() — passed at every
+    // unlocked, sleep, resumed, force, activity (D-Bus SimulateUserActivity, and input on a
+    // forced screensaver's surface: before baseTime has passed no inputIdle(true) came, so
+    // no inputIdle(false) will — the surface sends `activity`; ignored while locked, where
+    // video players send it every ~30 s). `config`: from config() — passed at every
     // step, so a changed profile or monitor list is the "config"/"monitors" event with the
     // new one. → { state, actions, ignored }. Actions, in this order: powerOn { ids },
     // hideSaver { ids }, showSaver { ids } (a surface for every monitor leaving "on", also
@@ -347,7 +358,9 @@ Singleton {
             next.idleSince = now - config.saverAfter * 1000;
             break;
         case "activity":
-            wake = true;
+            // Locked: only real input at the lock screen wakes (players keep sending it)
+            if (!next.locked)
+                wake = true;
             break;
         default:
             return { state: state, actions: [], ignored: "unknown event" };
@@ -379,6 +392,9 @@ Singleton {
             const to = want[id];
             if (from === "off" && to !== "off")
                 powerOn.push(id);
+            // The shell changes its power: an earlier read no longer says what it is
+            if ((from === "off") !== (to === "off"))
+                next.power[id] = "unknown";
             if (from !== "on" && to === "on")
                 hide.push(id);
             if (from === "on" && to !== "on")

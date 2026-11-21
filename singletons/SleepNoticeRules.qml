@@ -42,7 +42,8 @@ Singleton {
     }
 
     // `event`: { type: "slept", outcome: "locked" | "unlocked" | "unknown", at } (after the
-    // resume), { type: "closed" } (the notification closed: ×, or its action), or
+    // resume), { type: "closed", at } (the notification about the sleep at `at` closed: ×,
+    // or its action; a close of one since replaced is ignored), or
     // { type: "restarted" } (the shell started with this remembered state). → { state,
     // actions }: notify { at } (show the notification, replacing one shown), withdraw (take
     // it back). A changed state is for the caller to remember.
@@ -66,7 +67,7 @@ Singleton {
             // Unknown, or anything else: no lock state could be read, never an alarm
             return stay;
         case "closed":
-            if (current.phase === "shown")
+            if (current.phase === "shown" && Number(event.at) === current.at)
                 return { state: { phase: "waiting", at: current.at }, actions: [] };
             return stay;
         case "restarted":
