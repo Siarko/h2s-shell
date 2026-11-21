@@ -49,11 +49,17 @@ if [ -e "$work/control/unreachable" ]; then
     echo "ssh: connect to host \${destination#*@} port 22: Connection refused" >&2
     exit 255
 fi
-if [ -e "$work/control/drop-polls" ] && [[ "\$*" == *" poll "* ]]; then
-    echo "client_loop: send disconnect: Broken pipe" >&2
-    exit 255
+cd "$remote_home" || exit 255
+if [ "\$*" = "bash -s" ]; then
+    # The action is the first line of the script it is sent
+    input=\$(cat)
+    if [ -e "$work/control/drop-polls" ] && [[ "\$input" == "set -- poll "* ]]; then
+        echo "client_loop: send disconnect: Broken pipe" >&2
+        exit 255
+    fi
+    exec env -u XDG_CACHE_HOME HOME="$remote_home" bash -c "\$*" <<< "\$input"
 fi
-cd "$remote_home" && exec env -u XDG_CACHE_HOME HOME="$remote_home" bash -c "\$*"
+exec env -u XDG_CACHE_HOME HOME="$remote_home" bash -c "\$*"
 EOF
 chmod +x "$work/ssh"
 
@@ -64,12 +70,17 @@ mkdir -p "$local_repo/tests"
 cp "$REPO/tests/remote-run.sh" "$local_repo/tests/"
 cat > "$local_repo/tests/fake.sh" << 'EOF'
 #!/usr/bin/env bash
-# fake.sh <status> [<file to wait for>]
+# fake.sh <status> [<file to wait for> [<argument to echo>]]
 echo "tools: system (PATH, not pinned) — labwc 0"
 echo "hup ignored: $(( 0x$(awk '/^SigIgn/ {print $2}' /proc/$$/status) & 1 ))"
 echo "commit: $(git rev-parse HEAD)"
 echo "session: $(awk '{print $6}' /proc/$$/stat)"
-if [ -n "${2:-}" ]; then while [ ! -e "$2" ]; do sleep 0.1; done; fi
+echo "argument: ${3:-}"
+# A deadline, so that a check gone wrong does not leave it running
+if [ -n "${2:-}" ]; then
+    for _ in $(seq 600); do [ -e "$2" ] && break; sleep 0.1; done
+    [ -e "$2" ] || { echo "fake: gave up waiting"; exit 99; }
+fi
 echo "All (1 s):"
 echo "  PASS     fake part"
 echo "fake: status $1"
@@ -80,6 +91,9 @@ chmod +x "$local_repo/tests/fake.sh"
     cd "$local_repo" && git init --quiet -b master && git config user.email t@t && git config user.name t \
         && git add -A && git commit --quiet -m one \
         && git clone --quiet "$local_repo" "$remote_home/src/h2s-shell" \
+        && git clone --quiet "$local_repo" "$remote_home/src/h2s shell" \
+        && git -C "$remote_home/src/h2s-shell" worktree add --quiet --detach "$remote_home/owner-tree" \
+        && rm -rf "$remote_home/owner-tree" \
         && echo two > two && git add two && git commit --quiet -m two \
         && git checkout --quiet -b feature && echo three > three && git add three && git commit --quiet -m three
 ) || { echo "remote-run-selftest.sh: the test repositories could not be made" >&2; exit 2; }
@@ -95,11 +109,13 @@ run() {
 }
 has() { grep -qF -- "$1" <<< "$OUTPUT"; }
 run_id() { sed -n 's/^remote-run.sh: run \([^ ]*\) started.*/\1/p' <<< "$OUTPUT"; }
+# remote_clean [<repository>]: as it was, but for objects; the owner's stale worktree kept
 remote_clean() {
-    local repo=$remote_home/src/h2s-shell
+    local repo=${1:-$remote_home/src/h2s-shell}
     [ "$(git -C "$repo" rev-parse HEAD)" = "$remote_head" ] \
         && [ -z "$(git -C "$repo" status --porcelain)" ] \
-        && [ "$(git -C "$repo" worktree list | wc -l)" = 1 ] \
+        && ! git -C "$repo" worktree list | grep -q h2s-shell-tests \
+        && { [ "$repo" != "$remote_home/src/h2s-shell" ] || git -C "$repo" worktree list | grep -q owner-tree; } \
         && [ -z "$(git -C "$repo" for-each-ref refs/remote-run)" ] \
         && [ -z "$(ls -A "$remote_home/.cache/h2s-shell-tests/remote-run" 2> /dev/null)" ] \
         && [ -z "$(git -C "$local_repo" for-each-ref refs/remote-run)" ]
@@ -166,6 +182,29 @@ touch "$work/control/release"
 run --attach "$id"
 check "--attach brings back status 0" [ "$STATUS" = 0 ]
 check "nothing left on the remote" remote_clean
+
+echo "quoting: an argument with shell syntax, a repository path with a space"
+tricky='a b;$(touch $HOME/pwned) `touch $HOME/pwned`'
+run --repo '~/src/h2s shell' --wait-max 0 feature -- tests/fake.sh 0 "$work/control/release2" "$tricky"
+id=$(run_id)
+check "it starts in the repository with a space" [ -n "$id" ]
+touch "$work/control/release2"
+run --attach "$id"
+check "status 0" [ "$STATUS" = 0 ]
+check "the argument reaches the command unchanged" has "argument: $tricky"
+check "nothing it names ran" bash -c '[ -z "$(find "$1" "$2" -name pwned)" ]' _ "$remote_home" "$local_repo"
+check "--attach cleans the run's own repository" remote_clean "$remote_home/src/h2s shell"
+
+echo "ids that are no run's"
+for bad in .. . ../x 20260101-000000-0123456789-abc; do
+    run --attach "$bad"
+    check "--attach $bad: status 2, refused here" bash -c '[ "$1" = 2 ] && grep -q "is not a run id" <<< "$2"' _ "$STATUS" "$OUTPUT"
+done
+check "the remote's run directory still there" [ -d "$remote_home/.cache/h2s-shell-tests" ]
+# The remote half checks the id itself, whoever calls it
+script_text=$(sed -n "/^remote_script='/,/^'$/p" "$local_repo/tests/remote-run.sh" | sed '1d;$d')
+printf 'set -- clean %q ..\n%s\n' "$remote_home/src/h2s-shell" "$script_text" | "$work/ssh" "$address" "bash -s" > /dev/null 2>&1
+check "the remote half refuses a clean of '..'" bash -c '[ "$1" = 3 ] && [ -d "$2" ]' _ "$?" "$remote_home/.cache/h2s-shell-tests/remote-run"
 
 echo "an unreachable remote"
 touch "$work/control/unreachable"

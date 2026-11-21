@@ -1842,7 +1842,11 @@ unreachable, no repository there), was lost, or was still going at the limit. In
 or cut off, it prints the run's id and the run goes on; `--attach <id>` collects it later.
 
 It needs git and ssh here, and git, bash, `setsid` and coreutils' `env` (8.31 or later) on
-the remote; the run there takes its test tools as any run on that system does.
+the remote; the run there takes its test tools as any run on that system does. The
+arguments go to the remote's bash on standard input, so the remote login shell only runs
+the words `bash -s` and one single-quoted `bash -c` command: a POSIX shell, bash, zsh and
+fish all do. Cleaning up removes the run's own worktree entry only, never the remote
+repository's other worktrees.
 `tests/remote-run-selftest.sh`, a part of `--quick`, checks it against a stand-in `ssh` that
 runs the remote half locally in a temp directory: a pass and a failure status, a dropped
 connection and the time limit each picked up with `--attach`, an unreachable remote, a

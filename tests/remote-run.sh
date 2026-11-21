@@ -30,7 +30,8 @@
 # The address is never written to a file, here or on the remote; ssh runs with
 # BatchMode=yes, so it never asks for a password. H2S_REMOTE_SSH names another ssh (the
 # self-test's stand-in). Needs git, ssh and, on the remote, git, bash, setsid and env from
-# coreutils 8.31 or later — the same on NixOS and on Arch.
+# coreutils 8.31 or later — the same on NixOS and on Arch. The remote's login shell only
+# runs "bash -s" and one single-quoted "bash -c" word: sh, bash, zsh and fish all do.
 #
 # Exit status: the remote command's; 2 when the run could not be set up or its end not
 # seen (no address, the remote unreachable, a ref that does not resolve, a run lost or
@@ -72,7 +73,8 @@ done
 [[ "$poll" =~ ^[0-9]+([.][0-9]+)?$ ]] || setup_error "H2S_REMOTE_POLL takes seconds, not '$poll'"
 if [ -n "$attach" ]; then
     [ -z "$ref" ] || usage
-    [[ "$attach" =~ ^[A-Za-z0-9.-]+$ ]] || setup_error "'$attach' is not a run id"
+    # Exactly the form made below (date, time, commit, a random number)
+    [[ "$attach" =~ ^[0-9]{8}-[0-9]{6}-[0-9a-f]{10}-[0-9a-f]{4}$ ]] || setup_error "'$attach' is not a run id"
 fi
 
 # The remote half. Every call sends this script on ssh's standard input with one action;
@@ -83,6 +85,11 @@ set -uo pipefail
 action=$1
 shift
 runs=${XDG_CACHE_HOME:-$HOME/.cache}/h2s-shell-tests/remote-run
+# The id is the form the local half makes, checked again here before any path is built of it
+id_form="^[0-9]{8}-[0-9]{6}-[0-9a-f]{10}-[0-9a-f]{4}\$"
+check_id() { [[ "$1" =~ $id_form ]] || { echo "\"$1\" is not a run id" >&2; exit 3; }; }
+# The repository a run was started in, as start wrote it, else the one given
+run_repo() { if [ -f "$runs/$1/repo" ]; then cat "$runs/$1/repo"; else expand "$2"; fi; }
 expand() { case "$1" in "~") echo "$HOME" ;; "~/"*) echo "$HOME/${1#"~/"}" ;; *) echo "$1" ;; esac; }
 case "$action" in
 probe)
@@ -100,20 +107,25 @@ probe)
     ;;
 start)
     # start <repo> <id> <commit> <command…>
+    check_id "$2"
     repo=$(expand "$1") id=$2 commit=$3
     shift 3
     dir=$runs/$id
     mkdir -p "$dir" || exit 3
     [ ! -e "$dir/run.pid" ] || { echo "run $id was started already" >&2; exit 3; }
+    # Where it runs, for clean (an --attach knows only the id)
+    repo=$(cd "$repo" 2> /dev/null && pwd) || { echo "no repository at $1" >&2; exit 3; }
+    printf "%s" "$repo" > "$dir/repo"
     if [ -f "$dir/bundle" ]; then
         git -C "$repo" fetch --quiet "$dir/bundle" "refs/remote-run/$id:refs/remote-run/$id" \
             || { echo "the bundle could not be fetched into $1" >&2; exit 3; }
     fi
-    git -C "$repo" worktree add --quiet --detach "$dir/tree" "$commit" \
+    # The tree is named after the id, so its entry in the repository is worktrees/<id>
+    git -C "$repo" worktree add --quiet --detach "$dir/$id" "$commit" \
         || { echo "no working tree for $commit could be made" >&2; exit 3; }
     git -C "$repo" update-ref -d "refs/remote-run/$id" 2> /dev/null
     rm -f "$dir/bundle"
-    head=$(git -C "$dir/tree" rev-parse HEAD)
+    head=$(git -C "$dir/$id" rev-parse HEAD)
     [ "$head" = "$commit" ] || { echo "the remote tree is at $head, not $commit" >&2; exit 3; }
     printf "%q " "$@" > "$dir/command"
     # A new session, so the hang-up of this connection does not reach the run; SIGHUP back
@@ -121,7 +133,7 @@ start)
     cd "$dir" || exit 3
     setsid -f env --default-signal=HUP bash -c "
         echo \$\$ > run.pid.tmp && mv run.pid.tmp run.pid
-        (cd tree && eval \"\$(cat ../command)\") > run.log 2>&1 < /dev/null
+        (cd $id && eval \"\$(cat ../command)\") > run.log 2>&1 < /dev/null
         echo \$? > status.tmp && mv status.tmp status" < /dev/null > /dev/null 2>&1 \
         || { echo "the run could not be started (setsid)" >&2; exit 3; }
     for _ in $(seq 50); do [ -f "$dir/run.pid" ] && break; sleep 0.1; done
@@ -130,6 +142,7 @@ start)
     ;;
 poll)
     # poll <id>: "done <status>", "running", "lost" (ended without a status) or "unknown"
+    check_id "$1"
     dir=$runs/$1
     if [ -f "$dir/status" ]; then echo "done $(cat "$dir/status")"
     elif [ ! -f "$dir/run.pid" ]; then echo unknown
@@ -139,33 +152,39 @@ poll)
     fi
     ;;
 collect)
+    check_id "$1"
     cat "$runs/$1/run.log" 2> /dev/null
     ;;
 clean)
     # clean <repo> <id>
-    repo=$(expand "$1") dir=$runs/$2
-    if [ -d "$dir/tree" ]; then
-        git -C "$repo" worktree remove --force "$dir/tree" 2> /dev/null || rm -rf "$dir/tree"
+    check_id "$2"
+    repo=$(run_repo "$2" "$1") dir=$runs/$2
+    if [ -d "$dir/$2" ] && ! git -C "$repo" worktree remove --force "$dir/$2" 2> /dev/null; then
+        # Only the entry of this run: other worktrees of the repository are not ours to prune
+        rm -rf "${dir:?}/$2"
+        common=$(git -C "$repo" rev-parse --path-format=absolute --git-common-dir 2> /dev/null) \
+            && rm -rf "${common:?}/worktrees/$2"
     fi
-    git -C "$repo" worktree prune 2> /dev/null
     git -C "$repo" update-ref -d "refs/remote-run/$2" 2> /dev/null
     rm -rf "$dir"
     ;;
 esac
 '
 
-# remote <action> <argument…>: runs the remote half; ssh's own failure is status 255
+# remote <action> <argument…>: runs the remote half; ssh's own failure is status 255. The
+# arguments go on standard input with the script, quoted for the remote bash, so the remote
+# login shell only ever sees the plain words "bash -s".
 remote() {
-    local words
-    words=$(printf '%q ' "$@")
     "$SSH" -o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 \
-        "$host" "bash -s -- $words" <<< "$remote_script"
+        "$host" "bash -s" <<< "set -- $(printf '%q ' "$@")
+$remote_script"
 }
 # receive <file>: copies the bundle into the run's directory (a plain command: standard
-# input carries the file, not the script; the id is letters, digits and dashes)
+# input carries the file, not the script; the id is digits, letters and dashes). One
+# single-quoted word for bash, which every login shell passes on as it is.
 receive() {
     "$SSH" -o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 \
-        "$host" "d=\${XDG_CACHE_HOME:-\$HOME/.cache}/h2s-shell-tests/remote-run/$id && mkdir -p \"\$d\" && cat > \"\$d/bundle\"" < "$1"
+        "$host" "bash -c 'd=\${XDG_CACHE_HOME:-\$HOME/.cache}/h2s-shell-tests/remote-run/$id && mkdir -p \"\$d\" && cat > \"\$d/bundle\"'" < "$1"
 }
 
 reattach_hint() { echo "remote-run.sh: the run goes on remotely; collect it with: tests/remote-run.sh --attach $id" >&2; }
