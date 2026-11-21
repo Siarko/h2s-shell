@@ -105,9 +105,9 @@ QtObject {
     // Whatever the chains: no suite runs past this, counted from the start of the suites. It
     // stays under tests/headless.sh's limit on Quickshell (`timeout 480`, labwc's 540), so that
     // a run that hangs ends here, naming its suites, not killed from outside. The chain's
-    // own budgets (Modules → ModuleRegistries → Anchors 90 s each, ModuleInstaller and
-    // ModuleUpdater 240 s each) add up to more: they are bounds for a hang, and the chain
-    // takes about 100 s in all.
+    // own budgets (Modules → ModuleRegistries → Anchors 90 s each, ModuleInstaller,
+    // ModuleUpdater and ModuleBackup 240 s each) add up to more: they are bounds for a hang,
+    // and the whole chain ends about 100 s after the start.
     readonly property int _runLimitMs: 420000
     function timeLimitOf(suite) {
         return suite.timeLimitMs > 0 ? suite.timeLimitMs : _asyncLimitMs;
