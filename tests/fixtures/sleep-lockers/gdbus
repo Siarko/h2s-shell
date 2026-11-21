@@ -1,0 +1,15 @@
+#!/bin/sh
+# A stand-in for gdbus (tests/SleepLockersReadingTest.qml), started through a link in the
+# suite's scratch directory: it answers logind's ListInhibitors on the system bus with that
+# directory's `inhibitors` (@UID@ replaced by the caller's uid), and fails as gdbus does
+# when there is no such file. Anything else it is asked fails.
+here=$(dirname "$0")
+case " $* " in
+    *" call --system --dest org.freedesktop.login1 --object-path /org/freedesktop/login1 --method org.freedesktop.login1.Manager.ListInhibitors "*) ;;
+    *) echo "Error: the stand-in only knows logind's ListInhibitors" >&2; exit 2 ;;
+esac
+if [ ! -f "$here/inhibitors" ]; then
+    echo "Error: GDBus.Error:org.freedesktop.DBus.Error.ServiceUnknown: The name org.freedesktop.login1 was not provided by any .service files" >&2
+    exit 1
+fi
+sed "s/@UID@/$(id -u)/g" "$here/inhibitors"

@@ -37,6 +37,9 @@ Singleton {
     // unless listed here. Global, not per profile: which code runs in the shell is not a
     // preference a profile switches.
     property alias disabledModules: _adapter.disabledModules
+    // The notice about locking before sleep last given (SleepLockNotice,
+    // LockIoRules.sleepNoticeStep): remembered, so it is given once, not at every start
+    property alias sleepLockNotice: _adapter.sleepLockNotice
     // The file itself, for the backup taken before a migration
     readonly property string path: _file.path
 
@@ -102,6 +105,7 @@ Singleton {
             property string globals: "{}"
             property list<string> migratedKeys: []
             property list<string> disabledModules: []
+            property string sleepLockNotice: ""
             // The shell version that last wrote this file — for reference, and for
             // migrations that need to know what wrote it
             property string writtenBy: ""

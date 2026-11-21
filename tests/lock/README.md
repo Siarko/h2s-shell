@@ -352,7 +352,7 @@ value, one set to a value that cannot be used is ignored (and named in the log).
 | `H2S_LOCK_SYSTEM` | `TestSeams`, `seams.sh` | `nixos` or `other`: the system the lock takes itself to be on (only with `H2S_LOCK_SYSTEM_PAM_DIR`) |
 | `H2S_LOCK_AUTH_METHODS` | `seams.sh` | an executable that answers for the methods script (the test PAM stacks) |
 | `H2S_LOCK_LEDS_DIR` | `TestSeams` | where the Caps Lock LEDs are read, instead of `/sys/class/leds` |
-| `H2S_LOCK_TEST_TIMINGS` | `TestSeams` | JSON overrides of `LockRules.timings` |
+| `H2S_LOCK_TEST_TIMINGS` | `TestSeams` | JSON overrides of `LockRules.timings`, and `sleepLockers`, `sleepLockersEvery` (the first read of other lockers before sleep and the pause between reads, `SleepLockNotice`) |
 | `H2S_LOCK_TEST_RELOAD` | `TestSeams` | `1`: the `locktest` IPC, `reload(hard)` |
 | `H2S_SHELL_TEST_MODULE_GUARD_MS` | `TestSeams` | the module start guard's window, ms |
 | `H2S_SHELL_TEST_MODULE_CHECK_PATH` | `TestSeams` | a directory put first on the module file check's `PATH` |

@@ -83,6 +83,7 @@ QtObject {
 
     property var _lockscreen: Lockscreen
     property var _lockNotice: LockNotice
+    property var _sleepLockNotice: SleepLockNotice
 
     // Popup panels are compiled the first time they open, which delayed the first opening
     // of the calendar and the music panel by 20 ms. Compile them in the background once the

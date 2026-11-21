@@ -6,8 +6,9 @@ import QtQuick
 // The small decisions of the lock screen's I/O side that are not lock rules but still
 // deserve tests (tests/LockIoRulesTest.qml): the driver's queue and how it carries out a
 // step, the password fallback, how a Qt key is named for the rules, how a forwarded key
-// edits the prompt's field, how a methods-script run is reported, and how long a helper
-// process waits before it is started again. Pure: no clock, no process, no
+// edits the prompt's field, how a methods-script run is reported, how long a helper
+// process waits before it is started again, and whether another program locks before sleep
+// (SleepLockNotice). Pure: no clock, no process, no
 // other singleton. The rules themselves are in LockRules; the driver is Lockscreen.
 Singleton {
     id: root
@@ -377,5 +378,226 @@ Singleton {
                 + " and was left locked. "
                 + (pathUsable ? "Log: " + directory.replace(/\/+$/, "") + "/h2s-shell-launcher.log" : "Log: h2s-shell-launcher.log in XDG_RUNTIME_DIR")
         };
+    }
+
+    // ---- Other lockers before sleep (SleepLockNotice) ----
+    // Whether something besides this shell locks the screen before the computer sleeps, read
+    // from what logind knows about every system: the sleep "delay" inhibitors, which a
+    // program takes to act before sleep. A locker of the user's own session holds one —
+    // xss-lock, swayidle with a before-sleep command, GNOME Shell, KDE's screen locker,
+    // hypridle — beside services that hold one for other work (NetworkManager, UPower). The
+    // list says who holds each and why, not what it will do: a holder counts as a locker
+    // by its name or by a reason that says it locks the screen; hypridle holds one whatever
+    // its before_sleep_cmd is, so it is only a possible locker.
+
+    // Holders that lock the screen before sleep when they hold a sleep inhibitor at all
+    readonly property var sleepLockerNames: ["xss-lock", "swayidle", "light-locker", "xfce4-screensaver",
+        "cinnamon-screensaver", "mate-screensaver", "gnome shell", "screen locker", "xscreensaver",
+        "xsecurelock", "hyprlock", "swaylock"]
+    // Holders that act before sleep and may or may not lock: their configuration says
+    readonly property var possibleSleepLockerNames: ["hypridle"]
+
+    // logind's ListInhibitors as `gdbus call` prints it (a GVariant:
+    // `([('sleep', 'who', "why", 'delay', uint32 1000, uint32 42), …],)`, `(@a(ssssuu) [],)`
+    // for none) → [{ what, who, why, mode, uid, pid }], or null for anything else.
+    function parseInhibitors(output) {
+        if (typeof output !== "string" || output.length > 1000000)
+            return null;
+        const text = output.trim();
+        let at = 0;
+        const space = () => { while (at < text.length && /\s/.test(text[at])) at++; };
+        const take = token => {
+            space();
+            if (text.startsWith(token, at)) {
+                at += token.length;
+                return true;
+            }
+            return false;
+        };
+        const string = () => {
+            space();
+            const quote = text[at];
+            if (quote !== "'" && quote !== "\"")
+                return null;
+            let value = "";
+            for (at++; at < text.length; at++) {
+                const character = text[at];
+                if (character === quote) {
+                    at++;
+                    return value;
+                }
+                if (character !== "\\") {
+                    value += character;
+                    continue;
+                }
+                const escaped = text[++at];
+                const simple = { n: "\n", t: "\t", r: "\r", a: "\u0007", b: "\b", f: "\f", v: "\v" };
+                if (escaped === "u" || escaped === "U") {
+                    const length = escaped === "u" ? 4 : 8;
+                    const hex = text.substr(at + 1, length);
+                    if (!new RegExp("^[0-9a-fA-F]{" + length + "}$").test(hex))
+                        return null;
+                    const code = parseInt(hex, 16);
+                    if (code > 0x10ffff)
+                        return null;
+                    value += String.fromCodePoint(code);
+                    at += length;
+                } else if (escaped !== undefined) {
+                    value += simple[escaped] ?? escaped;
+                } else {
+                    return null;
+                }
+            }
+            return null;
+        };
+        const number = () => {
+            take("uint32");
+            space();
+            const match = /^[0-9]{1,10}/.exec(text.slice(at));
+            if (!match)
+                return null;
+            at += match[0].length;
+            return Number(match[0]);
+        };
+        if (!take("("))
+            return null;
+        take("@a(ssssuu)");
+        if (!take("["))
+            return null;
+        const inhibitors = [];
+        if (!take("]")) {
+            do {
+                if (!take("("))
+                    return null;
+                const what = string();
+                if (what === null || !take(","))
+                    return null;
+                const who = string();
+                if (who === null || !take(","))
+                    return null;
+                const why = string();
+                if (why === null || !take(","))
+                    return null;
+                const mode = string();
+                if (mode === null || !take(","))
+                    return null;
+                const uid = number();
+                if (uid === null || !take(","))
+                    return null;
+                const pid = number();
+                if (pid === null || !take(")"))
+                    return null;
+                inhibitors.push({ what: what, who: who, why: why, mode: mode, uid: uid, pid: pid });
+            } while (take(","));
+            if (!take("]"))
+                return null;
+        }
+        take(",");
+        if (!take(")"))
+            return null;
+        space();
+        return at === text.length ? inhibitors : null;
+    }
+
+    // A holder's name as it may be shown: one line, no control characters, at most 40
+    // characters ("" when nothing is left)
+    function lockerName(who) {
+        const text = typeof who === "string" ? who.replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]+/g, " ").replace(/\s+/g, " ").trim() : "";
+        return text.length > 40 ? text.slice(0, 39) + "…" : text;
+    }
+
+    // The inhibitors read (parseInhibitors) and this user's uid → { state, names }:
+    // "present" (a locker of this user holds a sleep delay inhibitor; `names` says which),
+    // "possible" (only holders that may lock), "none" (the list was read and holds neither),
+    // "unknown" (no list, no uid: a failed read is never "none"). The shell's own inhibitor
+    // (who "h2s-shell") and other users' (a greeter's, another session's) do not count.
+    // `names`: shown names, sorted, at most 3.
+    function sleepLockers(inhibitors, uid) {
+        if (!Array.isArray(inhibitors) || typeof uid !== "number" || !Number.isInteger(uid) || uid < 0)
+            return { state: "unknown", names: [] };
+        const present = new Set();
+        const possible = new Set();
+        for (const inhibitor of inhibitors) {
+            if (inhibitor?.uid !== uid || inhibitor.mode !== "delay" || typeof inhibitor.what !== "string"
+                    || !inhibitor.what.split(":").includes("sleep"))
+                continue;
+            const who = lockerName(inhibitor.who);
+            const key = who.toLowerCase();
+            if (key === "h2s-shell")
+                continue;
+            const why = typeof inhibitor.why === "string" ? inhibitor.why : "";
+            if (sleepLockerNames.includes(key) || (/\block/i.test(why) && /\b(screen|session)\b/i.test(why)))
+                present.add(who || "another program");
+            else if (possibleSleepLockerNames.includes(key))
+                possible.add(who);
+        }
+        const names = set => Array.from(set).sort().slice(0, 3);
+        if (present.size > 0)
+            return { state: "present", names: names(present) };
+        if (possible.size > 0)
+            return { state: "possible", names: names(possible) };
+        return { state: "none", names: [] };
+    }
+
+    // The reader's whole output — `id -u`'s line, then gdbus's answer — → sleepLockers()
+    function sleepLockersFromOutput(output) {
+        const text = typeof output === "string" ? output : "";
+        const newline = text.indexOf("\n");
+        const first = (newline < 0 ? text : text.slice(0, newline)).trim();
+        const uid = /^[0-9]{1,10}$/.test(first) ? Number(first) : null;
+        return sleepLockers(newline < 0 ? null : parseInhibitors(text.slice(newline + 1)), uid);
+    }
+
+    // An array, or an array-like (a list that came through a QML signal), as an array
+    function _list(value) {
+        return Array.isArray(value) ? value : value && typeof value === "object" && typeof value.length === "number" ? Array.from(value) : [];
+    }
+
+    // How an outcome reads in the log, e.g. "present: swayidle" (logged when it changes)
+    function sleepLockersText(lockers) {
+        const state = ["present", "possible", "none"].includes(lockers?.state) ? lockers.state : "unknown";
+        const names = _list(lockers?.names);
+        return names.length > 0 ? state + ": " + names.join(", ") : state;
+    }
+
+    // What the user is told, given the lockers read and the setting (true / false), → null or
+    // { key, summary, body }: two lockers race when the setting is on and another locks; the
+    // screen stays unlocked through sleep when it is off and nothing locks it. A possible
+    // locker or an unknown read says nothing.
+    function sleepLockNotice(lockers, lockOnSleep) {
+        const names = _list(lockers?.names).map(lockerName).filter(name => name !== "");
+        if (lockers?.state === "present" && lockOnSleep === true && names.length > 0) {
+            return {
+                key: "both:" + names.join(","),
+                summary: "Two programs lock the screen before sleep",
+                body: names.join(", ") + (names.length === 1 ? " locks" : " lock")
+                    + " it too. Keep one of them: \"Lock before the computer sleeps\" is in Settings → Lockscreen."
+            };
+        }
+        if (lockers?.state === "none" && lockOnSleep === false) {
+            return {
+                key: "none",
+                summary: "The screen stays unlocked during sleep",
+                body: "Nothing locks it before the computer sleeps. Turn on \"Lock before the computer sleeps\" in Settings → Lockscreen."
+            };
+        }
+        return null;
+    }
+
+    // One decision after a read or a change of the setting: `remembered` is the key of the
+    // notice last given ("" for none; kept in the config, so a notice is given once, not at
+    // every start). → { notice (null, or sleepLockNotice's to give now), remember (the key to
+    // keep) }. An unknown read changes nothing; an outcome with nothing to say forgets the
+    // key, so the same problem coming back later is told again.
+    function sleepNoticeStep(remembered, lockers, lockOnSleep) {
+        const kept = typeof remembered === "string" ? remembered : "";
+        if (!["present", "possible", "none"].includes(lockers?.state))
+            return { notice: null, remember: kept };
+        const notice = sleepLockNotice(lockers, lockOnSleep);
+        if (notice === null)
+            return { notice: null, remember: "" };
+        if (notice.key === kept)
+            return { notice: null, remember: kept };
+        return { notice: notice, remember: notice.key };
     }
 }

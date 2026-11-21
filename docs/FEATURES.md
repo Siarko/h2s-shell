@@ -268,7 +268,10 @@ Two independent stages, both driven by Wayland idle notifications:
 
 - **Screensaver** — after `screensaverTimeout` the screen is covered by a black surface
   that fades in, optionally showing the notification list. Commands can be configured to
-  run when it activates and deactivates. A
+  run when it activates and deactivates (on idleness: under a lock too, the end command
+  when the user is back, at the prompt as well). A lock while it shows takes the screen
+  and the screensaver goes; an unlock without input (logind's Unlock) while the user is
+  still away brings it back. A
   profile switch that changes the screensaver's timeout while it shows takes it down (and
   starts the idle count again): a known limit.
 - **Lock screen** — a real `WlSessionLock`, so the compositor enforces it. It can be
@@ -365,6 +368,17 @@ Two independent stages, both driven by Wayland idle notifications:
   the lock (at most 4 s), so the desktop is not what shows on waking. The fingerprint and
   key conversations stop for the sleep and start again after it, with the methods looked
   for again; the inhibitor is taken again after every wake, and when it is lost.
+- **Another locker before sleep** — the shell reads logind's sleep inhibitors (half a
+  minute after it starts, then every 15 minutes; a read, no password) to learn whether
+  another program of the user's locks the screen before sleep: one known by name
+  (xss-lock, swayidle, GNOME Shell, KDE's screen locker, …) or one whose reason says it
+  locks the screen. It says so once, in a notification: "The screen stays unlocked during
+  sleep" when "Lock before the computer sleeps" is off and nothing else locks, "Two
+  programs lock the screen before sleep" when it is on and another does. hypridle holds an
+  inhibitor whatever its `before_sleep_cmd` is, so it may or may not lock: with it alone
+  nothing is said; neither when the read fails. A notice is remembered in the config and
+  given again only after the situation changed; while the screen is locked it waits for
+  the unlock. The same on NixOS and Arch (systemd-logind on both).
 - **The log** — every authentication event leaves a `[Lockscreen]` line in the shell's
   log (what was asked, started, answered, refused, why a lock ended), never what was
   typed: what to read when unlocking fails on the real machine.

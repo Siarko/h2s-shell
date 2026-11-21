@@ -19,6 +19,7 @@ QtObject {
     property var _fetch: FetchTest {}
     property var _network: NetworkTest {}
     property var _deviceAddressReading: DeviceAddressReadingTest {}
+    property var _sleepLockersReading: SleepLockersReadingTest {}
     property var _vpnProviders: VpnProvidersTest {}
     property var _calendarDates: CalendarDatesTest {}
     property var _calendarEvents: CalendarEventsTest {}
@@ -83,7 +84,7 @@ QtObject {
     property var _anchors: AnchorsTest { after: _moduleRegistries }
 
     // The suites that run on the event loop (TestCase.asynchronous)
-    readonly property var _asyncSuites: [_pointerInput, _toastDrag, _settingsCard, _moduleContribution, _networkCardGeometry, _buttonKinds, _pillSizes, _apiElements, _sidePanel, _statusPill, _lockView, _authPromptView, _commandRunner, _systemFacts, _modules, _moduleIcon, _moduleRegistries, _anchors, _vpnProviders, _testSeamsShape, _testTree, _deviceAddressReading, _network, _fileChooser]
+    readonly property var _asyncSuites: [_pointerInput, _toastDrag, _settingsCard, _moduleContribution, _networkCardGeometry, _buttonKinds, _pillSizes, _apiElements, _sidePanel, _statusPill, _lockView, _authPromptView, _commandRunner, _systemFacts, _modules, _moduleIcon, _moduleRegistries, _anchors, _vpnProviders, _testSeamsShape, _testTree, _deviceAddressReading, _sleepLockersReading, _network, _fileChooser]
     // How long an asynchronous suite may take, counted from the start of the suites, unless
     // it sets its own (TestCase.timeLimitMs); then it fails as timed out
     readonly property int _asyncLimitMs: 90000

@@ -96,6 +96,17 @@ and `plans/documentation.md` predate the decisions of 2026-11-17: step 1 revises
   app's own time waits behind a shown ordinary toast; changing "Show each toast for" restarts
   a running count. A pinned ordinary toast stays until unpinned (a pinned job counts down when
   it ends); pinned toasts stand left of the toasts' column, each new one 48 px lower.
+- **Lock before sleep, the notice** (step 9, the agent's words): "The screen stays unlocked
+  during sleep" / "Nothing locks it before the computer sleeps. Turn on "Lock before the
+  computer sleeps" in Settings → Lockscreen." and "Two programs lock the screen before sleep" /
+  "swayidle locks it too. Keep one of them: …". Both cases were built (the decision names
+  telling the user that something else locks; the default being off makes the unlocked
+  sleep the case that matters). Once per situation, remembered in the config. **hypridle
+  says nothing**: it holds a sleep inhibitor whatever its `before_sleep_cmd` — on the Arch
+  machine it holds one with no `before_sleep_cmd`, so nothing locks there before sleep with
+  the setting off, and the shell cannot tell that from the inhibitor list (reading
+  hypridle's config would be one program's file format, on each system). To decide: say
+  "may stay unlocked" for hypridle too, or leave it silent.
 - **The side panel** (C1): Escape is window-wide while it is open; the owner setting `open`
   false closes it without `closed`; widths 320/420/520 are fixed in `Theme.qml` (grown with
   the font), not theme tokens; it does not open while the session is locked.
@@ -222,8 +233,7 @@ Steps 3, 4, 5, 6 and 10 are done (done.md); the API plan's closing slice (Z) is 
    written down honestly (no isolation; review covers the project's own modules; for others
    the prompt's text is the only protection); Settings → Modules (enable, disable, reload,
    install, update, remove from a repository); the safe-mode banner
-9. Lock — open: lock-before-sleep conflict detection; screensaver and lock screen together
-   checked
+9. Lock — both items on branch `lock-step9` (done.md), waiting for review and merge
 11. PAM configuration from the shell — open
 12. Documentation per [plans/documentation.md](plans/documentation.md); architecture and API
     chapters — open

@@ -2466,3 +2466,27 @@ Moved out of the tracker as done; checked against the code and the sections abov
   old-shell check); `watchMask` from `notifyMask`; `LockClient`'s argv from its table. The lock
   bed now announces the operator change on the bus, as a real daemon does. Reviewed; module
   suites, stand-ins and the module's lock bed on both machines.
+- **Lock-before-sleep conflict detection (step 9)** — on branch `lock-step9` 2026-11-21.
+  Found: logind's ListInhibitors (a read over the system bus, no polkit) lists every sleep
+  delay inhibitor with who, why, uid and pid, the same on NixOS and Arch; lockers of the user's
+  session hold one (xss-lock, swayidle with a before-sleep command, GNOME Shell, KDE's screen
+  locker), beside services that hold one for other work (NetworkManager, UPower, rtkit) and
+  hypridle, which holds one whatever it is configured to do. Not visible there: a lock command
+  run on logind's Lock signal (hypridle's `lock_cmd`, xss-lock) beside the shell's own handling
+  of Lock, and a second session-lock client (the protocol shows other clients nothing; the
+  compositor refuses the second lock). Built: `LockIoRules.parseInhibitors` / `sleepLockers`
+  (present / possible / none / unknown, this uid only, the shell's own left out) /
+  `sleepLockNotice` / `sleepNoticeStep`; `singletons/lock/SleepLockers.qml` (the read);
+  `singletons/SleepLockNotice.qml` (first read 30 s after the start, then every 15 min; one
+  notice per situation, remembered in `Config.sleepLockNotice`, held while locked; the outcome
+  logged when it changes). Tests: LockIoRulesTest cases, `SleepLockersReadingTest` (stand-in
+  gdbus), lock bed `sleep-lockers` (the bed's gdbus stand-in answers ListInhibitors from
+  `logind_inhibitors`; timings `sleepLockers`, `sleepLockersEvery`).
+- **Screensaver and lock screen together checked (step 9)** — on branch `lock-step9`
+  2026-11-21. Lock bed `screensaver-lock`: screensaver up then a lock (the layer goes, the
+  prompt takes the password, no screensaver after); a lock and logind's Unlock while still
+  idle (the screensaver comes back, input ends it); locked first then idle (the screensaver
+  stays off, the commands still run on idleness, the lock still unlocks). Found and fixed: at
+  every unlock the screensaver's window was mapped for its fade out (a binding glitch:
+  `_show` read the new `locked` beside the old `screensaverVisible`); it now follows
+  `Lockscreen.idle`.

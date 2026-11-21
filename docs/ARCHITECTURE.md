@@ -479,7 +479,8 @@ launcher agree on the contract described under "Recovery" below):
   view that fails to publish cannot keep the lock from being set): the `WlSessionLock`,
   one single-shot `Timer` per timer name (tokens from the rules), `Profiles.screenLocked`
   and `Quickshell.watchFiles` (off while locked: a reload while locked would unlock), the
-  adapters. It exposes only `view`, `locked`, `screensaverVisible`, `lock()`, the surface
+  adapters. It exposes only `view`, `locked`, `screensaverVisible`, `idle` (what the
+  screensaver's window follows, with `locked`), `lock()`, the surface
   functions the views call (they take the `LockSurface` object and act only for a
   registered one), and the IPC (`lock`, `status`, `state` = `describe` plus a few driver
   facts). There is no unlock and no dispatch function: the state, queue and surface
@@ -504,6 +505,19 @@ launcher agree on the contract described under "Recovery" below):
   and `SleepInhibitor.qml` (`systemd-inhibit` held as a level, taken again when lost).
   Their small pure helpers are in `singletons/LockIoRules.qml` (tested in
   `tests/LockIoRulesTest.qml`).
+- **Other lockers before sleep** — `singletons/SleepLockNotice.qml`, beside the driver:
+  `singletons/lock/SleepLockers.qml` reads logind's `ListInhibitors` and `id -u` (`gdbus
+  call --system`, a read anyone may make), `LockIoRules.sleepLockers` decides from the
+  sleep delay inhibitors of this user, the shell's own left out: present (a locker by name
+  or by a reason that says it locks the screen), possible (hypridle, which holds one
+  whatever its configuration), none, or unknown (a failed read); `sleepNoticeStep` decides
+  the one notice and the key remembered in `Config.sleepLockNotice`. The reading runs
+  against a stand-in gdbus in `tests/SleepLockersReadingTest.qml`, the whole in the lock
+  bed's `sleep-lockers`. Not covered by it: a locker that holds no inhibitor (a lock
+  command run by logind's Lock signal — hypridle's `lock_cmd`, xss-lock — beside the
+  shell's own handling of it), and a second client of the session-lock protocol, which
+  the protocol does not show to other clients; the compositor refuses the second lock,
+  whichever it is.
 - **Views** — `screensaver/LockSurface.qml` (one per screen, an instance with its own id)
   and `screensaver/LockPrompt.qml` render `Lockscreen.view` and report input. Keys arrive
   in one place per surface — a key catcher that holds the focus; the field never takes it

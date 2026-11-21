@@ -496,6 +496,8 @@ notification_server_up() {
 #                    `gdbus monitor …` prints, as gdbus would, every line appended to
 #                    logind/signals after it started (logind_signal writes them), and
 #                    notes each start in logind/log ("monitor <pid>")
+#                    `gdbus call … ListInhibitors` answers logind/inhibitors (none
+#                    without it; logind_inhibitors writes it)
 #   systemd-inhibit  notes "hold <pid> <time>" in logind/log, runs the command it was given
 #                    (the shell's `read -r release`) and notes "release <pid> <time>" when
 #                    that ends; between logind_signal sleep and wake it refuses, as logind
@@ -532,6 +534,13 @@ case "\$1" in
             *" PreparingForSleep "*)
                 echo "call PreparingForSleep \$(cat "\$preparing" 2> /dev/null)" >> "\$log"
                 [ "\$(cat "\$preparing" 2> /dev/null)" = true ] && echo "(<true>,)" || echo "(<false>,)"
+                exit 0
+                ;;
+            *".ListInhibitors "*)
+                # logind's inhibitors (SleepLockNotice reads them): logind/inhibitors as
+                # gdbus prints the list (logind_inhibitors writes it), none without it
+                echo "call ListInhibitors" >> "\$log"
+                cat "$WORK/logind/inhibitors" 2> /dev/null || echo "(@a(ssssuu) [],)"
                 exit 0
                 ;;
         esac
@@ -705,6 +714,20 @@ logind_signals() {
     log "logind stand-in: $* (one write)"
 }
 # The stand-in inhibitor's record: holds and releases, in order ("hold release hold")
+# logind_inhibitors <who> <why>...: the inhibitors the gdbus stand-in lists besides none —
+# each a sleep delay inhibitor of this user's, held by <who> for <why> (pairs); with no
+# arguments, none
+logind_inhibitors() {
+    local uid entries="" who why
+    uid=$(id -u)
+    while [ $# -ge 2 ]; do
+        who=$1 why=$2
+        shift 2
+        entries="$entries${entries:+, }('sleep', '$who', '$why', 'delay', uint32 $uid, uint32 4242)"
+    done
+    if [ -n "$entries" ]; then echo "([$entries],)"; else echo "(@a(ssssuu) [],)"; fi > "$WORK/logind/inhibitors"
+    log "logind stand-in: inhibitors ${entries:-none}"
+}
 inhibitor_record() { awk '$1 == "hold" || $1 == "release" { printf "%s ", $1 }' "$WORK/logind/log"; }
 # Whether the stand-in inhibitor is held right now: more holds than releases
 inhibitor_held() { [ "$(grep -c '^hold' "$WORK/logind/log")" -gt "$(grep -c '^release' "$WORK/logind/log")" ]; }
