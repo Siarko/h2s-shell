@@ -68,7 +68,11 @@ FloatingWindow {
           shown: () => NetworkManager.wifiAvailable },
         { id: "network_ethernet", label: "Ethernet", tab: "system", parent: "network", component: networkEthernetComp,
           shown: () => NetworkManager.ethernetDevice !== "" },
-        { id: "network_vpn", label: "VPN", tab: "system", parent: "network", component: networkVpnComp }
+        { id: "network_vpn", label: "VPN", tab: "system", parent: "network", component: networkVpnComp },
+        // Every module, then the modules' own pages under the group
+        // (notes/plans/modules-management.md §4)
+        { id: "modules", label: "Modules", tab: "system", group: true },
+        { id: "modules_installed", label: "Installed", tab: "system", parent: "modules", component: modulesComp }
     ]
 
     // Every page: the core's, with the loaded modules' put in (ModuleMergeRules.mergeSettingsPages:
@@ -587,6 +591,7 @@ FloatingWindow {
     Component { id: networkWifiComp; NetworkWifiSettings {} }
     Component { id: networkEthernetComp; NetworkEthernetSettings {} }
     Component { id: networkVpnComp; NetworkVpnSettings {} }
+    Component { id: modulesComp; ModulesSettings { modalHost: root.modalHost } }
     Component { id: sttComp;           SttSettings           { editIndex: root.editIndex } }
     Component { id: curvesComp;        CurvesSettings {} }
     Component { id: colorsComp;        ColorsSettings { themeName: root.editTheme } }

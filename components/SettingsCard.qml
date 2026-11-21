@@ -31,6 +31,11 @@ import qs.singletons
 // the header, never over the card's own parts. Regions get the card's context, and on an
 // own-provider place the card's `scopeId`.
 //
+// The card's own parts of the name's line: `leading` before the name, centred on the name and
+// its line (a module's icon), and `titleItems` right after the name, before the region
+// `title` (marks with their tips); room is kept for both as for the region's elements. The
+// name's colour and weight are `titleColor` and `titleBold`.
+//
 // Repeated per item, it stands on a KeyedModel (its modelData the item's key), so that it
 // keeps its item — and its region's elements — while other items come and go:
 //
@@ -62,6 +67,13 @@ AnchorBlock {
     // In use (connected): the name bold, its line and the border in the accent's colours
     property bool active: false
     property bool open: false
+    // The name's colour and weight
+    property color titleColor: Theme.textPrimary
+    property bool titleBold: active
+    // Before the name, centred on it and its line: the item's face (a module's icon)
+    property alias leading: _leading.data
+    // Right after the name, before the modules' elements there: the card's own (marks)
+    property alias titleItems: _titleItems.data
     // A lasting line under the header, in the warning colour ("" none), with a button
     // (`noticeAction`, "" none) that emits noticeActionRequested
     property string notice: ""
@@ -115,6 +127,8 @@ AnchorBlock {
     readonly property alias afterHost: _after
     readonly property alias frame: _frame
     readonly property alias titleText: _title
+    readonly property alias leadingItem: _leading
+    readonly property alias titleItemsRow: _titleItems
 
     kind: "card"
     placements: ["before", "after"]
@@ -128,7 +142,9 @@ AnchorBlock {
     // taller
     readonly property real _slotHeight: _onNameLine ? Math.max(_buttonRow.implicitHeight, _titleBlock.implicitHeight) : _titleBlock.implicitHeight
     // The room on the name's line for the buttons: what the name's least and the arrow leave
-    readonly property real _lineRoom: Math.max(0, _header.width - _arrow.implicitWidth - 2 * _header.spacing - _title.Layout.minimumWidth)
+    readonly property real _lineRoom: Math.max(0, _header.width - _arrow.implicitWidth - 2 * _header.spacing - _title.Layout.minimumWidth - _leadingWidth)
+    // The room `leading` takes before the name: none when empty
+    readonly property real _leadingWidth: _leading.implicitWidth > 0 ? Math.ceil(_leading.implicitWidth) + _header.spacing : 0
     // The gap between the primary controls and the rest, on one line
     readonly property bool _primaryShown: _primary.implicitWidth > 0
     readonly property real _actionsGap: _primaryShown && _actions.implicitWidth > 0 ? buttonGap : 0
@@ -225,11 +241,19 @@ AnchorBlock {
                         width: parent.width
                         implicitHeight: root._onNameLine ? root._slotHeight : _buttonRow.y + _buttonRow.implicitHeight
 
+                        // The card's own item before the name, centred on the name and its line
+                        Row {
+                            id: _leading
+                            x: 0
+                            y: Math.round((_titleBlock.implicitHeight - height) / 2)
+                        }
+
                         ColumnLayout {
                             id: _titleBlock
+                            x: root._leadingWidth
                             // The rest of the name's line: up to the buttons on it, else up to
                             // the arrow
-                            width: Math.max(0, Math.floor((root._onNameLine ? _buttonRow.x : _arrow.x) - _header.spacing))
+                            width: Math.max(0, Math.floor((root._onNameLine ? _buttonRow.x : _arrow.x) - _header.spacing - x))
                             spacing: 1
                             // The name, and after it the region `title`: room is kept for
                             // its elements on the right (the padding), so the name is cut
@@ -245,9 +269,24 @@ AnchorBlock {
                                 textFormat: Text.PlainText
                                 font.family: Theme.fontFamily
                                 font.pixelSize: Theme.fontSizeBody
-                                font.bold: root.active
-                                color: Theme.textPrimary
-                                rightPadding: _titleRegion.width > 0 ? _titleRegion.width + _titleRegion.gap : 0
+                                font.bold: root.titleBold
+                                color: root.titleColor
+                                rightPadding: _itemsRoom + (_titleRegion.width > 0 ? _titleRegion.width + _titleRegion.gap : 0)
+
+                                // Where the name ends as drawn: its whole width, or what is left
+                                // of the line beside what follows it — on its right end when it
+                                // is drawn on the right after all (a mirrored layout)
+                                readonly property real _nameEnd: effectiveHorizontalAlignment === Text.AlignLeft
+                                    ? Math.max(0, Math.min(implicitWidth, width) - rightPadding) : width - rightPadding
+                                readonly property real _itemsRoom: _titleItems.implicitWidth > 0 ? Math.ceil(_titleItems.implicitWidth) + _titleRegion.gap : 0
+
+                                // The card's own items right after the name, as tall as its line
+                                RowLayout {
+                                    id: _titleItems
+                                    x: _title._nameEnd + _titleRegion.gap
+                                    height: _title.height
+                                    spacing: _titleRegion.gap
+                                }
 
                                 AnchorBlock {
                                     id: _titleRegion
@@ -255,12 +294,8 @@ AnchorBlock {
                                     readonly property alias appendHost: _titleAppend
                                     readonly property real gap: 6
 
-                                    // Right after the name as drawn: its whole width, or what is
-                                    // left of the line beside the elements — on its right end
-                                    // when it is drawn on the right after all (a mirrored layout)
-                                    x: (_title.effectiveHorizontalAlignment === Text.AlignLeft
-                                        ? Math.max(0, Math.min(_title.implicitWidth, _title.width) - _title.rightPadding)
-                                        : _title.width - _title.rightPadding) + gap
+                                    // Right after the name and the card's own items
+                                    x: _title._nameEnd + _title._itemsRoom + gap
                                     // A quarter of the card at most; the name's part of the header
                                     // is never narrower than the room kept for it (the name's
                                     // minimum width), so it covers none of the card's own parts

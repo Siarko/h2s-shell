@@ -474,7 +474,7 @@ Singleton {
         "tablet", "locktest", "shelltest", "toasttest", "fakevpn",
         // Settings page ids and popup keys of the core that are module-id shaped
         "bar_appearance", "controls", "popups", "network_ethernet", "network_overview", "network_vpn",
-        "network_wifi", "notifications_appearance", "other_appearance", "widgets_appearance", "tray-menu"
+        "network_wifi", "notifications_appearance", "other_appearance", "widgets_appearance", "tray-menu", "modules_installed"
     ]
 
     readonly property var settingTypes: ["bool", "number", "slider", "interval", "enum", "string", "stringList"]

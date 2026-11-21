@@ -24,6 +24,7 @@ TestCase {
     property var toggles: []
 
     // A layer surface that never takes the keyboard: the side panel's suite needs it
+    property int behindPillClicks: 0
     property var _window: PanelWindow {
         anchors { bottom: true; left: true }
         implicitWidth: 520
@@ -43,6 +44,13 @@ TestCase {
             spacing: 6
             Public.ProgressBar { id: waveBar; value: 0.5; wave: true }
             Public.ProgressBar { id: stillBar; value: 0.5 }
+        }
+
+        // Under the pill: a click that goes through lands here
+        MouseArea {
+            x: 0; y: 50
+            width: 380; height: 60
+            onClicked: suite.behindPillClicks++
         }
 
         Public.StatusPill {
@@ -269,6 +277,16 @@ TestCase {
         pill.expanded = true;
         assert(lines.visible, "the owner may expand it");
         pill.expanded = false;
+
+        // --- not expandable: hover only, the click stops on it ---
+        pill.expandable = false;
+        driver.mouseClick(pill, pill.width / 2, folded / 2);
+        assert(!pill.expanded && !lines.visible && toggles.length === 2, "not expandable: a click does not expand it");
+        assertEqual(behindPillClicks, 0, "… nor reaches what it stands on");
+        pill.expanded = true;
+        assert(!lines.visible, "… and stays folded when set");
+        pill.expanded = false;
+        pill.expandable = true;
 
         // --- without parts ---
         driver.mouseClick(emptyPill, emptyPill.width / 2, emptyPill.height / 2);

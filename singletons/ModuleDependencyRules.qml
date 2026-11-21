@@ -520,6 +520,38 @@ Singleton {
                                           .map(module => module.id)), known) };
     }
 
+    // An opened card's dependency lines (plan §4). `modules`: [{ id, name, uses: [{ id,
+    // version, optional }], state, enabled }] — the statuses that count, with their manifests'
+    // uses. → { needs: ["Tailscale 1.0 — on"] (hard), canUse: ["Weather 1.x — not installed"]
+    // (soft), usedBy: [names] (the modules whose uses name it, by name), missing: the name of
+    // the first hard dependency that is not running ("" none) }. A dependency is "on"
+    // (loaded), "starting" (pending), "off" (turned off, new or held), "not running" (failed,
+    // missing something) or "not installed".
+    function cardDependencies(id, modules) {
+        const list = (Array.isArray(modules) ? modules : []).filter(module => typeof module?.id === "string" && module.id !== "");
+        const byId = new Map();
+        for (const module of list)
+            if (!byId.has(module.id))
+                byId.set(module.id, module);
+        const uses = (Array.isArray(byId.get(id)?.uses) ? byId.get(id).uses : [])
+            .filter(use => typeof use?.id === "string" && use.id !== "");
+        const running = other => other?.state === "loaded" || other?.state === "pending";
+        const stateWord = other => !other ? "not installed" : other.state === "loaded" ? "on" : other.state === "pending" ? "starting"
+                                 : !ModuleInstallRules.isOn(other) ? "off" : "not running";
+        const line = use => {
+            const other = byId.get(use.id);
+            const version = typeof use.version === "string" ? ModuleInstallRules._plain(use.version, 40) : "";
+            return _name(other?.name, use.id) + (version !== "" ? " " + version : "") + " — " + stateWord(other);
+        };
+        const hard = uses.filter(use => use.optional !== true);
+        const missing = hard.find(use => !running(byId.get(use.id)));
+        const users = Array.from(byId.values()).filter(module => module.id !== id && Array.isArray(module.uses)
+                                                       && module.uses.some(use => use?.id === id))
+            .map(module => _name(module.name, module.id)).sort((first, second) => first.localeCompare(second));
+        return { needs: hard.map(line), canUse: uses.filter(use => use.optional === true).map(line), usedBy: users,
+                 missing: missing ? _name(byId.get(missing.id)?.name, missing.id) : "" };
+    }
+
     // The dependencies installed for module `id` that nothing else needs once it is removed
     // — each offered unchecked with its removal ("Also remove Clipboard (installed for Notes,
     // nothing else uses it)"). `modules`: [{ id, name, uses, source, installedFor }] —

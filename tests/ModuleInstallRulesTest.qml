@@ -62,6 +62,7 @@ TestCase {
         _builtin();
         _hostReads();
         _list();
+        _card();
         _checks();
         _installerSteps();
     }
@@ -665,6 +666,47 @@ TestCase {
                     "marks: each with its count and a tip saying what it counts");
         assertEqual(rules.marks({ warnings: ["a", "b"], deprecations: ["c"] }).map(mark => mark.tip).join(","), "2 warnings,1 deprecated API use", "… singular and plural");
         assertEqual(rules.marks({ warnings: [], deprecations: [] }).length + rules.marks(null).length, 0, "none: no marks");
+    }
+
+    function _card() {
+        const rules = ModuleInstallRules;
+        assertEqual(rules.cardSubtitle({ version: "1.2.0", source: "builtin", state: "loaded", enabled: true }), "1.2.0 · Built-in",
+                    "subtitle: version · source");
+        assertEqual(rules.cardSubtitle({ version: "0.1.0", source: "user", sourceLabel: "Your copy", state: "unconfirmed" }), "0.1.0 · Your copy · Off",
+                    "… a module not on ends Off");
+        assertEqual(rules.cardSubtitle({ version: "2.0", source: "user", sourceLabel: "Your link → /x", state: "disabled", enabled: false }),
+                    "2.0 · Your link · Off", "… a link says so");
+        assertEqual(["system", "developer", "repository", "folder", "?"].map(source => rules.sourceWord({ source: source })).join("|"),
+                    "Installed by the system|Development path|Repository|Copied folder|", "… the other sources' words; none unknown");
+        assertEqual(rules.cardSubtitle({ version: "1.0\n<b>x</b>" + "9".repeat(80), source: "", state: "loaded" }).length, rules.maxVersionLength,
+                    "… a version from outside on one line, capped");
+
+        const pill = (status, context) => { const made = rules.pillOf(status, context); return made ? made.label + "/" + made.kind : "none"; };
+        assertEqual(["loaded", "disabled", "duplicate"].map(state => pill({ state: state })).join(","), "none,none,none",
+                    "pill: none for on and well, off, or anything not worth attention");
+        assertEqual(pill({ state: "unconfirmed" }) + "," + pill({ state: "approval" }), "New — off/warning,Approval required/warning",
+                    "… new and held for approval: warnings");
+        assertEqual(pill({ state: "failed" }), "Failed/danger", "… failed: danger");
+        assertEqual(pill({ state: "incompatible", api: "2.3" }, { shellApi: "1.36" }) + "," + pill({ state: "incompatible", api: "1.40" }, { shellApi: "1.36" }),
+                    "Needs API 2.x/danger,Needs API 1.40/danger", "… incompatible: the major asked for, or the version within the same major");
+        assertEqual(pill({ state: "missing-program", missingPrograms: ["gcalcli", "x"] }) + "," + pill({ state: "missing-program" }),
+                    "Needs gcalcli/warning,Needs a program/warning", "… a missing program by name");
+        assertEqual(pill({ state: "missing-module" }, { missingModule: "Tailscale" }) + "," + pill({ state: "missing-module" }),
+                    "Needs Tailscale/warning,Needs a module/warning", "… a missing module by name");
+        assertEqual(pill({ state: "pending" }) + "," + pill({ state: "safe-mode" }), "Starting…/muted,Safe mode/warning", "… starting, safe mode");
+        assertEqual(pill({ state: "missing-program", missingPrograms: ["a\nb<i>"] }), "Needs a b<i>/warning", "… a name from outside on one line, as written");
+
+        const confirmation = rules.confirmationQuestion("Player");
+        assertEqual(confirmation.title + "|" + confirmation.body[0].text + "|" + confirmation.body[0].strong + "|" + confirmation.body[1],
+                    "Enable Player?|Player is not part of h2s-shell.|true|It runs inside the shell with your rights and could read anything the shell sees, "
+                    + "your lock screen password included. Enable it only if you trust where it comes from.", "confirmation: the statement (plan §2)");
+        assertEqual(confirmation.kind + "|" + confirmation.buttons.map(button => button.id + "/" + button.label + "/" + button.kind).join(",") + "|" + confirmation.cancelLabel,
+                    "warning|enable/Enable/save|Cancel", "… Enable (save) and Cancel");
+        const disable = rules.disableQuestion("Tailscale", ["Exit map", "Routes"], []);
+        assertEqual(disable.title + "|" + disable.body.join("|"), "Disable Tailscale?|These modules need it and are disabled too:|Exit map, Routes",
+                    "disable: the modules disabled with it");
+        assertEqual(disable.buttons.map(button => button.id + "/" + button.label + "/" + button.kind).join(","), "disable/Disable/warning", "… Disable (warning)");
+        assertEqual(rules.disableQuestion("A", [], ["Mystery"]).body.join("|"), "These may need it and stay on: Mystery", "… unreadable uses: may need it");
     }
 
     function _checks() {

@@ -9,8 +9,8 @@ import QtQuick
 // placed by hand), the copies it replaces, the actions its card offers, whether turning it on
 // needs the user's confirmation, what removing it deletes, which repository addresses are
 // accepted and the git commands that download one, git's progress lines, the record of what
-// the shell installed, the built-in modules that start off, the order of the list, the marks
-// beside a name and the words of a check's result. Pure: no file, no process; the host and
+// the shell installed, the built-in modules that start off, the order of the list, a card's
+// line, pill and marks, the questions Enable and Disable ask, and the words of a check's result. Pure: no file, no process; the host and
 // the installer do the I/O. Nothing here throws on any input — paths, records and addresses
 // come from outside. Checked by tests/ModuleInstallRulesTest.qml.
 Singleton {
@@ -1016,6 +1016,85 @@ Singleton {
             result.push({ kind: "deprecation", count: deprecations,
                           tip: deprecations + (deprecations === 1 ? " deprecated API use" : " deprecated API uses") });
         return result;
+    }
+
+    // The source in a word or two, for the card's line under the name: "Built-in",
+    // "Repository", "Your link" … ("" for a status without a source)
+    function sourceWord(status) {
+        switch (status?.source) {
+        case "builtin": return "Built-in";
+        case "system": return "Installed by the system";
+        case "developer": return "Development path";
+        case "repository": return "Repository";
+        case "folder": return "Copied folder";
+        case "user": return String(status.sourceLabel ?? "").startsWith("Your link") ? "Your link" : "Your copy";
+        default: return "";
+        }
+    }
+
+    // The card's line under the name: "1.2.0 · Built-in", ending "· Off" for a module that is
+    // not on (isOn) — with the order and the name's colour, that is all the on/off state says
+    function cardSubtitle(status) {
+        const parts = [_plain(String(status?.version ?? ""), maxVersionLength), sourceWord(status)].filter(part => part !== "");
+        if (!isOn(status))
+            parts.push("Off");
+        return parts.join(" · ");
+    }
+
+    // The pill on a card's name line, only for a state worth attention (§4's table): { label,
+    // kind } with kind a StatusPill word; null for a module that is on and well or turned off
+    // (the name's colour and the order say so). `context`: { shellApi ("1.36"), missingModule
+    // (the name of the first hard dependency not running; "" unknown) }
+    function pillOf(status, context) {
+        switch (status?.state) {
+        case "unconfirmed": return { label: "New — off", kind: "warning" };
+        case "approval": return { label: "Approval required", kind: "warning" };
+        case "failed": return { label: "Failed", kind: "danger" };
+        case "incompatible": {
+            const api = _plain(String(status.api ?? ""), 20);
+            const major = api.split(".")[0];
+            const shellMajor = String(context?.shellApi ?? "").split(".")[0];
+            return { label: api === "" ? "Incompatible" : "Needs API " + (major !== shellMajor ? major + ".x" : api), kind: "danger" };
+        }
+        case "missing-program": {
+            const program = _plain(String(_list(status.missingPrograms)[0] ?? ""), 40);
+            return { label: program !== "" ? "Needs " + program : "Needs a program", kind: "warning" };
+        }
+        case "missing-module": {
+            const name = _plain(String(context?.missingModule ?? ""), 40);
+            return { label: name !== "" ? "Needs " + name : "Needs a module", kind: "warning" };
+        }
+        case "pending": return { label: "Starting…", kind: "muted" };
+        case "safe-mode": return { label: "Safe mode", kind: "warning" };
+        default: return null;
+        }
+    }
+
+    // What the confirmation says (§2), the words after the first line
+    readonly property string trustText: "It runs inside the shell with your rights and could read anything the shell sees, "
+        + "your lock screen password included. Enable it only if you trust where it comes from."
+
+    // The confirmation before a module that is not part of h2s-shell is first enabled (§2, §5),
+    // as a Settings modal's question (SettingsModalHost.ask's spec, less its subject)
+    function confirmationQuestion(name) {
+        const shown = _plain(String(name ?? ""), 60);
+        return { kind: "warning", title: "Enable " + shown + "?",
+                 body: [{ text: shown + " is not part of h2s-shell.", strong: true }, trustText],
+                 buttons: [{ id: "enable", label: "Enable", kind: "save" }], cancelLabel: "Cancel" };
+    }
+
+    // The question before disabling a module that running modules need (§4, "Disable"):
+    // `dependents` the names disabled with it (ModuleDependencyRules.disableList's), `unknown`
+    // the names of running modules whose uses cannot be read (they may need it; left on)
+    function disableQuestion(name, dependents, unknown) {
+        const names = list => _list(list).map(each => _plain(String(each ?? ""), 60)).filter(each => each !== "").join(", ");
+        const body = [];
+        if (names(dependents) !== "")
+            body.push("These modules need it and are disabled too:", names(dependents));
+        if (names(unknown) !== "")
+            body.push("These may need it and stay on: " + names(unknown));
+        return { kind: "warning", title: "Disable " + _plain(String(name ?? ""), 60) + "?", body: body,
+                 buttons: [{ id: "disable", label: "Disable", kind: "warning" }], cancelLabel: "Cancel" };
     }
 
     // ---- A check's result (§6.3) ----

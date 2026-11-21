@@ -1810,6 +1810,13 @@ TestCase {
         assertEqual(pages.pages.find(page => page.id === "ts").tab, "system", "… a group's page takes the group's tab");
         assertEqual(pages.pages.find(page => page.id === "ts").url, "file:///t/P.qml", "… a module's page has a url");
         assertEqual(pages.problems.length, 2, "… the lost parent and the core's id: said");
+        const withGroup = ModuleMergeRules.mergeSettingsPages(pageCore.concat([{ id: "modules", tab: "system", group: true },
+                                                                               { id: "modules_installed", tab: "system", parent: "modules" }]), [
+            { id: "ts.lost", label: "Lost", tab: "behaviour", component: "file:///t/R.qml", module: "ts", parent: "nowhere" },
+            { id: "ts.mine", label: "Mine", tab: "behaviour", component: "file:///t/S.qml", module: "ts", parent: "modules" }]);
+        assertEqual(withGroup.pages.map(page => page.id + (page.parent ? "<" + page.parent : "")).join(","),
+                    "general,network,network_vpn<network,themes,modules,modules_installed<modules,ts.lost<modules,ts.mine<modules",
+                    "pages: the core's own Modules group takes them after its own page, the group once");
         const settingCore = [{ key: "general.debug" }];
         assert(ModuleMergeRules.mergeSettingEntries(settingCore, []) === settingCore, "settings, no module: the core's list itself");
         assertEqual(ModuleMergeRules.mergeSettingEntries(settingCore, [{ key: "general.debug" }, { key: "mod.x.a" }]).length, 2, "settings: a core key dropped");

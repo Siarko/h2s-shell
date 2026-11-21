@@ -636,7 +636,8 @@ Singleton {
     // becomes { id, label, tab, url, module, parent? }:
     //   parent a core group → under it, on the group's tab (after the group's own pages);
     //   parent "modules", or a parent the core does not have → under the Modules group
-    //     (System tab; the group exists only while it has pages);
+    //     (System tab): the core's own group when it has one (the shell's: Settings →
+    //     Modules, its own page first), else one made while it has pages;
     //   no parent → on its tab, after the core's pages.
     // An id the core has is dropped. → { pages, problems: [text] }
     function mergeSettingsPages(corePages, modulePages) {
@@ -671,8 +672,14 @@ Singleton {
                     problems.push(page.module + ": settings page " + ModuleRules.show(page.id) + ": no group " + ModuleRules.show(parent)
                                   + " — shown under Modules");
                 made.parent = modulesGroup.id;
-                made.tab = modulesGroup.tab;
-                underModules.push(made);
+                made.tab = groups.get(modulesGroup.id) ?? modulesGroup.tab;
+                if (groups.has(modulesGroup.id)) {
+                    if (!children.has(modulesGroup.id))
+                        children.set(modulesGroup.id, []);
+                    children.get(modulesGroup.id).push(made);
+                } else {
+                    underModules.push(made);
+                }
             }
         }
         if (topLevel.length === 0 && underModules.length === 0 && children.size === 0)

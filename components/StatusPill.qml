@@ -5,7 +5,9 @@ import qs.singletons
 // A pill that sums up a state: an icon and a label, then its parts — each an icon and a
 // short text (a count) in its kind's colour, its tip shown over it on hover. A click flips
 // `expanded` while there are parts: the parts then one per line under a rule, each its icon
-// and its line in its colour. A second click folds them away.
+// and its line in its colour. A second click folds them away. Not `expandable`, it takes no
+// click at all — the tips still show on hover — and the click stops there, so it never
+// reaches what the pill stands on (a card's header).
 //
 // `kind` and each part's `kind` are words of ApiElementRules.statusKinds (the colours they
 // stand for); `parts` is ApiElementRules.statusParts' list — plain texts, capped. The public
@@ -21,11 +23,14 @@ Rectangle {
     property string kind: "normal"
     property var parts: []
     property bool expanded: false
+    // Whether a click expands it; false: hover only
+    property bool expandable: true
 
     signal toggled(bool expanded)
 
     readonly property bool hasParts: (parts ?? []).length > 0
-    readonly property bool open: expanded && hasParts
+    readonly property bool open: expanded && hasParts && expandable
+    readonly property bool _clickable: hasParts && expandable
     readonly property var colours: ApiElementRules.statusKind(kind).value
     readonly property int gap: Math.round(Theme.fontSizeSmall / 2)
     readonly property real collapsedHeight: _row.implicitHeight + 2 * gap
@@ -40,7 +45,7 @@ Rectangle {
     width: implicitWidth
     height: implicitHeight
     radius: collapsedHeight / 2
-    color: _area.lit && hasParts ? Theme.surfaceHover : Theme.fill
+    color: _area.lit && _clickable ? Theme.surfaceHover : Theme.fill
     border.width: Theme.border.width
     border.color: Theme.outline
     Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
@@ -53,12 +58,15 @@ Rectangle {
         keyProp: "key"
     }
 
-    // Below the parts: their hover handlers see the pointer, the click comes here
+    // Below the parts: their hover handlers see the pointer, the click comes here — and,
+    // not expandable, stops here
     PointerArea {
         id: _area
-        enabled: root.hasParts
-        cursorShape: Qt.PointingHandCursor
+        enabled: root.hasParts || !root.expandable
+        cursorShape: root._clickable ? Qt.PointingHandCursor : Qt.ArrowCursor
         onClicked: {
+            if (!root._clickable)
+                return;
             root.expanded = !root.expanded;
             root.toggled(root.expanded);
         }

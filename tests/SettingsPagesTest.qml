@@ -83,6 +83,7 @@ TestCase {
         "panels/settings/SectionTitle.qml",
         "panels/settings/NetworkConnectionEditor.qml",
         "panels/settings/NetworkVpnSettings.qml",
+        "panels/settings/ModulesSettings.qml",
         "panels/settings/VpnProviderPageFrame.qml",
         "panels/settings/KeepSettingsBar.qml",
         "components/PrivilegedMark.qml",

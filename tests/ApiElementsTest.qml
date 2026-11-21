@@ -37,7 +37,7 @@ TestCase {
         "ProgressBar": ["kind", "value", "wave"],
         "HoverTip": ["target", "text"],
         "SidePanel": ["closed", "content", "open", "size", "title"],
-        "StatusPill": ["expanded", "icon", "kind", "label", "parts", "toggled"]
+        "StatusPill": ["expandable", "expanded", "icon", "kind", "label", "parts", "toggled"]
     })
 
     // The base types: a module's object is the internal one itself, so only these names

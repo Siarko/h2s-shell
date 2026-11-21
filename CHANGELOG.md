@@ -44,7 +44,9 @@ The interface modules are written against (`qs.api`), versioned on its own
   `module.privileged.start` and `PrivilegedAction` are refused for a call whose stack names
   another module's directory too, or none; `PrivilegedAction`'s `elevate` must be the one
   word `"pkexec"` (module test mode: its stand-in, one word) — any other words are refused
-  before anything runs.
+  before anything runs. `StatusPill`'s `expandable` (default true): false, a click neither
+  expands the pill nor reaches what it stands on; the parts' tips still show on hover. The
+  id `modules_installed` is reserved: it is the core's Settings → Modules page.
 - 1.35: `ProgressBar`'s `wave` (default false): the owner says the bar is moving now, and
   bands of light pass through its filled part, a new one every theme duration
   `progressWave` (300 ms by default), each crossing in `progressWaveTravel` (1200 ms); none
@@ -448,6 +450,15 @@ The interface modules are written against (`qs.api`), versioned on its own
   file inside the module's directory (≤ 1 MiB).
 
 ### Added
+- Settings → System → Modules → Installed: every module as a card, enabled ones first (their
+  names in colour), then the ones turned off ("Off" under the name); a pill only for a state
+  that needs attention (Failed, Needs …, New — off, Approval required), warnings and
+  deprecated API uses as marks beside the name, each with a tip. Opened, a card shows the
+  description, where the module comes from, the API, whether it runs administrator actions,
+  the modules it needs, can use and is used by, its programs, its errors and warnings, and
+  its data folder. "Enable" asks first for a module that is not part of h2s-shell; "Disable"
+  asks on the button, or in a dialog listing the modules that need it and go off with it.
+  The Modules group is always there; modules' own pages follow under it.
 - Built-in modules have their place: on NixOS in the package (`share/h2s-shell-builtin`), on
   Arch in `~/.local/share/h2s-shell/builtin`, which `install.sh` fills from the checkout. None
   ships yet. On Arch, update with `git pull` and then `./install.sh --update` in the shell's

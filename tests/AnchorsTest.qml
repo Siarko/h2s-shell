@@ -1049,7 +1049,10 @@ TestCase {
                                                "settings.network_wifi.saved", "settings.network_wifi.saved.card", "settings.network_wifi.hotspots",
                                                "settings.network_wifi.hotspots.card", "settings.network_wifi.hotspots.card.settings",
                                                "settings.network_wifi.hotspots.card.actions", "settings.network_wifi.hotspots.card.title",
-                                               "settings.network_ethernet.profiles", "settings.network_ethernet.profiles.card"]
+                                               "settings.network_ethernet.profiles", "settings.network_ethernet.profiles.card",
+                                               "settings.modules_installed", "settings.modules_installed.installed", "settings.modules_installed.installed.card",
+                                               "settings.modules_installed.installed.card.settings", "settings.modules_installed.installed.card.actions",
+                                               "settings.modules_installed.installed.card.title"]
     function _popupLiveProblems(prefix) {
         const problems = [];
         const live = Object.keys(Anchors.live).filter(path => path === prefix || path.startsWith(prefix + "."));
@@ -2517,7 +2520,20 @@ TestCase {
         };
         for (let i = 1; i <= 5; i++)
             windowCycle(i);
-        _then("the settings window closed after the cycles", () => _live("settings.general") === "", () => {
+        // The Modules group: its first page the core's, a card per module; its places named, not
+        // published
+        _then("the settings window closed before the Modules page", () => _live("settings.general") === "", () => {
+            _openSettingsWindow();
+            _settingsWindow.selectedPage = "modules";
+        });
+        _then("the Modules page shows a card per module", () => (Anchors.live["settings.modules_installed.installed.card"] ?? 0) > 0, () => {
+            assertEqual(_settingsWindow.selectedPage, "modules_installed", "the Modules group opens its first page, the core's Installed");
+            assertEqual(Anchors.live["settings.modules_installed.installed.card"], Modules.host.statuses.filter(status => status.state !== "duplicate").length,
+                        "… a card per module");
+            assertEqual(_popupLiveProblems("settings.modules_installed").join("; "), "", "… its places named, not published");
+            _closeSettingsWindow();
+        });
+        _then("the settings window closed after the cycles", () => _live("settings.general") === "" && _live("settings.modules_installed") === "", () => {
             assertEqual(_windowCycles, 10, "the General page shown and left five times, the window opened and closed five times, built each time");
             for (let i = 0; i < 5; i++) {
                 _openSettingsWindow();

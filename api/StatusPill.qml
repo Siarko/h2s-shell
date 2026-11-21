@@ -7,7 +7,8 @@ import qs.singletons
 // a short text (a count) in its kind's colour with its tip over it on hover (HoverTip's
 // rules). A click flips `expanded` while there are parts: the parts one per line under a
 // rule, icon and `line` in the part's colour; `toggled(expanded)` reports it. The owner may
-// set `expanded` too.
+// set `expanded` too. `expandable` (1.36, default true) false: a click neither expands it nor
+// goes through to what it stands on; the tips still show on hover.
 //
 //   StatusPill { icon: ""; label: "Sending 1/6"
 //                parts: [{ icon: ""; text: "3"; kind: "muted"; tip: "3 queued" }] }
@@ -29,6 +30,7 @@ Item {
     property string kind: "normal"
     property var parts: []
     property alias expanded: _inner.expanded
+    property alias expandable: _inner.expandable
 
     signal toggled(bool expanded)
 

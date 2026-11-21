@@ -571,6 +571,17 @@ module asks for administrator rights only through the shell's password prompt, w
 the module, what the action is for and the command — read it, and cancel when it does not
 match what you just did. Install a module only from someone you trust, pinned to a tag.
 
+Settings → System → Modules → Installed lists every module as a card: the enabled ones
+first, their names in the accent colour, then the ones turned off, muted, "Off" under the
+name. A pill stands beside the name only for a state that needs attention (Failed, Needs …,
+New — off, Approval required); warnings and deprecated API uses are marks with a count, their
+tip on hover. Opened, a card shows the module's description, where it comes from (and the
+copies it replaces), the API it asks for, whether it runs administrator actions, the modules
+it needs, can use and is used by, its programs, its errors and warnings as written, and its
+data folder. "Enable" asks for the confirmation first when the module is not part of
+h2s-shell; "Disable" asks on the button, or in a dialog listing the running modules that need
+it, which are disabled with it. Modules' own settings pages follow under the Modules group.
+
 ## External dependencies
 
 Beyond Quickshell and Qt 6, the shell shells out to:

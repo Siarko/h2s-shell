@@ -606,7 +606,9 @@ import qs.singletons.network
 //                          over it on hover (HoverTip's rules); expanded (the owner may set
 //                          it; a click flips it while there are parts): the parts one per
 //                          line under a rule — icon and `line` ("" → the tip, or the text
-//                          without one) in the part's colour; toggled(expanded). Texts
+//                          without one) in the part's colour; toggled(expanded);
+//                          expandable (1.36, default true) — false: a click neither expands
+//                          it nor reaches what it stands on, tips on hover still. Texts
 //                          plain, one line, cut past 80 (oneLine); unknown kinds →
 //                          "normal", logged once; past 12 parts the rest dropped, logged
 //                          once. Fills no width.

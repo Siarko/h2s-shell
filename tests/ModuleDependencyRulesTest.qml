@@ -55,6 +55,7 @@ TestCase {
         _rollback();
         _dependents();
         _disable();
+        _cardLines();
         _orphans();
         _reviewCases();
     }
@@ -418,6 +419,30 @@ TestCase {
         const soft = ModuleDependencyRules.disableList("weather", [{ id: "weather", uses: [] },
             { id: "a", uses: [{ id: "weather", optional: true }], state: "loaded" }]);
         assertEqual(soft.disabled.length, 0, "disable: soft users stay on");
+    }
+
+    function _cardLines() {
+        const modules = [
+            { id: "exitmap", name: "Exit map", uses: [{ id: "tailscale", version: "1.0" }, { id: "weather", version: "1.x", optional: true },
+                                                      { id: "routes", version: "2.0" }], state: "missing-module", enabled: true },
+            { id: "tailscale", name: "Tailscale", uses: [], state: "loaded", enabled: true },
+            { id: "routes", name: "Routes", uses: [], state: "disabled", enabled: false },
+            { id: "badge", name: "Badge", uses: [{ id: "tailscale", optional: true }], state: "loaded" },
+            { id: "alpha", name: "Alpha", uses: [{ id: "tailscale", version: "1.0" }], state: "failed" }];
+        const exitmap = ModuleDependencyRules.cardDependencies("exitmap", modules);
+        assertEqual(exitmap.needs.join("|"), "Tailscale 1.0 — on|Routes 2.0 — off", "card: hard uses with their state");
+        assertEqual(exitmap.canUse.join("|"), "weather 1.x — not installed", "card: soft uses; one not installed by its id");
+        assertEqual(exitmap.missing, "Routes", "card: the first hard dependency not running");
+        const tailscale = ModuleDependencyRules.cardDependencies("tailscale", modules);
+        assertEqual(tailscale.usedBy.join(",") + "|" + tailscale.needs.length + "|" + tailscale.missing, "Alpha,Badge,Exit map|0|",
+                    "card: used by, hard and soft, by name; needs nothing");
+        const odd = ModuleDependencyRules.cardDependencies("x", [{ id: "x", uses: [{ id: "y", version: "1\n0" }, { id: 3 }] },
+                                                                  { id: "y", name: "Y", state: "pending" }, { id: "z", name: "Z", state: "failed", uses: [{ id: "x" }] }]);
+        assertEqual(odd.needs.join("|") + "|" + odd.missing, "Y 1 0 — starting|", "card: starting counts as running; text on one line; a malformed use left out");
+        assertEqual(ModuleDependencyRules.cardDependencies("q", [{ id: "q", uses: [{ id: "z" }] }, { id: "z", state: "failed", uses: [] }]).needs.join(""),
+                    "z — not running", "card: a failed dependency is not running");
+        assertEqual(JSON.stringify(ModuleDependencyRules.cardDependencies("x", null)), JSON.stringify({ needs: [], canUse: [], usedBy: [], missing: "" }),
+                    "card: nothing known: nothing");
     }
 
     function _orphans() {
