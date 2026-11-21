@@ -23,7 +23,7 @@ notify_staying() {
 
 # toast_at <id> <place> <queue>: where that notification's toast is
 toast_at() {
-    shell_ipc shelltest notificationState | python3 -I -c '
+    shell_ipc locktest.notifications notificationState | python3 -I -c '
 import json, sys
 toast = next((n["toast"] for n in json.load(sys.stdin) if n["id"] == int(sys.argv[1])), None)
 sys.exit(0 if toast is not None and toast.get("place") == sys.argv[2] and toast.get("queue") == sys.argv[3] else 1)' "$@"
@@ -199,7 +199,7 @@ check_within 3 "dropped past the bottom left corner: inside the screen, whole" \
 check "\"×\" on the modal" test -z "$(shell_ipc shelltest toastDismiss "$backup")"
 # has_entry <id>: the server still holds that notification (its entry in the centre)
 has_entry() {
-    shell_ipc shelltest notificationState | python3 -I -c '
+    shell_ipc locktest.notifications notificationState | python3 -I -c '
 import json, sys
 sys.exit(0 if any(n["id"] == int(sys.argv[1]) for n in json.load(sys.stdin)) else 1)' "$1"
 }

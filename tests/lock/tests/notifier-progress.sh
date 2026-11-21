@@ -2,7 +2,7 @@
 # io/NotificationHandle.qml) driven over the bed's `locktest progress` IPC sends with the
 # real gdbus to the shell's own notification server on the private session bus, and learns
 # a click and a dismissal from that server in-process. Checked from the shell's state
-# (`shelltest notificationState`) and the handle's (`locktest progress state`):
+# (`locktest.notifications notificationState`) and the handle's (`locktest progress state`):
 #
 # - a summary and a body of quotes, backslashes, line breaks and an emoji arrive exactly as
 #   sent (the GVariant text gdbus parses: NotificationRules.gvariantString);
@@ -34,7 +34,7 @@ sys.exit(0 if eval(sys.argv[1]) else 1)' "$1"
 
 # entry_is <id> <python expression over the entry `n`, None when it is not there>
 entry_is() {
-    shell_ipc shelltest notificationState | python3 -I -c '
+    shell_ipc locktest.notifications notificationState | python3 -I -c '
 import json, sys
 n = next((n for n in json.load(sys.stdin) if n["id"] == int(sys.argv[1])), None)
 sys.exit(0 if eval(sys.argv[2]) else 1)' "$1" "$2"
@@ -50,7 +50,7 @@ log "sent: $show_json"
 
 # texts_are <id>: the entry's summary and body are exactly what show_json sent
 texts_are() {
-    shell_ipc shelltest notificationState | python3 -I -c '
+    shell_ipc locktest.notifications notificationState | python3 -I -c '
 import json, sys
 sent = json.loads(sys.argv[2])
 n = next((n for n in json.load(sys.stdin) if n["id"] == int(sys.argv[1])), None)

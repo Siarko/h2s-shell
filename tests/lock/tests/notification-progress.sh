@@ -20,7 +20,7 @@ notify_hints() {
 # notifications_are <json>: the shell's notifications are exactly these (id, summary, and
 # the progress's shown / value / state)
 notifications_are() {
-    shell_ipc shelltest notificationState | python3 -I -c '
+    shell_ipc locktest.notifications notificationState | python3 -I -c '
 import json, sys
 held = [[n["id"], n["summary"], n["progress"]["shown"], n["progress"]["value"], n["progress"]["state"]]
         for n in json.load(sys.stdin)]

@@ -14,7 +14,7 @@ import qs.singletons.io as Io
 // read them here, by the same property names as the production file's — TestSeamsShapeTest
 // checks the two files agree. Read once, at the first use; when any is in force, one line
 // in the log names them (`[TestSeams] test bed: …`), and `qs ipc call modules list` and
-// the lock screen's `state` carry the list. And the `locktest` IPC lives here, below.
+// the lock screen's `state` carry the list. And the `locktest` IPCs live here, below.
 //
 // Used by the lock screen: it imports nothing of the module system, and nothing that
 // would wait.
@@ -78,6 +78,31 @@ Singleton {
         // callbacks add to `events` ("action:<id>", "dismissed").
         function progress(operation: string, argument: string): string {
             return root._progress(operation, argument);
+        }
+    }
+
+    // The notifications the server holds, for the lock bed's notification scenarios
+    // (tests/lock/tests/notifications.sh and others): only a test tree answers, so no process
+    // of the user reads held notifications from the shell. On in every test tree, as module
+    // test mode is.
+    IpcHandler {
+        target: "locktest.notifications"
+
+        // The notifications the server holds, in its order: each one's id, summary,
+        // progress as its card shows it (NotificationRules.progress), and its toast —
+        // whether it is on screen, where ("waiting", "shown", "moved" or "none") in which
+        // queue ("critical", "staying", "ordinary"), and for how long, in ms (0: it stays;
+        // ToastRules.timing)
+        function notificationState(): string {
+            return JSON.stringify(Notifications.notifications.values.map(notification => {
+                const place = Notifications.toastPlace(notification.id);
+                return {
+                    id: notification.id, summary: notification.summary, body: notification.body,
+                    progress: NotificationRules.progress(notification.hints),
+                    toast: { shown: place.place === "shown" || place.place === "moved", place: place.place, queue: place.queue,
+                             duration: Notifications.toastDurations[notification.id] ?? null }
+                };
+            }));
         }
     }
 

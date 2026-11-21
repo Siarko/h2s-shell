@@ -3,7 +3,7 @@
 # sends with the real gdbus to the shell's own notification server on the bed's private
 # session bus. A test tree is in module test mode, where notifications are only recorded:
 # H2S_SHELL_TEST_MODULE_NOTIFY=1 has them sent all the same. Checked from the shell's state
-# (`shelltest notificationState`) and the module's (`good progressState`):
+# (`locktest.notifications notificationState`) and the module's (`good progressState`):
 #
 # - the notification is there, its bar at the module's value, its toast staying
 #   ("whileRunning");
@@ -29,7 +29,7 @@ check "the seam is in force" grep -q H2S_SHELL_TEST_MODULE_NOTIFY <<< "$(shell_i
 # job_is <python expression over the module's notification's entry `n`, None when it is
 # not there>
 job_is() {
-    shell_ipc shelltest notificationState | python3 -I -c '
+    shell_ipc locktest.notifications notificationState | python3 -I -c '
 import json, sys
 n = next((n for n in json.load(sys.stdin) if n["summary"] == "Good job"), None)
 sys.exit(0 if eval(sys.argv[1]) else 1)' "$1"
@@ -41,7 +41,7 @@ check_within 5 "the module's notification is on the private bus, its bar at 30" 
     job_is 'n is not None and n["progress"]["shown"] and n["progress"]["value"] == 0.3 and n["progress"]["state"] == "running"'
 check_within 5 "… its toast stays (whileRunning)" job_is '(n["toast"]["shown"] and n["toast"]["duration"] == 0)'
 check_within 5 "… the module's handle runs" module_job_is running
-id=$(shell_ipc shelltest notificationState | python3 -I -c '
+id=$(shell_ipc locktest.notifications notificationState | python3 -I -c '
 import json, sys
 print(next(n["id"] for n in json.load(sys.stdin) if n["summary"] == "Good job"))')
 log "the module's notification: $id"

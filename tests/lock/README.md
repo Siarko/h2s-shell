@@ -324,8 +324,10 @@ The two versions have the same names: a consumer reads `TestSeams.lockTools` or
 `TestSeams.qml` holds what the reader says when nothing is set (`TestSeamRules.read({})`):
 empty directories, which each consumer takes as its own default (`/etc/pam.d`,
 `/sys/class/leds`, `gdbus` from `PATH`), no timings, no stand-ins. The test version also
-holds what only a test tree has: the `locktest` IPC (a reload on request) and module test
-mode (`moduleTestMode`, on in every test tree; `ModuleHost.testMode`).
+holds what only a test tree has: the `locktest` IPC (a reload on request), the
+`locktest.notifications` IPC (`notificationState`: the notifications the server holds and
+their toasts, for the notification scenarios; on in every test tree) and module test mode
+(`moduleTestMode`, on in every test tree; `ModuleHost.testMode`).
 
 On NixOS the package leaves `tests/lock/` out (`nix/package.nix`); on Arch the shell is a
 checkout, so the test files are on disk, but nothing loads them unless they are copied over

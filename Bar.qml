@@ -375,7 +375,6 @@ PanelWindow {
     //   qs ipc call shelltest cellRect clock
     //   qs ipc call shelltest popupItemRect calendarAdd
     //   qs ipc call shelltest popupState
-    //   qs ipc call shelltest notificationState
     //   qs ipc call shelltest toastBadges
     //   qs ipc call shelltest notificationAction 7 cancel
     //   qs ipc call shelltest notificationDismiss 7
@@ -398,23 +397,6 @@ PanelWindow {
             if (!window)
                 return "{}";
             return bar._testRect(bar._testFind(window.contentItem, item => item.objectName === name && item.visible), window._screenOffset);
-        }
-
-        // The notifications the server holds, in its order: each one's id, summary,
-        // progress as its card shows it (NotificationRules.progress), and its toast —
-        // whether it is on screen, where ("waiting", "shown", "moved" or "none") in which
-        // queue ("critical", "staying", "ordinary"), and for how long, in ms (0: it stays;
-        // ToastRules.timing)
-        function notificationState(): string {
-            return JSON.stringify(Notifications.notifications.values.map(notification => {
-                const place = Notifications.toastPlace(notification.id);
-                return {
-                    id: notification.id, summary: notification.summary, body: notification.body,
-                    progress: NotificationRules.progress(notification.hints),
-                    toast: { shown: place.place === "shown" || place.place === "moved", place: place.place, queue: place.queue,
-                             duration: Notifications.toastDurations[notification.id] ?? null }
-                };
-            }));
         }
 
         // How many toasts wait in each queue, as the badges count them: { critical, staying,

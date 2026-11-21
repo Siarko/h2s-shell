@@ -8,9 +8,9 @@
 #
 # Then the toasts' display time, as each sender asks for it (the spec's expire timeout):
 # 0 stays, 2000 ms shows 2 s, -1 the user's time (5 s by default). Read from the shell's
-# state over the shelltest IPC: whether each toast is on screen, and for how long. Then the
-# three queues: two critical ones — one shown, one waiting on the critical badge — beside
-# the staying toast and an ordinary one.
+# state over the test tree's locktest.notifications IPC: whether each toast is on screen,
+# and for how long. Then the three queues: two critical ones — one shown, one waiting on
+# the critical badge — beside the staying toast and an ordinary one.
 #
 # The screensaver and the lock pause nothing: a toast counts down and goes beneath the
 # screensaver, and every toast above counts and queues while the session is locked. Last,
@@ -55,7 +55,7 @@ notify_for() {
 # toast_is <id> <shown: true|false> [<duration, ms>]: the shell's state of that
 # notification's toast
 toast_is() {
-    shell_ipc shelltest notificationState | python3 -I -c '
+    shell_ipc locktest.notifications notificationState | python3 -I -c '
 import json, sys
 toast = next((n["toast"] for n in json.load(sys.stdin) if n["id"] == int(sys.argv[1])), None)
 wanted = {"shown": sys.argv[2] == "true"}
@@ -119,7 +119,7 @@ notify_critical() {
 
 # toast_at <id> <place> <queue>: where that notification's toast is
 toast_at() {
-    shell_ipc shelltest notificationState | python3 -I -c '
+    shell_ipc locktest.notifications notificationState | python3 -I -c '
 import json, sys
 toast = next((n["toast"] for n in json.load(sys.stdin) if n["id"] == int(sys.argv[1])), None)
 sys.exit(0 if toast is not None and toast.get("place") == sys.argv[2] and toast.get("queue") == sys.argv[3] else 1)' "$@"
@@ -158,7 +158,7 @@ check "still locked" compositor_locked
 # has_entry <id> <true|false>: whether the server still holds that notification (its entry
 # in the centre)
 has_entry() {
-    shell_ipc shelltest notificationState | python3 -I -c '
+    shell_ipc locktest.notifications notificationState | python3 -I -c '
 import json, sys
 held = any(n["id"] == int(sys.argv[1]) for n in json.load(sys.stdin))
 sys.exit(0 if held == (sys.argv[2] == "true") else 1)' "$@"

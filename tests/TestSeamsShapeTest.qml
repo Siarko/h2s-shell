@@ -30,6 +30,10 @@ TestCase {
         path: Quickshell.shellDir + "/scripts/seams.sh"
         blockLoading: true
     }
+    property var _bar: FileView {
+        path: Quickshell.shellDir + "/Bar.qml"
+        blockLoading: true
+    }
     property var _testTreeScript: FileView {
         path: Quickshell.shellDir + "/tests/lock/seams/seams.sh"
         blockLoading: true
@@ -69,6 +73,13 @@ TestCase {
         assertEqual(_properties(testTree).join(", "), productionProperties.join(", "), "the same properties, of the same types, in both TestSeams files");
         assert(!production.includes("Quickshell.env"), "the production TestSeams reads nothing from the environment");
         assert(!production.includes("TestSeamRules"), "… and does not use the reader's rules");
+        // The held notifications' summaries and bodies are told only in a test tree: the
+        // shell's own IPC (Bar.qml's shelltest) has no notificationState
+        const bar = _bar.text();
+        assert(bar.includes("target: \"shelltest\""), "Bar.qml read, its shelltest IPC found");
+        assert(!bar.includes("notificationState"), "… without notificationState");
+        assert(!production.includes("notificationState") && testTree.includes("function notificationState()"),
+               "notificationState is the test tree's (locktest.notifications), not the production TestSeams'");
 
         // The values: what the reader says for an environment without any seam — and off for
         // the two that are not read from a variable (module test mode is on in every test
