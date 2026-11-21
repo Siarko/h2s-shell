@@ -684,6 +684,34 @@ itself.
 trusted, from a repository one could read, and pinned to a tag rather than a branch that can
 change underneath. What changed is read before updating.
 
+#### Built-in modules
+
+The repository's built-in modules are in `builtin-modules/`, each a module directory, with
+`builtin.json` (`{ "off": [ids] }`: the ones that start off). None ships yet: it holds only
+`builtin.json`, and a built-in root that holds nothing else finds no module and changes
+nothing for the host. The shell loads them from a copy outside its own tree, which the
+launcher names to the shell in `H2S_SHELL_BUILTIN_MODULES`. In a checkout that is itself
+the shell's tree (Arch), `builtin-modules/` lies inside what Quickshell scans: its name has a
+hyphen, so no `import qs.…` can reach it, and each module brings its own `qmldir`, as the
+fixture modules under `tests/fixtures/` do.
+
+##### NixOS
+
+`nix/package.nix` installs them to `$out/share/h2s-shell-builtin`, beside the shell's tree
+(`$out/share/h2s-shell`, which leaves `builtin-modules/` out), and the `h2s-shell` command
+sets `H2S_SHELL_BUILTIN_MODULES` to it — also when `H2S_SHELL_DIR` runs a checkout, and
+whatever the caller had set.
+
+##### Arch
+
+`install.sh` copies the checkout's `builtin-modules/` to
+`~/.local/share/h2s-shell/builtin/` (under `$XDG_DATA_HOME` when set), replacing what was
+there; `install.sh --update`, after a `git pull` in the checkout, copies it again and does
+nothing else. A link or a file in that place is left alone (status 1). The directory is
+written only there, never by Settings or by the module installer. `scripts/launch.sh`, when
+`H2S_SHELL_BUILTIN_MODULES` is unset, sets it to that directory; set (empty included), it
+takes what is given, and only an absolute path counts.
+
 - A **module** is a directory with a `module.json` (the schema: `singletons/ModuleManifestRules.qml`'s
   header), a `qmldir` for its singletons, and QML loaded by `file://` URL —
   never imported statically (a broken one would fail the whole config). Every file the
@@ -704,7 +732,8 @@ change underneath. What changed is read before updating.
   builds `H2S_SHELL_MODULES` (the shell's input; the launcher's output) — canonical module
   directories from `H2S_SHELL_MODULE_PATH` (the developer's list), then
   `~/.local/share/h2s-shell/modules/*`, then the built-in modules' directory
-  (`H2S_SHELL_BUILTIN_MODULES`, given by the shell's installation), then the system data
+  (`H2S_SHELL_BUILTIN_MODULES`, given by the shell's installation: see "Built-in modules"
+  below), then the system data
   directories' `h2s-shell/modules/*` (`H2S_SHELL_MODULE_DATA_DIRS`). The running shell runs
   the same search again (`launch.sh --discover-modules`) on `qs ipc call modules rediscover`
   and loads its list in place. Safe mode (no module loads): after
@@ -1639,7 +1668,8 @@ another); nothing appears on screen and the real session cannot be reached. See 
 `tests/install-test.sh` runs `install.sh` without letting it change anything: an empty
 environment, a private home directory and a `PATH` of one directory that holds recording
 stand-ins for `sudo`, `pacman`, `git`, `fc-list` and for the programs that could change a
-system, plus the five plain tools the script uses; no new privileges; a terminal of the
+system, plus the plain tools the script uses (`cp`, `mv` and `rm` among them, for the
+built-in modules); no new privileges; a terminal of the
 run's own (`script`), since the script hands `pacman` the terminal. Before anything runs it
 checks that every privileged name on that `PATH` is one of its stand-ins, and reads
 `install.sh` for ways around them, stopping with status 2 at any: a program named by its
@@ -1647,9 +1677,11 @@ path, `command -p`, an assignment to `PATH`, `exec`, `eval`, `source` or `.`, a 
 the command, a command substitution in a here-document. That reading refuses these forms
 and proves nothing more; what holds whatever the script says is the empty environment, the
 one-directory `PATH`, the private home and no new privileges. It checks
-the packages asked for and how, where the shell is cloned, that nothing else runs as root,
-that a second run changes nothing, another Quickshell config left alone, and what happens
-when `pacman`, the clone or reading the config's origin fails. It runs on both systems.
+the packages asked for and how, where the shell is cloned, where its built-in modules are
+copied (and that `--update` copies them again, alone: no packages, no `sudo`), that nothing
+else runs as root, that a second run changes nothing, another Quickshell config and a link
+where the built-in modules go left alone, and what happens when `pacman`, the clone or
+reading the config's origin fails. It runs on both systems.
 
 ### The test tree
 
@@ -1720,7 +1752,10 @@ files, on either system.
 - `package`: the flake's package builds (`nix`, into the store; no link, no lock file
   written); its version is `singletons/Version.qml`'s; `tests/lock`, `notes` and `docs`
   are not in it; its `h2s-shell` command runs the checkout `H2S_SHELL_DIR` names with the
-  arguments given, and every program the shell calls is on the `PATH` it sets.
+  arguments given, and every program the shell calls is on the `PATH` it sets; the
+  built-in modules are in `share/h2s-shell-builtin`, as `builtin-modules/` holds them, not
+  in the shell's tree, and the command hands that directory to the launcher
+  (`H2S_SHELL_BUILTIN_MODULES`).
 - `layout`: the files the shell's code reads on NixOS are where it looks for them.
 
 #### Arch

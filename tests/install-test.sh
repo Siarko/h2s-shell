@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
 # Runs install.sh without letting it change the machine, and checks what it would have
-# done: which packages it asks for and how, where the shell goes, that nothing runs as
-# root but what it hands to sudo, that a second run changes nothing, and what it does when
-# a step fails. The same on NixOS and on Arch: install.sh is for Arch, the test is not.
+# done: which packages it asks for and how, where the shell goes, where its built-in modules
+# are copied (and `--update`, which copies them again), that nothing runs as root but what it
+# hands to sudo, that a second run changes nothing, and what it does when a step fails. The same on NixOS and on Arch: install.sh is for Arch, the test is not.
 #
 # How install.sh is kept from the machine:
 #   - an empty environment (env -i) with a private HOME and a PATH of one directory, made
 #     here: recording stand-ins for sudo, pacman, git, fc-list and for every program that
-#     could change the system (below), and links to the five plain tools install.sh uses
-#     (bash, mkdir, dirname, grep, cat). No stand-in runs anything real;
+#     could change the system (below), and links to the plain tools install.sh uses
+#     (bash, mkdir, dirname, grep, cat, and cp, mv, rm for the built-in modules, which work
+#     only inside the private HOME). No stand-in runs anything real;
 #   - no new privileges (setpriv): even a sudo reached by another way could not become root;
 #   - before anything runs: every privileged name must resolve to a stand-in written here,
 #     and install.sh is read for the ways around a PATH of stand-ins that reading can find
@@ -36,7 +37,7 @@ need script "gives each run of install.sh a terminal of its own, as it hands pac
 need setpriv "runs install.sh with no new privileges, so that nothing in it could become root"
 need timeout "ends a run that hangs"
 need awk "reads install.sh for ways around the stand-ins before it is run"
-for tool in bash mkdir dirname grep cat; do need "$tool" "install.sh uses it; linked into the private PATH"; done
+for tool in bash mkdir dirname grep cat cp mv rm; do need "$tool" "install.sh uses it; linked into the private PATH"; done
 if [ ${#missing[@]} -gt 0 ]; then
     printf 'install-test.sh: %s\n' "${missing[@]}" >&2
     exit 2
@@ -58,17 +59,18 @@ check() {
 # What must never be the real thing on the private PATH. The first four are install.sh's
 # own; the rest are not expected at all and only say that they were called (status 97).
 PRIVILEGED=(sudo pacman pkexec su doas systemctl yay paru)
-UNEXPECTED=(pkexec su doas systemctl yay paru ln cp mv rm chmod chown install tee curl wget)
+UNEXPECTED=(pkexec su doas systemctl yay paru ln chmod chown install tee curl wget)
 MARK="# a stand-in written by tests/install-test.sh"
 
 # make_bin <directory>: the private PATH of one run, and its control directory beside it
 # (<directory>/../control): `log` (one line per stand-in call), and files a case puts
-# there: sudo-status, git-clone-fails, git-remote-fails, fonts (what fc-list prints).
+# there: sudo-status, git-clone-fails, git-remote-fails, git-clone-no-builtin (a clone
+# without builtin-modules/), fonts (what fc-list prints).
 make_bin() {
     local bin=$1 control name
     control=$(dirname "$bin")/control
     mkdir -p "$bin" "$control"
-    for name in bash mkdir dirname grep cat; do ln -s "$(type -P "$name")" "$bin/$name"; done
+    for name in bash mkdir dirname grep cat cp mv rm; do ln -s "$(type -P "$name")" "$bin/$name"; done
     standin() { { echo "#!$BASH_PATH"; echo "$MARK"; echo "control='$control'"; cat; } > "$bin/$1"; chmod +x "$bin/$1"; }
     standin sudo << 'STANDIN'
 terminal=no
@@ -96,6 +98,11 @@ case "$*" in
         mkdir "$3" || exit 128
         echo "$2" > "$3/.standin-origin"
         : > "$3/shell.qml"
+        if [ ! -e "$control/git-clone-no-builtin" ]; then
+            mkdir -p "$3/builtin-modules/sample"
+            echo '{ "off": [] }' > "$3/builtin-modules/builtin.json"
+            echo '{ "id": "sample" }' > "$3/builtin-modules/sample/module.json"
+        fi
         ;;
     *) exit 97 ;;
 esac
@@ -221,9 +228,9 @@ start_case() {
     echo "JetBrainsMono Nerd Font" > "$CONTROL/fonts"
     EXTRA_ENV=()
 }
-# run_install [piped]: runs install.sh once in the case's surroundings — from the file, or
-# given to bash on its standard input, as `curl … | bash` does. OUTPUT (both streams, as
-# the terminal got them), STATUS.
+# run_install [piped | --update]: runs install.sh once in the case's surroundings — from the
+# file (with --update: given that argument), or given to bash on its standard input, as
+# `curl … | bash` does. OUTPUT (both streams, as the terminal got them), STATUS.
 run_install() {
     safe_bin "$BIN" || setup_error "the private PATH of $CASE is not safe; stopped before running install.sh"
     : > "$CONTROL/log"
@@ -233,6 +240,8 @@ run_install() {
         [ ${#EXTRA_ENV[@]} -gt 0 ] && printf ' %q' "${EXTRA_ENV[@]}"
         if [ "${1:-}" = piped ]; then
             printf ' %q --no-new-privs %q < %q\n' "$SETPRIV" "$BIN/bash" "$INSTALL"
+        elif [ "${1:-}" = --update ]; then
+            printf ' %q --no-new-privs %q %q --update\n' "$SETPRIV" "$BIN/bash" "$INSTALL"
         else
             printf ' %q --no-new-privs %q %q\n' "$SETPRIV" "$BIN/bash" "$INSTALL"
         fi
@@ -272,8 +281,13 @@ check "first run: nothing else that changes a system is run" none_logged '^unexp
 check "first run: the shell is cloned from its repository into ~/.config/quickshell/default" \
     logged "git: clone $repository $target"
 check "first run: the clone is there" test -f "$target/shell.qml"
+builtin=$HOME_DIR/.local/share/h2s-shell/builtin
+check "first run: the checkout's built-in modules are copied to ~/.local/share/h2s-shell/builtin" \
+    test "$(cat "$builtin/builtin.json" "$builtin/sample/module.json" 2> /dev/null)" = "$(printf '%s\n' '{ "off": [] }' '{ "id": "sample" }')"
 check "first run: nothing else is put in the home directory" \
-    test "$(home_tree)" = "$(printf '%s\n' . ./.config ./.config/quickshell ./.config/quickshell/default ./.config/quickshell/default/.standin-origin ./.config/quickshell/default/shell.qml | LC_ALL=C sort)"
+    test "$(home_tree)" = "$(printf '%s\n' . ./.config ./.config/quickshell ./.config/quickshell/default ./.config/quickshell/default/.standin-origin ./.config/quickshell/default/shell.qml \
+        ./.config/quickshell/default/builtin-modules ./.config/quickshell/default/builtin-modules/builtin.json ./.config/quickshell/default/builtin-modules/sample ./.config/quickshell/default/builtin-modules/sample/module.json \
+        ./.local ./.local/share ./.local/share/h2s-shell ./.local/share/h2s-shell/builtin ./.local/share/h2s-shell/builtin/builtin.json ./.local/share/h2s-shell/builtin/sample ./.local/share/h2s-shell/builtin/sample/module.json | LC_ALL=C sort)"
 check "first run: it ends by saying what is left to do" says "==> Done. Left for you:"
 check "first run: the autostart line names the installed launch.sh" says "hl.exec_cmd(\"$target/scripts/launch.sh\")"
 check "first run: with a Nerd Font installed, no warning about one" silent_on "no Nerd Font found"
@@ -282,19 +296,64 @@ check "first run: with a Nerd Font installed, no warning about one" silent_on "n
 tree_before=$(home_tree)
 run_install
 check "second run: exit 0" status_is 0
-check "second run: says it is installed" says "Already installed"
+check "second run: says it is installed, and how to update" says "Already installed; update it with: git -C \"$target\" pull && \"$target/install.sh\" --update"
 check "second run: no second clone" none_logged '^git: clone'
 check "second run: the packages are asked for the same way (pacman's --needed skips what is there)" logged "$sudo_line"
 check "second run: the home directory is as it was" test "$(home_tree)" = "$tree_before"
 check "second run: nothing else that changes a system is run" none_logged '^unexpected '
 
+# ---- --update: the built-in modules again, nothing else -----------------------------------
+# What the checkout no longer holds goes; what it gained comes; no packages, no sudo
+rm -r "$target/builtin-modules/sample"
+mkdir -p "$target/builtin-modules/other"
+echo '{ "id": "other" }' > "$target/builtin-modules/other/module.json"
+: > "$builtin/left-by-hand"
+run_install --update
+check "--update: exit 0" status_is 0
+check "--update: the built-in modules are the checkout's now" \
+    test "$(cd "$builtin" && find . | LC_ALL=C sort | tr '\n' ' ')" = ". ./builtin.json ./other ./other/module.json "
+check "--update: no sudo, no pacman" none_logged '^sudo \|^pacman:'
+check "--update: no clone, no pull" none_logged '^git: clone\|pull'
+check "--update: nothing left beside the built-in directory" test ! -e "$builtin.new" -a ! -e "$builtin.old"
+check "--update: says to restart the shell" says "Restart the shell to load the built-in modules again"
+
+start_case update-not-installed
+run_install --update
+check "--update without an install: exit 1" status_is 1
+check "--update without an install: says to install first" says "run this without --update first"
+check "--update without an install: nothing is put in the home directory" test "$(home_tree)" = .
+
+# ---- The built-in directory is a link: left alone ------------------------------------------
+start_case builtin-link
+mkdir -p "$HOME_DIR/elsewhere" "$HOME_DIR/.local/share/h2s-shell"
+echo kept > "$HOME_DIR/elsewhere/file"
+ln -s "$HOME_DIR/elsewhere" "$HOME_DIR/.local/share/h2s-shell/builtin"
+run_install
+check "a link where the built-in directory goes: exit 1" status_is 1
+check "a link where the built-in directory goes: says it leaves it alone" says "is not a directory; leaving it alone"
+check "a link where the built-in directory goes: the link and what it leads to are as they were" \
+    test -L "$HOME_DIR/.local/share/h2s-shell/builtin" -a "$(cat "$HOME_DIR/elsewhere/file")" = kept -a "$(ls "$HOME_DIR/elsewhere")" = file
+check "a link where the built-in directory goes: it does not say it is done" silent_on "==> Done"
+
+# ---- A checkout without built-in modules (an older one): what is there stays ---------------
+start_case no-builtin
+: > "$CONTROL/git-clone-no-builtin"
+mkdir -p "$HOME_DIR/.local/share/h2s-shell/builtin"
+echo '{ "off": [] }' > "$HOME_DIR/.local/share/h2s-shell/builtin/builtin.json"
+run_install
+check "a checkout without built-in modules: exit 0" status_is 0
+check "a checkout without built-in modules: says so" says "This checkout has no built-in modules"
+check "a checkout without built-in modules: the built-in directory is as it was" \
+    test "$(cat "$HOME_DIR/.local/share/h2s-shell/builtin/builtin.json")" = '{ "off": [] }'
+
 # ---- XDG_CONFIG_HOME ---------------------------------------------------------------------
 start_case xdg
-EXTRA_ENV=(XDG_CONFIG_HOME="$CASE/config")
+EXTRA_ENV=(XDG_CONFIG_HOME="$CASE/config" XDG_DATA_HOME="$CASE/data")
 run_install
 check "XDG_CONFIG_HOME: exit 0" status_is 0
 check "XDG_CONFIG_HOME: the shell goes under it" logged "git: clone $repository $CASE/config/quickshell/default"
-check "XDG_CONFIG_HOME: nothing is put in the home directory" test "$(home_tree)" = .
+check "XDG_DATA_HOME: the built-in modules go under it" test -f "$CASE/data/h2s-shell/builtin/sample/module.json"
+check "XDG_CONFIG_HOME, XDG_DATA_HOME: nothing is put in the home directory" test "$(home_tree)" = .
 
 # ---- Another Quickshell config is there --------------------------------------------------
 start_case other-config
@@ -342,6 +401,7 @@ run_install
 check "the clone fails: a non-zero exit" status_nonzero
 check "the clone fails: it does not say it is done" silent_on "==> Done"
 check "the clone fails: no half-made config is left" test ! -e "$HOME_DIR/.config/quickshell/default"
+check "the clone fails: no built-in modules are copied" test ! -e "$HOME_DIR/.local"
 
 # ---- The font warning --------------------------------------------------------------------
 start_case no-font

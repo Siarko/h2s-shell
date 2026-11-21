@@ -7,12 +7,22 @@
 #
 # or, from a checkout: ./install.sh
 #
+# After `git pull` in the checkout, `install.sh --update` copies its built-in modules again
+# (no packages, no sudo).
+#
+# The built-in modules (the checkout's builtin-modules/) are copied to
+# ~/.local/share/h2s-shell/builtin, where scripts/launch.sh finds them: a directory the
+# shell's install and update write, replaced as a whole each time, never by hand or by
+# Settings. Outside the checkout: the built-in root is found from the shell's installation,
+# the same place on every Arch install.
+#
 # On NixOS use the flake instead (see the README).
 
 set -euo pipefail
 
 repository="https://github.com/Siarko/h2s-shell"
 target="${XDG_CONFIG_HOME:-$HOME/.config}/quickshell/default"
+builtin_target="${XDG_DATA_HOME:-$HOME/.local/share}/h2s-shell/builtin"
 
 packages=(
     quickshell
@@ -30,6 +40,42 @@ packages=(
     libvips               # vipsthumbnail: wallpapers resized to the screen, kept in ~/.cache
     ttf-jetbrains-mono-nerd
 )
+
+ours() { git -C "$target" remote get-url origin 2> /dev/null | grep -q "Siarko/h2s-shell"; }
+
+# The checkout's built-in modules into $builtin_target, replacing what was there: copied
+# beside it first, so a copy that fails leaves the old one in place. Links are copied as
+# links (a module whose file leads out of its directory is refused by the shell's own check).
+copy_builtin() {
+    local source="$target/builtin-modules"
+    echo "==> Built-in modules, in $builtin_target"
+    if [ ! -d "$source" ]; then
+        echo "This checkout has no built-in modules; leaving $builtin_target as it is."
+        return 0
+    fi
+    if [ -L "$builtin_target" ] || { [ -e "$builtin_target" ] && [ ! -d "$builtin_target" ]; }; then
+        echo "$builtin_target is not a directory; leaving it alone. Move it away and run this again." >&2
+        exit 1
+    fi
+    mkdir -p "$(dirname "$builtin_target")"
+    rm -rf "$builtin_target.new" "$builtin_target.old"
+    cp -RP "$source" "$builtin_target.new"
+    if [ -d "$builtin_target" ]; then
+        mv "$builtin_target" "$builtin_target.old"
+    fi
+    mv "$builtin_target.new" "$builtin_target"
+    rm -rf "$builtin_target.old"
+}
+
+if [ "${1:-}" = --update ]; then
+    if [ ! -e "$target/shell.qml" ] || ! ours; then
+        echo "h2s-shell is not installed in $target; run this without --update first." >&2
+        exit 1
+    fi
+    copy_builtin
+    echo "==> Done. Restart the shell to load the built-in modules again: $target/scripts/launch.sh --restart"
+    exit 0
+fi
 
 if ! command -v pacman > /dev/null; then
     echo "This script is for Arch Linux (pacman). On NixOS use the flake: see $repository" >&2
@@ -49,8 +95,8 @@ fi
 
 echo "==> The shell, in $target"
 if [ -e "$target/shell.qml" ]; then
-    if git -C "$target" remote get-url origin 2> /dev/null | grep -q "Siarko/h2s-shell"; then
-        echo "Already installed; update it with: git -C \"$target\" pull"
+    if ours; then
+        echo "Already installed; update it with: git -C \"$target\" pull && \"$target/install.sh\" --update"
     else
         echo "$target already holds another Quickshell config; leaving it alone." >&2
         echo "Move it away and run this again." >&2
@@ -60,6 +106,8 @@ else
     mkdir -p "$(dirname "$target")"
     git clone "$repository" "$target"
 fi
+
+copy_builtin
 
 cat << EOF
 

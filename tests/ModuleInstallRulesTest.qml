@@ -493,6 +493,8 @@ TestCase {
         const rules = ModuleInstallRules;
         assertEqual(JSON.stringify(rules.builtinOff('{"off": ["player", "weather", "player", "Bad", "clock", 3]}')), JSON.stringify({ ok: true, off: ["player", "weather"] }),
                     "builtin.json: the valid ids (a reserved one is none), each once");
+        assertEqual(JSON.stringify(rules.builtinOff('{ "off": [] }\n')), JSON.stringify({ ok: true, off: [] }),
+                    "builtin.json as builtin-modules/ ships it: well formed, none off (no problem for the host)");
         for (const bad of ["", "{", "[]", '{"off": "clock"}', "{}", null])
             assertEqual(JSON.stringify(rules.builtinOff(bad)), JSON.stringify({ ok: false, off: [] }), "unreadable or another form: not ok, none off — " + JSON.stringify(bad));
         const on = (id, source, disabled, enabled) => rules.enabledByLists(id, source, ["clock"], enabled ?? [], disabled ?? []);

@@ -19,6 +19,9 @@
 # "killed" case is only that a killed shell is started again, and the "stopped" case is the
 # one that fails on `wait -f`: there it spins on every machine.
 #
+# Last, the module search's built-in root (H2S_SHELL_BUILTIN_MODULES, and its default when
+# unset), through `launch.sh --discover-modules`.
+#
 #   tests/launcher-selftest.sh
 #
 # Nothing real is started: no compositor, no Quickshell. It needs bash, coreutils, grep,
@@ -361,6 +364,33 @@ is "… and still runs" test -e "/proc/$launcher"
 running=$(shell_pid)
 signal TERM "$launcher"
 within 5 "stopped" gone "$running"
+
+# ---- (8) The built-in root of the module search ---
+# Unset, it is the data home's h2s-shell/builtin (where install.sh puts it on Arch); one that
+# holds only builtin.json — what the package and install.sh bring while no module ships —
+# finds what no built-in root finds; set, the one given; set and empty, none.
+echo "== the built-in root of the module search"
+discovery=$work/discovery
+mkdir -p "$discovery/run" "$discovery/data/h2s-shell/modules/alpha" "$discovery/data/h2s-shell/builtin" "$discovery/package/gamma"
+echo '{ "id": "alpha" }' > "$discovery/data/h2s-shell/modules/alpha/module.json"
+echo '{ "off": [] }' > "$discovery/data/h2s-shell/builtin/builtin.json"
+echo '{ "id": "gamma" }' > "$discovery/package/gamma/module.json"
+discover() {
+    env -i "PATH=$work/bin" "HOME=$work/home" "XDG_RUNTIME_DIR=$discovery/run" "XDG_DATA_HOME=$discovery/data" \
+        "H2S_SHELL_MODULE_DATA_DIRS=" "$@" "$bash_path" "$launch_script" --discover-modules 2> /dev/null
+}
+canonical() { (cd -P "$1" && pwd); }
+alpha=$(canonical "$discovery/data/h2s-shell/modules/alpha")
+is "unset, with only builtin.json there: the user's module alone" test "$(discover)" = "$alpha"
+is "… the same as with no built-in root" test "$(discover H2S_SHELL_BUILTIN_MODULES=)" = "$alpha"
+mkdir -p "$discovery/data/h2s-shell/builtin/beta"
+echo '{ "id": "beta" }' > "$discovery/data/h2s-shell/builtin/beta/module.json"
+beta=$(canonical "$discovery/data/h2s-shell/builtin/beta")
+is "unset: a module in the data home's h2s-shell/builtin is found, after the user's" test "$(discover)" = "$alpha:$beta"
+is "set and empty: none" test "$(discover H2S_SHELL_BUILTIN_MODULES=)" = "$alpha"
+is "set: the one given, not the data home's" \
+    test "$(discover "H2S_SHELL_BUILTIN_MODULES=$discovery/package")" = "$alpha:$(canonical "$discovery/package/gamma")"
+is "set to a relative path: none" test "$(discover H2S_SHELL_BUILTIN_MODULES=package)" = "$alpha"
 
 echo
 if [ "$failures" = 0 ]; then

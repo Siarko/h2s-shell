@@ -7,6 +7,10 @@
 #
 # H2S_SHELL_DIR=<a git checkout> runs that checkout instead, with the same programs: for
 # development, where editing a file reloads the shell (the store copy never changes).
+#
+# The built-in modules (builtin-modules/ in the repository) go to $out/share/h2s-shell-builtin,
+# beside the shell's tree rather than inside it, and the command hands that directory to the
+# launcher as H2S_SHELL_BUILTIN_MODULES — always the package's own, whichever tree it runs.
 { lib
 , stdenvNoCC
 , runtimeShell
@@ -77,13 +81,17 @@ stdenvNoCC.mkDerivation {
 
   installPhase = ''
     runHook preInstall
-    mkdir -p $out/share/h2s-shell $out/bin
+    mkdir -p $out/share $out/bin
+    cp -r builtin-modules $out/share/h2s-shell-builtin
+    rm -r builtin-modules
+    mkdir -p $out/share/h2s-shell
     cp -r . $out/share/h2s-shell
     chmod +x $out/share/h2s-shell/scripts/*.sh
 
     cat > $out/bin/h2s-shell <<EOF
     #!${runtimeShell}
     export PATH="${lib.makeBinPath runtimePrograms}:\$PATH"
+    export H2S_SHELL_BUILTIN_MODULES="$out/share/h2s-shell-builtin"
     exec "\''${H2S_SHELL_DIR:-$out/share/h2s-shell}/scripts/launch.sh" "\$@"
     EOF
     chmod +x $out/bin/h2s-shell

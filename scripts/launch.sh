@@ -278,7 +278,11 @@ stop_shell() {
 #                           that inherited this).
 #   H2S_SHELL_BUILTIN_MODULES
 #                           input, the shell's installation's: the directory of its built-in
-#                           modules (an absolute path; unset or anything else: none).
+#                           modules (an absolute path; set to anything else, empty included:
+#                           none). The NixOS package's command sets it to the package's own;
+#                           unset, it is $XDG_DATA_HOME/h2s-shell/builtin (~/.local/share), where
+#                           install.sh puts them on Arch. Exported so that the shell and a
+#                           --restart from it read the same.
 #   H2S_SHELL_MODULE_DATA_DIRS
 #                           the data directories searched instead of $XDG_DATA_DIRS (which the
 #                           shell needs as it is: icons, fonts, mime data); set and empty: none.
@@ -292,6 +296,9 @@ stop_shell() {
 # logged. At most $max_modules modules and $max_modules_length bytes (a longer environment
 # string fails the shell's execve with E2BIG: no shell at all); the rest is dropped, logged.
 # H2S_SHELL_SAFE_MODE is the supervisor's, set per start (supervise): never inherited.
+if [ -z "${H2S_SHELL_BUILTIN_MODULES+set}" ]; then
+    export H2S_SHELL_BUILTIN_MODULES="${XDG_DATA_HOME:-$HOME/.local/share}/h2s-shell/builtin"
+fi
 launcher_script=$(readlink -f "$0")
 discovery_seconds=3
 max_modules=200

@@ -448,6 +448,10 @@ The interface modules are written against (`qs.api`), versioned on its own
   file inside the module's directory (≤ 1 MiB).
 
 ### Added
+- Built-in modules have their place: on NixOS in the package (`share/h2s-shell-builtin`), on
+  Arch in `~/.local/share/h2s-shell/builtin`, which `install.sh` fills from the checkout. None
+  ships yet. On Arch, update with `git pull` and then `./install.sh --update` in the shell's
+  folder: it copies the built-in modules again, nothing else.
 - Modules can be installed, updated to another version and removed through IPC:
   `qs ipc call modules install <address-or-folder>` (a git address, `#<tag|branch|commit>`
   allowed, or a folder; `installKeepOff` keeps it off) downloads it with the modules it needs,
