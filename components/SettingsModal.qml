@@ -18,7 +18,8 @@ import qs.singletons
 // It never closes itself: a button reports `answered(index)` (an index into `buttonList`),
 // "×" `requested("closeButton")`, Escape `requested("escape")`; the owner sets `open`
 // (SettingsModalHost). While open it holds the keyboard — Escape reaches it before any
-// shortcut behind it (a side panel's) —, given back on closing to the item that had it.
+// shortcut behind it (a side panel's) —, Tab and Shift+Tab cycle through its controls, and
+// the keyboard taken from it is taken back; on closing it goes back to the item that had it.
 // `values` holds the checkboxes' states by key, all unchecked each time it opens.
 Item {
     id: root
@@ -85,6 +86,47 @@ Item {
         if (_focusBefore && _focusBefore.visible)
             _focusBefore.forceActiveFocus();
         _focusBefore = null;
+    }
+
+    // The keyboard moved out while open (a click or tap that takes it, Qt's own Tab from a
+    // control inside): back into the panel
+    readonly property Item _focused: Window.activeFocusItem
+    on_FocusedChanged: {
+        if (open && _focused && !_isInside(_focused))
+            Qt.callLater(() => {
+                const focused = Window.activeFocusItem;
+                if (root.open && focused && !root._isInside(focused))
+                    _panel.forceActiveFocus();
+            });
+    }
+
+    // Tab inside the panel: the next control there that takes the keyboard (`forward`, else
+    // the one before), wrapping round; none, the panel itself
+    function _cycle(forward) {
+        let item = Window.activeFocusItem ?? _panel;
+        for (let step = 0; step < 1000 && item; step++) {
+            item = item.nextItemInFocusChain(forward);
+            if (item && item !== _panel && _isInside(item) && item.visible && item.enabled) {
+                item.forceActiveFocus(forward ? Qt.TabFocusReason : Qt.BacktabFocusReason);
+                return;
+            }
+            if (item === Window.activeFocusItem)
+                break;
+        }
+        _panel.forceActiveFocus();
+    }
+
+    // Shortcuts, not key handlers: a control that takes Tab itself (activeFocusOnTab) would
+    // hand the keyboard on through the whole window's chain before a handler saw the key
+    Shortcut {
+        sequence: "Tab"
+        enabled: root.open && root.visible
+        onActivated: root._cycle(true)
+    }
+    Shortcut {
+        sequences: ["Backtab", "Shift+Tab"]
+        enabled: root.open && root.visible
+        onActivated: root._cycle(false)
     }
 
     function _toggle(key) {

@@ -15,8 +15,8 @@ import qs.singletons
 //     subject  the ids the question acts on; `withdraw(subject)` closes it when they go
 //   onAnswer(answer): { button, cancelled, reason, values, subject } — `button` the id of
 //     the button clicked, "cancel" when cancelled; `reason` "button", "close" (×),
-//     "escape", "lock" (the session locked), "window" (the window hid or went), "subject"
-//     (withdrawn); `values` the checkboxes' states by key and the content's; `subject` the
+//     "escape", "lock" (the session locked), "window" (the window hid or went), "page"
+//     (the window turned to another page: `page` changed), "subject" (withdrawn); `values` the checkboxes' states by key and the content's; `subject` the
 //     spec's, so the answer acts on what was asked about.
 //
 // `ask` returns "" when the modal opens, else why not: another is open (a question never
@@ -33,7 +33,12 @@ Item {
     // The last refusal logged: the same one again is not (log on a change of outcome)
     property string _lastRefusal: ""
 
-    readonly property bool _locked: Profiles.screenLocked
+    // What the window shows (its page's id): another one cancels the open question, whose
+    // page went
+    property var page: null
+    onPageChanged: cancel("page")
+
+    readonly property bool _locked: ApiElements.sessionLocked
     readonly property bool _windowShown: Window.window?.visible ?? false
 
     on_LockedChanged: if (_locked) cancel("lock")

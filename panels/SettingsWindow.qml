@@ -554,6 +554,7 @@ FloatingWindow {
         SettingsModalHost {
             id: _modalHost
             anchors.fill: parent
+            page: root.selectedPage
         }
     }
 
@@ -623,7 +624,8 @@ FloatingWindow {
     // on-screen keyboard can hide. An ordinary window keeps the keyboard; Qt 6.12 stops
     // asking for text only when told after a focus change (notes/plans/touch.md) — Qt 6.11
     // cannot, there the keyboard stays until the window loses the focus.
-    TouchTextFocus {}
+    // Leaves the focus alone while a question is open: a tap would take it from the modal
+    TouchTextFocus { watching: !root.modalHost.open }
     readonly property Item _focusItem: contentItem.Window.activeFocusItem
     on_FocusItemChanged: Qt.callLater(() => Qt.inputMethod.update(Qt.ImQueryInput))
 }

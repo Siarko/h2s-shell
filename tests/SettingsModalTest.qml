@@ -43,6 +43,12 @@ TestCase {
                 width: 200
                 height: 24
                 text: "behind"
+                activeFocusOnTab: true
+            }
+            Checkbox {
+                id: behindBox
+                x: 10; y: 250
+                label: "Behind"
             }
             SmallButton {
                 id: behind
@@ -62,6 +68,13 @@ TestCase {
             SettingsModalHost {
                 id: host
                 anchors.fill: parent
+            }
+
+            // Over the window's content, as in the Settings window: it leaves the focus alone
+            // while a question is open
+            TouchTextFocus {
+                id: touchText
+                watching: !host.open
             }
         }
 
@@ -274,6 +287,47 @@ TestCase {
         assert(_until(() => !host.open), "Escape closes the modal");
         assertEqual(drawerEvents.length + " " + drawer.open, "0 true", "… not the side panel behind it");
         drawer.open = false;
+
+        // --- Tab stays inside ---
+        host.ask({ title: "Two boxes", checks: [{ key: "one", label: "One" }, { key: "two", label: "Two" }],
+                   buttons: [{ label: "Go" }] }, _remember);
+        assert(_until(_focusInside), "a modal with two checkboxes, with the keyboard");
+        const reached = [];
+        let stayed = true;
+        for (let i = 0; i < 5; i++) {
+            driver.keyClick(Qt.Key_Tab);
+            driver.wait(20);
+            stayed = stayed && _focusInside();
+            reached.push(host.Window.activeFocusItem?.objectName ?? "");
+        }
+        assert(stayed && !field.activeFocus && !behindBox.activeFocus, "Tab five times: the keyboard never reaches a control behind");
+        assertEqual(reached.slice(0, 3).join(" "), "modalCheck:one modalCheck:two modalCheck:one", "… it cycles through the checkboxes, wrapping");
+        driver.keyClick(Qt.Key_Tab, Qt.ShiftModifier);
+        driver.wait(20);
+        assert(_focusInside() && host.Window.activeFocusItem?.objectName.startsWith("modalCheck:"), "… Shift+Tab too");
+        host.cancel("window");
+
+        // --- a touch tap: the focus stays ---
+        _askRemove();
+        assert(_until(_focusInside), "opened, with the keyboard");
+        const title = _find(host.modal, "modalTitle");
+        const touch = driver.touchEvent(title);
+        touch.press(0, title, 5, 5).commit();
+        driver.wait(60);
+        touch.release(0, title, 5, 5).commit();
+        driver.wait(120);
+        assert(_focusInside(), "a tap on the modal: the keyboard stays in it");
+        driver.keyClick(Qt.Key_Escape);
+        assert(_until(() => !host.open), "… and Escape still cancels");
+        assertEqual(_last()?.reason, "escape", "… as Escape");
+
+        // --- the window turning to another page ---
+        host.page = "general";
+        _askRemove();
+        host.page = "general";
+        assertEqual(host.open, true, "the same page set again: stays");
+        host.page = "modules";
+        assertEqual(host.open + " " + _last()?.reason + " " + _last()?.button, "false page cancel", "another page: closed as cancelled");
 
         // --- one button: informs ---
         const before = answers.length;

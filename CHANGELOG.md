@@ -427,6 +427,9 @@ The interface modules are written against (`qs.api`), versioned on its own
   file inside the module's directory (≤ 1 MiB).
 
 ### Added
+- Settings → Appearance → Other has a "Settings modal" section: the corners, padding, border,
+  spacing and widths of the questions that open over the Settings window; their dimming is
+  a colour of its own, "Modal dimming" (Colors → Backgrounds).
 - The shell tells you, once, when locking before sleep is in conflict with what else runs:
   "The screen stays unlocked during sleep" when "Lock before the computer sleeps" is off
   and no other program locks the screen before sleep, "Two programs lock the screen before
