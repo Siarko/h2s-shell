@@ -509,9 +509,11 @@ launcher agree on the contract described under "Recovery" below):
   `singletons/lock/SleepLockers.qml` reads logind's `ListInhibitors` and `id -u` (`gdbus
   call --system`, a read anyone may make), `LockIoRules.sleepLockers` decides from the
   sleep delay inhibitors of this user, the shell's own left out: present (a locker by name
-  or by a reason that says it locks the screen), possible (hypridle, which holds one
-  whatever its configuration), none, or unknown (a failed read); `sleepNoticeStep` decides
-  the one notice and the key remembered in `Config.sleepLockNotice`. The reading runs
+  or by a reason that says it locks the screen), possible (hypridle, swayidle, xss-lock:
+  they run a command of the user's, often logind's Lock, which the shell follows), none, or
+  unknown (a failed read); `sleepNoticeStep` decides the one notice and the key remembered
+  (a `PersistentProperties` for the process, `Config.sleepLockNotice` when the config can
+  be written), forgotten after two quiet reads in a row. No reads while locked. The reading runs
   against a stand-in gdbus in `tests/SleepLockersReadingTest.qml`, the whole in the lock
   bed's `sleep-lockers`. Not covered by it: a locker that holds no inhibitor (a lock
   command run by logind's Lock signal — hypridle's `lock_cmd`, xss-lock — beside the

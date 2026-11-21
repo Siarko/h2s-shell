@@ -430,9 +430,9 @@ The interface modules are written against (`qs.api`), versioned on its own
 - The shell tells you, once, when locking before sleep is in conflict with what else runs:
   "The screen stays unlocked during sleep" when "Lock before the computer sleeps" is off
   and no other program locks the screen before sleep, "Two programs lock the screen before
-  sleep" when it is on and another (xss-lock, swayidle, GNOME Shell, KDE's screen locker, …)
-  does. Read from logind's sleep inhibitors; hypridle, which may or may not lock, and a
-  failed read say nothing.
+  sleep" when it is on and another (GNOME Shell, KDE's screen locker, …) does. Read from
+  logind's sleep inhibitors; hypridle, swayidle and xss-lock (often set to ask logind to
+  lock, which the shell follows) and a failed read say nothing.
 - Toasts stack in three queues, top to bottom: critical, staying (until taken away) and
   ordinary (they count down), each showing at most its own number and counting what waits
   on its own "+N" badge beside its lowest toast (the critical badge outlined in red); a

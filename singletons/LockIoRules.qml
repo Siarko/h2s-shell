@@ -384,18 +384,21 @@ Singleton {
     // Whether something besides this shell locks the screen before the computer sleeps, read
     // from what logind knows about every system: the sleep "delay" inhibitors, which a
     // program takes to act before sleep. A locker of the user's own session holds one —
-    // xss-lock, swayidle with a before-sleep command, GNOME Shell, KDE's screen locker,
+    // GNOME Shell, KDE's screen locker, xss-lock, swayidle with a before-sleep command,
     // hypridle — beside services that hold one for other work (NetworkManager, UPower). The
     // list says who holds each and why, not what it will do: a holder counts as a locker
-    // by its name or by a reason that says it locks the screen; hypridle holds one whatever
-    // its before_sleep_cmd is, so it is only a possible locker.
+    // by its name or by a reason that says it locks the screen. hypridle, swayidle and
+    // xss-lock run whatever they are given — often `loginctl lock-session`, logind's Lock,
+    // which this shell follows (no race at all), or nothing that locks — so they are only
+    // possible lockers, whatever their reason says.
 
     // Holders that lock the screen before sleep when they hold a sleep inhibitor at all
-    readonly property var sleepLockerNames: ["xss-lock", "swayidle", "light-locker", "xfce4-screensaver",
+    readonly property var sleepLockerNames: ["light-locker", "xfce4-screensaver",
         "cinnamon-screensaver", "mate-screensaver", "gnome shell", "screen locker", "xscreensaver",
         "xsecurelock", "hyprlock", "swaylock"]
-    // Holders that act before sleep and may or may not lock: their configuration says
-    readonly property var possibleSleepLockerNames: ["hypridle"]
+    // Holders that run a command of the user's before sleep, which may lock by itself, ask
+    // logind to lock (this shell then locks, in step with sleep) or not lock at all
+    readonly property var possibleSleepLockerNames: ["hypridle", "swayidle", "xss-lock"]
 
     // logind's ListInhibitors as `gdbus call` prints it (a GVariant:
     // `([('sleep', 'who', "why", 'delay', uint32 1000, uint32 42), …],)`, `(@a(ssssuu) [],)`
@@ -526,10 +529,10 @@ Singleton {
             if (key === "h2s-shell")
                 continue;
             const why = typeof inhibitor.why === "string" ? inhibitor.why : "";
-            if (sleepLockerNames.includes(key) || (/\block/i.test(why) && /\b(screen|session)\b/i.test(why)))
-                present.add(who || "another program");
-            else if (possibleSleepLockerNames.includes(key))
+            if (possibleSleepLockerNames.includes(key))
                 possible.add(who);
+            else if (sleepLockerNames.includes(key) || (/\block/i.test(why) && /\b(screen|session)\b/i.test(why)))
+                present.add(who || "another program");
         }
         const names = set => Array.from(set).sort().slice(0, 3);
         if (present.size > 0)
@@ -570,8 +573,8 @@ Singleton {
             return {
                 key: "both:" + names.join(","),
                 summary: "Two programs lock the screen before sleep",
-                body: names.join(", ") + (names.length === 1 ? " locks" : " lock")
-                    + " it too. Keep one of them: \"Lock before the computer sleeps\" is in Settings → Lockscreen."
+                body: "This shell locks it, and " + names.join(", ") + (names.length === 1 ? " does" : " do")
+                    + " too. One lock is enough."
             };
         }
         if (lockers?.state === "none" && lockOnSleep === false) {
@@ -584,20 +587,25 @@ Singleton {
         return null;
     }
 
-    // One decision after a read or a change of the setting: `remembered` is the key of the
-    // notice last given ("" for none; kept in the config, so a notice is given once, not at
-    // every start). → { notice (null, or sleepLockNotice's to give now), remember (the key to
-    // keep) }. An unknown read changes nothing; an outcome with nothing to say forgets the
-    // key, so the same problem coming back later is told again.
-    function sleepNoticeStep(remembered, lockers, lockOnSleep) {
-        const kept = typeof remembered === "string" ? remembered : "";
+    // One decision after a read (`fromRead` true) or a change of the setting or of the lock:
+    // `memory` is { key: the notice last given ("" for none; kept in the config, so a notice
+    // is given once, not at every start), quiet: reads in a row with nothing to say }. →
+    // { notice (null, or sleepLockNotice's to give now), memory (to keep) }. An unknown read
+    // changes nothing but the count; a different notice is given at once; the key is forgotten
+    // only after two reads in a row with nothing to say — so the same problem coming back
+    // later is told again, but not after one read that blinked.
+    function sleepNoticeStep(memory, lockers, lockOnSleep, fromRead) {
+        const key = typeof memory?.key === "string" ? memory.key : "";
+        const quiet = Number.isInteger(memory?.quiet) && memory.quiet > 0 ? memory.quiet : 0;
         if (!["present", "possible", "none"].includes(lockers?.state))
-            return { notice: null, remember: kept };
+            return { notice: null, memory: { key: key, quiet: fromRead === true ? 0 : quiet } };
         const notice = sleepLockNotice(lockers, lockOnSleep);
-        if (notice === null)
-            return { notice: null, remember: "" };
-        if (notice.key === kept)
-            return { notice: null, remember: kept };
-        return { notice: notice, remember: notice.key };
+        if (notice === null) {
+            const count = fromRead === true ? quiet + 1 : quiet;
+            return { notice: null, memory: count >= 2 ? { key: "", quiet: count } : { key: key, quiet: count } };
+        }
+        if (notice.key === key)
+            return { notice: null, memory: { key: key, quiet: 0 } };
+        return { notice: notice, memory: { key: notice.key, quiet: 0 } };
     }
 }

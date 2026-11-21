@@ -1,0 +1,1 @@
+([('sleep', 'UPower', 'Pause device polling', 'delay', uint32 0, uint32 2450), ('sleep', 'h2s-shell', 'Lock the screen before sleep', 'delay', uint32 @UID@, uint32 900), ('sleep', 'GNOME Shell', 'GNOME needs to lock the screen', 'delay', uint32 @UID@, uint32 2090)],)

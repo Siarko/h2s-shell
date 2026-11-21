@@ -2477,9 +2477,12 @@ Moved out of the tracker as done; checked against the code and the sections abov
   compositor refuses the second lock). Built: `LockIoRules.parseInhibitors` / `sleepLockers`
   (present / possible / none / unknown, this uid only, the shell's own left out) /
   `sleepLockNotice` / `sleepNoticeStep`; `singletons/lock/SleepLockers.qml` (the read);
-  `singletons/SleepLockNotice.qml` (first read 30 s after the start, then every 15 min; one
-  notice per situation, remembered in `Config.sleepLockNotice`, held while locked; the outcome
-  logged when it changes). Tests: LockIoRulesTest cases, `SleepLockersReadingTest` (stand-in
+  `singletons/SleepLockNotice.qml` (first read 30 s after the start, then every 15 min, none
+  while locked; one notice per situation, remembered for the process and in
+  `Config.sleepLockNotice`, forgotten after two quiet reads in a row, held while locked; the
+  outcome logged when it changes). After review: swayidle and xss-lock only possible lockers
+  (often `loginctl lock-session`, which the shell follows); the race notice no longer advises
+  turning the shell's lock off. Tests: LockIoRulesTest cases, `SleepLockersReadingTest` (stand-in
   gdbus), lock bed `sleep-lockers` (the bed's gdbus stand-in answers ListInhibitors from
   `logind_inhibitors`; timings `sleepLockers`, `sleepLockersEvery`).
 - **Screensaver and lock screen together checked (step 9)** — on branch `lock-step9`

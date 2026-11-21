@@ -91,10 +91,10 @@ TestCase {
         _then("the stand-in is in place", () => _ready, () => {
             _reader = _readerComponent.createObject(suite, { toolDirectory: _scratch });
             assertEqual(_reader.lockers.state, "unknown", "before a read: unknown");
-            _readWith("swayidle");
+            _readWith("gnome");
         });
         _then("the first read answered", () => _answered(), () => {
-            assertEqual(_lockers(), JSON.stringify({ state: "present", names: ["swayidle"] }),
+            assertEqual(_lockers(), JSON.stringify({ state: "present", names: ["GNOME Shell"] }),
                         "a locker of this user's found; the shell's own inhibitor and root's services left out");
             _readWith("hypridle");
         });

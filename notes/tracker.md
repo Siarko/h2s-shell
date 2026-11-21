@@ -99,10 +99,12 @@ and `plans/documentation.md` predate the decisions of 2026-11-17: step 1 revises
 - **Lock before sleep, the notice** (step 9, the agent's words): "The screen stays unlocked
   during sleep" / "Nothing locks it before the computer sleeps. Turn on "Lock before the
   computer sleeps" in Settings → Lockscreen." and "Two programs lock the screen before sleep" /
-  "swayidle locks it too. Keep one of them: …". Both cases were built (the decision names
+  "This shell locks it, and GNOME Shell does too. One lock is enough." (says what the two do,
+  never advises turning the shell's lock off). Both cases were built (the decision names
   telling the user that something else locks; the default being off makes the unlocked
   sleep the case that matters). Once per situation, remembered in the config. **hypridle
-  says nothing**: it holds a sleep inhibitor whatever its `before_sleep_cmd` — on the Arch
+  says nothing** (swayidle and xss-lock neither: they often run `loginctl lock-session`, which
+  the shell follows — no race): hypridle holds a sleep inhibitor whatever its `before_sleep_cmd` — on the Arch
   machine it holds one with no `before_sleep_cmd`, so nothing locks there before sleep with
   the setting off, and the shell cannot tell that from the inhibitor list (reading
   hypridle's config would be one program's file format, on each system). To decide: say

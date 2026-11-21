@@ -12,11 +12,12 @@ import qs.singletons.lock
 // that idle daemons started with the session have taken theirs, then every 15 minutes; a
 // change of the setting is decided again on the last read.
 //
-// Given once: the notice's key is kept in the config (Config.sleepLockNotice), and an
-// outcome with nothing to say forgets it, so the same problem coming back is told again. A
-// read that fails says nothing. Not while the session is locked (nobody would see the
-// toast), and not without a config read that can remember. The outcome goes to the log
-// when it changes.
+// Given once: the notice's key is kept for the process (over a reload too) and in the
+// config (Config.sleepLockNotice) when it can be written, and forgotten only after two reads
+// in a row with nothing to say, so the same problem coming back is told again
+// (LockIoRules.sleepNoticeStep). A read that fails says nothing. Not while the session is
+// locked (nobody would see the toast), and no reads then. The outcome goes to the log when
+// it changes.
 Singleton {
     id: root
 
@@ -33,18 +34,29 @@ Singleton {
     on_LockOnSleepChanged: _decide()
     on_SessionLockedChanged: _decide()
     on_ConfigUsableChanged: _decide()
+    Component.onCompleted: Qt.callLater(_decide)
 
     function _timing(name, fallback) {
         const given = TestSeams.timings[name];
         return typeof given === "number" && isFinite(given) && given >= 0 ? given : fallback;
     }
 
-    function _decide() {
-        if (_reader.reads === 0 || !_configUsable || _sessionLocked)
+    // `fromRead`: called for a read just answered (counts toward forgetting the key)
+    function _decide(fromRead) {
+        if (!Config.ready)
             return;
-        const step = LockIoRules.sleepNoticeStep(Config.sleepLockNotice, _reader.lockers, _lockOnSleep);
-        if (step.remember !== Config.sleepLockNotice)
-            Config.sleepLockNotice = step.remember;
+        if (!_memory.loaded) {
+            _memory.loaded = true;
+            _memory.key = _configUsable ? Config.sleepLockNotice : "";
+        }
+        if (_reader.reads === 0 || _sessionLocked)
+            return;
+        const step = LockIoRules.sleepNoticeStep({ key: _memory.key, quiet: _memory.quiet }, _reader.lockers,
+                                                 _lockOnSleep, fromRead === true);
+        _memory.key = step.memory.key;
+        _memory.quiet = step.memory.quiet;
+        if (_configUsable && step.memory.key !== Config.sleepLockNotice)
+            Config.sleepLockNotice = step.memory.key;
         if (step.notice === null)
             return;
         console.info("[SleepLockNotice] telling the user: " + step.notice.summary);
@@ -60,7 +72,7 @@ Singleton {
                 root._loggedOutcome = text;
                 console.info("[SleepLockNotice] other lockers before sleep: " + text);
             }
-            root._decide();
+            root._decide(true);
         }
     }
 
@@ -77,6 +89,17 @@ Singleton {
         id: _every
         interval: root._readEvery
         repeat: true
-        onTriggered: _reader.start()
+        onTriggered: {
+            if (!root._sessionLocked)
+                _reader.start();
+        }
+    }
+
+    // What was told, for this process: over a reload, and where the config cannot keep it
+    PersistentProperties {
+        id: _memory
+        property bool loaded: false
+        property string key: ""
+        property int quiet: 0
     }
 }

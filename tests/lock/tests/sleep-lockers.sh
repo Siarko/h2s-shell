@@ -6,9 +6,11 @@
 #
 #   "Lock before the computer sleeps" off, nothing else locks: one notice, the screen stays
 #   unlocked during sleep — remembered in the config, not repeated at the next reads;
-#   switched on: nothing to say; another locker appears: one notice, two programs lock;
-#   hypridle alone (it may or may not lock): nothing; while locked nothing is said, and
-#   what is due is said once unlocked; a read that fails says nothing.
+#   switched on: nothing to say (the key forgotten after two such reads); another locker
+#   appears: one notice, two programs lock, never advising to turn the shell's lock off;
+#   swayidle or hypridle alone (they may lock, ask logind to — which the shell follows — or
+#   not lock): nothing; while locked no reads and nothing is said, and what is due is said
+#   once unlocked; a read that fails says nothing.
 # The outcome is logged when it changes, not at every read.
 
 mkdir -p "$XDG_CONFIG_HOME/h2s_shell"
@@ -59,12 +61,17 @@ check "the outcome logged once, not at every read" outcome_logged_once none
 # ---- Switched on: nothing to say; another locker appears ----
 shell_ipc profiles simulate '{"locktest.lockOnSleep": true}' > /dev/null
 check_within 5 "switched on: the inhibitor is taken" inhibitor_held
-check_within 5 "… nothing to say: the remembered notice is forgotten" remembered_is ""
+check_within 5 "… nothing to say: two reads later the remembered notice is forgotten" remembered_is ""
 logind_inhibitors swayidle "Setup Up Lock Screen"
-check_within 10 "on, and swayidle locks too: the notice comes" notices_of_are "$BOTH_SUMMARY" 1
-check "… naming it" grep -q 'swayidle locks it too.' <<< "$(shell_ipc shelltest notifierRecorded)"
-check_within 5 "… remembered" remembered_is "both:swayidle"
-check "the new outcome logged" outcome_logged_once "present: swayidle"
+check_within 10 "on, swayidle alone: read as a possible locker" outcome_logged_once "possible: swayidle"
+wait_reads 2
+check "… nothing said (it may ask logind to lock, which the shell follows)" notices_of_are "$BOTH_SUMMARY" 0
+logind_inhibitors "GNOME Shell" "GNOME needs to lock the screen"
+check_within 10 "on, and GNOME Shell locks too: the notice comes" notices_of_are "$BOTH_SUMMARY" 1
+check "… saying what the two do" grep -q 'This shell locks it, and GNOME Shell does too. One lock is enough.' \
+    <<< "$(shell_ipc shelltest notifierRecorded)"
+check_within 5 "… remembered" remembered_is "both:GNOME Shell"
+check "the new outcome logged" outcome_logged_once "present: GNOME Shell"
 wait_reads 3
 check "three reads later: still once" notices_of_are "$BOTH_SUMMARY" 1
 
@@ -82,14 +89,21 @@ check "… on with it neither" notices_of_are "$BOTH_SUMMARY" 1
 lock_by_ipc
 check_within 5 "locked" compositor_locked
 logind_inhibitors
-wait_reads 3
+wait_reads 1 # one already under way may still answer
+locked_reads=$(reads)
+no_read_while_locked() { ! wait_until 3 lines_more_than "$locked_reads" '^call ListInhibitors' "$WORK/logind/log"; }
+check "locked: no reads for 3 s (every second otherwise)" no_read_while_locked
 check "off, nothing else locks, but locked: not said (nobody would see it)" notices_of_are "$UNLOCKED_SUMMARY" 1
 logind_signal unlock
 check_within 5 "unlocked" compositor_unlocked
-check_within 5 "… now said" notices_of_are "$UNLOCKED_SUMMARY" 2
+check_within 5 "… the reads go on, and it is said" notices_of_are "$UNLOCKED_SUMMARY" 2
+# The config is written a moment after a change: wait for it, so the check below is of a
+# key that was on disk before the failing reads, not of a write still pending
+check_within 5 "… remembered in the config" remembered_is none
 
 # ---- A read that fails says nothing and forgets nothing ----
 echo "not a list" > "$WORK/logind/inhibitors"
 check_within 10 "an unreadable answer: unknown" outcome_logged_once unknown
-check "… the remembered notice kept" remembered_is none
+wait_reads 2
+check "… two more unreadable reads later the remembered notice is kept" remembered_is none
 check "… nothing new said" notices_of_are "$UNLOCKED_SUMMARY" 2
