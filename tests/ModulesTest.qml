@@ -331,7 +331,9 @@ TestCase {
             // process 123 relaunched once after a crash already (8), now again (9)
             host.guardFile = _scratch + "/starts";
             host.guardIdentity = "123:9";
-            host.guardClearMs = 300;
+            // A window no load here outlives, however slow the machine: the count is read
+            // before it is cleared (a short window comes after, for the clearing)
+            host.guardClearMs = 600000;
             host.load(_dirs(["good"]), {});
         });
         _then("the guarded load settles", () => _settled() && host.guard !== null, () => {
@@ -345,11 +347,16 @@ TestCase {
         });
         _then("the reload settles", () => _settled() && host.guard !== null, () => {
             assertEqual(host.guard?.count, 2, "a reload of the same process: not counted again");
-            suite._exists = null;
-            _sh("sleep 0.6; cat \"$1/starts\"", [_scratch], (code, output) => suite._exists = output.trim());
+            // Now a short window, from the next load's answer on
+            host.guardClearMs = 300;
+            host.load(_dirs(["good"]), {});
+            suite._clearAsked = Date.now();
         });
-        _then("the counter is cleared after the window", () => _exists !== null, () => {
-            assertEqual(_exists, "123:9 0", "lived guardClearMs: the count back to 0");
+        _then("the counter is cleared after the window", () => host.guard?.cleared === true && _counterReads("123:9 0"), () => {
+            assert(Date.now() - _clearAsked >= 300, "… not before the window (" + (Date.now() - _clearAsked) + " ms)");
+            assertEqual(_counter, "123:9 0", "lived guardClearMs: the count back to 0");
+            // The long window again: the next counts are read before anything clears them
+            host.guardClearMs = 600000;
             suite._made = null;
             _sh("printf 'garbage\\n' > \"$1/starts\"", [_scratch], code => suite._made = code);
         });
@@ -1157,6 +1164,21 @@ TestCase {
     }
     property var _made: null
     property var _exists: null
+    property var _clearAsked: 0
+    // The start counter's file as last read, and whether a read is under way
+    property string _counter: ""
+    property bool _readingCounter: false
+    // Whether the counter file reads `expected`: a step's condition, read anew while it waits
+    function _counterReads(expected) {
+        if (!_readingCounter) {
+            _readingCounter = true;
+            _sh("cat \"$1/starts\"", [_scratch], (code, output) => {
+                suite._counter = output.trim();
+                suite._readingCounter = false;
+            });
+        }
+        return _counter === expected;
+    }
     // The test's own files: in the private runtime directory the runner gives it
     readonly property string _scratch: (Quickshell.env("XDG_RUNTIME_DIR") || "/tmp") + "/h2s-modules-test-" + Date.now()
 
