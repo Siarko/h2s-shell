@@ -4,13 +4,13 @@ import qs.singletons
 import qs.components
 
 // One notification's toast, made by ToastStack for a toast on its screen and destroyed after
-// it slid out. Notifications holds the queues: whether the toast is on screen (`present`,
-// from the stack), whether it counts down (Notifications.countingToasts) and for how long
-// (Notifications.toastDurations). The toast only slides, counts and reports its end
-// (Notifications.toastGone) — it holds nothing another toast waits for.
+// it slid out. Toasts holds the queues: whether the toast is on screen (`present`,
+// from the stack), whether it counts down (Toasts.countingToasts) and for how long
+// (Toasts.toastDurations). The toast only slides, counts and reports its end
+// (Toasts.toastGone) — it holds nothing another toast waits for.
 // A critical or staying toast — or a modal — can be dragged by its title line (the grip) when
-// the option is on (Notifications.canMoveToast); dropped, it is a modal at that place, inside
-// its screen (ToastRules.clampToScreen, Notifications.moveToast). A modal has the accent
+// the option is on (Toasts.canMoveToast); dropped, it is a modal at that place, inside
+// its screen (ToastRules.clampToScreen, Toasts.moveToast). A modal has the accent
 // outline and fades in and out where it is instead of sliding.
 Item {
     id: root
@@ -60,7 +60,7 @@ Item {
 
     // ---- Dragged by its title line ----
     // Allowed by the rules (an option; critical, staying or a modal) while it is on screen
-    readonly property bool movable: present && toastId >= 0 && Notifications.canMoveToast(toastId)
+    readonly property bool movable: present && toastId >= 0 && Toasts.canMoveToast(toastId)
     property bool dragging: false
     // Not moving: no slide, nudge, move to a place or fade running (for tests from outside)
     readonly property bool settled: !slideIn.running && !nudge.running && !toPlace.running && !fadeIn.running
@@ -99,8 +99,8 @@ Item {
         _lastY = place.y - originY;
         x = place.x;
         dragging = false;
-        Notifications.moveToast(toastId, place.x, place.y);
-        if (Notifications.isModal(toastId)) {
+        Toasts.moveToast(toastId, place.x, place.y);
+        if (Toasts.isModal(toastId)) {
             // Taken, the modal's place is where it was dropped and this changes nothing;
             // refused, it is the old one. Not placed yet (pinned meanwhile): the stack places it.
             _takeModalPlace();
@@ -152,7 +152,7 @@ Item {
         // Its notification, read when it shows: the queues forget it once it left, and the
         // card still shows it while it slides out
         if (toastId >= 0)
-            currentNotif = Notifications.toastObject(toastId) ?? currentNotif;
+            currentNotif = Toasts.toastObject(toastId) ?? currentNotif;
         slideOut.stop();
         fadeOut.stop();
         remaining = 1.0;
@@ -190,19 +190,19 @@ Item {
     function dismiss() {
         countdown.stop();
         if (toastId >= 0)
-            Notifications.toastGone(toastId);
+            Toasts.toastGone(toastId);
     }
 
     // Gone while still in its queue — its screen's HUD destroyed: out of the queue too, or the
     // toasts after it would wait for it to count down, for ever
-    // A modal whose screen went waits in its queue again (Notifications.modalScreenGone)
+    // A modal whose screen went waits in its queue again (Toasts.modalScreenGone)
     Component.onDestruction: {
         if (toastId < 0 || !present)
             return;
         if (modal)
-            Notifications.modalScreenGone(toastId);
+            Toasts.modalScreenGone(toastId);
         else
-            Notifications.toastGone(toastId);
+            Toasts.toastGone(toastId);
     }
 
     onRestXChanged: {
@@ -210,12 +210,12 @@ Item {
             nudge.restart();
     }
 
-    // How long it shows (Notifications.toastDurations, ToastRules.timing): the sender's time,
+    // How long it shows (Toasts.toastDurations, ToastRules.timing): the sender's time,
     // the user's, or 0 — it stays until taken away ("×", a swipe), no countdown
-    readonly property int _ms: toastId >= 0 ? (Notifications.toastDurations[toastId] ?? 0) : 0
-    readonly property bool _staying: toastId < 0 || (Notifications.toastKinds[toastId] ?? "stays") === "stays"
-    // Whether this toast counts down now (Notifications.countingToasts)
-    readonly property bool _counting: present && toastId >= 0 && Notifications.countingToasts.includes(toastId)
+    readonly property int _ms: toastId >= 0 ? (Toasts.toastDurations[toastId] ?? 0) : 0
+    readonly property bool _staying: toastId < 0 || (Toasts.toastKinds[toastId] ?? "stays") === "stays"
+    // Whether this toast counts down now (Toasts.countingToasts)
+    readonly property bool _counting: present && toastId >= 0 && Toasts.countingToasts.includes(toastId)
     // What it counts: a new showing, an announce, or a new time counts from full
     readonly property string _countKey: _counting ? _generation + ":" + _ms : ""
 
@@ -235,7 +235,7 @@ Item {
     }
 
     Connections {
-        target: Notifications
+        target: Toasts
 
         // Announced again while on screen: counting, it counts its time from full (a new
         // count key); waiting its turn or staying, it is full already
@@ -348,7 +348,7 @@ Item {
         // job goes on); the toast then leaves as its notification does
         onCloseClicked: {
             if (root.toastId >= 0)
-                Notifications.dismissToast(root.toastId, root.currentNotif);
+                Toasts.dismissToast(root.toastId, root.currentNotif);
         }
         // Also after an action on a notification that does not stay after it
         onDismissRequested: root.dismiss()

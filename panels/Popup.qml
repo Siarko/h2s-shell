@@ -514,7 +514,7 @@ LazyLoader {
             clip: true
 
             // The notification centre open here: where it stands on the screen, out in full
-            // rather than mid-slide, for the toasts to keep clear of (Notifications.centreArea).
+            // rather than mid-slide, for the toasts to keep clear of (Toasts.centreArea).
             // Told once it has settled: moving over from another panel or resizing, it changes
             // every frame, and each change sets the toasts moving afresh — they trailed it.
             readonly property var _centreArea: {
@@ -531,7 +531,7 @@ LazyLoader {
             function _reportCentreArea() {
                 if (_centreArea === null) {
                     _centreSettle.stop();
-                    Notifications.setCentreArea(popupLoader.barScreen?.name ?? "", null);
+                    Toasts.setCentreArea(popupLoader.barScreen?.name ?? "", null);
                 } else {
                     _centreSettle.restart();
                 }
@@ -539,9 +539,9 @@ LazyLoader {
             Timer {
                 id: _centreSettle
                 interval: 80
-                onTriggered: Notifications.setCentreArea(popupLoader.barScreen?.name ?? "", clipWrapper._centreArea)
+                onTriggered: Toasts.setCentreArea(popupLoader.barScreen?.name ?? "", clipWrapper._centreArea)
             }
-            Component.onDestruction: Notifications.setCentreArea(popupLoader.barScreen?.name ?? "", null)
+            Component.onDestruction: Toasts.setCentreArea(popupLoader.barScreen?.name ?? "", null)
 
             Behavior on _start {
                 enabled: popup.showPopup

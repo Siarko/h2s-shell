@@ -14,12 +14,12 @@ Rectangle {
     property string timestamp: ""
     property bool compactDismiss: false
     // A pin in the header (the centre's entries): pinned, the notification stays on screen as
-    // a modal (Notifications.pinToast) until unpinned or dismissed
+    // a modal (Toasts.pinToast) until unpinned or dismissed
     property bool pinnable: false
     // The screen a pin puts the notification on: the card's own (the centre's), "" unknown
     property string screenName: QsWindow.window?.screen?.name ?? ""
     // The pin's glyph, tooltip and effect, from whether it is a modal now (ToastRules.pinLook)
-    readonly property var pinLook: ToastRules.pinLook(notification !== null && Notifications.isModal(notification.id))
+    readonly property var pinLook: ToastRules.pinLook(notification !== null && Toasts.isModal(notification.id))
     property int imageMaxHeight: 120
     // From the theme: a card in the panel by default; a toast sets its own
     property int contentPadding: Theme.notificationCard.padding
@@ -94,9 +94,9 @@ Rectangle {
         if (!notification)
             return;
         if (pinLook.action === "pin")
-            Notifications.pinToast(notification, screenName);
+            Toasts.pinToast(notification, screenName);
         else
-            Notifications.unpinToast(notification.id);
+            Toasts.unpinToast(notification.id);
     }
 
     // The header's dismiss control sits inside a tappable area: its press marks the tap
@@ -104,7 +104,7 @@ Rectangle {
     property bool _dismissPressed: false
     property real _selectionClearedAt: 0
     // A critical notification is outlined in the error colour, wherever the card is (a
-    // toast, the panel, the lock screen) — the toast of one also stays (Notifications)
+    // toast, the panel, the lock screen) — the toast of one also stays (Toasts)
     readonly property bool _critical: Notifications.isCritical(notification)
     border.width: _critical ? Math.max(borderWidth, Theme.border.selectedWidth) : borderWidth
     border.color: _critical ? Theme.error : borderColor

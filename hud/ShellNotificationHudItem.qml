@@ -25,7 +25,7 @@ Item {
     property var currentNotif: null
 
     function showNext() {
-        const notif = Notifications.dequeueShellNotification();
+        const notif = Toasts.dequeueShellNotification();
         if (!notif) {
             currentNotif = null;
             return;
@@ -41,10 +41,10 @@ Item {
     }
 
     Connections {
-        target: Notifications
+        target: Toasts
 
         function onShellQueueChanged() {
-            if (Notifications.toastScreen !== root.screenModelData.name)
+            if (Toasts.toastScreen !== root.screenModelData.name)
                 return;
             if (root.currentNotif !== null)
                 return;

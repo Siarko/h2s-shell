@@ -118,7 +118,7 @@ PanelWindow {
 
     // ---- Toasts ----
     // Three stacks under the bar at the right edge — critical, staying, ordinary — each
-    // queue's badge beside its lowest toast (ToastStack, Notifications' queues)
+    // queue's badge beside its lowest toast (ToastStack, Toasts' queues)
     ToastStack {
         id: toastStack
         y: hud._barInsets.top + Theme.osdToast.screenGap
@@ -170,11 +170,11 @@ PanelWindow {
                                     height: Math.round(badge.height), settled: badge.settled });
         }
 
-        // The open notification centre's place (Notifications.centreArea): { screen, x, y,
+        // The open notification centre's place (Toasts.centreArea): { screen, x, y,
         // width, height } on its screen, "{}" while it is closed; with the toasts' column's
         // right edge on this screen (stackRight) and whether it stands free of the screen's edge
         function centreArea(): string {
-            const area = Notifications.centreArea;
+            const area = Toasts.centreArea;
             return JSON.stringify(Object.assign({}, area ?? {}, { stackRight: toastStack.rightEdge, free: toastStack.free }));
         }
 

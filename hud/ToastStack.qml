@@ -7,8 +7,8 @@ import qs.singletons
 // "+N" beside its lowest toast, counting what waits there (the critical one with the critical
 // outline, ToastRules.badgeLook). One toast per notification on screen, keyed by its id, made
 // when it shows and destroyed after it slid out; a toast that leaves is kept until then.
-// On the toasts' screen (Notifications.criticalToastScreen) the stack takes what fits whenever the
-// queues change (Notifications.fillToasts).
+// On the toasts' screen (Toasts.criticalToastScreen) the stack takes what fits whenever the
+// queues change (Toasts.fillToasts).
 // Modals — toasts dragged out of their queue, notifications pinned from the centre — are the
 // same toasts, out of the stack at their own place on this screen (ToastRules.onScreen's
 // modals); a pinned one is given its first place here (ToastRules.pinSpot). Hud adds each
@@ -27,7 +27,7 @@ Item {
     // The notification centre open on this screen ({ x, y, width, height }), else null: the
     // column stands left of it (ToastRules.stackEdge) — this overlay is above the centre
     readonly property var centre: {
-        const area = Notifications.centreArea;
+        const area = Toasts.centreArea;
         return area !== null && screenName !== "" && area.screen === screenName ? area : null;
     }
     // The toast and, at most, the badge beside it
@@ -67,13 +67,13 @@ Item {
 
     // The screen toasts go to — the critical ones' screen, which is the others' too unless a
     // fullscreen window hides all but the critical ones there
-    readonly property bool _toastScreen: screenName !== "" && Notifications.criticalToastScreen === screenName
+    readonly property bool _toastScreen: screenName !== "" && Toasts.criticalToastScreen === screenName
     // The toasts in their queues on this screen, top to bottom: [{ id, queue }]
-    readonly property var _onScreen: ToastRules.onScreen(Notifications.toastState, Notifications.fullscreenHidden)
-    readonly property var stack: _onScreen.stack.filter(entry => Notifications.toastScreens[entry.id] === screenName)
+    readonly property var _onScreen: ToastRules.onScreen(Toasts.toastState, Toasts.fullscreenHidden)
+    readonly property var stack: _onScreen.stack.filter(entry => Toasts.toastScreens[entry.id] === screenName)
     // The modals on this screen: [{ id, queue, x, y }], x and y in the window (null: not
     // placed yet)
-    readonly property var modals: _onScreen.modals.filter(entry => Notifications.toastScreens[entry.id] === screenName)
+    readonly property var modals: _onScreen.modals.filter(entry => Toasts.toastScreens[entry.id] === screenName)
     readonly property var _presentKeys: stack.map(entry => String(entry.id)).concat(modals.map(entry => String(entry.id)))
     // Where each modal goes in the stack's own coordinates, by id; null: not placed yet
     readonly property var modalPlaces: {
@@ -107,8 +107,8 @@ Item {
             if (entry.x !== null && entry.y !== null)
                 continue;
             const spot = ToastRules.pinSpot({
-                modals: ToastRules.onScreen(Notifications.toastState).modals
-                    .filter(other => Notifications.toastScreens[other.id] === screenName),
+                modals: ToastRules.onScreen(Toasts.toastState).modals
+                    .filter(other => Toasts.toastScreens[other.id] === screenName),
                 width: Theme.osdToast.width,
                 height: toastFor(entry.id)?.height ?? 0,
                 screenWidth: dropWidth,
@@ -118,7 +118,7 @@ Item {
                 top: root.y,
                 gap: Theme.osdToast.screenGap
             });
-            Notifications.placeModal(entry.id, spot.x, spot.y);
+            Toasts.placeModal(entry.id, spot.x, spot.y);
         }
     }
     // Toasts sliding out, by key: kept until they finish
@@ -141,7 +141,7 @@ Item {
     }
 
     // The waiting counts, on the toasts' screen only
-    readonly property var _badges: _toastScreen ? Notifications.toastBadges : ({ critical: 0, staying: 0, ordinary: 0 })
+    readonly property var _badges: _toastScreen ? Toasts.toastBadges : ({ critical: 0, staying: 0, ordinary: 0 })
     readonly property bool _anyBadge: _badges.critical > 0 || _badges.staying > 0 || _badges.ordinary > 0
     readonly property real restX: rightEdge - Theme.osdToast.width
         - (_anyBadge ? Theme.osdToast.badgeWidth + 8 : free ? 0 : Theme.osdToast.screenGap)
@@ -199,14 +199,14 @@ Item {
             return;
         _filling = true;
         try {
-            Notifications.fillToasts(screenName);
+            Toasts.fillToasts(screenName);
         } finally {
             _filling = false;
         }
     }
 
     Connections {
-        target: Notifications
+        target: Toasts
         function onRoomForToasts() { root.fill(); }
         function onToastScreenChanged() { root.fill(); }
         function onCriticalToastScreenChanged() { root.fill(); }

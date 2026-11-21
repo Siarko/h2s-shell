@@ -23,7 +23,7 @@ PanelWindow {
 
     // True when the notifications popup is the active panel — suppresses HUD toasts
     property bool notifPanelOpen: popupLoader.active && popupLoader.contentType === "notifications"
-    onNotifPanelOpenChanged: Notifications.setHudPanelOpen(notifPanelOpen)
+    onNotifPanelOpenChanged: Toasts.setHudPanelOpen(notifPanelOpen)
 
     // Close this screen's popup when another screen's popup opens
     onActiveScreenChanged: {
@@ -402,7 +402,7 @@ PanelWindow {
         // How many toasts wait in each queue, as the badges count them: { critical, staying,
         // ordinary }
         function toastBadges(): string {
-            return JSON.stringify(Notifications.toastBadges);
+            return JSON.stringify(Toasts.toastBadges);
         }
 
         // A notification's action run as its card runs it (Notifications.invokeAction), and
@@ -425,13 +425,13 @@ PanelWindow {
             return "";
         }
 
-        // "×" on a notification's toast, as its card's "×" does (Notifications.dismissToast);
+        // "×" on a notification's toast, as its card's "×" does (Toasts.dismissToast);
         // "" when done, "not shown" when it has no toast on screen
         function toastDismiss(id: int): string {
-            const place = Notifications.toastPlace(id).place;
+            const place = Toasts.toastPlace(id).place;
             if (place !== "shown" && place !== "moved")
                 return "not shown";
-            Notifications.dismissToast(id);
+            Toasts.dismissToast(id);
             return "";
         }
 

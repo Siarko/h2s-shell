@@ -138,7 +138,7 @@ TestCase {
     }
 
     function _place(notification) {
-        const at = Notifications.toastPlace(notification.id);
+        const at = Toasts.toastPlace(notification.id);
         return at.place + (at.queue ? " " + at.queue : "");
     }
 
@@ -149,8 +149,8 @@ TestCase {
             Config.globals = JSON.stringify(Object.assign(JSON.parse(savedGlobals || "{}"), change));
         };
         settings({});
-        Notifications.clearHudQueue();
-        Notifications.screensOverride = [{ name: "drag-screen", focused: true, fullscreen: false, workspace: 1 }];
+        Toasts.clearHudQueue();
+        Toasts.screensOverride = [{ name: "drag-screen", focused: true, fullscreen: false, workspace: 1 }];
         const made = [];
         let nextId = 9501;
         const standIn = (expire, change) => {
@@ -160,7 +160,7 @@ TestCase {
         };
         let stack = _stack.createObject(stackHost);
         const show = notification => {
-            Notifications.enqueueHudNotification(notification);
+            Toasts.enqueueHudNotification(notification);
             return stack.toastFor(notification.id);
         };
         const settle = () => driver.wait(Math.max(Theme.duration("enter"), Theme.duration("move")) + 80);
@@ -185,8 +185,8 @@ TestCase {
             followed = backupToast.dragging && Math.abs(backupToast.x - (startX - 150)) <= 25 && Math.abs(backupToast.y - (startY + 125)) <= 25;
         });
         assert(followed, "while held, the toast follows the pointer");
-        assert(_place(backup) === "moved staying" && Notifications.isModal(backup.id), "dropped: a modal");
-        const moved = Notifications.toastState.moved.find(entry => entry.id === backup.id);
+        assert(_place(backup) === "moved staying" && Toasts.isModal(backup.id), "dropped: a modal");
+        const moved = Toasts.toastState.moved.find(entry => entry.id === backup.id);
         assert(Math.abs(moved.x - (startX - 300)) <= 2 && Math.abs(moved.y - (startY + 40 + 250)) <= 2,
                "… its place in the window's coordinates, where it was dropped (" + moved.x + ", " + moved.y + ")");
         assert(_until(() => stack.toastFor(backup.id) === backupToast && backupToast.modal && !backupToast.dragging),
@@ -201,7 +201,7 @@ TestCase {
 
         // --- dragged again: it just changes place; past the screen's edge: back inside ---
         _drag(backupToast, -1000, 1000, 10);
-        let corner = Notifications.toastState.moved.find(entry => entry.id === backup.id);
+        let corner = Toasts.toastState.moved.find(entry => entry.id === backup.id);
         assert(corner.x === 0 && corner.y === 600 - backupToast.height, "dropped past the bottom left: inside the screen, whole");
         settle();
         assert(Math.abs(backupToast.x) < 1 && Math.abs(backupToast.y + 40 - corner.y) < 1, "… and the toast there");
@@ -209,7 +209,7 @@ TestCase {
         // --- a bar at the bottom and the left: a drop stays off it, and the toasts' column is not moved ---
         stack.barInsets = { top: 0, bottom: 50, left: 30, right: 0 };
         _drag(backupToast, -100, 100, 6);
-        const offBar = Notifications.toastState.moved.find(entry => entry.id === backup.id);
+        const offBar = Toasts.toastState.moved.find(entry => entry.id === backup.id);
         assert(offBar.x === 30 && offBar.y === 600 - 50 - backupToast.height, "dropped onto the bars: beside them (" + offBar.x + ", " + offBar.y + ")");
         settle();
         stack.barInsets = { top: 0, bottom: 0, left: 0, right: 0 };
@@ -218,7 +218,7 @@ TestCase {
         // --- a modal dragged with the option turned off meanwhile: back to its place ---
         _drag(backupToast, 300, -250, 10, () => settings({ "notifications.movableToasts": false }));
         settings({});
-        const kept = Notifications.toastState.moved.find(entry => entry.id === backup.id);
+        const kept = Toasts.toastState.moved.find(entry => entry.id === backup.id);
         assert(kept.x === corner.x && kept.y === corner.y, "refused at the release: the modal keeps its place");
         assert(_until(() => backupToast.settled && Math.abs(backupToast.x - corner.x) < 1 && Math.abs(backupToast.y + 40 - corner.y) < 1),
                "… and goes back there (inside the input mask)");
@@ -250,8 +250,8 @@ TestCase {
 
         // --- a modal job that ends counts down where it is, and goes ---
         backup.expireTimeout = 2000;
-        Notifications._retime(backup.id, backup);
-        assert(Notifications.countingToasts.includes(backup.id) && backupToast._counting, "its job ended: the modal counts down");
+        Toasts._retime(backup.id, backup);
+        assert(Toasts.countingToasts.includes(backup.id) && backupToast._counting, "its job ended: the modal counts down");
         assert(_find(backupToast, item => item.bodyMaxLines !== undefined).timerVisible, "… and shows its countdown bar");
         backupToast.resources.find(resource => resource.property === "remaining")?.complete();
         assert(_place(backup) === "none" && _until(() => stack.toastFor(backup.id) === null), "… and goes, fading where it is");
@@ -275,12 +275,12 @@ TestCase {
         assert(pinButton !== null && pinButton.visible && entry.pinLook.action === "pin", "an entry in the centre: a pin");
         driver.mouseClick(pinButton, pinButton.width / 2, pinButton.height / 2);
         assert(_place(mail) === "moved ordinary" && entry.pinLook.action === "unpin", "pinned: a modal; the pin now unpins");
-        assert(_until(() => Notifications.toastState.moved.find(modal => modal.id === mail.id)?.x !== null), "… placed by its screen's stack");
-        const pinned = Notifications.toastState.moved.find(modal => modal.id === mail.id);
+        assert(_until(() => Toasts.toastState.moved.find(modal => modal.id === mail.id)?.x !== null), "… placed by its screen's stack");
+        const pinned = Toasts.toastState.moved.find(modal => modal.id === mail.id);
         const mailToast = stack.toastFor(mail.id);
         assert(mailToast !== null && mailToast.present && pinned.x + Theme.osdToast.width <= 800 - Theme.osdToast.width,
                "… beside the toasts' column (" + pinned.x + ", " + pinned.y + ")");
-        assert(!Notifications.countingToasts.includes(mail.id), "pinned while it would count down: it stays");
+        assert(!Toasts.countingToasts.includes(mail.id), "pinned while it would count down: it stays");
         assert(_until(() => mailToast.opacity > 0.99 && Math.abs(mailToast.x - pinned.x) < 1), "… shown there");
         const mailCard = _find(mailToast, item => item.bodyMaxLines !== undefined);
         assert(!mailCard.timerVisible, "… with no countdown bar: it does not count down");
@@ -293,13 +293,13 @@ TestCase {
         settle();
         _drag(alertToast, -300, 200, 10);
         assert(_place(alert) === "moved staying", "a modal again");
-        Notifications.screensOverride = [{ name: "other-screen", focused: true, fullscreen: false, workspace: 1 }];
+        Toasts.screensOverride = [{ name: "other-screen", focused: true, fullscreen: false, workspace: 1 }];
         stack.destroy();
         stack = null;
         assert(_until(() => _place(alert) === "waiting staying"), "its HUD gone: it waits in its queue again");
 
-        Notifications.clearHudQueue();
-        Notifications.screensOverride = null;
+        Toasts.clearHudQueue();
+        Toasts.screensOverride = null;
         Config.globals = savedGlobals;
         for (const object of made)
             object.destroy();

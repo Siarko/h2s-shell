@@ -4,7 +4,7 @@ import Quickshell
 import QtQuick
 
 // Where and how long toasts show — pure, so tests/ToastRulesTest.qml checks every case
-// without the monitors or a notification server at hand. Notifications holds the live
+// without the monitors or a notification server at hand. Toasts holds the live
 // answers (`toastScreen`, the shown toasts and their times).
 //
 // Which screen — notifications' toasts and the shell's own messages:

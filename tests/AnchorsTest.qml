@@ -1948,10 +1948,10 @@ TestCase {
     property var _popupCellA: null
     property var _popupCellB: null
     property int _popupCycles: 0
-    // The centre's places told to the toasts (Notifications.centreArea), open ones only
+    // The centre's places told to the toasts (Toasts.centreArea), open ones only
     property var _centreReports: []
     function _countCentreReport() {
-        const area = Notifications.centreArea;
+        const area = Toasts.centreArea;
         if (area !== null)
             _centreReports = _centreReports.concat([{ x: area.x, y: area.y, width: area.width, height: area.height }]);
     }
@@ -2660,10 +2660,10 @@ TestCase {
                             "the network popup on screen: the module's elements at the connections' end (" + number + ")");
                 assertEqual(_popupLiveProblems("popup.network").join("; "), "", "… its places live (" + number + ")");
                 // Another cell's panel while it is open: the popup moves to it. The first time,
-                // what it tells the toasts on the way (Notifications.centreArea) is counted
+                // what it tells the toasts on the way (Toasts.centreArea) is counted
                 if (number === 1) {
                     _centreReports = [];
-                    Notifications.centreAreaChanged.connect(_countCentreReport);
+                    Toasts.centreAreaChanged.connect(_countCentreReport);
                 }
                 _realPopup.open(_popupCellB, false, "notifications", null, number % 2 === 0);
             });
@@ -2678,7 +2678,7 @@ TestCase {
             });
             if (number === 1) {
                 _then("the centre settled", () => Date.now() >= _waitUntil && !_realPopup.item._contentAnimating, () => {
-                    Notifications.centreAreaChanged.disconnect(_countCentreReport);
+                    Toasts.centreAreaChanged.disconnect(_countCentreReport);
                     const body = _realPopup.item.contentItem.children.find(child => child.objectName === "popupBody") ?? null;
                     const area = body?._centreArea ?? null;
                     assert(area !== null && _centreReports.length === 1 && JSON.stringify(_centreReports[0]) === JSON.stringify(area),

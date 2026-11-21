@@ -383,14 +383,16 @@ would freeze the whole shell. Chain with `then`.
 
 `singletons/Notifications.qml` is the notification server (`NotificationServer`, every
 capability on: markup, links, images, actions, action icons, inline replies). It tracks
-each notification it receives, records its arrival time and extracted codes, and keeps the
-toasts' state. Every decision is in two pure singletons with their suites:
+each notification it receives and records its arrival time and extracted codes.
+`singletons/Toasts.qml` keeps the toasts: their screen, the shell's pill queue, the three
+queues, modals, and what each screen's HUD takes. Every decision is in two pure singletons
+with their suites:
 `singletons/NotificationRules.qml` (a card's progress view and the wave, whether an action
 also dismisses — not on a resident notification —, the shell's own sender's hints and
 announces, orphans after a reload) and `singletons/ToastRules.qml` (which screen, how
 long, which queue, and every change of the queues).
 
-**The toast state** is one plain object of notification ids, `Notifications.toastState`
+**The toast state** is one plain object of notification ids, `Toasts.toastState`
 (`ToastRules.emptyState`'s shape): `waiting` and `shown`, each with the three queues
 `critical`, `staying` and `ordinary` (ids oldest first — ids grow with arrival), and
 `moved`, the modals (`{ id, queue, x, y, keep? }`: dragged out or pinned, x and y `null`
@@ -410,7 +412,7 @@ once and the user's one at a time, the oldest first; elsewhere whatever no longe
   ones that stay in `staying`, the rest in `ordinary`; `limits` reads the three limits.
 - `enqueue` lets a queue take a new toast when it can (`accepts`: toasts on, a screen for
   it, not an ordinary one while the centre is open, only critical ones under a fullscreen
-  window with "Don't show"). Each screen's `ToastStack` pulls (`Notifications.takeToast`,
+  window with "Don't show"). Each screen's `ToastStack` pulls (`Toasts.takeToast`,
   `ToastRules.nextWaiting`/`show`): a queue with room shows its oldest waiting toast;
   queues never overtake each other.
 - The notification changing (a job ending, a new time or urgency, a timing setting) runs
@@ -418,7 +420,7 @@ once and the user's one at a time, the oldest first; elsewhere whatever no longe
   stays goes up to its queue, a shown critical or staying one or a modal counts where it
   is. The centre opening runs `centreOpened` (only the ordinary queue goes), a fullscreen
   window with "Don't show" `fullscreenHid`, "Show toasts" off `dropWaiting`.
-- A toast ends through `Notifications.toastGone` (its time ran out, an action, its
+- A toast ends through `Toasts.toastGone` (its time ran out, an action, its
   notification closed) or `dismissToast` ("×" and the swipe: `notification.dismiss()`, so
   a job's handle learns it as from the centre).
 - An announce from the shell's own sender (`NotificationRules.announced`) goes through
@@ -431,7 +433,7 @@ screen, the bar's reserved space too, and keeps everything it shows clear of the
 hovered or written. Its input mask is a `Region` per visible part: the toasts' strip
 (`ToastStack`, as tall as its toasts and badges, left of the open centre when that stands
 level with it — `ToastRules.stackEdge`, from the centre's rectangle each popup reports to
-`Notifications.setCentreArea`), a `Region` per modal's toast (a `Variants` over
+`Toasts.setCentreArea`), a `Region` per modal's toast (a `Variants` over
 `ToastStack.modalToasts`, so the set follows modals as they come, go and move), the volume
 OSD, the shell's pill and a startup warning while one shows. Everywhere else clicks pass
 through.
@@ -453,7 +455,7 @@ drives the card's timer bar (`ToastRules.showsTimer`). Nothing pauses under the 
 screen or the screensaver.
 
 Notifications with category `x-qs-shell` are the shell's own short messages: not tracked,
-they go to `Notifications.shellQueue` and `hud/ShellNotificationHudItem.qml` shows each
+they go to `Toasts.shellQueue` and `hud/ShellNotificationHudItem.qml` shows each
 summary for 2.5 s in a pill at the bottom of the toasts' screen. `singletons/Notifier.qml`
 sends the shell's notifications: a plain one with one `notify-send`, a progress one
 through a handle (below, "Progress notifications").

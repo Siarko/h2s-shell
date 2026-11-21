@@ -554,13 +554,13 @@ TestCase {
         NotificationHandle {}
     }
 
-    // Toasts through the three queues (Notifications.toastState, ToastRules), shown by a
+    // Toasts through the three queues (Toasts.toastState, ToastRules), shown by a
     // ToastStack as Hud makes it, on a stand-in toasts' screen, with stand-in notifications:
     // which queue each goes to, the stacks' order, the limits and badges, how long each
     // shows (ToastRules.timing) and which one counts down
     function _toastTimes() {
         const savedGlobals = Config.globals;
-        Notifications.screensOverride = [{ name: "queue-screen", focused: true, fullscreen: false, workspace: 1 }];
+        Toasts.screensOverride = [{ name: "queue-screen", focused: true, fullscreen: false, workspace: 1 }];
         const made = [];
         let nextId = 9001;
         const standIn = (expire, change) => {
@@ -573,11 +573,11 @@ TestCase {
         made.push(stack);
         // Queued: the stack on the toasts' screen shows it at once while its queue has room
         const show = notification => {
-            Notifications.enqueueHudNotification(notification);
+            Toasts.enqueueHudNotification(notification);
             return stack.toastFor(notification.id);
         };
         const place = notification => {
-            const at = Notifications.toastPlace(notification.id);
+            const at = Toasts.toastPlace(notification.id);
             return at.place + (at.queue ? " " + at.queue : "");
         };
         const countdownOf = toast => toast.resources.find(resource => resource.property === "remaining") ?? null;
@@ -599,10 +599,10 @@ TestCase {
             }
         };
         const clear = () => {
-            Notifications.clearHudQueue();
+            Toasts.clearHudQueue();
             settle();
         };
-        const shownCount = queue => Notifications.toastState.shown[queue].length;
+        const shownCount = queue => Toasts.toastState.shown[queue].length;
         const presentToasts = () => _findAll(stack, item => item.toastId !== undefined && item.toastId >= 0 && item.present).length;
 
         // --- one of each queue: three stacks, critical on top, then staying, then ordinary ---
@@ -622,7 +622,7 @@ TestCase {
         assert(placeOf(urgent) === 0 && placeOf(stays) === urgentToast.height + 2 * spacing
                && placeOf(ordinary) === placeOf(stays) + staysToast.height + 2 * spacing && ordinaryToast.y === placeOf(ordinary),
                "a wider gap between two queues (" + [placeOf(urgent), placeOf(stays), placeOf(ordinary)] + ")");
-        assert(staysToast !== null && !counting(staysToast) && !cardOf(staysToast).timerVisible && Notifications.toastDurations[stays.id] === 0,
+        assert(staysToast !== null && !counting(staysToast) && !cardOf(staysToast).timerVisible && Toasts.toastDurations[stays.id] === 0,
                "expire 0: no countdown, no timer bar, its time 0");
         assert(counting(ordinaryToast) && countdownOf(ordinaryToast).duration === 5000 && cardOf(ordinaryToast).timerVisible,
                "the ordinary one counts the user's 5 s");
@@ -632,10 +632,10 @@ TestCase {
         closeButtonOf(staysToast).clicked(null);
         assert(place(stays) === "none" && !staysToast.present && stays.dismissCalls === 1 && !stays.tracked,
                "its \"×\": the notification dismissed — the toast goes, the entry too");
-        assert(Notifications._toastWatched[stays.id] === undefined && Notifications._toastWatched[ordinary.id] === ordinary,
+        assert(Toasts._toastWatched[stays.id] === undefined && Toasts._toastWatched[ordinary.id] === ordinary,
                "a notification gone: no longer followed; one still there is");
         clear();
-        assert(presentToasts() === 0 && stack.stack.length === 0 && Notifications.hudQueue.length === 0
+        assert(presentToasts() === 0 && stack.stack.length === 0 && Toasts.hudQueue.length === 0
                && stack._leaving.length === 0, "cleared: nothing shown, waiting or sliding out");
 
         // --- each queue its own limit; what waits is counted on its badge, beside its lowest toast ---
@@ -646,7 +646,7 @@ TestCase {
         assert(shownCount("critical") === 1 && shownCount("staying") === 1 && shownCount("ordinary") === 1
                && place(criticals[1]) === "waiting critical" && place(stayings[2]) === "waiting staying" && place(ordinaries[1]) === "waiting ordinary",
                "the defaults: 1 critical, 1 staying, 1 ordinary shown; the others wait in their queues");
-        assertEqual(JSON.stringify(Notifications.toastBadges), JSON.stringify({ critical: 1, staying: 2, ordinary: 1 }), "the badges count what waits");
+        assertEqual(JSON.stringify(Toasts.toastBadges), JSON.stringify({ critical: 1, staying: 2, ordinary: 1 }), "the badges count what waits");
         const criticalBadge = badge("critical");
         const stayingBadge = badge("staying");
         assert(criticalBadge.look.shown && criticalBadge.look.label === "+1" && criticalBadge.border.color === Theme.error
@@ -666,20 +666,20 @@ TestCase {
         _find(stayingBadge, item => item instanceof MouseArea).clicked(null);
         Notifications.openPanelRequested.disconnect(onBadgeClick);
         assertEqual(JSON.stringify(badgeClicks), JSON.stringify(["queue-screen"]), "a badge clicked: the centre asked for on the badge's own screen");
-        Notifications.setCentreArea("other-screen", { x: 300, y: 40, width: 480, height: 600 });
+        Toasts.setCentreArea("other-screen", { x: 300, y: 40, width: 480, height: 600 });
         assert(stack.centre === null && stack.rightEdge === 800 && !stack.free, "the centre open on another screen: the column stays at the edge");
-        Notifications.setCentreArea("queue-screen", { x: 500, y: 40, width: 280, height: 600 });
+        Toasts.setCentreArea("queue-screen", { x: 500, y: 40, width: 280, height: 600 });
         assert(stack.centre !== null && stack.rightEdge === 500 - Theme.osdToast.screenGap && stack.free,
                "the centre open here: the column's edge left of it, by the gap (" + stack.rightEdge + ")");
         assertEqual(stack.restX, 500 - Theme.osdToast.screenGap - Theme.osdToast.width - Theme.osdToast.badgeWidth - 8, "… the toasts rest there, beside their badges");
         assert(stayingShown.slides === false && stayingShown.resources.some(resource => resource.property === "x" && resource.to === stack.restX && resource.running),
                "… a toast on screen moves over (nudged), and comes and goes in place meanwhile");
-        Notifications.setCentreArea("other-screen", null);
+        Toasts.setCentreArea("other-screen", null);
         assert(stack.free, "another screen's popup closing: this screen's centre stays");
-        Notifications.setCentreArea("queue-screen", null);
+        Toasts.setCentreArea("queue-screen", null);
         assert(stack.centre === null && stack.rightEdge === 800 && !stack.free && stack.restX === 800 - Theme.osdToast.width - Theme.osdToast.badgeWidth - 8
                && stayingShown.slides, "the centre closed: the column back at the edge");
-        assertEqual(Notifications.hudQueue.map(notification => notification.id).join(","), [criticals[1].id, stayings[1].id, stayings[2].id, ordinaries[1].id].join(","),
+        assertEqual(Toasts.hudQueue.map(notification => notification.id).join(","), [criticals[1].id, stayings[1].id, stayings[2].id, ordinaries[1].id].join(","),
                     "hudQueue: every queue's waiting, oldest first");
         settings({ "notifications.criticalToastLimit": 2, "notifications.stayingToastLimit": 3 });
         assert(shownCount("critical") === 2 && shownCount("staying") === 3 && shownCount("ordinary") === 1 && !criticalBadge.look.shown && !stayingBadge.look.shown,
@@ -690,18 +690,18 @@ TestCase {
         // --- a queue that waits with nothing of it shown here: its badge below the stack ---
         settings({});
         const elsewhere = standIn(0);
-        Notifications.screensOverride = [{ name: "other-screen", focused: true, fullscreen: false, workspace: 1 }];
-        Notifications.enqueueHudNotification(elsewhere);
+        Toasts.screensOverride = [{ name: "other-screen", focused: true, fullscreen: false, workspace: 1 }];
+        Toasts.enqueueHudNotification(elsewhere);
         const otherStack = _stack.createObject(suite, { screenModelData: { name: "other-screen" } });
         made.push(otherStack);
         const waitingHere = show(standIn(0));
-        assert(place(elsewhere) === "shown staying" && Notifications.toastScreens[elsewhere.id] === "other-screen" && stack.stack.length === 0,
+        assert(place(elsewhere) === "shown staying" && Toasts.toastScreens[elsewhere.id] === "other-screen" && stack.stack.length === 0,
                "shown on the toasts' screen of then; not in another screen's stack");
-        Notifications.screensOverride = [{ name: "queue-screen", focused: true, fullscreen: false, workspace: 1 }];
+        Toasts.screensOverride = [{ name: "queue-screen", focused: true, fullscreen: false, workspace: 1 }];
         assert(otherStack.stack.length === 1 && _find(stack, item => item.objectName === "stayingBadge").look.shown && stack.layout.badges.staying?.y === 0,
                "the toasts' screen moved: the other one keeps its toast, the badge here stands alone");
         clear();
-        Notifications.screensOverride = [{ name: "queue-screen", focused: true, fullscreen: false, workspace: 1 }];
+        Toasts.screensOverride = [{ name: "queue-screen", focused: true, fullscreen: false, workspace: 1 }];
 
         // --- resident ones stay (staying); with "Resident notification hide" they count down ---
         const resident = standIn(-1, { resident: true });
@@ -728,7 +728,7 @@ TestCase {
         assert(place(holding) === "shown staying" && place(runningJob) === "waiting staying", "a job set to stay waits behind the staying one");
         runningJob.expireTimeout = -1;
         const endedToast = stack.toastFor(runningJob.id);
-        assert(place(runningJob) === "shown ordinary" && counting(endedToast) && Notifications.toastBadges.staying === 0,
+        assert(place(runningJob) === "shown ordinary" && counting(endedToast) && Toasts.toastBadges.staying === 0,
                "it ends while waiting: into the ordinary queue, shown there, counting");
         holding.expireTimeout = -1;
         assert(place(holding) === "shown staying" && counting(stack.toastFor(holding.id)), "one ending while shown in staying: counts where it is");
@@ -740,13 +740,13 @@ TestCase {
         const waiting = show(standIn(-1));
         const ownTime = show(standIn(3000));
         assert(counting(oldest) && !counting(waiting) && waiting.remaining === 1, "the user's time: the oldest counts, the next waits its turn");
-        assert(counting(ownTime) && countdownOf(ownTime).duration === 3000 && Notifications.toastDurations[ownTime.toastId] === 3000,
+        assert(counting(ownTime) && countdownOf(ownTime).duration === 3000 && Toasts.toastDurations[ownTime.toastId] === 3000,
                "3000 ms: counts 3 s at once, by itself");
         countdownOf(oldest).complete();
         assert(!oldest.present && counting(waiting), "the oldest's time running out: the next counts at once");
         waiting.currentNotif.expireTimeout = 0;
         assert(!counting(waiting) && waiting.present && waiting.remaining === 1 && !cardOf(waiting).timerVisible
-               && Notifications.toastPlace(waiting.toastId).queue === "staying",
+               && Toasts.toastPlace(waiting.toastId).queue === "staying",
                "replaced with 0 while counting: it goes up to the staying queue, stops, no timer bar");
         clear();
 
@@ -756,7 +756,7 @@ TestCase {
         assert(counting(replaced) && countdownOf(replaced).duration === 5000 && cardOf(replaced).timerVisible,
                "replaced 0 → -1 while shown: counts the user's time where it is, its bar shows");
         replaced.currentNotif.expireTimeout = 4000;
-        assert(counting(replaced) && countdownOf(replaced).duration === 4000 && Notifications.toastDurations[replaced.toastId] === 4000,
+        assert(counting(replaced) && countdownOf(replaced).duration === 4000 && Toasts.toastDurations[replaced.toastId] === 4000,
                "replaced with 4000: counts 4 s from full");
         clear();
 
@@ -765,7 +765,7 @@ TestCase {
         const zero = show(standIn(0));
         const thirty = show(standIn(30000));
         assert(counting(zero) && countdownOf(zero).duration === 5000 && cardOf(zero).timerVisible && !counting(thirty)
-               && Notifications.toastPlace(zero.toastId).queue === "ordinary",
+               && Toasts.toastPlace(zero.toastId).queue === "ordinary",
                "setting off: expire 0 counts the user's time in the ordinary queue; 30 s waits its turn like any other");
         clear();
 
@@ -776,18 +776,18 @@ TestCase {
         const behind = show(standIn(-1));
         const closedId = closedOne.toastId;
         closedOne.currentNotif.closed(1);
-        assert(Notifications.toastPlace(closedId).place === "none" && !closedOne.present, "closed by its sender: out of its queue, the toast leaves");
+        assert(Toasts.toastPlace(closedId).place === "none" && !closedOne.present, "closed by its sender: out of its queue, the toast leaves");
         counter.dismiss();
         assert(counting(behind), "the counting one leaving: the one behind the closed one counts");
         behind.currentNotif.expireTimeout = 0;
         const last = show(standIn(-1));
-        assert(counting(last) && Notifications.countingToasts.length === 1, "the counting one changing queue: the next ordinary one counts");
+        assert(counting(last) && Toasts.countingToasts.length === 1, "the counting one changing queue: the next ordinary one counts");
         clear();
 
         // --- a backlog arriving at once: never past any queue's limit, a toast for each shown ---
         const drain = (change, list, message) => {
             settings(change);
-            const limits = Notifications.toastLimits;
+            const limits = Toasts.toastLimits;
             let past = "";
             for (const notification of list) {
                 show(notification);
@@ -797,22 +797,22 @@ TestCase {
                 }
             }
             const shown = shownCount("critical") + shownCount("staying") + shownCount("ordinary");
-            const waitingTotal = Notifications.hudQueue.length;
+            const waitingTotal = Toasts.hudQueue.length;
             assert(past === "" && presentToasts() === shown && shown + waitingTotal === list.length
-                   && ToastRules.queues.every(queue => shownCount(queue) === Math.min(limits[queue], list.filter(n => Notifications.toastQueue(n) === queue).length)),
+                   && ToastRules.queues.every(queue => shownCount(queue) === Math.min(limits[queue], list.filter(n => Toasts.toastQueue(n) === queue).length)),
                    message + " (" + ToastRules.queues.map(queue => queue + " " + shownCount(queue)).join(", ") + ", " + waitingTotal + " waiting)");
             // Drained: each shown one ends, the next takes its place, never past the limit
             for (let round = 0; round < list.length && past === ""; round++) {
                 const shownIds = _allShown();
                 if (shownIds.length === 0)
                     break;
-                Notifications.toastGone(shownIds[0]);
+                Toasts.toastGone(shownIds[0]);
                 for (const queue of ToastRules.queues) {
                     if (shownCount(queue) > limits[queue])
                         past = queue;
                 }
             }
-            assert(past === "" && Notifications.hudQueue.length === 0, message + ": drained one by one, never past a limit");
+            assert(past === "" && Toasts.hudQueue.length === 0, message + ": drained one by one, never past a limit");
             clear();
         };
         drain({}, [standIn(-1), standIn(-1), standIn(-1)], "one at a time: three at once, one shows");
@@ -828,7 +828,7 @@ TestCase {
         queued.forEach(show);
         queued[1].dismiss();
         stack.toastFor(queued[0].id).dismiss();
-        assert(place(queued[1]) === "none" && place(queued[2]) === "shown ordinary" && Notifications.hudQueue.length === 0,
+        assert(place(queued[1]) === "none" && place(queued[2]) === "shown ordinary" && Toasts.hudQueue.length === 0,
                "the 2nd dismissed while it waits: the 3rd shows after the 1st, nothing left waiting");
         clear();
 
@@ -880,7 +880,7 @@ TestCase {
         const openStaying = standIn(0);
         const openOrdinary = [standIn(-1), standIn(-1)];
         openCritical.concat([openStaying], openOrdinary).forEach(show);
-        Notifications.setHudPanelOpen(true);
+        Toasts.setHudPanelOpen(true);
         assert(place(openCritical[0]) === "shown critical" && place(openCritical[1]) === "waiting critical" && place(openStaying) === "shown staying"
                && place(openOrdinary[0]) === "none" && place(openOrdinary[1]) === "none" && !stack.toastFor(openOrdinary[0].id).present,
                "centre open: critical and staying stay (and wait), the ordinary ones go, shown and waiting");
@@ -888,35 +888,35 @@ TestCase {
         const lateOrdinary = standIn(-1);
         show(lateOrdinary);
         assert(place(lateOrdinary) === "none", "centre open: a new ordinary one is not queued (seen in the centre)");
-        Notifications.toastGone(openCritical[0].id);
+        Toasts.toastGone(openCritical[0].id);
         assert(place(openCritical[1]) === "shown critical", "centre open: the next critical one shows in its turn");
         const newStaying = standIn(0);
         show(newStaying);
-        Notifications.toastGone(openStaying.id);
+        Toasts.toastGone(openStaying.id);
         assert(place(newStaying) === "shown staying" && stack.toastFor(newStaying.id)?.present, "centre open: a new staying one shows");
         show(lateCritical);
-        assert(place(lateCritical) === "waiting critical" && Notifications.toastBadges.critical === 1, "centre open: a new critical one queues, counted");
-        Notifications.toastGone(openCritical[1].id);
+        assert(place(lateCritical) === "waiting critical" && Toasts.toastBadges.critical === 1, "centre open: a new critical one queues, counted");
+        Toasts.toastGone(openCritical[1].id);
         const newCritical = standIn(-1, critical);
         show(newCritical);
         assert(place(lateCritical) === "shown critical" && place(newCritical) === "waiting critical", "centre open: … and shows in its turn");
-        Notifications.toastGone(lateCritical.id);
+        Toasts.toastGone(lateCritical.id);
         assert(place(newCritical) === "shown critical" && stack.toastFor(newCritical.id)?.present, "centre open: a critical one arriving shows");
         const endsWaiting = standIn(0, { resident: true, hints: { "x-qs-progress-run": Notifier.progressRun } });
         show(endsWaiting);
         endsWaiting.expireTimeout = -1;
-        assert(place(endsWaiting) === "none" && Notifications.toastKinds[endsWaiting.id] === undefined
-               && Notifications.toastDurations[endsWaiting.id] === undefined && Notifications.toastObject(endsWaiting.id) === null,
+        assert(place(endsWaiting) === "none" && Toasts.toastKinds[endsWaiting.id] === undefined
+               && Toasts.toastDurations[endsWaiting.id] === undefined && Toasts.toastObject(endsWaiting.id) === null,
                "centre open: a job ending while it waits in staying is no ordinary toast now: dropped, its maps pruned");
-        Notifications.setHudPanelOpen(false);
+        Toasts.setHudPanelOpen(false);
         clear();
 
         // --- "Show toasts" off: what waits goes, in every queue ---
         [standIn(-1, critical), standIn(-1, critical), standIn(0), standIn(0), standIn(-1), standIn(-1)].forEach(show);
-        assertEqual(JSON.stringify(Notifications.toastBadges), JSON.stringify({ critical: 1, staying: 1, ordinary: 1 }), "one waits in each queue");
+        assertEqual(JSON.stringify(Toasts.toastBadges), JSON.stringify({ critical: 1, staying: 1, ordinary: 1 }), "one waits in each queue");
         settings({ "notifications.toasts": false });
-        assert(Notifications.hudQueue.length === 0 && JSON.stringify(Notifications.toastBadges) === JSON.stringify({ critical: 0, staying: 0, ordinary: 0 })
-               && Object.keys(Notifications.toastKinds).length === 3,
+        assert(Toasts.hudQueue.length === 0 && JSON.stringify(Toasts.toastBadges) === JSON.stringify({ critical: 0, staying: 0, ordinary: 0 })
+               && Object.keys(Toasts.toastKinds).length === 3,
                "toasts off: nothing waits in any queue, the maps keep only the shown ones");
         const whileOff = standIn(-1, critical);
         show(whileOff);
@@ -930,53 +930,53 @@ TestCase {
         const fullStaying = standIn(0);
         const fullOrdinary = [standIn(-1), standIn(-1)];
         fullCritical.concat([fullStaying], fullOrdinary).forEach(show);
-        Notifications.screensOverride = [{ name: "queue-screen", focused: true, fullscreen: true, workspace: 1 }];
-        assert(Notifications.toastScreen === "" && Notifications.criticalToastScreen === "queue-screen"
+        Toasts.screensOverride = [{ name: "queue-screen", focused: true, fullscreen: true, workspace: 1 }];
+        assert(Toasts.toastScreen === "" && Toasts.criticalToastScreen === "queue-screen"
                && place(fullCritical[0]) === "shown critical" && place(fullCritical[1]) === "waiting critical"
                && place(fullStaying) === "none" && place(fullOrdinary[0]) === "none" && place(fullOrdinary[1]) === "none"
                && stack.toastFor(fullCritical[0].id)?.present && !stack.toastFor(fullStaying.id).present,
                "fullscreen: the critical toasts stay (and wait); staying and ordinary go, shown and waiting");
         const fullNew = [standIn(0), standIn(-1), standIn(-1, critical)];
         fullNew.forEach(show);
-        Notifications.toastGone(fullCritical[0].id);
+        Toasts.toastGone(fullCritical[0].id);
         assert(place(fullNew[0]) === "none" && place(fullNew[1]) === "none" && place(fullCritical[1]) === "shown critical"
                && place(fullNew[2]) === "waiting critical",
                "fullscreen: a new staying or ordinary one is not queued; critical ones still show in turn");
         // A staying toast still in the state while hidden (as a modal will be): not in the stack
-        Notifications.toastState = { waiting: { critical: [], staying: [], ordinary: [] },
-                                     shown: { critical: Notifications.toastState.shown.critical, staying: [fullStaying.id], ordinary: [] },
+        Toasts.toastState = { waiting: { critical: [], staying: [], ordinary: [] },
+                                     shown: { critical: Toasts.toastState.shown.critical, staying: [fullStaying.id], ordinary: [] },
                                      moved: [] };
         assertEqual(JSON.stringify(stack.stack.map(entry => entry.queue)), JSON.stringify(["critical"]),
                     "fullscreen: the stack shows the critical toasts only");
-        Notifications.toastGone(fullStaying.id);
+        Toasts.toastGone(fullStaying.id);
         // "Another screen" with none free: no screen for critical toasts either — they go too
         show(fullNew[2]);
         settings({ "notifications.toastFullscreen": "elsewhere" });
-        assert(Notifications.criticalToastScreen === "" && place(fullCritical[1]) === "none" && place(fullNew[2]) === "none"
-               && Notifications.hudQueue.length === 0 && !stack.toastFor(fullCritical[1].id).present,
+        assert(Toasts.criticalToastScreen === "" && place(fullCritical[1]) === "none" && place(fullNew[2]) === "none"
+               && Toasts.hudQueue.length === 0 && !stack.toastFor(fullCritical[1].id).present,
                "fullscreen, then \"Another screen\" with none free: the critical toasts go, shown and waiting");
         // Both screens gone at once (the only output went): everything goes, not only the
         // ones that are not critical
         settings({ "notifications.toastFullscreen": "hide" });
-        Notifications.screensOverride = [{ name: "queue-screen", focused: true, fullscreen: false, workspace: 1 }];
+        Toasts.screensOverride = [{ name: "queue-screen", focused: true, fullscreen: false, workspace: 1 }];
         const goneCritical = [standIn(-1, critical), standIn(-1, critical)];
         goneCritical.forEach(show);
-        Notifications.screensOverride = [];
-        assert(place(goneCritical[0]) === "none" && place(goneCritical[1]) === "none" && Notifications.hudQueue.length === 0,
+        Toasts.screensOverride = [];
+        assert(place(goneCritical[0]) === "none" && place(goneCritical[1]) === "none" && Toasts.hudQueue.length === 0,
                "no screen at all: the critical toasts go too, shown and waiting");
-        Notifications.screensOverride = [{ name: "queue-screen", focused: true, fullscreen: false, workspace: 1 }];
+        Toasts.screensOverride = [{ name: "queue-screen", focused: true, fullscreen: false, workspace: 1 }];
         settings({});
         clear();
 
         // --- a toast swiped away just as its time ran out: still the notification dismissed ---
         const lateSwipe = standIn(-1);
         const lateSwipeToast = show(lateSwipe);
-        Notifications.toastGone(lateSwipe.id);
+        Toasts.toastGone(lateSwipe.id);
         cardOf(lateSwipeToast).closeClicked();
         assert(lateSwipe.dismissCalls === 1 && !lateSwipe.tracked, "its time ran out during the swipe: the notification is dismissed all the same");
         clear();
 
-        Notifications.screensOverride = null;
+        Toasts.screensOverride = null;
         Config.globals = savedGlobals;
         for (const object of made)
             object.destroy();
@@ -993,8 +993,8 @@ TestCase {
             Config.globals = JSON.stringify(Object.assign(JSON.parse(savedGlobals || "{}"), change));
         };
         settings({});
-        Notifications.clearHudQueue();
-        Notifications.screensOverride = [{ name: "modal-screen", focused: true, fullscreen: false, workspace: 1 }];
+        Toasts.clearHudQueue();
+        Toasts.screensOverride = [{ name: "modal-screen", focused: true, fullscreen: false, workspace: 1 }];
         const made = [];
         let nextId = 9301;
         const standIn = (expire, change) => {
@@ -1003,105 +1003,105 @@ TestCase {
             return standing;
         };
         const place = notification => {
-            const at = Notifications.toastPlace(notification.id);
+            const at = Toasts.toastPlace(notification.id);
             return at.place + (at.queue ? " " + at.queue : "");
         };
 
         // --- pinned from the centre: no toast before, a modal on the toasts' screen ---
         const mail = standIn(-1);
-        assert(Notifications.pinToast(mail) && place(mail) === "moved ordinary" && Notifications.toastScreens[mail.id] === "modal-screen",
+        assert(Toasts.pinToast(mail) && place(mail) === "moved ordinary" && Toasts.toastScreens[mail.id] === "modal-screen",
                "pinned with no toast: a modal on the toasts' screen");
-        assert(!Notifications.countingToasts.includes(mail.id) && Notifications.toastDurations[mail.id] === 5000,
+        assert(!Toasts.countingToasts.includes(mail.id) && Toasts.toastDurations[mail.id] === 5000,
                "pinned while it would count down: it stays (its time kept for later)");
-        assert(Notifications.pinToast(mail) && place(mail) === "moved ordinary", "pinned again: it stays as it is");
-        Notifications.unpinToast(mail.id);
+        assert(Toasts.pinToast(mail) && place(mail) === "moved ordinary", "pinned again: it stays as it is");
+        Toasts.unpinToast(mail.id);
         assert(place(mail) === "none" && mail.tracked && mail.dismissCalls === 0, "unpinned: the modal ends, the entry stays");
         const gone = standIn(-1);
         gone.tracked = false;
-        assert(!Notifications.pinToast(gone) && place(gone) === "none", "an entry gone: not pinned");
+        assert(!Toasts.pinToast(gone) && place(gone) === "none", "an entry gone: not pinned");
         // From a centre open on another screen: on that one
         const fromCentre = standIn(-1);
-        assert(Notifications.pinToast(fromCentre, "centre-screen") && Notifications.toastScreens[fromCentre.id] === "centre-screen",
+        assert(Toasts.pinToast(fromCentre, "centre-screen") && Toasts.toastScreens[fromCentre.id] === "centre-screen",
                "pinned from a centre on another screen: a modal on the centre's screen");
-        Notifications.unpinToast(fromCentre.id);
+        Toasts.unpinToast(fromCentre.id);
         const shownThere = standIn(0);
-        Notifications.enqueueHudNotification(shownThere);
-        Notifications.fillToasts("modal-screen");
-        assert(place(shownThere) === "shown staying" && Notifications.toastScreens[shownThere.id] === "modal-screen", "a toast shown on the toasts' screen");
-        assert(Notifications.pinToast(shownThere, "centre-screen") && place(shownThere) === "moved staying"
-               && Notifications.toastScreens[shownThere.id] === "centre-screen", "… pinned from the other screen's centre: it goes there");
-        Notifications.toastGone(shownThere.id);
-        Notifications.screensOverride = [];
-        assert(!Notifications.pinToast(mail) && place(mail) === "none", "no screen for toasts: not pinned");
-        Notifications.screensOverride = [{ name: "modal-screen", focused: true, fullscreen: false, workspace: 1 }];
+        Toasts.enqueueHudNotification(shownThere);
+        Toasts.fillToasts("modal-screen");
+        assert(place(shownThere) === "shown staying" && Toasts.toastScreens[shownThere.id] === "modal-screen", "a toast shown on the toasts' screen");
+        assert(Toasts.pinToast(shownThere, "centre-screen") && place(shownThere) === "moved staying"
+               && Toasts.toastScreens[shownThere.id] === "centre-screen", "… pinned from the other screen's centre: it goes there");
+        Toasts.toastGone(shownThere.id);
+        Toasts.screensOverride = [];
+        assert(!Toasts.pinToast(mail) && place(mail) === "none", "no screen for toasts: not pinned");
+        Toasts.screensOverride = [{ name: "modal-screen", focused: true, fullscreen: false, workspace: 1 }];
 
         // --- a pinned job: kept while it would count, by its kind once it stays, then counts when it ends ---
         const job = standIn(5000);
-        Notifications.pinToast(job);
-        assert(!Notifications.countingToasts.includes(job.id), "a job pinned while it counted: it stays");
+        Toasts.pinToast(job);
+        assert(!Toasts.countingToasts.includes(job.id), "a job pinned while it counted: it stays");
         job.expireTimeout = 0;
-        Notifications._retime(job.id, job);
-        assert(place(job) === "moved staying" && !Notifications.countingToasts.includes(job.id), "it runs again (stays): still a modal (its queue now staying), no countdown");
+        Toasts._retime(job.id, job);
+        assert(place(job) === "moved staying" && !Toasts.countingToasts.includes(job.id), "it runs again (stays): still a modal (its queue now staying), no countdown");
         job.expireTimeout = 3000;
-        Notifications._retime(job.id, job);
-        assert(Notifications.countingToasts.includes(job.id), "it ends: the modal counts down where it is");
-        Notifications.toastGone(job.id);
+        Toasts._retime(job.id, job);
+        assert(Toasts.countingToasts.includes(job.id), "it ends: the modal counts down where it is");
+        Toasts.toastGone(job.id);
 
         // --- the centre, toasts off and a fullscreen window leave modals in the state ---
         const pinned = standIn(0);
-        Notifications.pinToast(pinned);
-        Notifications.setHudPanelOpen(true);
+        Toasts.pinToast(pinned);
+        Toasts.setHudPanelOpen(true);
         assert(place(pinned) === "moved staying", "the centre opened: the modal stays");
         const whileOpen = standIn(-1);
-        assert(Notifications.pinToast(whileOpen) && place(whileOpen) === "moved ordinary", "pinned while the centre is open: a modal at once");
-        Notifications.setHudPanelOpen(false);
+        assert(Toasts.pinToast(whileOpen) && place(whileOpen) === "moved ordinary", "pinned while the centre is open: a modal at once");
+        Toasts.setHudPanelOpen(false);
         settings({ "notifications.toasts": false });
         assert(place(pinned) === "moved staying", "toasts off: the modal stays");
         settings({ "notifications.toastFullscreen": "hide" });
-        Notifications.screensOverride = [{ name: "modal-screen", focused: true, fullscreen: true, workspace: 1 }];
-        const hidden = ToastRules.onScreen(Notifications.toastState, Notifications.fullscreenHidden);
+        Toasts.screensOverride = [{ name: "modal-screen", focused: true, fullscreen: true, workspace: 1 }];
+        const hidden = ToastRules.onScreen(Toasts.toastState, Toasts.fullscreenHidden);
         assert(place(pinned) === "moved staying" && hidden.modals.length === 0, "a fullscreen window, \"Don't show\": kept, not shown");
-        Notifications.screensOverride = [{ name: "modal-screen", focused: true, fullscreen: false, workspace: 1 }];
-        assert(ToastRules.onScreen(Notifications.toastState, Notifications.fullscreenHidden).modals.some(entry => entry.id === pinned.id),
+        Toasts.screensOverride = [{ name: "modal-screen", focused: true, fullscreen: false, workspace: 1 }];
+        assert(ToastRules.onScreen(Toasts.toastState, Toasts.fullscreenHidden).modals.some(entry => entry.id === pinned.id),
                "… back when the fullscreen window goes");
         settings({});
 
         // --- its screen gone: back in its queue, or gone when that queue takes nothing now ---
-        Notifications.modalScreenGone(pinned.id);
+        Toasts.modalScreenGone(pinned.id);
         assert(place(pinned) === "waiting staying", "its screen gone: it waits in its queue again");
-        Notifications.pinToast(pinned);
-        Notifications.setHudPanelOpen(true);
-        Notifications.modalScreenGone(whileOpen.id);
+        Toasts.pinToast(pinned);
+        Toasts.setHudPanelOpen(true);
+        Toasts.modalScreenGone(whileOpen.id);
         assert(place(whileOpen) === "none", "its screen gone while the centre is open: an ordinary one goes (the centre shows it)");
-        Notifications.setHudPanelOpen(false);
-        Notifications.modalScreenGone(mail.id);
+        Toasts.setHudPanelOpen(false);
+        Toasts.modalScreenGone(mail.id);
         assert(place(mail) === "none", "not a modal: nothing");
 
         // --- the movable option and the rules' answer ---
-        assert(Notifications.movableToasts && Notifications.canMoveToast(pinned.id), "movable by default: a modal can be dragged");
+        assert(Toasts.movableToasts && Toasts.canMoveToast(pinned.id), "movable by default: a modal can be dragged");
         settings({ "notifications.movableToasts": false });
-        assert(!Notifications.canMoveToast(pinned.id), "the option off: no drag");
-        Notifications.moveToast(pinned.id, 10, 10);
-        assert(Notifications.toastState.moved.find(entry => entry.id === pinned.id).x !== 10, "… and a move asked for is refused");
+        assert(!Toasts.canMoveToast(pinned.id), "the option off: no drag");
+        Toasts.moveToast(pinned.id, 10, 10);
+        assert(Toasts.toastState.moved.find(entry => entry.id === pinned.id).x !== 10, "… and a move asked for is refused");
         settings({});
-        Notifications.placeModal(pinned.id, 30, 40);
-        const placed = Notifications.toastState.moved.find(entry => entry.id === pinned.id);
+        Toasts.placeModal(pinned.id, 30, 40);
+        const placed = Toasts.toastState.moved.find(entry => entry.id === pinned.id);
         assert(placed.x === 30 && placed.y === 40, "a pinned modal given its place");
 
-        Notifications.clearHudQueue();
-        Notifications.screensOverride = null;
+        Toasts.clearHudQueue();
+        Toasts.screensOverride = null;
         Config.globals = savedGlobals;
         for (const object of made)
             object.destroy();
     }
 
     // The shell's own sender announcing a notification again (x-qs-announce raised,
-    // Notifications.watchAnnounces): its toast comes back once through the queue, or on
+    // Toasts.watchAnnounces): its toast comes back once through the queue, or on
     // screen counts its time again; stand-in notifications, a stack on a stand-in toasts' screen
     function _announces() {
         const savedGlobals = Config.globals;
         Config.globals = JSON.stringify(Object.assign(JSON.parse(savedGlobals || "{}"), { "notifications.toastDuration": 5 }));
-        Notifications.screensOverride = [{ name: "announce-screen", focused: true, fullscreen: false, workspace: 1 }];
+        Toasts.screensOverride = [{ name: "announce-screen", focused: true, fullscreen: false, workspace: 1 }];
         const made = [];
         let nextId = 9101;
         const standIn = run => {
@@ -1110,7 +1110,7 @@ TestCase {
                 hints["x-qs-progress-run"] = run;
             const standing = _standIn.createObject(suite, { id: nextId++, summary: "Job", hints: hints });
             made.push(standing);
-            Notifications.watchAnnounces(standing);
+            Toasts.watchAnnounces(standing);
             return standing;
         };
         const replace = (notification, change) => {
@@ -1128,20 +1128,20 @@ TestCase {
         };
         const timesShown = id => _allShown().filter(shown => shown === id).length;
         const shownTotal = () => _allShown().length;
-        const quiet = message => assert(stack.stack.length === 0 && Notifications.hudQueue.length === 0 && shownTotal() === 0,
-                                       message + " (" + Notifications.hudQueue.length + " waiting, " + shownTotal() + " shown)");
+        const quiet = message => assert(stack.stack.length === 0 && Toasts.hudQueue.length === 0 && shownTotal() === 0,
+                                       message + " (" + Toasts.hudQueue.length + " waiting, " + shownTotal() + " shown)");
 
         const job = standIn(Notifier.progressRun);
-        Notifications.enqueueHudNotification(job);
+        Toasts.enqueueHudNotification(job);
         assert(toastOf(job)?.present && timesShown(job.id) === 1, "the job's toast shows");
         away(job);
         quiet("taken away: gone");
 
         replace(job, { "x-qs-announce": "1" });
-        assert(toastOf(job)?.present && timesShown(job.id) === 1 && Notifications.hudQueue.length === 0 && countdownOf(toastOf(job)).running,
+        assert(toastOf(job)?.present && timesShown(job.id) === 1 && Toasts.hudQueue.length === 0 && countdownOf(toastOf(job)).running,
                "announced with its toast gone: it comes back, counting");
         replace(job, { value: 50 });
-        assert(toastOf(job)?.present && timesShown(job.id) === 1 && Notifications.hudQueue.length === 0,
+        assert(toastOf(job)?.present && timesShown(job.id) === 1 && Toasts.hudQueue.length === 0,
                "a plain update while shown: nothing more");
         away(job);
         replace(job, { value: 60 });
@@ -1157,18 +1157,18 @@ TestCase {
         const before = toast.remaining;
         replace(job, { "x-qs-announce": "3" });
         assert(before === 0.5 && countdown.running && !countdown.paused && toast.remaining > 0.9
-               && timesShown(job.id) === 1 && Notifications.hudQueue.length === 0,
+               && timesShown(job.id) === 1 && Toasts.hudQueue.length === 0,
                "announced on screen: its time starts again, no second toast (" + before + " → " + toast.remaining + ")");
 
         // Waiting its turn already: not queued twice
         const other = standIn(Notifier.progressRun);
         away(job);
-        Notifications.enqueueHudNotification(other);
-        Notifications.enqueueHudNotification(job);
-        assert(toastOf(other)?.present && Notifications.hudQueue.length === 1, "the job waits behind another toast");
+        Toasts.enqueueHudNotification(other);
+        Toasts.enqueueHudNotification(job);
+        assert(toastOf(other)?.present && Toasts.hudQueue.length === 1, "the job waits behind another toast");
         replace(job, { "x-qs-announce": "4" });
-        assert(Notifications.hudQueue.length === 1 && timesShown(job.id) === 0, "announced while waiting: still once in the queue");
-        Notifications.clearHudQueue();
+        assert(Toasts.hudQueue.length === 1 && timesShown(job.id) === 0, "announced while waiting: still once in the queue");
+        Toasts.clearHudQueue();
         toastOf(other).resources.find(resource => resource.property === "x" && resource.to === toastOf(other).screenWidth).complete();
         quiet("cleared");
 
@@ -1177,13 +1177,13 @@ TestCase {
         replace(job, { "x-qs-announce": "5" });
         quiet("toasts off: an announce brings nothing");
         Config.globals = JSON.stringify(Object.assign(JSON.parse(savedGlobals || "{}"), { "notifications.toastDuration": 5 }));
-        Notifications.screensOverride = [];
+        Toasts.screensOverride = [];
         replace(job, { "x-qs-announce": "6" });
-        Notifications.screensOverride = [{ name: "announce-screen", focused: true, fullscreen: false, workspace: 1 }];
+        Toasts.screensOverride = [{ name: "announce-screen", focused: true, fullscreen: false, workspace: 1 }];
         quiet("no toast screen: an announce brings nothing");
-        Notifications.setHudPanelOpen(true);
+        Toasts.setHudPanelOpen(true);
         replace(job, { "x-qs-announce": "7" });
-        Notifications.setHudPanelOpen(false);
+        Toasts.setHudPanelOpen(false);
         quiet("the centre open: an announce brings nothing");
 
         // An outside app's replacement — plain, or even with the hint but not this run's token
@@ -1195,7 +1195,7 @@ TestCase {
         replace(otherRun, { "x-qs-announce": "1" });
         quiet("an outside app's replacement, or another run's announce: nothing, as before");
 
-        Notifications.screensOverride = null;
+        Toasts.screensOverride = null;
         Config.globals = savedGlobals;
         for (const object of made)
             object.destroy();
@@ -1210,7 +1210,7 @@ TestCase {
 
     // The ids of every shown toast, critical first
     function _allShown() {
-        const shown = Notifications.toastState.shown;
+        const shown = Toasts.toastState.shown;
         return shown.critical.concat(shown.staying, shown.ordinary);
     }
 

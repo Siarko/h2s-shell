@@ -95,12 +95,12 @@ Singleton {
         // ToastRules.timing)
         function notificationState(): string {
             return JSON.stringify(Notifications.notifications.values.map(notification => {
-                const place = Notifications.toastPlace(notification.id);
+                const place = Toasts.toastPlace(notification.id);
                 return {
                     id: notification.id, summary: notification.summary, body: notification.body,
                     progress: NotificationRules.progress(notification.hints),
                     toast: { shown: place.place === "shown" || place.place === "moved", place: place.place, queue: place.queue,
-                             duration: Notifications.toastDurations[notification.id] ?? null }
+                             duration: Toasts.toastDurations[notification.id] ?? null }
                 };
             }));
         }
