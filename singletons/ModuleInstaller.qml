@@ -176,7 +176,9 @@ Scope {
     // Remove module `id`, found at `directory` (as `modules list` shows it — the subject: a
     // module that now lives elsewhere is not removed). `options`: { withData — its data
     // directory, store, backups and settings too; alsoRemove: [ids] — dependencies installed
-    // for it that nothing else uses (ModuleDependencyRules.orphans) }. → "" when it started
+    // for it that nothing else uses (ModuleDependencyRules.orphans); planKey — removalPreview's
+    // `key` of what the user was shown: the job fails "The module changed" when what it would
+    // delete now differs }. → "" when it started
     function remove(id, directory, options) {
         const refusal = _refusal();
         if (refusal !== "")
@@ -187,7 +189,7 @@ Scope {
             return "No module \"" + ModuleInstallRules._plain(String(id ?? ""), 60) + "\"";
         if (canonical === "" || canonical !== status.directory)
             return "The module changed: " + id + " is now " + ModuleInstallRules._plain(status.directory);
-        const job = _start("remove", { withData: options?.withData === true,
+        const job = _start("remove", { withData: options?.withData === true, planKey: typeof options?.planKey === "string" ? options.planKey : "",
                                        alsoRemove: Array.isArray(options?.alsoRemove) ? options.alsoRemove.filter(each => typeof each === "string") : [] });
         job.ids = [id];
         phase = "removing";
@@ -199,7 +201,8 @@ Scope {
     // What Remove would delete, for the question asked before it (Settings → Modules): read
     // now, without a job, nothing changed. `id` and `directory` as remove()'s. → done({ ok,
     // reason, id, directory, title, lines (without the data line), orphans: [{ id, label }] —
-    // the dependencies installed for it that nothing else uses, offered unchecked })
+    // the dependencies installed for it that nothing else uses, offered unchecked —, key: what
+    // remove()'s `planKey` takes })
     function removalPreview(id, directory, done) {
         const refused = reason => Qt.callLater(() => done({ ok: false, reason: reason, id: String(id ?? ""), directory: String(directory ?? ""),
                                                             title: "", lines: [], orphans: [] }));
@@ -220,7 +223,7 @@ Scope {
             }
             const removal = _removalFor(sources, records, id, now, false, []);
             done({ ok: removal.plan.ok, reason: removal.plan.reason, id: id, directory: now.directory, title: removal.plan.title,
-                   lines: removal.plan.lines,
+                   lines: removal.plan.lines, key: _planKey(removal),
                    orphans: removal.orphans.map(each => ({ id: each.id, label: ModuleInstallRules.alsoRemoveLabel(each.name, now.name || id) })) });
         });
     }
@@ -1192,7 +1195,17 @@ Scope {
         return { plan: plan, dependents: dependents, offered: offered, orphans: orphans, nameOf: nameOf };
     }
 
+    // What a removal plan is, for comparing the one shown with the one done: what it deletes
+    // and says, and the dependencies it offers
+    function _planKey(removal) {
+        return JSON.stringify([removal.plan.ok, removal.plan.steps, removal.plan.lines, removal.offered]);
+    }
+
     function _removeWith(job, id, status) {
+        if (job.planKey !== "" && job.planKey !== _planKey(_removalFor(job.sources, job.records, id, status, false, []))) {
+            _finish(job, false, "The module changed");
+            return;
+        }
         const removal = _removalFor(job.sources, job.records, id, status, job.withData, job.alsoRemove);
         const plan = removal.plan;
         const dependents = removal.dependents;

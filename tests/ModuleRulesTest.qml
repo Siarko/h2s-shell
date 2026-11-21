@@ -784,7 +784,7 @@ TestCase {
         assertEqual(ModuleMergeRules.statusOf({ manifest: tailscale, state: "loaded" }).setupHints.length, 0, "… not otherwise");
         assertEqual(ModuleMergeRules.statusOf(null).state, "failed", "a status of nothing: failed, no throw");
         assertEqual(Object.keys(status).sort().join(","),
-                    "api,confirmation,deprecations,description,directory,enabled,errors,id,installedFor,missingPrograms,name,replaces,setupHints,shadowedBy,source,sourceLabel,state,version,warnings",
+                    "api,confirmation,deprecations,description,directory,enabled,entry,errors,id,installedFor,missingPrograms,name,replaces,setupHints,shadowedBy,source,sourceLabel,state,version,warnings",
                     "a status holds exactly these fields (plain data)");
         const sourced = ModuleMergeRules.statusOf({ manifest: tailscale, state: "unconfirmed", source: "user", sourceLabel: "Your copy",
                                                     replaces: [{ directory: "/b/ts", source: "builtin", version: "1.0.0", extra: 1 }],

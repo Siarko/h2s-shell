@@ -539,6 +539,7 @@ TestCase {
 
     // What Remove would delete, read without a job: the question's words
     property var _preview: null
+    property string _handKey: ""
     function _previewOf(description, id, directory, check) {
         _then(description + ": preview asked", _idle, () => {
             suite._preview = null;
@@ -556,7 +557,11 @@ TestCase {
         });
         _previewOf("a hand-placed folder", "handmade", () => _data() + "/modules/handmade", preview => {
             assert(preview.ok && preview.lines[1].startsWith("Deletes the folder "), "preview of a folder: the folder deleted (" + preview.lines.join(" | ") + ")");
+            assert(typeof preview.key === "string" && preview.key !== "", "… with the key of its plan");
+            suite._handKey = preview.key;
         });
+        _job("a stale plan", () => installer.remove("handmade", _data() + "/modules/handmade", { planKey: "stale" }), result =>
+             assert(!result.ok && result.message === "The module changed", "remove with a plan key that no longer holds: refused (" + result.message + ")"));
         _previewOf("another directory", "handmade", () => temp + "/elsewhere", preview =>
                    assert(!preview.ok && preview.reason === "The module changed", "preview: another directory than the module's refused"));
         _previewOf("the chain", "beta", () => _status("beta").directory, preview => {
@@ -565,7 +570,7 @@ TestCase {
             assert(preview.orphans[0].label.startsWith("Also remove Gamma (installed for "), "… with its label (" + preview.orphans[0].label + ")");
         });
         _job("a hand-made link", () => installer.remove("linked", temp + "/outside/linked", {}), result => assert(result.ok, "a link placed by hand removed (" + result.message + ")"));
-        _job("a hand-placed folder", () => installer.remove("handmade", _data() + "/modules/handmade", {}), result => assert(result.ok, "a folder placed by hand removed (" + result.message + ")"));
+        _job("a hand-placed folder", () => installer.remove("handmade", _data() + "/modules/handmade", { planKey: suite._handKey }), result => assert(result.ok, "a folder placed by hand removed (" + result.message + ")"));
         _then("the link's target is read", _idle, () => _sh("cat \"$1/outside/linked/module.json\" > /dev/null && echo there", [temp]));
         _then("the link's target was read", () => _out !== null, () => assertEqual(_out.lines[0], "there", "the link's target is untouched"));
         _check("hand-placed ones removed", state => {

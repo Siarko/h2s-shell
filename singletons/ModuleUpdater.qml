@@ -260,8 +260,11 @@ Scope {
 
     // ---- Updating ----
 
-    // Queues the update of module `id` that the last check found. → "" when queued
-    function update(id) {
+    // Queues the update of module `id` that the last check found; `version` (optional): the
+    // version the user was shown — refused when the last check found another. → "" when queued
+    function update(id, version) {
+        if (typeof version === "string" && version !== "" && typeof id === "string" && checks[id]?.version !== version)
+            return "The update changed";
         return updateAll(typeof id === "string" ? [id] : null);
     }
 

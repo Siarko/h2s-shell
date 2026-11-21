@@ -49,13 +49,18 @@ Item {
     property var _asked: null
     // The remove this page started: { job, id } — its outcome is said on the card
     property var _removing: null
-    // Whether "Check all" ran: its summary stays under the title until the next
+    // Whether "Check all" ran: its summary stays under the title until the next; the results
+    // there when it started (an entry the run did not replace is not its result), and why it
+    // did not start
     property bool _checkedAll: false
+    property var _checksBefore: ({})
+    property string _checkAllRefusal: ""
 
     // The updater's check results of the modules installed from a repository, for "Check
     // all"'s summary
     readonly property var _checkResults: _counted.filter(status => status.source === "repository")
-        .map(status => root.updater?.checks?.[status.id]).filter(check => check !== undefined && check !== null)
+        .map(status => root.updater?.checks?.[status.id])
+        .filter(check => check !== undefined && check !== null && !Object.values(root._checksBefore).includes(check))
     // Ids with a row of the update queue that has not ended (no second "Update" for them)
     readonly property var _queued: (updater?.queue?.rows ?? []).filter(row => !["done", "failed", "notFinished"].includes(row.phase)).map(row => row.id)
 
@@ -139,7 +144,7 @@ Item {
         } else if (action.effect === "remove") {
             _askRemove(action.subject);
         } else if (action.effect === "update") {
-            const refused = updater?.update(action.subject.id) ?? "No updater";
+            const refused = updater?.update(action.subject.id, action.version) ?? "No updater";
             if (refused !== "")
                 _setProblem(action.subject.id, refused);
         } else if (action.effect === "check") {
@@ -149,11 +154,15 @@ Item {
 
     // `id` "" — every module installed from a repository
     function _check(id) {
+        const before = updater?.checks ?? {};
         const refused = updater?.check(id) ?? "No updater";
-        if (id === "")
+        if (id === "") {
             _checkedAll = refused === "";
-        if (refused !== "" && id !== "")
+            _checksBefore = before;
+            _checkAllRefusal = ApiElementRules.oneLine(refused, 200);
+        } else if (refused !== "") {
             _setProblem(id, refused);
+        }
     }
 
     // Remove: what it deletes is read first (the installer's preview), then asked
@@ -168,11 +177,12 @@ Item {
                 root._setProblem(subject.id, "Cannot be removed: " + String(preview?.reason ?? ""));
                 return;
             }
-            root._ask(Object.assign(question, { subject: { id: subject.id, directory: subject.directory } }), answer => {
+            root._ask(Object.assign(question, { subject: { id: subject.id, directory: subject.directory, planKey: String(preview.key ?? "") } }), answer => {
                 root._asked = null;
                 if (answer.cancelled || answer.button !== "remove" || !root._current(answer.subject))
                     return;
-                const refused = root.installer.remove(answer.subject.id, answer.subject.directory, ModuleInstallRules.removeOptions(answer.values));
+                const options = Object.assign(ModuleInstallRules.removeOptions(answer.values), { planKey: answer.subject.planKey });
+                const refused = root.installer.remove(answer.subject.id, answer.subject.directory, options);
                 if (refused !== "")
                     root._setProblem(answer.subject.id, refused);
                 else
@@ -255,17 +265,18 @@ Item {
                     visible: text !== ""
                     text: root.updater?.checking && root.updater.checkingTotal > 0
                         ? ModuleInstallRules.checkingText(root.updater.checkingIndex, root.updater.checkingTotal)
+                        : root._checkAllRefusal !== "" ? root._checkAllRefusal
                         : root._checkedAll ? ModuleInstallRules.checkSummaryText(root._checkResults) : ""
                     textFormat: Text.PlainText
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.fontSizeSmall
-                    color: Theme.textMuted
+                    color: root._checkAllRefusal !== "" && !(root.updater?.checking ?? false) ? Theme.error : Theme.textMuted
                 },
                 SmallButton {
                     objectName: "checkAll"
                     visible: !(root.host?.safeMode ?? false)
                     label: root.updater?.checking ? "Checking…" : "Check all"
-                    available: root.updater !== null && !root.updater.checking
+                    available: !!root.updater && !root.updater.checking
                     onClicked: root._check("")
                 }
             ]
@@ -295,10 +306,9 @@ Item {
                     readonly property var approval: root.updater?.approvals?.[modelData] ?? null
                     readonly property var updatePill: ModuleInstallRules.updatePillOf(check, approval)
                     readonly property var checkLine: ModuleInstallRules.checkLineOf(check, root.updater?.checking === true && root.updater.checkingId === modelData)
-                    // `entry`: the status's directory stands for its place in the modules folder
-                    // here — only whether Remove is offered is decided from it; the installer
-                    // decides what is deleted from what it reads on disk
-                    readonly property var actions: ModuleInstallRules.actionsFor(status, { source: status.source ?? "", entry: status.directory ?? "" }, {
+                    // Remove is offered from the status's place in the modules folder; what it
+                    // deletes the installer reads on disk
+                    readonly property var actions: ModuleInstallRules.actionsFor(status, { source: status.source ?? "", entry: status.entry ?? "" }, {
                         runningDependents: disabling.disabled.concat(disabling.unknown).map(id => root.nameOf(id)),
                         needsConfirmation: (status.confirmation ?? []).length > 0,
                         // Downloaded and not queued or waiting for approval: "Update to x"
@@ -546,7 +556,7 @@ Item {
                         SmallButton {
                             objectName: "checkButton"
                             label: root.updater?.checking === true && root.updater.checkingId === card.modelData ? "Checking…" : (card.checkAction?.label ?? "")
-                            available: root.updater !== null && !root.updater.checking
+                            available: !!root.updater && !root.updater.checking
                             onClicked: root.act(card.checkAction, card.status)
                         }
                     }

@@ -1298,6 +1298,9 @@ TestCase {
             assertEqual(label("old"), "user | Your copy", "a folder placed in the user root: user, \"Your copy\"");
             assertEqual(label("linked"), "user | Your link → " + _trust("linked").directory, "a link placed there: user, where it leads");
             assertEqual(label("shipped"), "builtin | Built-in", "in the built-in root: builtin");
+            assert(_trust("old")?.entry.endsWith("/old") && _trust("linked")?.entry.endsWith("/linked") && _trust("linked").entry !== _trust("linked").directory,
+                   "the status's entry: its place in the user root (a link's own path, not its target)");
+            assertEqual(_trust("shipped")?.entry + "|" + _trust("devmod")?.entry, "|", "… none outside it");
             assertEqual(_trust("shipped")?.state, "loaded", "… loaded, never asked about");
             assertEqual(_trust("shipped-off")?.state + " " + _trust("shipped-off")?.enabled, "disabled false", "listed off by builtin.json: off");
             const list = _trustHost.acknowledgements;

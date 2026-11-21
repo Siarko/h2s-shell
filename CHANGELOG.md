@@ -981,6 +981,7 @@ The interface modules are written against (`qs.api`), versioned on its own
   action used to be an empty button.
 
 ### Fixed
+- A checkbox with a long label wraps it to more lines inside its width instead of running past the edge (the Settings dialogs' checkboxes, `Checkbox` of the module API).
 - At each unlock the screensaver's window was put on the screen for a moment, clear, over
   the desktop until its fade out ended (under half a second).
 - Toasts sat lower than meant under a top bar — by the bar's reserved space — and the shell's

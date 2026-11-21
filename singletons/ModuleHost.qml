@@ -1996,7 +1996,7 @@ Scope {
             return ModuleMergeRules.statusOf({
                 manifest: record.manifest, directory: record.directory, state: record.state || "failed",
                 enabled: _enabledFor(record), errors: errors, warnings: warnings,
-                source: record.found?.source ?? "", sourceLabel: record.found?.label ?? "", replaces: replaced[index],
+                source: record.found?.source ?? "", sourceLabel: record.found?.label ?? "", entry: record.found?.entry ?? "", replaces: replaced[index],
                 installedFor: installed && ModuleRules.has(_sourceRecords.modules, record.manifest.id) ? _sourceRecords.modules[record.manifest.id].installedFor : "",
                 confirmation: record.confirmation.needed ? record.confirmation.reasons : [],
                 deprecations: record.deprecations.concat(ModuleRules.testGateDeprecations(testMode, record.manifest.api),

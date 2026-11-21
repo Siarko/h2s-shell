@@ -344,7 +344,11 @@ TestCase {
             assertEqual(state.staging, 0, "… nothing left in staging");
         });
         _then("check Notes: nothing runs", _idle, () => assertEqual(updater.check("nt"), "", "check Notes: started"));
-        _then("check Notes: done", _idle, () => assertEqual(updater.checks.nt?.outcome, "current", "a branch whose head is installed: up to date"));
+        _then("check Notes: done", _idle, () => {
+            assertEqual(updater.checks.nt?.outcome, "current", "a branch whose head is installed: up to date");
+            assertEqual(updater.update("wx", "9.9.9") + " " + updater.queue.rows.length, "The update changed 0",
+                        "update of another version than the check found: refused, nothing queued");
+        });
     }
 
     function _automaticRun() {

@@ -468,6 +468,8 @@ Singleton {
             shadowedBy: record?.shadowedBy ?? "",
             source: typeof record?.source === "string" ? record.source : "",
             sourceLabel: typeof record?.sourceLabel === "string" ? record.sourceLabel : "",
+            // Its place in the user's modules folder (sourceOf's `entry`): "" outside it
+            entry: typeof record?.entry === "string" ? record.entry : "",
             replaces: (record?.replaces ?? []).map(each => ({ directory: String(each?.directory ?? ""), source: String(each?.source ?? ""), version: String(each?.version ?? "") })),
             installedFor: typeof record?.installedFor === "string" ? record.installedFor : "",
             confirmation: (record?.confirmation ?? []).slice()
