@@ -112,12 +112,16 @@ Singleton {
         return record.versions.find(each => each.dir === record.active);
     }
 
-    // Whether a kept version is the one the user refused (record.refused)
+    // Whether a version ({ version, commit }) is the one the user refused (record.refused).
+    // A refusal with its commit holds for that commit whatever the version text says (a tag
+    // "v0.5.0" for a refused "0.5.0", a branch head with no version); only one recorded
+    // without a commit holds by version, for every copy of it.
     function _isRefused(version, refused) {
-        if (!ModuleRules.isObject(refused) || typeof refused.version !== "string" || version.version !== refused.version)
+        if (!ModuleRules.isObject(refused))
             return false;
-        // A refusal recorded without its commit holds for every copy of that version
-        return _commit(refused.commit) === "" || _sameCommit(version.commit, refused.commit);
+        if (_commit(refused.commit) !== "")
+            return _sameCommit(version?.commit, refused.commit);
+        return typeof refused.version === "string" && refused.version !== "" && version?.version === refused.version;
     }
 
     // ---- Versions ----
@@ -220,6 +224,9 @@ Singleton {
                 add("author", title + " names a different author.",
                     (author !== "" ? "By " + _plain(author, 100) : "No author named")
                     + (before !== "" ? ", was " + _plain(before, 100) : ", none before"));
+            // A declaration that is there but cannot be read may say anything: it asks
+            if (newManifest.privileged !== undefined && !ModuleRules.isObject(newManifest.privileged))
+                add("unknown", title + ": its administrator declaration could not be read.");
             if (ModuleRules.isObject(newManifest.privileged) && ack.privileged !== true) {
                 const why = _plain(newManifest.privileged.why, 200);
                 const programs = _list(newManifest.privileged.programs).map(program => _plain(program, 64)).filter(text => text !== "");
@@ -327,7 +334,7 @@ Singleton {
     readonly property var _finalPhases: ["done", "failed", "notFinished"]
 
     function emptyQueue() {
-        return { rows: [], ended: true, offered: [] };
+        return { rows: [], ended: true, offered: [], lastRun: 0 };
     }
 
     // One step of the update queue — a pure state machine. `queue`: the last result's queue
@@ -335,16 +342,19 @@ Singleton {
     //   { type: "add", items: [{ id, name, from, to, commit, uses, staged, consent }] }
     //       "Update", "Update all" or the automatic run; `staged` with `consent` (consentFor's
     //       result) and `uses` when the new version is already downloaded and verified
-    //   { type: "progress", id, progress }       ModuleInstallRules.progressOf's result
-    //   { type: "downloaded", id }
-    //   { type: "verified", id, to, commit, uses, consent }
+    //   { type: "progress", id, run, progress }  ModuleInstallRules.progressOf's result
+    //   { type: "downloaded", id, run }
+    //   { type: "verified", id, run, to, commit, uses, consent }
     //   { type: "approved" | "refused", id, to, commit }   the consent box's answer, keyed to
     //       the version it was asked about: an answer about another version is ignored
-    //   { type: "backedUp", id }
-    //   { type: "installed", id, restart }       `restart`: its new files need a restart
-    //   { type: "failed", id, reason }
+    //   { type: "backedUp", id, run }
+    //   { type: "installed", id, run, restart }  `restart`: its new files need a restart
+    //   { type: "failed", id, run, reason }
+    //   `run`: the row's run token, from the subject of the action that started the work —
+    //   each row queued anew gets a new one, so the answer of an earlier run of the same
+    //   module (a download still finishing after it failed and was queued again) is ignored
     // → { queue, actions, offer, notification, summary, ignored }
-    //   actions: [{ action: "download" | "verify" | "switch", id, subject: { id, to, commit } }
+    //   actions: [{ action: "download" | "verify" | "switch", id, subject: { id, to, commit, run } }
     //            | { action: "rememberRefusal", id, version, commit }]
     //   Downloads run side by side; one switch at a time (back up, unload, relink, load), each
     //   module after the modules of the queue it uses (ModuleDependencyRules.installOrder). A
@@ -381,7 +391,8 @@ Singleton {
                 const existing = state.rows.findIndex(row => row.id === item.id);
                 if (existing >= 0 && !_finalPhases.includes(state.rows[existing].phase))
                     continue;           // already queued or waiting for its answer
-                const row = _newRow(item);
+                state.lastRun++;
+                const row = _newRow(item, state.lastRun);
                 if (existing >= 0)
                     state.rows[existing] = row;
                 else
@@ -399,6 +410,10 @@ Singleton {
         }
         const row = state.rows.find(each => each.id === event?.id);
         if (!row)
+            return result(true);
+        // The installer's reports name the run they belong to; the consent box's answers are
+        // keyed to the version and commit they asked about instead
+        if (type !== "approved" && type !== "refused" && event.run !== row.run)
             return result(true);
         switch (type) {
         case "progress":
@@ -473,11 +488,16 @@ Singleton {
         copy.rows = copy.rows.filter(row => ModuleRules.isObject(row) && ModuleManifestRules.validId(row.id));
         copy.offered = _list(copy.offered);
         copy.ended = copy.ended === true;
+        copy.lastRun = Number.isInteger(copy.lastRun) && copy.lastRun >= 0 ? copy.lastRun : 0;
+        // A token must never repeat one a row already holds
+        for (const row of copy.rows)
+            if (Number.isInteger(row.run) && row.run > copy.lastRun)
+                copy.lastRun = row.run;
         return copy;
     }
 
-    function _newRow(item) {
-        return { id: item.id, name: _plain(item.name) || item.id, from: _version(item.from), to: _version(item.to),
+    function _newRow(item, run) {
+        return { id: item.id, run: run, name: _plain(item.name) || item.id, from: _version(item.from), to: _version(item.to),
                  commit: _commit(item.commit), uses: _uses(item.uses), phase: "downloading", reason: "",
                  progress: null, consentNeeded: false, consent: [], approved: false, restart: false, reported: "" };
     }
@@ -490,7 +510,7 @@ Singleton {
     }
 
     function _subject(row) {
-        return { id: row.id, to: row.to, commit: row.commit };
+        return { id: row.id, to: row.to, commit: row.commit, run: row.run };
     }
 
     // The new version is verified: its version, uses and whether it needs approval. A
@@ -663,8 +683,9 @@ Singleton {
     // Which version directories of a module stay after a switch. `record`: the record's
     // entry; `options`: { previousDir — the version switched from, pendingDir — one
     // downloaded and waiting }.
-    // → { ok, keep: [dirs], delete: [dirs] } — the active and the refused one are always kept;
-    //   then the previous, the waiting one, then the newest fetched, up to maxKeptVersions.
+    // → { ok, keep: [dirs], delete: [dirs] } — the active one, the refused one and the one
+    //   waiting in the queue are always kept; then the previous, then the newest fetched, up
+    //   to maxKeptVersions.
     //   A record that cannot be read deletes nothing (ok false).
     function keepPlan(record, options) {
         const entry = _record(record);
@@ -672,10 +693,10 @@ Singleton {
             return { ok: false, keep: [], delete: [] };
         const keep = [entry.active];
         for (const version of entry.versions)
-            if (_isRefused(version, entry.refused) && !keep.includes(version.dir))
+            if ((_isRefused(version, entry.refused) || version.dir === options?.pendingDir) && !keep.includes(version.dir))
                 keep.push(version.dir);
         const others = entry.versions.filter(version => !keep.includes(version.dir)).slice().sort((first, second) => {
-            const rank = version => version.dir === options?.previousDir ? 0 : version.dir === options?.pendingDir ? 1 : 2;
+            const rank = version => version.dir === options?.previousDir ? 0 : 1;
             if (rank(first) !== rank(second))
                 return rank(first) - rank(second);
             const a = _moment(first.fetchedAt);
@@ -781,7 +802,7 @@ Singleton {
         const none = { text: "No changelog", cut: false, none: true };
         if (typeof text !== "string")
             return none;
-        const lines = _changelogLines(text.slice(0, maxChangelogBytes));
+        const lines = _changelogLines(_utf8Prefix(text, maxChangelogBytes));
         if (lines.join("").trim() === "")
             return none;
         const sections = [];
@@ -820,6 +841,21 @@ Singleton {
             cut = true;
         }
         return { text: cut ? joined + "\n(cut)" : joined, cut: cut, none: false };
+    }
+
+    // The longest start of `text` whose UTF-8 form fits in `maxBytes` (the file is read up to
+    // that many bytes; a character is never split)
+    function _utf8Prefix(text, maxBytes) {
+        let bytes = 0;
+        let length = 0;
+        for (const character of text) {
+            const code = character.codePointAt(0);
+            bytes += code < 0x80 ? 1 : code < 0x800 ? 2 : code < 0x10000 ? 3 : 4;
+            if (bytes > maxBytes)
+                break;
+            length += character.length;
+        }
+        return text.slice(0, length);
     }
 
     // A text's lines as plain text: tabs as spaces, other control characters and bidi
@@ -861,27 +897,27 @@ Singleton {
 
     // ---- The automatic run (§6.3) ----
 
-    // Whether the daily automatic update run is due. `state`: { enabled — modules.autoUpdate
-    // is "Automatically", locked — false only when the session is known unlocked,
-    // lastAttemptAt (ms) — the last run's start, failures — runs failed in a row };
-    // `nowMs`: the clock.
+    // Whether the daily automatic update run is due. `state`: what autoRunRecord keeps
+    // ({ lastAttemptAt (ms) — the last run's start, failures — runs failed in a row,
+    // lastOutcome }); `enabled`: modules.autoUpdate is "Automatically" now; `locked`: false
+    // only when the session is known unlocked now; `nowMs`: the clock.
     // → { due, reason, nextAt } — reason "off", "locked", "first" (never ran), "daily",
     //   "retry" (after failures: 15 min, doubling, at most a day), "waiting", "unknown"
     //   (a last run that cannot be read or lies in the future: due, so a broken record never
     //   stops updates), "noClock" (no time to decide by: not due).
-    function autoRunDue(state, nowMs) {
-        if (state?.enabled !== true)
+    function autoRunDue(state, enabled, locked, nowMs) {
+        if (enabled !== true)
             return { due: false, reason: "off", nextAt: null };
-        if (state?.locked !== false)
+        if (locked !== false)
             return { due: false, reason: "locked", nextAt: null };
         if (!ModuleRules.isNumber(nowMs))
             return { due: false, reason: "noClock", nextAt: null };
-        const last = state.lastAttemptAt;
+        const last = state?.lastAttemptAt;
         if (last === undefined || last === null)
             return { due: true, reason: "first", nextAt: nowMs };
         if (!ModuleRules.isNumber(last) || last > nowMs)
             return { due: true, reason: "unknown", nextAt: nowMs };
-        const failures = Number.isInteger(state.failures) && state.failures > 0 ? state.failures : 0;
+        const failures = Number.isInteger(state?.failures) && state.failures > 0 ? state.failures : 0;
         const wait = failures === 0 ? dayMs : Math.min(dayMs, firstRetryMs * Math.pow(2, Math.min(failures - 1, 20)));
         const nextAt = last + wait;
         if (nowMs >= nextAt)
@@ -891,15 +927,16 @@ Singleton {
 
     // The automatic run's state after a run with `outcome` ("ok" or "failed") at `nowMs`, and
     // whether to log it: only when the outcome differs from the last one.
-    // → { state: { enabled, locked, lastAttemptAt, failures, lastOutcome }, log }
+    // → { state: { lastAttemptAt, failures, lastOutcome }, log } — only what the run leaves
+    //   behind is kept; whether runs are on and the lock are read anew each time
     function autoRunRecord(state, outcome, nowMs) {
         const failed = outcome !== "ok";
         const previous = Number.isInteger(state?.failures) && state.failures > 0 ? state.failures : 0;
-        const next = Object.assign({}, ModuleRules.isObject(state) ? state : {}, {
+        const next = {
             lastAttemptAt: ModuleRules.isNumber(nowMs) ? nowMs : null,
             failures: failed ? previous + 1 : 0,
             lastOutcome: failed ? "failed" : "ok"
-        });
+        };
         return { state: next, log: state?.lastOutcome !== next.lastOutcome };
     }
 
@@ -911,9 +948,13 @@ Singleton {
     // backupReasons), nowMs }.
     // → { ok, problem, directory, staging, name, items, skipped, meta }
     //   items: { what: "settings", prefix: "mod.<id>." } (every profile, values as stored),
-    //          { what: "store", from: <stores>/<id>, to: "store" },
-    //          { what: "data", from: <data>/<id>/<path>, to: "data/<path>" } — only the paths
-    //            the manifest names; the data directory itself never;
+    //          { what: "store", from: <stores>/<id>, to: "store", noLinks: true },
+    //          { what: "data", from: <data>/<id>/<path>, to: "data/<path>", noLinks: true } —
+    //            `noLinks`: copied without following links (a link is copied as a link, never
+    //            what it points to), and `from` used only when its resolved path lies inside
+    //            the store or the data directory — a link must not pull other files in;
+    //            data items only for the paths the manifest names, the data directory itself
+    //            never;
     //   skipped: [{ path, why }] — named paths refused (outside the data directory, not a
     //     plain relative path, beyond the cap);
     //   directory: <backups>/<id>/<version>-<YYYYMMDD-HHMMSS> (UTC), written in `staging`
@@ -938,7 +979,7 @@ Singleton {
                         && options.version.length <= ModuleInstallRules.maxVersionLength ? options.version : "unknown";
         const name = version + "-" + stamp;
         const items = [{ what: "settings", prefix: "mod." + id + "." },
-                       { what: "store", from: places.stores + "/" + id, to: "store" }];
+                       { what: "store", from: places.stores + "/" + id, to: "store", noLinks: true }];
         const skipped = [];
         const named = manifest?.backup;
         if (named !== undefined && !Array.isArray(named))
@@ -950,7 +991,7 @@ Singleton {
             else if (items.filter(item => item.what === "data").length >= maxBackupPaths)
                 skipped.push({ path: _plain(path), why: "more than " + maxBackupPaths + " paths named" });
             else if (!items.some(item => item.what === "data" && item.to === "data/" + _cleanRelative(path)))
-                items.push({ what: "data", from: places.data + "/" + id + "/" + _cleanRelative(path), to: "data/" + _cleanRelative(path) });
+                items.push({ what: "data", from: places.data + "/" + id + "/" + _cleanRelative(path), to: "data/" + _cleanRelative(path), noLinks: true });
         }
         return {
             ok: true, problem: "", name: name,
@@ -988,14 +1029,15 @@ Singleton {
     // Which backups of a module stay once a new one is in. `entries`: the backup directories,
     // each { dir, takenAt } — `takenAt` from its meta.json, else the time in its name.
     // → { keep: [dirs], delete: [dirs], unknown: [dirs] } — the newest maxBackups kept; one
-    //   whose name or time cannot be read is left alone and not counted (never deleted on a
-    //   guess).
+    //   whose name or time cannot be read, or a staging leftover (a name starting with "."),
+    //   is left alone and not counted (never deleted on a guess).
     function backupKeepPlan(entries) {
         const readable = [];
         const unknown = [];
         for (const entry of _list(entries)) {
             const dir = typeof entry === "string" ? entry : entry?.dir;
-            if (!ModuleInstallRules._versionDirectory(dir)) {
+            // A name starting with "." is a staging directory left over, never a backup
+            if (!ModuleInstallRules._versionDirectory(dir) || dir.startsWith(".")) {
                 if (typeof dir === "string")
                     unknown.push(dir);
                 continue;

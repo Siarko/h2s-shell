@@ -42,6 +42,12 @@ TestCase {
     readonly property var _cleanPlan: ({ refused: "", entries: [], offers: [], fetch: [], complete: true, blocking: [],
                                          ready: true, order: ["weather"], rootBreaks: [] })
 
+    // The installer's report for a row, with the run token of the row's current run
+    function _report(previous, event) {
+        const row = previous.queue.rows.find(each => each.id === event.id);
+        return ModuleUpdateRules.queueStep(previous.queue, Object.assign({ run: row ? row.run : 0 }, event));
+    }
+
     function _kinds(result) {
         return result.reasons.map(reason => reason.kind).join(",");
     }
@@ -114,6 +120,13 @@ TestCase {
         });
         assertEqual(already.needed, false, "consent: a program added to an approved declaration needs none (§10, 4)");
         assertEqual(already.after.map(note => note.line).join("|"), "Now also runs nft as administrator", "consent: it is shown after");
+
+        const brokenDeclaration = ModuleUpdateRules.consentFor(_acknowledgement(), _weatherRecord(), _manifest({ privileged: "yes" }), _address,
+                                                               { dependencyPlan: _cleanPlan });
+        assertEqual(_kinds(brokenDeclaration), "unknown", "consent: a privileged declaration that is no object asks as unknown");
+        const nullDeclaration = ModuleUpdateRules.consentFor(_acknowledgement({ privileged: true }), _weatherRecord(), _manifest({ privileged: null }),
+                                                             _address, { dependencyPlan: _cleanPlan });
+        assertEqual(_kinds(nullDeclaration), "unknown", "consent: even after an approved declaration");
 
         const less = ModuleUpdateRules.consentFor(_acknowledgement({ privileged: true }), _weatherRecord(), _manifest(), _address,
                                                   { dependencyPlan: _cleanPlan });
@@ -211,38 +224,38 @@ TestCase {
         assertEqual(added.queue.rows.map(row => row.id).join(","), "weather,notes,printers", "queue: providers before their dependents");
         assertEqual(added.summary.title + " " + added.summary.count, "Updating 0 of 3", "queue: the title line");
 
-        let step = ModuleUpdateRules.queueStep(added.queue, { type: "progress", id: "weather",
+        let step = _report(added, { type: "progress", id: "weather",
                                                               progress: ModuleInstallRules.progressOf("Receiving objects:  45% (120/266), 1.20 MiB | 2.40 MiB/s") });
         assertEqual(ModuleUpdateRules.rowText(step.queue.rows[0]), "Weather 1.2.0 → 1.3.0 — Downloading 45% · 2.4 MiB/s",
                     "queue: a downloading row with its percent and speed");
         assertEqual(added.queue.rows[0].progress, null, "queue: the caller's queue is not changed");
 
-        step = ModuleUpdateRules.queueStep(step.queue, { type: "downloaded", id: "notes" });
+        step = _report(step, { type: "downloaded", id: "notes" });
         assertEqual(step.actions.map(action => action.action).join(","), "verify", "queue: downloaded → verify");
-        step = ModuleUpdateRules.queueStep(step.queue, { type: "verified", id: "notes", to: "0.4.0", commit: _commitB,
+        step = _report(step, { type: "verified", id: "notes", to: "0.4.0", commit: _commitB,
                                                          uses: [{ id: "weather", version: "1.3" }], consent: { needed: false, reasons: [] } });
         assertEqual(step.actions.length, 0, "queue: Notes waits for Weather, still downloading");
         assertEqual(ModuleUpdateRules.rowText(step.queue.rows[1]), "Notes 0.3.0 → 0.4.0 — Waiting", "queue: the waiting row");
 
-        step = ModuleUpdateRules.queueStep(step.queue, { type: "downloaded", id: "weather" });
-        step = ModuleUpdateRules.queueStep(step.queue, { type: "verified", id: "weather", to: "1.3.0", commit: _commitC, uses: [],
+        step = _report(step, { type: "downloaded", id: "weather" });
+        step = _report(step, { type: "verified", id: "weather", to: "1.3.0", commit: _commitC, uses: [],
                                                          consent: { needed: false, reasons: [] } });
-        assertEqual(JSON.stringify(step.actions), JSON.stringify([{ action: "switch", id: "weather", subject: { id: "weather", to: "1.3.0", commit: _commitC } }]),
+        assertEqual(JSON.stringify(step.actions), JSON.stringify([{ action: "switch", id: "weather", subject: { id: "weather", to: "1.3.0", commit: _commitC, run: step.queue.rows[0].run } }]),
                     "queue: Weather switches first, with its subject");
 
-        step = ModuleUpdateRules.queueStep(step.queue, { type: "downloaded", id: "printers" });
-        step = ModuleUpdateRules.queueStep(step.queue, { type: "verified", id: "printers", to: "0.5.0", commit: _commitD, uses: [],
+        step = _report(step, { type: "downloaded", id: "printers" });
+        step = _report(step, { type: "verified", id: "printers", to: "0.5.0", commit: _commitD, uses: [],
                                                          consent: { needed: true, reasons: [{ kind: "privileged", line: "Printers 0.5.0 asks for administrator rights." }] } });
         assertEqual(ModuleUpdateRules.rowText(step.queue.rows[2]), "Printers 0.4.0 → 0.5.0 — Approval required", "queue: a row waits for approval");
         assertEqual(step.actions.length, 0, "queue: one switch at a time");
 
-        step = ModuleUpdateRules.queueStep(step.queue, { type: "backedUp", id: "weather" });
+        step = _report(step, { type: "backedUp", id: "weather" });
         assertEqual(ModuleUpdateRules.rowText(step.queue.rows[0]), "Weather 1.2.0 → 1.3.0 — Installing", "queue: backed up → installing");
-        step = ModuleUpdateRules.queueStep(step.queue, { type: "installed", id: "weather", restart: true });
+        step = _report(step, { type: "installed", id: "weather", restart: true });
         assertEqual(step.actions.map(action => action.action + ":" + action.id).join(","), "switch:notes", "queue: then Notes");
         assertEqual(step.offer, null, "queue: no restart offered while the queue runs");
-        step = ModuleUpdateRules.queueStep(step.queue, { type: "backedUp", id: "notes" });
-        step = ModuleUpdateRules.queueStep(step.queue, { type: "installed", id: "notes", restart: true });
+        step = _report(step, { type: "backedUp", id: "notes" });
+        step = _report(step, { type: "installed", id: "notes", restart: true });
         assertEqual(step.summary.title + " " + step.summary.count, "Updates finished 3 of 3", "queue: ended, the approval row counted");
         assertEqual(JSON.stringify(step.offer), JSON.stringify({ text: "Restart the shell to load the new files of Weather and Notes.", ids: ["weather", "notes"] }),
                     "queue: one restart offer for both");
@@ -259,8 +272,8 @@ TestCase {
         step = ModuleUpdateRules.queueStep(step.queue, { type: "approved", id: "printers", to: "0.5.0", commit: _commitD });
         assertEqual(step.actions.map(action => action.action + ":" + action.id).join(","), "switch:printers", "queue: approved later, it switches");
         assertEqual(step.summary.title, "Updating", "queue: running again");
-        step = ModuleUpdateRules.queueStep(step.queue, { type: "backedUp", id: "printers" });
-        step = ModuleUpdateRules.queueStep(step.queue, { type: "installed", id: "printers", restart: false });
+        step = _report(step, { type: "backedUp", id: "printers" });
+        step = _report(step, { type: "installed", id: "printers", restart: false });
         assertEqual(step.offer, null, "queue: no restart offered again for what was offered");
         assertEqual(step.notification.body, "Modules updated: Printers 0.5.0.", "queue: only the newly finished one is told");
         assertEqual(step.notification.opens + " " + step.notification.ids.join(","), "changelog printers", "queue: it opens the changelog");
@@ -287,6 +300,15 @@ TestCase {
         const record = _record([_version("0.4.0-aaaaaaa", "0.4.0", _commitA, 1), _version("0.5.0-ddddddd", "0.5.0", _commitD, 2)],
                                "0.4.0-aaaaaaa", { version: "0.5.0", commit: _commitD });
         assertEqual(ModuleUpdateRules.offerFor(record, { version: "0.5.0", commit: _commitD }).reason, "refused", "refusal: not offered again");
+        assertEqual(ModuleUpdateRules.offerFor(record, { version: "v0.5.0", commit: _commitD }).reason, "refused",
+                    "refusal: the refused commit as a tag named otherwise is not offered");
+        assertEqual(ModuleUpdateRules.offerFor(record, { version: "", commit: _commitD.slice(0, 7) }).reason, "refused",
+                    "refusal: nor as a branch head without a version");
+        const sameTextNewCommit = ModuleUpdateRules.offerFor(record, { version: "0.5.0", commit: _commitC });
+        assert(sameTextNewCommit.offer, "refusal: a refusal with a commit holds for that commit only");
+        const byVersion = Object.assign({}, record, { refused: { version: "0.5.0", commit: "" } });
+        assertEqual(ModuleUpdateRules.offerFor(byVersion, { version: "0.5.0", commit: _commitC }).reason, "refused",
+                    "refusal: one recorded without a commit holds by version");
         const newer = ModuleUpdateRules.offerFor(record, { version: "0.5.1", commit: _commitE });
         assert(newer.offer && newer.reason === "available", "refusal: a newer version is offered");
     }
@@ -297,7 +319,7 @@ TestCase {
         let step = ModuleUpdateRules.queueStep(null, { type: "add", items: [staged("notes", "Notes", [{ id: "weather", version: "1.1" }]),
                                                                            staged("weather", "Weather", [])] });
         assertEqual(step.actions.map(action => action.action + ":" + action.id).join(","), "switch:weather", "failures: staged items switch at once, provider first");
-        step = ModuleUpdateRules.queueStep(step.queue, { type: "failed", id: "weather", reason: "1.1.0 failed to start; 1.0.0 is active again" });
+        step = _report(step, { type: "failed", id: "weather", reason: "1.1.0 failed to start; 1.0.0 is active again" });
         assertEqual(ModuleUpdateRules.rowText(step.queue.rows[0]), "Weather 1.0.0 → 1.1.0 — Failed: 1.1.0 failed to start; 1.0.0 is active again",
                     "failures: the row says what and why");
         assertEqual(ModuleUpdateRules.rowText(step.queue.rows[1]), "Notes 1.0.0 → 1.1.0 — Failed: needs Weather, which was not updated",
@@ -314,7 +336,17 @@ TestCase {
         assertEqual(unread.queue.rows[0].reason, "its manifest could not be read", "failures: uses that cannot be read fail the row");
         const notAnswer = ModuleUpdateRules.queueStep(null, { type: "add", items: [Object.assign(staged("weather", "Weather", []), { consent: "yes" })] });
         assertEqual(notAnswer.queue.rows[0].phase, "approval", "failures: a consent that cannot be read asks");
-        const lateFailure = ModuleUpdateRules.queueStep(notAnswer.queue, { type: "failed", id: "weather", reason: "x" });
+        const firstRun = ModuleUpdateRules.queueStep(null, { type: "add", items: [{ id: "weather", name: "Weather", to: "1.1.0" }] });
+        const oldRun = firstRun.actions[0].subject.run;
+        assert(Number.isInteger(oldRun), "failures: the download's subject carries the run token");
+        const failedRun = _report(firstRun, { type: "failed", id: "weather", reason: "the server did not answer" });
+        const secondRun = ModuleUpdateRules.queueStep(failedRun.queue, { type: "add", items: [{ id: "weather", name: "Weather", to: "1.1.0" }] });
+        assert(secondRun.actions[0].subject.run !== oldRun, "failures: queued again, a new run token");
+        const lateDownload = ModuleUpdateRules.queueStep(secondRun.queue, { type: "downloaded", id: "weather", run: oldRun });
+        assert(lateDownload.ignored && lateDownload.queue.rows[0].phase === "downloading", "failures: a report of the earlier run is ignored");
+        assert(ModuleUpdateRules.queueStep(secondRun.queue, { type: "downloaded", id: "weather" }).ignored, "failures: a report without a run is ignored");
+        assertEqual(_report(secondRun, { type: "downloaded", id: "weather" }).queue.rows[0].phase, "verifying", "failures: the current run's report counts");
+        const lateFailure = _report(notAnswer, { type: "failed", id: "weather", reason: "x" });
         assert(lateFailure.ignored, "failures: a failure for a row not running is ignored");
     }
 
@@ -331,8 +363,8 @@ TestCase {
         assertEqual(step.notification.body, "Weather: approval required.", "held: the approval told");
         step = ModuleUpdateRules.queueStep(step.queue, { type: "approved", id: "weather", to: "2.0.0", commit: _commitC });
         assertEqual(step.actions.map(action => action.id).join(","), "weather", "held: the provider switches first");
-        step = ModuleUpdateRules.queueStep(step.queue, { type: "backedUp", id: "weather" });
-        step = ModuleUpdateRules.queueStep(step.queue, { type: "installed", id: "weather" });
+        step = _report(step, { type: "backedUp", id: "weather" });
+        step = _report(step, { type: "installed", id: "weather" });
         assertEqual(step.actions.map(action => action.action + ":" + action.id).join(","), "switch:notes", "held: then its dependent");
 
         const fresh = ModuleUpdateRules.queueStep(step.queue, { type: "add", items: [{ id: "radio", name: "Radio", to: "1.0.0" }] });
@@ -360,6 +392,9 @@ TestCase {
         const noRefusal = Object.assign({}, four, { refused: null });
         const pending = ModuleUpdateRules.keepPlan(noRefusal, { previousDir: "1.2.0-bbbbbbb", pendingDir: "1.4.0-ddddddd" });
         assertEqual(pending.delete.join(","), "1.1.0-aaaaaaa", "keep: with a waiting download, the oldest goes");
+        const crowded = ModuleUpdateRules.keepPlan(four, { previousDir: "1.2.0-bbbbbbb", pendingDir: "1.4.0-ddddddd" });
+        assertEqual(crowded.keep.join(",") + " / " + crowded.delete.join(","), "1.3.0-ccccccc,1.1.0-aaaaaaa,1.4.0-ddddddd / 1.2.0-bbbbbbb",
+                    "keep: the one waiting in the queue is never deleted, the previous goes before it");
         const newest = ModuleUpdateRules.keepPlan(noRefusal, {});
         assertEqual(newest.keep.join(","), "1.3.0-ccccccc,1.4.0-ddddddd,1.2.0-bbbbbbb", "keep: without hints, the newest fetched");
 
@@ -414,6 +449,13 @@ TestCase {
         assertEqual(byCharacters.text.length, ModuleUpdateRules.maxChangelogCharacters + "\n(cut)".length, "changelog: over its characters, cut at 20 000");
         const huge = "x".repeat(70000) + "\n## 2.0.0\n- far away";
         assert(!ModuleUpdateRules.changelogSince(huge, "1.0.0", "2.0.0").text.includes("far away"), "changelog: only the first 64 KiB is read");
+        // 40 000 two-byte characters: under 64 Ki characters, over 64 KiB
+        const wideCharacters = "\u017c".repeat(40000) + "\n## 2.0.0\n- far away";
+        assert(!ModuleUpdateRules.changelogSince(wideCharacters, "1.0.0", "2.0.0").text.includes("far away"),
+               "changelog: the cap counts UTF-8 bytes, not characters");
+        const nearCharacters = "\u017c".repeat(30000) + "\n## 2.0.0\n- near";
+        assertEqual(ModuleUpdateRules.changelogSince(nearCharacters, "1.0.0", "2.0.0").text, "## 2.0.0\n- near",
+                    "changelog: what fits in 64 KiB is read");
 
         const plain = ModuleUpdateRules.changelogSince("## 1.1.0\n- <b>bold</b>\t‮evil\u0007\r\n- next", "1.0.0", "1.1.0");
         assertEqual(plain.text, "## 1.1.0\n- <b>bold</b>    evil\n- next", "changelog: plain text, controls gone, line breaks kept");
@@ -441,10 +483,12 @@ TestCase {
         const hour = 60 * 60 * 1000;
         const day = 24 * hour;
         const start = Date.UTC(2026, 10, 21, 8, 0, 0);
-        const due = (state, now) => ModuleUpdateRules.autoRunDue(Object.assign({ enabled: true, locked: false }, state), now);
-        assertEqual(due({ enabled: false }, start).reason, "off", "auto: off by default");
-        assertEqual(due({ locked: true }, start).due, false, "auto: not while locked");
-        assertEqual(due({ locked: undefined }, start).reason, "locked", "auto: a lock state not known counts as locked");
+        const due = (state, now) => ModuleUpdateRules.autoRunDue(state, true, false, now);
+        assertEqual(ModuleUpdateRules.autoRunDue({}, false, false, start).reason, "off", "auto: off by default");
+        assertEqual(ModuleUpdateRules.autoRunDue({}, true, true, start).due, false, "auto: not while locked");
+        assertEqual(ModuleUpdateRules.autoRunDue({}, true, undefined, start).reason, "locked", "auto: a lock state not known counts as locked");
+        assertEqual(ModuleUpdateRules.autoRunDue({ enabled: true, locked: false }, undefined, undefined, start).reason, "off",
+                    "auto: a stored on or unlocked is never read for now");
         assertEqual(due({}, start).reason, "first", "auto: never ran, due");
         assertEqual(due({ lastAttemptAt: start, failures: 0 }, start + 23 * hour).due, false, "auto: not again within the day");
         assertEqual(due({ lastAttemptAt: start, failures: 0 }, start + day).reason, "daily", "auto: due after a day");
@@ -463,6 +507,7 @@ TestCase {
 
         let record = ModuleUpdateRules.autoRunRecord({ enabled: true, locked: false }, "failed", start);
         assert(record.log && record.state.failures === 1 && record.state.lastAttemptAt === start, "auto: a first failure logged and counted");
+        assertEqual(Object.keys(record.state).sort().join(","), "failures,lastAttemptAt,lastOutcome", "auto: only what the run leaves is kept");
         record = ModuleUpdateRules.autoRunRecord(record.state, "failed", start + hour);
         assert(!record.log && record.state.failures === 2, "auto: the same outcome again is not logged");
         record = ModuleUpdateRules.autoRunRecord(record.state, "ok", start + 2 * hour);
@@ -481,10 +526,10 @@ TestCase {
                     "backup: written beside it, then renamed in");
         assertEqual(JSON.stringify(plan.items), JSON.stringify([
             { what: "settings", prefix: "mod.weather." },
-            { what: "store", from: "/home/u/.config/h2s_shell/modules/weather", to: "store" },
-            { what: "data", from: "/home/u/.local/share/h2s-shell/module-data/weather/notes.db", to: "data/notes.db" },
-            { what: "data", from: "/home/u/.local/share/h2s-shell/module-data/weather/sub/keep.json", to: "data/sub/keep.json" }
-        ]), "backup: settings, store, and only the named files inside the data directory");
+            { what: "store", from: "/home/u/.config/h2s_shell/modules/weather", to: "store", noLinks: true },
+            { what: "data", from: "/home/u/.local/share/h2s-shell/module-data/weather/notes.db", to: "data/notes.db", noLinks: true },
+            { what: "data", from: "/home/u/.local/share/h2s-shell/module-data/weather/sub/keep.json", to: "data/sub/keep.json", noLinks: true }
+        ]), "backup: settings, store, and only the named files inside the data directory, none through links");
         assertEqual(plan.skipped.map(each => each.why).join(","),
                     "outside its data directory,outside its data directory,outside its data directory,not a path,the whole data directory,not a path",
                     "backup: paths outside the data directory, and the whole of it, are refused");
@@ -512,11 +557,13 @@ TestCase {
         entries.push({ dir: "1.3.0-20261001-100000", takenAt: Date.UTC(2026, 10, 20) });   // meta.json's time counts first
         entries.push({ dir: "broken" });
         entries.push({ dir: "../outside" });
+        entries.push({ dir: ".incoming-1.4.0-20261121-100000" });
         const plan = ModuleUpdateRules.backupKeepPlan(entries);
         assertEqual(plan.keep.join(","), "1.3.0-20261001-100000,1.2.0-20261106-100000,1.2.0-20261105-100000,1.1.0-20261104-100000,1.1.0-20261103-100000",
                     "backup keep: the newest five");
         assertEqual(plan.delete.join(","), "1.0.0-20261102-100000,1.0.0-20261101-100000", "backup keep: the older ones go");
-        assertEqual(plan.unknown.join(","), "broken,../outside", "backup keep: unreadable ones are left alone, never deleted");
+        assertEqual(plan.unknown.join(","), "broken,../outside,.incoming-1.4.0-20261121-100000",
+                    "backup keep: unreadable ones and staging leftovers are left alone, never counted or deleted");
         assertEqual(ModuleUpdateRules.backupKeepPlan(null).delete.length, 0, "backup keep: no list, nothing deleted");
     }
 }
