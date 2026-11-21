@@ -46,7 +46,10 @@ log "sent SIGHUP to the launcher (pid $SUPERVISOR_PID)"
 sleep 1 # fixed sleep: a negative claim: SIGHUP stops nothing
 check "SIGHUP: the launcher carries on" kill -0 "$SUPERVISOR_PID"
 check "… and so does the shell, untouched" test "$(_find_shell_pid)" = "$stopped"
-check_within "$GUARD" "… it said so" grep -aq "SIGHUP (the terminal it was started from closed?): the shell runs on, supervised" "$WORK/shell.log"
+# Ignored, not trapped (a trap would interrupt the supervisor's `wait`); the shell keeps it default
+ignores_hup() { local mask; mask=$(sed -n 's/^SigIgn:[[:space:]]*//p' "/proc/$1/status" 2> /dev/null); [ -n "$mask" ] && (( 0x$mask & 1 )); }
+check "… the launcher ignores SIGHUP" ignores_hup "$SUPERVISOR_PID"
+check "… the shell does not" eval '! ignores_hup "$stopped"'
 
 # ---- (2) A second plain launcher ----
 check "the supervisor holds the lock and wrote its pid" test "$(cat "$RUN/h2s-shell-launcher.lock")" = "$SUPERVISOR_PID"

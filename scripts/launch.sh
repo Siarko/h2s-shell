@@ -662,7 +662,7 @@ locked_restarts_record() {
 # can give the owner a prompt; or this script was told to stop (SIGUSR1: let the shell go,
 # as stop_shell does; SIGTERM/SIGINT: stop it too); or the compositor is gone (the session
 # ended, or crashed). SIGHUP (the terminal it was started from closed) is not a request to
-# stop: the shell runs on, supervised. Anything else — a crash Quickshell's own handler
+# stop: it is ignored, the shell runs on, supervised. Anything else — a crash Quickshell's own handler
 # gave up on (it restarts a crashed shell in the same process unless it crashed within 10 s
 # of starting, then it exits with 255), SIGKILL, the OOM killer — starts it again after a
 # pause: 1 s, doubling while it keeps dying within 30 s of starting. Died while the screen
@@ -697,7 +697,11 @@ supervise() {
     say "supervising the shell in $shell_dir (compositor socket $(compositor_socket)${compositor_identity:+, $compositor_identity})"
     trap 'stopping=1; say "told to let the shell go (SIGUSR1)"' USR1
     trap 'stopping=1; say "told to stop (SIGTERM/SIGINT): stopping the shell"; [ -n "$child" ] && kill -TERM "$child" 2> /dev/null' TERM INT
-    trap 'say "SIGHUP (the terminal it was started from closed?): the shell runs on, supervised"' HUP
+    # SIGHUP (the terminal it was started from closed) is ignored, not trapped: a trapped
+    # signal interrupts `wait`, and bash 5.3 loses the record of a child that exits at that
+    # moment ("pid N is not a child of this shell") — its status with it, taken for a crash.
+    # The shell gets it back as default (below)
+    trap '' HUP
     # Each child in a process group of its own: what it leaves behind can be found
     set -m
     while :; do
@@ -719,7 +723,9 @@ supervise() {
         # Not the lock's descriptor (a shell outliving this launcher would keep the next one
         # out), nor a terminal's input (a background job reading it is stopped)
         [ -z "$notice" ] || export H2S_SHELL_LOCK_NOTICE=$notice
-        qs --log-times -p "$shell_dir" "$@" < /dev/null {lock_fd}>&- &
+        # (SIGHUP as default for the shell, not ignored as here: unless it was ignored when
+        # this script started, as nohup does, which no shell can undo)
+        (trap - HUP; exec qs --log-times -p "$shell_dir" "$@") < /dev/null {lock_fd}>&- &
         child=$!
         unset H2S_SHELL_LOCK_NOTICE
         notice=""

@@ -189,9 +189,12 @@ start_row() {
     for layout in $(seq 1 "$layouts"); do
         at=$work/$1$layout
         up
-        signal KILL "$(shell_pid)"
+        # Until the signal is sent: while the stand-in execs its sleep, its environment
+        # cannot be read, and `signal` (which checks it is ours) sends nothing
+        wait_until 5 killed "$(shell_pid)"
     done
 }
+killed() { signal KILL "$1" || gone "$1"; }
 # end_row <name>: its supervisors and their shells, killed
 end_row() {
     local layout
@@ -262,14 +265,20 @@ is "… no other was started" test "$(shell_pid)" = "$stopped"
 is "… the supervisor did not spin meanwhile ($ticks of some $(getconf CLK_TCK) clock ticks)" test "$ticks" -le $(($(getconf CLK_TCK) / 5))
 is "… it said so, once" test "$(said_times 'is stopped: left alone')" = 1
 signal CONT "$stopped"
+# SIGHUP is ignored by the supervisor (a trap would interrupt its `wait`), not by the shell
+ignores_hup() { local mask; mask=$(sed -n 's/^SigIgn:[[:space:]]*//p' "/proc/$1/status" 2> /dev/null); [ -n "$mask" ] && (( 0x$mask & 1 )); }
+is "the supervisor ignores SIGHUP" ignores_hup "$launcher"
+is "… the shell it started does not" eval '! ignores_hup "$stopped"'
 signal HUP "$launcher"
-within 3 "SIGHUP to the supervisor: it says so" said "SIGHUP (the terminal it was started from closed?)"
-is "… and the shell runs on" test "$(state_of "$stopped")" = S -a "$(shell_pid)" = "$stopped"
+within 3 "SIGHUP to the supervisor: the shell runs on" test "$(state_of "$stopped")" = S
+is "… the same one" test "$(shell_pid)" = "$stopped"
+is "… and the supervisor too" test -e "/proc/$launcher"
 signal KILL "$stopped"
 within 5 "killed after it ran on: started again" started 2
 within 3 "… with its status known" said "the shell exited (status 137)"
 
-# ---- (3) SIGHUP that interrupts the wait just as the shell is killed: the shell's status counts
+# ---- (3) SIGHUP just as the shell is killed: the shell's status counts (bash loses the
+# record of a child that exits while a trapped signal interrupts `wait`)
 echo "== hangup as the shell dies"
 before=$(starts)
 echo hangup-and-die > "$at/mode"
