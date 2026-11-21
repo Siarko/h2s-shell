@@ -2419,3 +2419,12 @@ Moved out of the tracker as done; checked against the code and the sections abov
 - **Two flaky core tests fixed** — `AnchorsTest` (waits for the General page's layout, earlier)
   and `ToastDragTest` (waits for the toast to settle before reading its start; reproduced 6/6
   under load before, 0/6 after).
+- **Architecture clean-up A1–A6 (network)** — on `master` 2026-11-22. A1 VpnProvidersTest reads
+  `Notifier.recorded`; A2 `NetworkRules` split into `VpnWithNetworkRules`, `VpnProviderRules`,
+  `VpnLockdownRules` (pure move); A3 `VpnProviders` out of `VpnManager` (forwarders); A4 the
+  editor's save finishes in `NetworkProfiles.saveConnection` (link and kill switch written even
+  if the page closes; only the newest save of a profile writes them; plain Save off while a
+  "Save and reconnect" runs; a revert by "Keep these settings?" puts them back); A5
+  `NetworkProfileCard` without I/O; A6 `Bar.qml` through `Modules.initialProperties` (the same
+  owner check stays in WidgetSettingsPane.qml:228 and Popup.qml:636). Reviewed (an older save
+  overwriting a newer — fixed); `tests/run-all.sh` passed on both machines.
