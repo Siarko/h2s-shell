@@ -537,7 +537,33 @@ TestCase {
         _check("the stand-ins", state => assertEqual(state.staging, 0, "nothing left in staging after any of them"));
     }
 
+    // What Remove would delete, read without a job: the question's words
+    property var _preview: null
+    function _previewOf(description, id, directory, check) {
+        _then(description + ": preview asked", _idle, () => {
+            suite._preview = null;
+            installer.removalPreview(id, directory(), preview => suite._preview = preview);
+            assert(!installer.busy, description + ": no job for a preview");
+        });
+        _then(description + ": preview read", () => _preview !== null, () => check(_preview));
+    }
+
     function _removals() {
+        _previewOf("a hand-made link", "linked", () => temp + "/outside/linked", preview => {
+            assert(preview.ok, "preview of a link (" + preview.reason + ")");
+            assertEqual(preview.title + "|" + preview.lines[0], "Remove " + _status("linked").name + "?|Not installed by the shell.", "… its title, not installed by the shell");
+            assert(preview.lines[1].startsWith("Deletes only the link;") && preview.lines[1].endsWith("stays."), "… only the link (" + preview.lines[1] + ")");
+        });
+        _previewOf("a hand-placed folder", "handmade", () => _data() + "/modules/handmade", preview => {
+            assert(preview.ok && preview.lines[1].startsWith("Deletes the folder "), "preview of a folder: the folder deleted (" + preview.lines.join(" | ") + ")");
+        });
+        _previewOf("another directory", "handmade", () => temp + "/elsewhere", preview =>
+                   assert(!preview.ok && preview.reason === "The module changed", "preview: another directory than the module's refused"));
+        _previewOf("the chain", "beta", () => _status("beta").directory, preview => {
+            assert(preview.ok && preview.lines[0].startsWith("Deletes "), "preview of an installed module: its versions (" + preview.lines.join(" | ") + ")");
+            assertEqual(preview.orphans.map(each => each.id).join(","), "gamma", "… the dependency installed for it alone offered");
+            assert(preview.orphans[0].label.startsWith("Also remove Gamma (installed for "), "… with its label (" + preview.orphans[0].label + ")");
+        });
         _job("a hand-made link", () => installer.remove("linked", temp + "/outside/linked", {}), result => assert(result.ok, "a link placed by hand removed (" + result.message + ")"));
         _job("a hand-placed folder", () => installer.remove("handmade", _data() + "/modules/handmade", {}), result => assert(result.ok, "a folder placed by hand removed (" + result.message + ")"));
         _then("the link's target is read", _idle, () => _sh("cat \"$1/outside/linked/module.json\" > /dev/null && echo there", [temp]));

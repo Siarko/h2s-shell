@@ -1102,6 +1102,53 @@ Singleton {
                  buttons: [{ id: "disable", label: "Disable", kind: "warning" }], cancelLabel: "Cancel" };
     }
 
+    // The question before Remove (§4, "Remove"), from ModuleInstaller.removalPreview's answer:
+    // a danger modal with what is deleted ("Not installed by the shell." first and bold for
+    // what the user placed), who stops working or loses a feature, the unchecked "Also delete
+    // its data and settings" and one unchecked box per dependency installed for it alone
+    // (key "also:<id>"); "Remove" and "Keep". null when the preview refused (nothing is
+    // asked then: its reason is said instead)
+    function removeQuestion(preview) {
+        if (preview?.ok !== true)
+            return null;
+        const body = _list(preview.lines).map(line => String(line ?? ""))
+            .map(line => line === "Not installed by the shell." ? { text: line, strong: true } : line);
+        const checks = [{ key: "data", label: "Also delete its data and settings" }]
+            .concat(_list(preview.orphans).filter(each => typeof each?.id === "string" && each.id !== "")
+                    .map(each => ({ key: "also:" + each.id, label: String(each.label ?? each.id) })));
+        return { kind: "danger", title: String(preview.title ?? ""), body: body, checks: checks,
+                 buttons: [{ id: "remove", label: "Remove", kind: "delete" }], cancelLabel: "Keep" };
+    }
+
+    // What a Remove question's answer asks of the installer: { withData, alsoRemove: [ids] }
+    // from the checkboxes' `values`
+    function removeOptions(values) {
+        const given = ModuleRules.isObject(values) ? values : {};
+        return { withData: given.data === true,
+                 alsoRemove: Object.keys(given).filter(key => key.startsWith("also:") && given[key] === true).map(key => key.slice(5)) };
+    }
+
+    // The pill an update stands with (§4's table), beside any other: "Approval required" while
+    // the queue waits for the user's consent (`approval`: the updater's approvals[id]), "Update
+    // not finished" for a version the user refused (`check`: its checks[id]); null else
+    function updatePillOf(check, approval) {
+        if (approval !== undefined && approval !== null)
+            return { label: "Approval required", kind: "warning" };
+        if (check?.refused === true)
+            return { label: "Update not finished", kind: "warning" };
+        return null;
+    }
+
+    // A card's line about checking for updates: { text, tone } — "Checking…" (muted) while
+    // this module is checked, else checkResultText's words, the failure in the error colour
+    // and a version found in the accent; "" when never checked
+    function checkLineOf(check, checkingNow) {
+        if (checkingNow === true)
+            return { text: "Checking…", tone: "textMuted" };
+        const text = checkResultText(check);
+        return { text: text, tone: check?.outcome === "failed" ? "error" : check?.outcome === "available" ? "accent" : "textMuted" };
+    }
+
     // ---- A check's result (§6.3) ----
 
     // A moment as the local "14:32"

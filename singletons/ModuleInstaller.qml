@@ -196,6 +196,35 @@ Scope {
         return "";
     }
 
+    // What Remove would delete, for the question asked before it (Settings → Modules): read
+    // now, without a job, nothing changed. `id` and `directory` as remove()'s. → done({ ok,
+    // reason, id, directory, title, lines (without the data line), orphans: [{ id, label }] —
+    // the dependencies installed for it that nothing else uses, offered unchecked })
+    function removalPreview(id, directory, done) {
+        const refused = reason => Qt.callLater(() => done({ ok: false, reason: reason, id: String(id ?? ""), directory: String(directory ?? ""),
+                                                            title: "", lines: [], orphans: [] }));
+        if (!host || places.user === "")
+            return refused("The data home is not known");
+        const status = host.status(id);
+        if (!status || ModuleFileRules.canonicalPath(String(directory ?? "")) !== status.directory)
+            return refused("The module changed");
+        _sourceCheck((sources, records) => {
+            const now = host.status(id);
+            if (!now || now.directory !== status.directory) {
+                done({ ok: false, reason: "The module changed", id: id, directory: directory, title: "", lines: [], orphans: [] });
+                return;
+            }
+            if (!sources.complete) {
+                done({ ok: false, reason: "your modules folder could not be read", id: id, directory: directory, title: "", lines: [], orphans: [] });
+                return;
+            }
+            const removal = _removalFor(sources, records, id, now, false, []);
+            done({ ok: removal.plan.ok, reason: removal.plan.reason, id: id, directory: now.directory, title: removal.plan.title,
+                   lines: removal.plan.lines,
+                   orphans: removal.orphans.map(each => ({ id: each.id, label: ModuleInstallRules.alsoRemoveLabel(each.name, now.name || id) })) });
+        });
+    }
+
     // Make another kept version of module `id` the active one (`dir`: its directory name, as
     // the record lists it, or its path), its configuration backed up first. `options`:
     // { reason: "update" (the updater's) | "switch" (the default) } — the backup's.
@@ -1133,29 +1162,42 @@ Scope {
 
     // ---- Remove ----
 
-    function _removeWith(job, id, status) {
+    // What removing module `id` (its status) would do, from the source check's `sources` and
+    // `records`: { plan (ModuleInstallRules.removalPlan's), dependents, offered (the orphans'
+    // ids), orphans (ModuleDependencyRules.orphans'), nameOf }
+    function _removalFor(sources, records, id, status, withData, chosen) {
         const directory = status.directory;
-        const found = ModuleInstallRules.sourceOf(directory, ModuleInstallRules.linkFor(directory, job.sources.entries), job.sources.roots, job.records);
+        const found = ModuleInstallRules.sourceOf(directory, ModuleInstallRules.linkFor(directory, sources.entries), sources.roots, records);
         const known = host.statuses.filter(each => each.state !== "duplicate" && each.shadowedBy === "").map(each => ({
             id: each.id, name: each.name, uses: host.manifestOf(each.directory)?.uses ?? null, state: each.state,
             source: each.source, installedFor: each.installedFor, directory: each.directory, version: each.version
         }));
         const dependents = ModuleDependencyRules.dependents(id, known);
         const nameOf = other => known.find(each => each.id === other)?.name || other;
-        const offered = ModuleDependencyRules.orphans(id, known).map(each => each.id);
-        const alsoRemove = job.alsoRemove.filter(other => offered.includes(other)).map(other => {
+        const orphans = ModuleDependencyRules.orphans(id, known);
+        const offered = orphans.map(each => each.id);
+        const alsoRemove = chosen.filter(other => offered.includes(other)).map(other => {
             const module = known.find(each => each.id === other);
             return {
-                found: ModuleInstallRules.sourceOf(module.directory, ModuleInstallRules.linkFor(module.directory, job.sources.entries), job.sources.roots, job.records),
+                found: ModuleInstallRules.sourceOf(module.directory, ModuleInstallRules.linkFor(module.directory, sources.entries), sources.roots, records),
                 module: { id: other, name: module.name, version: module.version },
-                record: job.records.ok && ModuleRules.has(job.records.modules, other) ? job.records.modules[other] : null
+                record: records.ok && ModuleRules.has(records.modules, other) ? records.modules[other] : null
             };
         });
         const plan = ModuleInstallRules.removalPlan(found, { id: id, name: status.name, version: status.version },
-                                                    job.records.ok && ModuleRules.has(job.records.modules, id) ? job.records.modules[id] : null, {
-            withData: job.withData, dataHome: dataHome, configHome: configHome, home: home,
+                                                    records.ok && ModuleRules.has(records.modules, id) ? records.modules[id] : null, {
+            withData: withData, dataHome: dataHome, configHome: configHome, home: home,
             dependents: { hard: dependents.hard.map(nameOf), soft: dependents.soft.map(nameOf) }, alsoRemove: alsoRemove
         });
+        return { plan: plan, dependents: dependents, offered: offered, orphans: orphans, nameOf: nameOf };
+    }
+
+    function _removeWith(job, id, status) {
+        const removal = _removalFor(job.sources, job.records, id, status, job.withData, job.alsoRemove);
+        const plan = removal.plan;
+        const dependents = removal.dependents;
+        const nameOf = removal.nameOf;
+        const offered = removal.offered;
         if (!plan.ok) {
             _finish(job, false, plan.reason);
             return;

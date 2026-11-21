@@ -69,6 +69,8 @@ Scope {
     property bool checking: false
     property int checkingIndex: 0
     property int checkingTotal: 0
+    // The module being checked now ("" none, or before the list is read)
+    property string checkingId: ""
     // The queue (ModuleUpdateRules.queueStep's) and its title line
     property var queue: ModuleUpdateRules.emptyQueue()
     readonly property var queueSummary: ModuleUpdateRules.queueSummary(queue)
@@ -133,6 +135,7 @@ Scope {
         checking = true;
         checkingIndex = 0;
         checkingTotal = 0;
+        checkingId = "";
         installer.readInstalled(read => {
             if (generation !== _generation) {
                 done?.([]);
@@ -161,10 +164,12 @@ Scope {
                 }
                 if (index >= ids.length) {
                     checking = false;
+                    checkingId = "";
                     done?.(results);
                     return;
                 }
                 checkingIndex = index + 1;
+                checkingId = ids[index];
                 _checkOne(ids[index], read.records.modules[ids[index]], generation, automatically, outcome => {
                     results.push(outcome);
                     next(index + 1);
@@ -336,6 +341,7 @@ Scope {
     function cancel() {
         _generation++;
         checking = false;
+        checkingId = "";
         if (_current && (_current.action === "download" || _current.action === "fetch"))
             installer.cancelDownload(_current.job);
         if (_current && _current.action !== "switch" && _current.action !== "rememberRefusal")

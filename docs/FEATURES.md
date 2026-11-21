@@ -580,7 +580,13 @@ copies it replaces), the API it asks for, whether it runs administrator actions,
 it needs, can use and is used by, its programs, its errors and warnings as written, and its
 data folder. "Enable" asks for the confirmation first when the module is not part of
 h2s-shell; "Disable" asks on the button, or in a dialog listing the running modules that need
-it, which are disabled with it. Modules' own settings pages follow under the Modules group.
+it, which are disabled with it. "Remove", offered for what your modules folder holds, asks
+first what it deletes (only the link of a module you linked; the folder of one placed by
+hand), names the modules that stop working, and offers to delete the module's data and
+settings and the modules installed only for it — all unchecked. "Check all" and a card's
+"Check for updates" look for newer versions of the modules installed from a repository; each
+card shows the result under its name, and a downloaded update an "Update to …" button.
+Modules' own settings pages follow under the Modules group.
 
 ## External dependencies
 

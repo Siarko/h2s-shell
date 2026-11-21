@@ -61,6 +61,45 @@ TestCase {
         function iconFailed(id, why) {}
     }
 
+    // The stand-in installer: Remove's preview and remove, recorded
+    property var _installer: QtObject {
+        signal finished(var result)
+        property int jobNumber: 0
+        property var previews: ({})
+        property var calls: []
+        function removalPreview(id, directory, done) {
+            calls = calls.concat(["preview " + id + " " + directory]);
+            const preview = previews[id] ?? { ok: false, reason: "not in your modules folder" };
+            Qt.callLater(() => done(Object.assign({ id: id, directory: directory, title: "", lines: [], orphans: [] }, preview)));
+        }
+        function remove(id, directory, options) {
+            calls = calls.concat(["remove " + id + " " + directory + " " + JSON.stringify(options)]);
+            jobNumber++;
+            return "";
+        }
+    }
+
+    // The stand-in updater: its state set by the suite, its calls recorded
+    property var _updater: QtObject {
+        property var checks: ({})
+        property bool checking: false
+        property string checkingId: ""
+        property int checkingIndex: 0
+        property int checkingTotal: 0
+        property var approvals: ({})
+        property var queue: ({ rows: [] })
+        property bool automatic: false
+        property var calls: []
+        function check(id) {
+            calls = calls.concat(["check " + id]);
+            return "";
+        }
+        function update(id) {
+            calls = calls.concat(["update " + id]);
+            return "";
+        }
+    }
+
     property var _window: FloatingWindow {
         title: "h2s-tests modules page"
         visible: false
@@ -82,6 +121,8 @@ TestCase {
                 active: false
                 sourceComponent: ModulesSettings {
                     host: suite._host
+                    installer: suite._installer
+                    updater: suite._updater
                     modalHost: modal
                 }
             }
@@ -122,6 +163,13 @@ TestCase {
         _host.calls = [];
         _host.confirmRefusal = "";
         _host.refuseOff = [];
+        _installer.previews = {};
+        _installer.calls = [];
+        _updater.checks = {};
+        _updater.checking = false;
+        _updater.checkingId = "";
+        _updater.approvals = {};
+        _updater.calls = [];
         _host.statuses = [
             _status({ id: "tailscale", name: "Tailscale", version: "0.6.0", directory: "/mods/tailscale", source: "repository",
                       sourceLabel: "From github.com/x/h2s-tailscale @ v0.6.0", deprecations: ["Uses Api.module()"] }),
@@ -420,6 +468,129 @@ TestCase {
         page.openId = "dep";
         assert(_until(() => _card("dep").open));
         assertEqual(_all(_card("dep"), child => child.label === "Installed for" && child.visible)[0]?.value, "Two lines", "… in Installed for too");
+        page.openId = "";
+
+        _remove();
+        _checks();
+    }
+
+    function _modalChecked(key) {
+        return _named(modal.modal, "modalCheck:" + key)[0] ?? null;
+    }
+
+    // --- Remove: through the danger modal, keyed to the module ---
+    function _remove() {
+        _fixture();
+        assert(_until(() => _cards().length === 7 && _in(_card("player"), "removeButton") !== null), "the list again");
+        assertEqual(["dictation", "evil", "player", "tailscale", "exitmap"].map(id => _in(_card(id), "removeButton") !== null).join(","),
+                    "false,true,true,true,true", "Remove: for what the modules folder holds, never for a built-in module");
+        _installer.previews = { player: { ok: true, title: "Remove Player?",
+                                          lines: ["Not installed by the shell.", "Deletes the folder ~/.local/share/h2s-shell/modules/player."] } };
+        const player = _card("player");
+        _show(player);
+        _click(_in(player, "removeButton"));
+        assert(_until(_modalReady), "a click on Remove asks in the modal");
+        assertEqual(_installer.calls[0], "preview player /mods/player", "… what it deletes read first, for the module asked about");
+        assertEqual(_named(modal.modal, "modalTitle")[0].text, "Remove Player?", "… its title");
+        assertEqual(_named(modal.modal, "modalLine").map(line => line.text + (line.font.bold ? "*" : "")).join("|"),
+                    "Not installed by the shell.*|Deletes the folder ~/.local/share/h2s-shell/modules/player.", "… not installed by the shell, bold; the folder deleted");
+        assert(Qt.colorEqual(modal.modal.panel.children[0].border.color, Theme.error), "… a danger question");
+        assert(_modalChecked("data") !== null && !_modalChecked("data").checked, "… \"Also delete its data and settings\", unchecked");
+        _click(_modalButton("Keep"));
+        assert(_until(() => !modal.open), "Keep closes it");
+        assertEqual(_installer.calls.filter(call => call.startsWith("remove")).length, 0, "… nothing removed");
+
+        _click(_in(player, "removeButton"));
+        assert(_until(_modalReady), "asked again");
+        assert(!_modalChecked("data").checked, "… the box unchecked again");
+        _click(_modalChecked("data"));
+        assert(_until(() => _modalChecked("data").checked), "… ticked");
+        _click(_modalButton("Remove"));
+        assert(_until(() => _installer.calls.some(call => call.startsWith("remove"))), "Remove answers it");
+        assertEqual(_installer.calls.filter(call => call.startsWith("remove")).join(""), "remove player /mods/player {\"withData\":true,\"alsoRemove\":[]}",
+                    "… the module asked about, with its data");
+        assert(!_in(player, "removeButton").available, "… no second Remove while it runs");
+        _installer.finished({ ok: false, job: _installer.jobNumber, message: "the folder could not be deleted" });
+        assert(_until(() => _card("player").notice === "Could not be removed: the folder could not be deleted"), "a failed remove: its reason on the card");
+
+        // Others need it, a dependency installed for it alone
+        _installer.calls = [];
+        _installer.previews = { tailscale: { ok: true, title: "Remove Tailscale?", lines: ["Deletes Tailscale 0.6.0.", "These stop working: Exit map."],
+                                             orphans: [{ id: "clip", label: "Also remove Clipboard (installed for Tailscale, nothing else uses it)" }] } };
+        _show(_card("tailscale"));
+        _click(_in(_card("tailscale"), "removeButton"));
+        assert(_until(_modalReady), "Remove Tailscale asks");
+        assertEqual(_modalLines().join("|"), "Deletes Tailscale 0.6.0.|These stop working: Exit map.", "… who stops working");
+        assert(_modalChecked("also:clip") !== null && !_modalChecked("also:clip").checked, "… the dependency left alone offered, unchecked");
+        _click(_modalChecked("also:clip"));
+        assert(_until(() => _modalChecked("also:clip").checked));
+        _click(_modalButton("Remove"));
+        assert(_until(() => _installer.calls.some(call => call.startsWith("remove"))), "… answered");
+        assertEqual(_installer.calls.filter(call => call.startsWith("remove")).join(""),
+                    "remove tailscale /mods/tailscale {\"withData\":false,\"alsoRemove\":[\"clip\"]}", "… with the dependency ticked, without the data");
+        _installer.finished({ ok: true, job: _installer.jobNumber, message: "removed" });
+
+        // A preview that refuses asks nothing
+        _installer.previews = {};
+        _show(_card("evil"));
+        _click(_in(_card("evil"), "removeButton"));
+        assert(_until(() => _card("evil").notice === "Cannot be removed: not in your modules folder"), "a refused preview: its reason, no question");
+        assert(!modal.open, "… no modal");
+    }
+
+    // --- Checking for updates ---
+    function _checks() {
+        _fixture();
+        assert(_until(() => _cards().length === 7));
+        const checkAll = _all(page, child => child.objectName === "checkAll")[0];
+        _show(_card("evil"));
+        _all(page, child => child.toString().startsWith("QQuickFlickable"))[0].contentY = 0;
+        driver.wait(20);
+        assertEqual(checkAll.label + " " + checkAll.available, "Check all true", "\"Check all\" at the top");
+        _click(checkAll);
+        assertEqual(_updater.calls.join(","), "check ", "… checks every module");
+        _updater.checking = true;
+        _updater.checkingTotal = 3;
+        _updater.checkingIndex = 2;
+        _updater.checkingId = "weather";
+        const line = _all(page, child => child.objectName === "checkAllLine")[0];
+        assert(_until(() => line.visible && line.text === "Checking 2 of 3…"), "… says how far it is");
+        assertEqual(checkAll.label + " " + checkAll.available, "Checking… false", "… and takes no second click");
+        assertEqual(_card("weather").detail + "|" + _card("tailscale").detail, "Checking…|", "the card being checked says so");
+
+        const at = new Date(2026, 10, 21, 14, 32).getTime();
+        _updater.checks = { weather: { outcome: "available", version: "1.3.0", downloading: false, downloadedDir: "1.3.0-abcdef1", checkedAt: at },
+                            tailscale: { outcome: "failed", reason: "github.com did not answer", checkedAt: at } };
+        _updater.checking = false;
+        _updater.checkingId = "";
+        assert(_until(() => line.text === "1 update · 1 failed"), "done: its summary");
+        assertEqual(_card("weather").detail, "1.3.0 available", "a card's result under its name");
+        assert(Qt.colorEqual(_card("weather").detailColor, Theme.accent), "… a version found in the accent");
+        assertEqual(_card("tailscale").detail, "Check failed: github.com did not answer", "… a failed check, why");
+        assert(Qt.colorEqual(_card("tailscale").detailColor, Theme.error), "… in the error colour");
+
+        const update = _in(_card("weather"), "updateButton");
+        assertEqual(update?.label, "Update to 1.3.0", "a downloaded update: its button");
+        _show(_card("weather"));
+        _click(update);
+        assertEqual(_updater.calls[_updater.calls.length - 1], "update weather", "… queues it");
+        _updater.checks = Object.assign({}, _updater.checks, { weather: Object.assign({}, _updater.checks.weather, { downloading: true, downloadedDir: "" }) });
+        assert(_until(() => _in(_card("weather"), "updateButton") === null), "still downloading: no button");
+        _updater.checks = Object.assign({}, _updater.checks, { weather: Object.assign({}, _updater.checks.weather, { downloading: false, downloadedDir: "1.3.0-abcdef1" }) });
+        _updater.approvals = { weather: { dir: "1.3.0-abcdef1", reasons: [] } };
+        assert(_until(() => _in(_card("weather"), "updatePill")?.label === "Approval required"), "waiting for consent: its pill");
+        assertEqual(_in(_card("weather"), "updateButton"), null, "… and no button");
+
+        page.openId = "tailscale";
+        assert(_until(() => _in(_card("tailscale"), "checkButton") !== null), "an opened card from a repository: Check for updates");
+        const checkOne = _in(_card("tailscale"), "checkButton");
+        assertEqual(checkOne.label, "Check for updates", "… its label");
+        _show(checkOne);
+        _click(checkOne);
+        assertEqual(_updater.calls[_updater.calls.length - 1], "check tailscale", "… checks that module");
+        page.openId = "exitmap";
+        assert(_until(() => _card("exitmap").open));
+        assertEqual(_in(_card("exitmap"), "checkButton"), null, "a copied folder: no check");
         page.openId = "";
     }
 }

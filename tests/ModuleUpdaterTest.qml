@@ -272,6 +272,16 @@ TestCase {
             _clock.start();
     }
 
+    // The modules a check named as being checked, in order
+    property var _checkingIds: []
+    property Connections _checkingWatch: Connections {
+        target: suite.updater
+        function onCheckingIdChanged() {
+            if (suite.updater.checkingId !== "")
+                suite._checkingIds = suite._checkingIds.concat([suite.updater.checkingId]);
+        }
+    }
+
     property Connections _afterDone: Connections {
         target: suite.after
         function onDoneChanged() {
@@ -311,12 +321,16 @@ TestCase {
     }
 
     function _checkByHand() {
-        _then("check Weather: nothing runs", _idle, () => assertEqual(updater.check("wx"), "", "check Weather: started"));
+        _then("check Weather: nothing runs", _idle, () => {
+            suite._checkingIds = [];
+            assertEqual(updater.check("wx"), "", "check Weather: started");
+        });
         _then("check Weather: downloaded", () => _idle() && updater.checks.wx?.downloading === false && updater.changelogs.wx !== undefined, () => {
             const found = updater.checks.wx;
             assertEqual(found.outcome + " " + found.version + " " + found.ref, "available 1.1.0 v1.1.0", "a check finds the newer tag");
             assert(/^1\.1\.0-[0-9a-f]{7}$/.test(found.downloadedDir), "… and downloads it in the background (" + found.downloadedDir + ")");
             assertEqual(ModuleInstallRules.checkResultText(found), "1.1.0 available", "… the card's line");
+            assertEqual(suite._checkingIds.join(",") + "|" + updater.checkingId, "wx|", "… checkingId named it while it ran, \"\" after");
             const log = updater.changelogs.wx;
             assert(log.text.includes("## 1.1.0") && !log.text.includes("## 1.0.0"), "… its changelog since the version running: " + JSON.stringify(log.text));
             assertEqual(log.from + " → " + log.to, "1.0.0 → 1.1.0", "… with the versions");

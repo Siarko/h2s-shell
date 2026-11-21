@@ -17,8 +17,14 @@ import qs.singletons
 // decision. "Enable" on a module that is not part of h2s-shell asks the confirmation in the
 // Settings modal; "Disable" asks on the button ("Disable?"), or in the modal when running
 // modules need it (they are disabled with it). Every question carries the module's id and
-// directory and acts only while they still hold. State and I/O are the host's
-// (singletons/ModuleHost.qml): this page reads its statuses and calls setEnabled and confirm.
+// directory and acts only while they still hold. "Remove" (for what the user's modules folder
+// holds) asks in a danger modal what the installer's removalPreview says it deletes, with the
+// data box and the dependencies left alone unchecked, then calls the installer's remove.
+// "Check all" and a card's "Check for updates" run the updater's check — "Checking 2 of 3…",
+// "Checking…" on the card being checked, then its result under the name; "Update to x" queues
+// the update the check downloaded (updater.update). State and I/O are the host's, the
+// installer's and the updater's (singletons/ModuleHost.qml, ModuleInstaller.qml,
+// ModuleUpdater.qml): this page reads them and calls them.
 Item {
     id: root
 
@@ -27,6 +33,11 @@ Item {
     // The module host shown (a suite gives a stand-in): statuses, icons, apiVersion,
     // dataDirectories, manifestOf(directory), status(id), setEnabled(id, on), confirm(id, directory)
     property var host: Modules.host
+    // The installer (removalPreview(id, directory, done), remove(id, directory, options),
+    // jobNumber, finished(result)) and the updater (check(id), update(id), checks, checking,
+    // checkingId, checkingIndex, checkingTotal, approvals, queue, automatic)
+    property var installer: Modules.installer
+    property var updater: Modules.updater
     // Where a question that needs more than a button's word is asked (SettingsModalHost)
     property var modalHost: null
 
@@ -36,6 +47,29 @@ Item {
     property var problems: ({})
     // The subject of the question open in the modal, if this page asked it
     property var _asked: null
+    // The remove this page started: { job, id } — its outcome is said on the card
+    property var _removing: null
+    // Whether "Check all" ran: its summary stays under the title until the next
+    property bool _checkedAll: false
+
+    // The updater's check results of the modules installed from a repository, for "Check
+    // all"'s summary
+    readonly property var _checkResults: _counted.filter(status => status.source === "repository")
+        .map(status => root.updater?.checks?.[status.id]).filter(check => check !== undefined && check !== null)
+    // Ids with a row of the update queue that has not ended (no second "Update" for them)
+    readonly property var _queued: (updater?.queue?.rows ?? []).filter(row => !["done", "failed", "notFinished"].includes(row.phase)).map(row => row.id)
+
+    Connections {
+        target: root.installer
+        function onFinished(result) {
+            if (!root._removing || result?.job !== root._removing.job)
+                return;
+            const id = root._removing.id;
+            root._removing = null;
+            if (result.ok !== true)
+                root._setProblem(id, "Could not be removed: " + String(result.message ?? ""));
+        }
+    }
 
     readonly property var statuses: host?.statuses ?? []
     readonly property var _counted: statuses.filter(status => status?.state !== "duplicate")
@@ -102,7 +136,49 @@ Item {
                 _askDisable(action.subject, status);
             else
                 _disable(action.subject, []);
+        } else if (action.effect === "remove") {
+            _askRemove(action.subject);
+        } else if (action.effect === "update") {
+            const refused = updater?.update(action.subject.id) ?? "No updater";
+            if (refused !== "")
+                _setProblem(action.subject.id, refused);
+        } else if (action.effect === "check") {
+            _check(action.subject.id);
         }
+    }
+
+    // `id` "" — every module installed from a repository
+    function _check(id) {
+        const refused = updater?.check(id) ?? "No updater";
+        if (id === "")
+            _checkedAll = refused === "";
+        if (refused !== "" && id !== "")
+            _setProblem(id, refused);
+    }
+
+    // Remove: what it deletes is read first (the installer's preview), then asked
+    function _askRemove(subject) {
+        if (!installer || !modalHost)
+            return;
+        installer.removalPreview(subject.id, subject.directory, preview => {
+            if (!root._current(subject))
+                return;
+            const question = ModuleInstallRules.removeQuestion(preview);
+            if (!question) {
+                root._setProblem(subject.id, "Cannot be removed: " + String(preview?.reason ?? ""));
+                return;
+            }
+            root._ask(Object.assign(question, { subject: { id: subject.id, directory: subject.directory } }), answer => {
+                root._asked = null;
+                if (answer.cancelled || answer.button !== "remove" || !root._current(answer.subject))
+                    return;
+                const refused = root.installer.remove(answer.subject.id, answer.subject.directory, ModuleInstallRules.removeOptions(answer.values));
+                if (refused !== "")
+                    root._setProblem(answer.subject.id, refused);
+                else
+                    root._removing = { job: root.installer.jobNumber, id: answer.subject.id };
+            });
+        });
     }
 
     function _enable(subject) {
@@ -173,6 +249,27 @@ Item {
             spacing: 6
             Layout.fillWidth: true
 
+            buttons: [
+                Text {
+                    objectName: "checkAllLine"
+                    visible: text !== ""
+                    text: root.updater?.checking && root.updater.checkingTotal > 0
+                        ? ModuleInstallRules.checkingText(root.updater.checkingIndex, root.updater.checkingTotal)
+                        : root._checkedAll ? ModuleInstallRules.checkSummaryText(root._checkResults) : ""
+                    textFormat: Text.PlainText
+                    font.family: Theme.fontFamily
+                    font.pixelSize: Theme.fontSizeSmall
+                    color: Theme.textMuted
+                },
+                SmallButton {
+                    objectName: "checkAll"
+                    visible: !(root.host?.safeMode ?? false)
+                    label: root.updater?.checking ? "Checking…" : "Check all"
+                    available: root.updater !== null && !root.updater.checking
+                    onClicked: root._check("")
+                }
+            ]
+
             Text {
                 visible: _cards.count === 0
                 Layout.fillWidth: true
@@ -194,10 +291,24 @@ Item {
                     readonly property var dependencies: ModuleDependencyRules.cardDependencies(modelData, root.dependencyModules)
                     readonly property var disabling: ModuleDependencyRules.disableList(modelData, root.dependencyModules)
                     readonly property var pill: ModuleInstallRules.pillOf(status, { shellApi: root.host?.apiVersion ?? "", missingModule: dependencies.missing })
-                    readonly property var actions: ModuleInstallRules.actionsFor(status, { source: status.source ?? "" }, {
+                    readonly property var check: root.updater?.checks?.[modelData] ?? null
+                    readonly property var approval: root.updater?.approvals?.[modelData] ?? null
+                    readonly property var updatePill: ModuleInstallRules.updatePillOf(check, approval)
+                    readonly property var checkLine: ModuleInstallRules.checkLineOf(check, root.updater?.checking === true && root.updater.checkingId === modelData)
+                    // `entry`: the status's directory stands for its place in the modules folder
+                    // here — only whether Remove is offered is decided from it; the installer
+                    // decides what is deleted from what it reads on disk
+                    readonly property var actions: ModuleInstallRules.actionsFor(status, { source: status.source ?? "", entry: status.directory ?? "" }, {
                         runningDependents: disabling.disabled.concat(disabling.unknown).map(id => root.nameOf(id)),
-                        needsConfirmation: (status.confirmation ?? []).length > 0
+                        needsConfirmation: (status.confirmation ?? []).length > 0,
+                        // Downloaded and not queued or waiting for approval: "Update to x"
+                        update: check?.outcome === "available" && check.downloading !== true && (check.downloadedDir ?? "") !== ""
+                                && approval === null && !root._queued.includes(modelData) ? { version: check.version, downloaded: true } : null,
+                        autoUpdate: root.updater?.automatic === true
                     })
+                    readonly property var updateAction: actions.row.find(action => action.effect === "update") ?? null
+                    readonly property var removeAction: actions.row.find(action => action.effect === "remove") ?? null
+                    readonly property var checkAction: actions.opened.find(action => action.effect === "check") ?? null
                     // The main button: Enable or Disable (the held-for-approval's Enable asks in
                     // the consent box, which comes with updates)
                     readonly property var main: actions.row.find(action => action.effect === "enable" || action.effect === "disable") ?? null
@@ -214,6 +325,8 @@ Item {
                     Layout.fillWidth: true
                     title: root.nameOf(modelData)
                     subtitle: ModuleInstallRules.cardSubtitle(status)
+                    detail: checkLine.text
+                    detailColor: Theme[checkLine.tone]
                     titleColor: on ? Theme.accent : Theme.textMuted
                     titleBold: on
                     open: root.openId === modelData
@@ -287,6 +400,20 @@ Item {
                             label: card.pill?.label ?? ""
                             kind: card.pill?.kind ?? "muted"
                         },
+                        StatusPill {
+                            objectName: "updatePill"
+                            visible: card.updatePill !== null
+                            expandable: false
+                            label: card.updatePill?.label ?? ""
+                            kind: card.updatePill?.kind ?? "muted"
+                        },
+                        SmallButton {
+                            objectName: "updateButton"
+                            visible: card.updateAction !== null
+                            label: card.updateAction?.label ?? ""
+                            kind: "saveChange"
+                            onClicked: root.act(card.updateAction, card.status)
+                        },
                         SmallButton {
                             objectName: "mainButton"
                             visible: card.main !== null && card.main.asks !== "button" && card.main.asks !== "approval"
@@ -305,6 +432,14 @@ Item {
                             onConfirmed: root.act(card.main, card.status)
                         }
                     ]
+                    lastButtons: SmallButton {
+                        objectName: "removeButton"
+                        visible: card.removeAction !== null
+                        label: card.removeAction?.label ?? ""
+                        kind: "delete"
+                        available: root._removing === null
+                        onClicked: root.act(card.removeAction, card.status)
+                    }
 
                     // ---- Opened ----
 
@@ -400,6 +535,20 @@ Item {
                     DetailRow {
                         label: "Data"
                         value: root.host?.dataDirectories?.[card.modelData] ?? ""
+                    }
+
+                    // The opened card's buttons
+                    Flow {
+                        visible: card.checkAction !== null
+                        Layout.fillWidth: true
+                        Layout.topMargin: 4
+                        spacing: 6
+                        SmallButton {
+                            objectName: "checkButton"
+                            label: root.updater?.checking === true && root.updater.checkingId === card.modelData ? "Checking…" : (card.checkAction?.label ?? "")
+                            available: root.updater !== null && !root.updater.checking
+                            onClicked: root.act(card.checkAction, card.status)
+                        }
                     }
                 }
             }

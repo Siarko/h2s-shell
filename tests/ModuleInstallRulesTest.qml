@@ -707,6 +707,31 @@ TestCase {
                     "disable: the modules disabled with it");
         assertEqual(disable.buttons.map(button => button.id + "/" + button.label + "/" + button.kind).join(","), "disable/Disable/warning", "… Disable (warning)");
         assertEqual(rules.disableQuestion("A", [], ["Mystery"]).body.join("|"), "These may need it and stay on: Mystery", "… unreadable uses: may need it");
+
+        const removal = rules.removeQuestion({ ok: true, title: "Remove Player?", lines: ["Not installed by the shell.", "Deletes the folder ~/x.", "These stop working: Exit map."],
+                                               orphans: [{ id: "clip", label: "Also remove Clipboard (installed for Player, nothing else uses it)" }, { id: "" }] });
+        assertEqual(removal.kind + "|" + removal.title, "danger|Remove Player?", "remove: a danger question, its title");
+        assertEqual(JSON.stringify(removal.body), JSON.stringify([{ text: "Not installed by the shell.", strong: true }, "Deletes the folder ~/x.", "These stop working: Exit map."]),
+                    "… what is deleted, \"Not installed by the shell.\" bold, who stops working");
+        assertEqual(removal.checks.map(check => check.key + "=" + check.label).join("|"),
+                    "data=Also delete its data and settings|also:clip=Also remove Clipboard (installed for Player, nothing else uses it)", "… the data box and one per dependency left alone");
+        assertEqual(removal.buttons.map(button => button.id + "/" + button.label + "/" + button.kind).join(",") + "|" + removal.cancelLabel, "remove/Remove/delete|Keep", "… Remove and Keep");
+        assertEqual(rules.removeQuestion({ ok: false, reason: "x" }), null, "… a refused preview asks nothing");
+        assertEqual(JSON.stringify(rules.removeOptions({ data: true, "also:clip": true, "also:x": false })), JSON.stringify({ withData: true, alsoRemove: ["clip"] }),
+                    "remove options: the boxes' states");
+        assertEqual(JSON.stringify(rules.removeOptions(null)), JSON.stringify({ withData: false, alsoRemove: [] }), "… none: nothing more");
+
+        assertEqual(JSON.stringify(rules.updatePillOf({ refused: true }, { reasons: [] })), JSON.stringify({ label: "Approval required", kind: "warning" }),
+                    "update pill: waiting for consent");
+        assertEqual(rules.updatePillOf({ refused: true }, undefined)?.label + "," + rules.updatePillOf({ outcome: "available" }, null), "Update not finished,null",
+                    "… a refused version; none else");
+        const at = new Date(2026, 10, 21, 14, 32).getTime();
+        assertEqual(JSON.stringify(rules.checkLineOf({ outcome: "available", version: "1.3.0" }, true)), JSON.stringify({ text: "Checking…", tone: "textMuted" }),
+                    "check line: checking now");
+        assertEqual(["current", "available", "failed"].map(outcome => { const line = rules.checkLineOf({ outcome: outcome, version: "1.3.0", checkedAt: at, reason: "no answer" }, false);
+                                                                         return line.text + "/" + line.tone; }).join("|"),
+                    "Up to date · checked 14:32/textMuted|1.3.0 available/accent|Check failed: no answer/error", "… each outcome in its colour");
+        assertEqual(rules.checkLineOf(undefined, false).text, "", "… never checked: none");
     }
 
     function _checks() {

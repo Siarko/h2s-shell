@@ -64,6 +64,9 @@ AnchorBlock {
 
     property string title: ""
     property string subtitle: ""
+    // A second line under the name's (a check's result), in `detailColor`; none when empty
+    property string detail: ""
+    property color detailColor: Theme.textMuted
     // In use (connected): the name bold, its line and the border in the accent's colours
     property bool active: false
     property bool open: false
@@ -327,6 +330,17 @@ AnchorBlock {
                                 font.family: Theme.fontFamily
                                 font.pixelSize: Theme.fontSizeSmall
                                 color: root.active ? Theme.success : Theme.textMuted
+                            }
+                            Text {
+                                objectName: "cardDetail"
+                                visible: root.detail !== ""
+                                Layout.fillWidth: true
+                                elide: Text.ElideRight
+                                text: root.detail
+                                textFormat: Text.PlainText
+                                font.family: Theme.fontFamily
+                                font.pixelSize: Theme.fontSizeSmall
+                                color: root.detailColor
                             }
                         }
 

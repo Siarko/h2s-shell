@@ -463,6 +463,14 @@ The interface modules are written against (`qs.api`), versioned on its own
   its data folder. "Enable" asks first for a module that is not part of h2s-shell; "Disable"
   asks on the button, or in a dialog listing the modules that need it and go off with it.
   The Modules group is always there; modules' own pages follow under it.
+- Settings → Modules → Installed: "Remove" on a module in your modules folder (never on a
+  built-in or system one) asks first, saying what is deleted — only the link for a module you
+  linked, the folder for one you placed there by hand ("Not installed by the shell") — which
+  modules stop working without it, with "Also delete its data and settings" and any module
+  installed only for it offered unchecked. "Check all", and "Check for updates" on a card,
+  look for newer versions: "Checking 2 of 3…", then each card's result under its name ("Up to
+  date · checked 14:32", "1.3.0 available", "Check failed: …"); a downloaded update gets an
+  "Update to 1.3.0" button.
 - Built-in modules have their place: on NixOS in the package (`share/h2s-shell-builtin`), on
   Arch in `~/.local/share/h2s-shell/builtin`, which `install.sh` fills from the checkout. None
   ships yet. On Arch, update with `git pull` and then `./install.sh --update` in the shell's
