@@ -265,15 +265,32 @@ Singleton {
     // and reconnect"), vpns (the VPNs to link to the network, VpnWithNetworkRules
     // .vpnsToWrite; null: unchanged), lockdown (the kill switch for it, true or false; null:
     // unchanged) }. The links and the kill-switch choice are written once the profile's own
-    // save went through, before `saved`.
+    // save went through, before `saved` — only by the newest save of that profile: an older
+    // one answering later (a reconnect takes up to 90 s) must not overwrite a newer choice.
+    // When "Keep these settings?" puts the settings back, the links and the kill switch go
+    // back too (unless a newer save wrote them since).
     function saveConnection(request): void {
         const uuid = request.uuid;
         const what = "Saving " + request.original.name;
+        const number = (_saveNumbers[uuid] ?? 0) + 1;
+        _saveNumbers = Object.assign({}, _saveNumbers, { [uuid]: number });
+        if (request.reconnect)
+            savesReconnecting = savesReconnecting.concat([uuid]);
         const finish = ok => {
-            if (ok && request.vpns !== null && request.vpns !== undefined)
-                VpnManager.setVpnsWith(uuid, request.vpns);
-            if (ok && request.lockdown !== null && request.lockdown !== undefined)
-                VpnLockdown.setFor(uuid, request.lockdown);
+            if (request.reconnect) {
+                const at = savesReconnecting.indexOf(uuid);
+                savesReconnecting = savesReconnecting.filter((entry, i) => i !== at);
+            }
+            if (ok && root._saveNumbers[uuid] === number) {
+                const before = { number: number, vpns: VpnManager.vpnsWith(uuid).slice(), lockdown: VpnLockdown.isSetFor(uuid) };
+                if (request.vpns !== null && request.vpns !== undefined)
+                    VpnManager.setVpnsWith(uuid, request.vpns);
+                if (request.lockdown !== null && request.lockdown !== undefined)
+                    VpnLockdown.setFor(uuid, request.lockdown);
+                // The countdown this save started: what to put back with the settings
+                if (request.reconnect && root.pendingUndo?.uuid === uuid)
+                    root.pendingUndo = Object.assign({}, root.pendingUndo, { links: before });
+            }
             root.saved(uuid, ok);
         };
         if (request.reconnect)
@@ -282,13 +299,29 @@ Singleton {
             modify(uuid, request.changes, what, finish);
     }
 
+    // The number of the newest saveConnection by profile
+    property var _saveNumbers: ({})
+    // The profiles a "Save and reconnect" runs for (once each per save running): the editor's
+    // plain Save waits for it
+    property var savesReconnecting: []
+
+    // The links and the kill switch as they were before a save (pendingUndo.links), put back
+    // with its settings — unless a newer save of the profile came since
+    function _restoreLinks(uuid, links) {
+        if (!links || _saveNumbers[uuid] !== links.number)
+            return;
+        VpnManager.setVpnsWith(uuid, links.vpns);
+        VpnLockdown.setFor(uuid, links.lockdown);
+    }
+
     // "Save and reconnect": the changes, the profile up again, then "Keep these settings?"
     // for 20 s — without an answer the old ones come back, so a wrong address on the only
     // link does not leave the computer cut off. Kept here, not in the editor: leaving the
     // page during the countdown must not drop the way back. The undo comes from the
     // settings read after the change against `previous` (what the editor had read), so it
     // writes back what really changed (a manual profile's addresses, say). `done(ok)`.
-    // { uuid, name, changes } while the countdown runs, else null
+    // { uuid, name, changes, links (saveConnection's: the links and kill switch before) }
+    // while the countdown runs, else null
     property var pendingUndo: null
     property int undoSecondsLeft: 0
 
@@ -322,6 +355,8 @@ Singleton {
         if (!undo)
             return;
         modify(undo.uuid, undo.changes, "Going back to the old settings of " + undo.name, ok => {
+            if (ok)
+                root._restoreLinks(undo.uuid, undo.links);
             if (ok)
                 root.reconnect(undo.uuid, () => root.saved(undo.uuid, true));
             else

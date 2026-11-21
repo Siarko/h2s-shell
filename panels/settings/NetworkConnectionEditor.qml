@@ -260,7 +260,9 @@ Item {
         SmallButton {
             label: root._creating ? "Create" : "Save"
             kind: root.active ? "normal" : "save"
+            // Not while a "Save and reconnect" of this profile runs: one save at a time
             available: (root._dirty || root._creating) && root._valid && !NetworkProfiles.busy && NetworkProfiles.pendingUndo === null
+                && !NetworkProfiles.savesReconnecting.includes(root.uuid)
             tooltip: !root._valid ? "Fix the marked fields first" : root.active ? "Applies the next time it connects" : ""
             onClicked: root._save(false)
         }

@@ -736,6 +736,60 @@ TestCase {
         assert(blocking, "save after the page is gone: the kill-switch choice is written");
         VpnManager.setVpnsWith(_goneNetwork, []);
         VpnLockdown.setFor(_goneNetwork, false);
+        _olderSaveAnswersLate();
+    }
+
+    // Two saves of one profile: "Save and reconnect" with the kill switch on (its answer
+    // waits for the reconnect), then a plain Save with it off and another VPN, answered at
+    // once (no change to the profile itself). The older answer, coming last, writes nothing:
+    // the newer choice stays.
+    readonly property string _raceNetwork: "a4-network-race"
+    property int _raceAnswers: 0
+    property Timer _raceWait: Timer {
+        interval: 25
+        repeat: true
+        onTriggered: suite._checkRace()
+    }
+
+    function _olderSaveAnswersLate() {
+        NetworkProfiles.saved.connect(_countRace);
+        const original = { name: "Race" };
+        NetworkProfiles.saveConnection({ uuid: _raceNetwork, changes: [], original: original, reconnect: true,
+                                         vpns: ["a4test:older"], lockdown: true });
+        assert(NetworkProfiles.savesReconnecting.includes(_raceNetwork), "two saves: the reconnecting one is known (plain Save waits for it)");
+        NetworkProfiles.saveConnection({ uuid: _raceNetwork, changes: [], original: original, reconnect: false,
+                                         vpns: ["a4test:newer"], lockdown: false });
+        assertEqual(_raceAnswers, 1, "two saves: the plain one answered at once");
+        _saveStarted = Date.now();
+        _raceWait.start();
+    }
+
+    function _countRace(uuid, ok) {
+        if (uuid === _raceNetwork)
+            _raceAnswers++;
+    }
+
+    function _checkRace() {
+        if (_raceAnswers < 2 && Date.now() - _saveStarted < 15000)
+            return;
+        _raceWait.stop();
+        NetworkProfiles.saved.disconnect(_countRace);
+        assertEqual(_raceAnswers, 2, "two saves: both answered");
+        assertEqual(JSON.stringify(VpnManager.vpnsWith(_raceNetwork)), JSON.stringify(["a4test:newer"]),
+                    "two saves: the older one answering last does not overwrite the newer VPN link");
+        assert(!VpnLockdown.isSetFor(_raceNetwork), "two saves: … nor the newer kill-switch choice");
+        assert(!NetworkProfiles.savesReconnecting.includes(_raceNetwork), "two saves: none reconnecting any more");
+
+        // "Keep these settings?" put back: the links of before, unless a newer save came since
+        const newest = NetworkProfiles._saveNumbers[_raceNetwork];
+        NetworkProfiles._restoreLinks(_raceNetwork, { number: newest - 1, vpns: ["a4test:older"], lockdown: true });
+        assert(VpnManager.vpnsWith(_raceNetwork).includes("a4test:newer") && !VpnLockdown.isSetFor(_raceNetwork),
+               "settings put back: a newer save came since — its links kept");
+        NetworkProfiles._restoreLinks(_raceNetwork, { number: newest, vpns: ["a4test:before"], lockdown: true });
+        assert(VpnManager.vpnsWith(_raceNetwork).includes("a4test:before") && VpnLockdown.isSetFor(_raceNetwork),
+               "settings put back: the links and the kill switch of before with them");
+        VpnManager.setVpnsWith(_raceNetwork, []);
+        VpnLockdown.setFor(_raceNetwork, false);
         Notifier.recordOnly = _savedRecordOnly;
         finish();
     }
