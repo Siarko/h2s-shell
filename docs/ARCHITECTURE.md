@@ -1601,13 +1601,16 @@ component.
 
 ## Testing
 
-`tests/run-all.sh` runs everything there is to run before a commit, the quick parts first:
-the runners' own self-tests and the deploy check's, `install.sh` under stand-ins, the unit suites, a module's
+`tests/run-all.sh` runs everything there is to run before a commit: the runners' own
+self-tests and the deploy check's, `install.sh` under stand-ins, the unit suites, a module's
 suites on the fixture module, the checks of the system the machine runs, and the lock
-screen end to end — about four minutes, nearly all of it the lock test bed; `--quick`
-leaves that out. It stops at the first part that fails (`--keep-going` goes on) and ends
-with a summary naming every part as PASS, FAIL or NOT RUN with the reason: a missing tool
-(named with its use), a system without a set, a part left out or not reached. A part that
+screen end to end — nearly all of the time the lock test bed; `--quick` leaves that out.
+All parts but the lock bed run side by side (`-j <n>` at most n at once, `-j 1` one after
+another), each with its output in a log of its own, printed in the list's order; the lock
+bed runs last and alone. It stops at the first part that fails — nothing more starts, the
+parts still running are ended (`--keep-going` goes on) — and ends with a summary naming
+every part as PASS, FAIL or NOT RUN with the reason: a missing tool (named with its use), a
+system without a set, a part left out, not reached or ended. A part that
 did not run is never counted as passed; the exit status is 0 only when every part ran and
 passed, 1 when one failed, 2 when one could not be set up. `tests/run-all-selftest.sh`
 checks that verdict against made-up parts. The deploy check, `tests/device/deploy-check.sh`,

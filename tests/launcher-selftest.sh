@@ -114,7 +114,9 @@ fi
 
 # ---- The launcher under test: a copy of scripts/launch.sh beside the test bed's seams.sh
 # (tests/lock/seams/), as in the lock bed's test tree: the checkout's own seams.sh is
-# constants, and the cases need the first pause shortened (H2S_LAUNCHER_TEST_TIMINGS)
+# constants, and the cases need the first pause shortened (H2S_LAUNCHER_TEST_TIMINGS): to
+# 0.02 s, so that the pauses, doubling while the shell keeps dying within 30 s of its start,
+# stay short over the cases' dozen quick deaths in a row (0.1 s made them 0.1 … 3.2 s)
 mkdir -p "$work/tree/scripts"
 cp "$REPO/scripts/launch.sh" "$work/tree/scripts/launch.sh" \
     && cp "$REPO/tests/lock/seams/seams.sh" "$work/tree/scripts/seams.sh" \
@@ -141,6 +143,7 @@ fi
 # prints without end is killed by that limit (SIGXFSZ), not left to fill the disk.
 at=""
 launcher=""
+first_pause=0.02
 start_launcher() {
     at=$work/$1
     mkdir -p "$at/run"
@@ -153,7 +156,7 @@ start_launcher() {
         # and bash cannot trap a signal ignored at its start
         exec env --default-signal=HUP -i "PATH=$work/bin" "HOME=$work/home" "XDG_RUNTIME_DIR=$at/run" "XDG_CONFIG_HOME=$work/home/config" \
             "XDG_DATA_HOME=$work/data" "XDG_DATA_DIRS=$work/data" "H2S_SHELL_MODULE_DATA_DIRS=" \
-            "WAYLAND_DISPLAY=$socket" "H2S_LAUNCHER_TEST_TIMINGS=first=0.1" "LAUNCHER_SELFTEST=$work" \
+            "WAYLAND_DISPLAY=$socket" "H2S_LAUNCHER_TEST_TIMINGS=first=$first_pause" "LAUNCHER_SELFTEST=$work" \
             "LAUNCHER_SELFTEST_DIR=$at" "LAUNCHER_SELFTEST_PADDING=${2:-}" "GLIBC_TUNABLES=$tunables" \
             "$bash_path" "${3:-$launch_script}" > "$at/output" 2>&1 < /dev/null
     ) &
@@ -247,13 +250,16 @@ echo "== stopped"
 start_launcher stopped
 up
 stopped=$(shell_pid)
-ticks_before=$(ticks_of "$launcher")
 signal STOP "$stopped"
-sleep 3
+# Once it has seen the stop, a second of its processor time: a supervisor spinning on
+# `wait -f` uses all of it
+within 5 "a stopped shell: the supervisor sees it" said "is stopped: left alone"
+ticks_before=$(ticks_of "$launcher")
+sleep 1
 ticks=$(($(ticks_of "$launcher") - ticks_before))
 is "a stopped shell is left alone" test "$(state_of "$stopped")" = T
 is "… no other was started" test "$(shell_pid)" = "$stopped"
-is "… the supervisor did not spin meanwhile ($ticks of some $((3 * $(getconf CLK_TCK))) clock ticks)" test "$ticks" -le $((3 * $(getconf CLK_TCK) / 5))
+is "… the supervisor did not spin meanwhile ($ticks of some $(getconf CLK_TCK) clock ticks)" test "$ticks" -le $(($(getconf CLK_TCK) / 5))
 is "… it said so, once" test "$(said_times 'is stopped: left alone')" = 1
 signal CONT "$stopped"
 signal HUP "$launcher"
@@ -303,7 +309,7 @@ record_is() { [ "$(cat "$record" 2> /dev/null)" = "$1" ]; }
 kill_and_restart() { local before; before=$(starts); signal KILL "$(shell_pid)"; wait_until 10 started $((before + 1)); }
 kill_and_restart
 is "killed while locked: started again" test "$(starts)" = 2
-is "… the first restart while locked, said so" said "while the screen was locked: starting it again in 0.1 s (restart 1 of 3 while locked)"
+is "… the first restart while locked, said so" said "while the screen was locked: starting it again in $first_pause s (restart 1 of 3 while locked)"
 within 3 "… and recorded" record_is 1
 kill_and_restart
 is "the second, recorded" record_is 2
