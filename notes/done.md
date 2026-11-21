@@ -2437,3 +2437,9 @@ Moved out of the tracker as done; checked against the code and the sections abov
   Under load: 27/36 → 36/36 and 32/40 → 40/40. Still seen once alone: "save-killed: no save
   process left". Reviewed (the old key's status kept — fixed); module suites and stand-ins on
   both machines, the module's lock bed on NixOS.
+- **Docs: stale statements fixed, the rules lint (documentation plan D0, D1)** — on `master`
+  2026-11-22. README, FEATURES and ARCHITECTURE corrected against the code (no code change);
+  `tests/docs-check.sh` checks README and docs/ for links into notes/ or to missing files, a
+  developer's environment (home paths, machine models), a NixOS heading without an Arch one and
+  the other way round, non-English text; its self-test runs in `tests/run-all.sh`. Read by the
+  lead; the self-test passed on both machines.
