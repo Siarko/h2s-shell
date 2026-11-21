@@ -235,7 +235,7 @@ Steps 3, 4, 5, 6 and 10 are done (done.md); the API plan's closing slice (Z) is 
    written down honestly (no isolation; review covers the project's own modules; for others
    the prompt's text is the only protection); Settings → Modules (enable, disable, reload,
    install, update, remove from a repository); the safe-mode banner
-9. Lock — both items on branch `lock-step9` (done.md), waiting for review and merge
+9. Lock — done (done.md, 2026-11-22); the lock clean-up (architecture group D) follows
 11. PAM configuration from the shell — open
 12. Documentation per [plans/documentation.md](plans/documentation.md); architecture and API
     chapters — open
