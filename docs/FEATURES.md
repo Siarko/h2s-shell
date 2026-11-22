@@ -441,9 +441,11 @@ sleep (`sleepEnabled`, `sleepTimeout`); on the lock screen, screens off again af
   (`Suspend`, non-interactive) once per idle period. Only where logind answers `CanSuspend`
   "yes" (read at the start and when the page opens): where a polkit rule wants a password
   ("challenge") the section says "Not available here: the system asks for a password to
-  sleep" and nothing is asked. Apps keeping the screen on hold it while unlocked, not while
-  locked; logind's `sleep` block inhibitors (`systemd-inhibit --what=sleep`, a backup) are
-  read before the call and pause it, locked or not ("Paused: borg blocks sleep" under the
+  sleep" and nothing is asked. Apps keeping the screen on hold it while unlocked (a forced
+  screensaver too, after which it comes no sooner than it would after the screensaver's own
+  time), not while locked; logind's `sleep` block inhibitors (`systemd-inhibit --what=sleep`,
+  a backup) are read before the call — which goes only after a read found none — and pause
+  it, locked or not ("Paused: borg blocks sleep" under the
   timeline). An idle lock due no later than the sleep is waited for a moment, so it goes down
   locked; "Lock before the computer sleeps" locks at the sleep as for any other. With neither,
   the section says beforehand that it sleeps unlocked, and the notice below does not count

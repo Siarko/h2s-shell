@@ -23,8 +23,9 @@ import QtQuick
 //
 // Sleep is the whole computer's: logind's Suspend, asked once per idle period, only where
 // logind answers CanSuspend "yes" (never on "challenge": no password from a timer). The
-// apps keeping the screen on hold it while unlocked, as every stage; logind's own `sleep`
-// block inhibitors (a backup) hold it locked or not — read before the call. An idle lock due
+// apps keeping the screen on hold it while unlocked, as every stage (after a forced
+// screensaver too); logind's own `sleep` block inhibitors (a backup) hold it locked or not —
+// read before the call, which goes only after a read found none. An idle lock due
 // at or before it is waited for a moment (sleepLockWait), so a sleep the settings lock
 // before goes down locked; "Lock before the computer sleeps" locks at logind's
 // PrepareForSleep, as for any sleep.
@@ -71,6 +72,11 @@ Singleton {
     // A sleep due while the idle lock, due at or before it, is not taken yet waits for the
     // lock this long (ms) after the lock fell due, then goes ahead
     readonly property int sleepLockWait: 5000
+    // A read of logind's inhibitors for the sleep that could not tell (failed, timed out) is
+    // made again after a growing pause (ms); the sleep is never asked without a read
+    readonly property var sleepReadRetry: ({ minimum: 5000, maximum: 300000 })
+    // logind's sleep support (CanSuspend) not read: read again after a growing pause (ms)
+    readonly property var supportRetry: ({ minimum: 10000, maximum: 600000 })
 
     // The profile's values, by their names in the "lockscreen" group, normalised.
     // `values`: { screensaverEnabled, screensaverTimeout, screenOffEnabled, screenOffTimeout,
@@ -237,7 +243,9 @@ Singleton {
             idleSince: now,          // monotonic ms of the last input (moved at a release, a wake)
             busInhibitors: 0,        // org.freedesktop.ScreenSaver inhibits held
             logindIdleBlock: false,  // true, false or "unknown" (a failed read)
-            logindSleepBlock: false, // logind's `sleep` block: true, false or "unknown"
+            logindSleepBlock: "unknown", // logind's `sleep` block: true, false or "unknown"
+            sleepReadAt: null,       // monotonic ms of the last read of it (null: none in this period)
+            sleepReadFails: 0,       // reads in a row that could not tell
             locked: false,
             lockQuietSince: now,     // the later of the lock and the last input at the lock screen
             lockedDark: false,       // the lock screen's own screen-off reached
@@ -480,26 +488,81 @@ Singleton {
         return at >= 0 && now >= at;
     }
 
-    // When the sleep is next due (monotonic ms), or -1: from the last input (or a later
-    // profile switch that made it due), once per period; held by the apps keeping the screen
-    // on while unlocked (held) and, unless `ignoreBlock`, by logind's sleep block; an idle
-    // lock due at or before it and not taken yet is waited for up to sleepLockWait
+    // The apps keeping the screen on hold the sleep while unlocked — a forced screensaver
+    // too: the force only shows the screensaver
+    function _sleepHeld(state) {
+        if (state.locked)
+            return false;
+        return waylandHeld(state) || state.busInhibitors > 0 || state.logindIdleBlock === true;
+    }
+
+    // When the sleep falls due (monotonic ms), or -1: from the last input (or a later profile
+    // switch that made it due), once per period, unless held (_sleepHeld). After a forced
+    // screensaver it comes as long after the force as it would after the screensaver's own
+    // time (`sleepAfter − saverAfter`), or its whole time where that is not positive — never at
+    // once. An idle lock due at or before it and not taken yet is waited for up to
+    // sleepLockWait. Without `ignoreBlock`, only once a read of logind's inhibitors taken at or
+    // after that time found no sleep block (a failed read lets nothing go)
     function _sleepAt(state, config, ignoreBlock) {
         const sleepAfter = config.sleepAfter ?? 0;
         if (state.sleeping || state.sleepAsked || sleepAfter <= 0)
             return -1;
-        if (held(state) || !_counting(state))
+        if (_sleepHeld(state) || !_counting(state))
             return -1;
-        if (ignoreBlock !== true && state.logindSleepBlock === true)
-            return -1;
-        const start = state.sleepSince === null ? state.idleSince : Math.max(state.idleSince, state.sleepSince);
-        let due = start + sleepAfter * 1000;
+        let due;
+        if (state.forced) {
+            const gap = sleepAfter - (config.saverAfter ?? 0);
+            due = state.forcedAt + (gap > 0 ? gap : sleepAfter) * 1000;
+        } else {
+            due = state.idleSince + sleepAfter * 1000;
+        }
+        if (state.sleepSince !== null)
+            due = Math.max(due, state.sleepSince + sleepAfter * 1000);
         if (config.lockAfter > 0 && !state.locked && !state.lockedThisPeriod) {
             const lockAt = _lockStart(state) + config.lockAfter * 1000;
             if (lockAt <= due)
                 due = Math.max(due, lockAt + sleepLockWait);
         }
+        if (ignoreBlock !== true && !(state.logindSleepBlock === false && _sleepReadSince(state, due)))
+            return -1;
         return due;
+    }
+
+    // A read of logind's sleep block answered at or after `at`
+    function _sleepReadSince(state, at) {
+        return typeof state.sleepReadAt === "number" && state.sleepReadAt >= at;
+    }
+
+    // The pause before reading logind's inhibitors again for the sleep after `fails` reads in
+    // a row that could not tell (ms)
+    function sleepReadRetryDelay(fails) {
+        if (fails <= 0)
+            return 0;
+        return Math.min(sleepReadRetry.maximum, sleepReadRetry.minimum * Math.pow(2, fails - 1));
+    }
+
+    // When logind's inhibitors are next read for the sleep (monotonic ms), or -1: at the time
+    // it falls due; while a sleep block holds, again after logindRecheck; after a read that
+    // could not tell, again after a growing pause; none once a fresh read found it free
+    function _sleepReadAt(state, config) {
+        const due = _sleepAt(state, config, true);
+        if (due < 0)
+            return -1;
+        if (!_sleepReadSince(state, due))
+            return due;
+        if (state.logindSleepBlock === true)
+            return state.sleepReadAt + logindRecheck;
+        if (state.logindSleepBlock !== false)
+            return state.sleepReadAt + sleepReadRetryDelay(state.sleepReadFails ?? 0);
+        return -1;
+    }
+
+    // The pause before reading logind's sleep support again while it could not be read: the
+    // n-th retry after `tries` reads that could not tell (ms)
+    function supportRetryDelay(tries) {
+        if (tries <= 0)
+            return 0;
+        return Math.min(supportRetry.maximum, supportRetry.minimum * Math.pow(2, tries - 1));
     }
 
     // The sleep is due: logind is asked to suspend now (Idle reads logind's inhibitors first,
@@ -524,8 +587,8 @@ Singleton {
     function logindReadDue(state, config, now) {
         if (state.sleeping)
             return false;
-        const sleepAt = _sleepAt(state, config, true);
-        if (sleepAt >= 0 && now >= sleepAt)
+        const sleepReadAt = _sleepReadAt(state, config);
+        if (sleepReadAt >= 0 && now >= sleepReadAt)
             return true;
         if (state.locked || state.forced)
             return false;
@@ -566,8 +629,9 @@ Singleton {
         const sleepAt = _sleepAt(state, config, false);
         if (sleepAt >= 0)
             due.push(sleepAt);
-        else if (state.logindSleepBlock === true && _sleepAt(state, config, true) >= 0)
-            due.push(now + logindRecheck);
+        const sleepReadAt = _sleepReadAt(state, config);
+        if (sleepReadAt >= 0)
+            due.push(sleepReadAt);
         for (const id of Object.keys(state.pendingPower)) {
             const at = _powerRetryAt(state.pendingPower[id]);
             if (at >= 0)
@@ -619,6 +683,8 @@ Singleton {
         next.sleepSince = null;
         // Read again before the next sleep: a block seen now says nothing of then
         next.logindSleepBlock = "unknown";
+        next.sleepReadAt = null;
+        next.sleepReadFails = 0;
         next.lockedDark = false;
         if (next.locked)
             next.lockQuietSince = now;
@@ -626,6 +692,13 @@ Singleton {
             actions.push({ type: "endCommand" });
             next.commandStarted = false;
         }
+    }
+
+    // A read of logind's sleep block answered at `now`
+    function _sleepRead(next, held, now) {
+        next.logindSleepBlock = held === true ? true : held === false ? false : "unknown";
+        next.sleepReadAt = now;
+        next.sleepReadFails = next.logindSleepBlock === "unknown" ? (next.sleepReadFails ?? 0) + 1 : 0;
     }
 
     // An inhibitor released while unlocked: the counting starts at the release
@@ -712,7 +785,7 @@ Singleton {
             // The same read's sleep block, in the same step: the sleep is never asked on one
             // half of a read
             if ("sleepHeld" in event)
-                next.logindSleepBlock = event.sleepHeld === true ? true : event.sleepHeld === false ? false : "unknown";
+                _sleepRead(next, event.sleepHeld, now);
             break;
         }
         case "power": {
@@ -739,7 +812,7 @@ Singleton {
             break;
         }
         case "logindSleepBlock":
-            next.logindSleepBlock = event.held === true ? true : event.held === false ? false : "unknown";
+            _sleepRead(next, event.held, now);
             break;
         case "sleepFailed":
             next.sleepLeftUnlocked = false;

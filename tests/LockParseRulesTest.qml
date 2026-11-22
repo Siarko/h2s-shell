@@ -108,6 +108,11 @@ TestCase {
                                 inhibitor("idle", "mpv", "", "block", 1000), inhibitor("sleepy", "x", "", "block", 1000)]),
                     JSON.stringify({ held: false, holders: [] }), "sleepBlock: delays (the shell's own), other kinds: free");
         assertEqual(sleepBlock(null), JSON.stringify({ held: "unknown", holders: [] }), "sleepBlock: no list: unknown");
+        assertEqual(sleepBlock([inhibitor("sleep", "backup", "Copying", "block-weak", 1000)]),
+                    JSON.stringify({ held: true, holders: [{ who: "backup", why: "Copying" }] }),
+                    "sleepBlock: block-weak (its owner's own calls pass it, not the shell's): held");
+        assertEqual(sleepBlock([inhibitor("sleep", "x", "", "weak", 1000)]), JSON.stringify({ held: false, holders: [] }),
+                    "sleepBlock: a mode logind does not have: not counted");
         assertEqual(LockParseRules.sleepBlock([inhibitor("sleep", "", "a\nb", "block", 0)]).holders[0].who + "/"
                     + LockParseRules.sleepBlock([inhibitor("sleep", "", "a\nb", "block", 0)]).holders[0].why, "an app/a b",
                     "sleepBlock: no name: an app; one line");

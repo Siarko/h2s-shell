@@ -477,8 +477,25 @@ Singleton {
                     : ", IdleAction " + support.idleAction.action + " after " + support.idleAction.after + " s"));
             _sleepSupportTold = told;
         }
+        // Not read: read again after a growing pause, so a slow start does not leave the sleep
+        // off for the session
+        if (support.canSuspend === "unknown") {
+            _supportTries++;
+            _supportRetry.interval = IdleRules.supportRetryDelay(_supportTries);
+            _supportRetry.restart();
+        } else {
+            _supportTries = 0;
+            _supportRetry.stop();
+        }
         // The config follows the answer (sleep is a stage only on "yes")
         _dispatch({ type: "config" });
+    }
+    property int _supportTries: 0
+
+    Timer {
+        id: _supportRetry
+        repeat: false
+        onTriggered: _logindSleep.refresh()
     }
 
     LogindSleep {

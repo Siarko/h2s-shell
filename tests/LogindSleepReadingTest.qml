@@ -8,7 +8,8 @@ import qs.singletons.lock
 // run for real against a stand-in for gdbus (tests/fixtures/logind-sleep, linked into a
 // scratch directory whose files say what it answers): CanSuspend yes, na and challenge,
 // logind's IdleAction, a gdbus that fails, is not there or never ends (unknown, never "yes");
-// the Suspend call made once, non-interactive (`false`), taken and refused. Never the real
+// the Suspend call made once, non-interactive (`false`), taken, refused, and one that never
+// answers (ended by its watchdog). Never the real
 // gdbus or system bus: the reader is given the scratch directory as its tool directory, and
 // the stand-in only notes the call. Asynchronous.
 TestCase {
@@ -110,7 +111,7 @@ TestCase {
 
     function runAsync() {
         _then("the stand-in is in place", () => _ready, () => {
-            _reader = _readerComponent.createObject(suite, { toolDirectory: _scratch, watchdog: 500 });
+            _reader = _readerComponent.createObject(suite, { toolDirectory: _scratch, watchdog: 500, suspendWatchdog: 500 });
             _reader.suspended.connect((ok, error) => suite._suspended = { ok: ok, error: error });
             assertEqual(_support(), JSON.stringify({ canSuspend: "unknown", idleAction: null }), "before a read: unknown");
             _readAfter("echo yes > \"$1/can-suspend\"; echo 'ignore 1800000000' > \"$1/idle-action\"");
@@ -175,6 +176,17 @@ TestCase {
         });
         _then("the calls read again", () => _calls !== "", () => {
             assertEqual(_calls.trim(), "Suspend false", "… asked once");
+            _hangStarted = Date.now();
+            _suspendAfter("rm -f \"$1/refuse\"; touch \"$1/hang\"");
+        });
+        _then("the hanging call answered", () => _ready && _suspended !== null, () => {
+            assertEqual(_suspended.ok, false, "a Suspend call that never ends: not taken");
+            assert(/did not answer/.test(_suspended.error), "… said so: " + _suspended.error);
+            const took = Date.now() - _hangStarted;
+            assert(took >= 400 && took < 3000, "… ended by its watchdog (500 ms here), took " + took + " ms");
+            assert(!_reader.suspending, "… no longer running: a later sleep can be asked");
+            assertEqual(_readerComponent.createObject(suite).watchdog >= 15000, true,
+                        "the reads' watchdog by default outlasts three calls of 5 s each");
         });
         _clock.start();
         _sh("set -e; mkdir -p \"$1\"; ln -s \"$2/gdbus\" \"$1/\"", [_scratch, _fixtures], code => {

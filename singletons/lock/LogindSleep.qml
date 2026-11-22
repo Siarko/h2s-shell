@@ -11,7 +11,9 @@ import qs.singletons
 // the one call Idle makes when its rules say so.
 //
 // A failed or timed-out read is "unknown" (no sleep by the shell), never "yes"; a read that
-// has not answered after `watchdog` ms is ended. One read and one call at a time.
+// has not answered after `watchdog` ms (its three calls take up to 5 s each) is ended. A call
+// that has not answered after `suspendWatchdog` ms is ended and reported as not taken. One
+// read and one call at a time.
 //
 // `gdbus` is the one on PATH, or `toolDirectory`/gdbus (H2S_LOCK_TOOLS, the lock test bed's
 // seam: its stand-in answers from the test's files, the real system bus being cut off
@@ -25,7 +27,8 @@ Scope {
     signal suspended(bool ok, string error)
 
     property string toolDirectory: ""
-    property int watchdog: 7000
+    property int watchdog: 17000
+    property int suspendWatchdog: 30000
     // { canSuspend: "yes" | "no" | "challenge" | "na" | "unknown", idleAction: { action,
     // after (s) } | null (not read) } — LockParseRules.sleepSupport
     property var support: ({ canSuspend: "unknown", idleAction: null })
@@ -47,8 +50,22 @@ Scope {
     function suspend() {
         if (_suspend.running)
             return false;
+        _suspend._timedOut = false;
         _suspend.running = true;
+        _suspendWatchdog.restart();
         return true;
+    }
+
+    Timer {
+        id: _suspendWatchdog
+        interval: root.suspendWatchdog
+        repeat: false
+        onTriggered: {
+            if (!_suspend.running)
+                return;
+            _suspend._timedOut = true;
+            _suspend.running = false;
+        }
     }
 
     Timer {
@@ -68,10 +85,12 @@ Scope {
         property string _output: ""
         property bool _timedOut: false
         // Each answer under its header; a call that fails prints nothing on stdout
+        // Ended (the watchdog), the call under way is ended with it: no gdbus left behind
         command: ["sh", "-c",
-            "echo '[CanSuspend]'; \"$0\" " + root._call + " org.freedesktop.login1.Manager.CanSuspend; "
-            + "echo '[IdleAction]'; \"$0\" " + root._call + " org.freedesktop.DBus.Properties.Get org.freedesktop.login1.Manager IdleAction; "
-            + "echo '[IdleActionUSec]'; \"$0\" " + root._call + " org.freedesktop.DBus.Properties.Get org.freedesktop.login1.Manager IdleActionUSec; "
+            "trap 'kill $call 2> /dev/null; exit 143' TERM; ask() { echo \"[$1]\"; shift; \"$gdbus\" " + root._call + " \"$@\" & call=$!; wait $call; }; "
+            + "gdbus=$0; ask CanSuspend org.freedesktop.login1.Manager.CanSuspend; "
+            + "ask IdleAction org.freedesktop.DBus.Properties.Get org.freedesktop.login1.Manager IdleAction; "
+            + "ask IdleActionUSec org.freedesktop.DBus.Properties.Get org.freedesktop.login1.Manager IdleActionUSec; "
             + "true", root._gdbus]
         stdout: StdioCollector {
             onStreamFinished: _query._output = text
@@ -91,17 +110,22 @@ Scope {
     Process {
         id: _suspend
         property string _output: ""
+        property bool _timedOut: false
         // false: non-interactive — logind fails the call rather than ask for a password.
-        // gdbus's answer or error, then its status, all on stdout (one stream, read at the end)
-        command: ["sh", "-c", "out=$(\"$0\" " + root._call + " org.freedesktop.login1.Manager.Suspend false 2>&1); "
-            + "code=$?; printf '%s\\n[exit %s]\\n' \"$out\" \"$code\"", root._gdbus]
+        // gdbus's answer or error, then its status, all on stdout (one stream, read at the end);
+        // ended by the watchdog, the call is ended with it
+        command: ["sh", "-c", "trap 'kill $call 2> /dev/null; exit 143' TERM; "
+            + "\"$0\" " + root._call + " org.freedesktop.login1.Manager.Suspend false 2>&1 & call=$!; "
+            + "wait $call; echo \"[exit $?]\"", root._gdbus]
         stdout: StdioCollector {
             onStreamFinished: _suspend._output = text
         }
         onRunningChanged: {
             if (running)
                 return;
-            const outcome = LockParseRules.suspendOutcome(_output);
+            _suspendWatchdog.stop();
+            const outcome = _timedOut ? { ok: false, error: "logind did not answer within " + root.suspendWatchdog + " ms" }
+                                      : LockParseRules.suspendOutcome(_output);
             _output = "";
             root.suspended(outcome.ok, outcome.error);
         }

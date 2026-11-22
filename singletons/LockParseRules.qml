@@ -76,8 +76,9 @@ Singleton {
     // logind's inhibitors → whether a `sleep` block inhibitor holds (`systemd-inhibit
     // --what=sleep`: a backup, a download), of any user — logind refuses or delays a Suspend
     // while one holds, root's too: { held: true | false | "unknown", holders: [{ who, why }] }
-    // as idleBlock's. Delay inhibitors (the shell's own, UPower's) only delay a sleep and do
-    // not count.
+    // as idleBlock's. "block-weak" (systemd 257: a block its owner's own calls pass) counts:
+    // the shell is not its owner. Delay inhibitors (the shell's own, UPower's) only delay a
+    // sleep and do not count.
     function sleepBlock(inhibitors) {
         if (!Array.isArray(inhibitors))
             return { held: "unknown", holders: [] };
@@ -85,7 +86,7 @@ Singleton {
     }
 
     function _blocksWhat(inhibitor, what) {
-        return inhibitor?.mode === "block" && typeof inhibitor.what === "string" && inhibitor.what.split(":").includes(what);
+        return (inhibitor?.mode === "block" || inhibitor?.mode === "block-weak") && typeof inhibitor.what === "string" && inhibitor.what.split(":").includes(what);
     }
 
     // One line, capped
