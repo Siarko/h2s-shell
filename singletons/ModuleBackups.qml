@@ -2,7 +2,7 @@ import QtQuick
 import Quickshell
 import qs.singletons.io
 
-// A module's configuration backups on disk (notes/plans/modules-management.md §6.10), for
+// A module's configuration backups on disk, for
 // the installer, which takes one before every switch of a module's version and before a
 // restore, inside its own job: `take` writes one, `list` reads a module's, `readSettings`
 // and `writeBack` carry out a restore's file part. No job of its own and no decision: what

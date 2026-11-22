@@ -88,7 +88,7 @@ Singleton {
             "widgetSpacing": 5,              // between the widgets of a section
             "borderWidth": 0                 // along the edge facing the desktop (colour barBorder); 0: none
         },
-        // Radii, borders and spacing by kind of element (notes/plans/themes-stage7.md). Radii
+        // Radii, borders and spacing by kind of element. Radii
         // and sizes in pixels.
         "capsule": { "radius": 5, "horizontalPadding": 8, "borderWidth": 0 },   // a widget's cell on the bar
         "workspace": { "pillRadius": 4, "pillHorizontalPadding": 4, "pillHeight": 22, "pillSpacing": 4 },
@@ -131,7 +131,7 @@ Singleton {
         // popup, then each one's own, multiplied (popupWidth())
         "popupWidth": { "all": 100, "network": 100, "bluetooth": 100, "hardware": 100, "sound": 100,
                         "music": 100, "notifications": 100, "tray": 100, "power": 100, "calendar": 100, "battery": 100 },
-        // Animations by role — the kind of motion, not where it happens (notes/plans/themes.md)
+        // Animations by role — the kind of motion, not where it happens
         "durations": {
             "hover": 100,                    // colour under the pointer
             "state": 150,                    // a switch, a focused workspace, a field's state

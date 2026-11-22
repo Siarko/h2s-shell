@@ -9,7 +9,7 @@ import QtQuick
 Singleton {
     id: root
 
-    // What a module's QML may import without a warning (plan §4, a warning by the owner's
+    // What a module's QML may import without a warning (a warning by the owner's
     // decision): these modules, anything under the prefixes, and its own directory
     readonly property var allowedImports: ["Quickshell", "Quickshell.Io", "qs.api", "qs.components"]
     readonly property var allowedImportPrefixes: ["QtQuick", "QtQml"]

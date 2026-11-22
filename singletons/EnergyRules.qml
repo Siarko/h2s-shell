@@ -3,7 +3,7 @@ pragma Singleton
 import Quickshell
 import QtQuick
 
-// How the battery popup estimates use per app (notes/plans/battery-popup.md, stage 3) —
+// How the battery popup estimates use per app —
 // pure, so tests/EnergyRulesTest.qml checks it. Nothing on Linux measures energy per app
 // without root (the CPU's energy counters are root's on purpose), so, as Android does, it
 // is estimated from what each app used:

@@ -9,7 +9,7 @@ import qs.singletons.io
 // The wallpaper's live state: the source listed, the random draw, the day, and whether
 // another program draws a wallpaper too. Which image a screen shows is WallpaperRules';
 // the surfaces (wallpaper/WallpaperSurface.qml) ask fileFor(). Nothing runs while the
-// feature is off. notes/plans/wallpapers.md has the model.
+// feature is off.
 //
 //   h2s-shell ipc call wallpaper shuffle     (draw again; re-read the folder)
 //   h2s-shell ipc call wallpaper status

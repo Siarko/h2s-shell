@@ -4,7 +4,7 @@ import Quickshell
 import QtQuick
 
 // The settings a profile can override, with their types and defaults. The defaults
-// together are the read-only system profile (see notes/plans/adaptive-polling.md): what
+// together are the read-only system profile: what
 // applies to a key that no active profile sets.
 //
 // Entry fields:
@@ -180,7 +180,7 @@ Singleton {
         // above. Keyed by MonitorRules' ids (make|model|serial, not the connector), so a
         // monitor keeps its way on another port; a monitor not connected keeps its entry.
         // A way is "default" (the one above), "screensaver" or "off"; anything else counts as
-        // "default" (IdleRules.config). Edited on the Screensaver page (idle plan, slice I8)
+        // "default" (IdleRules.config). Edited on the Screensaver page
         { key: "lockscreen.perMonitor", label: "Set per monitor", group: "lockscreen",
           type: "bool", default: false },
         { key: "lockscreen.monitorBlanking", label: "Each monitor", group: "lockscreen",
@@ -251,7 +251,7 @@ Singleton {
           type: "bool", default: false, global: true, legacy: ["gcal", "debug"] },
 
         // ── Bar ──
-        // The screen edge the bar stands at (notes/plans/bar-position.md)
+        // The screen edge the bar stands at
         { key: "bar.edge", label: "Position", group: "barPosition", type: "enum", default: "top",
           options: [
               { value: "top", label: "Top" },
@@ -367,7 +367,7 @@ Singleton {
         { key: "system.vpnLockdownServers", label: "Other VPN servers", group: "network",
           type: "stringList", default: [], global: true },
 
-        // ── Wallpaper ── drawn by the shell (WallpaperRules, Wallpapers; notes/plans/wallpapers.md)
+        // ── Wallpaper ── drawn by the shell (WallpaperRules, Wallpapers)
         { key: "wallpaper.enabled", label: "Draw the wallpaper", group: "wallpaper",
           type: "bool", default: false,
           hint: "Off: the shell draws none, and another program (hyprpaper, swww) can." },
@@ -455,7 +455,7 @@ Singleton {
         // A brief wave across every history graph when it takes a sample
         { key: "graphs.heartbeat", label: "Graph heartbeat", group: "performance",
           type: "bool", default: true },
-        // Applied by Profiles while a profile sets it (step 6 of the plan); "unchanged"
+        // Applied by Profiles while a profile sets it; "unchanged"
         // leaves the system's own choice alone
         { key: "system.powerProfile", label: "System power profile", group: "power",
           type: "enum", default: "unchanged", options: [

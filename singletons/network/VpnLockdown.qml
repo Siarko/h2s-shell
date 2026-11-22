@@ -7,7 +7,7 @@ import qs.singletons.io
 import Quickshell.Io
 import qs.singletons.network
 
-// Only through the VPN (a kill switch; notes/plans/network.md, VPN stage 7): the nftables
+// Only through the VPN (a kill switch): the nftables
 // table built by scripts/h2s-vpn-lockdown, switched on while the blocking is wanted —
 // always, or while a network it is set for is up — and off when it is not. The script runs
 // as root through pkexec:
@@ -50,7 +50,7 @@ Singleton {
     // it through (VpnProviderRules.lockdownProviderNote; the provider's own lockdownNote if it
     // has one). "" for NetworkManager's VPNs, and when there is nothing to say. The popup's
     // row: while the VPN is up or coming up; the VPN page's card (`whateverState` true):
-    // whenever blocking is on, connected or not — the page states the limit (tailscale.md §8).
+    // whenever blocking is on, connected or not — the page states the limit.
     function noteFor(vpn, whateverState): string {
         if (vpn?.type !== "provider")
             return "";
@@ -103,8 +103,8 @@ Singleton {
 
     // The interfaces let through as VPNs, besides tun*, wg* and the like: the WireGuard
     // profiles' own — as set, not as up, so a VPN connecting changes nothing. NetworkManager's
-    // VPNs only: the blocking does not support provider VPNs (Tailscale; the owner's decision,
-    // notes/plans/tailscale.md §8) — what a provider reports never reaches the script.
+    // VPNs only: the blocking does not support provider VPNs (Tailscale; the owner's decision)
+    // — what a provider reports never reaches the script.
     readonly property var vpnInterfaces: VpnManager.nmInterfaceNames.slice().sort()
     // The VPN servers' names and addresses as set (every peer's, every remote) — of
     // NetworkManager's VPNs only, as above

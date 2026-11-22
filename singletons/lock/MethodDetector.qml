@@ -8,7 +8,7 @@ import qs.singletons
 // object per run: the lock's scope destroys the previous run when a newer one is asked for,
 // and destroying a Process kills it (SIGKILL), so an older run can neither keep running nor
 // report into a newer one. No timeout of its own: the rules' `detect` timer covers a script
-// that hangs (plan, section 7).
+// that hangs.
 //
 // The script honours H2S_LOCK_AUTH_METHODS (the test bed's seam, tests/lock/README.md): it
 // is inherited from the shell's environment and read by the script, not here.

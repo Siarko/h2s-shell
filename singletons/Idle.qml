@@ -7,16 +7,15 @@ import qs.singletons
 import qs.singletons.helper
 import qs.singletons.lock
 
-// Idleness, the screensaver and the idle lock: the I/O around IdleRules
-// (notes/plans/idle-lock-flow.md, §8 "Wiring"). It feeds the rules the facts — input idle
-// from two IdleMonitors, the lock from Lockscreen, sleep from SystemSleep, the profile's
-// settings, logind's idle block (read before a stage would start, LogindIdleBlock) — one
-// event at a time, and carries out the actions they return: the
-// screensaver's picture per monitor (`shownFor`, which the screensaver's windows follow),
-// the monitors' power (ScreenPower), the lock surface's black fallback (`lockBlack`), the
-// idle lock (Lockscreen.lock("idle")), the start and end commands. The screensaver
-// interface (org.freedesktop.ScreenSaver, the helper's: ScreenSaverClient) brings the apps
-// keeping the screen on and their activity, and is told the screensaver's state. One Timer runs to the
+// Idleness, the screensaver and the idle lock: the I/O around IdleRules. It feeds the rules
+// the facts — input idle from two IdleMonitors, the lock from Lockscreen, sleep from
+// SystemSleep, the profile's settings, logind's idle block (read before a stage would start,
+// LogindIdleBlock) — one event at a time, and carries out the actions they return: the
+// screensaver's picture per monitor (`shownFor`, which the screensaver's windows follow), the
+// monitors' power (ScreenPower), the lock surface's black fallback (`lockBlack`), the idle
+// lock (Lockscreen.lock("idle")), the start and end commands. The screensaver interface
+// (org.freedesktop.ScreenSaver, the helper's: ScreenSaverClient) brings the apps keeping the
+// screen on and their activity, and is told the screensaver's state. One Timer runs to the
 // rules' next deadline; nothing here decides when.
 //
 // Monitors are ScreenPower's (by MonitorRules' ids) where it can cut their power; elsewhere

@@ -4,7 +4,7 @@ import Quickshell
 import QtQuick
 
 
-// The module system's decisions (notes/plans/modules.md) — pure, so tests/ModuleRulesTest.qml
+// The module system's decisions — pure, so tests/ModuleRulesTest.qml
 // checks them without a module on disk: reading and checking a manifest, whether its API
 // version fits the shell's, the namespaces a module's contributions must stay in, the import
 // check (a warning, by the owner's decision), which of two modules with one id wins, the
@@ -36,7 +36,7 @@ Singleton {
     // The module API this shell offers, "major.minor" — published as Api.version (qs.api).
     // Kept here, not in api/, so that the host (qs.singletons) never imports qs.api: qs.api
     // imports qs.singletons, and the two importing each other would be a cycle.
-    // notes/plans/modules.md, "Module API 1.0", is the surface.
+    // api/Api.qml is the reference of the surface.
     //
     // THE VERSION RULE. Every change to the API bumps the minor once and has one "- 1.x:"
     // line under "Module API" in CHANGELOG.md (tests/ModuleRulesTest.qml compares the newest
@@ -62,7 +62,7 @@ Singleton {
     // changes) and the module's handle as `module`. Adding a slot bumps the API's minor.
     //
     // NEVER a slot on the lock screen, the screensaver or anything under singletons/lock:
-    // nothing foreign is drawn or run there (notes/plans/modules.md §4, item 1).
+    // nothing foreign is drawn or run there.
     // tests/ModuleRegistriesTest.qml checks that no file there names ModuleSlot.
     readonly property var slotTable: [
         { name: "network.popup.sections", since: "1.0",
@@ -74,7 +74,7 @@ Singleton {
         { name: "settings.general.bottom", since: "1.0",
           where: "Settings → Behaviour → General, at the end of the page",
           context: "{ slot, editIndex: the profile being edited (for SettingEditor) }" },
-        // The VPN provider seam's three (notes/plans/tailscale.md §3): one contribution per
+        // The VPN provider seam's three: one contribution per
         // provider, the one of the module whose id is the provider's providerId — a module's
         // provider uses its module id (`VpnProvider { providerId: module.moduleId }`). The row's
         // and the card's are read as their anchors since 1.23 (slotAliases: own-provider places);
@@ -947,9 +947,9 @@ Singleton {
         return "test mode: pkexec is not run (" + show(stray.slice(0, 200)) + "); a module's suites use its stand-in, <testPrograms>/pkexec";
     }
 
-    // ---- The test-mode gate for modules written for an API below 1.10 (removed by slice Z) ----
+    // ---- The test-mode gate for modules written for an API below 1.10 (to be removed) ----
     //
-    // REMOVED IN SLICE Z (notes/plans/api-next/migration.md): before 1.10 a module's suites
+    // TO BE REMOVED: before 1.10 a module's suites
     // put their own stand-in into PrivilegedAction's `elevate`, wherever it lay. For such a
     // module the strict rule (only `<testPrograms>/pkexec`) is relaxed for `elevate` alone:
     // any program there runs unless it is the real pkexec — its real path that of the

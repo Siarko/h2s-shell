@@ -469,7 +469,7 @@ Singleton {
         return role;
     }
 
-    // How the shell's block ends (§2.3): "system" (the fixed row), "permit" (`[default=done]
+    // How the shell's block ends: "system" (the fixed row), "permit" (`[default=done]
     // pam_permit.so`, keeping the result: a row that fails the stack on failure — required,
     // requisite, a raw bracketed bad/die — is in the list), "deny" (`requisite pam_deny.so`:
     // only a row that lets in at once lets in)
@@ -518,7 +518,7 @@ Singleton {
     // "unknown"), faillockPresent (the system's rules count with pam_faillock), faillock
     // (PamStackRules.faillockConfig's numbers, or null), otherService (the other service's
     // rows, in force or pending: the same rows for a shared list; not a list = not known),
-    // changedByHand (§2.6.1), sharedApplyStopped (a shared Apply stopped between the two
+    // changedByHand, sharedApplyStopped (a shared Apply stopped between the two
     // services) }. → { refusals, warnings }, each item { code, row (index, −1 for the list),
     // id ("" for the list), text }.
     function check(rows, facts) {

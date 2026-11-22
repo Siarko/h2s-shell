@@ -3,10 +3,10 @@ pragma Singleton
 import Quickshell
 import QtQuick
 
-// The lock's recovery decisions (Lockscreen, "Recovery"; notes/plans/lockscreen.md, section
-// 7): the lock marker, taking a lock back after the shell stopped while locked, and asking
-// again while the compositor refuses it. Pure, like LockRules: the driver holds the one
-// state, feeds events in and carries the effects out (tests/LockRecoveryRulesTest.qml).
+// The lock's recovery decisions (Lockscreen, "Recovery"): the lock marker, taking a lock back
+// after the shell stopped while locked, and asking again while the compositor refuses it.
+// Pure, like LockRules: the driver holds the one state, feeds events in and carries the
+// effects out (tests/LockRecoveryRulesTest.qml).
 //
 //   initial(settings)       → state
 //   withCarried(state, ...) → the state with what a reload carries over, as it is now
@@ -265,8 +265,7 @@ Singleton {
             _log(transaction, "error", "the compositor refused to let this shell take back the lock it had (" + why + "): the session "
                 + "stays locked, with no prompt of this shell's (Hyprland: misc:allow_session_lock_restore is off). Asking "
                 + "again every few seconds to a minute; to get the prompt back, switch it on — from a TTY: hyprctl -i 0 eval "
-                + "'hl.config({ misc = { allow_session_lock_restore = true } })' — see notes/plans/lockscreen.md, section 7, "
-                + "\"Recovery\"");
+                + "'hl.config({ misc = { allow_session_lock_restore = true } })'");
         }
         const delay = transaction.state.restoreDelay;
         _log(transaction, "warning", "taking the lock back again in " + Math.round(delay / 1000) + " s");

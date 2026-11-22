@@ -9,11 +9,11 @@ import qs.singletons.network
 // The VPNs: NetworkManager's WireGuard and plugin VPN profiles (NetworkProfiles), by UUID —
 // several may be up at once — and those of VPN providers (components/VpnProvider.qml: the
 // Tailscale module's), by "<provider>:<entry>". NetworkManager's connect and disconnect
-// through NetworkProfiles, so failures are reported the same way (a polkit prompt for want
-// of rights, else a notification with nmcli's words); a provider's through the provider,
-// its failures turned into the same kind of notification. The contract is in notes/plans
-// /tailscale.md §3. With no provider registered everything here is NetworkManager's alone,
-// exactly as before providers.
+// through NetworkProfiles, so failures are reported the same way (a polkit prompt for want of
+// rights, else a notification with nmcli's words); a provider's through the provider, its
+// failures turned into the same kind of notification. The contract is
+// components/VpnProvider.qml. With no provider registered everything here is NetworkManager's
+// alone, exactly as before providers.
 Singleton {
     id: root
 
@@ -202,7 +202,7 @@ Singleton {
 
     // The kinds of the provider VPNs among `ids` ("Tailscale"; "" for one whose provider is
     // not here), each once: those the blocking of traffic outside a VPN does not let through
-    // (VpnLockdown; notes/plans/tailscale.md §8), for the views to say so where a VPN is
+    // (VpnLockdown), for the views to say so where a VPN is
     // linked to a network that blocks
     function providerKindsAmong(ids): var {
         const kinds = [];
@@ -368,7 +368,7 @@ Singleton {
     // environment (TestSeams.fakeVpnProvider), never otherwise
     property var _fakeProvider: null
     // By a file URL, as a module's files are loaded (the shell's scanner does not reach
-    // tests/; such a file gets the same singletons — notes/plans/modules.md §2)
+    // tests/; such a file gets the same singletons)
     readonly property string fakeProviderUrl: "file://" + Quickshell.shellDir + "/tests/FakeVpnProvider.qml"
 
     function _startFakeProvider() {

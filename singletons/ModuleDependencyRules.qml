@@ -3,7 +3,7 @@ pragma Singleton
 import Quickshell
 import QtQuick
 
-// The dependency chain of a module being installed or updated (plan §6.9): what each of its
+// The dependency chain of a module being installed or updated: what each of its
 // `uses` needs (nothing, an update, a download), what cannot be had and why, the soft ones
 // offered, the order the chain installs in, how a run that failed halfway is taken back, and
 // — for Remove and Disable — which modules need a module and which dependencies installed for
@@ -520,7 +520,7 @@ Singleton {
                                           .map(module => module.id)), known) };
     }
 
-    // An opened card's dependency lines (plan §4). `modules`: [{ id, name, uses: [{ id,
+    // An opened card's dependency lines. `modules`: [{ id, name, uses: [{ id,
     // version, optional }], state, enabled }] — the statuses that count, with their manifests'
     // uses. → { needs: ["Tailscale 1.0 — on"] (hard), canUse: ["Weather 1.x — not installed"]
     // (soft), usedBy: [names] (the modules whose uses name it, by name), missing: the name of

@@ -3,7 +3,7 @@ pragma Singleton
 import Quickshell
 
 // Where the bar stands and how its content runs, for the bar and every widget on it:
-// the same bar on every screen, so one answer for all (notes/plans/bar-position.md)
+// the same bar on every screen, so one answer for all
 Singleton {
     id: root
 

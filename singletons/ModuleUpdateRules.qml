@@ -3,13 +3,12 @@ pragma Singleton
 import Quickshell
 import QtQuick
 
-// The module system's decisions about updating an installed module (plan
-// notes/plans/modules-management.md §6.3–§6.10): when an update needs the user's approval
-// and what is only shown after it, the update queue (several modules, in dependency order,
-// one restart offer at its end), which version directories stay on disk, the "Switch
-// version" list, the part of a changelog shown, whether a found version is offered, when the
-// daily automatic run is due, and what a configuration backup holds and which backups stay.
-// Uses ModuleInstallRules' vocabulary (sources, addresses, the record keyed by version
+// The module system's decisions about updating an installed module: when an update needs the
+// user's approval and what is only shown after it, the update queue (several modules, in
+// dependency order, one restart offer at its end), which version directories stay on disk, the
+// "Switch version" list, the part of a changelog shown, whether a found version is offered,
+// when the daily automatic run is due, and what a configuration backup holds and which backups
+// stay. Uses ModuleInstallRules' vocabulary (sources, addresses, the record keyed by version
 // directory) and ModuleDependencyRules' chain and order. Pure: no file, no process, no clock
 // of its own. Nothing here throws; input that cannot be read is unknown and unsafe — it asks,
 // waits or keeps, never passes as fine. Checked by tests/ModuleUpdateRulesTest.qml.
@@ -19,19 +18,19 @@ Singleton {
     // ---- Limits ----
 
     // Version directories kept per module: the active one, the one before it, and one
-    // waiting or refused (§6.1)
+    // waiting or refused
     readonly property int maxKeptVersions: 3
-    // Configuration backups kept per module (§6.10)
+    // Configuration backups kept per module
     readonly property int maxBackups: 5
-    // The changelog: how much of the file is read, and how much of it is shown (§6.7)
+    // The changelog: how much of the file is read, and how much of it is shown
     readonly property int maxChangelogBytes: 64 * 1024
     readonly property int maxChangelogLines: 200
     readonly property int maxChangelogCharacters: 20000
     // An install has no "from" version: the newest few sections are shown
     readonly property int installChangelogSections: 3
-    // "Switch version": tags listed before "More…" (§6.8)
+    // "Switch version": tags listed before "More…"
     readonly property int maxListedTags: 10
-    // Notes under "New in this version" before "And N more" (§6.6)
+    // Notes under "New in this version" before "And N more"
     readonly property int maxAfterNotes: 12
     // Files of its data directory a manifest may name for a backup, and their path length
     readonly property int maxBackupPaths: 32
@@ -169,7 +168,7 @@ Singleton {
         return 0;
     }
 
-    // ---- Consent for an update (§6.4) ----
+    // ---- Consent for an update ----
 
     // Whether updating a module needs the user's approval, by hand and automatically alike.
     // `acknowledgement`: the acknowledgement of the id, ModuleHost.acknowledgements[id] (ModuleInstallRules.acknowledgementOf's
@@ -255,7 +254,7 @@ Singleton {
                  after: afterNotes(context?.currentManifest, newManifest, { found: context?.found, names: context?.names }) };
     }
 
-    // The chain's reasons (§6.4, 3 and 4; §6.9 "Unresolved"): a module not installed, a
+    // The chain's reasons: a module not installed, a
     // dependent stopped, a dependency that cannot be had, a chain refused or not complete
     function _chainReasons(plan, title, names, add) {
         if (!ModuleRules.isObject(plan) || typeof plan.refused !== "string" || !Array.isArray(plan.entries)) {
@@ -284,7 +283,7 @@ Singleton {
             add("unresolved", _plain(line) + ".");
     }
 
-    // ---- After an update (§6.6) ----
+    // ---- After an update ----
 
     // What the card shows under "New in this version": not asked before, only told.
     // `oldManifest`, `newManifest`: the manifests before and after ({ version, programs,
@@ -321,7 +320,7 @@ Singleton {
         const after = parseVersion(newManifest.version);
         if (before && after && after.major > before.major)
             notes.push({ kind: "major", line: "Now " + after.major + "." + after.minor + ": a major version" });
-        // Programs added to a declaration the user already approved need no consent (§10, 4)
+        // Programs added to a declaration the user already approved need no consent
         if (ModuleRules.isObject(old.privileged) && ModuleRules.isObject(newManifest.privileged)) {
             const approved = strings(old.privileged.programs);
             for (const program of strings(newManifest.privileged.programs))
@@ -335,9 +334,9 @@ Singleton {
         return notes;
     }
 
-    // ---- On the page (Settings → Modules, §4, §6.4–§6.10) ----
+    // ---- On the page (Settings → Modules) ----
 
-    // The consent box of a row waiting for approval (§6.4). `approval`: the updater's
+    // The consent box of a row waiting for approval. `approval`: the updater's
     // approvals[id] ({ dir, version, reasons: consentFor's }); `name`, `fromVersion` the
     // running one's. → { lines: [{ text, detail }], trust: ModuleInstallRules.trustStatement
     // for a module that is new or from another source, else null, updateLabel "Update",
@@ -355,7 +354,7 @@ Singleton {
         };
     }
 
-    // A refused update on its card (§6.4): { title, detail, deleteLabel, deleteQuestion } —
+    // A refused update on its card: { title, detail, deleteLabel, deleteQuestion } —
     // "Update to 0.5.0 not finished. 0.4.0 is active."
     function notFinishedText(newVersion, activeVersion) {
         const next = _version(newVersion);
@@ -379,14 +378,14 @@ Singleton {
     readonly property var _backupReasonWords: ({ update: "before an update", switch: "before a switch", rollback: "before going back",
                                                  restore: "before a restore" })
 
-    // A backup's line in the list (§6.10): "19 Nov 10:12 · before an update · data included"
+    // A backup's line in the list: "19 Nov 10:12 · before an update · data included"
     function backupRowText(backup) {
         const parts = [momentText(backup?.takenAt), _backupReasonWords[backup?.reason] ?? "",
                        backup?.includesData === true ? "data included" : "settings only"];
         return parts.filter(part => part !== "").join(" · ");
     }
 
-    // The question before Restore (§6.10), a warning modal's spec; the subject is the caller's
+    // The question before Restore, a warning modal's spec; the subject is the caller's
     function restoreQuestion(name, backup, activeVersion) {
         const shown = _plain(name, 60);
         const version = _version(backup?.version);
@@ -398,7 +397,7 @@ Singleton {
                  buttons: [{ id: "restore", label: "Restore", kind: "warning" }], cancelLabel: "Cancel" };
     }
 
-    // After a restore (§6.10): an informing modal (one button)
+    // After a restore: an informing modal (one button)
     function restoredInfo(name, version) {
         const shown = _plain(name, 60);
         const from = _version(version);
@@ -407,7 +406,7 @@ Singleton {
                  buttons: [], cancelLabel: "OK" };
     }
 
-    // The Settings-wide banner after "Later" (§6.5): "Restart the shell to finish updating
+    // The Settings-wide banner after "Later": "Restart the shell to finish updating
     // Weather and Notes."; "" for none
     function restartBannerText(names) {
         const shown = _list(names).map(each => _plain(each, 60)).filter(each => each !== "");
@@ -417,7 +416,7 @@ Singleton {
         return "Restart the shell to finish updating " + joined + ".";
     }
 
-    // ---- The update queue (§6.5) ----
+    // ---- The update queue ----
 
     // Row phases; the queue has ended when every row is in one of `_restingPhases`
     readonly property var _activePhases: ["downloading", "verifying", "backingUp", "installing"]
@@ -769,7 +768,7 @@ Singleton {
         return (unit === 0 ? String(Math.round(size)) : size.toFixed(1)) + " " + units[unit];
     }
 
-    // ---- Versions kept on disk (§6.1) ----
+    // ---- Versions kept on disk ----
 
     // Which version directories of a module stay after a switch. `record`: the record's
     // entry; `options`: { previousDir — the version switched from, pendingDir — one
@@ -805,7 +804,7 @@ Singleton {
         return { ok: true, keep: keep, delete: remove };
     }
 
-    // ---- Switch version (§6.8) ----
+    // ---- Switch version ----
 
     // The "Switch version…" list. `record`: the record's entry; `tags`: [{ name, version,
     // commit, date }] from the check (`version` the tag's version text, default the name);
@@ -878,7 +877,7 @@ Singleton {
         return { ok: true, kept: kept, tags: listed, more: Math.max(0, remote.length - maxListedTags), head: headEntry };
     }
 
-    // ---- What's new (§6.7) ----
+    // ---- What's new ----
 
     // The part of a changelog shown for an update from `fromVersion` to `toVersion` (an
     // install: `fromVersion` empty). `text`: the file's text (only its first
@@ -956,7 +955,7 @@ Singleton {
             .map(line => line.replace(/\t/g, "    ").replace(/[\u0000-\u001f\u007f-\u009f‎‏‪-‮⁦-⁩]/g, ""));
     }
 
-    // ---- Whether a found version is offered (§6.3) ----
+    // ---- Whether a found version is offered ----
 
     // What a check found, judged against the record. `record`: the record's entry; `check`:
     // { version, commit } — the newest tag or the branch's head.
@@ -986,7 +985,7 @@ Singleton {
         return answer(true, "available", { sameVersion: version === active.version, downloadedDir: kept ? kept.dir : "" });
     }
 
-    // ---- Checking a repository (§6.3) ----
+    // ---- Checking a repository ----
 
     // The lines `git ls-remote` may print, and the longest one read
     readonly property int maxListedRefs: 2000
@@ -1099,7 +1098,7 @@ Singleton {
         return failed(_plain(ref, 60) + " is no longer on the server");
     }
 
-    // ---- The restart reminder (§6.5) ----
+    // ---- The restart reminder ----
 
     // The value of the restart reminder's hint `x-h2s-restart-for`: this process's id and its
     // start time (field 22 of /proc/<pid>/stat, in clock ticks since boot) — a new process,
@@ -1127,7 +1126,7 @@ Singleton {
         return value !== ownToken;
     }
 
-    // ---- The automatic run (§6.3) ----
+    // ---- The automatic run ----
 
     // Whether the daily automatic update run is due. `state`: what autoRunRecord keeps
     // ({ lastAttemptAt (ms) — the last run's start, failures — runs failed in a row,
@@ -1172,7 +1171,7 @@ Singleton {
         return { state: next, log: state?.lastOutcome !== next.lastOutcome };
     }
 
-    // ---- Configuration backups (§6.10) ----
+    // ---- Configuration backups ----
 
     // What a configuration backup of module `id` holds and where it goes. `manifest`: the
     // active version's manifest — its `backup` lists paths inside its data directory that

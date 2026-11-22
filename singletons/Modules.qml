@@ -5,7 +5,7 @@ import Quickshell
 import Quickshell.Io
 import QtCore
 
-// The shell's modules (notes/plans/modules.md): one ModuleHost fed from the environment the
+// The shell's modules: one ModuleHost fed from the environment the
 // launcher builds — H2S_SHELL_MODULES, the canonical module directories in search order, and
 // H2S_SHELL_SAFE_MODE=1 after the shell died quickly twice (scripts/launch.sh) — loaded as
 // soon as this singleton exists (load() only starts processes: nothing is read here). shell.qml
@@ -53,7 +53,7 @@ import QtCore
 //                                            without a restart
 //   qs ipc call modules loadWithoutSafeMode  the same, out of safe mode
 //
-// Installing, updating and removing (ModuleInstaller, notes/plans/modules-management.md §6;
+// Installing, updating and removing (ModuleInstaller;
 // a typed command counts as the user's click — never while the session is locked; each
 // answers "" when the job started, else why not, and the job's outcome goes to the log and
 // to `modules job`). Quickshell's IPC takes a fixed number of arguments, so each option is a
@@ -79,7 +79,7 @@ import QtCore
 //                                            files written back, on again when it was on
 //   qs ipc call modules job                  JSON: { busy, phase, subject, progress, lastResult }
 //
-// Updating (ModuleUpdater, §6.3–§6.5; refused while the session is locked, but `updates`):
+// Updating (ModuleUpdater; refused while the session is locked, but `updates`):
 //   qs ipc call modules check <id>           checks one module the shell installed from a
 //                                            repository (`git ls-remote`); what it finds is
 //                                            downloaded beside the kept versions, nothing switched
@@ -123,7 +123,7 @@ Singleton {
     }
 
     // For a core place that takes one Component (or one URL) per module instead of a
-    // ModuleSlot — the VPN slots after the merge (notes/plans/modules.md, "Module API 1.0")
+    // ModuleSlot — the VPN slots after the merge
     function slotComponent(slot, id) {
         return _host.slotComponent(slot, id);
     }

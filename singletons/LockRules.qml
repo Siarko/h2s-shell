@@ -6,7 +6,7 @@ import QtQuick
 // The lock screen's decisions — pure, so tests/LockRulesTest.qml checks every rule without
 // a compositor, PAM or logind. This file is the specification of the lock; the driver
 // (Lockscreen) owns the one live state, feeds events in and carries the effects out.
-// notes/plans/lockscreen.md, section 7, is the contract between the two.
+// The functions below are the contract between the two.
 //
 //   initial(settings)        → state
 //   step(state, event, now)  → { state, effects, ignored }
@@ -59,8 +59,8 @@ Singleton {
     readonly property var sleepTimers: LockStepRules.sleepTimers
     readonly property var timerNames: LockStepRules.timerNames
 
-    // The unlocks by request, not by authentication — the owner's decision (plan, section
-    // 5): logind's Unlock signal (`loginctl unlock-session`), the way in from another
+    // The unlocks by request, not by authentication — the owner's decision:
+    // logind's Unlock signal (`loginctl unlock-session`), the way in from another
     // console. An unlockRequested from any other source is refused.
     readonly property var unlockSources: ["logind"]
 
@@ -195,7 +195,7 @@ Singleton {
 
     // The compositor's lock is already held by this process: Quickshell reloaded the shell
     // while it was locked, and the new WlSessionLock took the old one's lock over (the driver
-    // set it before Quickshell realized it, plan section 7, "Reload"). So the lock goes on
+    // set it before Quickshell realized it). So the lock goes on
     // without asking the compositor for one: `adoptCompositorLock` (the session the
     // compositor's later word belongs to), then announceLocked(true), first — no
     // lockCompositor. Everything else of the lock starts afresh, as at any lock: the methods
@@ -525,7 +525,7 @@ Singleton {
         _recoverSleep(transaction);
         // Control characters (Enter's "\r", Backspace's "\b", Ctrl+letters) are not text
         const text = typeof event.text === "string" && !/[\u0000-\u001f\u007f]/.test(event.text) ? event.text : "";
-        // Escape never unlocks (it did until 2026-11-15: plan, section 5). On a sleeping
+        // Escape never unlocks (it did until 2026-11-15). On a sleeping
         // prompt it wakes it, as any key; at an awake prompt — from any surface — it hides
         // the prompt exactly as its inactivity time-out does: the field empties, a question
         // left unanswered is cancelled, a verification under way goes on. Never forwarded.
@@ -1174,7 +1174,7 @@ Singleton {
     // ---- Settings ----
 
     // `values`: { lockOnSleep, passwordFallback } — either may be left out. The idle and
-    // screensaver settings are the driver's (IdleMonitor), see the plan, section 7.
+    // screensaver settings are the driver's (IdleMonitor).
     function _settingsChanged(transaction, event) {
         const values = event.values !== null && typeof event.values === "object" ? event.values : {};
         const changes = {};
@@ -1321,7 +1321,7 @@ Singleton {
     }
 
     // ------------------------------------------------------------------------------------
-    // Another program's session lock (notes/plans/idle-lock-flow.md §10)
+    // Another program's session lock
     // ------------------------------------------------------------------------------------
     // Wayland shows no client another's session lock; the compositor refuses ours while one
     // is in force, and Hyprland ends a client that asks then. On Hyprland `hyprctl -j

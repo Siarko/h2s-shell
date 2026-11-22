@@ -3,13 +3,12 @@ pragma Singleton
 import Quickshell
 import QtQuick
 
-// The decisions about a module's configuration backups (notes/plans/modules-management.md
-// §6.10), beside ModuleUpdateRules.backupPlan (what a backup holds, where it goes) and
-// backupKeepPlan (which stay): a module's settings taken out of the profiles and the pinned
-// globals and put back, what the copying said, meta.json written and read, the list of a
-// module's backups, and what a restore does. Pure: no file, no process, no clock. Input that
-// cannot be read is unknown: never a backup to restore, never settings to write.
-// Checked by tests/ModuleBackupRulesTest.qml.
+// The decisions about a module's configuration backups, beside ModuleUpdateRules.backupPlan
+// (what a backup holds, where it goes) and backupKeepPlan (which stay): a module's settings
+// taken out of the profiles and the pinned globals and put back, what the copying said,
+// meta.json written and read, the list of a module's backups, and what a restore does. Pure:
+// no file, no process, no clock. Input that cannot be read is unknown: never a backup to
+// restore, never settings to write. Checked by tests/ModuleBackupRulesTest.qml.
 Singleton {
     id: root
 

@@ -12,7 +12,7 @@ import QtQuick
 // flip, or from `ipc call tablet set true`. Kept in memory only — a passing state, not
 // something to write to the config (each write shows "Settings saved" while the settings
 // are open). Reading the switch device directly (a udev uaccess rule) was the
-// alternative (notes/plans/touch.md, 2026-11-08).
+// alternative.
 Singleton {
     id: root
 

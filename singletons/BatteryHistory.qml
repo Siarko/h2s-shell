@@ -6,7 +6,7 @@ import QtQuick
 
 // The battery's history as UPower records it — the charge in percent and the power drawn
 // in watts, with the state at each point (charging or not) — for the battery popup's
-// graph (notes/plans/battery-popup.md, stage 2). UPower keeps it across restarts and
+// graph. UPower keeps it across restarts and
 // serves it over D-Bus without root (GetHistory); Quickshell does not expose it, so it is
 // asked with busctl, the Process idiom of ARCHITECTURE.md. Fetched on refresh() — the
 // popup asks while it is open — not polled.

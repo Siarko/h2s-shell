@@ -4,10 +4,9 @@ import Quickshell
 import qs.singletons
 
 // VPN providers — pure, tested in tests/VpnProvidersTest.qml: a VPN supplied by an object
-// rather than NetworkManager (the contract: components/VpnProvider.qml;
-// notes/plans/tailscale.md §3). Its entries are addressed as "<providerId>:<entryId>" —
-// NetworkManager's UUIDs are hexadecimal digits and dashes, so the colon keeps the two apart
-// for good.
+// rather than NetworkManager (the contract: components/VpnProvider.qml). Its entries are
+// addressed as "<providerId>:<entryId>" — NetworkManager's UUIDs are hexadecimal digits and
+// dashes, so the colon keeps the two apart for good.
 Singleton {
     id: root
 
@@ -209,7 +208,7 @@ Singleton {
         return { title: doing + " failed", body: _string(reason, 500).trim() || "It did not say why." };
     }
 
-    // The kill switch does not cover provider VPNs (the owner's decision, tailscale.md §8):
+    // The kill switch does not cover provider VPNs (the owner's decision):
     // the sentence saying so while blocking is on and the VPN is up or coming up ("" when
     // there is nothing to say). `note` the provider's own wording (its lockdownNote), else
     // the shell's. `whateverState` true: whenever blocking is on, up or not — the VPN page's

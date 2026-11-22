@@ -6,7 +6,7 @@ import QtQuick
 import qs.components
 import qs.singletons
 
-// Client for the pttd dictation daemon — its socket protocol is pttd's (notes/pttd-protocol.md).
+// Client for the pttd dictation daemon — its socket protocol is pttd's.
 // The shell only observes state and sends commands; audio capture and keyboard
 // emulation stay entirely on the daemon side.
 Singleton {

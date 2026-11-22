@@ -11,8 +11,8 @@ import QtQuick
 // strictly equal, so inserts, removals and moves of keys go to the right rows. Objects that
 // are built anew on each read (a refetch, a rescan, a re-sort) do not: with `objectProp` or
 // the default structural comparison it overwrites rows by position after the first changed
-// one, so a delegate ends up showing — and acting on — another item (notes/upstream/
-// quickshell-scriptmodel-replace.md). The delegate looks its item up by key instead.
+// one, so a delegate ends up showing — and acting on — another item. The delegate looks its
+// item up by key instead.
 Singleton {
     id: root
 

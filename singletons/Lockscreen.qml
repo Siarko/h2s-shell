@@ -9,12 +9,11 @@ import qs.singletons.io
 import qs.singletons.lock
 import qs.screensaver
 
-// The lock screen's driver, and the one owner of its state (notes/plans/lockscreen.md,
-// sections 3 and 7). LockRules decides everything; this holds the one current state,
-// feeds events in, one at a time, and carries the effects out through the adapters in
-// singletons/lock/ (PAM, the methods script, logind, the sleep inhibitor) and the
-// WlSessionLock. The views (screensaver/LockSurface, LockPrompt) render `view` and report
-// input through the surface functions below.
+// The lock screen's driver, and the one owner of its state. LockRules decides everything; this
+// holds the one current state, feeds events in, one at a time, and carries the effects out
+// through the adapters in singletons/lock/ (PAM, the methods script, logind, the sleep
+// inhibitor) and the WlSessionLock. The views (screensaver/LockSurface, LockPrompt) render
+// `view` and report input through the surface functions below.
 //
 // What the rest of the shell gets: `view` (LockRules.view of the state), `locked`,
 // lock(), the surface functions (which take the LockSurface object
@@ -25,20 +24,20 @@ import qs.screensaver
 // the rules say — an accepted authentication, logind's Unlock (`loginctl unlock-session`,
 // from another console), or the compositor ending it. Escape never unlocks.
 //
-// What same-process QML can still do (plan, section 7, "What other QML can reach"): call
+// What same-process QML can still do: call
 // lock() and the surface functions with a LockSurface it got hold of; emit the signals of
 // this singleton's child objects (`Lockscreen.children`: the logind monitor, the adapters),
 // which are filtered by event type but can carry logind's Unlock; and, like any process of
 // the user, run `loginctl unlock-session`. The tightening is defence in depth, not a
 // boundary against code running in the shell.
 //
-// The Quickshell bug worked around here (plan, section 1): Quickshell 0.3.2 never emits
+// The Quickshell bug worked around here: Quickshell 0.3.2 never emits
 // lockStateChanged when a WlSessionLock unlocks, so a binding to its `locked` stays true
 // after the first unlock — and the old code, hung on that binding, worked once per shell.
 // Here `locked` is never bound or watched: it is set by the effects, read back only right
 // after being set to true, and the compositor's word comes from secureStateChanged.
 //
-// Recovery (plan, section 7, "Reload" and "Restart"): a reload of the shell while locked
+// Recovery: a reload of the shell while locked
 // carries the compositor's lock over (`_carried`, set into the new WlSessionLock before
 // Quickshell realizes it, and the rules' `restored`); a shell that stopped while locked —
 // crashed, killed, stopped, restarted — finds the lock marker it wrote at the lock
@@ -115,7 +114,7 @@ Singleton {
         _api?.input(surface, { type: "submit", text: text });
     }
 
-    // ---- Settings (notes/plans/global-profiles.md) ----
+    // ---- Settings ----
 
     readonly property bool lockOnSleep: LockRules.lockOnSleepSetting(Profiles.value("lockscreen.lockOnSleep"),
                                                                      SettingsSchema.coreDefaults["lockscreen.lockOnSleep"],
@@ -395,7 +394,7 @@ Singleton {
             case "adoptCompositorLock":
                 // `restored`: the new WlSessionLock takes the old one's lock over when
                 // Quickshell realizes it (later in this reload); its target must be true by
-                // then, or it would unlock (plan, section 1). Nothing is sent to the
+                // then, or it would unlock. Nothing is sent to the
                 // compositor here
                 sessionInForce = effect.session;
                 _sessionLock.locked = true;

@@ -4,7 +4,7 @@ import Quickshell
 
 // Only through the VPN (a kill switch) — pure, tested in tests/NetworkTest.qml: what
 // VpnLockdown blocks, the arguments it hands scripts/h2s-vpn-lockdown, how it reads the
-// answer and what it does next. notes/plans/network.md, VPN stage 7.
+// answer and what it does next.
 Singleton {
     id: root
 

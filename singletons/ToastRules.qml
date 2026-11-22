@@ -85,7 +85,7 @@ Singleton {
         return timing(args).ms;
     }
 
-    // ---- The three queues (notes/plans/notification-flow.md §8.2) ----
+    // ---- The three queues ----
     // Toasts stack in three queues, top to bottom: critical, staying (they stay until taken
     // away), ordinary (they count down). Each shows up to its limit; the rest wait, oldest
     // first, and its badge counts them. A modal — a toast dragged out of its queue, or a

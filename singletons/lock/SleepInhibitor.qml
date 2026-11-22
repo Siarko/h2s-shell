@@ -77,8 +77,7 @@ Scope {
     //     d < grace <= 5   and   b + d < 5   (InhibitDelayMaxSec, worst case: s at the
     // build's start; a grace past 5 - (T - s) is cut short by logind anyway). Measured in the
     // lock test bed (reload-window): d 0.05-0.07 s, s to T up to 1.01 s. 3 s leaves ~2.9 s of
-    // margin, and costs a sleep right after a crash at most 3 s. notes/plans/lockscreen.md,
-    // "The reload window".
+    // margin, and costs a sleep right after a crash at most 3 s.
     readonly property int graceSeconds: 3
 
     Process {

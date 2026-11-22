@@ -2,7 +2,7 @@ import QtQuick
 import Quickshell
 import qs.singletons.io
 
-// The module updater (notes/plans/modules-management.md §6.3–§6.5): checks the modules the
+// The module updater: checks the modules the
 // shell installed from a repository for a newer version, downloads it in the background,
 // and switches through one queue — by hand ("Update", "Update all", `modules update`) or,
 // with modules.autoUpdate "automatic", by the daily run. No views: Settings → Modules and

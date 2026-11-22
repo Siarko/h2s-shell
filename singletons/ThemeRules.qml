@@ -6,7 +6,6 @@ import QtQuick
 // Pure functions behind Theme: resolving a theme file's `extends` chain and layering the
 // result over the built-in theme. No I/O — the caller passes a function that reads a theme
 // by name — so tests/ThemeTest.qml exercises them with made-up themes.
-// See notes/plans/themes.md.
 //
 // A theme file:
 //   {
@@ -37,7 +36,7 @@ Singleton {
     readonly property var wallpaperTransitions: ["fade", "zoom", "slide", "wipe", "circle", "dissolve", "pixelate"]
     readonly property var wallpaperWorkspaceTransitions: ["slide", "same"]
 
-    // The groups of radii, borders and spacing by kind of element (themes stage 7)
+    // The groups of radii, borders and spacing by kind of element
     readonly property var shapeGroups: ["capsule", "workspace", "tray", "popup", "row", "listItem", "dropdown",
         "powerMenu", "button", "saveButton", "cancelButton", "deleteButton", "warningButton",
         "successButton", "iconButton", "pill", "field",
@@ -646,16 +645,15 @@ Singleton {
         return name;
     }
 
-    // Moves the bar geometry from profiles into themes, once (notes/plans/themes.md, stage
-    // 3), so the bar looks the same in every profile afterwards. Each profile that sets
-    // any `bar.layout.*` gets a theme named after it holding those values, extending the
-    // theme of the nearest profile before it that got one ("default" for the first), and
-    // picks it with `appearance.theme` — the same layering profiles had. Geometry pinned
-    // as global goes into every such theme (and gives the first profile one if none has
-    // its own). `legacyLayout`: the `bar.layout` section of a config from before profiles
-    // whose values never reached a profile, or undefined; it counts as the first profile's.
-    // Inputs are not modified.
-    // Returns { profiles, globals, themes: [{ name, theme }] }.
+    // Moves the bar geometry from profiles into themes, once, so the bar looks the same in
+    // every profile afterwards. Each profile that sets any `bar.layout.*` gets a theme named
+    // after it holding those values, extending the theme of the nearest profile before it that
+    // got one ("default" for the first), and picks it with `appearance.theme` — the same
+    // layering profiles had. Geometry pinned as global goes into every such theme (and gives
+    // the first profile one if none has its own). `legacyLayout`: the `bar.layout` section of
+    // a config from before profiles whose values never reached a profile, or undefined; it
+    // counts as the first profile's. Inputs are not modified. Returns { profiles, globals,
+    // themes: [{ name, theme }] }.
     function themesFromBarLayout(profiles, globals, legacyLayout, exists) {
         const newProfiles = JSON.parse(JSON.stringify(profiles ?? []));
         const newGlobals = Object.assign({}, globals ?? {});

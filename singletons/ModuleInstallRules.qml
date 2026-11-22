@@ -4,7 +4,7 @@ import Quickshell
 import QtQuick
 
 // The module system's decisions about where a module comes from and what may be done with it
-// (notes/plans/modules-management.md §3–§6; ModuleRules.qml has the overview): its source
+// (ModuleRules.qml has the overview): its source
 // (built in, the system's, the development path, the user's root — installed by the shell or
 // placed by hand), the copies it replaces, the actions its card offers, whether turning it on
 // needs the user's confirmation, what removing it deletes, which repository addresses are
@@ -19,7 +19,7 @@ Singleton {
     // The sources a module can come from (sourceOf)
     readonly property var sources: ["builtin", "system", "repository", "folder", "user", "developer"]
     // Sources whose modules are trusted without the user's confirmation: the shell's own,
-    // the administrator's, and the developer's working copy (§10, 1, 5, 8)
+    // the administrator's, and the developer's working copy
     readonly property var exemptSources: ["builtin", "system", "developer"]
     // The longest repository address accepted (with its "#ref")
     readonly property int maxAddressLength: 1000
@@ -91,7 +91,7 @@ Singleton {
 
     // ---- Paths ----
 
-    // The places the shell's module management uses, from the data and config homes (§8b);
+    // The places the shell's module management uses, from the data and config homes;
     // "" each when a home is not an absolute path
     function paths(dataHome, configHome) {
         const data = _cleanPath(dataHome);
@@ -108,7 +108,7 @@ Singleton {
         };
     }
 
-    // ---- Where a module comes from (§3) ----
+    // ---- Where a module comes from ----
 
     // The source of one module. `directory`: its canonical directory (what discovery found).
     // `link`: the entry in a root it was found through, { entry, isLink, target } — `entry`
@@ -117,7 +117,7 @@ Singleton {
     // versions, builtin, system: [paths] }, canonical. `records`: parseRecord's result.
     // → { source, id, entry, isLink, target, address, ref, label }
     //   `entry` is set only for what the user root holds (what Remove may delete), `address`
-    //   is what an acknowledgement compares (§5), `label` the card's words (plain text).
+    //   is what an acknowledgement compares, `label` the card's words (plain text).
     // In discovery's order: the development path, the user root, the built-in place, the
     // system's places and the Nix store. A link in the user root is `repository`/`folder`
     // only when the record names its id with that kind, the link leads to
@@ -195,7 +195,7 @@ Singleton {
         return { kind: record.kind, address: record.address, ref: record.ref, commit: version.commit ?? "" };
     }
 
-    // The card's words for a source (§3's table), plain text
+    // The card's words for a source, plain text
     function sourceLabel(found) {
         switch (found?.source) {
         case "builtin": return "Built-in";
@@ -261,12 +261,12 @@ Singleton {
     }
 
     // Whether Remove is offered: for what the user root holds, never for a built-in, system or
-    // development copy (§3, "Remove")
+    // development copy
     function removable(found) {
         return ["repository", "folder", "user"].includes(found?.source) && _cleanPath(found?.entry) !== "";
     }
 
-    // ---- The card's actions (§4) ----
+    // ---- The card's actions ----
 
     // The actions a card offers, each label with its effect (one decision, from the state at
     // the time the card is built). `status`: the module's status (statusOf: id, directory,
@@ -276,11 +276,11 @@ Singleton {
     // → { row: [action], opened: [action] } — `row` the button row (main, Update, Remove),
     //   `opened` the opened card's buttons. An action: { label, effect, asks, subject } plus
     //   what it needs (`dependents`, `version`); `asks`: "none", "button" (the button's own
-    //   question), "modal" (the Settings modal), "confirmation" (§5's box) or "approval" (the
-    //   consent box, §6.4, for a module held for approval); `subject`
+    //   question), "modal" (the Settings modal), "confirmation" or "approval" (the
+    //   consent box, for a module held for approval); `subject`
     //   { id, directory } — what it acts on.
     // A duplicate gets none (it is shown inside its winner's card). In safe mode no update
-    // or check is offered (§7).
+    // or check is offered.
     function actionsFor(status, found, context) {
         const subject = { id: String(status?.id ?? ""), directory: String(status?.directory ?? "") };
         const row = [];
@@ -291,7 +291,7 @@ Singleton {
         const action = (label, effect, asks, extra) => Object.assign({ label: label, effect: effect, asks: asks, subject: subject }, extra ?? {});
         const off = !isOn(status);
         if (off) {
-            // Held for approval: the consent box (§6.4's); new: the confirmation (§5)
+            // Held for approval: the consent box; new: the confirmation
             const asks = state === "approval" ? "approval"
                        : state === "unconfirmed" || context?.needsConfirmation === true ? "confirmation" : "none";
             row.push(action("Enable", "enable", asks));
@@ -321,7 +321,7 @@ Singleton {
         return { row: row, opened: opened };
     }
 
-    // ---- The confirmation (§5) ----
+    // ---- The confirmation ----
 
     // What an acknowledgement records for a module: { source, address, author, privileged }
     // — the source kind, where it comes from (sourceOf's `address`; a repository's without a
@@ -438,7 +438,7 @@ Singleton {
     }
 
     // What the first start of a shell that confirms modules acknowledges, so that what ran
-    // before keeps running without a question (§5): `modules` [{ found, manifest, enabled }],
+    // before keeps running without a question: `modules` [{ found, manifest, enabled }],
     // the modules that count (not shadowed, a valid manifest). → { <id>: acknowledgementOf }
     // for each one that is on and needs a confirmation by its source; built-in, system and
     // development copies are never asked about and need none; one that is off then is asked
@@ -473,7 +473,7 @@ Singleton {
              + ": confirm it first" + command;
     }
 
-    // ---- What the host reads to tell sources apart (§3) ----
+    // ---- What the host reads to tell sources apart ----
 
     // The places sourceOf compares a module's directory with, as given (not yet canonical),
     // from the shell's environment: { dataHome, modulePath (H2S_SHELL_MODULE_PATH),
@@ -619,7 +619,7 @@ Singleton {
         return found ? { entry: found.entry, isLink: found.isLink === true, target: found.target } : null;
     }
 
-    // ---- Remove (§4, "Remove") ----
+    // ---- Remove ----
 
     // What removing a module deletes. `found`: sourceOf's result; `module`: { id, name,
     // version }; `record`: the record's entry for it (parseRecord's modules[id]) or null;
@@ -699,12 +699,12 @@ Singleton {
         return { ok: true, reason: "", subject: { id: id, entry: entry }, title: "Remove " + name + "?", lines: lines, steps: steps, also: also };
     }
 
-    // The checkbox offering a dependency installed for a module with its removal (§6.9)
+    // The checkbox offering a dependency installed for a module with its removal
     function alsoRemoveLabel(name, forName) {
         return "Also remove " + _plain(String(name ?? "")) + " (installed for " + _plain(String(forName ?? "")) + ", nothing else uses it)";
     }
 
-    // ---- Repository addresses and the download (§6.2) ----
+    // ---- Repository addresses and the download ----
 
     // Why an address is refused, "" when it is accepted: https://, ssh://, git://, file:// or
     // user@host:path, optionally "#<ref>". Refused: no text, over 1000 characters, control
@@ -839,7 +839,7 @@ Singleton {
         ] };
     }
 
-    // ---- git's progress (§6.2) ----
+    // ---- git's progress ----
 
     readonly property var _sizeUnits: ({ "bytes": 1, "B": 1, "KiB": 1024, "MiB": 1024 * 1024, "GiB": 1024 * 1024 * 1024, "TiB": 1024 * 1024 * 1024 * 1024 })
 
@@ -873,7 +873,7 @@ Singleton {
         };
     }
 
-    // ---- The record of what the shell installed (§6.2) ----
+    // ---- The record of what the shell installed ----
 
     // module-sources.json's text → { ok, modules: { <id>: entry }, dropped: [ids] }. Text
     // that is no JSON object: ok false, no modules — every module then reads as `user`
@@ -952,7 +952,7 @@ Singleton {
             && !name.startsWith("-") && name !== "." && name !== "..";
     }
 
-    // ---- Built-in modules that start off (§3) ----
+    // ---- Built-in modules that start off ----
 
     // builtin.json's text, { "off": [ids] } → { ok, off: [ids] }. Unreadable or not that form:
     // ok false, none off (the host logs it); an entry that is no valid id is skipped.
@@ -983,7 +983,7 @@ Singleton {
         return true;
     }
 
-    // ---- The list (§4) ----
+    // ---- The list ----
 
     // Whether a module counts as on (the card's main button, the list's first group): not
     // turned off, not waiting for the user's confirmation or approval
@@ -1046,7 +1046,7 @@ Singleton {
         return parts.join(" · ");
     }
 
-    // The pill on a card's name line, only for a state worth attention (§4's table): { label,
+    // The pill on a card's name line, only for a state worth attention: { label,
     // kind } with kind a StatusPill word; null for a module that is on and well or turned off
     // (the name's colour and the order say so). `context`: { shellApi ("1.36"), missingModule
     // (the name of the first hard dependency not running; "" unknown) }
@@ -1075,7 +1075,7 @@ Singleton {
         }
     }
 
-    // ---- The safe-mode banner (§7) ----
+    // ---- The safe-mode banner ----
 
     // Modules named in the banner's "on when it crashed" line; the rest are counted
     readonly property int safeModeNamesShown: 6
@@ -1133,11 +1133,11 @@ Singleton {
         };
     }
 
-    // What the confirmation says (§2), the words after the first line
+    // What the confirmation says, the words after the first line
     readonly property string trustText: "It runs inside the shell with your rights and could read anything the shell sees, "
         + "your lock screen password included. Enable it only if you trust where it comes from."
 
-    // The confirmation before a module that is not part of h2s-shell is first enabled (§2, §5),
+    // The confirmation before a module that is not part of h2s-shell is first enabled,
     // as a Settings modal's question (SettingsModalHost.ask's spec, less its subject)
     function confirmationQuestion(name) {
         const shown = _plain(String(name ?? ""), 60);
@@ -1146,7 +1146,7 @@ Singleton {
                  buttons: [{ id: "enable", label: "Enable", kind: "save" }], cancelLabel: "Cancel" };
     }
 
-    // The question before disabling a module that running modules need (§4, "Disable"):
+    // The question before disabling a module that running modules need:
     // `dependents` the names disabled with it (ModuleDependencyRules.disableList's), `unknown`
     // the names of running modules whose uses cannot be read (they may need it; left on)
     function disableQuestion(name, dependents, unknown) {
@@ -1160,7 +1160,7 @@ Singleton {
                  buttons: [{ id: "disable", label: "Disable", kind: "warning" }], cancelLabel: "Cancel" };
     }
 
-    // The question before Remove (§4, "Remove"), from ModuleInstaller.removalPreview's answer:
+    // The question before Remove, from ModuleInstaller.removalPreview's answer:
     // a danger modal with what is deleted ("Not installed by the shell." first and bold for
     // what the user placed), who stops working or loses a feature, the unchecked "Also delete
     // its data and settings" and one unchecked box per dependency installed for it alone
@@ -1186,7 +1186,7 @@ Singleton {
                  alsoRemove: Object.keys(given).filter(key => key.startsWith("also:") && given[key] === true).map(key => key.slice(5)) };
     }
 
-    // The pill an update stands with (§4's table), beside any other: "Approval required" while
+    // The pill an update stands with, beside any other: "Approval required" while
     // the queue waits for the user's consent (`approval`: the updater's approvals[id]), "Update
     // not finished" for a version the user refused (`check`: its checks[id]); null else
     function updatePillOf(check, approval) {
@@ -1207,9 +1207,9 @@ Singleton {
         return { text: text, tone: check?.outcome === "failed" ? "error" : check?.outcome === "available" ? "accent" : "textMuted" };
     }
 
-    // ---- Installing on the page (§4 "Add a module", §6.2, §6.9) ----
+    // ---- Installing on the page ----
 
-    // The statement for the modules an install brings that are not part of h2s-shell (§2, the
+    // The statement for the modules an install brings that are not part of h2s-shell (the
     // preview's box): { title, text } — "Notes is not part of h2s-shell." / "Notes and
     // Clipboard are not part of h2s-shell.", the words after it for one or several; null for
     // no names
@@ -1259,7 +1259,7 @@ Singleton {
                                _list(plan?.rootBreaks)]);
     }
 
-    // The preview of an install (§6.2, §6.9) from what the installer staged and planned.
+    // The preview of an install from what the installer staged and planned.
     // `given`: { root: { manifest, commit, source (installSource's) }, fetched: { <id>: { manifest,
     // commit, source } }, plan (ModuleDependencyRules.plan's), rootTarget (installTarget's),
     // replaced: [{ directory, source, version }] — the copies of its id it would replace (a
@@ -1340,7 +1340,7 @@ Singleton {
         };
     }
 
-    // ---- A check's result (§6.3) ----
+    // ---- A check's result ----
 
     // A moment as the local "14:32"
     function _clock(ms) {
@@ -1398,7 +1398,7 @@ Singleton {
         return all === 0 ? "Checking…" : "Checking " + now + " of " + all + "…";
     }
 
-    // ---- The installer's steps (§6.2, §6.8, §6.9; singletons/ModuleInstaller.qml) ----
+    // ---- The installer's steps (singletons/ModuleInstaller.qml) ----
 
     // A download (or a folder copy) larger than this is stopped: as git reports it while it
     // receives, and as the staged directory measures once it is there
@@ -1639,7 +1639,7 @@ Singleton {
         return result;
     }
 
-    // ---- The record, changed (§6.2): each a new modules map (parseRecord's `modules`), the
+    // ---- The record, changed: each a new modules map (parseRecord's `modules`), the
     // given one untouched ----
 
     function _recordCopy(modules) {
@@ -1840,7 +1840,7 @@ Singleton {
         return refused("not a place the shell writes: " + _plain(clean));
     }
 
-    // ---- Switch version, delete a version (§6.8) ----
+    // ---- Switch version, delete a version ----
 
     // A version as given ("1.2.0-abc1234", or its path in module-versions) → its name, "" for
     // anything else
@@ -1884,7 +1884,7 @@ Singleton {
 
     // Whether a module this run moved to another version (an update, a switch) goes back to
     // the version before: it did not start ("failed") and that version is known. A new
-    // module that fails keeps its files and shows Failed (§6.9). `step`: { kind, dir,
+    // module that fails keeps its files and shows Failed. `step`: { kind, dir,
     // previousDir }; `status`: the host's status of it after the load
     function backOnFailedStart(step, status) {
         return (step?.kind === "update" || step?.kind === "switch") && _versionDirectory(step.previousDir)

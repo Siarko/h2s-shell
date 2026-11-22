@@ -157,7 +157,7 @@ Singleton {
     }
 
     // Copies settings from their place in the old config into profiles, once per key
-    // (notes/plans/global-profiles.md). For every schema entry with a `legacy` location
+    // For every schema entry with a `legacy` location
     // whose key is not in `migratedKeys` yet: an always-global setting goes into the
     // globals, any other into Full (created at the top if the user has none) — so Full
     // spells out the user's own values. A key whose old value is undefined is only marked.
@@ -254,7 +254,7 @@ Singleton {
         return node;
     }
 
-    // ---- the bar (notes/plans/global-profiles.md, stage 4) ----
+    // ---- the bar ----
 
     // A bar section from the old config's two parallel arrays — widget types, and a JSON
     // array of preset names that may be shorter (a missing name means no preset)

@@ -14,7 +14,7 @@ Singleton {
 
     // A path made canonical without the file system: absolute, no "." or ".." segments, no
     // repeated or trailing "/". "" when it is not an absolute path. Two spellings of one
-    // directory load its singletons twice (plan §2: "a//b" does, "a/./b" does not, a symlink
+    // directory load its singletons twice ("a//b" does, "a/./b" does not, a symlink
     // does): the launcher resolves symlinks (realpath), this takes care of the rest.
     function canonicalPath(path) {
         if (typeof path !== "string" || !path.startsWith("/") || path.includes("\0"))

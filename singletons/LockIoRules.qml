@@ -18,8 +18,7 @@ Singleton {
     // A dispatch function that handles one item at a time, in order: an item dispatched
     // while one is being handled (by the handler itself, or by a signal it set off) is
     // queued and handled after it — never re-entered. A handler that throws is reported to
-    // `onError` and the queue goes on. This is the driver's "one step at a time" guarantee
-    // (plan, section 7).
+    // `onError` and the queue goes on. This is the driver's "one step at a time" guarantee.
     function serialQueue(handle, onError) {
         const queue = [];
         let running = false;
@@ -44,7 +43,7 @@ Singleton {
         };
     }
 
-    // One step's result carried out (plan, section 7: "commit before effects"): the new
+    // One step's result carried out ("commit before effects"): the new
     // state stored first — `commit` must not throw, it is a plain assignment — then
     // `prepare` (the per-lock adapters), `publish` (the view), each effect in order through
     // `execute`, and `finish` (the adapters' end). Each of those is guarded on its own: one
@@ -205,7 +204,7 @@ Singleton {
 
     // ---- The prompt's field ----
 
-    // What a forwardKey effect does to the field (plan, section 7): `text` (printable,
+    // What a forwardKey effect does to the field: `text` (printable,
     // never a control character — the rules filter those) is inserted at the cursor; Enter
     // submits; Backspace / Delete delete before / after the cursor; Left / Right / Home /
     // End move it; any other key changes nothing. Positions step by code point, never into
@@ -339,7 +338,7 @@ Singleton {
     // { restoreAllowed, locked } (true / false, null when not said). A lock is refused for
     // sure exactly when the session is locked and restoring is not allowed — and Hyprland
     // 0.57 then also kills the client that asked (it destroys the refused lock at once, and
-    // Quickshell's next request on it is a protocol error: plan, section 7, "Restart").
+    // Quickshell's next request on it is a protocol error).
     function hyprlandLockFacts(output) {
         const text = String(output ?? "");
         const option = /"option"\s*:\s*"misc:allow_session_lock_restore"[^}]*?"(?:bool|int)"\s*:\s*(true|false|0|1)\b/.exec(text);

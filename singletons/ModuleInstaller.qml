@@ -2,13 +2,13 @@ import QtQuick
 import Quickshell
 import qs.singletons.io
 
-// The module installer (notes/plans/modules-management.md §6): installs a module from a git
+// The module installer: installs a module from a git
 // address or a folder, with the modules it needs; switches an installed module to another
 // kept version, deletes a kept version, removes a module; goes back to the version before
 // when an update or a switch does not start. No views: Settings → Modules and
 // `qs ipc call modules install|remove|switchVersion|…` (Modules.qml) call it.
 //
-// Everything is the user's own, under the data and config homes (§8b), done as the user —
+// Everything is the user's own, under the data and config homes, done as the user —
 // no privileges. Nothing from a module's files is ever run: git runs with no hooks, no
 // submodules, no credential prompt, only the https/ssh/git/file protocols, the address after
 // "--" (ModuleInstallRules.downloadCommands); a folder is copied without following links.
@@ -33,7 +33,7 @@ import qs.singletons.io
 // root is as it was. Then the host searches again and loads (rediscover()); an updated module
 // that does not start goes back to its version before (ModuleInstallRules.backOnFailedStart).
 // Before a module moves to another version (an update, a switch, the way back after a failed
-// start) and before a restore, its configuration is backed up (ModuleBackups, §6.10): a
+// start) and before a restore, its configuration is backed up (ModuleBackups): a
 // backup that cannot be taken stops an update or a switch before anything moves, and a
 // restore before anything is written. restore() puts one back: the module turned off, its
 // settings, store and named data files written back, and turned on again when it was on.
@@ -323,7 +323,7 @@ Scope {
 
     // Download a new version of module `id` — the shell's own, from its recorded address at
     // `ref` ("" the recorded ref) — and move it in beside the kept versions without linking it
-    // (the updater's background download, §6.3): verified as an install is, the record
+    // (the updater's background download): verified as an install is, the record
     // listing it, the active version and the recorded ref unchanged; the versions beyond the
     // kept ones go (ModuleUpdateRules.keepPlan, the new one kept as waiting). A version the
     // record keeps already (the same commit) is taken as it is. → "" when it started (its
@@ -405,7 +405,7 @@ Scope {
         });
     }
 
-    // Remember that the user refused version `version` (`commit`) of module `id` (§6.4): the
+    // Remember that the user refused version `version` (`commit`) of module `id`: the
     // record's `refused`, so it is never offered again nor switched to. → "" when it started
     function rememberRefusal(id, version, commit) {
         const refusal = _refusal();
@@ -1579,7 +1579,7 @@ Scope {
         });
     }
 
-    // ---- Configuration backups (§6.10) ----
+    // ---- Configuration backups ----
 
     // A backup of module `id` now, inside `job` (`records`: the record as the job read it —
     // the active version's commit). → done({ ok, problem, name, meta }) while the job lives

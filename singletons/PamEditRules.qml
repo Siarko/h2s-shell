@@ -24,7 +24,7 @@ Singleton {
     // The line under it in a polkit-1 made by Replace: its other phases' lines are the
     // hand-made file's, so only its auth lines are compared with the vendor file's
     readonly property string replacedMarker: "# h2s-shell: replaced a hand-made file"
-    // The closing lines (§2.3), by PamRuleRules.closingOf's answer
+    // The closing lines, by PamRuleRules.closingOf's answer
     readonly property var closingLines: ({
         permit: "auth [default=done] pam_permit.so",
         deny: "auth requisite pam_deny.so"
@@ -124,7 +124,7 @@ Singleton {
         return control === "sufficient" || control === "optional" ? "-auth" : "auth";
     }
 
-    // A counted Password row (§2.4): pam_faillock's preauth (a lockout closes the service),
+    // A counted Password row: pam_faillock's preauth (a lockout closes the service),
     // pam_unix, and authfail reached only on a wrong password — the jump on success skips it
     // where a pass must not end the stack
     function countedLines(control) {
@@ -417,7 +417,7 @@ Singleton {
         };
     }
 
-    // A hand-made file taken in (§2.9): its auth lines top to bottom as rows — the editor's
+    // A hand-made file taken in: its auth lines top to bottom as rows — the editor's
     // own forms (the block's lines, a reader or key line as the editor writes it, the
     // counted pattern) as rows, everything else as a raw row in its place; the trailing run
     // of the service's own lines as the fixed row. → { rows, own, raw, fixed, hash (the
@@ -429,7 +429,7 @@ Singleton {
 
     // ── Changed by hand ──
 
-    // Whether a service's file is still as the shell left it (R6, §2.6.1). `text`: the
+    // Whether a service's file is still as the shell left it (R6). `text`: the
     // file's text (polkit: /etc/pam.d/polkit-1, null / undefined when there is none).
     // → { known, changed, reasons: [{ reason, line (1-based, 0 for the file), text }] }
     function changes(text, service) {
@@ -548,7 +548,7 @@ Singleton {
         return { ok: false, text: null, remove: false, refusals: [{ code, row: -1, id: "", text }], warnings: warnings ?? [] };
     }
 
-    // The new text of a service's file for the rows (§2.6.2). `currentText`: the file as it
+    // The new text of a service's file for the rows. `currentText`: the file as it
     // is (sudo: /etc/pam.d/sudo; polkit: /etc/pam.d/polkit-1, null / undefined when there is
     // none). `facts`: PamRuleRules.check's, with `service`, `vendorText` (polkit: the vendor
     // file), `replace` (the user took a hand-made file in: adopt's `hash` of the text taken
@@ -656,7 +656,7 @@ Singleton {
         return { text: "{ " + fields.join(" ") + " }" };
     }
 
-    // The shell's module options for the rows (§2.7): `rows` one list (sudo and polkit), or
+    // The shell's module options for the rows: `rows` one list (sudo and polkit), or
     // with `split` { sudo, polkit } (or "polkit-1") one per service. `facts` as for check
     // (system "nixos" assumed), the other service's rows filled in. → { ok, text,
     // refusals, warnings }, each item with its `service`; no text while one is refused.

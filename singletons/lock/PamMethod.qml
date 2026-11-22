@@ -5,7 +5,7 @@ import Quickshell.Services.Pam
 // The PAM adapter of one method (password, fingerprint, u2f): one PamContext, turned into
 // the rules' events, and the rules' effects turned into calls on it. No decisions: what to
 // start, when to answer and what a result means are LockRules'. What is here is only what
-// Quickshell 0.3.2's PamContext needs around it (notes/plans/lockscreen.md, section 1):
+// Quickshell 0.3.2's PamContext needs around it:
 //
 // - Every event carries the conversation id the rules gave in startPam. An event from a
 //   conversation that is no longer the current one still carries its own id, and the

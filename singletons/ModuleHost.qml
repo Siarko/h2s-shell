@@ -4,7 +4,7 @@ import Quickshell.Io
 import qs.components
 import qs.singletons.io
 
-// The module host (notes/plans/modules.md): given the module directories, it reads NOTHING on
+// The module host: given the module directories, it reads NOTHING on
 // the GUI thread before its check — each module.json and qmldir, and then the text of every
 // file the module names (for the import check and the properties a root object declares), come
 // out of one process, the file check (ModuleFileRules.fileCheckScript: resolved inside the module's
@@ -31,7 +31,7 @@ import qs.singletons.io
 // null. A soft provider coming or going while it is on turns its main off and on again
 // (pending meanwhile), so module.uses always says what is there.
 //
-// Where each module comes from (notes/plans/modules-management.md §3, §5): at each load a
+// Where each module comes from: at each load a
 // process (ModuleInstallRules.sourceCheckScript, under checkTimeoutMs) reads the places in
 // `sourcePlaces` — the user root and its entries (links or folders), the built-in root and its
 // builtin.json, the record of what the shell installed — and every module's source follows
@@ -299,7 +299,7 @@ Scope {
 
     // In test mode, the pkexec rule for a call whose JavaScript stack is `stack` (an
     // Error().stack taken where a module's code called the API): "legacy" when only modules
-    // written for an API below 1.10 are on it (ModuleRules, the gate removed by slice Z), else
+    // written for an API below 1.10 are on it (ModuleRules, a gate to be removed), else
     // "strict"
     function testCallRule(stack) {
         return ModuleRules.testCallRule(ModuleRules.stackDirectories(stack, directories)
@@ -1048,11 +1048,10 @@ Scope {
         _applyGuarded();
     }
 
-    // The host's own check of a directory that is not loaded — the installer's staged module
-    // (notes/plans/modules-management.md §6.2, "Verifying"): the same file check and manifest
-    // rules as a load, nothing built, nothing loaded, nothing of it kept. `done(answer)` once,
-    // never inside this call: { manifest, compatible, errors, warnings, mainFileError } — what
-    // could not be read counts as failed.
+    // The host's own check of a directory that is not loaded — the installer's staged module:
+    // the same file check and manifest rules as a load, nothing built, nothing loaded, nothing
+    // of it kept. `done(answer)` once, never inside this call: { manifest, compatible, errors,
+    // warnings, mainFileError } — what could not be read counts as failed.
     function checkDirectory(directory, done) {
         const record = _newRecord(ModuleFileRules.canonicalPath(directory));
         const answer = () => ({ manifest: record.manifest, compatible: record.compatible, errors: record.errors.slice(),
@@ -1294,7 +1293,7 @@ Scope {
         _applyGuarded();
     }
 
-    // ---- Where the modules come from (§3) ----
+    // ---- Where the modules come from ----
 
     // What the source check found (ModuleInstallRules.parseSourceCheck), the record it read
     // (parseRecord) and the built-in modules builtin.json lists as off. Until it answers every
@@ -1362,7 +1361,7 @@ Scope {
         }
     }
 
-    // ---- The first start that confirms modules (§5) ----
+    // ---- The first start that confirms modules ----
 
     property bool _baselineAsked: false
     // The modules of the last load are what a search that answered found (load()'s `searched`)

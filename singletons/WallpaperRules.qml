@@ -5,7 +5,7 @@ import QtQuick
 
 // Which image each screen's wallpaper shows — pure, so tests/WallpaperRulesTest.qml checks
 // every case without screens or files at hand. Wallpapers holds the live state and asks
-// here; notes/plans/wallpapers.md has the whole model.
+// here.
 //
 // The source is a file (the same image everywhere, nothing else applies) or a folder.
 // From a folder, images are named by their path relative to it, so the choices survive

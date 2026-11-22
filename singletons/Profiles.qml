@@ -9,7 +9,7 @@ import qs.components
 
 // Effective values of the settings in SettingsSchema: the system profile (the schema
 // defaults) overlaid by every active profile, in order. Read them with value(key) in a
-// binding; it follows profile changes. See notes/plans/adaptive-polling.md.
+// binding; it follows profile changes.
 //
 // The profiles live in Config.profiles. A config from before profiles has none and is
 // seeded with Full and Power save; an empty list is the user's choice and leaves only
