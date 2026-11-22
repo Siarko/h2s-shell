@@ -20,15 +20,16 @@ declaration (M1c, API 1.36), the host (M2) — next the packaging of built-in mo
 the installer (M3); after it the owner chooses what follows (the idle
 plan and PAM are ready).
 
-**The owner's queue for the night 2026-11-21/22** (in this order): finish step 8 (the last page
-slices: install and update on the page; then the segment's full set on both machines, merge,
-deploy to both — the NixOS machine still ran the shell of 2026-11-17 and needs the module's
-`privileged` declaration together with the core); the test hygiene plan
-(`plans/test-hygiene.md`, approved: T0 done; T1, T2, T4, T9 first); the decided small fixes
-(the password prompt's layout, `SettingsRow` cutting its label, Taildrop's "N files" opening the
-side panel, Taildrop's preferences as settings); the remembered polkit authorization — analysis
-and plan only; then the idle and lock plan's slices without views (pure rules first), then the
-PAM plan's. Releases, tags and pushing stay the owner's.
+**The night 2026-11-21/22 (done, details in done.md):** step 8 (Modules closed for now) is
+finished and deployed on both machines; the test hygiene plan's T0–T5, T7, T9 done (the full set
+~2.5 min on Arch, `--quick` ~26 s, `tests/affected.sh` picks a change's tests); the password
+prompt's layout, `SettingsRow`, Taildrop's "N files" side panel and preferences as settings,
+the supervisor's exit status across a SIGHUP; the idle plan's slices I1–I6 and I9 (the shell's
+own screen-off — off by default, the lock screen's after 1 min). For the owner: the remembered
+authorization plan's 5 questions (`plans/polkit-remembered.md`), the idle settings mockup to
+look at before the pages (I8), the release (core minor, module 0.7.0). Open next: idle I7
+(per-monitor ways), I8 (pages — after the owner's look), I10–I14; PAM slices 1… (1 in review);
+test hygiene T6, T8, T10, T11.
 
 State on 2026-11-21: notifications with a progress bar, Taildrop's list of transfers,
 Taildrop's views reworked (side panel, status pills, the bar wave, Taildrop off, "Save in…")

@@ -2555,3 +2555,36 @@ full set on both machines before the merge (`plans/modules-management.md` §9).
   the modules-on file; `restartNeeded`; system roots only when root-owned and not writable.
   Deployed on the Arch machine 2026-11-21: Tailscale acknowledged by the baseline, loaded;
   the config backed up as `config.json.bak-before-modules-host`.
+
+## The night 2026-11-21/22
+
+- **Step 8 finished** (`plans/modules-management.md`): the installer (M3), the updater (M3b),
+  configuration backups (M3c, manifest `backup`, API 1.37), built-in places in packaging (M2b),
+  the trust model in the docs (M0), the Settings → Modules page (M4a list and cards, M4b remove
+  and checks, M5a install with preview and changelog, M5b the update queue, consent, versions,
+  backups, the restart offer and banner), the safe-mode banner (M6). Each slice reviewed, the
+  security ones twice; deployed on both machines after the segment's full set passed on both.
+  The NixOS machine had been running the shell of 2026-11-17; it now runs the current one.
+- **Test hygiene** (`plans/test-hygiene.md`): T0 (SIGHUP reset for the launcher under test,
+  chained limits from the predecessor), T1 (0/0 and no-PASS fail), T2 (`tests/affected.sh` with
+  its map and self-test), T3 (instant animations in unit runs), T4 (unit shards, no
+  after-chains), T5 (run-all's parts side by side), T7 (the lock bed: guards, seams, -j, FLAKY
+  reruns, no fixed sleeps), T9 (`tests/remote-run.sh`). Unit suites 111 s → 13 s, `--quick`
+  180 s → ~26 s, the full set ~6 min → ~2.5 min on Arch. A real launcher defect found by the
+  flaky supervisor check: bash 5.3 loses a child's status when a trapped signal arrives — the
+  supervisor now ignores SIGHUP.
+- **Decided fixes**: the password prompt (identity first, polkit's message under Command for
+  module prompts), `SettingsRow` (a long value elides, the label keeps its width; the same
+  fractional-width trap fixed in `SchemaSettingEditor`), Taildrop ("N files" opens the side
+  panel; preferences as profile settings, no migration — unused on both machines).
+- **Idle plan** (`plans/idle-lock-flow.md`): I1 IdleRules and SleepNoticeRules, I2 Idle wired
+  (`lockscreen.lockAfter` from the last input; no migration), I3 the screensaver takes the
+  keyboard, I4 LockedHint reported to logind, I5 MonitorRules and ScreenPower on Hyprland (an
+  unknown monitor name in Hyprland's dpms dispatch turns every monitor off: dispatches only
+  from a fresh reading, recovery inside the action), I6 the shell's own screen-off (settings,
+  retries until confirmed, monitors it turned off restored after a restart), I9 logind idle
+  inhibitors (a 7 s watchdog; unknown counts as not held).
+- **Plans**: the remembered administrator authorization (`plans/polkit-remembered.md`, 5
+  questions for the owner).
+- **Workflow**: tests per slice by `affected.sh` + one `--quick`, the full set and the deploy
+  per segment; parallel agents only on disjoint files; nothing ended or deleted by pattern.
