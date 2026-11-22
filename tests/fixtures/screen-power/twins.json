@@ -1,0 +1,20 @@
+[
+    {
+        "name": "DP-1",
+        "make": "Dell Inc.",
+        "model": "U2419H",
+        "serial": "",
+        "dpmsStatus": true,
+        "disabled": false,
+        "mirrorOf": "none"
+    },
+    {
+        "name": "DP-3",
+        "make": "Dell Inc.",
+        "model": "U2419H",
+        "serial": "",
+        "dpmsStatus": true,
+        "disabled": false,
+        "mirrorOf": "none"
+    }
+]

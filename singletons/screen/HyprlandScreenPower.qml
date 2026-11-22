@@ -97,13 +97,11 @@ QtObject {
                 maxOutputBytes: 4096,
                 done: result => {
                     const problem = MonitorRules.dispatchProblem(result);
-                    const afterGeneration = root._generation;
-                    root._readOnce(after => {
-                        root._recover(answer.monitors, after, monitor.connector, afterGeneration);
+                    root._readOnce(after => root._recover(answer.monitors, after, monitor.connector, final => {
                         root._finish(action, problem !== "" ? problem
                                      : root._superseded(action) ? "a newer request came"
-                                     : MonitorRules.actionProblem(after?.monitors ?? null, action.id, action.on));
-                    });
+                                     : MonitorRules.actionProblem(final?.monitors ?? null, action.id, action.on));
+                    }));
                 }
             });
         });
@@ -118,17 +116,26 @@ QtObject {
         _next();
     }
 
-    // Monitors the action turned off besides its own are turned back on — each by a
-    // connector of the reading just made, and only when nothing changed since it started
-    function _recover(before, after, targetConnector, generation) {
-        if (after === null || generation !== _generation)
-            return;
-        for (const connector of MonitorRules.turnedOffBesides(before, after.monitors, targetConnector)) {
+    // Part of the action: monitors it turned off besides its own (on before, off in the
+    // reading after) are turned back on, each by a connector of that reading — whatever
+    // changed meanwhile, since a target unplugged under the action is exactly when Hyprland
+    // turns every monitor off. Then `done` gets the state the action leaves: a reading made
+    // after those dispatches, or `after` when none was needed.
+    function _recover(before, after, targetConnector, done) {
+        const connectors = after === null ? [] : MonitorRules.turnedOffBesides(before, after.monitors, targetConnector);
+        if (connectors.length === 0)
+            return done(after);
+        let waiting = connectors.length;
+        for (const connector of connectors) {
             console.warn("ScreenPower: " + connector + " went off with another monitor's action: turned back on");
             _runner.start([hyprctl, "dispatch", MonitorRules.hyprlandDpms(connector, true)], {
                 timeoutMs: 10000,
                 maxOutputBytes: 4096,
-                done: result => root.read()
+                done: result => {
+                    waiting -= 1;
+                    if (waiting === 0)
+                        root._readOnce(done);
+                }
             });
         }
     }

@@ -1,27 +1,45 @@
 #!/bin/sh
 # A stand-in for hyprctl (tests/ScreenPowerReadingTest.qml), started through a link in the
-# suite's scratch directory: `-j monitors` prints that directory's `monitors.json` (waits
-# while `read-wait` is there, fails while `read-fails` is); `dispatch <expression>` appends
-# the expression to `dispatches`, makes `after-dispatch.json` (when there) the new
-# `monitors.json`, and prints "ok" — as Hyprland does whatever it did — or fails with
-# status 1 while `dispatch-fails` is there. Anything else it is asked fails.
+# suite's scratch directory:
+# - `-j monitors` prints that directory's `monitors.json`, or fails while `read-fails` is
+#   there. One reading at a time can be held: while `read-wait` is there, the next reading
+#   takes it (renames it `read-held`), keeps `monitors.json` as it is then, and prints that
+#   once `read-held` is gone.
+# - `dispatch <expression>` appends the expression to `dispatches`, waits while
+#   `dispatch-wait` is there, fails with status 1 while `dispatch-fails` is, else makes
+#   `after-dispatch.json` (when there) the new `monitors.json` — `after-dispatch-2.json`
+#   then becomes `after-dispatch.json`, and so on to 5, one per dispatch — and prints "ok",
+#   as Hyprland does whatever it did.
+# Anything else it is asked fails.
 here=$(dirname "$0")
 case "$1 $2" in
     "-j monitors")
-        while [ -e "$here/read-wait" ]; do sleep 0.02; done
         if [ -e "$here/read-fails" ]; then
             echo "HYPRLAND_INSTANCE_SIGNATURE was not set! (Is Hyprland running?)" >&2
             exit 1
         fi
-        cat "$here/monitors.json" ;;
+        if mv "$here/read-wait" "$here/read-held" 2> /dev/null; then
+            answer=$(cat "$here/monitors.json")
+            while [ -e "$here/read-held" ]; do sleep 0.02; done
+            printf '%s\n' "$answer"
+        else
+            cat "$here/monitors.json"
+        fi ;;
     "dispatch "*)
         [ $# -eq 2 ] || { echo "the stand-in takes one expression" >&2; exit 2; }
         printf '%s\n' "$2" >> "$here/dispatches"
+        while [ -e "$here/dispatch-wait" ]; do sleep 0.02; done
         if [ -e "$here/dispatch-fails" ]; then
             echo "Couldn't connect to the Hyprland socket" >&2
             exit 1
         fi
-        [ ! -e "$here/after-dispatch.json" ] || mv "$here/after-dispatch.json" "$here/monitors.json"
+        if [ -e "$here/after-dispatch.json" ]; then
+            mv "$here/after-dispatch.json" "$here/monitors.json"
+            [ ! -e "$here/after-dispatch-2.json" ] || mv "$here/after-dispatch-2.json" "$here/after-dispatch.json"
+            for n in 3 4 5; do
+                [ ! -e "$here/after-dispatch-$n.json" ] || mv "$here/after-dispatch-$n.json" "$here/after-dispatch-$((n - 1)).json"
+            done
+        fi
         echo "ok" ;;
     *) echo "the stand-in only knows -j monitors and dispatch" >&2; exit 2 ;;
 esac

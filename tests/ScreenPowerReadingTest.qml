@@ -20,6 +20,7 @@ TestCase {
     readonly property string _fixtures: Quickshell.shellDir + "/tests/fixtures/screen-power"
     readonly property string _scratch: (Quickshell.env("XDG_RUNTIME_DIR") || "/tmp") + "/h2s-screen-power-reading-test-" + Date.now()
     readonly property string _samsung: "Samsung Electric Company|C27JG5x|H4ZMC00268"
+    readonly property string _builtIn: "BOE|0x0BCA|"
 
     property var _power: null
     property bool _written: false
@@ -86,6 +87,12 @@ TestCase {
             suite._shellDone = true;
             next?.();
         });
+    }
+
+    // Lets the held reading answer, once a reading has taken the hold. The steps that hold
+    // one wait until every reading has answered, so no release outlives its step.
+    function _release() {
+        _inScratch("n=0; until [ -e \"$1/read-held\" ] || [ $n -ge 500 ]; do sleep 0.02; n=$((n + 1)); done; rm \"$1/read-held\"");
     }
 
     function _readDispatches(next) {
@@ -160,19 +167,19 @@ TestCase {
             _inScratch("rm \"$1/read-fails\"; : > \"$1/read-wait\"", () => {
                 suite._power.setPower(suite._samsung, false);
                 suite._power.monitorEvent();
-                suite._inScratch("rm \"$1/read-wait\"");
+                suite._release();
             });
         });
-        _then("the action with an event under it was answered", () => _actions.length === 6, () => {
+        _then("the action with an event under it was answered", () => _actions.length === 6 && _shellDone && !_power._query.running && _power._runner.running === 0, () => {
             assertEqual(_actions[5], _samsung + ":false:the monitors changed while it was asked", "a monitor event between the reading and the dispatch: refused");
             // Another reading started while the action's runs
             _inScratch(": > \"$1/read-wait\"", () => {
                 suite._power.setPower(suite._samsung, false);
                 suite._power.read();
-                suite._inScratch("rm \"$1/read-wait\"");
+                suite._release();
             });
         });
-        _then("the action with a reading under it was answered", () => _actions.length === 7, () => {
+        _then("the action with a reading under it was answered", () => _actions.length === 7 && _shellDone && !_power._query.running && _power._runner.running === 0, () => {
             assertEqual(_actions[6], _samsung + ":false:the monitors changed while it was asked", "a reading started under the action: refused");
             _dispatchList(); // a fresh read of the dispatches, for the next step
         });
@@ -181,10 +188,10 @@ TestCase {
             _inScratch(": > \"$1/read-wait\"; cp \"$2/two-on.json\" \"$1/after-dispatch.json\"", () => {
                 suite._power.read();
                 suite._power.setPower(suite._samsung, true);
-                suite._inScratch("rm \"$1/read-wait\"");
+                suite._release();
             });
         });
-        _then("the action after a pending reading was answered", () => _actions.length === 8, () => {
+        _then("the action after a pending reading was answered", () => _actions.length === 8 && _shellDone && !_power._query.running && _power._runner.running === 0, () => {
             assertEqual(_actions[7], _samsung + ":true:", "an action asked while a reading was pending: done, from its own reading");
             assertEqual(_powers(), "DP-2=on eDP-1=on", "… published");
             // Two requests for one monitor: the newer wins, the older dispatches nothing
@@ -192,10 +199,10 @@ TestCase {
                 suite._power.setPower(suite._samsung, false);
                 suite._power.setPower(suite._samsung, true);
                 suite._power.setPower(suite._samsung, false);
-                suite._inScratch("rm \"$1/read-wait\"");
+                suite._release();
             });
         });
-        _then("the superseded requests were answered", () => _actions.length === 10, () => {
+        _then("the superseded requests were answered", () => _actions.length === 10 && _shellDone && !_power._query.running && _power._runner.running === 0, () => {
             assertEqual(_actions[8], _samsung + ":false:a newer request came", "the request under way when a newer came: superseded");
             assertEqual(_actions[9], _samsung + ":false:", "… the newest done; the one in between replaced in the queue");
             assertEqual(_powers(), "DP-2=off eDP-1=on", "… published");
@@ -203,16 +210,67 @@ TestCase {
             _inScratch("cp \"$2/two-on.json\" \"$1/monitors.json\"; cp \"$2/both-off.json\" \"$1/after-dispatch.json\"", () => suite._power.read());
         });
         _then("both on again", () => _powers() === "DP-2=on eDP-1=on", () => {
-            _power.setPower(_samsung, false);
+            // The action turns the other monitor off too; the recovery's enable brings it back;
+            // a queued action for that other monitor comes after, unhindered
+            _inScratch("cp \"$2/both-off.json\" \"$1/after-dispatch.json\"; cp \"$2/samsung-off.json\" \"$1/after-dispatch-2.json\";"
+                       + " cp \"$2/both-off.json\" \"$1/after-dispatch-3.json\"", () => {
+                suite._power.setPower(suite._samsung, false);
+                suite._power.setPower(suite._builtIn, false);
+            });
         });
-        _then("the recovery was dispatched", () => _actions.length === 11 && _dispatchList().slice(-1)[0] === _dpms("enable", "eDP-1"), () => {
-            assertEqual(_actions[10], _samsung + ":false:", "the action itself worked");
-            assertEqual(JSON.stringify(_dispatches.split("\n").slice(-2)), JSON.stringify([_dpms("disable", "DP-2"), _dpms("enable", "eDP-1")]),
-                        "… the monitor it turned off besides its own turned back on, by its connector");
+        _then("the recovery and the queued action were answered", () => _actions.length === 12, () => {
+            assertEqual(_actions[10], _samsung + ":false:", "the action itself worked, by the reading after its recovery");
+            assertEqual(_actions[11], _builtIn + ":false:", "… the action queued behind it worked: neither refused nor raced");
+            assertEqual(_powers(), "DP-2=off eDP-1=off", "… published");
+            _dispatchList();
+        });
+        _then("the recovery's dispatches read", () => !_dispatchesReading && _dispatchList().length === 8, () => {
+            assertEqual(JSON.stringify(_dispatches.split("\n").slice(-3)), JSON.stringify([_dpms("disable", "DP-2"), _dpms("enable", "eDP-1"), _dpms("disable", "eDP-1")]),
+                        "the monitor turned off besides the target turned back on, by its connector, before the next action");
+            _inScratch("cp \"$2/two-on.json\" \"$1/monitors.json\"", () => suite._power.read());
+        });
+        _then("both on before the unplug", () => _powers() === "DP-2=on eDP-1=on", () => {
+            // The target is unplugged under the dispatch: Hyprland turns the rest off, and a
+            // monitor event arrives before the reading after it
+            _inScratch(": > \"$1/dispatch-wait\"; cp \"$2/edp-off-alone.json\" \"$1/after-dispatch.json\"; cp \"$2/edp-on-alone.json\" \"$1/after-dispatch-2.json\"",
+                       () => suite._power.setPower(suite._samsung, false));
+        });
+        _then("the dispatch waits", () => _dispatchList().length === 9, () => {
+            _power.monitorEvent();
+            _power.read();
+            _inScratch("rm \"$1/dispatch-wait\"");
+        });
+        _then("the unplugged target's action was answered", () => _actions.length === 13, () => {
+            assertEqual(_actions[12], _samsung + ":false:the monitor is gone", "the target gone under the action: a problem");
+            assertEqual(_powers(), "eDP-1=on", "… every other monitor that was on is on again, whatever event came meanwhile");
+            _dispatchList();
+        });
+        _then("the unplug's dispatches read", () => !_dispatchesReading && _dispatchList().length === 10, () => {
+            assertEqual(_dispatches.split("\n").slice(-1)[0], _dpms("enable", "eDP-1"), "… by its connector");
+            // A reading older than the one published is not published
+            _inScratch("cp \"$2/two-on.json\" \"$1/monitors.json\"; : > \"$1/read-wait\"", () => {
+                suite._power.read();
+                suite._inScratch("n=0; until [ -e \"$1/read-held\" ] || [ $n -ge 500 ]; do sleep 0.02; n=$((n + 1)); done;"
+                                 + " cp \"$2/samsung-off.json\" \"$1/monitors.json\"", () => suite._power._readOnce(() => {}));
+            });
+        });
+        _then("the newer reading was published", () => _powers() === "DP-2=off eDP-1=on", () => {
+            _inScratch("rm \"$1/read-held\"");
+        });
+        _then("the older reading answered", () => _shellDone && !_power._query.running, () => {
+            assertEqual(_powers(), "DP-2=off eDP-1=on", "a reading started before the published one, answering after it: not published");
+            _inScratch("cp \"$2/twins.json\" \"$1/monitors.json\"", () => suite._power.read());
+        });
+        _then("the twins were read", () => _power.monitors.length === 2 && _power.monitors[0].connector === "DP-1", () => {
+            assertEqual(_power.monitors.map(monitor => monitor.id).join(" "), "Dell Inc.|U2419H||DP-1 Dell Inc.|U2419H||DP-3", "twins read: told apart");
+            _inScratch("cp \"$2/twin-alone.json\" \"$1/monitors.json\"", () => suite._power.read());
+        });
+        _then("one twin was read alone", () => _power.monitors.length === 1, () => {
+            assertEqual(_power.monitors[0].id, "Dell Inc.|U2419H||DP-1", "a twin left alone keeps its id");
             _inScratch("cp \"$2/malformed.json\" \"$1/monitors.json\"", () => suite._power.read());
         });
         _then("the malformed answer was read", () => !_power.monitorsRead, () => {
-            assertEqual(_powers(), "DP-2=unknown eDP-1=unknown", "an answer that is not JSON: every power unknown");
+            assertEqual(_powers(), "DP-1=unknown", "an answer that is not JSON: every power unknown");
             assertEqual(_power.readProblem, "hyprctl gave no readable answer", "… said so");
         });
         _clock.start();

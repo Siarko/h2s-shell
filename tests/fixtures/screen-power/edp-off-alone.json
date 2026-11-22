@@ -1,0 +1,13 @@
+[
+    {
+        "id": 0,
+        "name": "eDP-1",
+        "description": "BOE 0x0BCA",
+        "make": "BOE",
+        "model": "0x0BCA",
+        "serial": "",
+        "dpmsStatus": false,
+        "disabled": false,
+        "mirrorOf": "none"
+    }
+]
