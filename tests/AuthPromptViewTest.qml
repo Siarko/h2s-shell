@@ -1,5 +1,4 @@
 import QtQuick
-import QtTest as QT
 import Quickshell
 import Quickshell.Wayland
 import qs.polkit
@@ -66,10 +65,9 @@ TestCase {
             height: 20
         }
 
-        QT.TestCase {
+        WindowDriver {
             id: driver
             name: "AuthPromptViewDriver"
-            when: false
         }
     }
 
@@ -138,7 +136,11 @@ TestCase {
     }
 
     function runAsync() {
-        driver.wait(300); // the window shown
+        if (!driver.waitShown()) {
+            fail("the window was never drawn");
+            finish();
+            return;
+        }
         assertEqual(card.color.a, 1, "the prompt's card: its colour has no alpha");
         assertEqual(card.opacity, 1, "… and the card is not faded");
 

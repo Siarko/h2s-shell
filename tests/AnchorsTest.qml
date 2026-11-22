@@ -1,6 +1,5 @@
 import QtQuick
 import QtQuick.Layouts
-import QtTest as QT
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
@@ -1372,9 +1371,8 @@ TestCase {
 
     // ---- A card's buttons (its region `actions`) ----
 
-    property var _driver: QT.TestCase {
+    property var _driver: WindowDriver {
         name: "AnchorsDriver"
-        when: false
     }
     // Buttons kept to see that they stay the same objects
     property var _keptButtons: []

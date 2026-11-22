@@ -1,5 +1,4 @@
 import QtQuick
-import QtTest as QT
 import Quickshell
 import Quickshell.Wayland
 import qs.components
@@ -40,9 +39,8 @@ TestCase {
         WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
     }
 
-    property var _driver: QT.TestCase {
+    property var _driver: WindowDriver {
         name: "ModuleContributionDriver"
-        when: false
     }
 
     function _until(condition, limitMs = 3000) {

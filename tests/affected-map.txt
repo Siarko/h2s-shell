@@ -68,6 +68,8 @@ tests/headless.sh unit:all modules:all self:tests/run-unit-selftest.sh
 tests/run-modules.sh modules:all self:tests/run-unit-selftest.sh
 tests/fixtures/pkexec-on-path/* modules:all
 tests/run-all.sh self:tests/run-all-selftest.sh
+# Run by hand to find a flake: what it runs is the runners above, under load
+tests/soak.sh none
 tests/remote-run.sh self:tests/remote-run-selftest.sh
 tests/run-system.sh self:tests/run-system.sh self:tests/run-system-selftest.sh
 tests/system/* self:tests/run-system.sh

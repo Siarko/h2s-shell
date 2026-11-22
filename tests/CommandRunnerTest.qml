@@ -339,7 +339,8 @@ TestCase {
         _then("the runs past their limit answered", () => _answered("limitWrapped", "limitBare", "stubbornWrapped", "stubbornBare", "inTime", "limitNoSetpriv"), () => {
             const wrapped = _runs.limitWrapped.result;
             assertEqual(wrapped.timedOut + " " + wrapped.ok + " " + wrapped.code + " " + wrapped.cancelled, "true false 124 false", "past the limit, inside timeout: timedOut, timeout's 124");
-            assert(wrapped.durationMs >= 300 && wrapped.durationMs < 5000, "… at the limit, not at the script's end (" + wrapped.durationMs + " ms)");
+            // The script's own end is 30 s away: an answer before it is the limit's
+            assert(wrapped.durationMs >= 300 && wrapped.durationMs < 30000, "… at the limit, not at the script's end (" + wrapped.durationMs + " ms)");
             assertEqual(wrapped.stdout, "started", "… with what it printed until then");
             const watchdog = _runs.limitBare.result;
             assertEqual(watchdog.timedOut + " " + watchdog.ok + " " + watchdog.code + " " + watchdog.failedToStart, "true false -1 false", "past the limit, bare: the runner's watchdog ends it, timedOut");
@@ -351,7 +352,8 @@ TestCase {
                    "… and fired at it (" + watchdogTimings?.fired.watchdog + " ms)");
             const killedWrapped = _runs.stubbornWrapped.result;
             assertEqual(killedWrapped.timedOut + " " + killedWrapped.ok, "true false", "TERM shrugged off, inside timeout: its KILL ends it, timedOut");
-            assert(killedWrapped.durationMs >= 500 && killedWrapped.durationMs < 5000, "… killAfterMs after the limit (" + killedWrapped.durationMs + " ms)");
+            // The script never ends by itself: any answer is the KILL's
+            assert(killedWrapped.durationMs >= 500, "… killAfterMs after the limit (" + killedWrapped.durationMs + " ms)");
             const killedBare = _runs.stubbornBare.result;
             assertEqual(killedBare.timedOut + " " + killedBare.ok + " " + killedBare.code, "true false -1", "TERM shrugged off, bare: the runner's KILL ends it, timedOut");
             const killTimings = bare._timingsOf(_runs.stubbornBare.handle);
@@ -410,12 +412,13 @@ TestCase {
                             name + ": cancelled, answered once (cancel() twice)");
                 assertEqual(record.result.stdout + "|" + JSON.stringify(record.lines) + "|" + record.out.join(""), "ready|[[\"ready\",\"stdout\"]]|ready\n",
                             name + ": what the script said after the cancel is not handed over, nor kept");
-                assert(record.result.durationMs < 5000, name + ": ended by the TERM (" + record.result.durationMs + " ms)");
+                // The script loops until its trap exits 0 on the TERM; a KILL leaves no code
+                assertEqual(record.result.code, 0, name + ": ended by the TERM, its trap's exit");
             }
             for (const name of ["cancelStubbornWrapped", "cancelStubbornBare"]) {
                 const result = _runs[name].result;
                 assertEqual(result.cancelled + " " + result.ok + " " + result.timedOut, "true false false", name + ": TERM shrugged off, KILL after killAfterMs: cancelled");
-                assert(result.durationMs >= 200 && result.durationMs < 5000, name + ": … not before killAfterMs (" + result.durationMs + " ms)");
+                assert(result.durationMs >= 200, name + ": … not before killAfterMs (" + result.durationMs + " ms)");
             }
             const waited = _runs.cancelWaiting;
             assertEqual(waited.result.cancelled + " " + waited.result.failedToStart + " " + waited.result.stdout + " " + waited.result.durationMs + " " + waited.answers,

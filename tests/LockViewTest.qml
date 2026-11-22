@@ -1,5 +1,4 @@
 import QtQuick
-import QtTest as QT
 import Quickshell
 import Quickshell.Wayland
 import qs.screensaver
@@ -80,10 +79,9 @@ TestCase {
             timeout: 300
         }
 
-        QT.TestCase {
+        WindowDriver {
             id: driver
             name: "LockViewDriver"
-            when: false
         }
     }
 
@@ -116,7 +114,11 @@ TestCase {
     }
 
     function runAsync() {
-        driver.wait(300); // the window shown
+        if (!driver.waitShown()) {
+            fail("the window was never drawn");
+            finish();
+            return;
+        }
         const field = _find(prompt, "field");
         const error = _find(prompt, "error");
         const notice = _find(prompt, "notice");

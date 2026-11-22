@@ -1,6 +1,5 @@
 import QtQuick
 import QtQuick.Layouts
-import QtTest as QT
 import Quickshell
 import qs.api as Public
 import qs.components
@@ -71,10 +70,9 @@ TestCase {
             Public.SectionTitle { id: plainTitle; text: "Plain" }
         }
 
-        QT.TestCase {
+        WindowDriver {
             id: driver
             name: "SidePanelDriver"
-            when: false
         }
     }
 

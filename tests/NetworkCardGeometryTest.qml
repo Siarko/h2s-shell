@@ -1,6 +1,5 @@
 import QtQuick
 import QtQuick.Layouts
-import QtTest as QT
 import Quickshell
 import Quickshell.Wayland
 import qs.components
@@ -145,9 +144,8 @@ TestCase {
         }
     }
 
-    property var _driver: QT.TestCase {
+    property var _driver: WindowDriver {
         name: "NetworkCardGeometryDriver"
-        when: false
     }
 
     function _until(condition, limitMs = 3000) {

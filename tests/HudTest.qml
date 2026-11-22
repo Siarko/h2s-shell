@@ -1,5 +1,4 @@
 import QtQuick
-import QtTest as QT
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
@@ -80,10 +79,9 @@ TestCase {
             openSettings: pageId => { suite._opened = suite._opened.concat([pageId]); }
         }
 
-        QT.TestCase {
+        WindowDriver {
             id: driver
             name: "HudDriver"
-            when: false
         }
     }
     readonly property var _driver: driver

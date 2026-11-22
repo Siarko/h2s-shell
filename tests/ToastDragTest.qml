@@ -1,5 +1,4 @@
 import QtQuick
-import QtTest as QT
 import Quickshell
 import Quickshell.Wayland
 import Quickshell.Services.Notifications
@@ -58,10 +57,9 @@ TestCase {
             height: 200
         }
 
-        QT.TestCase {
+        WindowDriver {
             id: driver
             name: "ToastDragDriver"
-            when: false
         }
     }
 
@@ -145,7 +143,11 @@ TestCase {
     }
 
     function runAsync() {
-        driver.wait(300); // the window shown
+        if (!driver.waitShown()) {
+            fail("the window was never drawn");
+            finish();
+            return;
+        }
         const settings = change => {
             _globalsPin.use(change);
         };

@@ -1,5 +1,4 @@
 import QtQuick
-import QtTest as QT
 import Quickshell
 import Quickshell.Wayland
 import qs.components
@@ -118,10 +117,9 @@ TestCase {
             }
         }
 
-        QT.TestCase {
+        WindowDriver {
             id: driver
             name: "ButtonKindsDriver"
-            when: false
         }
     }
 

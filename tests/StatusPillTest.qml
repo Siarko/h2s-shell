@@ -1,6 +1,5 @@
 import QtQuick
 import QtQuick.Layouts
-import QtTest as QT
 import Quickshell
 import Quickshell.Wayland
 import qs.api as Public
@@ -74,10 +73,9 @@ TestCase {
 
         Item { id: cardArea; x: 10; y: 260; width: 360; height: 150 }
 
-        QT.TestCase {
+        WindowDriver {
             id: driver
             name: "StatusPillDriver"
-            when: false
         }
     }
 

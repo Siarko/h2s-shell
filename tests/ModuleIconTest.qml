@@ -1,5 +1,4 @@
 import QtQuick
-import QtTest as QT
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
@@ -55,10 +54,9 @@ TestCase {
             spacing: 10
         }
 
-        QT.TestCase {
+        WindowDriver {
             id: driver
             name: "ModuleIconDriver"
-            when: false
         }
     }
 

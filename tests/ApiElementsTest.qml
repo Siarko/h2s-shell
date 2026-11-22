@@ -1,6 +1,5 @@
 import QtQuick
 import QtQuick.Layouts
-import QtTest as QT
 import Quickshell
 import Quickshell.Wayland
 import qs.api as Public
@@ -670,10 +669,9 @@ TestCase {
         }
         Public.VpnProvider { id: unregistered; autoRegister: false; providerId: "api-elements-test" }
 
-        QT.TestCase {
+        WindowDriver {
             id: driver
             name: "ApiElementsDriver"
-            when: false
         }
     }
 

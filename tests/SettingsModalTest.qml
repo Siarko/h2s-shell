@@ -1,5 +1,4 @@
 import QtQuick
-import QtTest as QT
 import Quickshell
 import qs.components
 import qs.singletons
@@ -77,10 +76,9 @@ TestCase {
             }
         }
 
-        QT.TestCase {
+        WindowDriver {
             id: driver
             name: "SettingsModalDriver"
-            when: false
         }
     }
 

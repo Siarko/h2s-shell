@@ -347,7 +347,8 @@ TestCase {
         // Another agent: strictly one run at a time
         ModuleTestKit.setPolkitAgent("other");
         const talk = _path("talk");
-        _start("first", [talk, "sleep", "20"]);
+        const termed = module.dataDirectory + "/first-termed";
+        _start("first", [talk, "term", termed, "20"]);
         _start("queued", [talk, "lines", "1", "0"]);
         _then("the first run has started", () => _runs.first.startedAt > 0, () => {
             assert(_runs.queued.handle.running && _runs.queued.firstLineAt === 0, "with another agent the second waits while the first runs");
@@ -356,19 +357,24 @@ TestCase {
         _then("the queued run is answered", () => _done("queued"), () => {
             const queued = _runs.queued;
             assert(queued.result.cancelled && !queued.result.ok && !queued.handle.running, "cancel while queued: cancelled");
-            assert(queued.doneAt - queued.cancelledAt < 1000 && queued.lines.length === 0, "… at once, and it never ran");
-            assert(_runs.first.handle.running, "… the first still runs");
+            assert(queued.lines.length === 0, "… and it never ran");
+            assert(_runs.first.handle.running && _runs.first.result === null, "… answered at once: the first still runs");
             _start("after", [talk, "lines", "1", "0"]);
             _cancel("first");
         });
         _then("the first and the next are answered", () => _done("first", "after"), () => {
             const first = _runs.first;
             assert(first.result.cancelled && !first.result.ok && !first.result.timedOut, "cancel after start: cancelled");
-            assert(first.doneAt - first.cancelledAt < 2500, "… its pkexec signalled and gone before killAfterMs (" + (first.doneAt - first.cancelledAt) + " ms)");
             assertEqual(first.linesAfterCancel, 0, "… no line handed over after cancel()");
             const after = _runs.after;
             assert(after.result.ok && after.firstLineAt >= first.cancelledAt, "the next one started only after the first was cancelled");
             assert(after.firstLineAt >= first.doneAt - 50, "… and once the cancelled one had gone");
+            suite._markSeen = null;
+            markRunner.start(["sh", "-c", "if [ -e \"$1\" ]; then echo termed; else echo never; fi", "sh", termed], { done: result => suite._markSeen = result.stdout.trim() });
+        });
+        // Its TERM reached the command, which left by its trap: not the KILL killAfterMs later
+        _then("the first's mark is looked for", () => _markSeen !== null, () => {
+            assertEqual(_markSeen, "termed", "… its pkexec signalled: the command ended on the TERM");
         });
         _then("the queue is idle", () => _idle(), () => _cancelHeld());
     }
@@ -452,7 +458,8 @@ TestCase {
         });
         _then("the next one has run", () => _done("behind"), () => {
             const after = _runs.behind.firstLineAt - _runs.asking.foreignEndedAt;
-            assert(after >= 1500 && after < 4500, "that request ended: the 2 s ran again, then the head let go (" + after + " ms)");
+            assert(after >= 1500, "that request ended: the 2 s ran again, then the head let go (" + after + " ms)");
+            assert(_runs.asking.handle.running && _runs.asking.result === null, "… while the first still runs: let go by the 2 s, not by its end");
             _cancel("asking");
         });
         _then("the first is answered", () => _done("asking") && _idle(), () => {
@@ -521,7 +528,7 @@ TestCase {
         _then("the second has run", () => _done("second"), () => {
             const quiet = _runs.quiet;
             const after = _runs.second.firstLineAt - quiet.startedAt;
-            assert(after >= 1500 && after < 4500, "no request: the head let go about 2 s after the first started (" + after + " ms)");
+            assert(after >= 1500, "no request: the head let go about 2 s after the first started (" + after + " ms)");
             assert(quiet.handle.running && quiet.result === null, "… the first still running: a long run does not block the others");
             _cancel("quiet");
         });

@@ -1,5 +1,4 @@
 import QtQuick
-import QtTest as QT
 import Quickshell
 import qs.components
 import qs.panels.settings
@@ -245,10 +244,9 @@ TestCase {
             }
         }
 
-        QT.TestCase {
+        WindowDriver {
             id: driver
             name: "ModulesPageDriver"
-            when: false
         }
     }
 

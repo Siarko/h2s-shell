@@ -1,5 +1,4 @@
 import QtQuick
-import QtTest as QT
 import Quickshell
 import Quickshell.Wayland
 import qs.components
@@ -127,10 +126,9 @@ TestCase {
             onDismissRequested: dismissals++
         }
 
-        QT.TestCase {
+        WindowDriver {
             id: driver
             name: "PointerInputDriver"
-            when: false
         }
     }
 
@@ -177,7 +175,11 @@ TestCase {
     }
 
     function runAsync() {
-        driver.wait(300); // the window shown
+        if (!driver.waitShown()) {
+            fail("the window was never drawn");
+            finish();
+            return;
+        }
 
         // --- the mouse: hover and click, as before ---
         _reset();

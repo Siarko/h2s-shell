@@ -359,13 +359,16 @@ TestCase {
         });
         _then("the reload settles", () => _settled() && host.guard !== null, () => {
             assertEqual(host.guard?.count, 2, "a reload of the same process: not counted again");
+        });
+        // Inside the window the count stays: read from the file once the loads have settled,
+        // so it is what the guard left, not what it is about to write
+        _then("the counter read inside the window", () => _counterReads("123:9 2"), () => {
+            assert(host.guard?.cleared !== true, "inside guardClearMs: not cleared");
             // Now a short window, from the next load's answer on
             host.guardClearMs = 300;
             host.load(_dirs(["good"]), {});
-            suite._clearAsked = Date.now();
         });
         _then("the counter is cleared after the window", () => host.guard?.cleared === true && _counterReads("123:9 0"), () => {
-            assert(Date.now() - _clearAsked >= 300, "… not before the window (" + (Date.now() - _clearAsked) + " ms)");
             assertEqual(_counter, "123:9 0", "lived guardClearMs: the count back to 0");
             // The long window again: the next counts are read before anything clears them
             host.guardClearMs = 600000;
@@ -1458,7 +1461,6 @@ TestCase {
     }
     property var _made: null
     property var _exists: null
-    property var _clearAsked: 0
     // The start counter's file as last read, and whether a read is under way
     property string _counter: ""
     property bool _readingCounter: false

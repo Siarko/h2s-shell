@@ -2,6 +2,8 @@
 # The command the fixture's suite runs as "root":
 #   talk lines <n> <seconds>   prints "line 1" … "line <n>", <seconds> apart, then a line on stderr
 #   talk sleep <seconds>       prints "started", then sleeps (TERM ends it at once)
+#   talk term <file> <seconds> prints "started", then sleeps; TERM ends it at once, creating
+#                              <file> first (removed at the start): that the TERM reached it
 #   talk hold <seconds>        prints "started", then sleeps ignoring TERM (as a process run as
 #                              root, which the shell cannot signal: only KILL ends it here)
 #   talk env <name>            prints "<name>=<value>" from its environment ("" when unset)
@@ -22,6 +24,14 @@ case "$1" in
     sleep)
         echo started
         exec sleep "$2"
+        ;;
+    term)
+        rm -f -- "$2"
+        trap 'kill "$child" 2> /dev/null; : > "$2"; exit 143' TERM
+        echo started
+        sleep "$3" &
+        child=$!
+        wait "$child"
         ;;
     hold)
         trap '' TERM

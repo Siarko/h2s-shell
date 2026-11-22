@@ -1,5 +1,4 @@
 import QtQuick
-import QtTest as QT
 import Quickshell
 import Quickshell.Wayland
 import qs.singletons
@@ -40,10 +39,9 @@ TestCase {
     property QtObject _seenWindow: null
     property string _seenTitle: ""
     property Item _driverHolder: Item {
-        QT.TestCase {
+        WindowDriver {
             id: driver
             name: "FileChooserDriver"
-            when: false
         }
     }
 
