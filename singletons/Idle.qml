@@ -175,10 +175,13 @@ Singleton {
             break;
         case "powerOff":
         case "powerOn":
-            // The first ask, and the first ask again (a reading showed it did not take); the
-            // further ones, after a growing pause, are not logged
+            // The first ask, the first ask again (a reading showed it did not take), and each off
+            // asked of a monitor that came back powered; the further asks again, after a
+            // growing pause, are not logged
             if (action.restore === true)
                 _log("warning", "monitors turned off before the shell restarted, turned on again: " + action.ids.join(", "));
+            else if (action.again === true)
+                _log("info", "monitor " + action.ids.join(", ") + " read on while off: turned off again");
             else if (action.attempt === undefined)
                 _log("info", (action.type === "powerOff" ? "screens off: " : "screens on: ") + action.ids.join(", "));
             else if (action.attempt === 2)

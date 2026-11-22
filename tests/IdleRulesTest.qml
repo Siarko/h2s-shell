@@ -195,7 +195,10 @@ TestCase {
         assertEqual(machine.next(), -1, "… no deadline left");
         assertEqual(IdleRules.powerRetryDelay(40), IdleRules.powerRetry.maximum, "the pause grows up to its longest");
         machine.at(650000, { type: "power", power: { oled: "on" } });
-        assertEqual(machine.actions, "powerOff:oled", "read on later while the shell has it off (it came back powered): the off asked again at once");
+        assertEqual(machine.actions, "", "read on later while the shell has it off (it came back powered): not at once —");
+        assertEqual(machine.next(), 650000 + IdleRules.powerRetryDelay(3), "… after the pause its three asks earn");
+        machine.deadline();
+        assertEqual(machine.actions, "powerOff:oled", "… then the off asked again");
         machine.at(650100, { type: "power", power: { oled: "off" } });
         assertEqual(Object.keys(machine.state.pendingPower).length, 0, "… read off: done");
 
@@ -912,7 +915,7 @@ TestCase {
         dropped.idle(5000, 0).deadline();
         dropped.reconfigure(310000, values, ["lcd"]);
         dropped.reconfigure(310000 + IdleRules.shellOffWindow, values, ["lcd", "oled"]);
-        assertEqual(dropped.actions, "showSaver:oled,powerOff:oled", "powered off by the shell, back within its window: off again, no wake");
+        assertEqual(dropped.actions, "showSaver:oled", "powered off by the shell, back within its window: its black surface, no wake");
         assertEqual(dropped.state.stage.oled, 2, "… its stage taken back");
         assertEqual(Object.keys(dropped.state.gone).length, 0, "… no longer remembered as gone");
         const replugged = _machine(values, ["lcd", "oled"], true);
@@ -932,14 +935,14 @@ TestCase {
         only.reconfigure(301000, offTimes, []);
         assertEqual(only.actions, "", "every monitor gone while dark: no action, still active");
         only.reconfigure(302000, offTimes, [{ id: "|U27|SN", base: "|U27|SN", connector: "DP-1" }]);
-        assertEqual(only.actions, "showSaver:|U27|SN,powerOff:|U27|SN", "back under Qt's id, on its connector: off again, no wake, still active");
+        assertEqual(only.actions, "showSaver:|U27|SN", "back under Qt's id, on its connector: its black surface, no wake, still active");
         only.reconfigure(303000, offTimes, [backend]);
-        assertEqual(only.actions, "showSaver:Dell|U27|SN,powerOff:Dell|U27|SN", "… and under the backend's id again: off again, no wake");
+        assertEqual(only.actions, "showSaver:Dell|U27|SN", "… and under the backend's id again: its black surface, no wake");
         const loose = _machine(offTimes, [backend], true);
         loose.idle(5000, 0).deadline();
         loose.reconfigure(301000, offTimes, []);
         loose.reconfigure(302000, offTimes, ["|U27|SN"]);
-        assertEqual(loose.actions, "showSaver:|U27|SN,powerOff:|U27|SN", "back with no connector known, a field empty: matched loosely");
+        assertEqual(loose.actions, "showSaver:|U27|SN", "back with no connector known, a field empty: matched loosely");
         const other = _machine(offTimes, [backend], true);
         other.idle(5000, 0).deadline();
         other.reconfigure(301000, offTimes, []);
@@ -947,12 +950,76 @@ TestCase {
         assertEqual(other.actions, "endCommand,active:false",
                     "another monitor plugged in where it went: plugged in");
 
+        // A monitor that comes back powered after every cut: asked again after a growing pause,
+        // then given up on — left under its black surface until input, which starts afresh
+        const cycling = _machine(offTimes, [backend], true);
+        cycling.idle(5000, 0).deadline();
+        assertEqual(cycling.state.offAsks["Dell|U27|SN"], 1, "(off asked once)");
+        const pauses = [];
+        let clock = 300000;
+        for (let round = 0; round < IdleRules.powerRetry.tries + 1; round++) {
+            clock += 1000;
+            cycling.reconfigure(clock, offTimes, []);
+            clock += 1000;
+            cycling.reconfigure(clock, offTimes, [backend]);
+            const due = cycling.next();
+            if (due < 0) {
+                pauses.push("none");
+                break;
+            }
+            pauses.push(due - clock);
+            clock = due;
+            cycling.deadline();
+        }
+        assertEqual(pauses.join(" "), [1, 2, 3, 4, 5, 6, 7].map(asks => IdleRules.powerRetryDelay(asks)).join(" ") + " none",
+                    "back powered after each cut: each off after a longer pause, then none");
+        assertEqual(cycling.actions, "showSaver:Dell|U27|SN", "… the last time only its black surface");
+        assert(cycling.state.pendingPower["Dell|U27|SN"].gaveUp, "… given up for this period");
+        const said = [];
+        const gaveUp = _machine(offTimes, [backend], true);
+        gaveUp.idle(5000, 0).deadline();
+        clock = 300000;
+        for (let round = 0; round < IdleRules.powerRetry.tries + 2; round++) {
+            gaveUp.at(clock += 1000, { type: "power", power: { "Dell|U27|SN": "on" } });
+            said.push(gaveUp.actions);
+            const due = gaveUp.next();
+            if (due >= 0) {
+                gaveUp.at(clock = due, { type: "deadline" });
+                said.push(gaveUp.actions);
+            }
+        }
+        assertEqual(said.filter(text => text.startsWith("powerGaveUp")).length, 1, "read on after each off: the give-up said once");
+        assertEqual(said.filter(text => text === "powerOff:Dell|U27|SN").length, IdleRules.powerRetry.tries - 1, "… after asking its most");
+        gaveUp.input(clock += 1000);
+        assertEqual(Object.keys(gaveUp.state.offAsks).length, 0, "input: the asks counted afresh");
+        gaveUp.idle(clock + 5000, clock).deadline();
+        assertEqual(gaveUp.actions, "showSaver:Dell|U27|SN,powerOff:Dell|U27|SN,startCommand,active:true", "… the next period off at once again");
+
+        // Back while showing the screensaver: never asked off, so its screen-off comes at once
+        const saverBack = _machine(_with(offTimes, { screensaverEnabled: true, screensaverTimeout: 60 }), [backend], true);
+        saverBack.idle(5000, 0).deadline();
+        saverBack.reconfigure(61000, _with(offTimes, { screensaverEnabled: true, screensaverTimeout: 60 }), []);
+        saverBack.reconfigure(62000, _with(offTimes, { screensaverEnabled: true, screensaverTimeout: 60 }), [backend]);
+        saverBack.deadline();
+        assertEqual(saverBack.actions, "powerOff:Dell|U27|SN", "a screensaver monitor back, then its screen-off: off at once, no pause");
+        // The re-off says why it is asked (Idle logs it so), only on that ask
+        const said2 = _machine(offTimes, [backend], true);
+        said2.idle(5000, 0).deadline();
+        said2.at(301000, { type: "power", power: { "Dell|U27|SN": "off" } });
+        said2.at(302000, { type: "power", power: { "Dell|U27|SN": "on" } });
+        const reOff = IdleRules.step(said2.state, { type: "deadline" }, said2.config, said2.next());
+        assert(reOff.actions.length === 1 && reOff.actions[0].again === true, "the re-off: marked as one");
+        const reState = IdleRules.step(reOff.state, { type: "power", power: { "Dell|U27|SN": "on" } }, said2.config, said2.next() + 100).state;
+        const later = IdleRules.step(reState, { type: "deadline" }, said2.config, IdleRules.nextDeadline(reState, said2.config, said2.next() + 100));
+        assert(later.actions.length === 1 && later.actions[0].type === "powerOff" && later.actions[0].again !== true,
+               "… its own ask again (the reading still on) is not");
+
         // As Idle hands it: the only monitor gone ([]), the same id back
         const sameBack = _machine(offTimes, [backend], true);
         sameBack.idle(5000, 0).deadline();
         sameBack.reconfigure(301000, offTimes, []);
         sameBack.reconfigure(302000, offTimes, [backend]);
-        assertEqual(sameBack.actions, "showSaver:Dell|U27|SN,powerOff:Dell|U27|SN", "the same id back within its window: off again, no wake");
+        assertEqual(sameBack.actions, "showSaver:Dell|U27|SN", "the same id back within its window: its black surface, no wake");
         const sameLate = _machine(offTimes, [backend], true);
         sameLate.idle(5000, 0).deadline();
         sameLate.reconfigure(301000, offTimes, []);
@@ -975,7 +1042,7 @@ TestCase {
         named.idle(5000, 0).deadline();
         named.reconfigure(301000, offTimes, []);
         named.reconfigure(302000, offTimes, [{ id: "|DELL U27|", base: "|DELL U27|", connector: "DP-1" }]);
-        assertEqual(named.actions, "showSaver:|DELL U27|,powerOff:|DELL U27|", "back with fields that match nothing, on its connector: the same monitor");
+        assertEqual(named.actions, "showSaver:|DELL U27|", "back with fields that match nothing, on its connector: the same monitor");
         const byIdOnly = _machine(saver, ["lcd", "tv"], true);
         byIdOnly.idle(5000, 0).deadline();
         byIdOnly.reconfigure(310000, saver, ["lcd"]);
@@ -1031,7 +1098,7 @@ TestCase {
         form.deadline();
         form.reconfigure(410000, _with(saver, { screenOffEnabled: true, screenOffTimeout: 400 }), ["lcd"]);
         form.reconfigure(420000, _with(saver, { screenOffEnabled: true, screenOffTimeout: 400 }), [alone, "lcd"]);
-        assertEqual(form.actions, "showSaver:A|B|,powerOff:A|B|", "back under its plain id: off again, no wake");
+        assertEqual(form.actions, "showSaver:A|B|", "back under its plain id: its black surface, no wake");
 
         // Not plug-ins: the first step, and a change while going to sleep
         const first = _machine(saver, ["lcd", "tv"], true);

@@ -251,7 +251,11 @@ Singleton {
             // monitor id → { at, stage, shellOff, connector }: monitors that vanished while
             // dark in this period — one back in time is not a plug-in (replugWindow,
             // shellOffWindow)
-            gone: ({})
+            gone: ({}),
+            // monitor id → the offs asked of it in this period: a monitor that comes back
+            // powered after each cut (a reconnect) is asked again after a growing pause, and
+            // given up on after powerRetry.tries — left under its black surface until input
+            offAsks: ({})
         };
     }
 
@@ -500,11 +504,20 @@ Singleton {
 
     // ---- The step ----
 
+    // An off asked again of a monitor that came back powered (read on while off, or back
+    // after dropping off at its cut): after the pause its asks in this period earn, given up
+    // at powerRetry.tries without a word more (the give-up was said once)
+    function _offAgain(next, id, now) {
+        const asked = next.offAsks[id] ?? 0;
+        next.pendingPower[id] = { on: false, at: now, tries: asked, read: "on", gaveUp: asked >= powerRetry.tries, again: true };
+    }
+
     function _copy(state) {
         const next = Object.assign({}, state);
         next.shown = Object.assign({}, state.shown);
         next.stage = Object.assign({}, state.stage);
         next.connectors = Object.assign({}, state.connectors ?? {});
+        next.offAsks = Object.assign({}, state.offAsks ?? {});
         next.gone = {};
         for (const id of Object.keys(state.gone ?? {}))
             next.gone[id] = Object.assign({}, state.gone[id]);
@@ -522,6 +535,7 @@ Singleton {
         next.forced = false;
         next.dark = false;
         next.gone = {};
+        next.offAsks = {};
         next.lockedThisPeriod = next.locked;
         next.lockAsks = 0;
         next.lockAskedAt = -1;
@@ -623,7 +637,7 @@ Singleton {
             // a reconnect, its own button): the off is asked again, at once
             for (const id of config.monitors) {
                 if (next.shown[id] === "off" && next.power[id] === "on" && next.pendingPower[id] === undefined)
-                    next.pendingPower[id] = { on: false, at: now, tries: 0, read: "on", gaveUp: false };
+                    _offAgain(next, id, now);
             }
             // A pending action seen done is over; otherwise the reading is kept for its retry
             for (const id of Object.keys(next.pendingPower)) {
@@ -748,7 +762,8 @@ Singleton {
             departed[id] = { connector: beforeConnectors[id] ?? "", stage: next.stage[id] };
             const shown = next.shown[id] ?? "on";
             if (shown !== "on" && !sourceChanged)
-                next.gone[id] = { at: now, stage: next.stage[id], shellOff: shown === "off", connector: beforeConnectors[id] ?? "" };
+                next.gone[id] = { at: now, stage: next.stage[id], shellOff: shown === "off", connector: beforeConnectors[id] ?? "",
+                                  offAsks: next.offAsks[id] ?? 0 };
         }
         let plugged = false;
         for (const id of config.monitors) {
@@ -768,6 +783,7 @@ Singleton {
             const back = key !== "" ? next.gone[key] : null;
             if (back !== null && now - back.at <= (back.shellOff ? shellOffWindow : replugWindow)) {
                 next.stage[id] = back.stage;
+                next.offAsks[id] = Math.max(next.offAsks[id] ?? 0, back.offAsks);
                 delete next.gone[key];
             } else if (!next.sleeping) {
                 plugged = true;
@@ -829,14 +845,23 @@ Singleton {
             actions.push({ type: "hideSaver", ids: hide });
         if (show.length > 0)
             actions.push({ type: "showSaver", ids: show });
-        if (powerOff.length > 0)
-            actions.push({ type: "powerOff", ids: powerOff });
+        // A monitor already asked off in this period and shown again from "on" (back after
+        // dropping off): asked through _offAgain, after its pause
+        const offNow = powerOff.filter(id => (next.offAsks[id] ?? 0) === 0);
+        if (offNow.length > 0)
+            actions.push({ type: "powerOff", ids: offNow });
         actions.push(...early);
         next.shown = want;
         for (const id of powerOn)
             next.pendingPower[id] = { on: true, at: now, tries: 1, read: null, gaveUp: false };
-        for (const id of powerOff)
-            next.pendingPower[id] = { on: false, at: now, tries: 1, read: null, gaveUp: false };
+        for (const id of powerOff) {
+            if (offNow.includes(id)) {
+                next.pendingPower[id] = { on: false, at: now, tries: 1, read: null, gaveUp: false };
+                next.offAsks[id] = 1;
+            } else {
+                _offAgain(next, id, now);
+            }
+        }
         // Power actions the readings did not show: asked again, after their pause
         // (`attempt`: Idle logs the first ask again)
         if (!next.sleeping) {
@@ -854,7 +879,15 @@ Singleton {
                 pending.tries += 1;
                 pending.at = now;
                 pending.read = null;
-                actions.push({ type: pending.on ? "powerOn" : "powerOff", ids: [id], attempt: pending.tries });
+                const ask = { type: pending.on ? "powerOn" : "powerOff", ids: [id], attempt: pending.tries };
+                if (!pending.on)
+                    next.offAsks[id] = pending.tries;
+                // Came back powered (Idle says so, not "not turned off as asked")
+                if (pending.again === true) {
+                    ask.again = true;
+                    pending.again = false;
+                }
+                actions.push(ask);
             }
         }
 
