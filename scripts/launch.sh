@@ -220,6 +220,25 @@ recorded_supervisor() {
     echo "$pid"
 }
 
+# Closes the shell's settings window, waiting while Quickshell takes no requests. For a
+# moment after each reload (its reload popup, if the shell lets it show: an engine of its own,
+# some 2 s after a reload, 6 s after a failed one) it answers "Not ready to accept queries
+# yet.", and a `qs kill` then ends its event loop with the shell still standing: the shell is
+# destroyed after the application and crashes. Asked again every 0.2 s for $stop_wait_ms ms
+# at most; still not ready, it is let go anyway (said).
+ask_to_close_settings() {
+    local pid=$1 waited_ms=0
+    while qs ipc --pid "$pid" call settings close 2>&1 | grep -q "Not ready to accept queries"; do
+        if [ "$waited_ms" -ge "$stop_wait_ms" ]; then
+            say "the shell ($pid) still takes no requests after $(ms_to_seconds "$waited_ms") s: stopping it anyway"
+            return
+        fi
+        sleep 0.2
+        waited_ms=$((waited_ms + 200))
+    done
+    [ "$waited_ms" = 0 ] || say "the shell ($pid) took no requests for $(ms_to_seconds "$waited_ms") s (a reload): stopping it now"
+}
+
 # Asks the running shell to quit; one that does not answer (a hung instance cannot take
 # the request over its socket) is terminated, then killed. The settings window is closed
 # first: Quickshell tearing it down with a text field focused crashed it on the way out
@@ -237,7 +256,7 @@ stop_shell() {
         supervisor=$(supervisor_of "$pid") && kill -USR1 "$supervisor" 2> /dev/null
     done
     for pid in $pids; do
-        qs ipc --pid "$pid" call settings close > /dev/null 2>&1
+        ask_to_close_settings "$pid"
     done
     for pid in $pids; do
         qs kill --pid "$pid" > /dev/null 2>&1
@@ -588,7 +607,8 @@ clean_up_after() {
 
 # The pauses, in milliseconds: the first after a quick death (doubling while the shell
 # keeps dying within 30 s of starting); and how long a new launcher waits for an old one to
-# end. In a test tree the lock test bed shortens them ("first=0.1 lockwait=3", seconds:
+# end; and how long stop_shell waits for a shell that takes no requests. In a test tree the
+# lock test bed shortens them ("first=0.1 lockwait=3 stopwait=1", seconds:
 # seam_launcher_timings, from scripts/seams.sh — empty, a constant, in the shell itself),
 # and "discoveryhang=S" makes module discovery take S seconds, as on a hung mount
 # (find_modules). A seams.sh that cannot be read leaves the launcher's own pauses: the
@@ -596,6 +616,7 @@ clean_up_after() {
 source "$(dirname "$(readlink -f "$0")")/seams.sh" || echo "launch.sh: cannot read seams.sh: the launcher's own pauses" >&2
 pause_first_ms=1000
 lock_wait=15
+stop_wait_ms=8000
 discovery_hang_ms=""
 seconds_to_ms() { awk -v seconds="$1" 'BEGIN { if (seconds + 0 > 0) printf "%d", seconds * 1000 }'; }
 for timing in ${seam_launcher_timings:-}; do
@@ -605,6 +626,7 @@ for timing in ${seam_launcher_timings:-}; do
         first=*) pause_first_ms=$value ;;
         lockwait=*) lock_wait=$(( (value + 999) / 1000 )) ;;
         discoveryhang=*) discovery_hang_ms=$value ;;
+        stopwait=*) stop_wait_ms=$value ;;
     esac
 done
 ms_to_seconds() { awk -v ms="$1" 'BEGIN { printf "%.3f", ms / 1000 }' | sed 's/\.\?0*$//'; }

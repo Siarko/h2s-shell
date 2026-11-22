@@ -112,6 +112,28 @@ QtObject {
     // Asks the helper program (H2S_SHELL_HELPER) its version once, so its state is known
     property var _helper: Helper
 
+    // No Quickshell reload popup, after a reload that worked or one that failed. The popup is
+    // an engine of its own for some 2 s (6 s after a failure), and while it lives Quickshell
+    // takes no IPC and `qs kill` ends the event loop with the shell still standing: the shell
+    // is destroyed after the application and crashes (scripts/launch.sh waits that out too).
+    // A failure's errors stay in the log: Quickshell writes them, and this line says the
+    // shell runs on unchanged. Quickshell sends one failure twice: said once per failure.
+    property string _lastReloadError: ""
+    property var _reloadPopup: Connections {
+        target: Quickshell
+        function onReloadCompleted() {
+            Quickshell.inhibitReloadPopup();
+            root._lastReloadError = "";
+        }
+        function onReloadFailed(errorString) {
+            Quickshell.inhibitReloadPopup();
+            if (errorString === root._lastReloadError)
+                return;
+            root._lastReloadError = errorString;
+            console.warn("Reload failed, the shell runs on as it was: " + errorString);
+        }
+    }
+
     // One for the whole shell: a window per screen meant two independent windows, both
     // opened by Shell.openSettings() and both announcing every save
     property var _settingsWindow: SettingsWindow {

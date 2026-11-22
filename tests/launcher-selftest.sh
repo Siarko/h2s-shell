@@ -19,7 +19,8 @@
 # "killed" case is only that a killed shell is started again, and the "stopped" case is the
 # one that fails on `wait -f`: there it spins on every machine.
 #
-# Last, the module search's built-in root (H2S_SHELL_BUILTIN_MODULES, and its default when
+# Then the stop of a shell that takes no requests yet (`launch.sh --restart` after a reload),
+# and last, the module search's built-in root (H2S_SHELL_BUILTIN_MODULES, and its default when
 # unset), through `launch.sh --discover-modules`.
 #
 #   tests/launcher-selftest.sh
@@ -78,8 +79,30 @@ done
 # supervisor SIGHUP and is killed at the same moment; the next one runs). It sleeps for a
 # minute, more than any case takes: one that clean_up missed (its launcher killed before it
 # wrote its pid) does not stay for long.
+#
+# `qs list`, `qs ipc` and `qs kill` (stop_shell, case 9) answer for the "running shell" whose
+# pid is in the file `victim` there: listed while it lives, its IPC answering "Not ready to
+# accept queries yet." as many times as the file `not-ready` says, then taken; each call
+# noted in `calls`.
 {
     echo "#!$bash_path"
+    echo 'if [ "$1" = list ] || [ "$1" = ipc ] || [ "$1" = kill ]; then'
+    echo '    victim=$(cat "$LAUNCHER_SELFTEST_DIR/victim" 2> /dev/null)'
+    echo '    case "$1" in'
+    echo '        list) [ -n "$victim" ] && [ -e "/proc/$victim" ] && printf "Instance selftest:\n  Process ID: %s\n  Config path: %s\n" "$victim" "$LAUNCHER_SELFTEST_CONFIG" ;;'
+    echo '        ipc)'
+    echo '            read -r left < "$LAUNCHER_SELFTEST_DIR/not-ready"'
+    echo '            if [ "${left:-0}" -gt 0 ]; then'
+    echo '                echo $((left - 1)) > "$LAUNCHER_SELFTEST_DIR/not-ready"'
+    echo '                echo "ipc not-ready" >> "$LAUNCHER_SELFTEST_DIR/calls"'
+    echo '                echo "Not ready to accept queries yet." >&2'
+    echo '            else'
+    echo '                echo "ipc taken" >> "$LAUNCHER_SELFTEST_DIR/calls"'
+    echo '            fi ;;'
+    echo '        kill) echo kill >> "$LAUNCHER_SELFTEST_DIR/calls"; kill -TERM "$victim" ;;'
+    echo '    esac'
+    echo '    exit 0'
+    echo 'fi'
     echo 'echo $$ >> "$LAUNCHER_SELFTEST_DIR/starts"'
     echo 'echo "${H2S_SHELL_LOCK_NOTICE-unset}" >> "$LAUNCHER_SELFTEST_DIR/notices"'
     echo 'read -r what status < "$LAUNCHER_SELFTEST_DIR/mode"'
@@ -384,6 +407,49 @@ is "… and still runs" test -e "/proc/$launcher"
 running=$(shell_pid)
 signal TERM "$launcher"
 within 5 "stopped" gone "$running"
+
+# ---- (9) Stopping a shell that takes no requests yet ---
+# For a moment after a reload Quickshell answers no IPC ("Not ready to accept queries yet."),
+# and a `qs kill` then crashes it on its way out: `launch.sh --restart` asks again until the
+# shell takes the request, and kills it only then — or after stopwait (here 1 s) anyway.
+# A "running shell" of the stand-in's (a sleep, not a child of this script: reaped when
+# killed), then --restart, whose new supervisor's shell quits at once.
+echo "== stopping a shell that takes no requests yet"
+restart_with() {
+    at=$work/$1
+    mkdir -p "$at/run"
+    : > "$at/starts"
+    : > "$at/notices"
+    : > "$at/calls"
+    echo "exit 0" > "$at/mode"
+    echo "$2" > "$at/not-ready"
+    ( env "LAUNCHER_SELFTEST=$work" "$work/bin/sleep" 60 > /dev/null 2>&1 < /dev/null & echo $! > "$at/victim" )
+    env --default-signal=HUP -i "PATH=$work/bin" "HOME=$work/home" "XDG_RUNTIME_DIR=$at/run" "XDG_CONFIG_HOME=$work/home/config" \
+        "XDG_DATA_HOME=$work/data" "XDG_DATA_DIRS=$work/data" "H2S_SHELL_MODULE_DATA_DIRS=" \
+        "WAYLAND_DISPLAY=$socket" "H2S_LAUNCHER_TEST_TIMINGS=first=$first_pause stopwait=1" "LAUNCHER_SELFTEST=$work" \
+        "LAUNCHER_SELFTEST_DIR=$at" "LAUNCHER_SELFTEST_CONFIG=$work/tree/shell.qml" \
+        "$bash_path" "$launch_script" --restart > "$at/output" 2>&1 < /dev/null
+}
+calls_are() { [ "$(paste -sd, "$at/calls")" = "$1" ]; }
+restart_with notready 3
+victim=$(cat "$at/victim")
+within 5 "a shell not ready for three requests is stopped" gone "$victim"
+is "… killed only once its IPC took the request ($(paste -sd, "$at/calls"))" \
+    calls_are "ipc not-ready,ipc not-ready,ipc not-ready,ipc taken,kill"
+is "… and the launcher said it waited" said "took no requests for 0.6 s (a reload): stopping it now"
+within 5 "… then the new supervisor started a shell" started 1
+restart_with neverready 1000
+victim=$(cat "$at/victim")
+within 5 "a shell that never takes the request is stopped all the same" gone "$victim"
+is "… after asking for stopwait, every 0.2 s ($(grep -c 'not-ready' "$at/calls") requests)" \
+    calls_are "ipc not-ready,ipc not-ready,ipc not-ready,ipc not-ready,ipc not-ready,ipc not-ready,kill"
+is "… and the launcher said so" said "still takes no requests after 1 s: stopping it anyway"
+within 5 "… then the new supervisor started a shell" started 1
+restart_with ready 0
+victim=$(cat "$at/victim")
+within 5 "a shell that takes the request at once is stopped" gone "$victim"
+is "… asked once, then killed" calls_are "ipc taken,kill"
+is "… and the launcher said nothing of waiting" eval '! said "took no requests"'
 
 # ---- (8) The built-in root of the module search ---
 # Unset, it is the data home's h2s-shell/builtin (where install.sh puts it on Arch); one that

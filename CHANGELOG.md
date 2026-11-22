@@ -1043,6 +1043,10 @@ The interface modules are written against (`qs.api`), versioned on its own
   action used to be an empty button.
 
 ### Fixed
+- Restarting the shell within a few seconds of a reload (a saved file, an update) no longer
+  crashes it: Quickshell's reload popup is gone — a failed reload is written to the shell's
+  log instead (`qs log`) — and the launcher's stop waits while the
+  shell takes no requests.
 - Another program's lock screen (hyprlock) is seen under Hyprland: the shell no longer asks
   for its idle lock over it (Hyprland ended the shell for that), and "screen locked"
   profiles apply while it lasts.
