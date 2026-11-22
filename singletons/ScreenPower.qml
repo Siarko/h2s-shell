@@ -1,66 +1,41 @@
 pragma Singleton
 
 import Quickshell
-import Quickshell.Hyprland
 import QtQuick
 import qs.singletons.screen
 
 // The monitors and their power: which are connected (by their ids, MonitorRules), whether
 // each is on, and turning one off or on. Only the compositor can cut one output's power, so
-// it takes a backend (MonitorRules.backend): Hyprland's own dispatch where the shell runs
-// under Hyprland; without one, `canPowerOff` is false and nothing is read or asked.
+// it takes a backend (singletons/screen/ScreenPowerBackend.qml picks it): Hyprland's own
+// dispatch where the shell runs under Hyprland, elsewhere `wlopm` when it is on PATH;
+// without either, `canPowerOff` is false, nothing is read or asked, and `unavailable` says
+// why ({ reason, hint }) for the page.
 //
-// A failed reading or action leaves a monitor's power "unknown", never "off". The monitors
-// are read again when Hyprland adds or removes one, and after each action.
+// A failed reading or action leaves a monitor's power "unknown", never "off".
 Singleton {
     id: root
 
-    readonly property string backend: MonitorRules.backend({ hyprland: (Quickshell.env("HYPRLAND_INSTANCE_SIGNATURE") ?? "") !== "" })
-    readonly property bool canPowerOff: backend !== "none"
+    readonly property string backend: _backend.backend
+    readonly property bool canPowerOff: _backend.canPowerOff
+    readonly property var unavailable: _backend.unavailable
 
-    // [{ connector, id, make, model, serial, builtIn, power: "on" | "off" | "unknown" }]
-    readonly property var monitors: _hyprland?.monitors ?? []
-    readonly property var twins: _hyprland?.twins ?? []
-    readonly property bool monitorsRead: _hyprland?.monitorsRead ?? false
+    // [{ connector, id, base, make, model, serial, builtIn, power: "on" | "off" | "unknown" }]
+    readonly property var monitors: _backend.monitors
+    readonly property var twins: _backend.twins
+    readonly property bool monitorsRead: _backend.monitorsRead
 
     signal actionDone(string id, bool on, string problem)
 
     function read() {
-        _hyprland?.read();
+        _backend.read();
     }
 
     // The monitor with this id off (false) or on (true); answered by actionDone
     function setPower(id, on) {
-        if (_hyprland === null) {
-            actionDone(id, on, "no way to turn monitors off here");
-            return;
-        }
-        _hyprland.setPower(id, on);
+        _backend.setPower(id, on);
     }
 
-    property HyprlandScreenPower _hyprland: null
-
-    property Component _hyprlandComponent: Component {
-        HyprlandScreenPower {
-            onActionDone: (id, on, problem) => root.actionDone(id, on, problem)
-        }
-    }
-
-    property Connections _events: Connections {
-        target: root.backend === "hyprland" ? Hyprland : null
-        function onRawEvent(event) {
-            if (event.name === "monitoradded" || event.name === "monitoraddedv2"
-                    || event.name === "monitorremoved" || event.name === "monitorremovedv2") {
-                root._hyprland?.monitorEvent();
-                root.read();
-            }
-        }
-    }
-
-    Component.onCompleted: {
-        if (backend === "hyprland") {
-            _hyprland = _hyprlandComponent.createObject(root);
-            _hyprland.read();
-        }
+    property ScreenPowerBackend _backend: ScreenPowerBackend {
+        onActionDone: (id, on, problem) => root.actionDone(id, on, problem)
     }
 }

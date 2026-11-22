@@ -285,9 +285,11 @@ Two stages, both driven by Wayland idle notifications and both counted from the 
   The lock screen's screen-off waits while somebody is at it (the prompt awake, a check under
   way). On the lock screen
   they go off after `lockedScreenOffTimeout` without input there (1 minute by default,
-  0 never). It needs a compositor that can cut a monitor's power — Hyprland; elsewhere
-  "Turn off" falls back to the screensaver, and on the lock screen the lock surface goes
-  plain black instead. A screen-off of another program (hypridle's `dpms` listener) can run
+  0 never). It needs a compositor that can cut a monitor's power — Hyprland, or elsewhere
+  one with wlr-output-power-management (sway, labwc, river) and `wlopm` installed, where a
+  monitor is known by the model and serial Qt reports (no make); without either "Turn off"
+  falls back to the screensaver, and on the lock screen the lock surface goes plain black
+  instead. A screen-off of another program (hypridle's `dpms` listener) can run
   beside it: each acts on its own times.
 - **Lock screen** — a real `WlSessionLock`, so the compositor enforces it. It can be
   reached on idle (`lockAfter`), and shows a password
@@ -631,6 +633,7 @@ Beyond Quickshell and Qt 6, the shell shells out to:
 | `jq`, `gsettings` | `scripts/launch.sh`: the icon theme setting from the config, the system's icon theme for "Automatic" (both optional — without them the first installed theme is used) |
 | `flock`, `setsid` (util-linux) | `scripts/launch.sh`: one supervisor per session (without `flock` it warns and goes on unguarded), the detached restart |
 | `timeout` (coreutils), `setpriv` (util-linux) | time limits of the commands the shell and modules run through the command runner, taken from the system's directory (NixOS: `/run/current-system/sw/bin`; Arch: `/usr/bin`), never from `PATH` (optional — without both, a limit is kept by the shell alone and ends with it) |
+| `wlopm` | turning monitors off where Hyprland is not running, through wlr-output-power-management (optional — without it, and without Hyprland, screens are not turned off: the screensaver and the lock screen's black stand in). Not part of the shell's own install on either system: NixOS: the `wlopm` package of nixpkgs; Arch: `wlopm` from the AUR |
 | `cava` | the music visualiser (optional — there is an ambient fallback) |
 | `vipsthumbnail` (libvips) | wallpapers resized to each screen once, kept in `~/.cache/h2s_shell/wallpapers` (optional — without it the images themselves load, slower) |
 | `python3` | the Google OAuth helper, `scripts/google_auth.py` |

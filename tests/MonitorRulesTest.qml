@@ -4,7 +4,8 @@ import qs.singletons
 // Which monitor is which (singletons/MonitorRules.qml): ids from make|model|serial, the
 // fallback without a serial, twins told apart by their connector whatever their order and
 // reported, the laptop's panel, Hyprland's answer read (power on/off/unknown, disabled
-// outputs and mirrors left out, an unreadable answer), the dispatch and its answer, and the
+// outputs and mirrors left out, an unreadable answer), wlopm's answer and command, the
+// backend chosen, the dispatch and its answer, and the
 // per-monitor override.
 TestCase {
     suiteName: "MonitorRules"
@@ -53,8 +54,14 @@ TestCase {
 
         // --- the backend ---
         assertEqual(rules.backend({ hyprland: true }), "hyprland", "under Hyprland: its dispatch");
-        assertEqual(rules.backend({ hyprland: false }), "none", "elsewhere, for now: none");
+        assertEqual(rules.backend({ hyprland: false }), "none", "elsewhere, without wlopm: none");
+        assertEqual(rules.backend({ hyprland: false, wlopm: true }), "wlopm", "elsewhere, wlopm found: wlopm");
+        assertEqual(rules.backend({ hyprland: true, wlopm: true }), "hyprland", "… under Hyprland, Hyprland's own first");
+        assertEqual(rules.backend({ wlopm: "yes" }), "none", "… wlopm not known to be found: none");
         assertEqual(rules.backend(undefined), "none", "… nothing known: none");
+        assertEqual(JSON.stringify(rules.unavailable("none")), JSON.stringify({ reason: "Not supported here", hint: "Install wlopm to turn monitors off" }),
+                    "no backend: the page's reason, and the hint names wlopm");
+        assertEqual(rules.unavailable("wlopm").reason + rules.unavailable("hyprland").hint, "", "… a backend: nothing to say");
 
         // --- power ---
         assertEqual(rules.power(true), "on", "dpmsStatus true: on");
@@ -75,6 +82,7 @@ TestCase {
         assertEqual(read.monitors.map(monitor => monitor.connector + "=" + monitor.power).join(" "), "DP-2=off eDP-1=on DP-6=unknown",
                     "Hyprland's answer: each monitor's power; disabled, mirrors and unusable names left out");
         assertEqual(read.monitors[0].id, rules.identity(samsung), "… each with its id");
+        assertEqual(rules.hyprlandMonitors("[{\"name\": \"constructor\", \"dpmsStatus\": true}]").monitors.length, 1, "… a connector named like an object key: read");
         assert(read.monitors[1].builtIn && !read.monitors[0].builtIn, "… and whether it is built in");
         assertEqual(JSON.stringify(read.twins), "[]", "… no twins");
         const twins = rules.hyprlandMonitors(JSON.stringify([
@@ -91,6 +99,49 @@ TestCase {
                     "after a failed reading: the monitors kept, every power unknown");
         assertEqual(read.monitors[0].power, "off", "… the reading itself unchanged");
 
+        // --- wlopm's answer ---
+        const screens = [{ name: "DP-2", model: "C27JG5x", serialNumber: "" }, { name: "eDP-1", model: "0x0BCA", serialNumber: "S1" },
+                         { name: "DP-1", model: "U2419H", serialNumber: "" }, { name: "DP-3", model: "U2419H", serialNumber: "" }, null, { name: 7 }];
+        const wlopm = rules.wlopmMonitors(JSON.stringify([
+            { output: "DP-2", "power-mode": "off" },
+            { output: "eDP-1", "power-mode": "on" },
+            { output: "HDMI-A-1", error: "failed" },
+            { output: "DP-4", "power-mode": "standby" },
+            { output: "*", "power-mode": "on" },
+            { output: "-x", "power-mode": "on" },
+            { output: "DP-2", "power-mode": "on" },
+            "DP-7",
+            null
+        ]), screens);
+        assertEqual(wlopm.monitors.map(monitor => monitor.connector + "=" + monitor.power).join(" "), "DP-2=off eDP-1=on HDMI-A-1=unknown DP-4=unknown",
+                    "wlopm's answer: each output's power; an error or a mode it does not name: unknown; `*`, unusable names and repeats left out");
+        assertEqual(wlopm.monitors.map(monitor => monitor.id).join(" "), "|C27JG5x| |0x0BCA|S1 |||HDMI-A-1 |||DP-4",
+                    "… ids from the screen of that name (no make from Qt); outputs Qt does not know: empty fields, twins by connector");
+        assertEqual(JSON.stringify(wlopm.twins), JSON.stringify(["||"]), "… reported as twins");
+        assert(wlopm.monitors[1].builtIn && !wlopm.monitors[0].builtIn, "… the laptop's panel recognised");
+        const wlopmTwins = rules.wlopmMonitors("[{\"output\": \"DP-3\", \"power-mode\": \"on\"}, {\"output\": \"DP-1\", \"power-mode\": \"on\"}]", screens);
+        assertEqual(wlopmTwins.monitors.map(monitor => monitor.id).join(" "), "|U2419H||DP-3 |U2419H||DP-1", "two of one model without a serial: told apart by connector");
+        assertEqual(rules.wlopmMonitors("[{\"output\": \"DP-1\", \"power-mode\": \"on\"}]", screens, ["|U2419H|"]).monitors[0].id, "|U2419H||DP-1",
+                    "… a twin left alone keeps its id");
+        assertEqual(rules.wlopmMonitors("[{\"output\": \"constructor\", \"power-mode\": \"on\"}]", [{ name: "constructor", model: "M" }]).monitors[0].id, "|M|",
+                    "… a connector that is an object key is looked up as a name only");
+        assertEqual(rules.wlopmMonitors("[]", screens).monitors.length, 0, "no outputs: an empty list, read");
+        assertEqual(rules.wlopmMonitors("[{ \"output\": ", screens), null, "not JSON: no answer");
+        assertEqual(rules.wlopmMonitors("{}", screens), null, "… not a list: no answer");
+        assertEqual(rules.wlopmMonitors(undefined, screens), null, "… nothing: no answer");
+        assertEqual(rules.wlopmMonitors("[{\"output\": \"DP-2\", \"power-mode\": \"on\"}]", null).monitors[0].id, "||", "… no screens known: empty fields, still read");
+        assertEqual(rules.wlopmPower("on") + " " + rules.wlopmPower("off") + " " + rules.wlopmPower(undefined) + " " + rules.wlopmPower(true), "on off unknown unknown",
+                    "power-mode: on, off, else unknown, never off");
+
+        // --- the wlopm command ---
+        assertEqual(JSON.stringify(rules.wlopmCommand("wlopm", "DP-2", false)), JSON.stringify(["wlopm", "--off", "DP-2"]), "off: --off, that connector, argv");
+        assertEqual(JSON.stringify(rules.wlopmCommand("/x/wlopm", "HDMI-A-1", true)), JSON.stringify(["/x/wlopm", "--on", "HDMI-A-1"]), "on: --on");
+        assertEqual(JSON.stringify(rules.wlopmCommand("wlopm", "*", false)), "[]", "`*` (every output): no command");
+        assertEqual(JSON.stringify(rules.wlopmCommand("wlopm", "", false)), "[]", "… no connector: none");
+        assertEqual(JSON.stringify(rules.wlopmCommand("wlopm", "--json", false)), "[]", "… a name that reads as an option: none");
+        assertEqual(JSON.stringify(rules.wlopmCommand("wlopm", "DP-2; rm x", false)), "[]", "… a name with spaces or other characters: none");
+        assertEqual(JSON.stringify(rules.wlopmCommand("", "DP-2", false)), "[]", "… no program: none");
+
         // --- the run's answer ---
         assertEqual(rules.readProblem({ ok: true, code: 0 }), "", "a reading that ran: no problem");
         assertEqual(rules.readProblem({ ok: false, failedToStart: true }), "hyprctl could not be started", "… not started");
@@ -98,6 +149,8 @@ TestCase {
         assertEqual(rules.readProblem({ ok: true, truncated: true }), "too much output from hyprctl", "… cut short: not believed");
         assertEqual(rules.readProblem({ ok: false, code: 1, stderr: "no instance\nmore" }), "hyprctl failed (1): no instance", "… failed, its first line");
         assertEqual(rules.readProblem(null), "hyprctl gave no answer", "… no result");
+        assertEqual(rules.readProblem({ ok: false, code: 1, stderr: "ERROR: no protocol" }, "wlopm"), "wlopm failed (1): ERROR: no protocol", "… wlopm's, by its name");
+        assertEqual(rules.readProblem({ ok: false, failedToStart: true }, "wlopm"), "wlopm could not be started", "… wlopm not started");
 
         // --- the dispatch ---
         assertEqual(rules.hyprlandDpms("DP-2", false), "hl.dsp.dpms({ action = \"disable\", monitor = \"DP-2\" })", "off: disable, for that connector");
@@ -112,6 +165,9 @@ TestCase {
                     "… a failed run, its stderr");
         assertEqual(rules.dispatchProblem({ ok: false, failedToStart: true }), "hyprctl could not be started", "… not started");
         assertEqual(rules.dispatchProblem({ ok: false, timedOut: true }), "hyprctl did not answer", "… timed out");
+        assertEqual(rules.dispatchProblem({ ok: false, code: 1, stdout: "", stderr: "ERROR: Output 'X' does not exist." }, "wlopm"),
+                    "wlopm failed (1): ERROR: Output 'X' does not exist.", "… wlopm's, by its name");
+        assertEqual(rules.dispatchProblem({ ok: false, timedOut: true }, "wlopm"), "wlopm did not answer", "… wlopm timed out");
 
         // --- the action, by the reading after it ---
         const after = [{ id: "a", connector: "DP-1", power: "off" }, { id: "b", connector: "DP-2", power: "on" }, { id: "c", connector: "DP-3", power: "unknown" }];

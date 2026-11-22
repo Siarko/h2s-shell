@@ -10,8 +10,8 @@ import qs.singletons.screen
 // where it records the dispatches): the monitors and their power read, one turned off by its
 // id, a dispatch refused, an id not connected refused without a dispatch, a reading that
 // fails and one that is not JSON — both leave the power unknown. Never the real hyprctl.
-// And the shell's ScreenPower here, where no compositor backend runs: nothing can be
-// turned off. Asynchronous: each step is a process.
+// And the shell's ScreenPower here, not on Hyprland's backend. Asynchronous: each step is
+// a process.
 TestCase {
     id: suite
     suiteName: "ScreenPowerReading"
@@ -117,9 +117,13 @@ TestCase {
     }
 
     function runAsync() {
-        assertEqual(ScreenPower.backend, "none", "the shell's ScreenPower under the suites' compositor: no backend");
-        assert(!ScreenPower.canPowerOff, "… nothing can be turned off");
-        assertEqual(JSON.stringify(ScreenPower.monitors), "[]", "… and nothing is read");
+        // wlopm may be on this machine's PATH: WlopmScreenPowerReadingTest checks the choice
+        // without it
+        assert(ScreenPower.backend !== "hyprland", "the shell's ScreenPower under the suites' compositor: not Hyprland's");
+        if (ScreenPower.backend === "none") {
+            assert(!ScreenPower.canPowerOff, "… no backend: nothing can be turned off");
+            assertEqual(JSON.stringify(ScreenPower.monitors), "[]", "… and nothing is read");
+        }
 
         _then("the stand-in is in place", () => _written, () => {
             _power = _powerComponent.createObject(suite, { hyprctl: _scratch + "/hyprctl" });

@@ -1,0 +1,39 @@
+#!/bin/sh
+# A stand-in for wlopm (tests/WlopmScreenPowerReadingTest.qml), started through a link in
+# the suite's scratch directory:
+# - `--json` prints that directory's `outputs.json` (one output per line), fails while
+#   `read-fails` is there, hangs while `read-hangs` is, and prints text that is not JSON
+#   while `read-garbled` is.
+# - `--off <output>` / `--on <output>` appends its words to `commands`; fails while
+#   `action-fails` is there, and for an output `outputs.json` does not name, as wlopm does;
+#   else sets that output's power-mode in `outputs.json`.
+# Anything else it is asked fails.
+here=$(dirname "$0")
+case "$1" in
+    --json)
+        [ $# -eq 1 ] || { echo "the stand-in takes --json alone" >&2; exit 2; }
+        if [ -e "$here/read-fails" ]; then
+            echo "ERROR: Compositor does not support wlr-output-power-management-v1." >&2
+            exit 1
+        fi
+        [ ! -e "$here/read-hangs" ] || exec sleep 60
+        if [ -e "$here/read-garbled" ]; then
+            echo "[ { \"output\": "
+            exit 0
+        fi
+        cat "$here/outputs.json" ;;
+    --off|--on)
+        [ $# -eq 2 ] || { echo "the stand-in takes one output" >&2; exit 2; }
+        printf '%s %s\n' "$1" "$2" >> "$here/commands"
+        if [ -e "$here/action-fails" ]; then
+            echo "ERROR: Setting power mode failed." >&2
+            exit 1
+        fi
+        if ! grep -qF "\"output\": \"$2\"" "$here/outputs.json"; then
+            echo "ERROR: Output '$2' does not exist." >&2
+            exit 1
+        fi
+        mode=${1#--}
+        sed -i "/\"output\": \"$2\"/ s/\"power-mode\": \"[a-z]*\"/\"power-mode\": \"$mode\"/" "$here/outputs.json" ;;
+    *) echo "the stand-in only knows --json, --off and --on" >&2; exit 2 ;;
+esac

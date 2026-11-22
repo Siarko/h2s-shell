@@ -115,6 +115,7 @@ QtObject {
     property var _sleepNoticeRules: SleepNoticeRulesTest {}
     property var _monitorRules: MonitorRulesTest {}
     property var _screenPowerReading: ScreenPowerReadingTest {}
+    property var _wlopmScreenPowerReading: WlopmScreenPowerReadingTest {}
     property var _logindIdleBlockReading: LogindIdleBlockReadingTest {}
     property var _pamStackRules: PamStackRulesTest {}
     property var _pamStacksReading: PamStacksReadingTest {}

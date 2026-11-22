@@ -471,6 +471,8 @@ The interface modules are written against (`qs.api`), versioned on its own
   after a minute without input there ("Turn screens off on the lock screen after", 0 for
   never); input turns them on, and so do an unlock and waking from sleep. Needs Hyprland;
   elsewhere the lock screen goes plain black instead.
+- Screens off beyond Hyprland: on another compositor with wlr-output-power-management
+  (sway, labwc, river), monitors are turned off through `wlopm` when it is installed.
 - Each monitor its own way at "When the screensaver starts": with `lockscreen.perMonitor`
   on, `lockscreen.monitorBlanking` gives a monitor (by make, model and serial, so it keeps
   its way on another port) "screensaver" or "off" over the default — an OLED off, an LCD

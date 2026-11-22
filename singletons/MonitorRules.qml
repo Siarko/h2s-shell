@@ -13,7 +13,8 @@ import QtQuick
 // no serial, or with the same placeholder serial — are told apart by their connector
 // (`make|model|serial|connector`), and reported, so a view can say why. An identity once
 // seen as twins keeps the connector while the shell runs, so a twin left alone keeps its id;
-// an override is found under either form (overrideFor).
+// an override is found under either form (overrideFor). Off Hyprland, wlopm names outputs
+// only: the model and serial are Qt's for that screen, the make empty (wlopmMonitors).
 Singleton {
     id: root
 
@@ -21,9 +22,20 @@ Singleton {
     readonly property var builtInPrefixes: Object.freeze(["eDP-", "LVDS-", "DSI-"])
 
     // The backend that turns monitors off, from what the environment offers:
-    // { hyprland: bool } → "hyprland" | "none"
+    // { hyprland: bool, wlopm: bool } → "hyprland" | "wlopm" | "none" — Hyprland's own
+    // dispatch where it runs, else `wlopm` once it is found on PATH (`wlopm: true`; not yet
+    // known is not found)
     function backend(environment) {
-        return environment?.hyprland === true ? "hyprland" : "none";
+        if (environment?.hyprland === true)
+            return "hyprland";
+        return environment?.wlopm === true ? "wlopm" : "none";
+    }
+
+    // Why monitors cannot be turned off, for the page: { reason, hint }, both "" when they can
+    function unavailable(backendName) {
+        if (backendName === "hyprland" || backendName === "wlopm")
+            return { reason: "", hint: "" };
+        return { reason: "Not supported here", hint: "Install wlopm to turn monitors off" };
     }
 
     // A connector name as Hyprland gives it ("DP-2", "HDMI-A-1", "eDP-1"): the only names
@@ -111,7 +123,7 @@ Singleton {
         }
         if (!Array.isArray(parsed))
             return null;
-        const seen = {};
+        const seen = Object.create(null);
         const kept = [];
         for (const entry of parsed) {
             if (entry === null || typeof entry !== "object" || !validConnector(entry.name) || seen[entry.name])
@@ -130,11 +142,71 @@ Singleton {
                 power: power(entry.dpmsStatus)
             });
         }
+        return _named(kept, knownTwins);
+    }
+
+    // Monitors read ([{ connector, make, model, serial, builtIn, power }]) with their ids
+    function _named(kept, knownTwins) {
         const named = identities(kept, knownTwins);
         return {
             monitors: kept.map(monitor => Object.assign({ id: named.ids[monitor.connector], base: identity(monitor) }, monitor)),
             twins: named.twins
         };
+    }
+
+    // wlopm's `power-mode` → "on" | "off" | "unknown"
+    function wlopmPower(mode) {
+        return mode === "on" ? "on" : mode === "off" ? "off" : "unknown";
+    }
+
+    // `wlopm --json` ([{ "output": "<connector>", "power-mode": "on" | "off" }], an entry
+    // with "error" when its power could not be read) and the screens Qt knows
+    // ([{ name, model, serialNumber }]) → the same as hyprlandMonitors, or null when the text
+    // is not such an answer. wlopm gives connector names only: the model and serial come
+    // from the screen of that name (Qt has no make), so an id is `|model|serial`, and twins
+    // — two of one model without a serial, as Qt reports on Wayland — take their connector.
+    // An entry without a usable connector is left out: nothing could be asked of it.
+    function wlopmMonitors(text, screens, knownTwins) {
+        let parsed;
+        try {
+            parsed = JSON.parse(String(text ?? ""));
+        } catch (error) {
+            return null;
+        }
+        if (!Array.isArray(parsed))
+            return null;
+        // No prototype: a connector named like an object key ("constructor") is a name only
+        const byName = Object.create(null);
+        for (const screen of Array.isArray(screens) ? screens : []) {
+            if (screen !== null && typeof screen === "object" && validConnector(screen.name) && byName[screen.name] === undefined)
+                byName[screen.name] = screen;
+        }
+        const seen = Object.create(null);
+        const kept = [];
+        for (const entry of parsed) {
+            if (entry === null || typeof entry !== "object" || !validConnector(entry.output) || seen[entry.output])
+                continue;
+            seen[entry.output] = true;
+            const screen = byName[entry.output] ?? null;
+            kept.push({
+                connector: entry.output,
+                make: "",
+                model: _field(screen?.model),
+                serial: _field(screen?.serialNumber),
+                builtIn: isBuiltIn(entry.output),
+                power: entry.error !== undefined ? "unknown" : wlopmPower(entry["power-mode"])
+            });
+        }
+        return _named(kept, knownTwins);
+    }
+
+    // The wlopm command that turns one monitor off or on, as argv, or [] when the connector
+    // is not one to name: wlopm takes `*` for every output, so the caller asks only for a
+    // connector of its last reading, and nothing else reaches the command
+    function wlopmCommand(program, connector, on) {
+        if (typeof program !== "string" || program === "" || !validConnector(connector))
+            return [];
+        return [program, on === true ? "--on" : "--off", connector];
     }
 
     // The monitors as last read, after a reading that failed: still listed, their power
@@ -152,20 +224,22 @@ Singleton {
         return "hl.dsp.dpms({ action = \"" + (on === true ? "enable" : "disable") + "\", monitor = \"" + connector + "\" })";
     }
 
-    // What `hyprctl -j monitors` answered, as far as the run goes (CommandRunner's result)
-    // → "" when it ran and said everything, else the problem
-    function readProblem(result) {
+    // What the reading (`hyprctl -j monitors`, `wlopm --json`: `program`, hyprctl when not
+    // given) answered, as far as the run goes (CommandRunner's result) → "" when it ran and
+    // said everything, else the problem
+    function readProblem(result, program) {
+        const name = program ?? "hyprctl";
         if (result === null || typeof result !== "object")
-            return "hyprctl gave no answer";
+            return name + " gave no answer";
         if (result.failedToStart === true)
-            return "hyprctl could not be started";
+            return name + " could not be started";
         if (result.timedOut === true)
-            return "hyprctl did not answer";
+            return name + " did not answer";
         if (result.truncated === true)
-            return "too much output from hyprctl";
+            return "too much output from " + name;
         if (result.ok === true)
             return "";
-        return "hyprctl failed (" + result.code + ")" + _said(result.stderr);
+        return name + " failed (" + result.code + ")" + _said(result.stderr);
     }
 
     // The first line of what a command said, for a log line
@@ -178,17 +252,20 @@ Singleton {
     // The result is CommandRunner's. Hyprland prints "ok" even for an action it did not
     // take, so the run is all this says: whether the monitor changed is the next reading's
     // (actionProblem).
-    function dispatchProblem(result) {
+    // `program`, "hyprctl dispatch" when not given, names the command (wlopm's is "wlopm").
+    function dispatchProblem(result, program) {
+        const name = program ?? "hyprctl dispatch";
+        const tool = name.split(" ")[0];
         if (result === null || typeof result !== "object")
-            return "hyprctl gave no answer";
+            return tool + " gave no answer";
         if (result.failedToStart === true)
-            return "hyprctl could not be started";
+            return tool + " could not be started";
         if (result.timedOut === true)
-            return "hyprctl did not answer";
+            return tool + " did not answer";
         if (result.ok === true)
             return "";
         const output = String(result.stdout ?? "").trim();
-        return "hyprctl dispatch failed (" + result.code + ")" + _said(output !== "" ? output : result.stderr);
+        return name + " failed (" + result.code + ")" + _said(output !== "" ? output : result.stderr);
     }
 
     // After an action: the reading that followed it ([{ id, power }], or null when it failed)
