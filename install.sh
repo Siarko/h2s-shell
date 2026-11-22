@@ -120,7 +120,11 @@ echo "==> Packages"
 sudo pacman -S --needed "${packages[@]}" < /dev/tty
 
 # The icons are Nerd Font glyphs: say so now rather than leave empty boxes to puzzle over
-if command -v fc-list > /dev/null && ! fc-list : family | grep -q "Nerd Font"; then
+# (the list read whole, not piped into grep -q: grep ends at the first match, and under
+# pipefail the fc-list still writing then would fail the test and warn wrongly)
+fonts=""
+command -v fc-list > /dev/null && fonts=$(fc-list : family 2> /dev/null)
+if command -v fc-list > /dev/null && [[ "$fonts" != *"Nerd Font"* ]]; then
     echo "Warning: no Nerd Font found (fc-list); the shell's icons would show as empty boxes." >&2
     echo "Install one: sudo pacman -S ttf-jetbrains-mono-nerd" >&2
 fi

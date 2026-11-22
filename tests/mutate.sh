@@ -279,7 +279,10 @@ fi
 
 # ---- The suites -------------------------------------------------------------------------
 if [ ${#suites[@]} = 0 ]; then
-    line=$("$REPO/tests/affected.sh" --files "$file" 2> /dev/null | grep -m1 '^tests/run-unit.sh') \
+    # Read whole, then searched: grep -m1 in a pipe ends early, and under pipefail the
+    # affected.sh still printing then dies of SIGPIPE and fails the line
+    selection=$("$REPO/tests/affected.sh" --files "$file" 2> /dev/null)
+    line=$(grep -m1 '^tests/run-unit.sh' <<< "$selection") \
         || fail "tests/affected.sh selects no unit suite for $file: name the suites"
     read -r -a suites <<< "${line#tests/run-unit.sh}"
     [ ${#suites[@]} -gt 0 ] || fail "tests/affected.sh selects every unit suite for $file: name the suites"

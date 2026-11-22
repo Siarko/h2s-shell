@@ -220,9 +220,14 @@ print_shard() {
 # shard_reasons <index>: why the shard failed, as its verdict said (the lines of its last
 # verdict block that are not a suite's summary), so that the end of the output says it
 shard_reasons() {
-    local reasons
-    reasons=$(sed -n '/^Unit suites (/h; /^Unit suites (/!H; ${x;p}' "$work/shard-$1.out" 2> /dev/null \
-        | grep -E -- '^  [^ ]' | grep -v -E -- '^  --- ')
+    local reasons="" output
+    output=$(cat "$work/shard-$1.out" 2> /dev/null)
+    # No verdict block (a shard ended by a signal or a bash error): its output is not one,
+    # Quickshell's indented log lines would pass for reasons
+    if grep -q '^Unit suites (' <<< "$output"; then
+        reasons=$(sed -n '/^Unit suites (/h; /^Unit suites (/!H; ${x;p}' <<< "$output" \
+            | grep -E -- '^  [^ ]' | grep -v -E -- '^  --- ')
+    fi
     [ -n "$reasons" ] || reasons="  (no verdict: its output is above)"
     printf '%s\n' "$reasons" | sed 's/^/  /'
 }

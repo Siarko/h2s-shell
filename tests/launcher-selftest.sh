@@ -43,7 +43,8 @@ failures=0
 tunables=glibc.malloc.tcache_count=0:glibc.malloc.perturb=127
 
 # A process this script started (the launcher, a stand-in shell): it carries the marker
-ours() { [ -r "/proc/$1/environ" ] && tr '\0' '\n' < "/proc/$1/environ" 2> /dev/null | grep -qxF "LAUNCHER_SELFTEST=$work"; }
+# (read whole, not piped into grep -q: an early match and tr's SIGPIPE under pipefail)
+ours() { [ -r "/proc/$1/environ" ] && grep -qxF "LAUNCHER_SELFTEST=$work" <<< "$(tr '\0' '\n' < "/proc/$1/environ" 2> /dev/null)"; }
 signal() { ours "$2" && kill -s "$1" "$2" 2> /dev/null; }
 clean_up() {
     local pid
@@ -585,7 +586,7 @@ dev_processes() {
     local environ pid
     for environ in /proc/[0-9]*/environ; do
         pid=${environ#/proc/}; pid=${pid%/environ}
-        [ -r "$environ" ] && { tr '\0' '\n' < "$environ"; } 2> /dev/null | grep -qxF "LAUNCHER_SELFTEST_DIR=$dev" && echo "$pid"
+        [ -r "$environ" ] && grep -qxF "LAUNCHER_SELFTEST_DIR=$dev" <<< "$({ tr '\0' '\n' < "$environ"; } 2> /dev/null)" && echo "$pid"
     done
 }
 dev_gone() { [ -z "$(dev_processes)" ]; }

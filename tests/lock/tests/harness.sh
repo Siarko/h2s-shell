@@ -16,7 +16,7 @@ check "shell runs from the run's copy of the checkout" \
 # … and nothing of the session the run was started from: its agent socket, its seat, its
 # terminal, its toolkit settings (run.sh starts each test with an empty environment and a
 # short list of what to keep)
-shell_has_variable() { { tr '\0' '\n' < "/proc/$SHELL_PID/environ"; } 2> /dev/null | grep -q "^$1="; }
+shell_has_variable() { grep -q "^$1=" <<< "$({ tr '\0' '\n' < "/proc/$SHELL_PID/environ"; } 2> /dev/null)"; }
 check "the shell's environment can be read" shell_has_variable XDG_RUNTIME_DIR
 for variable in SSH_AUTH_SOCK XDG_SEAT XDG_VTNR KITTY_LISTEN_ON QT_QPA_PLATFORMTHEME; do
     if shell_has_variable "$variable"; then

@@ -62,7 +62,7 @@ check_within 10 "a finger unlocks" compositor_unlocked
 # exec-time environment, and so does every PAM helper it forks. The launcher took any
 # `^__QUICKSHELL_CRASH` for Quickshell's crash reporter and spared it: the dead shell's
 # fingerprint helper (timeout=-1) lived on. Only the reporter has __QUICKSHELL_CRASH_DUMP_FD.
-relaunched_in_place() { tr '\0' '\n' < "/proc/$SHELL_PID/environ" 2> /dev/null | grep -q '^__QUICKSHELL_CRASH_INFO_FD='; }
+relaunched_in_place() { grep -q '^__QUICKSHELL_CRASH_INFO_FD=' <<< "$(tr '\0' '\n' < "/proc/$SHELL_PID/environ" 2> /dev/null)"; }
 if [ "$in_place" = 0 ]; then
     log "the relaunch was not in place: crashing once more, for a shell relaunched in place"
     started=$(stat -c %Y "/proc/$SHELL_PID")

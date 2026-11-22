@@ -28,8 +28,12 @@ reloads() { shell_log_count "Configuration Loaded"; }
 # When the shell logged the compositor's confirmation, the first after line <n> of its log
 # (the launcher starts it with --log-times: wall-clock stamps), as seconds since the epoch
 confirmed_after() {
-    local line
-    line=$(tail -n +"$(($1 + 1))" "$WORK/shell.log" | sed 's/\x1b\[[0-9;]*m//g' | grep -a -m 1 '"type":"compositorLocked"') || return 0
+    local after line
+    # Read whole, then searched: grep -m 1 at the end of a pipe ends early, and the writers
+    # still writing then die of SIGPIPE
+    after=$(tail -n +"$(($1 + 1))" "$WORK/shell.log" | sed 's/\x1b\[[0-9;]*m//g')
+    line=$(grep -a -m 1 '"type":"compositorLocked"' <<< "$after")
+    [ -n "$line" ] || return 0
     date -d "${line:0:23}" +%s.%N 2> /dev/null
 }
 # The end of a sleep, and a wait until the shell has handled it (taken or ignored, its

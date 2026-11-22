@@ -120,8 +120,8 @@ sweep() {
         pid=${environ#/proc/}
         pid=${pid%/environ}
         [ "$pid" = $$ ] && continue
-        [ -O "$environ" ] && { tr "\0" "\n" < "$environ"; } 2> /dev/null \
-            | grep -qxF -- "$variable=$value" || continue
+        # Read whole, not piped into grep -q (an early match and tr's SIGPIPE under pipefail)
+        [ -O "$environ" ] && grep -qxF -- "$variable=$value" <<< "$({ tr "\0" "\n" < "$environ"; } 2> /dev/null)" || continue
         found="$found $pid"
     done
     [ -n "$found" ] || return 0
@@ -358,8 +358,7 @@ marked_inhibitors() {
     [ -n "$variable" ] && [ -n "$value" ] || return 0
     for pid in $(systemd-inhibit --list --no-pager --no-legend 2> /dev/null {lock_fd}<&- \
         | awk '{ for (i = 1; i + 2 <= NF; i++) if ($i ~ /^[0-9]+$/ && $(i + 2) ~ /^[0-9]+$/) { print $(i + 2); break } }'); do
-        { tr "\0" "\n" < "/proc/$pid/environ"; } 2> /dev/null \
-            | grep -qxF -- "$variable=$value" && echo "$pid"
+        grep -qxF -- "$variable=$value" <<< "$({ tr "\0" "\n" < "/proc/$pid/environ"; } 2> /dev/null)" && echo "$pid"
     done
 }
 
