@@ -31,5 +31,10 @@ TestCase {
         assert(CavaRules.logLine("", "cava exited with code 127").includes("cava exited with code 127"), "logLine: a failure names its problem");
         assert(CavaRules.logLine("cava could not be started", "cava exited with code 127").includes("code 127"), "logLine: another failure is new");
         assertEqual(CavaRules.logLine("cava exited with code 127", ""), "cava runs again", "logLine: back to fine");
+        assert(!CavaRules.logLine("", "cava exited with code 1").includes("ambient"),
+            "logLine: claims nothing of what the visualiser shows (frozen bars or the ambient wave)");
+
+        assert(CavaRules.retries(true), "retries: a run that exited is tried again");
+        assert(!CavaRules.retries(false), "retries: a program that could not be started is not, until asked again");
     }
 }

@@ -1048,9 +1048,9 @@ The interface modules are written against (`qs.api`), versioned on its own
   log instead (`qs log`) — and the launcher's stop waits while the
   shell takes no requests.
 - When cava cannot run (missing, or broken by a library update), the music visualiser no
-  longer fails silently: the shell logs why, once, tries cava again with a backoff, and
-  logs again once it runs; the ambient wave shows meanwhile. Visualizer's `cavaState` and
-  `cavaProblem` say where it stands.
+  longer fails silently: the shell logs why, once; a cava that exits is tried again with a
+  backoff, a missing one when the panel opens again; once it runs again that is logged too.
+  Visualizer's `cavaState` and `cavaProblem` say where it stands.
 - Another program's lock screen (hyprlock) is seen under Hyprland: the shell no longer asks
   for its idle lock over it (Hyprland ended the shell for that), and "screen locked"
   profiles apply while it lasts.

@@ -5,8 +5,11 @@ import qs.singletons.media
 // CavaReader run for real against stand-ins for cava (tests/fixtures/cava): one that cannot
 // run (the dynamic loader's message, exit 127) is "failed" with that reason, tried again
 // with a backoff, and logged once however often it fails; switched to one that works, the
-// levels come, the state is "running" and that is logged once; stopped, nothing waits.
-// Never the real cava. Asynchronous: each step is a process.
+// levels come, the state is "running" once it has run a while, and that is logged once;
+// stopped, nothing waits. A program that is not there is not tried again until asked. One
+// that prints a frame and dies is not counted as running. A run left behind by a restart
+// says nothing that counts. Restarts asked in one turn start one run. Never the real cava.
+// Asynchronous: each step is a process.
 TestCase {
     id: suite
     suiteName: "CavaReading"
@@ -17,11 +20,21 @@ TestCase {
     property var _reader: null
     property var _logged: []
     property var _levels: []
+    // The other readers, each with what it logged and the levels it gave
+    property var _missing: null
+    property var _missingLogged: []
+    property var _flaky: null
+    property var _flakyLogged: []
+    property var _stale: null
+    property var _staleLogged: []
+    property var _staleLevels: []
+    property var _once: null
 
     property Component _readerComponent: Component {
         CavaReader {
             retryMs: 20
             retryMostMs: 80
+            healthyMs: 100
         }
     }
 
@@ -63,7 +76,8 @@ TestCase {
     }
 
     function _end() {
-        _reader?.destroy();
+        for (const reader of [_reader, _missing, _flaky, _stale, _once])
+            reader?.destroy();
         suite.finish();
     }
 
@@ -95,6 +109,51 @@ TestCase {
             assert(!_reader._retry.running, "stopped: no retry waits");
             assert(_reader._current === null, "… no run is left");
             assertEqual(_reader.failures, 0, "… no failures counted");
+
+            _missing = _readerComponent.createObject(suite, { program: _fixtures + "/no-such-cava", configPath: "/dev/null" });
+            _missing.logged.connect(line => suite._missingLogged = suite._missingLogged.concat([line]));
+            _missing.active = true;
+        });
+        _then("the missing cava failed", () => _missing.state === "failed", () => {
+            assertEqual(_missing.problem, "cava could not be started", "a cava that is not there: could not be started");
+            assert(!_missing._retry.running, "… not tried again by itself");
+            assertEqual(_missing.runs, 1, "… one run");
+            _missing.requestRestart();
+        });
+        _then("the missing cava, asked again, failed again", () => _missing.runs === 2 && _missing.state === "failed" && _missing.failures === 2, () => {
+            assertEqual(_missingLogged.length, 1, "… the same outcome, logged once");
+            assert(!_missing._retry.running, "… and again not tried by itself");
+
+            _flaky = _readerComponent.createObject(suite, { program: _fixtures + "/cava-flaky", configPath: "/dev/null", healthyMs: 2000 });
+            _flaky.logged.connect(line => suite._flakyLogged = suite._flakyLogged.concat([line]));
+            _flaky.active = true;
+        });
+        _then("the flaky cava failed four times", () => _flaky.failures >= 4, () => {
+            assertEqual(_flaky.state, "failed", "a frame and then dead: failed, not running");
+            assertEqual(_flakyLogged.length, 1, "… logged once, no \"runs again\" between its deaths");
+            _flaky.active = false;
+
+            _stale = _readerComponent.createObject(suite, { program: _fixtures + "/cava-stubborn", configPath: "/dev/null" });
+            _stale.logged.connect(line => suite._staleLogged = suite._staleLogged.concat([line]));
+            _stale.levels.connect(line => suite._staleLevels = suite._staleLevels.concat([line]));
+            _stale.active = true;
+        });
+        _then("the stubborn cava is ready", () => _staleLevels.includes("ready"), () => {
+            _stale.program = _fixtures + "/cava";
+            _stale.requestRestart();
+        });
+        _then("the run after the restart is running", () => _stale.state === "running" && _stale._oldRunsEnded >= 1, () => {
+            assert(!_staleLevels.includes("stale"), "a run left behind: its last line dropped");
+            assertEqual(_stale.failures, 0, "… its end counts no failure");
+            assertEqual(JSON.stringify(_staleLogged), "[]", "… and logs nothing");
+
+            _once = _readerComponent.createObject(suite, { program: _fixtures + "/cava", configPath: "/dev/null" });
+            _once.active = true;
+            _once.requestRestart();
+            _once.requestRestart();
+        });
+        _then("the reader asked three times in one turn runs", () => _once.state === "running", () => {
+            assertEqual(_once.runs, 1, "restarts asked in one turn: one run");
         });
         _clock.start();
     }

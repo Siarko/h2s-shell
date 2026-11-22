@@ -1,0 +1,6 @@
+#!/bin/sh
+# A stand-in for a cava that prints one frame of levels and dies (tests/CavaReadingTest.qml):
+# one line is not a cava that runs.
+echo "10;20;30;40;40;30;20;10;"
+echo "cava: lost the audio source" >&2
+exit 1

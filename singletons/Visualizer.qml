@@ -14,9 +14,8 @@ import qs.singletons.media
 // shown a paused player while another plays, they fall flat rather than move to the
 // other's sound. Cava itself keeps running meanwhile — restarting it at every pause (and
 // every brief "paused" a player reports while seeking) dropped the bars and its
-// calibration each time. cava runs through CavaReader: a cava that fails is tried again with
-// a backoff and logged when that changes, the ambient wave showing meanwhile; where it
-// stands is `cavaState` and `cavaProblem`.
+// calibration each time. cava runs through CavaReader: a cava that fails is tried again and
+// logged when that changes; where it stands is `cavaState` and `cavaProblem`.
 Singleton {
     id: root
 
@@ -31,8 +30,9 @@ Singleton {
     // Whether cava has sent levels since it started; until then the ambient wave shows
     property bool useCava: false
     // Where cava stands, for a view of the shell's status (CavaReader): "stopped",
-    // "starting", "running" or "failed", and why it failed ("" otherwise). A failed cava
-    // is tried again with a backoff; the ambient wave shows meanwhile.
+    // "starting", "running" or "failed", and why it failed ("" otherwise). A cava that
+    // exited is tried again with a backoff, one that could not be started when the
+    // visualiser is shown again.
     readonly property string cavaState: _cava.state
     readonly property string cavaProblem: _cava.problem
 
@@ -73,12 +73,9 @@ Singleton {
         }
         const template = _cavaTemplate.text();
         _cavaGenerated.setText(template.replace(/^framerate\s*=.*$/m, "framerate = " + _cavaFps));
-        Qt.callLater(() => {
-            if (_cava.active)
-                _cava.restart();
-            else
-                _cava.active = root._active;
-        });
+        // Once per turn, however many changes asked for it (CavaReader.requestRestart)
+        _cava.active = true;
+        _cava.requestRestart();
     }
 
     FileView {

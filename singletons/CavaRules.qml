@@ -28,6 +28,14 @@ Singleton {
         return plain !== "" ? ": " + plain : "";
     }
 
+    // Whether a run that ended is tried again by itself: one that exited is (a crash, a
+    // library gone, a sound server not there yet), one that could not be started is not —
+    // the program is not there, and each try would only say so again; it is tried again
+    // when asked (the visualiser shown again, its settings changed)
+    function retries(exited) {
+        return exited === true;
+    }
+
     // How long to wait before the next try after `failures` failed runs in a row (1 or
     // more): `baseMs`, doubled at each failure, at most `mostMs`
     function retryDelay(failures, baseMs, mostMs) {
@@ -42,6 +50,6 @@ Singleton {
             return "";
         if (after === "")
             return "cava runs again";
-        return "no levels from cava (" + after + "); the visualiser shows its ambient wave, and cava is tried again";
+        return "no levels from cava: " + after;
     }
 }

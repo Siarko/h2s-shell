@@ -1,0 +1,9 @@
+#!/bin/sh
+# A stand-in for a cava that, asked to stop, still says something and exits with a failure
+# (tests/CavaReadingTest.qml): a run no longer current, whose last line and end must be
+# dropped. "ready" once it is set to answer.
+trap 'echo stale; echo "cava: stopped" >&2; exit 3' TERM
+echo ready
+while :; do
+    sleep 0.05
+done
