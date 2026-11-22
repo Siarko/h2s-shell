@@ -22,8 +22,18 @@ TestCase {
         assertEqual(line.type + " " + line.control, "auth required", "type and control word without case, as libpam");
         line = rules.parseLine("auth [ success=done   default=ignore ] pam_fprintd.so");
         assertEqual(JSON.stringify(line.actions), "{\"success\":\"done\",\"default\":\"ignore\"}", "spaces inside the brackets");
+        assertEqual(JSON.stringify(rules.logicalLines("auth required \\  \t\n\n# a comment between\n   \n  pam_unix.so\nauth required pam_env.so")),
+                    JSON.stringify([{ number: 1, text: "auth required    pam_unix.so" }, { number: 6, text: "auth required pam_env.so" }]),
+                    "a backslash with white space after it goes on; blank and comment lines between are skipped");
+        assertEqual(JSON.stringify(rules.logicalLines("auth required \\ # why\n pam_unix.so")), JSON.stringify([{ number: 1, text: "auth required   pam_unix.so" }]),
+                    "a comment after the backslash: the comment goes first, the line still goes on");
         line = rules.parseLine("auth required pam_exec.so [query=select x from y] quiet");
-        assertEqual(JSON.stringify(line.args), "[\"[query=select x from y]\",\"quiet\"]", "a bracketed argument kept as one");
+        assertEqual(JSON.stringify(line.args), "[\"query=select x from y\",\"quiet\"]", "a bracketed argument kept as one, without its brackets, as libpam hands it");
+        assertEqual(rules.parseLine("auth required pam_exec.so [a\\]b]").args[0], "a]b", "… an escaped bracket inside it unescaped");
+        for (const typo of ["[sucess=1 default=ignore]", "[success=1 Default=ignore]", "[success=OK]", "[success=skip]", "[success=0]", "[]"])
+            assert(rules.parseLine("auth " + typo + " pam_unix.so").error !== undefined, "a bracketed control libpam refuses: " + typo);
+        assertEqual(JSON.stringify(rules.parseLine("auth [new_authtok_reqd=done user_unknown=reset default=12] pam_unix.so").actions),
+                    "{\"new_authtok_reqd\":\"done\",\"user_unknown\":\"reset\",\"default\":\"12\"}", "… return-code names, reset and a jump count taken");
         assertEqual(rules.parseLine("@include common-auth").target, "common-auth", "@include");
         assertEqual(rules.parseLine("auth substack system-auth").controlKind, "substack", "substack");
         assert(rules.parseLine("auth [success=1 pam_unix.so").error !== undefined, "an unclosed bracket: an error");
@@ -171,10 +181,21 @@ TestCase {
         assertEqual(stack.lines[0].depth, 1, "… their depth");
 
         // --- a reader function, and a reader that fails ---
-        stack = rules.stack("sudo", path => path === "/usr/lib/pam.d/sudo" ? "auth required pam_unix.so\n" : null);
+        stack = rules.stack("sudo", path => path === "/usr/lib/pam.d/sudo" ? "auth required pam_unix.so\n" : undefined);
         assertEqual(stack.file + " " + names(stack), "/usr/lib/pam.d/sudo pam_unix.so", "a reader function: asked in the directories' order");
         stack = rules.stack("sudo", path => { throw new Error("denied"); });
-        assertEqual(stack.known + " " + stack.problems[0].reason, "false missing", "a reader that throws: not there, not known");
+        assertEqual(stack.known + " " + stack.problems[0].reason, "false unreadable", "a reader that throws: unreadable, not known");
+
+        // --- unreadable is not absent: libpam does not go on to the vendor directory ---
+        stack = rules.stack("sudo", { "/etc/pam.d/sudo": null, "/usr/lib/pam.d/sudo": "auth sufficient pam_permit.so\n" });
+        assertEqual([stack.known, stack.problems[0].reason, stack.problems[0].target, stack.lines.length].join(" "),
+                    "false unreadable /etc/pam.d/sudo 0", "an unreadable /etc/pam.d/sudo: not known, the vendor file never taken");
+        stack = rules.stack("sudo", { "/etc/pam.d/sudo": undefined, "/usr/lib/pam.d/sudo": "auth required pam_unix.so\n" });
+        assertEqual(stack.known + " " + stack.file, "true /usr/lib/pam.d/sudo", "undefined: no such file, the next directory");
+        stack = rules.stack("polkit-1", { "/usr/lib/pam.d/polkit-1": archPolkit, "/etc/pam.d/system-auth": null, "/usr/lib/pam.d/system-auth": archSystemAuth });
+        assertEqual([stack.known, stack.problems[0].reason, stack.problems[0].target, stack.lines.length].join(" "),
+                    "false unreadable /etc/pam.d/system-auth 0", "… an include too");
+        assertEqual(stack.faillock.present, null, "… pam_faillock not known");
 
         // --- a missing include: unknown, never "no such lines" ---
         stack = rules.stack("polkit-1", { "/usr/lib/pam.d/polkit-1": archPolkit });
@@ -186,7 +207,11 @@ TestCase {
         assertEqual(PolkitRules.pamStackOrderOf(stack), "", "… PolkitRules: not known");
         stack = rules.stack("sudo", { "/etc/pam.d/sudo": "auth sufficient pam_unix.so\nauth include gone\nauth sufficient pam_fprintd.so\n" });
         assertEqual(stack.unknownAt + " " + stack.lines.length, "1 2", "lines after a gap kept, unknownAt says where the gap is");
-        assertEqual(PolkitRules.pamStackOrderOf(stack), "password-first", "… only the lines before it decide: the password came first");
+        assertEqual(PolkitRules.pamStackOrderOf(stack), "", "… a password alone before the gap: not known (a reader may follow in it)");
+        stack = rules.stack("sudo", { "/etc/pam.d/sudo": "auth sufficient pam_unix.so\nauth sufficient pam_fprintd.so\nauth include gone\n" });
+        assertEqual(PolkitRules.pamStackOrderOf(stack), "password-first", "… both before the gap, the password first: password-first");
+        stack = rules.stack("sudo", { "/etc/pam.d/sudo": "auth sufficient pam_fprintd.so\nauth include gone\nauth sufficient pam_unix.so\n" });
+        assertEqual(PolkitRules.pamStackOrderOf(stack), "fingerprint-first", "… the reader before the gap: fingerprint-first");
         stack = rules.stack("sudo", {});
         assertEqual(stack.known + " " + stack.problems[0].reason + " " + stack.file, "false missing ", "no service file: not known");
         assertEqual(rules.stack("sudo", { "/etc/pam.d/sudo": "auth include ../shadow\n" }).problems[0].reason, "missing",
@@ -200,12 +225,17 @@ TestCase {
         assertEqual(stack.known + " " + stack.problems[0].reason + " " + stack.problems[0].target, "false cycle /etc/pam.d/a",
                     "a cycle: not known, where it closes");
         assertEqual(names(stack), "pam_env.so pam_unix.so", "… the walk ends");
-        const deep = {};
-        for (let i = 0; i < 30; i++)
-            deep["/etc/pam.d/s" + i] = "auth include s" + (i + 1) + "\n";
-        deep["/etc/pam.d/s30"] = "auth sufficient pam_unix.so\n";
-        stack = rules.stack("s0", deep);
-        assertEqual(stack.known + " " + stack.problems[0].reason, "false depth", "includes deeper than libpam allows: not known");
+        const chain = count => {
+            const files = {};
+            for (let i = 0; i < count; i++)
+                files["/etc/pam.d/s" + i] = "auth include s" + (i + 1) + "\n";
+            files["/etc/pam.d/s" + count] = "auth sufficient pam_unix.so\n";
+            return files;
+        };
+        stack = rules.stack("s0", chain(15));
+        assertEqual(stack.known + " " + names(stack), "true pam_unix.so", "fifteen includes deep: libpam reads it");
+        stack = rules.stack("s0", chain(16));
+        assertEqual(stack.known + " " + stack.problems[0].reason, "false depth", "sixteen: deeper than libpam allows, not known");
         stack = rules.stack("self", { "/etc/pam.d/self": "@include self\n" });
         assertEqual(stack.problems[0].reason, "cycle", "a file including itself: a cycle");
         stack = rules.stack("wide", { "/etc/pam.d/wide": "auth required pam_env.so\n".repeat(rules.maxLines + 5) });
@@ -216,13 +246,24 @@ TestCase {
         assertEqual(stack.known + " " + stack.problems[0].reason + " " + stack.problems[0].line, "false unparsable 2", "an unparsable line: not known, its place");
 
         // --- faillock.conf ---
-        assertEqual(JSON.stringify(rules.faillockConfig("")), "{\"deny\":3,\"failInterval\":900,\"unlockTime\":600}", "no file: libpam's defaults");
+        const settings = config => config === null ? "null"
+            : [config.deny, config.failInterval, config.unlockTime, config.rootUnlockTime, config.evenDenyRoot, config.silent].join(" ");
+        assertEqual(settings(rules.faillockConfig("")), "3 900 600 600 false false", "no file: libpam's defaults");
         assertEqual(rules.faillockConfig(null), null, "not read: not known");
-        assertEqual(JSON.stringify(rules.faillockConfig("# deny = 9\ndeny = 5\nfail_interval=60 # one minute\nunlock_time = 120\nsilent\n")),
-                    "{\"deny\":5,\"failInterval\":60,\"unlockTime\":120}", "set values read, comments and flags skipped");
-        assertEqual(rules.faillockConfig("unlock_time = never").unlockTime, 0, "unlock_time = never: 0");
-        assertEqual(JSON.stringify(rules.faillockConfig("deny = many\nfail_interval = 0\n")), "{\"deny\":3,\"failInterval\":900,\"unlockTime\":600}",
-                    "values libpam refuses: the defaults");
+        assertEqual(settings(rules.faillockConfig("# deny = 9\ndeny = 5\nfail_interval=60 # one minute\nunlock_time  120\nsilent\neven_deny_root\n")),
+                    "5 60 120 120 true true", "key = value, key=value, key value, flags; comments skipped");
+        assertEqual(settings(rules.faillockConfig("unlock_time = never\nroot_unlock_time = 30\n")), "3 900 0 30 false false", "never: 0; root's own time");
+        assertEqual(settings(rules.faillockConfig("deny = many\nfail_interval = 0\n")), "3 900 600 600 false false", "values libpam refuses: the defaults");
         assertEqual(rules.faillockConfig("deny = 0").deny, 0, "deny = 0 (never locks) kept");
+        assertEqual(rules.faillockConfig("deny = 3 \\\nunlock_time = 5\n").unlockTime, 5, "faillock.conf has no continuation lines");
+        assertEqual(settings(rules.faillockConfig("deny = 5\nunlock_time = 120\n", ["preauth", "deny=4", "unlock_time=60", "even_deny_root"])),
+                    "4 900 60 60 true false", "the line's arguments override the file");
+        assertEqual(rules.faillockConfig("deny = 5\n", ["preauth", "conf=/etc/security/other.conf"]), null, "conf= another file: this one not in force");
+        assertEqual(rules.faillockConfPath(["authfail", "conf=/etc/security/other.conf"]), "/etc/security/other.conf", "… faillockConfPath names it");
+        assertEqual(rules.faillockConfig("deny = 7\n", ["conf=/etc/security/other.conf"], "/etc/security/other.conf").deny, 7, "… and its text read with that path");
+        assertEqual(rules.faillockConfPath(["preauth"]), "/etc/security/faillock.conf", "no conf=: the default file");
+        stack = rules.stack("polkit-1", arch);
+        assertEqual(settings(rules.faillockConfig("deny = 5\n", stack.lines[stack.faillock.at[0].index].args)), "5 900 600 600 false false",
+                    "Arch's preauth line has no settings of its own: the file's");
     }
 }

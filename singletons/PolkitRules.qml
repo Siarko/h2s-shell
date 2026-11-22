@@ -362,17 +362,18 @@ Singleton {
                                                    PamStackRules.nixosDirectories));
     }
 
-    // The same for a stack PamStackRules.stack read. Where it is not known, the lines
-    // before the first gap decide what they can: a reader or a password already there
-    // comes first; nothing yet is "".
+    // The same for a stack PamStackRules.stack read. Where it is not known, only the lines
+    // before the first gap decide: the reader there first is "fingerprint-first", the
+    // password before a reader there is "password-first"; anything else is "" (a password
+    // alone may still be followed by a reader in the part not read).
     function pamStackOrderOf(stack) {
         const lines = stack && Array.isArray(stack.lines) ? stack.lines.slice(0, Math.max(0, stack.unknownAt ?? 0)) : [];
         const fingerprint = lines.findIndex(line => line.moduleName === "pam_fprintd.so");
         const password = lines.findIndex(line => line.moduleName === "pam_unix.so");
         if (!stack || stack.known !== true) {
-            if (fingerprint < 0 && password < 0)
-                return "";
-            return fingerprint >= 0 && (password < 0 || fingerprint < password) ? "fingerprint-first" : "password-first";
+            if (fingerprint >= 0 && (password < 0 || fingerprint < password))
+                return "fingerprint-first";
+            return fingerprint >= 0 && password >= 0 ? "password-first" : "";
         }
         if (password < 0)
             return fingerprint < 0 ? "" : "fingerprint-first";

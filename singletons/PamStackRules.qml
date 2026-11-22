@@ -19,37 +19,51 @@ Singleton {
     // NixOS generates everything into the first and has no vendor directory.
     readonly property var directories: ["/etc/pam.d", "/usr/lib/pam.d"]
     readonly property var nixosDirectories: ["/etc/pam.d"]
-    // How deep includes nest (libpam's PAM_SUBSTACK_MAX_LEVEL) and how many lines a whole
-    // stack may hold before it is given up on as not a real one
-    readonly property int maxDepth: 16
+    // How deep includes nest (libpam refuses a file at PAM_SUBSTACK_MAX_LEVEL, 16: fifteen
+    // includes below the service) and how many lines a whole stack may hold before it is
+    // given up on as not a real one
+    readonly property int maxDepth: 15
     readonly property int maxLines: 2000
 
     readonly property var _types: ["auth", "account", "password", "session"]
     readonly property var _simpleControls: ["required", "requisite", "sufficient", "optional"]
+    // The words libpam takes in a bracketed control (libpam/pam_handlers.c, _pam_token_returns
+    // and the actions), compared with case
+    readonly property var _returnNames: ["success", "open_err", "symbol_err", "service_err", "system_err",
+        "buf_err", "perm_denied", "auth_err", "cred_insufficient", "authinfo_unavail", "user_unknown",
+        "maxtries", "new_authtok_reqd", "acct_expired", "session_err", "cred_unavail", "cred_expired",
+        "cred_err", "no_module_data", "conv_err", "authtok_err", "authtok_recover_err", "authtok_lock_busy",
+        "authtok_disable_aging", "try_again", "ignore", "abort", "authtok_expired", "module_unknown",
+        "bad_item", "conv_again", "incomplete", "default"]
+    readonly property var _actionWords: ["ignore", "ok", "done", "bad", "die", "reset"]
 
     // ── One file ──
 
-    // The file's logical lines: a line ending in a backslash goes on in the next (libpam
-    // joins them with a space), a `#` starts a comment to the end of the line. Each item
+    // The file's logical lines: a line ending in a backslash (white space after it allowed)
+    // goes on in the next, joined with a space; blank and comment-only lines between are
+    // skipped while it goes on. A `#` starts a comment to the end of the line. Each item
     // `{ number, text }`, `number` the first physical line (from 1), `text` trimmed and
     // without the comment; empty lines are left out.
     function logicalLines(text) {
         const physical = String(text ?? "").split("\n");
         const result = [];
-        let pending = "", start = 0;
+        let pending = "", start = 0, continuing = false;
         for (let i = 0; i < physical.length; i++) {
             let line = physical[i].replace(/\r$/, "");
-            if (pending === "")
-                start = i + 1;
             const comment = line.indexOf("#");
-            const continued = comment < 0 && /\\$/.test(line);
             if (comment >= 0)
                 line = line.slice(0, comment);
-            else if (continued)
-                line = line.slice(0, -1);
-            pending += (pending === "" ? "" : " ") + line;
-            if (continued && i < physical.length - 1)
+            if (continuing && line.trim() === "")
                 continue;
+            if (!continuing)
+                start = i + 1;
+            continuing = /\\[ \t]*$/.test(line);
+            if (continuing)
+                line = line.replace(/\\[ \t]*$/, "");
+            pending += (pending === "" ? "" : " ") + line;
+            if (continuing && i < physical.length - 1)
+                continue;
+            continuing = false;
             const trimmed = pending.trim();
             if (trimmed !== "")
                 result.push({ number: start, text: trimmed });
@@ -83,9 +97,10 @@ Singleton {
         return word.length > 1 && word.endsWith("]") && !word.endsWith("\\]");
     }
 
-    // A bracketed control's `value=action` pairs as a map, keys and actions lower-cased
-    // (`[success=1 default=ignore]` → { success: "1", default: "ignore" }); null when a
-    // pair has no `=`.
+    // A bracketed control's `value=action` pairs as a map (`[success=1 default=ignore]` →
+    // { success: "1", default: "ignore" }); null when a pair is not one libpam takes: a
+    // value not among its return codes or `default`, an action not ignore/ok/done/bad/die/
+    // reset or a jump count. Compared with case (`Default`, `sucess` are refused).
     function controlActions(control) {
         const inner = String(control ?? "").replace(/^\[/, "").replace(/\]$/, "").trim();
         const actions = {};
@@ -93,9 +108,14 @@ Singleton {
             const equals = pair.indexOf("=");
             if (equals <= 0 || equals === pair.length - 1)
                 return null;
-            actions[pair.slice(0, equals).toLowerCase()] = pair.slice(equals + 1).toLowerCase();
+            const key = pair.slice(0, equals), action = pair.slice(equals + 1);
+            if (!_returnNames.includes(key))
+                return null;
+            if (!_actionWords.includes(action) && !/^[1-9]\d*$/.test(action))
+                return null;
+            actions[key] = action;
         }
-        return actions;
+        return Object.keys(actions).length > 0 ? actions : null;
     }
 
     // One logical line (comment already gone, as logicalLines gives it) → what it says:
@@ -149,7 +169,9 @@ Singleton {
         return {
             type, optional, control, controlKind, actions, module,
             moduleName: module.slice(module.lastIndexOf("/") + 1),
-            args: list.slice(3)
+            // libpam hands a bracketed argument to the module without its brackets, `\]` as `]`
+            args: list.slice(3).map(word => word.startsWith("[") && _closesBracket(word)
+                                    ? word.slice(1, -1).replace(/\\\]/g, "]") : word)
         };
     }
 
@@ -210,12 +232,14 @@ Singleton {
         return (directoryList ?? directories).map(directory => directory.replace(/\/+$/, "") + "/" + value);
     }
 
-    // The service's auth stack. `read` is a function path → text (a string; anything else
-    // is "not there or not readable") or a map { path: text }; `directoryList` the
+    // The service's auth stack. `read` is a function path → answer or a map { path: answer }:
+    // a string is the file's text, undefined (or a path not in the map) is "no such file" —
+    // libpam goes on to the next directory — and null (or a throw) is "there but not
+    // readable": the lookup stops there, the stack not known. `directoryList` the
     // directories in order (default `directories`). Result:
     //   service, file (the service's path, "" when not found), known (every file read,
     //   every line parsed, within the limits), problems [{ reason, file, line, target }]
-    //   (reason "missing" / "cycle" / "depth" / "unparsable" / "too long"),
+    //   (reason "missing" / "unreadable" / "cycle" / "depth" / "unparsable" / "too long"),
     //   unknownAt (how many of `lines` come before the first gap: all of them when known),
     //   lines [{ file, line, type, optional, control, controlKind, actions, module,
     //   moduleName, args, depth, substack (inside a substack), via [{ file, line }] (the
@@ -225,7 +249,7 @@ Singleton {
     //   faillock { present (true / false / null when not known), at [{ index, phase, args }] }.
     function stack(service, read, directoryList) {
         const reader = typeof read === "function" ? read
-            : (path => (read && Object.prototype.hasOwnProperty.call(read, path)) ? read[path] : null);
+            : (path => (read && Object.prototype.hasOwnProperty.call(read, path)) ? read[path] : undefined);
         const dirs = Array.isArray(directoryList) && directoryList.length > 0 ? directoryList : directories;
         const result = {
             service: String(service ?? ""), file: "", known: true, problems: [], unknownAt: -1,
@@ -239,6 +263,8 @@ Singleton {
             result.known = false;
             result.problems.push({ reason, file, line, target });
         };
+        // The first candidate that is there: { path, text }, { path, unreadable: true }, or
+        // null when none is
         const open = name => {
             for (const path of candidates(name, dirs)) {
                 let text = null;
@@ -249,6 +275,8 @@ Singleton {
                 }
                 if (typeof text === "string")
                     return { path, text };
+                if (text !== undefined)
+                    return { path, unreadable: true };
             }
             return null;
         };
@@ -279,6 +307,10 @@ Singleton {
                         problem("missing", path, logical.number, target);
                         continue;
                     }
+                    if (found.unreadable) {
+                        problem("unreadable", path, logical.number, found.path);
+                        continue;
+                    }
                     if (chain.indexOf(found.path) >= 0) {
                         problem("cycle", path, logical.number, found.path);
                         continue;
@@ -301,6 +333,8 @@ Singleton {
         const top = open(result.service);
         if (top === null) {
             problem("missing", "", 0, result.service);
+        } else if (top.unreadable) {
+            problem("unreadable", "", 0, top.path);
         } else {
             result.file = top.path;
             walk(top.path, top.text, [top.path], [], 0, false);
@@ -330,34 +364,69 @@ Singleton {
 
     // ── faillock.conf ──
 
-    // pam_faillock's settings from /etc/security/faillock.conf's text: { deny,
-    // failInterval, unlockTime (seconds; 0 = never unlocked by time) }, libpam's defaults
-    // (3, 900, 600) for what the file does not set or sets to something it would refuse.
-    // A file known not to exist is "" (all defaults); anything not a string (not read) is
-    // null: not known.
-    function faillockConfig(text) {
+    readonly property string faillockConfDefault: "/etc/security/faillock.conf"
+
+    // Which file pam_faillock reads for a line's arguments: `conf=<path>`, else the default
+    function faillockConfPath(args) {
+        const conf = (Array.isArray(args) ? args : []).map(word => String(word)).filter(word => word.startsWith("conf="));
+        return conf.length > 0 ? conf[conf.length - 1].slice(5) : faillockConfDefault;
+    }
+
+    // pam_faillock's settings for one stack line: `text` is the text of the file it reads
+    // (`path`, default faillock.conf; faillockConfPath(args) says which), `args` the line's
+    // arguments, which override the file (the preauth line's decide the lock, the authfail
+    // line's the counting). { deny, failInterval, unlockTime, rootUnlockTime (seconds;
+    // 0 = never unlocked by time), evenDenyRoot, silent }, libpam's defaults (3, 900, 600,
+    // root as unlock_time) for what is not set or set to something it would refuse. A file
+    // known not to exist is "" (defaults); text not read (not a string), or a `conf=` naming
+    // another file than `path`, is null: not known.
+    function faillockConfig(text, args, path) {
         if (typeof text !== "string")
             return null;
-        const config = { deny: 3, failInterval: 900, unlockTime: 600 };
-        for (const logical of logicalLines(text)) {
-            const match = logical.text.match(/^([A-Za-z_]+)\s*(?:=\s*(\S*))?/);
-            if (!match)
-                continue;
-            const key = match[1], value = match[2] ?? "";
-            if (key === "unlock_time" && value === "never") {
-                config.unlockTime = 0;
-                continue;
+        const words = Array.isArray(args) ? args.map(word => String(word)) : [];
+        if (faillockConfPath(words) !== String(path ?? faillockConfDefault))
+            return null;
+        const config = { deny: 3, failInterval: 900, unlockTime: 600, rootUnlockTime: -1, evenDenyRoot: false, silent: false };
+        const apply = (key, value) => {
+            if (key === "even_deny_root" && value === "")
+                config.evenDenyRoot = true;
+            else if (key === "silent" && value === "")
+                config.silent = true;
+            else if ((key === "unlock_time" || key === "root_unlock_time") && value === "never")
+                config[key === "unlock_time" ? "unlockTime" : "rootUnlockTime"] = 0;
+            else if (/^\d+$/.test(value)) {
+                const number = parseInt(value, 10);
+                if (key === "deny")
+                    config.deny = number;
+                else if (key === "fail_interval" && number > 0)
+                    config.failInterval = number;
+                else if (key === "unlock_time")
+                    config.unlockTime = number;
+                else if (key === "root_unlock_time")
+                    config.rootUnlockTime = number;
             }
-            if (!/^\d+$/.test(value))
+        };
+        // The file: one setting a line, `key = value` or `key value` or a bare flag, `#`
+        // comments; no continuation lines
+        for (const raw of text.split("\n")) {
+            const line = raw.replace(/#.*$/, "").trim();
+            if (line === "")
                 continue;
-            const number = parseInt(value, 10);
-            if (key === "deny")
-                config.deny = number;
-            else if (key === "fail_interval" && number > 0)
-                config.failInterval = number;
-            else if (key === "unlock_time")
-                config.unlockTime = number;
+            const match = line.match(/^(\S+?)[\s=]+(.*)$/);
+            if (match)
+                apply(match[1], match[2].trim());
+            else
+                apply(line, "");
         }
+        for (const word of words) {
+            const equals = word.indexOf("=");
+            if (equals > 0)
+                apply(word.slice(0, equals), word.slice(equals + 1));
+            else
+                apply(word, "");
+        }
+        if (config.rootUnlockTime < 0)
+            config.rootUnlockTime = config.unlockTime;
         return config;
     }
 }
