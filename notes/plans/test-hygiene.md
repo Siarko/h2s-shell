@@ -450,7 +450,12 @@ Each is one change with its test; "check" is what proves it.
   condition, window exposure before the first event, the two-sided time bounds in the
   privileged fixture and CommandRunner made one-sided hang guards or seam-timed. Check:
   each suite 20 runs in a row under `stress`-like load (`tests/soak.sh <suite> 20`, which
-  this slice adds) without a failure.
+  this slice adds) without a failure. Done: the guard's window measured from its answer on a monotonic
+  clock (≥ 285 ms, Qt's coarse timers); the drivers are `tests/WindowDriver.qml` (windowShown
+  from a drawn frame, never QtTest's root object; `waitShown()` before the first event); the
+  upper bounds gone or replaced by the alternative outcome (the script's own end, the first run
+  still running, a TERM shown by the trap's own exit code). Every touched suite 20/20 under
+  load; the short `wait(50)`/`wait(120)` before checks in the window suites are still fixed.
 - **T7 — lock bed: hang-guard deadlines, seams for the long waits, `-j` by cores, rerun
   alone as FLAKY, `tests/lock/lint.sh`** for fixed sleeps. Check: the bed's time ≤ target,
   `lint.sh` in `run-all.sh`, a scenario made to fail once by a stand-in shows as FLAKY.

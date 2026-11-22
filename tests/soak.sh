@@ -6,8 +6,9 @@
 #   tests/soak.sh <module dir> <n>            a module's suites (tests/run-modules.sh <dir>)
 #   tests/soak.sh --load <k> <suite> <n>      k busy loops (default: one per processor)
 #
-# The load is busy loops this script starts before the first run and ends after the last
-# (or on an interrupt): only the processes it started itself are signalled. Each run's output
+# The load is busy loops this script starts before the first run and ends after the last;
+# an interrupt or a TERM ends them and the run in progress at once (the runner ends its own
+# processes): only the processes it started itself are signalled. Each run's output
 # goes to a file of its own; a failed run's file is kept and named, with its FAIL lines, the
 # others are removed.
 #
@@ -37,6 +38,7 @@ fi
 
 logs=$(mktemp -d "${TMPDIR:-/tmp}/h2s-soak.XXXXXX") || { echo "soak.sh: cannot create a temp dir" >&2; exit 2; }
 loops=()
+runner_pid=""
 stop_load() {
     local pid
     for pid in "${loops[@]}"; do
@@ -47,8 +49,16 @@ stop_load() {
     done
     loops=()
 }
-trap stop_load EXIT
-trap 'stop_load; exit 130' INT TERM
+stop_all() {
+    if [ -n "$runner_pid" ]; then
+        kill "$runner_pid" 2> /dev/null
+        wait "$runner_pid" 2> /dev/null
+        runner_pid=""
+    fi
+    stop_load
+}
+trap stop_all EXIT
+trap 'stop_all; exit 130' INT TERM
 
 for (( i = 0; i < load; i++ )); do
     bash -c 'while :; do :; done' &
@@ -61,8 +71,12 @@ started=$SECONDS
 for (( run = 1; run <= runs; run++ )); do
     log="$logs/run-$run.log"
     run_started=$SECONDS
-    "${runner[@]}" > "$log" 2>&1
+    # In the background, so that a signal to this script is handled while a run goes on
+    "${runner[@]}" > "$log" 2>&1 &
+    runner_pid=$!
+    wait "$runner_pid"
     status=$?
+    runner_pid=""
     if [ "$status" -eq 0 ]; then
         echo "  run $run: PASS ($(( SECONDS - run_started )) s)"
         rm -f "$log"

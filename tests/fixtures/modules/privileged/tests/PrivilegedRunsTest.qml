@@ -348,7 +348,8 @@ TestCase {
         ModuleTestKit.setPolkitAgent("other");
         const talk = _path("talk");
         const termed = module.dataDirectory + "/first-termed";
-        _start("first", [talk, "term", termed, "20"]);
+        const exited = module.dataDirectory + "/first-exit";
+        _start("first", [talk, "term", termed, "20"], { environment: { PRIVILEGED_EXIT_MARK: exited } });
         _start("queued", [talk, "lines", "1", "0"]);
         _then("the first run has started", () => _runs.first.startedAt > 0, () => {
             assert(_runs.queued.handle.running && _runs.queued.firstLineAt === 0, "with another agent the second waits while the first runs");
@@ -370,11 +371,13 @@ TestCase {
             assert(after.result.ok && after.firstLineAt >= first.cancelledAt, "the next one started only after the first was cancelled");
             assert(after.firstLineAt >= first.doneAt - 50, "… and once the cancelled one had gone");
             suite._markSeen = null;
-            markRunner.start(["sh", "-c", "if [ -e \"$1\" ]; then echo termed; else echo never; fi", "sh", termed], { done: result => suite._markSeen = result.stdout.trim() });
+            markRunner.start(["sh", "-c", "if [ -e \"$1\" ]; then echo \"termed $(cat \"$2\" 2> /dev/null)\"; else echo never; fi", "sh", termed, exited],
+                             { done: result => suite._markSeen = result.stdout.trim() });
         });
-        // Its TERM reached the command, which left by its trap: not the KILL killAfterMs later
-        _then("the first's mark is looked for", () => _markSeen !== null, () => {
-            assertEqual(_markSeen, "termed", "… its pkexec signalled: the command ended on the TERM");
+        // Its TERM reached the command, which left by its trap (its own code, 42): not by a
+        // signal, nor the KILL killAfterMs later (which leaves the stand-in no status to write)
+        _then("the first's marks are looked for", () => _markSeen !== null, () => {
+            assertEqual(_markSeen, "termed 42", "… its pkexec signalled: the command ended by itself on the TERM");
         });
         _then("the queue is idle", () => _idle(), () => _cancelHeld());
     }

@@ -2598,3 +2598,11 @@ full set on both machines before the merge (`plans/modules-management.md` §9).
   only, arguments that pass without a credential refused, store paths refused); test hygiene
   T8 (a suite leaves shared state as it found it) with the command runner's timings on a
   monotonic clock and two module-API holes closed (`run._timings` writable, `runner._runner`).
+- **Test hygiene T6** (the unit flakes, `plans/test-hygiene.md`): QtTest's `'windowShown' of
+  null` gone (the drivers are `tests/WindowDriver.qml`, windowShown from a drawn frame;
+  `waitShown()` replaces the fixed 300 ms before the first event); `ModulesTest`'s start guard
+  measured from its answer on a monotonic clock; the privileged fixture's and `CommandRunnerTest`'s
+  upper time bounds gone (a TERM shown by the trap's own exit code, the stand-in pkexec's
+  `PRIVILEGED_EXIT_MARK`); `tests/soak.sh <suite | module dir> <n>` runs a suite n times under
+  busy loops. Every touched suite 20/20 under load. Left: the window suites' short fixed waits
+  before checks (none failed under the soak).

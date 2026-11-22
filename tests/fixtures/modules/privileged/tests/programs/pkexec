@@ -7,6 +7,9 @@
 # authorised). Prints PRIVILEGED_FIXTURE from its environment as "pkexec-env:<value>" on stderr
 # (module.privileged.start's options.environment, test mode only).
 # PRIVILEGED_MARK: a file it creates when it runs at all, for a suite to see that it did not.
+# PRIVILEGED_EXIT_MARK: it runs the words as a child instead, passes a TERM on to it (as pkexec
+# does), and writes the child's exit status to that file: how a cancelled run ended, which the
+# answer to a module does not say.
 if [ -n "${PRIVILEGED_MARK-}" ]; then : > "$PRIVILEGED_MARK"; fi
 for word; do printf 'pkexec:%s\n' "$word" >&2; done
 printf 'pkexec-env:%s\n' "${PRIVILEGED_FIXTURE-}" >&2
@@ -14,4 +17,20 @@ case "${5##*/}" in
     dismiss) exit 126 ;;
     refuse) exit 127 ;;
 esac
+if [ -n "${PRIVILEGED_EXIT_MARK-}" ]; then
+    rm -f -- "$PRIVILEGED_EXIT_MARK"
+    termed=""
+    "$@" &
+    child=$!
+    trap 'termed=1; kill -TERM "$child" 2> /dev/null' TERM
+    wait "$child"
+    status=$?
+    # A wait cut short by the TERM: the child's own status comes with the next
+    if [ -n "$termed" ]; then
+        wait "$child"
+        status=$?
+    fi
+    echo "$status" > "$PRIVILEGED_EXIT_MARK"
+    exit "$status"
+fi
 exec "$@"

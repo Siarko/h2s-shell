@@ -29,7 +29,7 @@ own screen-off — off by default, the lock screen's after 1 min). For the owner
 authorization plan's 5 questions (`plans/polkit-remembered.md`), the idle settings mockup to
 look at before the pages (I8), the release (core minor, module 0.7.0). Open next: idle I7
 (per-monitor ways), I8 (pages — after the owner's look), I10–I14; PAM slices 1… (1 in review);
-test hygiene T6, T8, T10, T11.
+test hygiene T8, T10, T11.
 
 State on 2026-11-21: notifications with a progress bar, Taildrop's list of transfers,
 Taildrop's views reworked (side panel, status pills, the bar wave, Taildrop off, "Save in…")
@@ -181,9 +181,6 @@ Known risks and leftovers, one line each; the detail is in [done.md](done.md).
   stand-in never answered); `modules-discovery` once saw the supervisor silent 44 s under load;
   `restart-crash-locked` hit a race in Quickshell 0.3.2's crash handler (accepted; upstream
   fix `pread`, `notes/upstream/quickshell-session-lock-unlock-notify.md` finding 5).
-- QtTest's `'windowShown' of null` once; fixture windows may flake.
-- `tests/ModulesTest.qml` (start guard, lines 268–301) asserts within a 300 ms timer: fails
-  under load (3 checks, NixOS).
 - The test tree's by-hand recipe (`tests/lock/README.md`) never run; `TestSeamsShapeTest`
   finds literal names only; O6 (lock tools from the trusted lookup) not built.
 
