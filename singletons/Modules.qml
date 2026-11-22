@@ -229,6 +229,13 @@ Singleton {
     // in a test tree that asks for them on its private bus (TestSeams.moduleNotify)
     Binding { target: Notifier; property: "recordOnly"; value: _host.testMode && !TestSeams.moduleNotify }
 
+    // Modules held for the user's confirmation or approval: one notification says so, until
+    // none waits; "Open Modules" opens Settings → Modules, where they are confirmed
+    ModuleWaitingNotice {
+        host: _host
+        onOpenRequested: Shell.openSettings("modules")
+    }
+
     // The safe-mode banner under the bar closed (×), for this run; the Modules page keeps its own
     property bool safeModeBannerDismissed: false
 

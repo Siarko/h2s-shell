@@ -918,6 +918,9 @@ The interface modules are written against (`qs.api`), versioned on its own
   that cannot be read is no longer saved over with the defaults. A module you placed by hand that starts asking for administrator rights,
   or names another author, is held off until you approve it the same way. Built-in modules,
   your system's and those on the development path (`H2S_SHELL_MODULE_PATH`) never ask.
+- A notification says when modules are held off for your confirmation or approval: which
+  ones and why, with "Open Modules" (Settings → Modules). It stays until none waits, one for
+  all of them; dismissed, it comes back only when the modules waiting change.
 - `qs ipc call modules rediscover` finds modules put on disk since the shell started and
   loads them without a restart; `qs ipc call modules loadWithoutSafeMode` loads the modules
   after a crash loop, in place. `qs ipc call modules list` says where each module comes from,

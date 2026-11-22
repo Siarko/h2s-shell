@@ -101,6 +101,7 @@ QtObject {
     property var _moduleDependencyRules: ModuleDependencyRulesTest {}
     property var _moduleUpdateRules: ModuleUpdateRulesTest {}
     property var _moduleBackupRules: ModuleBackupRulesTest {}
+    property var _moduleWaitingRules: ModuleWaitingRulesTest {}
     property var _keyedViews: KeyedViewsTest {}
     property var _settingsCard: SettingsCardTest {}
     property var _moduleContribution: ModuleContributionTest {}
@@ -112,6 +113,7 @@ QtObject {
     property var _anchors: AnchorsTest {}
     property var _moduleInstaller: ModuleInstallerTest {}
     property var _moduleUpdater: ModuleUpdaterTest {}
+    property var _moduleWaitingNotice: ModuleWaitingNoticeTest {}
     property var _moduleBackup: ModuleBackupTest {}
     property var _idleRules: IdleRulesTest {}
     property var _sleepNoticeRules: SleepNoticeRulesTest {}
