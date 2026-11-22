@@ -3,4 +3,3 @@
 # fails on a file with more, and fails on a line whose count is higher than the file's
 # mentions, so the list only shrinks: a change that rewords a file's mentions lowers its
 # count or removes its line. The list is meant to end empty.
-5 CLAUDE.md

@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Guidance for Claude Code (claude.ai/code) when working in this repository.
+Guidance for contributors and for Claude Code (claude.ai/code) working in this repository.
 
 ## Project
 
@@ -11,8 +11,7 @@ Quickshell cannot do from QML.
 
 ## Documentation
 
-`docs/` holds user and developer documentation only; for now that is (both to be
-rewritten, see the tracker's step 12):
+`docs/` holds user and developer documentation only; for now that is:
 
 - **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** — runtime model, directory layout,
   module resolution, the Process/SplitParser I/O idiom, the config system, the widget
@@ -20,8 +19,8 @@ rewritten, see the tracker's step 12):
 - **[docs/FEATURES.md](docs/FEATURES.md)** — what the shell does: every widget, panel,
   HUD element, settings page, and the external tools it depends on.
 
-The session notes (tracker, decisions, workflow, plans, reviews) live outside this
-repository; nothing in it links to them.
+Code and comments refer to code and, where it truly matters, to `docs/`; never to anything
+kept outside the repository (`tests/notes-ref-check.sh`).
 
 The rules for `docs/`: English only; where NixOS and Arch differ, a "NixOS" and an "Arch"
 subsection — never one system without the other; nothing that names or relies on a
@@ -102,7 +101,7 @@ why it cannot be told apart (an equivalent mutant). `run-all.sh` runs only its s
 `tests/soak.sh <suite | module dir> <n>` runs a suite n times in a row under busy loops:
 a check that depends on timing fails there in minutes.
 
-Never run `quickshell -p tests.qml` directly: five suites open a small window.
+Never run `quickshell -p tests.qml` directly: some suites open a small window.
 
 Every runner takes its tools from the pinned `tests/lock/tools.nix` where there is a `nix`
 command, else from `PATH` (`H2S_TEST_TOOLS=nix` or `=system` says which), and says which
@@ -116,8 +115,7 @@ functions show up as `TypeError: ... is not a function`): restart it fully after
 anything under `singletons/`.
 
 Beyond the test suites, verification is manual: check that the bar renders, the clock
-ticks, cells respond to clicks, and popups toggle. A feature with views starts with a
-mockup the owner sees before any code (`notes/workflow.md`).
+ticks, cells respond to clicks, and popups toggle.
 
 ## Conventions
 
@@ -146,7 +144,7 @@ mockup the owner sees before any code (`notes/workflow.md`).
   read**: for a list of records use `components/KeyedModel.qml` (a ScriptModel of string
   keys) and let the delegate look its item up by key (`list.byKey[modelData]`). Quickshell
   0.3.2 puts rebuilt objects into rows by position — even with `objectProp` — so a
-  delegate's state ends up with another item (`notes/upstream/quickshell-scriptmodel-replace.md`).
+  delegate's state ends up with another item ("The Repeater crash" in `docs/ARCHITECTURE.md`).
 - **Never start a `Process` with a declarative `running: true`** — Quickshell writes
   `running = false` on exit and destroys the binding. Use `Component.onCompleted` or a
   `Timer`.
@@ -156,7 +154,7 @@ mockup the owner sees before any code (`notes/workflow.md`).
   time-outs. The owner resets `asking` when the item it acts on changes. A button that asks
   before something else (turning a hotspot on) is the same component with its `kind`
   (`"save"`): the question takes the kind's colour. A question with a list, a choice or an
-  explanation opens the Settings modal (`notes/plans/modules-management.md` §4.1). Don't
+  explanation opens the Settings modal. Don't
   hand-roll another confirm; not everything needs a modal.
 - **How a button looks is `ThemeRules.buttonLook(kind, state)`**: `SmallButton` and
   `DeleteButton` draw what it names. A new kind or state is added there, with its cases.
@@ -178,13 +176,12 @@ mockup the owner sees before any code (`notes/workflow.md`).
   user-visible change, add a line under **Unreleased** in `CHANGELOG.md`; a release moves
   them to a new section, bumps the number and tags `v<number>`. `tests/VersionTest.qml`
   checks the two agree.
-- **Commit on a work branch only**, as `notes/workflow.md` describes; merging to `master`
-  and pushing follow review and are the owner's call.
+- **Commit on a work branch only.** Merging to `master` and pushing follow review and are
+  the maintainer's.
 
 ## Environment
 
-Developed and tested on NixOS and on Arch, by sessions on different machines; nothing about
-a session survives outside this repository (what is next and why: `notes/tracker.md`). What differs between the two systems for
+Developed and tested on NixOS and on Arch. What differs between the two systems for
 development (the full list of test tools per runner: `docs/ARCHITECTURE.md`, "Where the
 test tools come from"):
 
