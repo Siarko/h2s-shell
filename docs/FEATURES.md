@@ -280,12 +280,9 @@ screen's screen-off are off by default. No idle daemon is needed; one can still 
   and the screensaver goes; an unlock counts as the user being back, with or without input
   (logind's Unlock). A profile switch while it shows keeps it (one that turns it off hides
   it without the end command); waking from sleep ends it.
-- **Screens off** — the shell turns monitors off itself: at "Screensaver after" instead of
-  the screensaver (`blanking`: "Turn off" — an OLED's own protection mode starts even on a
-  black picture; with `perMonitor` on, each monitor can have its own way in
-  `monitorBlanking`, by make, model and serial: "screensaver" or "off" over the default,
-  set for now with the IPC `idle setMonitorWay <id> <way>`), and every monitor at "Turn
-  screens off after" (`screenOffTimeout`, off by default). Input, an unlock and waking from sleep turn them on again, and so does a shell
+- **Screens off** — the shell turns monitors off itself at "Turn screens off after"
+  (`screenOffTimeout`, off by default); with the screensaver off, straight from the
+  desktop (an OLED's own protection mode starts even on a black picture). Input, an unlock and waking from sleep turn them on again, and so does a shell
   that restarted while they were off; a monitor another program turned off is left alone.
   The lock screen's screen-off waits while somebody is at it (the prompt awake, a check under
   way). On the lock screen
@@ -293,10 +290,20 @@ screen's screen-off are off by default. No idle daemon is needed; one can still 
   0 never). It needs a compositor that can cut a monitor's power — Hyprland, or elsewhere
   one with wlr-output-power-management (sway, labwc, river) and `wlopm` installed, where a
   monitor is known by the make, model and serial Qt reports (a field it leaves empty matches
-  any, so a monitor keeps the way set on Hyprland); without either "Turn off"
-  falls back to the screensaver, and on the lock screen the lock surface goes plain black
-  instead. A screen-off of another program (hypridle's `dpms` listener) can run
+  any, so a monitor keeps the times set on Hyprland); without either the screen-off shows
+  the black screensaver at its time, and on the lock screen the lock surface goes plain
+  black instead. A screen-off of another program (hypridle's `dpms` listener) can run
   beside it: each acts on its own times.
+- **Per monitor** — with `perMonitor` on, each monitor can have its own screensaver and
+  screen-off, switches and times, in `monitorIdle` (by make, model and serial; no entry:
+  the default's): the laptop panel off at 2 minutes, an OLED off at 5 without a
+  screensaver, an LCD with the screensaver at 5 and off at 15. One clock for all: input on
+  any monitor counts for every one, and an app keeping the screen on holds every monitor.
+  A monitor plugged in while you are away goes straight to its stage if its times have
+  passed. The screensaver commands start once every monitor that goes dark has (a monitor
+  with both stages off is not waited for). The idle lock stays one for the session. Set
+  for now with the IPC `idle setMonitorTimes <id> <json|default>` (`idle state` lists the
+  monitors' ids).
 - **Keeping the screen on** — while the session is unlocked, three kinds of request hold the
   next stage (what was reached stays; the count starts again when the last one ends): a
   Wayland idle inhibitor (a fullscreen video, an app asking the compositor), an app's
@@ -443,8 +450,8 @@ so for each job pick one side and turn it off on the other:
 
 | Job | In the shell (Settings → Lockscreen) | In hypridle (`hypridle.conf`) |
 |---|---|---|
-| Screensaver, dimming | "Enable screensaver", `screensaverTimeout`; the start and end commands (`screensaverCommands`, `screensaverStartCommand`, `screensaverEndCommand`) run at the first stage reached and when the user is back | a `listener` whose `on-timeout` dims (`brightnessctl`) and whose `on-resume` restores |
-| Screens off | "Turn screens off" and `screenOffTimeout` (every monitor), or "When the screensaver starts" → "Turn off" (`blanking`, per monitor with `perMonitor` and `monitorBlanking`) | a `listener` with `on-timeout = hyprctl dispatch dpms off` and `on-resume = hyprctl dispatch dpms on` |
+| Screensaver, dimming | "Enable screensaver", `screensaverTimeout`; the start and end commands (`screensaverCommands`, `screensaverStartCommand`, `screensaverEndCommand`) run once every monitor that goes dark has and when the user is back | a `listener` whose `on-timeout` dims (`brightnessctl`) and whose `on-resume` restores |
+| Screens off | "Turn screens off" and `screenOffTimeout` (per monitor with `perMonitor` and `monitorIdle`) | a `listener` with `on-timeout = hyprctl dispatch dpms off` and `on-resume = hyprctl dispatch dpms on` |
 | Screens off on the lock screen | `lockedScreenOffTimeout` (60 s by default; 0 leaves it to the daemon) | a short `listener` that turns screens off only while locked |
 | Lock when idle | "Enable lock screen", `lockAfter` | a `listener` whose `on-timeout` is `loginctl lock-session` |
 | Lock before sleep | "Lock before the computer sleeps" (`lockOnSleep`) | `before_sleep_cmd = loginctl lock-session` |

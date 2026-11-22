@@ -15,7 +15,7 @@ import QtQuick
 //              "bool", "string", "stringList"; or a structured value with its own editor
 //              on its page ("barSection", "hardwarePopup", "color", "wallpaperSubset",
 //              "wallpaperSlots", "wallpaperWeekdays", "vpnWithNetworks", "vpnLockdownNetworks",
-//              "monitorBlanking"),
+//              "monitorIdle"),
 //              overridden as a whole
 //   default  — value of the system profile
 //   min/max  — for interval, number and slider
@@ -167,24 +167,18 @@ Singleton {
               { value: "title", label: "Title only" },
               { value: "app", label: "App only" }
           ] },
-        // What every monitor does at "Activate after": the screensaver, or powered off (an
-        // OLED's own protection mode starts even on black; only a power cut avoids it).
-        // Turning off needs the compositor (Hyprland, or wlopm elsewhere); without either,
-        // the screensaver
-        { key: "lockscreen.blanking", label: "When the screensaver starts", group: "lockscreen",
-          type: "enum", default: "screensaver", hint: "Turning screens off needs Hyprland, or wlopm elsewhere.", options: [
-              { value: "screensaver", label: "Screensaver" },
-              { value: "off", label: "Turn off" }
-          ] },
-        // Per-monitor ways: with "Set per monitor" on, a monitor's own way overrides the one
-        // above. Keyed by MonitorRules' ids (make|model|serial, not the connector), so a
-        // monitor keeps its way on another port; a monitor not connected keeps its entry.
-        // A way is "default" (the one above), "screensaver" or "off"; anything else counts as
-        // "default" (IdleRules.config). Edited on the Screensaver page
+        // Per-monitor times: with "Set per monitor" on, a monitor's own screensaver and
+        // screen-off (switches and times) replace the default's — the four settings of the
+        // screensaver and the screen-off — on the one idle clock; an OLED is a monitor with
+        // the screensaver off and screens off after its time. Keyed by MonitorRules' ids
+        // (make|model|serial, not the connector), so a monitor keeps its times on another
+        // port; a monitor not connected keeps its entry; no entry = the default. An entry:
+        // { screensaverEnabled, screensaverTimeout, screenOffEnabled, screenOffTimeout }
+        // (IdleRules.monitorTimes); written through IdleRules.withMonitorTimes
         { key: "lockscreen.perMonitor", label: "Set per monitor", group: "lockscreen",
           type: "bool", default: false },
-        { key: "lockscreen.monitorBlanking", label: "Each monitor", group: "lockscreen",
-          type: "monitorBlanking", default: ({}) },
+        { key: "lockscreen.monitorIdle", label: "Each monitor", group: "lockscreen",
+          type: "monitorIdle", default: ({}) },
         { key: "lockscreen.screenOffEnabled", label: "Turn screens off", group: "lockscreen",
           type: "bool", default: false, hint: "Needs Hyprland, or wlopm elsewhere." },
         { key: "lockscreen.screenOffTimeout", label: "Turn screens off after", group: "lockscreen",

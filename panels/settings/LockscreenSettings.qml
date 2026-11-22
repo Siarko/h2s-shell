@@ -57,13 +57,6 @@ Flickable {
         }
 
         SchemaSettingEditor {
-            key: "lockscreen.blanking"
-            editIndex: root.editIndex
-            hint: root._powerOffHint
-            available: root._screensaverOn && ScreenPower.canPowerOff
-        }
-
-        SchemaSettingEditor {
             key: "lockscreen.screenOffEnabled"
             editIndex: root.editIndex
             hint: root._powerOffHint

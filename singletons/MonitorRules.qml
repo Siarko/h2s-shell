@@ -8,8 +8,8 @@ import QtQuick
 // reads the monitors and hands the answers here.
 //
 // A monitor's id is `make|model|serial`, never its connector: a cable moved to another
-// port keeps the monitor's settings. The id is also the key of its override in the
-// `monitorBlanking` setting ({ id: way }). Two connected monitors with one id — twins with
+// port keeps the monitor's settings. The id is also the key of its entry in a per-monitor
+// setting (`monitorIdle`: { id: its times }). Two connected monitors with one id — twins with
 // no serial, or with the same placeholder serial — are told apart by their connector
 // (`make|model|serial|connector`), and reported, so a view can say why. An identity once
 // seen as twins keeps the connector while the shell runs, so a twin left alone keeps its id;
@@ -330,11 +330,11 @@ Singleton {
     // only when exactly one stored key matches so, and none of its exact keys is stored.
     // `connected`: the connected monitors (as read, or ids) — a key that is an exact key of
     // another of them is that monitor's, never taken loosely.
-    function looseKey(monitorBlanking, monitor, connected) {
-        if (!_isMap(monitorBlanking) || _isTwin(monitor))
+    function looseKey(map, monitor, connected) {
+        if (!_isMap(map) || _isTwin(monitor))
             return "";
         const exact = overrideKeys(monitor);
-        if (exact.some(key => typeof monitorBlanking[key] === "string"))
+        if (exact.some(key => _isEntry(map[key])))
             return "";
         const others = [];
         for (const other of Array.isArray(connected) ? connected : []) {
@@ -345,7 +345,7 @@ Singleton {
         const fields = String(typeof monitor === "string" ? monitor : monitor?.base ?? monitor?.id ?? "").split("|");
         if (fields.length !== 3 || fields[1] === "")
             return "";
-        const matches = Object.keys(monitorBlanking).filter(key => {
+        const matches = Object.keys(map).filter(key => {
             const stored = key.split("|");
             return stored.length === 3 && stored[1] === fields[1] && !others.includes(key)
                 && [0, 2].every(i => stored[i] === fields[i] || stored[i] === "" || fields[i] === "");
@@ -355,9 +355,9 @@ Singleton {
 
     // Every stored key that names this monitor: its exact ones (overrideKeys) and the loose
     // one (looseKey, among the `connected` monitors) when there is one
-    function overrideMatches(monitorBlanking, monitor, connected) {
+    function overrideMatches(map, monitor, connected) {
         const keys = overrideKeys(monitor);
-        const loose = looseKey(monitorBlanking, monitor, connected);
+        const loose = looseKey(map, monitor, connected);
         return loose !== "" && !keys.includes(loose) ? keys.concat([loose]) : keys;
     }
 
@@ -370,28 +370,32 @@ Singleton {
             ?? null;
     }
 
-    // The way a monitor's override names in `monitorBlanking`, or "" when it has none (or
-    // the map is not one). `monitor`: { id, base, connector } as read, or an id. Its exact
+    // A per-monitor map's value that counts as an entry: text, or an object (not a list)
+    function _isEntry(value) {
+        return typeof value === "string" || _isMap(value);
+    }
+
+    // A monitor's entry in a per-monitor map (text or an object, as stored), or "" when it
+    // has none (or the map is not one). `monitor`: { id, base, connector } as read, or an id. Its exact
     // keys first, then the loose one (looseKey, among the `connected` monitors)
-    function overrideFor(monitorBlanking, monitor, connected) {
-        if (!_isMap(monitorBlanking))
+    function overrideFor(map, monitor, connected) {
+        if (!_isMap(map))
             return "";
-        for (const key of overrideMatches(monitorBlanking, monitor, connected)) {
-            const way = monitorBlanking[key];
-            if (typeof way === "string")
-                return way;
+        for (const key of overrideMatches(map, monitor, connected)) {
+            if (_isEntry(map[key]))
+                return map[key];
         }
         return "";
     }
 
     // The keys of overrides no connected monitor uses, sorted: kept, and listed to be
     // forgotten. `monitors`: the connected ones, as read ({ id, base, connector }) or ids
-    function notConnected(monitorBlanking, monitors) {
-        if (!_isMap(monitorBlanking))
+    function notConnected(map, monitors) {
+        if (!_isMap(map))
             return [];
         const used = [];
         for (const monitor of monitors ?? [])
-            used.push(...overrideMatches(monitorBlanking, monitor, monitors));
-        return Object.keys(monitorBlanking).filter(key => !used.includes(key)).sort();
+            used.push(...overrideMatches(map, monitor, monitors));
+        return Object.keys(map).filter(key => !used.includes(key)).sort();
     }
 }

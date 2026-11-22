@@ -111,8 +111,12 @@ TestCase {
         assertEqual(wants(resolved({}, true)), false, "name: every idle stage off: left free (an idle daemon may own it)");
         assertEqual(wants(resolved({ screensaverEnabled: true }, true)), true, "name: the screensaver on: asked for");
         assertEqual(wants(resolved({ screenOffEnabled: true }, true)), true, "… screens off on, with power control: asked for");
-        assertEqual(wants(resolved({ screenOffEnabled: true }, false)), false,
-                    "… screens off switched on without power control (no stage there): left free");
+        assertEqual(wants(resolved({ screenOffEnabled: true }, false)), true,
+                    "… screens off switched on without power control (the screensaver at its time): asked for");
+        assertEqual(wants(resolved({ perMonitor: true, monitorIdle: { m: { screensaverEnabled: true } } }, true)), true,
+                    "… only one monitor's own screensaver on: asked for");
+        assertEqual(wants(resolved({ perMonitor: true, monitorIdle: { m: { screenOffEnabled: true } } }, true)), true,
+                    "… only one monitor's own screen-off on: asked for");
         assertEqual(wants(resolved({ lockscreenEnabled: true }, false)), true, "… the idle lock on: asked for");
         assertEqual(wants(resolved({ lockedScreenOffTimeout: 30, lockOnSleep: true }, true)), false,
                     "… the lock screen's screen-off and the lock before sleep do not count (requests are ignored while locked)");

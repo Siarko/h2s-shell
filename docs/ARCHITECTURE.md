@@ -597,8 +597,8 @@ launcher agree on the contract described under "Recovery" below):
   queue) — and reports the apps' requests and the name's owner —
   `HelperRules.serviceStatus`), and a logind `idle` block read at the deadlines that would
   start a stage (`singletons/lock/LogindIdleBlock.qml`, `ListInhibitors`). IPC: `idle state` (JSON, with the monitors' ids) and
-  `idle setMonitorWay <id> <way>` (one monitor's entry in `lockscreen.monitorBlanking`,
-  `IdleRules.withMonitorWay`).
+  `idle setMonitorTimes <id> <json|default>` (one monitor's entry in
+  `lockscreen.monitorIdle`, `IdleRules.withMonitorTimes`).
 - **Adapters** — `singletons/lock/`, thin: I/O to events, effects to I/O, no decisions.
   Per lock (`LockScope.qml`, created when a lock begins and destroyed when it has ended,
   so destruction is the cleanup): `PamMethod.qml` (one `PamContext` per method,

@@ -79,9 +79,8 @@ Singleton {
         lockscreenEnabled: Profiles.value("lockscreen.lockscreenEnabled"),
         lockAfter: Profiles.value("lockscreen.lockAfter"),
         lockedScreenOffTimeout: Profiles.value("lockscreen.lockedScreenOffTimeout"),
-        blanking: Profiles.value("lockscreen.blanking"),
         perMonitor: Profiles.value("lockscreen.perMonitor"),
-        monitorBlanking: Profiles.value("lockscreen.monitorBlanking"),
+        monitorIdle: Profiles.value("lockscreen.monitorIdle"),
         screensaverCommands: Profiles.value("lockscreen.screensaverCommands")
     })
     // A profile switch changes several values in one pass: one config event after it
@@ -474,21 +473,32 @@ Singleton {
             });
         }
 
-        // h2s-shell ipc call idle setMonitorWay '<id>' off   (a MonitorRules id, as `state`'s
-        // monitors list them, or one of a monitor not connected; "default", "screensaver" or
-        // "off"): written where the setting's value comes from now (Profiles.writeInEffect);
-        // applies while "Set per monitor" is on. Only once the monitors are read: a connected
+        // h2s-shell ipc call idle setMonitorTimes '<id>' '<times>'   (a MonitorRules id, as
+        // `state`'s monitors list them, or one of a monitor not connected; `times` "default" —
+        // the monitor follows the default — or JSON: {"screensaverEnabled": false,
+        // "screensaverTimeout": 300, "screenOffEnabled": true, "screenOffTimeout": 300}):
+        // written where the setting's value comes from now (Profiles.writeInEffect); applies
+        // while "Set per monitor" is on. Only once the monitors are read: a connected
         // monitor's entry goes under the form of its id it has now
-        function setMonitorWay(id: string, way: string): string {
+        function setMonitorTimes(id: string, times: string): string {
             if (!root._powerControl)
                 return "not understood: the monitors are not read (no power control)";
+            let given = times;
+            if (times !== "default") {
+                try {
+                    given = JSON.parse(times);
+                } catch (error) {
+                    given = null;
+                }
+            }
             const entries = root._monitorEntries;
             const connected = MonitorRules.connectedFor(id, entries);
-            const map = IdleRules.withMonitorWay(Profiles.value("lockscreen.monitorBlanking"), connected ?? id, way, entries);
+            const map = IdleRules.withMonitorTimes(Profiles.value("lockscreen.monitorIdle"), connected ?? id, given, entries);
             if (map === null)
-                return "not understood: a monitor id (make|model|serial), one of " + IdleRules.monitorWays.join(", ")
-                    + ", at most " + IdleRules.maxMonitorWays + " monitors";
-            return Profiles.writeInEffect("lockscreen.monitorBlanking", map) === false ? "not written" : "ok";
+                return "not understood: a monitor id (make|model|serial); \"default\" or {screensaverEnabled, screensaverTimeout, "
+                    + "screenOffEnabled, screenOffTimeout} (whole seconds, " + IdleRules.monitorTimeRange.minimum + "–"
+                    + IdleRules.monitorTimeRange.maximum + "); at most " + IdleRules.maxMonitorEntries + " monitors";
+            return Profiles.writeInEffect("lockscreen.monitorIdle", map) === false ? "not written" : "ok";
         }
     }
 }

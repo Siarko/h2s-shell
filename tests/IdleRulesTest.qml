@@ -2,9 +2,10 @@ import QtQuick
 import qs.singletons
 
 // The idle rules (singletons/IdleRules.qml): every case of their table of outcomes and
-// examples — an OLED turned off, an LCD with the
-// screensaver, a laptop panel off, a monitor unplugged, a profile switched mid-idle, input
-// waking all, the lock screen's own screen-off, inhibitors holding while unlocked only.
+// examples — an OLED turned off, an LCD with the screensaver, a laptop panel off, each at
+// its own times on one clock, a monitor plugged in or unplugged, a profile switched
+// mid-idle, input waking all, the lock screen's own screen-off, inhibitors holding while
+// unlocked only.
 // A machine drives the rules as Idle will: events at given times, the Timer at
 // nextDeadline; actions are compared as "type:ids" lists.
 TestCase {
@@ -66,11 +67,24 @@ TestCase {
         return Object.assign({}, base, extra);
     }
 
+    // A monitor's own times, as monitorIdle keeps them: an OLED's (no screensaver, off at 5 min)
+    readonly property var oledTimes: ({ screensaverEnabled: false, screensaverTimeout: 300, screenOffEnabled: true, screenOffTimeout: 300 })
+
+    // Per monitor on, these monitors with their own times
+    function _own(base, entries) {
+        return _with(base, { perMonitor: true, monitorIdle: entries });
+    }
+
+    function _entry(saverAfter, screenOffAfter) {
+        return { screensaverEnabled: saverAfter > 0, screensaverTimeout: saverAfter > 0 ? saverAfter : 300,
+                 screenOffEnabled: screenOffAfter > 0, screenOffTimeout: screenOffAfter > 0 ? screenOffAfter : 600 };
+    }
+
     function run() {
         _config();
         _screensaver();
-        _ways();
-        _monitorWays();
+        _perMonitorTimes();
+        _monitorTimes();
         _screenOff();
         _lock();
         _input();
@@ -93,19 +107,19 @@ TestCase {
         for (const unset of [null, ""])
             assertEqual(rules.config({ screensaverEnabled: true, screensaverTimeout: unset }, [], false).saverAfter, 300,
                         "a time not set (" + JSON.stringify(unset) + "): the default");
-        assertEqual(rules.config({ monitorBlanking: { oled: "off" } }, ["oled"], true).ways.oled, "screensaver",
-                    "overrides only with Set per monitor on, which is off unless set");
+        assertEqual(rules.config({ monitorIdle: { oled: oledTimes } }, ["oled"], true).times.oled.screenOffAfter, 0,
+                    "own times only with Set per monitor on, which is off unless set");
         const quick = _machine({ screensaverEnabled: true, screensaverTimeout: 1, screenOffEnabled: true, screenOffTimeout: 2 }, ["oled"], true);
         quick.idle(500, 0);
         assertEqual(quick.next(), 1000, "a time of one second: due after it");
-        assertEqual([900, 1000, 2000].map(ms => rules.stage(quick.state, quick.config, ms)).join(" "), "0 1 2",
+        assertEqual([900, 1000, 2000].map(ms => rules.stage(quick.state, quick.config, ms).oled).join(" "), "0 1 2",
                     "times of one and two seconds: the screensaver at 1 s, the screens off at 2 s");
         const offQuick = _machine({ screenOffEnabled: true, screenOffTimeout: 1 }, ["oled"], true).idle(500, 0);
-        assert(offQuick.next() === 1000 && rules.stage(offQuick.state, offQuick.config, 1000) === 2, "screens off after one second");
+        assert(offQuick.next() === 1000 && rules.stage(offQuick.state, offQuick.config, 1000).oled === 2, "screens off after one second");
         offQuick.deadline().at(1500, { type: "busInhibitors", count: 1 });
-        assertEqual(rules.stage(offQuick.state, offQuick.config, 2000), 2, "… an inhibitor then holds them off");
+        assertEqual(rules.stage(offQuick.state, offQuick.config, 2000).oled, 2, "… an inhibitor then holds them off");
         offQuick.at(2500, { type: "sleep" });
-        assertEqual(rules.stage(offQuick.state, offQuick.config, 3000), 2, "… going to sleep keeps the stage reached");
+        assertEqual(rules.stage(offQuick.state, offQuick.config, 3000).oled, 2, "… going to sleep keeps the stage reached");
         assertEqual(rules.powerRetryDelay(0), 0, "no power action asked yet: no pause");
         const junk = _machine(saver, ["lcd"], false).at(20000, { type: "inputIdle", idle: true, since: "junk" });
         assertEqual(junk.state.idleSince, 20000 - IdleRules.baseTime, "an idle event with a time not understood: idle for the base time");
@@ -116,11 +130,12 @@ TestCase {
         dueAlready.reconfigure(60000, { lockscreenEnabled: true, lockAfter: 30 });
         assertEqual(dueAlready.actions, "lock", "Lock after shortened just as the lock fell due: it is asked, not put off");
         const full = {};
-        for (let i = 0; i < IdleRules.maxMonitorWays; i++)
-            full["Make|Model|S" + i] = "off";
-        assertEqual(rules.withMonitorWay(full, "Make|Model|New", "off"), null, "a new monitor's way beyond the most kept: refused");
+        for (let i = 0; i < IdleRules.maxMonitorEntries; i++)
+            full["Make|Model|S" + i] = oledTimes;
+        assertEqual(rules.withMonitorTimes(full, "Make|Model|New", oledTimes), null, "a new monitor's times beyond the most kept: refused");
+        assertEqual(IdleRules.maxMonitorEntries, 32, "the most monitors kept: 32");
         delete full["Make|Model|S0"];
-        assert(rules.withMonitorWay(full, "Make|Model|New", "off") !== null, "… one fewer: taken");
+        assert(rules.withMonitorTimes(full, "Make|Model|New", oledTimes) !== null, "… one fewer: taken");
         const lockQuick = _machine({ lockscreenEnabled: true, lockAfter: 1 }, ["lcd"], true).idle(500, 0);
         assertEqual(lockQuick.next(), 1000, "Lock after one second: due after it");
         const lockedQuick = _machine({ lockedScreenOffTimeout: 1 }, ["lcd"], true).at(100, { type: "locked" }).idle(500, 100);
@@ -144,9 +159,9 @@ TestCase {
         assert(exact.actions === "" && exact.next() === 120000, "the lock turned on exactly as long into idle as its time: from the switch");
         const held = _machine({ screensaverEnabled: true, screensaverTimeout: 1 }, ["lcd"], false);
         held.idle(500, 0).deadline();
-        assertEqual(held.state.stage, 1, "(the screensaver after 1 s)");
+        assertEqual(held.state.stage.lcd, 1, "(the screensaver after 1 s)");
         held.at(1500, { type: "busInhibitors", count: 1 });
-        assertEqual(rules.stage(held.state, held.config, 2000), 1, "… an inhibitor then holds it there, it stays");
+        assertEqual(rules.stage(held.state, held.config, 2000).lcd, 1, "… an inhibitor then holds it there, it stays");
         assertEqual(rules.lockRetryDelay(0), 0, "no ask yet: no retry pause");
         const since = _machine(saver, ["lcd"], false).idle(20000, 3000);
         assertEqual(since.state.idleSince, 3000, "idle since the time the event gives");
@@ -280,8 +295,8 @@ TestCase {
                                    lockedScreenOffTimeout: 0 }, ["a"], true);
         assertEqual([set.saverAfter, set.screenOffAfter, set.lockAfter, set.lockedScreenOffAfter].join(" "), "10 20 30 0",
                     "the times as set, 0 = never");
-        assertEqual(rules.config({ screenOffEnabled: true }, ["a"], false).screenOffAfter, 0,
-                    "no power control: no screen-off stage");
+        assertEqual(rules.config({ screenOffEnabled: true }, ["a"], false).times.a.screenOffAfter, 600,
+                    "no power control: the screen-off stays a stage (the screensaver at its time)");
         assertEqual(rules.config({ screensaverEnabled: false, screensaverTimeout: 10 }, [], false).saverAfter, 0,
                     "a time without its switch: never");
         assertEqual(rules.config({ screensaverEnabled: true, screensaverTimeout: "junk" }, [], false).saverAfter, 300,
@@ -291,19 +306,32 @@ TestCase {
         assertEqual(twins.duplicates.join(" "), "a b", "… two monitors with one id reported, once each");
         assertEqual(rules.config({}, ["a", "b"], false).duplicates.length, 0, "distinct ids: no duplicates");
 
-        const ways = values => rules.config(values, ["oled", "lcd"], true).ways;
-        assertEqual(ways({}).oled, "screensaver", "the default way: the screensaver");
-        assertEqual(ways({ perMonitor: true, monitorBlanking: { oled: "off" } }).oled, "off", "an override: off");
-        assertEqual(ways({ perMonitor: true, monitorBlanking: { oled: "off" } }).lcd, "screensaver", "… the others the default");
-        assertEqual(ways({ perMonitor: false, monitorBlanking: { oled: "off" } }).oled, "screensaver",
-                    "overrides only with Set per monitor on");
-        assertEqual(ways({ blanking: "off", perMonitor: true, monitorBlanking: { lcd: "screensaver" } }).lcd, "screensaver",
-                    "an override against the default");
-        assertEqual(ways({ blanking: "slideshow" }).lcd, "screensaver", "slideshow, not built yet: the screensaver");
-        assertEqual(ways({ perMonitor: true, monitorBlanking: { oled: "default" } }).oled, "screensaver",
-                    "an override not understood: the default");
-        assertEqual(rules.config({ blanking: "off" }, ["oled"], false).ways.oled, "screensaver",
-                    "off without power control: the screensaver");
+        const times = values => rules.config(values, ["oled", "lcd"], true).times;
+        const pair = entry => entry.saverAfter + " " + entry.screenOffAfter;
+        const base = { screensaverEnabled: true, screensaverTimeout: 120, screenOffEnabled: true, screenOffTimeout: 900 };
+        assertEqual(pair(times(base).oled), "120 900", "every monitor the default's times");
+        assertEqual(pair(times(_own(base, { oled: oledTimes })).oled), "0 300", "own times: the OLED's");
+        assertEqual(pair(times(_own(base, { oled: oledTimes })).lcd), "120 900", "… the others the default's");
+        assertEqual(pair(times(_with(base, { perMonitor: false, monitorIdle: { oled: oledTimes } })).oled), "120 900",
+                    "own times only with Set per monitor on");
+        assertEqual(pair(times(_own(base, { oled: { screenOffEnabled: false } })).oled), "120 0",
+                    "an entry without a field: the default's for that field");
+        assertEqual(pair(times(_own(base, { oled: "off", lcd: [1] })).oled), "120 900", "an entry not understood: the default");
+        assertEqual(pair(times(_own(base, { lcd: [1] })).lcd), "120 900", "… a list neither");
+        assertEqual(pair(times(_own(base, "junk")).oled), "120 900", "a map not understood: the default");
+        assertEqual(pair(times(_own({}, { oled: { screensaverEnabled: true } })).oled), "300 0",
+                    "an entry's switch on without its time: the default's time, or its default");
+        assertEqual(pair(times(_own({}, { oled: { screenOffEnabled: true } })).oled), "0 600", "… for the screen-off too");
+        const given = { oled: oledTimes };
+        const resolved = rules.config(_own(base, given), ["oled"], true);
+        resolved.times.oled.saverAfter = 7;
+        assertEqual(rules.config(_own(base, given), ["oled"], true).times.oled.saverAfter, 0, "a config's times are its own copy");
+        const twoDefaults = rules.config(base, ["a", "b"], true);
+        twoDefaults.times.a.saverAfter = 7;
+        assertEqual(twoDefaults.times.b.saverAfter, 120, "… each monitor's too");
+        assertEqual(rules.monitorTimeRange.minimum, SettingsSchema.entry("lockscreen.screensaverTimeout").min,
+                    "a monitor's times: the default's shortest");
+        assertEqual(rules.monitorTimeRange.maximum, SettingsSchema.entry("lockscreen.screenOffTimeout").max, "… and longest");
     }
 
     function _screensaver() {
@@ -327,109 +355,197 @@ TestCase {
         assertEqual(quiet.actions, "showSaver:lcd,active:true", "commands off: no start command");
     }
 
-    function _ways() {
-        // The OLED turned off, the LCD the screensaver, at the same deadline
-        const perMonitor = _with(saver, { perMonitor: true, monitorBlanking: { oled: "off" } });
-        const machine = _machine(perMonitor, ["lcd", "oled"], true);
+    function _perMonitorTimes() {
+        // The OLED off at 5 min (no screensaver), the LCD the screensaver at 5 min: one deadline
+        const oledOff = _own(saver, { oled: oledTimes });
+        const machine = _machine(oledOff, ["lcd", "oled"], true);
         machine.idle(5000, 0).deadline();
         assertEqual(machine.actions, "showSaver:lcd+oled,powerOff:oled,startCommand,active:true",
-                    "the OLED's way off: off, under a black surface that takes the keys; the LCD the screensaver");
+                    "the OLED's own screen-off at the LCD's screensaver time: off, under a black surface that takes the keys");
         assertEqual(machine.shown(), "lcd=saver oled=off", "… what is in place");
 
-        const noPower = _machine(perMonitor, ["lcd", "oled"], false);
+        const noPower = _machine(oledOff, ["lcd", "oled"], false);
         noPower.idle(5000, 0).deadline();
         assertEqual(noPower.actions, "showSaver:lcd+oled,startCommand,active:true",
-                    "no power control: the OLED gets the screensaver");
+                    "no power control: the OLED's screen-off is the screensaver at its time");
+        assertEqual(noPower.shown(), "lcd=saver oled=saver", "… both the screensaver");
 
         // A laptop: its panel off (its backlight costs power on black)
-        const laptop = _machine(_with(saver, { blanking: "off" }), ["panel"], true);
+        const laptop = _machine(_own(saver, { panel: _entry(0, 120) }), ["panel"], true);
         laptop.idle(5000, 0).deadline();
         assertEqual(laptop.actions, "showSaver:panel,powerOff:panel,startCommand,active:true",
-                    "the laptop panel's way off: powered off at Screensaver after");
+                    "the laptop panel's own screen-off at 2 min: powered off then");
 
-        // A way changed during idle: applied at once
+        // Times changed during idle: applied at once
         const changed = _machine(saver, ["lcd", "oled"], true);
         changed.idle(5000, 0).deadline();
-        changed.reconfigure(310000, perMonitor);
-        assertEqual(changed.actions, "powerOff:oled", "the OLED switched to off during idle: off now");
+        changed.reconfigure(310000, oledOff);
+        assertEqual(changed.actions, "powerOff:oled", "the OLED given its own screen-off, already past: off now");
         changed.reconfigure(320000, saver);
-        assertEqual(changed.actions, "powerOn:oled", "… and back to the screensaver: on, its screensaver stays");
+        assertEqual(changed.actions, "powerOn:oled", "… and back to the default: on, its screensaver stays");
         assertEqual(changed.shown(), "lcd=saver oled=saver", "… both the screensaver");
+
+        // Three monitors at different times on one clock: the laptop panel off at 2 min, the
+        // OLED off at 5 min, the LCD the screensaver at 5 min and off at 15
+        const three = _own(_with(saver, { screenOffEnabled: true, screenOffTimeout: 900 }), { panel: _entry(0, 120), oled: oledTimes });
+        const desk = _machine(three, ["lcd", "oled", "panel"], true);
+        desk.idle(5000, 0);
+        assertEqual(desk.next(), 120000, "the earliest of every monitor's times");
+        desk.deadline();
+        assertEqual(desk.actions, "showSaver:panel,powerOff:panel",
+                    "2 min: the panel off; the commands and active wait for the other monitors");
+        assertEqual(desk.next(), 300000, "… next the OLED's and the LCD's");
+        desk.deadline();
+        assertEqual(desk.actions, "showSaver:lcd+oled,powerOff:oled,startCommand,active:true",
+                    "5 min: every monitor dark: the commands, active");
+        assertEqual(desk.next(), 900000, "… next the LCD's screen-off");
+        desk.deadline();
+        assertEqual(desk.actions, "powerOff:lcd", "15 min: the LCD off too");
+        assertEqual(desk.shown(), "lcd=off oled=off panel=off", "… all off");
+        desk.input(1000000);
+        assertEqual(desk.actions, "powerOn:lcd+oled+panel,hideSaver:lcd+oled+panel,endCommand,active:false", "input wakes all");
+        desk.idle(1005000, 1000000);
+        assertEqual(desk.next(), 1120000, "… each monitor's times again from the input");
+
+        // Reached stays per monitor: a profile with longer times keeps what each reached
+        const reached = _machine(three, ["lcd", "oled", "panel"], true);
+        reached.idle(5000, 0).deadline();
+        reached.reconfigure(130000, _own(_with(saver, { screenOffEnabled: true, screenOffTimeout: 900 }),
+                                         { panel: _entry(0, 600), oled: oledTimes }));
+        assertEqual(reached.actions, "", "the panel's time made longer once it is off: it stays off");
+        assertEqual(reached.shown(), "lcd=on oled=on panel=off", "… the others still on");
+        assertEqual(reached.next(), 300000, "… the others at their own times");
+        reached.reconfigure(140000, _own(saver, { panel: _entry(60, 0), oled: oledTimes }));
+        assertEqual(reached.actions, "powerOn:panel", "the panel's screen-off switched off: back to its screensaver, its own");
+        assertEqual(reached.shown(), "lcd=on oled=on panel=saver", "… the others untouched");
+        reached.reconfigure(150000, _own(saver, { panel: _entry(0, 0), oled: oledTimes }));
+        assertEqual(reached.actions, "hideSaver:panel", "both its stages switched off: the desktop, without the end command");
+
+        // A monitor with both stages off never goes dark and is not waited for
+        const never = _machine(_own(saver, { lcd: _entry(0, 0) }), ["lcd", "oled"], true);
+        never.idle(5000, 0);
+        assertEqual(never.next(), 300000, "a monitor with both stages off: no time of its own");
+        never.deadline();
+        assertEqual(never.actions, "showSaver:oled,startCommand,active:true",
+                    "the OLED's screensaver: the commands and active, not waiting for the LCD");
+        assertEqual(never.shown(), "lcd=on oled=saver", "… the LCD keeps the desktop");
+        const none = _machine(_own(saver, { lcd: _entry(0, 0), oled: _entry(0, 0) }), ["lcd", "oled"], true);
+        none.idle(5000, 0);
+        assertEqual(none.next(), -1, "no monitor goes dark: nothing due");
+        none.at(400000, { type: "deadline" });
+        assertEqual(none.actions, "", "… no commands, never active");
+        none.at(410000, { type: "force" });
+        assertEqual(none.actions, "showSaver:lcd+oled,startCommand,active:true",
+                    "a forced screensaver: on every monitor, whatever its own stages");
+
+        // A monitor in the config before a step has seen it (the monitors event still queued):
+        // its times count already, for the deadline and for logind's read
+        const queued = _machine(saver, ["lcd"], true);
+        queued.idle(5000, 0);
+        queued.config = IdleRules.config(_own(saver, { tv: _entry(60, 0) }), ["lcd", "tv"], true);
+        assertEqual(queued.next(), 60000, "a monitor not stepped yet: its own time is the next deadline");
+        assert(IdleRules.logindReadDue(queued.state, queued.config, 60000), "… and logind's block is read when it is due");
+
+        // Commands wait for every monitor that goes dark, also one plugged in before its time
+        const later = _machine(_own(saver, { tv: _entry(600, 0) }), ["lcd"], true);
+        later.idle(5000, 0);
+        later.reconfigure(100000, _own(saver, { tv: _entry(600, 0) }), ["lcd", "tv"]);
+        later.deadline();
+        assertEqual(later.actions, "showSaver:lcd", "the LCD dark, the TV not yet: no commands, not active");
+        later.deadline();
+        assertEqual(later.actions, "showSaver:tv,startCommand,active:true", "… the TV at its own time: now");
     }
 
-    // One monitor's way written into the per-monitor map (the IPC; the page's editor later)
-    function _monitorWays() {
+    // One monitor's times written into the per-monitor map (the IPC; the page's editor)
+    function _monitorTimes() {
         const rules = IdleRules;
         const keys = map => JSON.stringify(map);
         const oled = "Samsung|Odyssey|S1";
         const gone = "Dell|U27|X9";
-        assertEqual(keys(rules.withMonitorWay({}, oled, "off")), keys({ [oled]: "off" }), "a way set");
-        assertEqual(keys(rules.withMonitorWay({ [oled]: "off", [gone]: "screensaver" }, oled, "screensaver")),
-                    keys({ [gone]: "screensaver", [oled]: "screensaver" }),
-                    "a way changed; a monitor not connected keeps its entry");
-        assertEqual(keys(rules.withMonitorWay({ [oled]: "off", [gone]: "off" }, oled, "default")), keys({ [gone]: "off" }),
+        const lcdTimes = _entry(300, 900);
+        assertEqual(keys(rules.withMonitorTimes({}, oled, oledTimes)), keys({ [oled]: oledTimes }), "times set");
+        assertEqual(keys(rules.withMonitorTimes({ [oled]: oledTimes, [gone]: lcdTimes }, oled, lcdTimes)),
+                    keys({ [gone]: lcdTimes, [oled]: lcdTimes }),
+                    "times changed; a monitor not connected keeps its entry");
+        assertEqual(keys(rules.withMonitorTimes({ [oled]: oledTimes, [gone]: oledTimes }, oled, "default")), keys({ [gone]: oledTimes }),
                     "default: the entry dropped, the others kept");
-        assertEqual(keys(rules.withMonitorWay({ "Samsung|C27JG5x|H4Z": "off" }, { id: "Samsung|C27JG5x|", base: "Samsung|C27JG5x|", connector: "DP-2" }, "screensaver")),
-                    keys({ "Samsung|C27JG5x|": "screensaver" }), "a connected monitor's way: the key it matched loosely replaced");
-        assertEqual(keys(rules.withMonitorWay({ "Samsung|C27JG5x|H4Z": "off" }, "Samsung|C27JG5x|", "screensaver")),
-                    keys({ "Samsung|C27JG5x|H4Z": "off", "Samsung|C27JG5x|": "screensaver" }), "… an id not connected: only its own key");
+        assertEqual(keys(rules.withMonitorTimes({ "Samsung|C27JG5x|H4Z": oledTimes }, { id: "Samsung|C27JG5x|", base: "Samsung|C27JG5x|", connector: "DP-2" }, lcdTimes)),
+                    keys({ "Samsung|C27JG5x|": lcdTimes }), "a connected monitor's times: the key it matched loosely replaced");
+        assertEqual(keys(rules.withMonitorTimes({ "Samsung|C27JG5x|H4Z": oledTimes }, "Samsung|C27JG5x|", lcdTimes)),
+                    keys({ "Samsung|C27JG5x|H4Z": oledTimes, "Samsung|C27JG5x|": lcdTimes }), "… an id not connected: only its own key");
         const dellA = { id: "Dell|U2419H|S1", base: "Dell|U2419H|S1", connector: "DP-1" };
         const dellB = { id: "Dell|U2419H|", base: "Dell|U2419H|", connector: "DP-3" };
-        assertEqual(keys(rules.withMonitorWay({ "Dell|U2419H|S1": "off" }, dellB, "screensaver", [dellA, dellB])),
-                    keys({ "Dell|U2419H|S1": "off", "Dell|U2419H|": "screensaver" }), "B's way with A connected and stored: B's own key added, A's kept");
-        assertEqual(rules.config({ perMonitor: true, blanking: "screensaver", monitorBlanking: { "Dell|U2419H|S1": "off" } }, [dellB, dellA], true).ways["Dell|U2419H|"],
-                    "screensaver", "… and B does not take A's way");
-        assertEqual(keys(rules.withMonitorWay(null, oled, "off")), keys({ [oled]: "off" }), "no map yet: a new one");
-        assertEqual(keys(rules.withMonitorWay(["junk"], oled, "off")), keys({ [oled]: "off" }), "a list is no map");
-        assertEqual(rules.withMonitorWay({}, oled, "slideshow"), null, "slideshow, not built: refused");
-        assertEqual(rules.withMonitorWay({}, oled, "saver"), null, "a way not understood: refused");
-        const given = { [oled]: "off" };
-        rules.withMonitorWay(given, oled, "default");
-        assertEqual(keys(given), keys({ [oled]: "off" }), "the map given is not changed");
+        assertEqual(keys(rules.withMonitorTimes({ "Dell|U2419H|S1": oledTimes }, dellB, lcdTimes, [dellA, dellB])),
+                    keys({ "Dell|U2419H|S1": oledTimes, "Dell|U2419H|": lcdTimes }), "B's times with A connected and stored: B's own key added, A's kept");
+        assertEqual(rules.config({ perMonitor: true, monitorIdle: { "Dell|U2419H|S1": oledTimes } }, [dellB, dellA], true).times["Dell|U2419H|"].screenOffAfter,
+                    0, "… and B does not take A's times");
+        assertEqual(keys(rules.withMonitorTimes(null, oled, oledTimes)), keys({ [oled]: oledTimes }), "no map yet: a new one");
+        assertEqual(keys(rules.withMonitorTimes(["junk"], oled, oledTimes)), keys({ [oled]: oledTimes }), "a list is no map");
+        const given = { [oled]: oledTimes };
+        rules.withMonitorTimes(given, oled, "default");
+        assertEqual(keys(given), keys({ [oled]: oledTimes }), "the map given is not changed");
+
+        // Only times of the entry's shape: four fields, switches as booleans, whole seconds in range
+        const without = Object.assign({}, oledTimes);
+        delete without.screenOffTimeout;
+        const refused = [
+            ["off", "a way"], [null, "nothing"], [[1], "a list"], [without, "a field missing"],
+            [_with(oledTimes, { slideshow: true }), "a field more"], [_with(oledTimes, { screensaverEnabled: "true" }), "a switch as text"],
+            [_with(oledTimes, { screenOffEnabled: 1 }), "a switch as a number"], [_with(oledTimes, { screensaverTimeout: "300" }), "a time as text"],
+            [_with(oledTimes, { screenOffTimeout: 4 }), "a time under 5 s"], [_with(oledTimes, { screensaverTimeout: 86401 }), "a time over a day"],
+            [_with(oledTimes, { screenOffTimeout: 30.5 }), "a time not whole"]
+        ];
+        for (const [times, what] of refused)
+            assertEqual(rules.withMonitorTimes({}, oled, times), null, what + ": refused");
+        assertEqual(keys(rules.withMonitorTimes({}, oled, _with(oledTimes, { screensaverTimeout: 5, screenOffTimeout: 86400 }))),
+                    keys({ [oled]: _with(oledTimes, { screensaverTimeout: 5, screenOffTimeout: 86400 }) }), "the shortest and longest times: taken");
+        assertEqual(Object.keys(rules.withMonitorTimes({}, oled, { screenOffTimeout: 300, screenOffEnabled: true, screensaverTimeout: 300,
+                                                                    screensaverEnabled: false })[oled]).join(" "),
+                    "screensaverEnabled screensaverTimeout screenOffEnabled screenOffTimeout", "kept in one order, a copy of the times given");
 
         // Only ids of MonitorRules' shape
-        assertEqual(rules.withMonitorWay({}, "", "off"), null, "no id: refused");
-        assertEqual(rules.withMonitorWay({}, "DP-2", "off"), null, "a connector name: refused");
-        assertEqual(rules.withMonitorWay({}, "__proto__", "off"), null, "an object key: refused");
-        assertEqual(rules.withMonitorWay({}, "a|b", "off"), null, "two fields: refused");
-        assertEqual(rules.withMonitorWay({}, "a|b|c|DP-1|x", "off"), null, "five fields: refused");
-        assertEqual(rules.withMonitorWay({}, "a|b|c|bad name", "off"), null, "a twin's connector not valid: refused");
-        assertEqual(rules.withMonitorWay({}, "a\nb|c|d", "off"), null, "a control character: refused");
-        assertEqual(rules.withMonitorWay({}, "x".repeat(81) + "||", "off"), null, "a field over 80: refused");
-        assertEqual(keys(rules.withMonitorWay({}, "||", "off")), keys({ "||": "off" }), "empty fields: taken");
-        assertEqual(keys(rules.withMonitorWay({}, "A|B||DP-1", "off")), keys({ "A|B||DP-1": "off" }), "a twin's id: taken");
+        assertEqual(rules.withMonitorTimes({}, "", oledTimes), null, "no id: refused");
+        assertEqual(rules.withMonitorTimes({}, "DP-2", oledTimes), null, "a connector name: refused");
+        assertEqual(rules.withMonitorTimes({}, "__proto__", oledTimes), null, "an object key: refused");
+        assertEqual(rules.withMonitorTimes({}, "a|b", "default"), null, "two fields: refused, also to drop");
+        assertEqual(rules.withMonitorTimes({}, "a|b|c|DP-1|x", oledTimes), null, "five fields: refused");
+        assertEqual(rules.withMonitorTimes({}, "a|b|c|bad name", oledTimes), null, "a twin's connector not valid: refused");
+        assertEqual(rules.withMonitorTimes({}, "a\nb|c|d", oledTimes), null, "a control character: refused");
+        assertEqual(rules.withMonitorTimes({}, "x".repeat(81) + "||", oledTimes), null, "a field over 80: refused");
+        assertEqual(keys(rules.withMonitorTimes({}, "||", oledTimes)), keys({ "||": oledTimes }), "empty fields: taken");
+        assertEqual(keys(rules.withMonitorTimes({}, "A|B||DP-1", oledTimes)), keys({ "A|B||DP-1": oledTimes }), "a twin's id: taken");
 
-        // At most maxMonitorWays entries
+        // At most maxMonitorEntries entries
         const full = {};
-        for (let i = 0; i < rules.maxMonitorWays; i++)
-            full["M|" + i + "|"] = "off";
-        assertEqual(rules.withMonitorWay(full, oled, "off"), null, "a new entry beyond the cap: refused");
-        assertEqual(rules.withMonitorWay(full, "M|0|", "screensaver")["M|0|"], "screensaver", "… one changed: taken");
-        assertEqual(Object.keys(rules.withMonitorWay(full, "M|0|", "default")).length, rules.maxMonitorWays - 1,
+        for (let i = 0; i < rules.maxMonitorEntries; i++)
+            full["M|" + i + "|"] = oledTimes;
+        assertEqual(rules.withMonitorTimes(full, oled, oledTimes), null, "a new entry beyond the cap: refused");
+        assertEqual(keys(rules.withMonitorTimes(full, "M|0|", lcdTimes)["M|0|"]), keys(lcdTimes), "… one changed: taken");
+        assertEqual(Object.keys(rules.withMonitorTimes(full, "M|0|", "default")).length, rules.maxMonitorEntries - 1,
                     "… one dropped: taken");
 
-        // A monitor's key changes form (alone → twin and back): its way follows it
+        // A monitor's key changes form (alone → twin and back): its times follow it
         const twin = { id: "A|B||DP-1", base: "A|B|", connector: "DP-1" };
-        assertEqual(rules.config({ perMonitor: true, monitorBlanking: { "A|B|": "off" } }, [twin], true).ways["A|B||DP-1"], "off",
-                    "set alone, now a twin: its way found under the plain form");
+        assertEqual(rules.config({ perMonitor: true, monitorIdle: { "A|B|": oledTimes } }, [twin], true).times["A|B||DP-1"].screenOffAfter, 300,
+                    "set alone, now a twin: its times found under the plain form");
         const alone = { id: "A|B|", base: "A|B|", connector: "DP-1" };
-        assertEqual(rules.config({ perMonitor: true, monitorBlanking: { "A|B||DP-1": "off" } }, [alone], true).ways["A|B|"], "off",
-                    "set as a twin, now alone: its way found under the twin's form");
-        assertEqual(keys(rules.withMonitorWay({ "A|B|": "off", [gone]: "off" }, twin, "screensaver")),
-                    keys({ [gone]: "off", "A|B||DP-1": "screensaver" }),
+        assertEqual(rules.config({ perMonitor: true, monitorIdle: { "A|B||DP-1": oledTimes } }, [alone], true).times["A|B|"].screenOffAfter, 300,
+                    "set as a twin, now alone: its times found under the twin's form");
+        assertEqual(keys(rules.withMonitorTimes({ "A|B|": oledTimes, [gone]: oledTimes }, twin, lcdTimes)),
+                    keys({ [gone]: oledTimes, "A|B||DP-1": lcdTimes }),
                     "written under the form it has now, the other form dropped");
-        assertEqual(keys(rules.withMonitorWay({ "A|B||DP-1": "off" }, alone, "default")), keys({}),
+        assertEqual(keys(rules.withMonitorTimes({ "A|B||DP-1": oledTimes }, alone, "default")), keys({}),
                     "default drops it under either form");
 
-        // Read back by config: the override applies only with Set per monitor on
-        const map = rules.withMonitorWay({}, "L|C|D", "off");
-        assertEqual(rules.config({ perMonitor: true, monitorBlanking: map }, ["L|C|D", oled], true).ways["L|C|D"], "off",
-                    "the map written is the one config reads");
+        // Read back by config: the entry applies only with Set per monitor on
+        const map = rules.withMonitorTimes({}, "L|C|D", oledTimes);
+        const read = rules.config({ perMonitor: true, monitorIdle: map }, ["L|C|D", oled], true).times["L|C|D"];
+        assertEqual(read.saverAfter + " " + read.screenOffAfter, "0 300", "the map written is the one config reads");
     }
 
     function _screenOff() {
         const values = _with(saver, { screenOffEnabled: true, screenOffTimeout: 600 });
-        const machine = _machine(_with(values, { perMonitor: true, monitorBlanking: { oled: "off" } }), ["lcd", "oled"], true);
+        const machine = _machine(_own(values, { oled: oledTimes }), ["lcd", "oled"], true);
         machine.idle(5000, 0).deadline();
         assertEqual(machine.next(), 600000, "after the screensaver: Turn screens off after, from the last input");
         machine.deadline();
@@ -494,8 +610,7 @@ TestCase {
 
     function _input() {
         // Input wakes all, whatever each shows
-        const values = _with(saver, { perMonitor: true, monitorBlanking: { oled: "off" }, screenOffEnabled: true,
-                                      screenOffTimeout: 600 });
+        const values = _own(_with(saver, { screenOffEnabled: true, screenOffTimeout: 600 }), { oled: oledTimes });
         const machine = _machine(values, ["lcd", "oled", "panel"], true);
         machine.idle(5000, 0).deadline();
         machine.input(350000);
@@ -734,11 +849,11 @@ TestCase {
     }
 
     function _monitors() {
-        const values = _with(saver, { perMonitor: true, monitorBlanking: { oled: "off" } });
+        const values = _own(saver, { oled: oledTimes });
         const machine = _machine(values, ["lcd"], true);
         machine.idle(5000, 0).deadline();
         machine.reconfigure(310000, values, ["lcd", "oled"]);
-        assertEqual(machine.actions, "showSaver:oled,powerOff:oled", "a monitor plugged in during idle: the stage's picture for its way");
+        assertEqual(machine.actions, "showSaver:oled,powerOff:oled", "a monitor plugged in during idle, past its own time: straight to its stage");
         machine.at(311000, { type: "power", power: { lcd: "on", oled: "off" } });
         machine.reconfigure(320000, values, ["lcd"]);
         assertEqual(machine.actions, "", "a monitor unplugged: no action");
@@ -811,7 +926,7 @@ TestCase {
         assert(IdleRules.busForceTakes(bus.state), "SetActive(true) unlocked: it takes");
         bus.at(1000, { type: "busForce" });
         assertEqual(bus.actions, "showSaver:lcd,startCommand,active:true", "… the screensaver now");
-        const busLocked = _machine(_with(saver, { blanking: "off" }), ["oled"], true);
+        const busLocked = _machine(_own(saver, { oled: oledTimes }), ["oled"], true);
         busLocked.at(1000, { type: "locked" });
         assert(!IdleRules.busForceTakes(busLocked.state), "SetActive(true) locked: it does not take");
         busLocked.at(2000, { type: "busForce" });

@@ -125,16 +125,18 @@ Singleton {
 
     // Whether the shell asks for org.freedesktop.ScreenSaver: only while one of its idle
     // stages runs — the screensaver, screens off or the idle lock, as IdleRules.config
-    // resolves them (`saverAfter`, `screenOffAfter`, `lockAfter`: 0 off; a screen-off left
-    // switched on without power control is off there) — since apps' requests hold only
-    // those. With none the name is left free, so an idle daemon doing idle instead
+    // resolves them (`saverAfter`, `screenOffAfter`, `lockAfter`: 0 off; a monitor's own
+    // times in `times`; a screen-off without power control is the screensaver there, still
+    // a stage) — since apps' requests hold only those. With none the name is left free, so an idle daemon doing idle instead
     // (hypridle) can own it and hear the apps. The lock screen's own screen-off does not
     // count: requests are ignored while locked
     function wantsScreenSaverName(config) {
         if (config === null || typeof config !== "object")
             return false;
         const on = seconds => typeof seconds === "number" && seconds > 0;
-        return on(config.saverAfter) || on(config.screenOffAfter) || on(config.lockAfter);
+        const monitors = config.times !== null && typeof config.times === "object" ? Object.values(config.times) : [];
+        return on(config.saverAfter) || on(config.screenOffAfter) || on(config.lockAfter)
+            || monitors.some(times => on(times?.saverAfter) || on(times?.screenOffAfter));
     }
 
     // The shell's word on the name, for the helper

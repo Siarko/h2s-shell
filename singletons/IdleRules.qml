@@ -13,20 +13,26 @@ import QtQuick
 // that and what is shown now (`state.shown`). A profile change, a monitor plugged in, a
 // deadline, a wake or a resume are then the same step, and no stage is left behind.
 //
-// All idle times count from the last input:
+// All idle times count from the last input, one clock for every monitor (input on any
+// monitor is input for all):
 //
-//   last input ── saverAfter ── screenOffAfter ── lockAfter
-//                 (stage 1:      (stage 2: every
-//                  each monitor   monitor off)
-//                  its way)
+//   last input ── saverAfter ── screenOffAfter ──┬── lockAfter (one for the session)
+//                 (stage 1)     (stage 2)        │
+//                 each monitor its own times, or the default's ("Set per monitor")
 //   locked ── lockedScreenOffAfter, from the lock or the last input at the lock screen
 //
-// A stage reached stays until input — an inhibitor arriving, a profile with longer times —
-// unless the profile switches it off (a screensaver turned off is hidden, without the end
+// Each monitor has the same two stages, each switched on or off with its own time: the OLED
+// with the screensaver off and screens off after 5 min is a monitor that goes straight to
+// off. Without power control a monitor's screen-off is the black screensaver at that time.
+//
+// A stage reached stays until input, per monitor — an inhibitor arriving, a profile with
+// longer times — unless the profile switches it off (a screensaver turned off is hidden, without the end
 // command: the user is still away). Inhibitors (Wayland, the screensaver bus interface,
 // logind's idle block) hold the next stage while unlocked and are ignored while locked; a
-// released inhibitor restarts the counting at its release. Locking never turns a monitor
-// on; only input does.
+// released inhibitor restarts the counting at its release; an inhibitor holds every
+// monitor (none says which monitor it is for). Locking never turns a monitor on; only
+// input does. The commands and `active` start once every monitor with a stage on has gone
+// dark; a monitor with both stages off is not waited for.
 //
 // Facts that could not be read are unknown, never the comfortable answer: a monitor's power
 // is "off" only when read as off, and logind's block is held only when read as held.
@@ -47,19 +53,19 @@ Singleton {
     // still off after an on) is asked again after a growing pause (ms)
     readonly property var powerRetry: ({ minimum: 2000, maximum: 300000, tries: 8 })
 
-    // The ways a monitor goes dark at "Screensaver after"
-    readonly property var ways: ["screensaver", "off", "slideshow"]
-
     // The profile's values, by their names in the "lockscreen" group, normalised.
     // `values`: { screensaverEnabled, screensaverTimeout, screenOffEnabled, screenOffTimeout,
-    // lockscreenEnabled, lockAfter, lockedScreenOffTimeout, blanking, perMonitor,
-    // monitorBlanking ({ monitorId: way }), screensaverCommands } — times in seconds;
-    // `monitors`: the connected monitors' ids (make|model|serial, MonitorRules) or objects
-    // with an `id` — as read ({ id, base, connector }), a monitor's override is found under
-    // either form of its key (MonitorRules.overrideFor); `canPowerOff`: a backend can cut a monitor's power. → the config every
-    // other function takes: times in seconds, 0 = never; `ways` resolved per monitor to
-    // "screensaver" or "off" — "off" without power control and "slideshow" (not built)
-    // fall back to the screensaver.
+    // lockscreenEnabled, lockAfter, lockedScreenOffTimeout, perMonitor, monitorIdle
+    // ({ monitorId: { screensaverEnabled, screensaverTimeout, screenOffEnabled,
+    // screenOffTimeout } }), screensaverCommands } — times in seconds; `monitors`: the
+    // connected monitors' ids (make|model|serial, MonitorRules) or objects with an `id` — as
+    // read ({ id, base, connector }), a monitor's entry is found under either form of its key
+    // (MonitorRules.overrideFor); `canPowerOff`: a backend can cut a monitor's power. → the
+    // config every other function takes: times in seconds, 0 = never; `saverAfter` and
+    // `screenOffAfter` the default's, `times` per connected monitor ({ saverAfter,
+    // screenOffAfter }: its entry in `monitorIdle` while `perMonitor` is on, else the
+    // default's). A screen-off without power control stays a stage: the screensaver at its
+    // time (wanted).
     function config(values, monitors, canPowerOff) {
         const given = values ?? {};
         const power = canPowerOff === true;
@@ -70,8 +76,23 @@ Singleton {
                 return fallback;
             return Math.max(0, number);
         };
+        // A source's two stages (the profile's own values, or a monitor's entry with the
+        // default's values for a field it lacks)
+        const stages = (source, fallback) => ({
+            saverAfter: flag(source.screensaverEnabled, fallback.screensaverEnabled)
+                ? seconds(source.screensaverTimeout, fallback.screensaverTimeout) : 0,
+            screenOffAfter: flag(source.screenOffEnabled, fallback.screenOffEnabled)
+                ? seconds(source.screenOffTimeout, fallback.screenOffTimeout) : 0
+        });
+        const own = {
+            screensaverEnabled: flag(given.screensaverEnabled, false),
+            screensaverTimeout: seconds(given.screensaverTimeout, 300),
+            screenOffEnabled: flag(given.screenOffEnabled, false),
+            screenOffTimeout: seconds(given.screenOffTimeout, 600)
+        };
+        const defaults = stages(own, own);
         const ids = [];
-        // Each id's monitor as given, for its override under either form of its key
+        // Each id's monitor as given, for its entry under either form of its key
         const byId = {};
         // Two connected monitors with one id (MonitorRules should have told them apart):
         // kept once, and reported, not merged silently
@@ -87,25 +108,20 @@ Singleton {
                 duplicates.push(id);
             }
         }
-        const defaultWay = ways.includes(given.blanking) ? given.blanking : "screensaver";
         const perMonitor = flag(given.perMonitor, false);
-        const overrides = perMonitor && given.monitorBlanking !== null && typeof given.monitorBlanking === "object"
-            ? given.monitorBlanking : {};
-        const resolved = {};
+        const entries = perMonitor && _isMap(given.monitorIdle) ? given.monitorIdle : {};
+        const times = {};
         for (const id of ids) {
-            const own = MonitorRules.overrideFor(overrides, byId[id], monitors);
-            const way = ways.includes(own) ? own : defaultWay;
-            resolved[id] = way === "off" && power ? "off" : "screensaver";
+            const entry = MonitorRules.overrideFor(entries, byId[id], monitors);
+            times[id] = _isMap(entry) ? stages(entry, own) : Object.assign({}, defaults);
         }
         return {
-            saverAfter: flag(given.screensaverEnabled, false) ? seconds(given.screensaverTimeout, 300) : 0,
-            // Without power control there is no screen-off stage (the page greys it)
-            screenOffAfter: power && flag(given.screenOffEnabled, false) ? seconds(given.screenOffTimeout, 600) : 0,
+            saverAfter: defaults.saverAfter,
+            screenOffAfter: defaults.screenOffAfter,
             lockAfter: flag(given.lockscreenEnabled, false) ? seconds(given.lockAfter, 600) : 0,
             lockedScreenOffAfter: seconds(given.lockedScreenOffTimeout, 60),
-            defaultWay: defaultWay,
             perMonitor: perMonitor,
-            ways: resolved,
+            times: times,
             canPowerOff: power,
             commands: flag(given.screensaverCommands, false),
             monitors: ids,
@@ -113,27 +129,58 @@ Singleton {
         };
     }
 
-    // What a monitor's entry in `monitorBlanking` may say: its own way, or "default" (the
-    // profile's `blanking`)
-    readonly property var monitorWays: ["default", "screensaver", "off"]
+    function _isMap(value) {
+        return value !== null && typeof value === "object" && !Array.isArray(value);
+    }
 
-    // At most this many entries in `monitorBlanking` (connected or not): a new one beyond it
-    // is refused; changing or dropping one is always possible
-    readonly property int maxMonitorWays: 32
+    // A monitor's own times as `monitorIdle` keeps them: its two switches and their times
+    // (seconds, within the range of the default's settings — SettingsSchema's
+    // screensaverTimeout and screenOffTimeout)
+    readonly property var monitorTimeRange: ({ minimum: 5, maximum: 86400 })
 
-    // The per-monitor map with one monitor's way set: `map` the current `monitorBlanking`;
+    // At most this many entries in `monitorIdle` (connected or not): a new one beyond it is
+    // refused; changing or dropping one is always possible
+    readonly property int maxMonitorEntries: 32
+
+    // A monitor's times as given (the IPC, the page) → the entry kept, or null when not
+    // understood: { screensaverEnabled, screenOffEnabled } booleans, { screensaverTimeout,
+    // screenOffTimeout } whole seconds within monitorTimeRange — all four, nothing else
+    function monitorTimes(times) {
+        if (!_isMap(times))
+            return null;
+        const fields = ["screensaverEnabled", "screensaverTimeout", "screenOffEnabled", "screenOffTimeout"];
+        if (Object.keys(times).some(key => !fields.includes(key)))
+            return null;
+        const time = value => typeof value === "number" && Number.isInteger(value)
+            && value >= monitorTimeRange.minimum && value <= monitorTimeRange.maximum;
+        if (typeof times.screensaverEnabled !== "boolean" || typeof times.screenOffEnabled !== "boolean"
+                || !time(times.screensaverTimeout) || !time(times.screenOffTimeout))
+            return null;
+        return {
+            screensaverEnabled: times.screensaverEnabled,
+            screensaverTimeout: times.screensaverTimeout,
+            screenOffEnabled: times.screenOffEnabled,
+            screenOffTimeout: times.screenOffTimeout
+        };
+    }
+
+    // The per-monitor map with one monitor's times set: `map` the current `monitorIdle`;
     // `monitor` a connected monitor as read ({ id, base, connector }: its entry is written
     // under its id, and the other form of its key — the plain `base` of a twin, or a twin's
     // `base|connector` of one alone — dropped, and the one it matches loosely,
     // MonitorRules.looseKey, never another `connected` monitor's key) or a MonitorRules id
-    // (a monitor not connected: that key only); `way` one of `monitorWays` — "default"
-    // drops the entry. The other monitors' entries are kept as they are. → the new map, or null when the id or the way is not
-    // understood, or a new entry would pass `maxMonitorWays` (nothing written).
-    function withMonitorWay(map, monitor, way, connected) {
+    // (a monitor not connected: that key only); `times` its own times (monitorTimes) or
+    // "default" — the entry dropped, the monitor follows the default. The other monitors'
+    // entries are kept as they are. → the new map, or null when the id or the times are not
+    // understood, or a new entry would pass `maxMonitorEntries` (nothing written).
+    function withMonitorTimes(map, monitor, times, connected) {
         const id = typeof monitor === "string" ? monitor : monitor?.id;
-        if (!MonitorRules.validId(id) || !monitorWays.includes(way))
+        if (!MonitorRules.validId(id))
             return null;
-        const given = map !== null && typeof map === "object" && !Array.isArray(map) ? map : {};
+        const entry = times === "default" ? null : monitorTimes(times);
+        if (times !== "default" && entry === null)
+            return null;
+        const given = _isMap(map) ? map : {};
         const keys = typeof monitor === "string" ? [id] : MonitorRules.overrideMatches(given, monitor, connected);
         const result = {};
         for (const key of Object.keys(given)) {
@@ -141,10 +188,10 @@ Singleton {
                 result[key] = given[key];
         }
         const isNew = !keys.some(key => key in given);
-        if (way !== "default") {
-            if (isNew && Object.keys(result).length >= maxMonitorWays)
+        if (entry !== null) {
+            if (isNew && Object.keys(result).length >= maxMonitorEntries)
                 return null;
-            result[id] = way;
+            result[id] = entry;
         }
         return result;
     }
@@ -167,7 +214,7 @@ Singleton {
             lockAskedAt: -1,         // monotonic ms of the last ask, -1 none
             lockSince: null,         // a profile switch made the lock due: it counts from then (ms)
             lockAfterSeen: null,     // the config's lockAfter at the last step (null: none yet)
-            stage: 0,                // 0 none, 1 screensaver, 2 screens off: reached in this period
+            stage: ({}),             // monitor id → 0 none, 1 screensaver, 2 screens off: reached in this period
             commandStarted: false,   // the start command ran in this period
             active: false,           // reported as ActiveChanged
             lockBlack: false,        // the lock surface drawn plain black
@@ -195,31 +242,63 @@ Singleton {
         return (state.inputIdle && !state.awayIdle) || state.busInhibitors > 0 || state.logindIdleBlock === true;
     }
 
-    function _enabled(stage, state, config) {
-        if (stage === 1)
-            return config.saverAfter > 0 || state.forced;
-        if (stage === 2)
-            return config.screenOffAfter > 0;
-        return true;
+    // A monitor's times: its own, or the default's for one config does not list
+    function _timesOf(config, id) {
+        return config.times?.[id] ?? { saverAfter: config.saverAfter, screenOffAfter: config.screenOffAfter };
     }
 
-    // The stage idle has reached now: what was reached stays unless switched off; held,
-    // nothing further; else from the time since the last input
-    function stage(state, config, now) {
+    // A monitor's stage 1 is on: its screensaver, or the screensaver forced
+    function _saverOn(times, state) {
+        return times.saverAfter > 0 || state.forced;
+    }
+
+    // A monitor's stage 2 is on: its screen-off
+    function _offOn(times) {
+        return times.screenOffAfter > 0;
+    }
+
+    // A monitor goes dark at some point: a stage of its own on (or the screensaver forced)
+    function _goesDark(times, state) {
+        return _saverOn(times, state) || _offOn(times);
+    }
+
+    // The stage one monitor has reached now: what was reached stays unless switched off;
+    // held, nothing further; else from the time since the last input, on its own times
+    function _monitorStage(state, config, id, now) {
+        let reached = state.stage[id] ?? 0;
         if (state.sleeping)
-            return state.stage;
-        let reached = state.stage;
-        while (reached > 0 && !_enabled(reached, state, config))
-            reached--;
+            return reached;
+        const times = _timesOf(config, id);
+        if (reached === 2 && !_offOn(times))
+            reached = 1;
+        if (reached === 1 && !_saverOn(times, state))
+            reached = 0;
         if (held(state) || !_counting(state))
             return reached;
         const idleFor = now - state.idleSince;
         let timeline = state.forced ? 1 : 0;
-        if (config.saverAfter > 0 && idleFor >= config.saverAfter * 1000)
+        if (times.saverAfter > 0 && idleFor >= times.saverAfter * 1000)
             timeline = 1;
-        if (config.screenOffAfter > 0 && idleFor >= config.screenOffAfter * 1000)
+        if (times.screenOffAfter > 0 && idleFor >= times.screenOffAfter * 1000)
             timeline = 2;
         return Math.max(reached, timeline);
+    }
+
+    // → { monitorId: 0 | 1 | 2 } for every connected monitor: the stage each has reached now.
+    // A monitor plugged in during idle starts from the clock: past its times, at its stage
+    function stage(state, config, now) {
+        const result = {};
+        for (const id of config.monitors)
+            result[id] = _monitorStage(state, config, id, now);
+        return result;
+    }
+
+    // Every monitor that goes dark has reached its first stage (a monitor with both stages
+    // off is not waited for; with none going dark, never): the moment of the commands and
+    // of `active`. `reached`: stage()'s answer
+    function allDark(state, config, reached) {
+        const waited = config.monitors.filter(id => _goesDark(_timesOf(config, id), state));
+        return waited.length > 0 && waited.every(id => reached[id] >= 1);
     }
 
     // The lock screen's own screen-off: no input at the lock for its time (inhibitors ignored)
@@ -247,10 +326,10 @@ Singleton {
         const reached = stage(state, config, now);
         const dark = lockedDark(state, config, now) && config.canPowerOff;
         for (const id of config.monitors) {
-            if (dark || reached === 2)
+            if (dark || (reached[id] === 2 && config.canPowerOff))
                 result[id] = "off";
-            else if (reached === 1)
-                result[id] = config.ways[id] === "off" ? "off" : "saver";
+            else if (reached[id] >= 1)
+                result[id] = "saver";
             else
                 result[id] = "on";
         }
@@ -341,7 +420,8 @@ Singleton {
             return false;
         if (state.logindIdleBlock === true)
             return true;
-        return stage(state, config, now) > state.stage || lockDue(state, config, now);
+        const reached = stage(state, config, now);
+        return config.monitors.some(id => reached[id] > (state.stage[id] ?? 0)) || lockDue(state, config, now);
     }
 
     // → the next moment `wanted`, `lockDue` or `lockBlack` changes (monotonic ms, never
@@ -351,10 +431,14 @@ Singleton {
             return -1;
         const due = [];
         if (_counting(state) && !held(state)) {
-            if (config.saverAfter > 0 && state.stage < 1)
-                due.push(state.idleSince + config.saverAfter * 1000);
-            if (config.screenOffAfter > 0 && state.stage < 2)
-                due.push(state.idleSince + config.screenOffAfter * 1000);
+            for (const id of config.monitors) {
+                const times = _timesOf(config, id);
+                const reached = state.stage[id] ?? 0;
+                if (times.saverAfter > 0 && reached < 1)
+                    due.push(state.idleSince + times.saverAfter * 1000);
+                if (times.screenOffAfter > 0 && reached < 2)
+                    due.push(state.idleSince + times.screenOffAfter * 1000);
+            }
         }
         const lockAt = _lockAt(state, config.lockAfter);
         if (lockAt >= 0)
@@ -376,6 +460,7 @@ Singleton {
     function _copy(state) {
         const next = Object.assign({}, state);
         next.shown = Object.assign({}, state.shown);
+        next.stage = Object.assign({}, state.stage);
         next.power = Object.assign({}, state.power);
         next.pendingPower = {};
         for (const id of Object.keys(state.pendingPower ?? {}))
@@ -386,7 +471,7 @@ Singleton {
     // Input (or what counts as input): a new idle period
     function _wake(next, now, actions) {
         next.idleSince = now;
-        next.stage = 0;
+        next.stage = {};
         next.forced = false;
         next.lockedThisPeriod = next.locked;
         next.lockAsks = 0;
@@ -435,7 +520,8 @@ Singleton {
     // actions asked again { ids: [id], attempt } (a reading since the last ask showed the
     // monitor otherwise; a `restore`'s first with `restore: true`, first of all), powerGaveUp
     // { ids, on } (asked powerRetry.tries times: not asked again), lock, active { active },
-    // lockBlack { black }.
+    // lockBlack { black }. The start command comes, and `active` turns true unlocked, once
+    // every monitor that goes dark has (allDark).
     function step(state, event, config, now) {
         const next = _copy(state);
         const actions = [];
@@ -584,10 +670,12 @@ Singleton {
             if (!config.monitors.includes(id))
                 delete next.power[id];
         }
+
         for (const id of Object.keys(next.pendingPower)) {
             if (!config.monitors.includes(id))
                 delete next.pendingPower[id];
         }
+        // Only connected monitors keep a stage: one plugged in again starts from the clock
         next.stage = stage(next, config, now);
         next.lockedDark = lockedDark(next, config, now);
         const want = wanted(next, config, now);
@@ -645,7 +733,8 @@ Singleton {
             }
         }
 
-        if (next.stage >= 1 && !next.commandStarted && config.commands) {
+        const dark = allDark(next, config, next.stage);
+        if (dark && !next.commandStarted && config.commands) {
             actions.push({ type: "startCommand" });
             next.commandStarted = true;
         }
@@ -655,7 +744,7 @@ Singleton {
             // `attempt`: 1 the first ask, more for an ask again (Idle logs the first of those)
             actions.push({ type: "lock", attempt: next.lockAsks });
         }
-        const active = next.locked || config.monitors.some(id => want[id] !== "on");
+        const active = next.locked || dark;
         if (active !== next.active) {
             actions.push({ type: "active", active: active });
             next.active = active;

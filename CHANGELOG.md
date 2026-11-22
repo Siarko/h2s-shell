@@ -474,18 +474,21 @@ The interface modules are written against (`qs.api`), versioned on its own
 - Apps that keep the screen on through logind (`systemd-inhibit --what=idle`, video
   players) hold off the screensaver, screen-off and the idle lock while unlocked.
 - Screens off: Settings → Lockscreen → "Turn screens off" (after a time from your last
-  input), and "When the screensaver starts": "Turn off" instead of the screensaver (an
-  OLED's own protection mode starts even on black). On the lock screen the screens go off
-  after a minute without input there ("Turn screens off on the lock screen after", 0 for
-  never); input turns them on, and so do an unlock and waking from sleep. Needs Hyprland;
-  elsewhere the lock screen goes plain black instead.
+  input; with the screensaver off, straight from the desktop — an OLED's own protection
+  mode starts even on black). On the lock screen the screens go off after a minute without
+  input there ("Turn screens off on the lock screen after", 0 for never); input turns them
+  on, and so do an unlock and waking from sleep. Needs Hyprland; elsewhere the screen-off
+  shows the black screensaver at its time, and the lock screen goes plain black instead.
 - Screens off beyond Hyprland: on another compositor with wlr-output-power-management
   (sway, labwc, river), monitors are turned off through `wlopm` when it is installed.
-- Each monitor its own way at "When the screensaver starts": with `lockscreen.perMonitor`
-  on, `lockscreen.monitorBlanking` gives a monitor (by make, model and serial, so it keeps
-  its way on another port) "screensaver" or "off" over the default — an OLED off, an LCD
-  with the screensaver. Not on a settings page yet; for now set over IPC: `idle state`
-  lists the monitors, `idle setMonitorWay <id> <default|screensaver|off>`.
+- Each monitor its own screensaver and screen-off times: with `lockscreen.perMonitor` on,
+  `lockscreen.monitorIdle` gives a monitor (by make, model and serial, so it keeps its
+  times on another port) its own switches and times for both, on the one clock from your
+  last input — the laptop panel off at 2 min, an OLED off at 5 min without a screensaver,
+  an LCD with the screensaver at 5 min; a monitor without an entry follows the default.
+  The screensaver commands start once every monitor that goes dark has. Not on a settings
+  page yet; for now set over IPC: `idle state` lists the monitors,
+  `idle setMonitorTimes <id> <json|default>`.
 - Safe mode has a banner, under the bar and at the top of Settings → Modules: why the shell
   started without modules, the modules on when it crashed and one installed or updated in
   the last day, with "Open Modules" and "Load modules" (loads them again without a

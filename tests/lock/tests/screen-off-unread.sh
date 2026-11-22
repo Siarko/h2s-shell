@@ -10,8 +10,8 @@ printf '#!%s
 exec %q "$@"
 ' "$(command -v bash)" "$real_hyprctl" > "$WORK/hyprctl-bin/hyprctl"
 chmod +x "$WORK/hyprctl-bin/hyprctl"
-stack_start --shell-path "$WORK/hyprctl-bin" --settings '{"lockscreen.screensaverEnabled": true,
-    "lockscreen.screensaverTimeout": 5, "lockscreen.blanking": "off", "lockscreen.lockedScreenOffTimeout": 5}'
+stack_start --shell-path "$WORK/hyprctl-bin" --settings '{"lockscreen.screenOffEnabled": true,
+    "lockscreen.screenOffTimeout": 5, "lockscreen.lockedScreenOffTimeout": 5}'
 
 # idle_is <section> <field> <value>: the shell's `idle state` says so
 idle_is() {
@@ -23,7 +23,7 @@ screens_listed() {
 
 check_within "$GUARD" "no monitor read: no power control" idle_is config canPowerOff false
 check "… the screens instead" screens_listed
-check_timed 10 "5 s without input: the screensaver shows (\"Turn off\" falls back to it)" state_is screensaver true
+check_timed 10 "5 s without input: the screensaver shows (the screen-off falls back to it)" state_is screensaver true
 move_pointer 700 400
 move_pointer 720 410
 check_within "$GUARD" "input: it goes" state_is screensaver false

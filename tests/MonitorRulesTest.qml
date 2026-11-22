@@ -202,6 +202,11 @@ TestCase {
         assertEqual(rules.overrideFor(null, "x"), "", "… none in no map");
         assertEqual(rules.overrideFor(["off"], "0"), "", "… none in a list");
         assertEqual(rules.overrideFor({ x: 3 }, "x"), "", "… a way that is not text is none");
+        assertEqual(JSON.stringify(rules.overrideFor({ x: { screenOffEnabled: true } }, "x")), JSON.stringify({ screenOffEnabled: true }),
+                    "… an entry that is an object (a monitor's times): found");
+        assertEqual(rules.overrideFor({ x: [1] }, "x"), "", "… a list is no entry");
+        assertEqual(rules.looseKey({ "A|M|S|DP-1": {}, "A|M|": {} }, { id: "A|M|S", base: "A|M|S", connector: "DP-1" }), "",
+                    "an exact key holding an object: nothing taken loosely");
         assertEqual(JSON.stringify(rules.notConnected(overrides, [rules.identity(samsung)])), JSON.stringify(["Dell Inc.|U2419H||DP-1"]),
                     "overrides of monitors not connected, to be listed");
         assertEqual(JSON.stringify(rules.notConnected(overrides, [])), JSON.stringify(Object.keys(overrides).sort()), "… all, sorted, when none is");
