@@ -1500,6 +1500,42 @@ TestCase {
         plainSleep.sleepDeadline();
         assertEqual(plainSleep.actions, "sleep:locked", "SuspendThenHibernate not possible: a plain Suspend");
 
+        // A SuspendThenHibernate refused at the call (logind weighs swap against the memory in
+        // use then): a plain Suspend once more in the period, after a fresh read
+        const refusedThen = _machine(_with(withSleep, { lockOnSleep: true }), ["lcd"], true, "yes", "yes", "yes").idle(5000, 0);
+        refusedThen.sleepDeadline();
+        assertEqual(refusedThen.actions, "sleep+hibernate:locked", "SuspendThenHibernate asked");
+        refusedThen.at(1801000, { type: "sleepFailed" });
+        assertEqual(refusedThen.actions, "", "refused: nothing at once");
+        assertEqual(refusedThen.next(), 1801000, "… logind's inhibitors to be read again now");
+        refusedThen.at(1801000, { type: "deadline" });
+        assertEqual(refusedThen.actions, "", "… never asked on the read from before the refusal");
+        refusedThen.sleepDeadline();
+        assertEqual(refusedThen.actions, "sleep:locked", "… after a fresh read: a plain Suspend");
+        refusedThen.at(1802000, { type: "sleepFailed" });
+        assertEqual(refusedThen.next(), -1, "the plain Suspend refused too: not asked again in this period");
+        const blockedThen = _machine(_with(withSleep, { lockOnSleep: true }), ["lcd"], true, "yes", "yes", "yes").idle(5000, 0);
+        blockedThen.sleepDeadline().at(1801000, { type: "sleepFailed" });
+        blockedThen.sleepDeadline(true);
+        assertEqual(blockedThen.actions, "", "the read after the refusal finds a sleep block: paused, as ever");
+        const failedReads = _machine(_with(withSleep, { lockOnSleep: true }), ["lcd"], true, "yes", "yes", "yes").idle(5000, 0);
+        failedReads.sleepDeadline("unknown").sleepDeadline();
+        assertEqual(failedReads.actions, "sleep+hibernate:locked", "a read that could not tell, then one that did: asked");
+        failedReads.at(1900000, { type: "sleepFailed" }).sleepDeadline("unknown");
+        assertEqual(failedReads.next(), 1900000 + IdleRules.sleepReadRetry.minimum,
+                    "after the refusal a read that could not tell: read again after the first pause (the earlier failures not counted)");
+        const nextPeriod = _machine(_with(withSleep, { lockOnSleep: true }), ["lcd"], true, "yes", "yes", "yes").idle(5000, 0);
+        nextPeriod.sleepDeadline().at(1801000, { type: "sleepFailed" }).sleepDeadline();
+        nextPeriod.input(1900000).idle(1905000, 1900000);
+        nextPeriod.sleepDeadline();
+        assertEqual(nextPeriod.actions, "sleep+hibernate:locked", "a new period: SuspendThenHibernate again");
+        const plainRefused = _machine(_with(withSleep, { lockOnSleep: true }), ["lcd"], true, "yes", "yes", "na").idle(5000, 0);
+        plainRefused.sleepDeadline().at(1801000, { type: "sleepFailed" });
+        assertEqual(plainRefused.next(), -1, "a plain Suspend refused: not asked again (nothing to fall back to)");
+        const hibernateRefused = _machine(hours, ["lcd"], true, "yes", "yes", "yes").idle(5000, 0);
+        hibernateRefused.sleepDeadline().at(7201000, { type: "sleepFailed" });
+        assertEqual(hibernateRefused.next(), -1, "a Hibernate refused (sleep off): not asked again");
+
         // A lock due no later is waited for, as for the sleep
         const lockFirst = _machine(_with(hours, { lockscreenEnabled: true, lockAfter: 7200 }), ["lcd"], true, "yes", "yes", "yes").idle(5000, 0);
         assertEqual(lockFirst.config.hibernateAfter, 14400, "lock at 2 h: hibernation 2 h after it");

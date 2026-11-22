@@ -466,12 +466,17 @@ sleep (`sleepEnabled`, `sleepTimeout`) and hibernation (`hibernateEnabled`,
   "Not available here" with the reason the shell can read without root: a password asked
   ("challenge"), the kernel's lockdown (Secure Boot), no swap or only zram (lost at
   power-off), swap smaller than the memory in use, no resume device. Apps keeping the screen
-  on and logind's `sleep` blocks hold it as they hold sleep.
+  on and logind's `sleep` blocks hold it as they hold sleep. logind judges a hibernation at
+  the call (swap against the memory in use then): a `SuspendThenHibernate` it refuses is
+  followed, after a fresh read of its inhibitors, by a plain `Suspend`, so the computer
+  still sleeps.
   - **NixOS**: `/etc` is generated: set the delay with
     `programs.h2s-shell.idle.hibernateDelay = "3h";` (it goes into sleep.conf). Hibernation
     itself needs a swap device (`swapDevices`) and `boot.resumeDevice`.
   - **Arch**: Apply writes `/etc/systemd/sleep.conf.d/h2s-shell.conf` (`[Sleep]`,
-    `HibernateDelaySec=`) through pkexec, asking for the password on that click. Hibernation
+    `HibernateDelaySec=`) through pkexec, asking for the password on that click; when another
+    drop-in (sorting after it, or in `/run` or `/usr/lib`) still sets another delay after the
+    write, the section names that file and offers no Apply. Hibernation
     itself needs a swap partition or file (zram does not count) and the `resume` hook in the
     initramfs (or `resume=` on the kernel's command line).
 - **Not locked while asleep** — at each sleep the shell looks whether the session is

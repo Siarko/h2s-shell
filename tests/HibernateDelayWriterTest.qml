@@ -25,13 +25,15 @@ TestCase {
     property string _answer: "run"
     property var _applied: null
     property string _file: ""
+    property string _modes: ""
     property bool _ready: false
 
     property Component _writerComponent: Component {
         HibernateDelayWriter {}
     }
 
-    // The stand-in for PrivilegedRuns.startShell: the words run as the user (no pkexec)
+    // The stand-in for PrivilegedRuns.startShell: the words run as the user (no pkexec), with
+    // the most open umask a caller could hand on (pkexec keeps the caller's)
     function _start(request, done) {
         _runs.push({ what: request.what, argv: Array.from(request.argv) });
         if (_answer === "dismissed") {
@@ -39,7 +41,7 @@ TestCase {
                                       blocked: "", error: "" }));
             return;
         }
-        const process = _shell.createObject(suite, { command: request.argv, done: null, read: null });
+        const process = _shell.createObject(suite, { command: ["sh", "-c", "umask 000; exec \"$@\"", "sh"].concat(request.argv), done: null, read: null });
         process.finished.connect((code, stdout, stderr) => done({ ok: code === 0, code: code, stdout: stdout, stderr: stderr, dismissed: false,
                                                                   refused: false, cancelled: false, blocked: "", error: "" }));
         process.running = true;
@@ -88,12 +90,12 @@ TestCase {
 
     function _readFile() {
         _file = "";
-        _sh("cat \"$1/sleep.conf.d/h2s-shell.conf\" 2> /dev/null || echo '(none)'", [_scratch], null, text => suite._file = text);
+        _sh("cat \"$1/systemd/sleep.conf.d/h2s-shell.conf\" 2> /dev/null || echo '(none)'", [_scratch], null, text => suite._file = text);
     }
 
     function runAsync() {
         _then("the scratch directory is there", () => _ready, () => {
-            _writer = _writerComponent.createObject(suite, { directory: _scratch + "/sleep.conf.d", start: suite._start });
+            _writer = _writerComponent.createObject(suite, { directory: _scratch + "/systemd/sleep.conf.d", start: suite._start });
             _writer.applied.connect((seconds, ok, quiet, error) => suite._applied = { seconds: seconds, ok: ok, quiet: quiet, error: error });
             assertEqual(_writerComponent.createObject(suite).directory, "/etc/systemd/sleep.conf.d", "by default: the system's drop-in directory");
             assert(!_writer.apply(59), "a delay under a minute: not started");
@@ -108,7 +110,7 @@ TestCase {
             assert(!_writer.busy, "… no longer busy");
             assertEqual(_runs.length, 1, "… one run");
             assertEqual(_runs[0].argv[0], "/bin/sh", "… the system's shell, the first word handed to the runs as administrator");
-            assertEqual(JSON.stringify(_runs[0].argv.slice(3)), JSON.stringify(["sh", "10800", _scratch + "/sleep.conf.d"]),
+            assertEqual(JSON.stringify(_runs[0].argv.slice(3)), JSON.stringify(["sh", "10800", _scratch + "/systemd/sleep.conf.d"]),
                         "… the delay and the directory as arguments");
             assertEqual(_runs[0].argv[2], HibernateRules.applyScript, "… the fixed script");
             assert(!_runs[0].argv.includes("pkexec"), "… no pkexec in the stand-in's words");
@@ -116,8 +118,13 @@ TestCase {
         });
         _then("the drop-in read", () => _file !== "", () => {
             assertEqual(_file, HibernateRules.dropInText(10800), "the drop-in as the rules say");
-            assertEqual(JSON.stringify(HibernateRules.hibernateDelay(_file)), JSON.stringify({ state: "set", seconds: 10800 }),
+            _modes = "";
+            _sh("stat -c %a \"$1/systemd\" \"$1/systemd/sleep.conf.d\" \"$1/systemd/sleep.conf.d/h2s-shell.conf\"", [_scratch], null, text => suite._modes = text.trim().split("\n").join(" "));
+            assertEqual(JSON.stringify(HibernateRules.hibernateDelay(_file)), JSON.stringify({ state: "set", seconds: 10800, file: "" }),
                         "… read back as sleep.conf's delay");
+        });
+        _then("the modes read", () => _modes !== "", () => {
+            assertEqual(_modes, "755 755 644", "under umask 000: the directories it made 755, the drop-in 644 (writable by root alone)");
             _applied = null;
             assert(_writer.apply(7200), "2 h: started");
         });
@@ -127,7 +134,7 @@ TestCase {
         });
         _then("the drop-in read again", () => _file !== "", () => {
             assertEqual(_file, HibernateRules.dropInText(7200), "… replaced whole");
-            _sh("ls -a \"$1/sleep.conf.d\"", [_scratch], null, text => suite._file = "ls:" + text.split("\n").filter(name => name !== "").join(" "));
+            _sh("ls -a \"$1/systemd/sleep.conf.d\"", [_scratch], null, text => suite._file = "ls:" + text.split("\n").filter(name => name !== "").join(" "));
             _file = "";
         });
         _then("the directory listed", () => _file !== "", () => {
@@ -147,7 +154,7 @@ TestCase {
             _applied = null;
             _ready = false;
             // A plain file where the directory should be: the write fails
-            _sh("set -e; rm -rf \"$1/sleep.conf.d\"; touch \"$1/sleep.conf.d\"", [_scratch], () => {
+            _sh("set -e; rm -rf \"$1/systemd/sleep.conf.d\"; touch \"$1/systemd/sleep.conf.d\"", [_scratch], () => {
                 suite.assert(suite._writer.apply(1800), "30 min: started");
                 suite._ready = true;
             });

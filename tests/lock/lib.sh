@@ -544,7 +544,8 @@ notification_server_up() {
 #                    logind/can-suspend-then-hibernate ("na" without them); `… Suspend
 #                    <bool>` (and SuspendThenHibernate, Hibernate) notes "call <method>
 #                    <bool>" and, as logind does, sends PrepareForSleep(true) (refused with
-#                    logind/refuse-suspend) — the wake is the test's (logind_signal wake)
+#                    logind/refuse-suspend, one method with logind/refuse-<method>) — the
+#                    wake is the test's (logind_signal wake)
 #                    ("call LockedHint")
 #   systemd-inhibit  notes "hold <pid> <time>" in logind/log, runs the command it was given
 #                    (the shell's `read -r release`) and notes "release <pid> <time>" when
@@ -638,7 +639,7 @@ case "\$1" in
                     last=\$argument
                 done
                 echo "call \$method \$last" >> "\$log"
-                if [ -f "$WORK/logind/refuse-suspend" ]; then
+                if [ -f "$WORK/logind/refuse-suspend" ] || [ -f "$WORK/logind/refuse-\$method" ]; then
                     echo "Error: GDBus.Error:org.freedesktop.login1.OperationInProgress: There's already a shutdown or sleep operation in progress" >&2
                     exit 1
                 fi

@@ -99,18 +99,28 @@ Singleton {
     }
 
     // `systemd-analyze cat-config systemd/sleep.conf` (the main file and its drop-ins, in the
-    // order systemd reads them) → the system's delay: { state: "set", seconds } | { state:
-    // "unset" } (systemd's own default then: from the battery, or 2 h without one) |
-    // { state: "unknown" } (not read, or a value not understood). The last assignment in a
-    // [Sleep] section wins; an empty one puts it back to unset
+    // order systemd reads them, each under a `# /its/path` line) → the system's delay:
+    // { state: "set", seconds, file } | { state: "unset" } (systemd's own default then: from
+    // the battery, or 2 h without one; with `file` when an empty assignment there put it back)
+    // | { state: "unknown" } (not read, or a value not understood). The last assignment in a
+    // [Sleep] section wins; each file starts outside any section, as systemd reads it.
+    // `file`: the path of the file that made the last assignment ("" before any path line),
+    // one line, capped
     function hibernateDelay(text) {
         const given = String(text ?? "");
         if (given.trim() === "")
             return { state: "unknown" };
         let section = "";
+        let file = "";
         let delay = { state: "unset" };
         for (const raw of given.split("\n")) {
             const line = raw.trim();
+            const path = /^#\s*(\/\S.*)$/.exec(line);
+            if (path !== null) {
+                file = _line(path[1], 200);
+                section = "";
+                continue;
+            }
             if (line === "" || line.startsWith("#") || line.startsWith(";"))
                 continue;
             const header = /^\[([^\]]*)\]$/.exec(line);
@@ -122,13 +132,33 @@ Singleton {
             if (section !== "Sleep" || assignment === null)
                 continue;
             if (assignment[1].trim() === "") {
-                delay = { state: "unset" };
+                delay = { state: "unset", file: file };
                 continue;
             }
             const seconds = timeSpan(assignment[1]);
-            delay = seconds === null ? { state: "unknown" } : { state: "set", seconds: seconds };
+            delay = seconds === null ? { state: "unknown" } : { state: "set", seconds: seconds, file: file };
         }
         return delay;
+    }
+
+    // Text from outside on one line, capped
+    function _line(text, length) {
+        return String(text ?? "").replace(/[\u0000-\u001f\u007f]+/g, " ").replace(/\s+/g, " ").trim().slice(0, length);
+    }
+
+    // The file that keeps the shell's drop-in from taking effect, or "": after the shell
+    // wrote `written` (seconds; anything else: no write), the delay read back is another,
+    // set (or unset) last by a file that is not the shell's own drop-in — one sorting after
+    // it, or in another directory systemd reads. Apply cannot win against it
+    function delayOverride(delay, written) {
+        if (!Number.isInteger(written) || written <= 0)
+            return "";
+        if (delay?.state !== "set" && delay?.state !== "unset")
+            return "";
+        if (delay.state === "set" && delay.seconds === written)
+            return "";
+        const file = typeof delay.file === "string" ? delay.file : "";
+        return file !== "" && file !== dropInDirectory + "/" + dropInName ? file : "";
     }
 
     // ---- What the page says ----
@@ -185,12 +215,16 @@ Singleton {
         return !(delay?.state === "set" && delay.seconds === seconds);
     }
 
-    // The line under the times while they differ, by system: Apply on the one, the option
-    // on NixOS (`nixos` true)
-    function delayLine(delay, nixos, durationOf) {
+    // The line under the times while they differ, by system: Apply where /etc is the
+    // machine's own (`nixos` false), the option on NixOS (true), neither while that was not
+    // read (null); with `override` (delayOverride's file), the file that wins over Apply
+    function delayLine(delay, nixos, durationOf, override) {
         const now = "The time after sleeping is a system setting (now " + delayWords(delay, durationOf) + ").";
-        return nixos === true ? now + " On NixOS it is the option " + nixosOption + "."
-                              : now + " Changing it asks for your password.";
+        if (nixos === true)
+            return now + " On NixOS it is the option " + nixosOption + ".";
+        if (typeof override === "string" && override !== "")
+            return now + " " + override + " sets it after the shell's own file, so Apply cannot change it.";
+        return nixos === false ? now + " Changing it asks for your password." : now;
     }
 
     // ---- The Apply ----
@@ -200,10 +234,10 @@ Singleton {
     // drop-in beside its place and renames it there (never half a file), and says what it
     // wrote. → [shell, "-c", script, "sh", seconds, directory], or null for a delay outside
     // delayRange or a directory that is not a plain absolute path
-    readonly property string applyScript: "set -eu; "
+    readonly property string applyScript: "set -eu; umask 022; "
         + "case \"$1\" in ''|*[!0-9]*) echo 'not a delay' >&2; exit 2;; esac; "
         + "case \"$2\" in /*) ;; *) echo 'not a directory' >&2; exit 2;; esac; "
-        + "mkdir -p -- \"$2\"; "
+        + "if [ ! -d \"$2\" ]; then mkdir -p -- \"$2\"; chmod 0755 -- \"$2\"; fi; "
         + "file=\"$2/" + dropInName + "\"; "
         + "temporary=$(mktemp -- \"$file.XXXXXX\"); "
         + "printf '%s\\n' '# Written by h2s-shell: Settings, When away, Hibernate' '[Sleep]' \"HibernateDelaySec=$1\" > \"$temporary\"; "

@@ -310,6 +310,8 @@ Singleton {
             lockSince: null,         // a profile switch made the lock due: it counts from then (ms)
             lockAfterSeen: null,     // the config's lockAfter at the last step (null: none yet)
             sleepAsked: false,       // the sleep asked in this period: not asked again
+            sleepAskedThen: false,   // … as SuspendThenHibernate (read only while sleepAsked)
+            sleepPlain: false,       // SuspendThenHibernate refused in this period: a plain Suspend instead
             sleepLeftUnlocked: false, // … and the settings leave it unlocked (no notice then)
             sleepSince: null,        // a profile switch made the sleep due: it counts from then (ms)
             sleepAfterSeen: null,    // the whole computer's stage at the last step (machineAfter)
@@ -730,6 +732,7 @@ Singleton {
         next.lockAskedAt = -1;
         next.lockSince = null;
         next.sleepAsked = false;
+        next.sleepPlain = false;
         next.sleepLeftUnlocked = false;
         next.sleepSince = null;
         // Read again before the next sleep: a block seen now says nothing of then
@@ -772,8 +775,10 @@ Singleton {
     // `event`: { type, … } — inputIdle { idle, since? }, awayIdle { idle, since? },
     // busInhibitors { count }, logindIdleBlock { held: true | false | "unknown", sleepHeld? }
     // (logind's idle block and, from the same read, its sleep block), logindSleepBlock { held }
-    // (the sleep block alone), sleepFailed (logind refused
-    // the sleep asked: not asked again in this period), power
+    // (the sleep block alone), sleepFailed (logind refused the sleep asked: not asked again
+    // in this period — but a refused SuspendThenHibernate, which logind judges at the call
+    // (swap against the memory in use then), is asked once more as a plain Suspend, after a
+    // fresh read of its inhibitors), power
     // { power: { id: "on" | "off" | other } }, deadline, config, monitors, locked,
     // unlocked, sleep, resumed, force (IPC), busForce (D-Bus SetActive(true): as force, never
     // while locked or going to sleep — busForceTakes), activity (D-Bus SimulateUserActivity, and input on a
@@ -869,6 +874,14 @@ Singleton {
             break;
         case "sleepFailed":
             next.sleepLeftUnlocked = false;
+            if (next.sleepAsked && next.sleepAskedThen && !next.sleepPlain) {
+                next.sleepPlain = true;
+                next.sleepAsked = false;
+                // Never on a read from before the refusal: read again first
+                next.logindSleepBlock = "unknown";
+                next.sleepReadAt = null;
+                next.sleepReadFails = 0;
+            }
             break;
         case "lockAttended":
             next.lockAttended = event.attended === true;
@@ -1145,9 +1158,10 @@ Singleton {
         if (sleepDue(next, config, now)) {
             next.sleepAsked = true;
             next.sleepLeftUnlocked = sleepLeftUnlocked(next, config);
-            if ((config.sleepAfter ?? 0) > 0)
-                actions.push({ type: "sleep", leftUnlocked: next.sleepLeftUnlocked, thenHibernate: config.sleepThenHibernate === true });
-            else
+            if ((config.sleepAfter ?? 0) > 0) {
+                next.sleepAskedThen = config.sleepThenHibernate === true && next.sleepPlain !== true;
+                actions.push({ type: "sleep", leftUnlocked: next.sleepLeftUnlocked, thenHibernate: next.sleepAskedThen });
+            } else
                 actions.push({ type: "hibernate", leftUnlocked: next.sleepLeftUnlocked });
         }
         const active = next.locked || dark;

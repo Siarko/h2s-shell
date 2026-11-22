@@ -7,7 +7,8 @@
 #   profile Full: sleep off, the idle lock at 3 s, hibernation 4 s after it — counted from
 #   the lock: Hibernate(false) at 7 s, from the locked session;
 #   profile Sleepy (locktest.sleepy): sleep at 4 s with hibernation on — the sleep asks
-#   SuspendThenHibernate(false) (the delay after it is the system's), no Hibernate of its own.
+#   SuspendThenHibernate(false) (the delay after it is the system's), no Hibernate of its own;
+#   refused (logind weighs swap at the call), a plain Suspend(false) follows in that period.
 
 mkdir -p "$XDG_CONFIG_HOME/h2s_shell" "$WORK/logind"
 python3 -I -c '
@@ -61,4 +62,17 @@ check "… once, non-interactive" test "$(grep '^call SuspendThenHibernate' "$WO
 check "… no plain Suspend, no second Hibernate" test "$(calls_of Suspend) $(calls_of Hibernate)" = "0 1"
 logind_signal wake
 check_within "$GUARD" "awake" test "$(idle_field 'state["sleeping"]')" = false
+
+# ---- SuspendThenHibernate refused at the call: a plain Suspend instead ----
+touch "$WORK/logind/refuse-SuspendThenHibernate"
+move_pointer 600 380
+check_within 15 "4 s idle: SuspendThenHibernate asked again" called SuspendThenHibernate 2
+check_within "$GUARD" "… refused: a plain Suspend follows" called Suspend 1
+check "… non-interactive" test "$(grep '^call Suspend ' "$WORK/logind/log")" = "call Suspend false"
+check "… once (no second SuspendThenHibernate in the period)" test "$(calls_of SuspendThenHibernate)" = 2
+check "… logind's inhibitors read again between the two" \
+    test "$(grep -E '^call (SuspendThenHibernate|ListInhibitors|Suspend)( |$)' "$WORK/logind/log" | tail -n 3 | cut -d' ' -f2 | tr '\n' ' ')" = "SuspendThenHibernate ListInhibitors Suspend "
+check_within "$GUARD" "… what logind allows read again after the refusal" test "$(grep -c '^call CanHibernate' "$WORK/logind/log")" -ge 2
+logind_signal wake
+check_within "$GUARD" "awake again" test "$(idle_field 'state["sleeping"]')" = false
 shell_ipc profiles clearSimulation > /dev/null

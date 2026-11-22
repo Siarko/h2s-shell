@@ -78,6 +78,10 @@ Singleton {
     readonly property var sleepSupport: _logindSleep.support
     // The Apply of the system's delay before hibernating is under way
     readonly property bool hibernateDelayApplying: _delayWriter.busy
+    // The delay the last Apply of this run wrote (seconds), -1 none: what the page compares
+    // the delay read back with, to name a file that wins over the shell's
+    readonly property int hibernateDelayWritten: _delayWritten
+    property int _delayWritten: -1
 
     // The Hibernate section's Apply (the user's click): the system's delay before a sleep
     // turns into hibernation set to `seconds`, through a run as administrator (polkit asks
@@ -231,9 +235,7 @@ Singleton {
         case "sleep":
         case "hibernate": {
             const method = action.type === "hibernate" ? "Hibernate" : action.thenHibernate === true ? "SuspendThenHibernate" : "Suspend";
-            _log("info", "idle: asking logind to " + ({ Suspend: "suspend", SuspendThenHibernate: "suspend, then hibernate",
-                                                       Hibernate: "hibernate" })[method]
-                 + (action.leftUnlocked ? " (unlocked, as the settings say)" : ""));
+            _log("info", "idle: asking logind to " + _methodWords(method) + (action.leftUnlocked ? " (unlocked, as the settings say)" : ""));
             if (!_logindSleep.suspend(method))
                 _dispatch({ type: "sleepFailed" });
             break;
@@ -269,6 +271,11 @@ Singleton {
         default:
             break;
         }
+    }
+
+    // A sleep method (LogindSleep.methods) as the log says it
+    function _methodWords(method) {
+        return ({ Suspend: "suspend", SuspendThenHibernate: "suspend, then hibernate", Hibernate: "hibernate" })[method] ?? "sleep";
     }
 
     function _runCommand(key) {
@@ -533,19 +540,24 @@ Singleton {
         id: _logindSleep
         toolDirectory: TestSeams.lockTools
         onRead: support => root._sleepSupportRead(support)
-        onSuspended: (ok, error) => {
+        onSuspended: (ok, error, method) => {
             if (ok)
                 return;
-            root._log("warning", "logind did not suspend: " + error);
+            root._log("warning", "logind did not " + root._methodWords(method) + ": " + error);
             root._dispatch({ type: "sleepFailed" });
+            // What logind allows may have changed since it was read (a hibernation it now
+            // refuses: swap against the memory in use, judged at the call)
+            _logindSleep.refresh();
         }
     }
 
     Io.HibernateDelayWriter {
         id: _delayWriter
         onApplied: (seconds, ok, quiet, error) => {
-            if (ok)
+            if (ok) {
                 root._log("info", "the system's delay before hibernating set to " + seconds + " s");
+                root._delayWritten = seconds;
+            }
             else if (!quiet)
                 root._log("warning", "the system's delay before hibernating not set: " + error);
             // What is in force now, whichever way it went

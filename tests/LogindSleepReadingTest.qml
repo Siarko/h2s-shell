@@ -29,6 +29,7 @@ TestCase {
     property real _hangStarted: 0
     // The last suspended() answer: { ok, error }, null before
     property var _suspended: null
+    property string _method: ""
     property string _calls: ""
 
     property Component _readerComponent: Component {
@@ -123,7 +124,7 @@ TestCase {
         _then("the stand-in is in place", () => _ready, () => {
             _reader = _readerComponent.createObject(suite, { toolDirectory: _scratch, fileRoot: _scratch + "/root", watchdog: 500,
                                                              suspendWatchdog: 500 });
-            _reader.suspended.connect((ok, error) => suite._suspended = { ok: ok, error: error });
+            _reader.suspended.connect((ok, error, method) => { suite._suspended = { ok: ok, error: error }; suite._method = method; });
             assertEqual(_support(), JSON.stringify({ canSuspend: "unknown", idleAction: null }), "before a read: unknown");
             _readAfter("echo yes > \"$1/can-suspend\"; echo 'ignore 1800000000' > \"$1/idle-action\"");
         });
@@ -145,7 +146,7 @@ TestCase {
         _then("the hibernation read answered", () => _answered(), () => {
             assertEqual(_hibernation(), JSON.stringify({ canHibernate: "na", canSuspendThenHibernate: "yes", hibernation: {
                 swaps: [{ name: "/dev/zram0", type: "partition", kib: 4194300, zram: true }], memoryInUse: 2000000, lockdown: "none",
-                resume: false, delay: { state: "set", seconds: 10800 }, nixos: false } }),
+                resume: false, delay: { state: "set", seconds: 10800, file: "/etc/systemd/sleep.conf.d/h2s-shell.conf" }, nixos: false } }),
                 "CanHibernate na, CanSuspendThenHibernate yes; zram only, lockdown none, no resume device; the drop-in's delay 3 h");
             assertEqual(HibernateRules.unavailable(Object.assign({ answer: _reader.support.canHibernate }, _reader.support.hibernation)),
                         "Not available here: no swap space to save the session to (only zram, which is lost at power-off).",
@@ -229,6 +230,7 @@ TestCase {
         });
         _then("the hibernate call answered", () => _ready && _suspended !== null, () => {
             assertEqual(JSON.stringify(_suspended), JSON.stringify({ ok: true, error: "" }), "Hibernate: taken");
+            assertEqual(_method, "Hibernate", "… the answer names the method asked");
             _callsRead();
         });
         _then("the hibernate call read", () => _calls !== "", () => {
@@ -237,6 +239,7 @@ TestCase {
         });
         _then("the suspend-then-hibernate call answered", () => _ready && _suspended !== null, () => {
             assertEqual(_suspended.ok, true, "SuspendThenHibernate: taken");
+            assertEqual(_method, "SuspendThenHibernate", "… the answer names the method asked");
             _callsRead();
         });
         _then("the suspend-then-hibernate call read", () => _calls !== "", () => {

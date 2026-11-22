@@ -53,6 +53,10 @@ Flickable {
     // With sleep on, the profile's time after sleeping is not the system's delay: said, with
     // Apply (or, on NixOS, the module's option)
     readonly property bool _delayDiffers: _config.sleepAfter > 0 && HibernateRules.delayDiffers(_hibernation.delay, _hibernate.after)
+    // What the last Apply wrote (Idle.hibernateDelayWritten), and the file that wins over it
+    // when the delay read back is still another: named, and no Apply while it does
+    property int delayWritten: Idle.hibernateDelayWritten
+    readonly property string _delayOverride: HibernateRules.delayOverride(_hibernation.delay, delayWritten)
     readonly property var _monitorMap: _edited("lockscreen.monitorIdle")
     // The map comes from a profile above, or the default: its cards' choices dimmed
     readonly property bool _mapInherited: !("lockscreen.monitorIdle" in Profiles.effectiveGlobals)
@@ -544,12 +548,13 @@ Flickable {
                     spacing: 8
                     Hint {
                         objectName: "hibernateDelayLine"
-                        text: HibernateRules.delayLine(root._hibernation.delay, root._hibernation.nixos === true, seconds => Format.duration(seconds))
+                        text: HibernateRules.delayLine(root._hibernation.delay, root._hibernation.nixos ?? null, seconds => Format.duration(seconds),
+                                                       root._delayOverride)
                         Layout.fillWidth: true
                     }
                     SmallButton {
                         objectName: "hibernateApply"
-                        visible: root._hibernation.nixos === false
+                        visible: root._hibernation.nixos === false && root._delayOverride === ""
                         label: Idle.hibernateDelayApplying ? "Applying…" : "Apply"
                         kind: "save"
                         available: !Idle.hibernateDelayApplying

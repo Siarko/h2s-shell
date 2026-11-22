@@ -540,6 +540,19 @@ TestCase {
                     "The time after sleeping is a system setting (now 2 h). On NixOS it is the option programs.h2s-shell.idle.hibernateDelay.",
                     "NixOS: the option named");
         assert(page._hibernation.nixos === true, "… no Apply (/etc is generated)");
+        page.sleepSupport = facts({}, { nixos: null });
+        assertEqual(named("hibernateDelayLine").text, "The time after sleeping is a system setting (now 2 h).",
+                    "whether this is NixOS not read: no password promised, no Apply");
+        // The shell wrote 3 h; another drop-in sorting after its own still says 2 h
+        page.sleepSupport = facts({}, { delay: { state: "set", seconds: 7200, file: "/etc/systemd/sleep.conf.d/zz-tlp.conf" } });
+        page.delayWritten = 10800;
+        assertEqual(named("hibernateDelayLine").text,
+                    "The time after sleeping is a system setting (now 2 h). /etc/systemd/sleep.conf.d/zz-tlp.conf sets it after the shell's own file, so Apply cannot change it.",
+                    "a file winning over the shell's: named");
+        assertEqual(page._delayOverride, "/etc/systemd/sleep.conf.d/zz-tlp.conf", "… and no Apply while it does");
+        page.delayWritten = -1;
+        assertEqual(page._delayOverride, "", "nothing written in this run: Apply offered as before");
+        page.delayWritten = Qt.binding(() => Idle.hibernateDelayWritten);
         page.sleepSupport = facts({}, { delay: { state: "unset" } });
         assert(page._delayDiffers && /now not set: systemd's default/.test(named("hibernateDelayLine").text),
                "the system's delay not set: said, Apply offered");

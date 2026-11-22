@@ -29,8 +29,9 @@ Scope {
 
     // After each read, with its outcome (also in `support`)
     signal read(var support)
-    // After each suspend(method): whether logind took it, and gdbus's error line when not
-    signal suspended(bool ok, string error)
+    // After each suspend(method): whether logind took it, gdbus's error line when not, and
+    // the method asked
+    signal suspended(bool ok, string error, string method)
 
     property string toolDirectory: ""
     property string fileRoot: ""
@@ -158,7 +159,7 @@ Scope {
             const outcome = _timedOut ? { ok: false, error: "logind did not answer within " + root.suspendWatchdog + " ms" }
                                       : LockParseRules.suspendOutcome(_output);
             _output = "";
-            root.suspended(outcome.ok, outcome.error);
+            root.suspended(outcome.ok, outcome.error, _method);
         }
     }
 }

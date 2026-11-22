@@ -526,7 +526,8 @@ The interface modules are written against (`qs.api`), versioned on its own
   your last input)". Never with a password: where hibernation is not possible the section says
   why (the system asks for a password, no swap or only zram, Secure Boot lockdown, no resume
   device). The same rules as sleep: apps keeping the screen on hold it while unlocked, a
-  program blocking sleep pauses it. The timeline marks it across all monitors, after a break.
+  program blocking sleep pauses it; a sleep-then-hibernate the system refuses at the moment
+  becomes a plain sleep. The timeline marks it across all monitors, after a break.
 - Safe mode has a banner, under the bar and at the top of Settings → Modules: why the shell
   started without modules, the modules on when it crashed and one installed or updated in
   the last day, with "Open Modules" and "Load modules" (loads them again without a

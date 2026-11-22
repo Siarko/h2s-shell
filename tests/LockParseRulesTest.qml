@@ -159,7 +159,7 @@ TestCase {
         assertEqual(JSON.stringify(whole), JSON.stringify({
             canSuspend: "yes", canHibernate: "na", canSuspendThenHibernate: "challenge", idleAction: null,
             hibernation: { swaps: [{ name: "/dev/zram0", type: "partition", kib: 4194300, zram: true }], memoryInUse: 600, lockdown: "integrity",
-                           resume: true, delay: { state: "set", seconds: 10800 }, nixos: false }
+                           resume: true, delay: { state: "set", seconds: 10800, file: "/etc/systemd/sleep.conf" }, nixos: false }
         }), "sleepSupport: every section; sleep.conf's own [Sleep] and look-alike headers stay in it, past its header");
         assertEqual(LockParseRules.sleepSupport("[NixOS]\nyes\n").hibernation.nixos, true, "sleepSupport: NixOS");
         assertEqual(LockParseRules.sleepSupport("[Bogus]\n[NixOS]\nyes\n[Other]\nno\n").hibernation.nixos, null,
