@@ -48,12 +48,16 @@ TestCase {
                     "attended: a password being checked");
         assertEqual(LockViewRules.view(withState({ password: Object.assign({}, fresh.password, { status: "asking", question: "Code:" }) })).attended,
                     true, "attended: a question asked");
-        const passive = (message, isError) => withState({ passive: Object.assign({}, fresh.passive, {
-            fingerprint: Object.assign({}, fresh.passive.fingerprint, { status: "running", message: message, messageIsError: isError }) }) });
+        const passive = (message, isError, status) => withState({ passive: Object.assign({}, fresh.passive, {
+            fingerprint: Object.assign({}, fresh.passive.fingerprint, { status: status ?? "running", message: message, messageIsError: isError }) }) });
         assertEqual(LockViewRules.view(passive("Place your finger on the reader", false)).attended, false,
                     "attended: not for a fingerprint's every-round hint");
         assertEqual(LockViewRules.view(passive("Failed to match fingerprint", true)).attended, true,
                     "attended: a finger not recognised: somebody at the reader");
+        assertEqual(LockViewRules.view(passive("Failed to match fingerprint", true, "backoff")).attended, false,
+                    "attended: not for an error left from a round that ended (the pause before the next)");
+        assertEqual(LockViewRules.view(passive("Device error", true, "broken")).attended, false,
+                    "attended: not for a broken reader's error, shown for the whole lock");
         const effect = { type: "respondPam", method: "password", conversation: 3, text: "pw" };
         assertEqual(JSON.stringify(LockRules.describeEffect(effect)), JSON.stringify(LockViewRules.describeEffect(effect)), "LockRules.describeEffect forwards");
     }

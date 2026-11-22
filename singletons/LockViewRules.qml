@@ -45,12 +45,15 @@ Singleton {
             fieldEpoch: state.prompt.fieldEpoch,
             methods: LockStepRules.passiveMethods.map(method => _passiveView(method, state.passive[method.name])),
             // Somebody is at the lock screen: the prompt awake, a check or an unlock under way, a
-            // question asked, or a passive method's error on show (a finger not recognised:
-            // somebody touched the reader — not its "place your finger", said every round).
+            // question asked, or a passive method's error during its running round (a finger
+            // not recognised: somebody touched the reader). Not its "place your finger", said
+            // every round, and not an error left from a round that ended (backoff, broken).
             // The lock screen's screen-off waits meanwhile (IdleRules)
             attended: state.prompt.owner !== null || busy || asking
-                || LockStepRules.passiveMethods.some(method => state.passive[method.name]?.messageIsError === true
-                                                              && (state.passive[method.name]?.message ?? "") !== "")
+                || LockStepRules.passiveMethods.some(method => {
+                    const passive = state.passive[method.name];
+                    return passive?.status === "running" && passive.messageIsError === true && (passive.message ?? "") !== "";
+                })
         };
     }
 

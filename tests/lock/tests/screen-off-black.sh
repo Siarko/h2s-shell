@@ -1,9 +1,11 @@
 # The lock screen's screen-off without power control (the shell started without Hyprland's
 # instance: no backend can cut a monitor's power): after its time the lock surface goes plain
-# black instead — its notifications gone — and input brings the lock screen back. The
-# output itself stays on.
+# black instead — its notifications gone — and input brings the lock screen back (the
+# notifications once the prompt, woken by it, sleeps again: 3 s here). The output itself
+# stays on.
 
-stack_start --no-hyprland-ipc --session-bus --settings '{"lockscreen.lockedScreenOffTimeout": 5}'
+stack_start --no-hyprland-ipc --session-bus --timings '{"prompt": 3000}' \
+    --settings '{"lockscreen.lockedScreenOffTimeout": 8}'
 
 check_within 10 "the shell's notification server is on the private bus" notification_server_up
 notify "Messages" "Alice" "See you at five."
@@ -37,10 +39,10 @@ lock_by_ipc
 check_within "$GUARD" "locked" compositor_locked
 check "the lock screen not black at first" lock_black_is false
 check_within "$GUARD" "… its notification shows" card_shown
-check_timed 10 "5 s without input at the lock screen: the lock surface goes black" lock_black_is true
+check_timed 12 "8 s without input at the lock screen: the lock surface goes black" lock_black_is true
 check_within "$GUARD" "… the notification is gone from it" card_gone
 move_pointer 700 400
 move_pointer 720 410
 check_within "$GUARD" "input: the lock screen shows again" lock_black_is false
-check_within "$GUARD" "… the notification with it" card_shown
+check_within "$GUARD" "… the notification with it, once the prompt sleeps" card_shown
 check "… still locked" compositor_locked

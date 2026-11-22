@@ -165,13 +165,19 @@ Singleton {
         case "powerOn":
             // The first ask, and the first ask again (a reading showed it did not take); the
             // further ones, after a growing pause, are not logged
-            if (action.attempt === undefined)
+            if (action.restore === true)
+                _log("warning", "monitors turned off before the shell restarted, turned on again: " + action.ids.join(", "));
+            else if (action.attempt === undefined)
                 _log("info", (action.type === "powerOff" ? "screens off: " : "screens on: ") + action.ids.join(", "));
             else if (action.attempt === 2)
                 _log("warning", "monitor " + action.ids.join(", ") + " not turned " + (action.type === "powerOff" ? "off" : "on")
                      + " as asked: asking again, with a growing pause");
             for (const id of action.ids)
                 ScreenPower.setPower(id, action.type === "powerOn");
+            break;
+        case "powerGaveUp":
+            _log("warning", "monitor " + action.ids.join(", ") + " still not " + (action.on ? "on" : "off")
+                 + " after asking " + IdleRules.powerRetry.tries + " times: not asked again");
             break;
         case "lockBlack":
             _log("info", action.black ? "the lock screen goes black (a monitor not read as off)" : "the lock screen shows again");
@@ -279,9 +285,11 @@ Singleton {
     }
 
     // Monitors a previous run turned off (Config.screensOff): turned on at the first reading
-    // once the config is read — a restart or a crash while they were off left them so, and
+    // once the config is read (the rules' `restore`: pending, asked again, remembered until a
+    // reading shows them on) — a restart or a crash while they were off left them so, and
     // Hyprland turns nothing on at input by default. Until then nothing is written over the
-    // list; monitors another program turned off are never in it
+    // list; monitors another program turned off are never in it. Config saves a second after
+    // a change (its debounce): a crash within that second keeps the list before it
     property bool _screensRestored: false
     readonly property bool _configUsable: Config.ready && !Config.loadFailed
 
@@ -289,13 +297,9 @@ Singleton {
         if (_screensRestored || !_configUsable || !ScreenPower.canPowerOff || !ScreenPower.monitorsRead)
             return;
         _screensRestored = true;
-        const ids = IdleRules.restoreOnStart(Array.from(Config.screensOff ?? []), ScreenPower.monitors)
-            .filter(id => _state.shown[id] !== "off");
-        if (ids.length > 0) {
-            _log("warning", "monitors turned off before the shell restarted, turned on again: " + ids.join(", "));
-            for (const id of ids)
-                ScreenPower.setPower(id, true);
-        }
+        const ids = IdleRules.restoreOnStart(Array.from(Config.screensOff ?? []), ScreenPower.monitors);
+        if (ids.length > 0)
+            _dispatch({ type: "restore", ids: ids });
         _remember();
     }
 
