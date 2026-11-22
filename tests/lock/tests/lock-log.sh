@@ -57,12 +57,21 @@ position=0
 check_in_order \
     'event {"type":"lockRequested","source":"ipc"}' \
     'effect {"type":"lockCompositor"' \
-    'lock marker: locked ' \
     'locking (ipc), session 1' \
     'effect {"type":"detectMethods"' \
     'the lock screen is up'
 lock_up=$position
 first_submit=$(first_line_after "$lock_up" 'event {"type":"submit","text":"<redacted>"')
+# Under Hyprland the compositor is asked once `hyprctl -j locked` has answered (another
+# program's lock would get the shell ended): the marker, written just before the ask, comes
+# after the lock's step, and before the compositor's confirmation
+marker_line=$(first_line_after "$lock_up" 'lock marker: locked ')
+confirmed_line=$(first_line_after "$lock_up" 'event {"type":"compositorLocked"')
+if [ -n "$marker_line" ] && [ -n "$confirmed_line" ] && [ "$marker_line" -lt "$confirmed_line" ]; then
+    pass "the marker's locked after the lock's step, before the compositor's confirmation (line $marker_line)"
+else
+    fail "the marker's locked after the lock's step, before the compositor's confirmation (line ${marker_line:-none}, confirmed at line ${confirmed_line:-none})"
+fi
 for step in 'event {"type":"compositorLocked"' '"type":"methodsDetected"'; do
     line=$(first_line_after "$lock_up" "$step")
     if [ -n "$line" ] && [ -n "$first_submit" ] && [ "$line" -lt "$first_submit" ]; then
