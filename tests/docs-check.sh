@@ -4,8 +4,8 @@
 #
 #   notes-link     a link into notes/ (working notes are never linked from the documents)
 #   broken-link    a relative link to a file that is not there
-#   environment    a developer's environment: a home path, a machine model, "the owner's
-#                  machine" (the pattern list below)
+#   environment    a developer's environment: a home path, a checkout folder under ~, a
+#                  machine model, "the owner's machine" (the pattern list below)
 #   systems        a "NixOS" heading without an "Arch" heading beside it (the same level,
 #                  under the same parent), or the other way round
 #   english        text that is not English (Polish letters and a few common Polish words)
@@ -48,6 +48,7 @@ fi
 # What names a developer's environment, as extended regular expressions (case ignored)
 environment_patterns=(
     '/home/[A-Za-z0-9_.-]+'
+    '~/(src|Projects|wt)/'
     '/Users/[A-Za-z0-9_.-]+'
     '[A-Za-z]:\\Users\\'
     'Framework (Laptop )?1[0-9]'

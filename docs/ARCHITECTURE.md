@@ -2020,7 +2020,8 @@ The destination comes from `H2S_REMOTE` (or `--host`) and is never written to a 
 or there; ssh runs with `BatchMode=yes`, so it never asks for a password. `<ref>` defaults
 to `HEAD`, which must then have no uncommitted changes; the command defaults to
 `tests/run-all.sh --keep-going`. The remote is asked which commits its repository has
-(`H2S_REMOTE_REPO`, or `--repo`; default `~/Projects/h2s-shell/sources/h2s-shell`), and what it lacks goes over as
+(a default checkout path on the remote, named in the script's header; `H2S_REMOTE_REPO` or
+`--repo` names another), and what it lacks goes over as
 a `git bundle` — the whole history when they share none. It is fetched into that
 repository's objects under a ref of its own, and the run gets a detached working tree of
 its own in `~/.cache/h2s-shell-tests/remote-run/<id>/` on the remote, beside its log, so

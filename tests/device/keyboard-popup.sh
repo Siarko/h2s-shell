@@ -5,7 +5,7 @@
 # closes it — on an empty workspace. See tests/device/README.md.
 #
 #   tests/device/keyboard-popup.sh            the shell started by `h2s-shell`
-#   H2S_SHELL_DIR=~/src/h2s-shell tests/device/keyboard-popup.sh
+#   H2S_SHELL_DIR=<checkout> tests/device/keyboard-popup.sh
 set -u
 here=$(cd "$(dirname "$0")" && pwd)
 export XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}

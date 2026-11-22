@@ -104,7 +104,8 @@ check "a link to a missing file: named broken-link" says "^docs/guide.md:21: bro
 
 tree environment
 printf '%s\n' "Run it from /home/alice/src/shell." "Seen on the Framework 12 only." \
-    "As on the owner's machine." "Or C:\\Users\\bob\\shell." >> "$work/environment/docs/dev/architecture.md"
+    "As on the owner's machine." "Or C:\\Users\\bob\\shell." "Clone it into ~/src/shell." \
+    >> "$work/environment/docs/dev/architecture.md"
 printf '%s\n' '```' 'cd /Users/carol/shell' '```' >> "$work/environment/README.md"
 run environment
 check "a developer's environment: status 1" status_is 1
@@ -112,8 +113,9 @@ check "a developer's environment: a home path" says "^docs/dev/architecture.md:2
 check "a developer's environment: a machine model" says "^docs/dev/architecture.md:3: environment: Seen on the Framework 12"
 check "a developer's environment: the owner's machine" says "^docs/dev/architecture.md:4: environment: As on the owner's machine"
 check "a developer's environment: a Windows home" says "^docs/dev/architecture.md:5: environment: "
+check "a developer's environment: a checkout folder under ~" says "^docs/dev/architecture.md:6: environment: Clone it into ~/src/shell"
 check "a developer's environment: in a code block too" says "^README.md:16: environment: cd /Users/carol"
-check "a developer's environment: those five only" findings_are 5
+check "a developer's environment: those six only" findings_are 6
 
 tree nixos-only
 cat >> "$work/nixos-only/docs/guide.md" << 'EOF'

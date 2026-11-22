@@ -184,6 +184,6 @@ The shell runs from a git checkout and reloads itself when a file changes; only 
 helper program (`helper/`, C++/Qt) is compiled, by the package on NixOS and by `install.sh`
 (and the launcher, after an update) on Arch. `tests/run-all.sh` runs every test before a commit (`--quick` leaves out
 the lock screen's end-to-end tests); `tests/run-unit.sh` runs the unit suites. On NixOS,
-run a checkout with the package's programs: `H2S_SHELL_DIR=~/src/h2s-shell h2s-shell`. How the shell is
+run a checkout with the package's programs: `H2S_SHELL_DIR=<checkout> h2s-shell`. How the shell is
 put together: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md); changes:
 [CHANGELOG.md](CHANGELOG.md).
