@@ -11,8 +11,17 @@
 # The built-in modules (builtin-modules/ in the repository) go to $out/share/h2s-shell-builtin,
 # beside the shell's tree rather than inside it, and the command hands that directory to the
 # launcher as H2S_SHELL_BUILTIN_MODULES — always the package's own, whichever tree it runs.
+#
+# The helper (helper/, a C++/Qt program) is a derivation of its own, `passthru.helper`,
+# installed to its libexec/h2s-shell/; the command hands that directory to the launcher as
+# H2S_SHELL_LIBEXEC, where launch.sh finds it (unless a checkout run through H2S_SHELL_DIR
+# has built its own). Its Qt is the qtbase of the nixpkgs Quickshell is built with, so one
+# Qt is loaded per machine; no QPA plugin is loaded, so it is not wrapped.
 { lib
+, stdenv
 , stdenvNoCC
+, cmake
+, qt6
 , runtimeShell
 , quickshell
 , version
@@ -54,6 +63,24 @@ let
     findutils
     util-linux # flock: one supervisor per session (launch.sh); setsid: the detached restart
   ];
+
+  helper = stdenv.mkDerivation {
+    pname = "h2s-helper";
+    # The shell's number, without the revision: `h2s-helper --version` prints it
+    version = builtins.head (lib.splitString "+" version);
+    src = lib.fileset.toSource {
+      root = ../helper;
+      fileset = ../helper;
+    };
+    nativeBuildInputs = [ cmake ];
+    buildInputs = [ qt6.qtbase ];
+    dontWrapQtApps = true;
+    cmakeFlags = [ "-DH2S_VERSION=${builtins.head (lib.splitString "+" version)}" ];
+    meta = {
+      description = "The h2s-shell's helper: what the shell cannot do from QML";
+      platforms = lib.platforms.linux;
+    };
+  };
 in
 stdenvNoCC.mkDerivation {
   pname = "h2s-shell";
@@ -70,6 +97,8 @@ stdenvNoCC.mkDerivation {
       ../flake.lock
       ../.github
       ../.devcontainer
+      # Built on its own (helper, above), installed into libexec
+      ../helper
       # The lock test bed: runs against a checkout, with tools of its own
       ../tests/lock
       # A local `nix build` leaves this link; building from a checkout would copy it in
@@ -92,11 +121,14 @@ stdenvNoCC.mkDerivation {
     #!${runtimeShell}
     export PATH="${lib.makeBinPath runtimePrograms}:\$PATH"
     export H2S_SHELL_BUILTIN_MODULES="$out/share/h2s-shell-builtin"
+    export H2S_SHELL_LIBEXEC="${helper}/libexec/h2s-shell"
     exec "\''${H2S_SHELL_DIR:-$out/share/h2s-shell}/scripts/launch.sh" "\$@"
     EOF
     chmod +x $out/bin/h2s-shell
     runHook postInstall
   '';
+
+  passthru = { inherit helper; };
 
   meta = {
     description = "A desktop shell for Hyprland, built with Quickshell";

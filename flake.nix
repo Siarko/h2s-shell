@@ -26,6 +26,8 @@
           quickshell = quickshell.packages.${system}.default;
           version = versionNumber + (if self ? shortRev then "+" + self.shortRev else "");
         };
+        # The helper alone (tests/run-helper.sh builds it with nix)
+        h2s-helper = h2s-shell.helper;
         default = h2s-shell;
       });
 

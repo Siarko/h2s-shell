@@ -96,6 +96,10 @@ tests/affected-map.txt self:tests/affected-selftest.sh
 # ---- The shell's entry, install and packaging ------------------------------------------
 shell.qml unit:all lock:all
 install.sh self:tests/install-test.sh
+helper/* self:tests/run-helper.sh
+scripts/build-helper.sh self:tests/run-helper.sh
+tests/run-helper.sh self:tests/run-helper.sh
+tests/fixtures/helper/* unit:HelperTest
 flake.nix self:tests/run-system.sh
 flake.lock self:tests/run-system.sh unit:QuickshellPinTest
 nix/* self:tests/run-system.sh
@@ -108,7 +112,7 @@ singletons/DictationMusicPause.qml lock:harness
 singletons/hardware/HardwareSource.qml unit:HardwareTest
 
 # ---- Lock scenarios that are not about the lock screen itself --------------------------
-scripts/launch.sh self:tests/launcher-selftest.sh lock:restart-* lock:supervisor lock:modules-discovery lock:modules-launcher
+scripts/launch.sh self:tests/launcher-selftest.sh self:tests/run-helper.sh lock:restart-* lock:supervisor lock:modules-discovery lock:modules-launcher
 singletons/Lockscreen.qml lock:restart-*
 singletons/LockRecoveryRules.qml lock:restart-*
 scripts/lock-auth-methods.sh lock:methods-*

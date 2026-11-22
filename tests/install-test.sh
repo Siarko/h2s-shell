@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Runs install.sh without letting it change the machine, and checks what it would have
 # done: which packages it asks for and how, where the shell goes, where its built-in modules
-# are copied (and `--update`, which copies them again), that nothing runs as root but what it
-# hands to sudo, that a second run changes nothing, and what it does when a step fails. The same on NixOS and on Arch: install.sh is for Arch, the test is not.
+# are copied (and `--update`, which copies them again), that it builds the helper as the user
+# (and goes on when that fails), that nothing runs as root but what it hands to sudo, that a second run changes nothing, and what it does when a step fails. The same on NixOS and on Arch: install.sh is for Arch, the test is not.
 #
 # How install.sh is kept from the machine:
 #   - an empty environment (env -i) with a private HOME and a PATH of one directory, made
@@ -65,7 +65,8 @@ MARK="# a stand-in written by tests/install-test.sh"
 # make_bin <directory>: the private PATH of one run, and its control directory beside it
 # (<directory>/../control): `log` (one line per stand-in call), and files a case puts
 # there: sudo-status, git-clone-fails, git-remote-fails, git-clone-no-builtin (a clone
-# without builtin-modules/), fonts (what fc-list prints).
+# without builtin-modules/), git-clone-no-helper (a clone without scripts/build-helper.sh),
+# build-fails (the clone's stand-in build-helper.sh fails), fonts (what fc-list prints).
 make_bin() {
     local bin=$1 control name
     control=$(dirname "$bin")/control
@@ -102,6 +103,19 @@ case "$*" in
             mkdir -p "$3/builtin-modules/sample"
             echo '{ "off": [] }' > "$3/builtin-modules/builtin.json"
             echo '{ "id": "sample" }' > "$3/builtin-modules/sample/module.json"
+        fi
+        # The helper's build script, a stand-in that notes its call (install.sh runs it with
+        # bash) and fails when told: the real one is tests/run-helper.sh's
+        if [ ! -e "$control/git-clone-no-helper" ]; then
+            mkdir -p "$3/scripts"
+            {
+                echo "control='$control'"
+                echo 'privileges=unknown'
+                echo 'while read -r key value; do [ "$key" = NoNewPrivs: ] && privileges=$value; done < /proc/self/status'
+                echo 'echo "build-helper no-new-privs=$privileges: $*" >> "$control/log"'
+                echo '[ ! -e "$control/build-fails" ] || { echo "a compiler error" >&2; exit 1; }'
+                echo 'echo "$HOME/.cache/h2s-shell/helper/0123456789abcdef/h2s-helper"'
+            } > "$3/scripts/build-helper.sh"
         fi
         ;;
     *) exit 97 ;;
@@ -286,8 +300,14 @@ check "first run: the checkout's built-in modules are copied to ~/.local/share/h
     test "$(cat "$builtin/builtin.json" "$builtin/sample/module.json" 2> /dev/null)" = "$(printf '%s\n' '{ "off": [] }' '{ "id": "sample" }')"
 check "first run: nothing else is put in the home directory" \
     test "$(home_tree)" = "$(printf '%s\n' . ./.config ./.config/quickshell ./.config/quickshell/default ./.config/quickshell/default/.standin-origin ./.config/quickshell/default/shell.qml \
+        ./.config/quickshell/default/scripts ./.config/quickshell/default/scripts/build-helper.sh \
         ./.config/quickshell/default/builtin-modules ./.config/quickshell/default/builtin-modules/builtin.json ./.config/quickshell/default/builtin-modules/sample ./.config/quickshell/default/builtin-modules/sample/module.json \
         ./.local ./.local/share ./.local/share/h2s-shell ./.local/share/h2s-shell/builtin ./.local/share/h2s-shell/builtin/builtin.json ./.local/share/h2s-shell/builtin/sample ./.local/share/h2s-shell/builtin/sample/module.json | LC_ALL=C sort)"
+check "first run: the helper is built once, by the checkout's scripts/build-helper.sh, not through sudo (no new privileges)" \
+    test "$(log_count '^build-helper ')" = 1 -a "$(log_count '^build-helper no-new-privs=1: $')" = 1
+check "first run: … after the clone" test "$(grep -n '^build-helper ' "$CONTROL/log" | cut -d: -f1)" -gt "$(grep -n '^git: clone' "$CONTROL/log" | cut -d: -f1)"
+check "first run: the helper's packages are asked for (cmake, a compiler, Qt's headers)" \
+    test -n "$(printf '%s\n' "${packages[@]}" | grep -x cmake)" -a -n "$(printf '%s\n' "${packages[@]}" | grep -x base-devel)" -a -n "$(printf '%s\n' "${packages[@]}" | grep -x qt6-base)"
 check "first run: it ends by saying what is left to do" says "==> Done. Left for you:"
 check "first run: the autostart line names the installed launch.sh" says "hl.exec_cmd(\"$target/scripts/launch.sh\")"
 check "first run: with a Nerd Font installed, no warning about one" silent_on "no Nerd Font found"
@@ -314,6 +334,7 @@ check "--update: the built-in modules are the checkout's now" \
     test "$(cd "$builtin" && find . | LC_ALL=C sort | tr '\n' ' ')" = ". ./builtin.json ./other ./other/module.json "
 check "--update: no sudo, no pacman" none_logged '^sudo \|^pacman:'
 check "--update: no clone, no pull" none_logged '^git: clone\|pull'
+check "--update: the helper is built again" test "$(log_count '^build-helper ')" = 1
 nothing_beside() { ! compgen -G "$builtin.*" > /dev/null; }
 check "--update: the built-in directory is a directory" test -d "$builtin" -a ! -L "$builtin"
 check "--update: no copy or old one left beside it" nothing_beside
@@ -321,7 +342,7 @@ check "--update: no copy or old one left beside it" nothing_beside
 run_install --update
 check "--update: a file beside it that this run did not make is not deleted" test -e "$builtin.new.kept-by-someone"
 rm "$builtin.new.kept-by-someone"
-check "--update: says to restart the shell" says "Restart the shell to load the built-in modules again"
+check "--update: says to restart the shell" says "Restart the shell to load the built-in modules and the helper again"
 
 for arguments in "--upgrade" "--update --update"; do
     start_case "wrong-argument-${arguments// /}"
@@ -417,6 +438,22 @@ check "the clone fails: a non-zero exit" status_nonzero
 check "the clone fails: it does not say it is done" silent_on "==> Done"
 check "the clone fails: no half-made config is left" test ! -e "$HOME_DIR/.config/quickshell/default"
 check "the clone fails: no built-in modules are copied" test ! -e "$HOME_DIR/.local"
+
+# ---- The helper's build -------------------------------------------------------------------
+start_case build-fails
+: > "$CONTROL/build-fails"
+run_install
+check "the helper does not build: exit 0 (the shell runs without it)" status_is 0
+check "the helper does not build: a warning, and how to build it again" says "Warning: the helper did not build"
+check "… naming the script" says "scripts/build-helper.sh"
+check "the helper does not build: it still ends by saying what is left to do" says "==> Done. Left for you:"
+
+start_case no-helper
+: > "$CONTROL/git-clone-no-helper"
+run_install
+check "a checkout without the helper (an older one): exit 0" status_is 0
+check "a checkout without the helper: says so" says "This checkout has no helper to build."
+check "a checkout without the helper: nothing is built" none_logged '^build-helper '
 
 # ---- The font warning --------------------------------------------------------------------
 start_case no-font

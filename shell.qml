@@ -109,6 +109,8 @@ QtObject {
     property var _bluetoothPower: BluetoothPower
     // Counts use per app on battery, popup open or not (the battery popup shows it)
     property var _energyUsage: EnergyUsage
+    // Asks the helper program (H2S_SHELL_HELPER) its version once, so its state is known
+    property var _helper: Helper
 
     // One for the whole shell: a window per screen meant two independent windows, both
     // opened by Shell.openSettings() and both announcing every save

@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# A stand-in for h2s-helper --version (tests/HelperTest.qml): one that fails
+echo "something broke" >&2
+exit 3

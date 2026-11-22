@@ -1,8 +1,9 @@
 # shellcheck shell=bash
 # The flake's package (nix/package.nix): it builds, holds the shell without the parts left
 # out and its built-in modules beside it, and its h2s-shell command runs the checkout
-# H2S_SHELL_DIR names with every program the shell calls on PATH and the package's built-in
-# modules' directory. Builds into the store, links nothing, writes no lock file.
+# H2S_SHELL_DIR names with every program the shell calls on PATH, the package's built-in
+# modules' directory and its helper's (H2S_SHELL_LIBEXEC, holding h2s-helper, built from
+# helper/ and answering --version with the shell's version). Builds into the store, links nothing, writes no lock file.
 need nix "builds the flake's package"
 need diff "compares the package's built-in modules with the checkout's"
 
@@ -19,7 +20,7 @@ check "the package builds" test -n "$out" -a -d "$out"
 number=$(sed -n 's/.*readonly property string number: "\([^"]*\)".*/\1/p' "$REPO/singletons/Version.qml")
 check "its version is singletons/Version.qml's ($number)" test -n "$number" -a "${out#*-h2s-shell-}" = "$number"
 check "it holds the shell" test -f "$out/share/h2s-shell/shell.qml"
-for left_out in tests/lock notes docs; do
+for left_out in tests/lock notes docs helper; do
     check "$left_out is not in it" test ! -e "$out/share/h2s-shell/$left_out"
 done
 check "it has the h2s-shell command" test -x "$out/bin/h2s-shell"
@@ -36,6 +37,7 @@ mkdir -p "$work/checkout/scripts" "$work/home"
     echo '#!/bin/sh'
     echo 'echo "arguments: $*"'
     echo 'echo "built-in modules: ${H2S_SHELL_BUILTIN_MODULES-unset}"'
+    echo 'echo "libexec: ${H2S_SHELL_LIBEXEC-unset}"'
     for program in "${programs[@]}"; do
         echo "command -v $program > /dev/null && echo 'found: $program'"
     done
@@ -50,3 +52,13 @@ check "… handing it the package's built-in modules (whatever the caller had se
 for program in "${programs[@]}"; do
     check "$program is on the launcher's PATH" answered "found: $program"
 done
+
+# The helper: the launcher names its directory, and the program there answers
+libexec=$(sed -n 's/^libexec: //p' <<< "$answer")
+check "the launcher hands the shell the helper's directory (H2S_SHELL_LIBEXEC), in the store" \
+    test -n "$libexec" -a "${libexec#/nix/store/}" != "$libexec"
+check "… holding h2s-helper, a program" test -x "$libexec/h2s-helper"
+protocol=$(sed -n 's/.*readonly property int protocol: \([0-9]*\).*/\1/p' "$REPO/singletons/HelperRules.qml")
+helper_answer=$(timeout 10 env -i "$libexec/h2s-helper" --version 2> /dev/null)
+check "… which answers --version with the shell's version ($number) and the protocol HelperRules speaks ($protocol)" \
+    test "$helper_answer" = "{\"protocol\":$protocol,\"version\":\"$number\"}"

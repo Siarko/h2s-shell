@@ -6,10 +6,12 @@ a user's point of view see [FEATURES.md](FEATURES.md).
 ## Runtime model
 
 This is not a compiled application. [Quickshell](https://quickshell.org)
-interprets the QML directly, so there is no build step:
+interprets the QML directly, so the QML needs no build. One small helper program is
+compiled ([The helper](#the-helper)):
 
 ```
 quickshell                 # reads shell.qml from the current directory
+scripts/build-helper.sh    # builds the helper (scripts/launch.sh does it when needed)
 tests/run-unit.sh          # runs the unit suites (tests.qml), prints PASS/FAIL, exits
 tests/run-unit.sh FormatTest LockRulesTest   # only the named suites
 ```
@@ -56,6 +58,56 @@ Two consequences worth knowing:
   `singletons/Time.qml` references `Config` with no import line. Several files still
   import their own directory explicitly; that is redundant but harmless.
 
+### The helper
+
+`helper/` is a CMake project: `h2s-helper`, C++17 on Qt 6 Core and DBus only, one program
+with subcommands, for what Quickshell cannot do from QML (the screensaver D-Bus interface
+is the first planned). It is I/O only — it reports and acts on request; what the shell
+does with a report is decided in `*Rules.qml`. The shell starts it as a child process and
+talks to it in JSON lines, one object per line each way, on its standard input and output
+(`Process` and `SplitParser`, as for any command); it ends when its standard input closes,
+so it never outlives the shell, and nothing else can talk to it. `h2s-helper --version`
+prints `{"version":"<the shell's version>","protocol":<n>}`; the protocol number changes
+whenever a message changes meaning, and `singletons/HelperRules.qml` holds the number the
+shell speaks: a helper with another is out of date, its features off. `h2s-helper ping`
+answers `{"ping":…}` with `{"event":"pong","ping":…}` after a `{"event":"ready",…}` line;
+the tests use it.
+
+`scripts/launch.sh` finds the helper before starting the shell and hands its path to the
+shell as `H2S_SHELL_HELPER` (empty: none). In this order: `H2S_HELPER`, a path (set and
+empty: no helper at all); the checkout's own build, rebuilt when its source changed
+(`scripts/build-helper.sh --if-changed`) — where the installation brings no helper, or the
+checkout has built one; the installation's, `$H2S_SHELL_LIBEXEC/h2s-helper`. A build is
+bounded in time and not tried while the session is locked by a shell that died. No helper,
+or a build that failed: the shell runs without it, and the launcher's log says so once per
+change of that outcome. `singletons/Helper.qml` runs `--version` once at start and keeps
+the state (`missing`, `ready`, `outdated`, `failed`); a feature that uses the helper
+checks `Helper.available`.
+
+`scripts/build-helper.sh` builds the checkout's `helper/` into
+`${XDG_CACHE_HOME:-~/.cache}/h2s-shell/helper/<a hash of the checkout's path>/` (or
+`--out <dir>`), never into the tree: it refuses a directory inside the checkout, a link, or
+one holding files it did not make. The binary is renamed into place, so a running helper
+keeps running; a stamp of the source (`helper/`, the script, the shell's version) beside it
+says whether `--if-changed` has anything to do, and a source that failed to build is not
+tried again until it changes or the script is run without `--if-changed`. It needs cmake,
+a C++ compiler and Qt 6's development files (Core, DBus).
+
+#### NixOS
+
+`nix/package.nix` builds the helper as a derivation of its own (the flake's `h2s-helper`,
+with the qtbase of the nixpkgs Quickshell is built with) into its
+`libexec/h2s-shell/`; the package's `h2s-shell` command sets `H2S_SHELL_LIBEXEC` to it. The
+shell's own files leave `helper/` out. A checkout run through `H2S_SHELL_DIR` uses the
+package's helper unless it has built its own.
+
+#### Arch
+
+`install.sh` installs `cmake`, `base-devel` (the compiler) and `qt6-base` with the other
+packages, and runs `scripts/build-helper.sh` as the user after the clone and at
+`--update`; a build that fails is a warning, not the install's failure. After an update the
+launcher rebuilds the helper at the next start.
+
 Singletons are created lazily, on first reference. A singleton that nothing touches
 never runs its timers — which is why hardware polling only costs anything when the
 hardware widget or panel is actually in use.
@@ -72,6 +124,7 @@ shell.qml                 process root — one Bar, one Hud, one ScreensaverSurf
 │   └── hud/
 ├── screensaver/          screensaver surface + the lock surface and prompt (views of Lockscreen)
 ├── pam/                  the lock screen's own PAM configs, one per way of unlocking
+├── helper/               the helper program (C++/Qt, CMake): what QML cannot do; built, not interpreted
 ├── components/           reusable building blocks (BarWidget, Logger, sliders, cards)
 └── singletons/           all shared state and all I/O
     ├── network/          nmcli/sysfs-backed network state
@@ -1755,7 +1808,20 @@ the packages asked for and how, where the shell is cloned, where its built-in mo
 copied (and that `--update` copies them again, alone: no packages, no `sudo`), that nothing
 else runs as root, that a second run changes nothing, another Quickshell config and a link
 where the built-in modules go left alone, and what happens when `pacman`, the clone or
-reading the config's origin fails. It runs on both systems.
+reading the config's origin fails, and that the helper is built as the user after the
+clone and at `--update` (by a stand-in `scripts/build-helper.sh` in the stand-in clone), a
+build that fails being a warning only. It runs on both systems.
+
+`tests/run-helper.sh` builds the helper into a temporary directory and runs it: `--version`
+(the shell's version and the protocol `HelperRules` speaks), a wrong subcommand, and a
+`ping` conversation driven as the shell drives it (a round trip, what is not a JSON
+object, a line too long, its standard input closed: it ends). Then
+`scripts/build-helper.sh` in a copy of the tree with a stand-in `cmake` (the directories it
+refuses, a build, `--if-changed` with the source unchanged and changed, a failed build),
+and `scripts/launch.sh --helper` with a stand-in build script (each place the helper is
+looked for, a failed build, a locked session, the log line once per outcome). The shell's
+side, `HelperRules` and the `--version` reading, is the unit suite `HelperTest`, on
+stand-in programs.
 
 ### The test tree
 
@@ -1907,6 +1973,11 @@ Versions are printed, not checked. A missing tool is a set-up error: status 2, e
 missing tool named with its use, nothing run. `tests/resolve-selftest.sh` checks the lookup
 against stand-in programs; it needs neither `nix` nor labwc.
 
+`tests/run-helper.sh` makes the same choice for the helper's build: with `nix`, the flake's
+`h2s-helper` package, with nix's own cmake, compiler and Qt; from the system, `cmake`, a
+C++ compiler and Qt 6's development files on the machine (a missing `cmake` is a set-up
+error, status 2).
+
 The deploy check (`tests/device/deploy-check.sh`) and its self-test take only a `python3`
 (for the shell's JSON answers) from the same source: the pinned set's where there is `nix`,
 else the one on `PATH`; none is a set-up error, status 2.
@@ -1942,7 +2013,8 @@ are the ones beside the libpam Quickshell links, on both systems.
 #### NixOS
 
 `nix` builds the pinned tools, for the unit suites, the lock test bed and the deploy check's
-`python3` alike (there is no `python3` on `PATH` to fall back on). The
+`python3` alike (there is no `python3` on `PATH` to fall back on), and the helper's package
+for `tests/run-helper.sh`. The
 launcher is the package's `h2s-shell`, so the tests run the Quickshell the installed shell
 runs.
 
@@ -1966,6 +2038,9 @@ does not install them. The packages, each with what the tests use it for
 | `dbus`, `glib2` | `dbus-daemon`, `gdbus`: a private session bus for the notification tests |
 | `python`, `python-pywayland` | the virtual keyboard and pointer, and the scanner their bindings are made with; `python` also reads the shell's answers in the deploy check |
 | `pkgconf`, `wayland`, `wayland-protocols` | finding the protocol files those bindings are made from |
+
+`tests/run-helper.sh` builds the helper with `cmake`, `base-devel` (the compiler) and
+`qt6-base`, which `install.sh` installs.
 
 The first four are enough for everything but the lock test bed. The bed takes the first
 `python3` on `PATH`; it has to be one that imports pywayland. There is no `h2s-shell` command, so the unit and module suites run

@@ -372,11 +372,14 @@ EOF
     # tests of dead keys and Compose sequences must not depend on the caller's. No input
     # method module is asked for: Qt picks its own, as in a session without one (both set in
     # the isolation block at the top).
+    # No helper (H2S_HELPER set and empty): the launcher would otherwise build the copy's at
+    # each start; tests/run-helper.sh is where the helper is tested.
     LAUNCHER_ENV=("${shell_env[@]}" QT_LOGGING_RULES="${LOCKTEST_QT_LOGGING:-}" DBUS_SESSION_BUS_ADDRESS="$session_bus_address"
         H2S_LOCK_TOOLS="$tools" XDG_SESSION_ID="$session_id" H2S_LOCK_SYSTEM_PAM_DIR="$WORK/system-pam"
         H2S_LOCK_TEST_RELOAD="$reload_seam" H2S_SHELL_DIR="$LOCKTEST_SHELL" H2S_LOCK_AUTH_METHODS="$WORK/pam/methods.sh"
         H2S_LOCK_LEDS_DIR="$WORK/leds" H2S_LOCK_TEST_TIMINGS="$timings" QT_QPA_PLATFORM=wayland
-        H2S_LAUNCHER_TEST_TIMINGS="$launcher_timings" H2S_SHELL_MODULE_PATH="$modules" H2S_SHELL_MODULE_DATA_DIRS="$data_dirs")
+        H2S_LAUNCHER_TEST_TIMINGS="$launcher_timings" H2S_SHELL_MODULE_PATH="$modules" H2S_SHELL_MODULE_DATA_DIRS="$data_dirs"
+        H2S_HELPER="")
     [ -z "$shell_path" ] || LAUNCHER_ENV+=(PATH="$shell_path:$PATH")
     [ ${#extra_env[@]} -eq 0 ] || LAUNCHER_ENV+=("${extra_env[@]}")
     start_launcher

@@ -629,6 +629,7 @@ Beyond Quickshell and Qt 6, the shell shells out to:
 | `cava` | the music visualiser (optional — there is an ambient fallback) |
 | `vipsthumbnail` (libvips) | wallpapers resized to each screen once, kept in `~/.cache/h2s_shell/wallpapers` (optional — without it the images themselves load, slower) |
 | `python3` | the Google OAuth helper, `scripts/google_auth.py` |
+| `h2s-helper` (the shell's own, `helper/`) | what Quickshell cannot do from QML; nothing uses it yet. Built from source: on NixOS by the package; on Arch by `install.sh` and the launcher, with `cmake`, `base-devel` and `qt6-base` (optional — without it the shell runs, the launcher's log says so) |
 | `pttd` / `ptt` | dictation (optional) |
 | sysfs | CPU, RAM, disk, temperatures, GPU, network throughput |
 

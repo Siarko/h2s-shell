@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# A stand-in for h2s-helper --version (tests/HelperTest.qml): text in the version, long and with markup
+[ "$1" = --version ] || exit 2
+long=$(printf 'v%.0s' {1..100})
+printf '{"version":"<b>%s</b>\\tx","protocol":1}\n' "$long"

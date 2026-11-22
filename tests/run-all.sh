@@ -18,6 +18,8 @@
 #   tests/run-all-selftest.sh                           this runner's own verdict
 #   tests/run-system-selftest.sh                        the system runner's own verdict
 #   tests/install-test.sh                               install.sh under stand-ins
+#   tests/run-helper.sh                                 the helper (helper/), built and run;
+#                                                       its build and launch.sh's look-up
 #   tests/run-unit.sh                                   the unit suites
 #   tests/run-modules.sh tests/fixtures/modules/good tests/fixtures/modules/legacy-elevate
 #                                                       modules' suites, on the fixtures
@@ -86,6 +88,7 @@ parts=(
     "this runner's self-test|tests/run-all-selftest.sh"
     "system runner self-test|tests/run-system-selftest.sh"
     "install.sh under stand-ins|tests/install-test.sh"
+    "helper|tests/run-helper.sh"
     "unit suites|tests/run-unit.sh"
     "module fixture suites|tests/run-modules.sh tests/fixtures/modules/good tests/fixtures/modules/legacy-elevate"
     "privileged runs fixture|tests/run-modules.sh tests/fixtures/modules/privileged tests/fixtures/modules/privileged-undeclared"

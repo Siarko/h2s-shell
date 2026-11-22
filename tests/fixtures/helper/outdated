@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# A stand-in for h2s-helper --version (tests/HelperTest.qml): a helper of another protocol
+[ "$1" = --version ] || exit 2
+echo '{"version":"1.9.0","protocol":0}'

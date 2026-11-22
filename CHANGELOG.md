@@ -458,6 +458,7 @@ The interface modules are written against (`qs.api`), versioned on its own
   file inside the module's directory (≤ 1 MiB).
 
 ### Added
+- A compiled helper (`helper/`, C++/Qt), built by the package or `install.sh` (now `cmake base-devel qt6-base`).
 - Apps that keep the screen on through logind (`systemd-inhibit --what=idle`, video
   players) hold off the screensaver, screen-off and the idle lock while unlocked.
 - Screens off: Settings → Lockscreen → "Turn screens off" (after a time from your last

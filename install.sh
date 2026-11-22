@@ -8,13 +8,19 @@
 # or, from a checkout: ./install.sh
 #
 # After `git pull` in the checkout, `install.sh --update` copies its built-in modules again
-# (no packages, no sudo).
+# and builds the helper again (no packages, no sudo).
 #
 # The built-in modules (the checkout's builtin-modules/) are copied to
 # ~/.local/share/h2s-shell/builtin, where scripts/launch.sh finds them: a directory the
 # shell's install and update write, replaced as a whole each time, never by hand or by
 # Settings. Outside the checkout: the built-in root is found from the shell's installation,
 # the same place on every Arch install.
+#
+# The helper (the checkout's helper/, a small C++/Qt program for what the shell cannot do
+# from QML) is built by scripts/build-helper.sh, as you, into ~/.cache/h2s-shell/helper —
+# with cmake, a C++ compiler (base-devel) and Qt 6's development files (qt6-base). The
+# shell's launcher rebuilds it at start when an update changed its source; a build that
+# fails leaves the shell running without it.
 #
 # On NixOS use the flake instead (see the README).
 
@@ -38,6 +44,7 @@ packages=(
     git
     xdg-utils             # opens the browser for the Google sign-in
     libvips               # vipsthumbnail: wallpapers resized to the screen, kept in ~/.cache
+    cmake base-devel qt6-base # the helper: cmake, a C++ compiler, Qt's headers
     ttf-jetbrains-mono-nerd
 )
 
@@ -72,6 +79,20 @@ copy_builtin() {
     fi
 }
 
+# The helper, built from the checkout as this user (never through sudo). A failed build is
+# not the install's failure: the shell runs without the helper, and says so.
+build_helper() {
+    echo "==> The helper"
+    if [ ! -f "$target/scripts/build-helper.sh" ]; then
+        echo "This checkout has no helper to build."
+        return 0
+    fi
+    if ! bash "$target/scripts/build-helper.sh" > /dev/null; then
+        echo "Warning: the helper did not build (above); the shell runs without it." >&2
+        echo "Build it again with: $target/scripts/build-helper.sh" >&2
+    fi
+}
+
 if [ $# -gt 1 ] || { [ $# = 1 ] && [ "$1" != --update ]; }; then
     echo "usage: install.sh [--update]" >&2
     exit 2
@@ -83,7 +104,8 @@ if [ "${1:-}" = --update ]; then
         exit 1
     fi
     copy_builtin
-    echo "==> Done. Restart the shell to load the built-in modules again: $target/scripts/launch.sh --restart"
+    build_helper
+    echo "==> Done. Restart the shell to load the built-in modules and the helper again: $target/scripts/launch.sh --restart"
     exit 0
 fi
 
@@ -118,6 +140,7 @@ else
 fi
 
 copy_builtin
+build_helper
 
 cat << EOF
 

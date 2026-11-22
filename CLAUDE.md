@@ -6,7 +6,8 @@ Guidance for Claude Code (claude.ai/code) when working in this repository.
 
 A **Quickshell desktop shell configuration** — a custom Wayland/Hyprland desktop panel
 built with Qt 6 and QML. Not a compiled application: QML files are interpreted directly
-by the Quickshell runtime.
+by the Quickshell runtime. One small helper program is compiled (`helper/`, C++/Qt): what
+Quickshell cannot do from QML.
 
 ## Documentation
 
@@ -42,10 +43,17 @@ each major release.
 
 ## Running
 
-There is no build step:
+QML needs no build; one helper is compiled — `scripts/build-helper.sh` (cmake, a C++
+compiler, Qt 6's Core and DBus development files) builds `helper/` into
+`~/.cache/h2s-shell/helper/<checkout>/`, never into the tree. NixOS: the package builds it
+(`nix/package.nix`, into its `libexec/`); Arch: `install.sh` builds it, and
+`scripts/launch.sh` rebuilds it at start when its source changed (a failed build: the shell
+runs without it, said once in the launcher's log). The shell is handed its path as
+`H2S_SHELL_HELPER` (`singletons/Helper.qml`).
 
 ```
 quickshell                 # reads shell.qml from the current directory
+scripts/build-helper.sh    # builds the helper (launch.sh does it when needed)
 tests/affected.sh --run    # while iterating: the suites, scenarios and self-tests the change needs
 tests/run-unit.sh FormatTest LockRulesTest   # … or named suites
 tests/lock/run.sh relock fallback            # … or named lock scenarios
@@ -74,6 +82,7 @@ runnable alone:
 tests/run-unit.sh          # the unit suites, in a private headless compositor (--log <file>)
 tests/run-modules.sh <dir> # a module's suites, against this tree (--suite <name> for some)
 tests/install-test.sh      # install.sh under stand-ins: what it would do, nothing done
+tests/run-helper.sh        # the helper built and run; its build script and launch.sh's look-up
 tests/run-system.sh        # this system's set (tests/system/nixos, tests/system/arch)
 tests/lock/run.sh          # the lock screen, end to end, in an invisible compositor
 tests/*-selftest.sh        # self-tests: the runners' own verdicts, the deploy check's, affected.sh's map
@@ -98,6 +107,10 @@ mockup the owner sees before any code (`notes/workflow.md`).
 
 ## Conventions
 
+- **The helper (`helper/`) is I/O only**: it reports and acts on request, decisions stay
+  in `*Rules.qml`. A capability goes into it only when Quickshell cannot do it, and leaves
+  it when Quickshell can. It talks to the shell in JSON lines on its standard input and
+  output, and ends when its input closes.
 - **State and I/O live in `singletons/`.** QML under `widgets/`, `panels/` and `hud/`
   renders that state and calls singleton methods — it should not own system access.
 - **All colours and type sizes come from `singletons/Theme.qml`.** No literal colours
@@ -174,6 +187,11 @@ test tools come from"):
   - Arch, without `nix`: labwc (the suites' headless compositor) and the lock bed's
     programs are packages to have installed for development (`install.sh` installs
     neither); the lock bed makes its Python bindings and keymaps at each start.
+- **The helper's build.** `tests/run-helper.sh` builds it with the same choice of source.
+  - NixOS: as the flake's `h2s-helper` package (the derivation the NixOS package
+    installs), with nix's own cmake, compiler and Qt.
+  - Arch, without `nix`: with `cmake`, a C++ compiler (`base-devel`) and `qt6-base` from
+    the system, which `install.sh` installs.
 - **Paths.** Scripts start with `#!/usr/bin/env bash`: NixOS has no `/bin/bash`.
   System files differ (NixOS: `/run/current-system/sw/bin`, `/etc/static`, a generated
   `/etc/pam.d`); code that reads them handles both systems.

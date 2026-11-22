@@ -414,6 +414,74 @@ discover_modules() {
     export H2S_SHELL_MODULES="$list"
 }
 
+# The shell's helper (helper/, a C++/Qt program; scripts/build-helper.sh), handed to the
+# shell as H2S_SHELL_HELPER (output, the shell's: the program's path, empty when there is
+# none; singletons/Helper.qml reads it). Looked for in this order:
+#   1. H2S_HELPER (input): a path to that program; set and empty, no helper at all (the
+#      lock test bed);
+#   2. this checkout's own build (scripts/build-helper.sh --if-changed: rebuilt here when
+#      the helper's source changed since, as after an update) — where the installation
+#      has no helper of its own (Arch), or where this checkout has built one already;
+#   3. the installation's: $H2S_SHELL_LIBEXEC/h2s-helper (the NixOS package's command sets
+#      it to the package's).
+# A build is bounded ($helper_build_seconds s) and not tried while the session is locked
+# by a shell that died (its restart must not wait for a compiler). None found, or a build
+# that failed: the shell runs without it. Said once per change of that outcome (kept in
+# $runtime_dir), never at every start; the build's own output is in its log, beside it.
+helper_state=$runtime_dir/h2s-shell-helper
+helper_build_seconds=300
+find_helper() {
+    local found="" outcome="" previous="" build=$shell_dir/scripts/build-helper.sh own=""
+    if [ -n "${H2S_HELPER+set}" ]; then
+        if [ -z "$H2S_HELPER" ]; then
+            outcome="none: H2S_HELPER is set and empty"
+        elif [ -x "$H2S_HELPER" ] && [ -f "$H2S_HELPER" ]; then
+            found=$H2S_HELPER
+            outcome="found: $found (H2S_HELPER)"
+        else
+            outcome="none: H2S_HELPER ($H2S_HELPER) is not a program"
+        fi
+    else
+        if [ -f "$shell_dir/helper/CMakeLists.txt" ] && [ -f "$build" ]; then
+            own=$("$BASH" "$build" --print-path 2> /dev/null < /dev/null) || own=""
+            if [ -n "$own" ] && { [ -z "${H2S_SHELL_LIBEXEC:-}" ] || [ -x "$own" ]; }; then
+                if died_locked; then
+                    if [ -x "$own" ]; then
+                        found=$own
+                        outcome="found: $found (this checkout's, not rebuilt while the session is locked)"
+                    fi
+                else
+                    if command -v timeout > /dev/null; then
+                        found=$(timeout -k 5 "$helper_build_seconds" "$BASH" "$build" --if-changed < /dev/null) || found=""
+                    else
+                        found=$("$BASH" "$build" --if-changed < /dev/null) || found=""
+                    fi
+                    if [ -n "$found" ]; then
+                        outcome="found: $found (this checkout's build)"
+                    else
+                        outcome="failed: this checkout's build did not work (log: ${own%/*}/build.log)"
+                    fi
+                fi
+            fi
+        fi
+        if [ -z "$found" ] && [ -n "${H2S_SHELL_LIBEXEC:-}" ] && [ -x "$H2S_SHELL_LIBEXEC/h2s-helper" ]; then
+            found=$H2S_SHELL_LIBEXEC/h2s-helper
+            outcome="found: $found (the installation's)${outcome:+, after $outcome}"
+        fi
+        [ -n "$outcome" ] || outcome="none: not built (scripts/build-helper.sh builds it)"
+    fi
+    export H2S_SHELL_HELPER="$found"
+    [ -f "$helper_state" ] && { IFS= read -r previous < "$helper_state"; } 2> /dev/null
+    if [ "$outcome" != "$previous" ]; then
+        printf '%s\n' "$outcome" 2> /dev/null > "$helper_state"
+        if [ -n "$found" ]; then
+            say "helper: $outcome"
+        else
+            say "helper: $outcome; the shell runs without it"
+        fi
+    fi
+}
+
 prepare_environment() {
     # Marks the shell as started here: without it, the shell shows a banner saying the
     # icon theme cannot apply and how to start it instead
@@ -692,6 +760,8 @@ supervise() {
         [[ "$notice" =~ ^[0-9]{1,3}$ ]] || notice=""
         [ -z "$notice" ] || say "the last launcher gave up on a shell that died while the screen was locked: the shell will say so"
     fi
+    # (Once per supervisor: a build must not keep a restart after a crash waiting)
+    find_helper {lock_fd}>&-
     rm -f "$locked_restarts_file"
     compositor_identity=$(socket_identity)
     say "supervising the shell in $shell_dir (compositor socket $(compositor_socket)${compositor_identity:+, $compositor_identity})"
@@ -830,6 +900,9 @@ ipc_with_retry() {
 case "$1" in
     # Internal: the module search, run by discover_modules under its bound
     --discover-modules) find_modules; exit 0 ;;
+    # Internal: the helper as the shell would get it (its path, or an empty line), for the
+    # tests (tests/run-helper.sh)
+    --helper) find_helper; echo "$H2S_SHELL_HELPER"; exit 0 ;;
     # Straight to the running shell: no icon theme to work out
     ipc) shift; ipc_with_retry "$@"; exit $? ;;
     # The lock screen's log, for reading after a failed attempt (the wrapper's PATH has qs)
@@ -856,7 +929,7 @@ case "$1" in
         # nothing to supervise (and a supervisor would take that exit for the shell's)
         for argument in "$@"; do
             case "$argument" in
-                -d | --daemonize) prepare_environment; unset H2S_SHELL_LOCK_NOTICE; discover_modules; exec qs -p "$shell_dir" "$@" ;;
+                -d | --daemonize) prepare_environment; unset H2S_SHELL_LOCK_NOTICE; discover_modules; find_helper; exec qs -p "$shell_dir" "$@" ;;
             esac
         done
         supervise "$@"
