@@ -299,8 +299,9 @@ Two stages, both driven by Wayland idle notifications and both counted from the 
   nothing. The lock is reported to logind (the session's `LockedHint`) once the compositor
   holds it, and cleared at the unlock. Every lock starts afresh: nothing of one lock carries into the next.
   Another program's session lock (another locker) is seen under Hyprland (`hyprctl -j
-  locked`, read before the idle lock and when the compositor refuses the shell's): while it
-  lasts the shell asks no idle lock, the `screen.locked` profile condition holds, and
+  locked`, read before every lock the shell asks — idle, IPC, logind's Lock, before sleep —
+  at the start, and when the compositor refuses the shell's): while it lasts the shell asks
+  no lock of its own (Hyprland would end it), a lock before sleep counts as done, the `screen.locked` profile condition holds, and
   `lockscreen status` says `foreign-locked`; it is read again with a growing pause (1 s to
   30 s) until it ends. Elsewhere the compositor's refusal is all that shows it, and the idle
   lock is asked again with a growing pause.

@@ -568,7 +568,11 @@ launcher agree on the contract described under "Recovery" below):
   first, and another program's lock read as held (`Lockscreen.foreignLocked`,
   `singletons/lock/ForeignLock.qml` around the pure `LockRules.foreignStep`) counts as locked
   for `IdleRules` and the `screen.locked` fact, read again with a growing pause until it
-  ends; a refusal of the shell's lock reads it too), the start and end commands.
+  ends; a refusal of the shell's lock reads it too), the start and end commands. Every
+  lock the rules take on Hyprland but a restore waits for that read at `lockCompositor`
+  (`ForeignLock.beforeAsk`): another lock standing, the compositor is not asked (Hyprland
+  ends a client that asks then) and the rules hear `foreignLocked` (the lock ends, a sleep
+  inhibitor is released); so the marker's "locked" means a lock of the shell's own.
   Its two `IdleMonitor`s (`singletons/lock/IdleWatch.qml`: one ignoring Wayland idle
   inhibitors, one respecting them) are made once with a fixed 5 s, so a settings change
   never ends an idle period; every stage counts from the last input. One `Timer` runs to

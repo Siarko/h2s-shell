@@ -185,7 +185,7 @@ Singleton {
     // authentication, the lock's life and sleep. Pointer motion, keys and timers would drown
     // them; what those cause shows in the rules' own log effects.
     readonly property var _loggedEvents: ["started", "restored", "lockRequested", "unlockRequested", "compositorLocked",
-        "compositorFinished", "surfaceAdded", "surfaceRemoved", "submit", "methodsDetected", "methodsFailed",
+        "compositorFinished", "foreignLocked", "surfaceAdded", "surfaceRemoved", "submit", "methodsDetected", "methodsFailed",
         "pamMessage", "pamCompleted", "pamStartFailed", "prepareForSleep", "resumed", "settings"]
     readonly property var _loggedEffects: ["lockCompositor", "adoptCompositorLock", "unlockCompositor", "announceLocked",
         "reportLockedHint", "detectMethods", "startPam", "abortPam", "respondPam", "holdInhibitor", "releaseInhibitor"]
@@ -357,30 +357,46 @@ Singleton {
                 + (Date.now() - start.at) + " ms (" + start.config + ")" + (ignored ? "; not taken: " + ignored : ""));
         }
 
+        // Sets the compositor's lock for `session`, still the rules' lock being taken (an
+        // answer of ForeignLock's may come after the lock ended)
+        function askCompositor(session) {
+            if (session !== state.phase.session || (state.phase.status !== "locking" && state.phase.status !== "unlocking")) {
+                log("info", "the compositor is not asked for session " + session + ": that lock is no longer being taken");
+                return;
+            }
+            // The marker first: a shell that dies from here on comes back locked
+            recover({ type: "lockAsked" });
+            _sessionLock.locked = true;
+            // Reliable in this direction (only the unlock notify is broken): false right
+            // after setting it means Quickshell refused the lock without a signal — no
+            // ext-session-lock, no surface component, lock() failing. No lock object was
+            // made then, so setting `locked` back to false sends nothing to the
+            // compositor; it only clears Quickshell's target, so that the next lock is
+            // not taken for a no-op.
+            if (!_sessionLock.locked) {
+                log("warning", "the session lock was refused at once (session " + session + ")");
+                _sessionLock.locked = false;
+                // The rules say whether the lock rules hear of it, or (a lock being taken
+                // back) this process quits for a fresh one
+                recover({ type: "lockRefused", session: session });
+            } else {
+                recover({ type: "lockTaken" });
+            }
+        }
+
         function execute(effect) {
             if (root._loggedEffects.includes(effect.type))
                 log("info", "effect " + describeEffect(effect));
             switch (effect.type) {
             case "lockCompositor":
                 sessionInForce = effect.session;
-                // The marker first: a shell that dies from here on comes back locked
-                recover({ type: "lockAsked" });
-                _sessionLock.locked = true;
-                // Reliable in this direction (only the unlock notify is broken): false right
-                // after setting it means Quickshell refused the lock without a signal — no
-                // ext-session-lock, no surface component, lock() failing. No lock object was
-                // made then, so setting `locked` back to false sends nothing to the
-                // compositor; it only clears Quickshell's target, so that the next lock is
-                // not taken for a no-op.
-                if (!_sessionLock.locked) {
-                    log("warning", "the session lock was refused at once (session " + effect.session + ")");
-                    _sessionLock.locked = false;
-                    // The rules say whether the lock rules hear of it, or (a lock being taken
-                    // back) this process quits for a fresh one
-                    recover({ type: "lockRefused", session: effect.session });
-                } else {
-                    recover({ type: "lockTaken" });
-                }
+                // Hyprland ends a client that asks for a lock while another program's stands:
+                // the compositor's word first (ForeignLock), then the ask or not. A lock taken
+                // back (restore) has its own question to Hyprland (LockRecoveryRules)
+                if (effect.source !== "restore" && _foreign.canRead)
+                    _foreign.beforeAsk(effect.session);
+                else
+                    askCompositor(effect.session);
                 break;
             case "adoptCompositorLock":
                 // `restored`: the new WlSessionLock takes the old one's lock over when
@@ -425,7 +441,7 @@ Singleton {
                 _lockedHint.report(effect.locked);
                 break;
             case "checkForeignLock":
-                _foreign.refused();
+                _foreign.check();
                 break;
             case "detectMethods":
                 scopeFor(effect)?.detect(effect.generation);
@@ -683,7 +699,15 @@ Singleton {
         _markerProbe.done.connect(lines => {
             recover({ type: "markerAnswered", lines: lines, locked: state.phase.status !== "unlocked" });
             recover({ type: "markerChecked" });
+            // Another program's lock standing at the start (a shell started again while one
+            // lasts): read, so that it is not taken for nothing — nor for this shell's own,
+            // which the marker alone says (only a lock asked once the read found none
+            // writes "locked")
+            if (!recovery.restoring && state.phase.status === "unlocked")
+                _foreign.check();
         });
+        _foreign.askAllowed.connect(session => askCompositor(session));
+        _foreign.askDenied.connect(session => dispatch({ type: "foreignLocked", session: session }));
         _restoreRetry.triggered.connect(() => recover({ type: "restoreRetry", locked: state.phase.status !== "unlocked" }));
 
         // The compositor confirmed the lock (secure) or ended / refused it. Tagged with the
@@ -1092,7 +1116,7 @@ Singleton {
     // the ones before keep their positions
     ForeignLock {
         id: _foreign
-        ownLock: root.locked
+        ownLock: _carried.held
         // The lock test bed's `foreignPollMaximum` timing (H2S_LOCK_TEST_TIMINGS, ms)
         pollMaximum: {
             const given = TestSeams.timings.foreignPollMaximum;

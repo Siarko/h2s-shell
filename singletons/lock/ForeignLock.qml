@@ -4,16 +4,20 @@ import qs.singletons
 
 // Another program's session lock, as far as it can be seen: the I/O around
 // LockRules.foreignStep. On Hyprland `hyprctl -j locked` is read (SleepLockState with no
-// session path: the compositor's word only, bounded to a second) when the compositor refused
-// the shell's lock (`refused()`) and before the idle lock (`lockWhenFree()`); a lock read as
-// held is read again after a growing pause until it ends. Elsewhere nothing is read: the
-// refusal is all there is.
+// session path: the compositor's word only, bounded to a second) before the compositor is
+// asked for a lock (`beforeAsk()`: Hyprland ends a client that asks while another lock
+// stands), before the idle lock (`lockWhenFree()`), when the compositor refused the shell's
+// lock and at the start (`check()`); a lock read as held is read again after a growing
+// pause until it ends. Elsewhere nothing is read: the refusal is all there is.
 Scope {
     id: root
 
     signal logLine(string level, string message)
     // A lock asked through lockWhenFree() may go ahead
     signal lockAllowed(string source)
+    // The compositor may be asked for the lock of this session (beforeAsk), or may not
+    signal askAllowed(int session)
+    signal askDenied(int session)
 
     // Another program holds the session lock (read so)
     readonly property bool held: _state.held
@@ -22,13 +26,18 @@ Scope {
     // is about that one
     property bool ownLock: false
     property bool onHyprland: (Quickshell.env("HYPRLAND_INSTANCE_SIGNATURE") ?? "") !== ""
+    readonly property bool canRead: onHyprland
     // The longest pause between reads of a held lock (ms; 0: the rules' own)
     property int pollMaximum: 0
 
     property var _state: LockRules.foreignInitial()
 
-    function refused() {
-        _step({ type: "refused" });
+    function check() {
+        _step({ type: "check" });
+    }
+
+    function beforeAsk(session) {
+        _step({ type: "beforeAsk", session: session });
     }
 
     function lockWhenFree(source) {
@@ -60,6 +69,12 @@ Scope {
             case "lock":
                 root.lockAllowed(action.source);
                 break;
+            case "ask":
+                root.askAllowed(action.session);
+                break;
+            case "askDenied":
+                root.askDenied(action.session);
+                break;
             case "log":
                 root.logLine(action.level, action.message);
                 break;
@@ -89,7 +104,10 @@ Scope {
                 Qt.callLater(() => _reader.ask(_reader.wanted));
                 return;
             }
-            root._step({ type: "answer", serial: serial, outcome: outcome, ownLock: root.ownLock });
+            // Stepped outside the process's own change handler: what the answer lets go ahead
+            // may ask for the next read at once
+            const answered = serial;
+            Qt.callLater(() => root._step({ type: "answer", serial: answered, outcome: outcome, ownLock: root.ownLock }));
         }
     }
 

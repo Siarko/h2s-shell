@@ -164,6 +164,7 @@ Singleton {
         unlockRequested: (transaction, event) => root._unlockRequested(transaction, event),
         compositorLocked: (transaction, event) => root._compositorLocked(transaction, event),
         compositorFinished: (transaction, event) => root._compositorFinished(transaction, event),
+        foreignLocked: (transaction, event) => root._foreignLocked(transaction, event),
         surfaceAdded: (transaction, event) => root._surfaceAdded(transaction, event),
         surfaceRemoved: (transaction, event) => root._surfaceRemoved(transaction, event),
         activity: (transaction, event) => root._activity(transaction, event),
@@ -315,6 +316,19 @@ Singleton {
         LockStepRules.emit(transaction, "checkForeignLock", {});
     }
 
+    // Another program holds the session lock: the driver read it before asking the
+    // compositor (lockCompositor), and did not ask — Hyprland ends a client that asks for a
+    // lock while another stands. The lock is over with nothing to unlock, as at a refusal
+    function _foreignLocked(transaction, event) {
+        const refused = _checkCompositor(transaction.state, event);
+        if (refused !== "")
+            return refused;
+        if (transaction.state.phase.status === "locked")
+            return "not locking";
+        LockStepRules.log(transaction, "info", "another program holds the session lock: the compositor is not asked");
+        _leaveLock(transaction, "foreign", "", false);
+    }
+
     // The lock's first effects are always lockCompositor and announceLocked(true), whatever
     // the event did before (a sleep's timers): the lock is what matters most on the way down
     function _enterLock(transaction, source) {
@@ -324,7 +338,7 @@ Singleton {
         LockStepRules.setTop(transaction, Object.assign(LockStepRules.freshLockRegions(), {
             phase: { status: "locking", session: session, lastEnd: "", confirmLate: false, pending: null }
         }));
-        LockStepRules.emit(transaction, "lockCompositor", { session: session });
+        LockStepRules.emit(transaction, "lockCompositor", { session: session, source: source || "request" });
         LockStepRules.emit(transaction, "announceLocked", { locked: true });
         transaction.effects = transaction.effects.concat(before);
         LockStepRules.log(transaction, "info", "locking (" + (source || "request") + "), session " + session);
@@ -1321,16 +1335,21 @@ Singleton {
     // `settings`: { canRead (the compositor can be asked: Hyprland), pollMaximum (the longest
     // pause between reads, ms; foreignPoll.maximum when not a positive number) }.
     //
-    // Events: lockWanted { source } (a lock that waits for the read: the idle lock),
-    // refused (the compositor refused ours: checkForeignLock), pollDue, answer { serial,
-    // outcome: "locked" | "unlocked" | "unknown", ownLock: the shell has a lock asked or
-    // held }, ownLocked (the compositor confirmed the shell's own lock). Actions: read
-    // { serial }, held { held }, poll { ms }, lock { source }, log { level, message }.
+    // Events: lockWanted { source } (a lock that waits for the read: the idle lock, which
+    // so never shows the lock screen for a moment), beforeAsk { session } (the lock rules
+    // asked for the compositor's lock: every lock but a restore waits for the read), check
+    // (the compositor refused ours — checkForeignLock — or the shell started), pollDue,
+    // answer { serial, outcome: "locked" | "unlocked" | "unknown", ownLock: the shell has a
+    // compositor lock asked or held }, ownLocked (the compositor confirmed the shell's own
+    // lock). Actions: read { serial }, held { held }, poll { ms }, lock { source }, ask
+    // { session } (ask the compositor), askDenied { session } (do not: another lock stands),
+    // log { level, message }. A failed read never stops a lock: it is asked, as without
+    // Hyprland.
 
     readonly property var foreignPoll: ({ minimum: 1000, maximum: 30000 })
 
     function foreignInitial() {
-        return { held: false, reading: 0, serial: 0, polls: 0, pendingLock: "", told: "" };
+        return { held: false, reading: 0, serial: 0, polls: 0, pendingLock: "", pendingAsk: 0, told: "" };
     }
 
     // The pause before the n-th read again of a held lock: doubling, bounded
@@ -1377,7 +1396,21 @@ Singleton {
                 read();
             break;
         }
-        case "refused":
+        case "beforeAsk": {
+            const session = typeof event.session === "number" ? event.session : 0;
+            if (session <= 0)
+                return { state: state, actions: [], ignored: "no session" };
+            if (!canRead) {
+                actions.push({ type: "ask", session: session });
+                break;
+            }
+            // Read afresh even when a lock is known held: it may have ended since the last poll
+            next.pendingAsk = session;
+            if (next.reading === 0)
+                read();
+            break;
+        }
+        case "check":
             if (!canRead || next.held || next.reading !== 0)
                 return { state: state, actions: [], ignored: !canRead ? "cannot read the compositor's lock" : "already known or being read" };
             read();
@@ -1393,11 +1426,15 @@ Singleton {
                 return { state: state, actions: [], ignored: "late answer" };
             next.reading = 0;
             const pending = next.pendingLock;
+            const ask = next.pendingAsk;
             next.pendingLock = "";
+            next.pendingAsk = 0;
             // A lock of the shell's own asked meanwhile: whatever Hyprland says is ours
             if (event.ownLock === true) {
                 if (next.held)
                     release();
+                if (ask > 0)
+                    actions.push({ type: "ask", session: ask });
                 break;
             }
             if (event.outcome === "locked") {
@@ -1408,6 +1445,8 @@ Singleton {
                 }
                 tell("held", "info", "another program holds the session lock: the shell counts the session locked and asks no lock of its own while it lasts");
                 poll();
+                if (ask > 0)
+                    actions.push({ type: "askDenied", session: ask });
             } else if (event.outcome === "unlocked") {
                 if (next.held) {
                     release();
@@ -1415,6 +1454,8 @@ Singleton {
                 }
                 if (pending !== "")
                     actions.push({ type: "lock", source: pending });
+                if (ask > 0)
+                    actions.push({ type: "ask", session: ask });
             } else {
                 // Unknown is not proof either way: a held lock stays held (read again later),
                 // a lock wanted is asked for, as without Hyprland
@@ -1423,16 +1464,19 @@ Singleton {
                     poll();
                 else if (pending !== "")
                     actions.push({ type: "lock", source: pending });
+                if (ask > 0)
+                    actions.push({ type: "ask", session: ask });
             }
             break;
         }
         case "ownLocked":
-            if (!next.held && next.reading === 0 && next.pendingLock === "")
+            if (!next.held && next.reading === 0 && next.pendingLock === "" && next.pendingAsk === 0)
                 return { state: state, actions: [], ignored: "no other lock known" };
             // Only one session lock at a time: the other one is over, and a read under way
             // would see ours
             next.reading = 0;
             next.pendingLock = "";
+            next.pendingAsk = 0;
             if (next.held)
                 release();
             next.told = "";

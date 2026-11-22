@@ -1,6 +1,6 @@
 # Another program's session lock (a second Quickshell, tests/lock/locker/shell.qml) in the
-# bed's Hyprland. The shell sees it at the idle lock's deadline (hyprctl -j locked): no idle
-# lock is asked over it, its status is not "unlocked"
+# bed's Hyprland. The shell sees it at the idle lock's deadline (hyprctl -j locked), and
+# reads before any lock it asks (an IPC lock here): no lock is asked over it, its status is not "unlocked"
 # but "foreign-locked", the `screen.locked` fact is true; when the other lock ends (read
 # again after a pause of at most 1 s here, the test timing foreignPollMaximum), all of that
 # returns, and the shell's own idle lock works again. Hyprland runs with
@@ -33,6 +33,15 @@ sleep 4 # fixed sleep: a negative claim: the idle lock is not asked again while 
 check "still no idle lock asked" test "$(idle_asks)" = 0
 check "… nor a refusal" test "$(shell_log_count "the compositor refused the lock")" = 0
 
+# A lock asked over it (the IPC, as Super+L): read first, the compositor not asked
+pid_before=$SHELL_PID
+shell_ipc lockscreen lock > /dev/null
+check_within 5 "an IPC lock over it: ended as another program's" state_is last_end foreign
+check "… the compositor was not asked" test "$(shell_log_count "the compositor is not asked")" -ge 1
+check "… the status still foreign-locked" shell_status_is foreign-locked
+check "… the fact still true" fact_is true
+check "… the shell survives (not ended by Hyprland)" test "$(_find_shell_pid)" = "$pid_before"
+
 locker_unlock
 check_within 5 "the other lock ends" compositor_unlocked
 check_within 5 "the shell reads the end: unlocked again" shell_status_is unlocked
@@ -47,7 +56,7 @@ type_text "$LOCKTEST_PASSWORD"
 press_key Return
 check_within 10 "the password unlocks" compositor_unlocked
 
-# Not asking was what kept the shell alive: Hyprland, the restore off, ends a client that asks
+# Not asking is what keeps the shell alive: Hyprland, the restore off, ends a client that asks
 # for a lock while another stands (notes/plans/lockscreen.md, section 1). The refusal itself
 # (elsewhere, and its read) is LockRulesTest's.
 check "the shell was never restarted" test "$(grep -c "the shell exited" "$WORK/shell.log")" = 0
