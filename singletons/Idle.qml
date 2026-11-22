@@ -63,10 +63,12 @@ Singleton {
     // monitor in its list, the screens with the screensaver: nothing may lose the screensaver
     // or the lock screen's blackout to a reading that failed)
     readonly property bool _powerControl: ScreenPower.canPowerOff && ScreenPower.monitors.length > 0
-    // [{ id, connector }]: ScreenPower's monitors with power control, else the screens
+    // [{ id, base, connector }]: ScreenPower's monitors with power control, else the screens
+    // Qt knows, with ids made the same way (make|model|serial), so per-monitor times apply
+    // there too
     readonly property var _monitorEntries: _powerControl
         ? ScreenPower.monitors.map(monitor => ({ id: monitor.id, base: monitor.base, connector: monitor.connector }))
-        : Quickshell.screens.map(screen => ({ id: screen.name, base: screen.name, connector: screen.name }))
+        : MonitorRules.screenMonitors(Array.from(Quickshell.screens), [])
     readonly property var _monitors: _monitorEntries.map(monitor => monitor.id)
     on_MonitorsChanged: Qt.callLater(root._monitorListChanged)
 
@@ -478,11 +480,9 @@ Singleton {
         // the monitor follows the default — or JSON: {"screensaverEnabled": false,
         // "screensaverTimeout": 300, "screenOffEnabled": true, "screenOffTimeout": 300}):
         // written where the setting's value comes from now (Profiles.writeInEffect); applies
-        // while "Set per monitor" is on. Only once the monitors are read: a connected
-        // monitor's entry goes under the form of its id it has now
+        // while "Set per monitor" is on. A connected monitor's entry goes under the form of its
+        // id it has now (the screens' ids where no backend reads the monitors)
         function setMonitorTimes(id: string, times: string): string {
-            if (!root._powerControl)
-                return "not understood: the monitors are not read (no power control)";
             let given = times;
             if (times !== "default") {
                 try {

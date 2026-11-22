@@ -180,7 +180,7 @@ Singleton {
         { key: "lockscreen.monitorIdle", label: "Each monitor", group: "lockscreen",
           type: "monitorIdle", default: ({}) },
         { key: "lockscreen.screenOffEnabled", label: "Turn screens off", group: "lockscreen",
-          type: "bool", default: false, hint: "Needs Hyprland, or wlopm elsewhere." },
+          type: "bool", default: false, hint: "Needs Hyprland, or wlopm elsewhere; without either, the black screensaver instead." },
         { key: "lockscreen.screenOffTimeout", label: "Turn screens off after", group: "lockscreen",
           type: "number", min: 5, max: 86400, suffix: "s", default: 600,
           hint: "Counted from your last input." },

@@ -19,10 +19,11 @@ Flickable {
     readonly property bool _screensaverOn: _edited("lockscreen.screensaverEnabled") === true
     readonly property bool _lockOn: _edited("lockscreen.lockscreenEnabled") === true
     readonly property bool _commandsOn: _edited("lockscreen.screensaverCommands") === true
-    // Where monitors cannot be turned off, why (the backend's word) in place of the schema's
-    // hint; "" where they can
+    // Where monitors cannot be turned off, why (the backend's word) and what the screen-off
+    // does instead, in place of the schema's hint; "" where they can
     readonly property string _powerOffHint: ScreenPower.canPowerOff ? ""
-        : [ScreenPower.unavailable?.reason ?? "", ScreenPower.unavailable?.hint ?? ""].filter(part => part !== "").join(". ")
+        : [(ScreenPower.unavailable?.reason || "Not supported here") + ": the black screensaver instead",
+           ScreenPower.unavailable?.hint ?? ""].filter(part => part !== "").join(". ")
 
     anchors.fill: parent
     contentHeight: col.implicitHeight
@@ -60,13 +61,12 @@ Flickable {
             key: "lockscreen.screenOffEnabled"
             editIndex: root.editIndex
             hint: root._powerOffHint
-            available: ScreenPower.canPowerOff
         }
 
         SchemaSettingEditor {
             key: "lockscreen.screenOffTimeout"
             editIndex: root.editIndex
-            available: ScreenPower.canPowerOff && root._edited("lockscreen.screenOffEnabled") === true
+            available: root._edited("lockscreen.screenOffEnabled") === true
         }
 
         SchemaSettingEditor {

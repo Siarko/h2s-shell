@@ -205,6 +205,25 @@ TestCase {
         assertEqual(JSON.stringify(rules.overrideFor({ x: { screenOffEnabled: true } }, "x")), JSON.stringify({ screenOffEnabled: true }),
                     "… an entry that is an object (a monitor's times): found");
         assertEqual(rules.overrideFor({ x: [1] }, "x"), "", "… a list is no entry");
+
+        // No backend reads the monitors: the screens Qt knows, with ids made the same way
+        const fromScreens = rules.screenMonitors([
+            { name: "DP-1", manufacturer: "Samsung", model: "Odyssey", serialNumber: "S1" },
+            { name: "DP-2", manufacturer: "Dell", model: "U2419H", serialNumber: "" },
+            { name: "DP-3", manufacturer: "Dell", model: "U2419H" },
+            { name: "DP-1", manufacturer: "Other", model: "X", serialNumber: "2" },
+            { name: "", manufacturer: "Nameless" }, null, "DP-9",
+            { name: "eDP-1", manufacturer: "a|b", model: "c\nd", serialNumber: 7 }
+        ], []);
+        assertEqual(JSON.stringify(fromScreens), JSON.stringify([
+            { id: "Samsung|Odyssey|S1", base: "Samsung|Odyssey|S1", connector: "DP-1" },
+            { id: "Dell|U2419H||DP-2", base: "Dell|U2419H|", connector: "DP-2" },
+            { id: "Dell|U2419H||DP-3", base: "Dell|U2419H|", connector: "DP-3" },
+            { id: "a b|c d|", base: "a b|c d|", connector: "eDP-1" }
+        ]), "the screens: make|model|serial ids, twins by their connector, one per name, fields made safe");
+        assertEqual(JSON.stringify(rules.screenMonitors([{ name: "DP-2", manufacturer: "Dell", model: "U2419H" }], ["Dell|U2419H|"])),
+                    JSON.stringify([{ id: "Dell|U2419H||DP-2", base: "Dell|U2419H|", connector: "DP-2" }]), "… a twin seen before keeps its connector");
+        assertEqual(JSON.stringify(rules.screenMonitors(undefined, [])), "[]", "… no screens: none");
         assertEqual(rules.looseKey({ "A|M|S|DP-1": {}, "A|M|": {} }, { id: "A|M|S", base: "A|M|S", connector: "DP-1" }), "",
                     "an exact key holding an object: nothing taken loosely");
         assertEqual(JSON.stringify(rules.notConnected(overrides, [rules.identity(samsung)])), JSON.stringify(["Dell Inc.|U2419H||DP-1"]),

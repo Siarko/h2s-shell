@@ -301,7 +301,9 @@ screen's screen-off are off by default. No idle daemon is needed; one can still 
   any monitor counts for every one, and an app keeping the screen on holds every monitor.
   A monitor plugged in while you are away goes straight to its stage if its times have
   passed. The screensaver commands start once every monitor that goes dark has (a monitor
-  with both stages off is not waited for). The idle lock stays one for the session. Set
+  with both stages off is not waited for). Where monitors cannot be turned off, a monitor
+  is known by the make, model and serial Qt reports, and its own times still apply (its
+  screen-off the black screensaver). The idle lock stays one for the session. Set
   for now with the IPC `idle setMonitorTimes <id> <json|default>` (`idle state` lists the
   monitors' ids).
 - **Keeping the screen on** — while the session is unlocked, three kinds of request hold the

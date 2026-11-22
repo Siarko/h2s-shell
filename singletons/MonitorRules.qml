@@ -211,6 +211,25 @@ Singleton {
         return [program, on === true ? "--on" : "--off", connector];
     }
 
+    // The screens Qt knows ([{ name, manufacturer, model, serialNumber }]) → [{ id, base,
+    // connector }], ids as a backend's reading makes them (twins take their connector), for
+    // where no backend reads the monitors: per-monitor settings still find their entries
+    // there. The connector is the screen's name as Qt gives it, kept as it is (nothing is
+    // asked of it there: it only finds the screen's surface); a screen without a name, or a
+    // second one of a name, is left out.
+    function screenMonitors(screens, knownTwins) {
+        const seen = Object.create(null);
+        const kept = [];
+        for (const screen of Array.isArray(screens) ? screens : []) {
+            if (screen === null || typeof screen !== "object" || typeof screen.name !== "string" || screen.name === "" || seen[screen.name])
+                continue;
+            seen[screen.name] = true;
+            kept.push({ connector: screen.name, make: _field(screen.manufacturer), model: _field(screen.model),
+                        serial: _field(screen.serialNumber) });
+        }
+        return _named(kept, knownTwins).monitors.map(monitor => ({ id: monitor.id, base: monitor.base, connector: monitor.connector }));
+    }
+
     // The monitors as last read, after a reading that failed: still listed, their power
     // unknown — a monitor is never taken to be off when that could not be read
     function unknownPower(monitors) {

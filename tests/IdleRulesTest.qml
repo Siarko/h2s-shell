@@ -370,6 +370,17 @@ TestCase {
                     "no power control: the OLED's screen-off is the screensaver at its time");
         assertEqual(noPower.shown(), "lcd=saver oled=saver", "… both the screensaver");
 
+        // No power control, the monitors as the screens give them (Idle's other path): the
+        // OLED's own times are found by its make, model and serial, and still darken it
+        const screens = MonitorRules.screenMonitors([{ name: "DP-1", manufacturer: "Samsung", model: "Odyssey", serialNumber: "S1" },
+                                                     { name: "DP-2", manufacturer: "LG", model: "27GL", serialNumber: "9" }], []);
+        const fromScreens = _machine({ perMonitor: true, monitorIdle: { "Samsung|Odyssey|S1": oledTimes } }, screens, false);
+        fromScreens.idle(5000, 0);
+        assertEqual(fromScreens.next(), 300000, "the screens' ids: the OLED's own screen-off is due");
+        fromScreens.deadline();
+        assertEqual(fromScreens.actions, "showSaver:Samsung|Odyssey|S1,active:true",
+                    "… and darkens it with the black screensaver; the LCD, with no stage, not waited for");
+
         // A laptop: its panel off (its backlight costs power on black)
         const laptop = _machine(_own(saver, { panel: _entry(0, 120) }), ["panel"], true);
         laptop.idle(5000, 0).deadline();
