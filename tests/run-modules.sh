@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Runs modules' own test suites, in the same private, headless compositor as the shell's
 # (tests/headless.sh, shared with tests/run-unit.sh), with the same tools from the same
-# place (see tests/run-unit.sh).
+# place (see tests/run-unit.sh), and under the same memory cap (H2S_TEST_MEMORY_MAX,
+# tests/memory-cap.sh).
 #
 #   tests/run-modules.sh <module dir>…                 the suites each module's manifest lists
 #   tests/run-modules.sh --suite <name> … <dir>…       only the named ones (--suite once per

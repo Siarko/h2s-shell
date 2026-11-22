@@ -196,6 +196,15 @@ here may reach it.
   keeps them, outside the run's directories; the run's processes have a core size limit of
   0, so none is written. What remains, where crashes go to `systemd-coredump`: a journal
   entry per crash (`coredumpctl list` shows them, with no core file).
+- **A memory cap on every process `spawn` starts** (`H2S_TEST_MEMORY_MAX`, 1536M by
+  default, `0` for none; `tests/memory-cap.sh`): a transient scope of the user's service
+  manager each (the launcher's shells share the launcher's), entered by exec, so pids,
+  process groups and parents stay as they were; else an address-space limit (`prlimit`).
+  A process that runs away is stopped at the cap, not left to fill the machine's memory,
+  and its test fails saying which. The scopes are asked of the user's service manager
+  through the caller's runtime dir, which `run.sh` hands to `lib.sh` apart
+  (`H2S_TEST_USER_RUNTIME_DIR`, `H2S_TEST_USER_BUS`); `lib.sh` unsets them, so the stack
+  sees only its private ones (`harness.sh` checks).
 - **A private session bus only when asked** (`stack_start --session-bus`, the notification
   test): a `dbus-daemon` of the test's own, its socket in the private runtime dir, with no
   service directories, so nothing is activated; the real session bus is never named.

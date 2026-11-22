@@ -36,11 +36,15 @@
 #                 whatever the status — a run that hung after it included
 #   killed        else: a suite failed (a check, a TypeError or ReferenceError, a crash),
 #                 or the run took longer than four times the unmutated run's time (at least
-#                 60 s): a hang
+#                 60 s): a hang; or Quickshell was stopped at the memory cap (the runner
+#                 says "killed at the memory cap"): a mutant that runs away — counted as
+#                 killed, shown as "killed (memory cap)" and listed apart
 # Lock scenarios and module fixture parts are not run: only unit suites.
 #
-# Tools are taken by tests/run-unit.sh, as always (the pinned ones where there is `nix`, else
-# PATH; H2S_TEST_TOOLS says which). Each worker has its own copy of the tree, under this
+# Each mutant's Quickshell runs under the unit runner's memory cap (tests/memory-cap.sh,
+# H2S_TEST_MEMORY_MAX, 1536M by default): with -j mutants at once, at most that many times
+# the cap is taken. Tools are taken by tests/run-unit.sh, as always (the pinned ones where
+# there is `nix`, else PATH; H2S_TEST_TOOLS says which). Each worker has its own copy of the tree, under this
 # run's temp dir, removed by its path when the run ends (an interrupt included).
 #
 # Exit status: 0 when it ran (whatever survived); 2 for a wrong option or file, suites that
@@ -52,9 +56,10 @@ REPO=$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd -P)
 usage() { echo "usage: tests/mutate.sh [--list] [--max <n>] [--seed <n>] [-j <n>] <file> [<suite>…]  |  tests/mutate.sh --judge <log> <status> <file>" >&2; exit 2; }
 fail() { echo "mutate.sh: $*" >&2; exit 2; }
 
-# verdict <log> <status> <file>: survived, not-run, not-compiled or killed. A load error
-# names the file at a line in Quickshell's `caused by` chain; a JavaScript error at run time
-# (TypeError, ReferenceError, …) names it too, and is a kill
+# verdict <log> <status> <file>: survived, not-run, not-compiled, capped (killed at the
+# memory cap) or killed. A load error names the file at a line in Quickshell's `caused by`
+# chain; a JavaScript error at run time (TypeError, ReferenceError, …) names it too, and is
+# a kill
 verdict() {
     local log=$1 status=$2 subject=$3
     case "$status" in
@@ -63,6 +68,8 @@ verdict() {
     esac
     if grep -E "caused by @${subject//./\\.}\[[1-9][0-9]*:[0-9]+\]" "$log" 2> /dev/null | grep -q -v -E "(Type|Reference|Range|Syntax|Eval|URI)Error: "; then
         echo not-compiled
+    elif grep -q -F "killed at the memory cap" "$log" 2> /dev/null; then
+        echo capped
     else
         echo killed
     fi
@@ -363,7 +370,7 @@ done
 
 # A worker: the mutants whose index modulo the workers is its number, in its own copy
 work_on() {
-    local worker=$1 tree=$work/tree-$1 index mutant line column old new kind outcome status
+    local worker=$1 tree=$work/tree-$1 index mutant line column old new kind outcome status shown
     current_run=""
     trap '[ -n "$current_run" ] && kill -TERM "$current_run" 2> /dev/null; wait; exit 130' TERM
     for index in "${!picked[@]}"; do
@@ -384,7 +391,9 @@ work_on() {
         fi
         cp "$subject" "$tree/$file"
         printf '%s\037%s\n' "$outcome" "$mutant" >> "$work/results-$worker"
-        echo "  [$((index + 1))/${#picked[@]}] $outcome  $(describe "$mutant")"
+        shown=$outcome
+        [ "$outcome" = capped ] && shown="killed (memory cap)"
+        echo "  [$((index + 1))/${#picked[@]}] $shown  $(describe "$mutant")"
     done
 }
 
@@ -398,7 +407,8 @@ workers=()
 
 results=$(cat "$work"/results-* 2> /dev/null | sort -t$'\037' -k2,2n -k3,3n)
 count() { printf '%s\n' "$results" | grep -c "^$1"$'\037'; }
-killed=$(count killed) survived=$(count survived) not_compiled=$(count not-compiled) not_run=$(count not-run)
+capped=$(count capped)
+killed=$(( $(count killed) + capped )) survived=$(count survived) not_compiled=$(count not-compiled) not_run=$(count not-run)
 section() {
     local outcome=$1 title=$2 entry
     [ "$(count "$outcome")" -gt 0 ] || return 0
@@ -409,8 +419,9 @@ section() {
     done
 }
 section survived "Surviving mutants (no suite noticed them)"
+section capped "Killed at the memory cap (Quickshell ran away: counted as killed)"
 section not-compiled "Not compiled"
 section not-run "Not run (the runner could not be set up, or the text was not found)"
 echo
-echo "mutate.sh: $file, $((SECONDS - started)) s: killed $killed / survived $survived / not compiled $not_compiled${not_run:+$([ "$not_run" -gt 0 ] && echo " / not run $not_run")}"
+echo "mutate.sh: $file, $((SECONDS - started)) s: killed $killed$([ "$capped" -gt 0 ] && echo " ($capped at the memory cap)") / survived $survived / not compiled $not_compiled${not_run:+$([ "$not_run" -gt 0 ] && echo " / not run $not_run")}"
 exit 0

@@ -10,7 +10,8 @@
 # an interrupt or a TERM ends them and the run in progress at once (the runner ends its own
 # processes): only the processes it started itself are signalled. Each run's output
 # goes to a file of its own; a failed run's file is kept and named, with its FAIL lines, the
-# others are removed.
+# others are removed. Each run's Quickshell is under the runners' memory cap
+# (H2S_TEST_MEMORY_MAX, tests/memory-cap.sh): a suite that leaks across the runs fails there.
 #
 # Exit status: 0 when all n runs passed, 1 when any failed, 2 when the arguments are wrong or
 # a run could not be set up (the runner's status 2: the soak stops there).

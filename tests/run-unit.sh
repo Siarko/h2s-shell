@@ -28,7 +28,9 @@
 # nowhere, a private HOME and XDG directories, no new privileges) and each shard's verdict
 # are tests/headless.sh's, shared with tests/run-modules.sh. On PATH first: stand-ins for
 # nmcli and notify-send (tests/fixtures/unit-path), for the suites that build the real
-# settings window.
+# settings window. Each shard's Quickshell runs under a memory cap (H2S_TEST_MEMORY_MAX,
+# 1536M by default, 0 for none; tests/memory-cap.sh, said in the first lines): a shard
+# stopped there fails, its verdict naming the suites it was running and the cap.
 #
 # Needs Quickshell, labwc, setpriv, setsid and timeout. labwc and setpriv are the pinned
 # ones of tests/lock/tools.nix where there is a `nix` command, else those on PATH
@@ -38,7 +40,8 @@
 #
 # Exit status: 0 when every suite passed, 1 when a check FAILed, a suite timed out, checked
 # nothing (0/0) or checked after it had reported, a TypeError / ReferenceError was printed,
-# a shard's Quickshell exited non-zero (a crash after a partial summary included) or the
+# a shard's Quickshell exited non-zero (a crash after a partial summary included) or was
+# stopped at the memory cap, or the
 # suites that reported are not exactly those run — all of tests.qml's, or the named ones
 # and those they bring —, 2 when the runner or a shard could not be set up (a missing tool
 # is named, with its use), a name is empty or not a suite of tests.qml, or the suites of

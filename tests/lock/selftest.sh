@@ -2,9 +2,11 @@
 # The lock bed's runner checking itself, in seconds, without a stack: lint.sh's cases, and
 # run.sh's second run of a failed test — a scenario that fails once and then passes is
 # FLAKY (the run still fails, the flaky log gets its line, the first log is kept), one that
-# fails twice is a FAIL. The scenarios start nothing: they live in a directory of this
-# script's (LOCKTEST_EXTRA_TESTS), and the run takes a lock file of its own, so a real run
-# of the bed may go on meanwhile.
+# fails twice is a FAIL — and the memory cap on what a scenario spawns: under a cap of 200M
+# (H2S_TEST_MEMORY_MAX), a process that takes 400 MB is stopped, and the scenario fails
+# saying so. The scenarios start no stack: they live in a directory of this script's
+# (LOCKTEST_EXTRA_TESTS), and the run takes a lock file of its own, so a real run of the bed
+# may go on meanwhile.
 #
 #   tests/lock/selftest.sh
 #
@@ -46,8 +48,15 @@ fi
 EOF
 echo 'fail "every time"' > "$work/tests/self-failing.sh"
 echo 'pass "always"' > "$work/tests/self-passing.sh"
-env LOCKTEST_KEEP=1 LOCKTEST_LOCK_FILE="$work/bed.flock" LOCKTEST_EXTRA_TESTS="$work/tests" XDG_CACHE_HOME="$work/cache" \
-    TMPDIR="$work/temp" timeout 300 "$LOCKTEST_DIR/run.sh" -j 2 self-flaky self-failing self-passing \
+# A process past the cap: its whole scope is stopped (systemd), or its allocation fails
+# (prlimit); either way it ends
+cat > "$work/tests/self-capped.sh" << 'EOF'
+spawn "$WORK/hog.log" bash -c 's=$(head -c 419430400 /dev/zero | tr "\0" x); echo "allocated ${#s}"'
+hog=$SPAWNED_PID
+check_within 60 "the process that allocates past the cap has ended" eval '! kill -0 -- "-$hog" 2> /dev/null'
+EOF
+env H2S_TEST_MEMORY_MAX=200M LOCKTEST_KEEP=1 LOCKTEST_LOCK_FILE="$work/bed.flock" LOCKTEST_EXTRA_TESTS="$work/tests" XDG_CACHE_HOME="$work/cache" \
+    TMPDIR="$work/temp" timeout 300 "$LOCKTEST_DIR/run.sh" -j 2 self-flaky self-failing self-passing self-capped \
     > "$work/run.out" 2>&1 < /dev/null
 status=$?
 summary=$(sed -n '/^Summary/,$p' "$work/run.out")
@@ -58,7 +67,7 @@ grep -qx '  FAIL  self-failing — and again, alone' <<< "$summary" \
     && pass "failed twice: FAIL" || failed "no 'FAIL … and again, alone' line for self-failing"
 grep -qx '  PASS  self-passing' <<< "$summary" && pass "passed: PASS, not run again" || failed "self-passing did not PASS"
 [ "$(grep -cx '== self-passing' "$work/run.out")" = 1 ] || failed "self-passing ran more than once"
-grep -q '^failed, so run once more, alone: self-flaky self-failing$' "$work/run.out" \
+grep -q '^failed, so run once more, alone: self-flaky self-failing self-capped$' "$work/run.out" \
     && pass "only the failed ones ran again" || failed "the second run's list"
 flaky_line=$(cat "$work/cache/h2s-shell-tests/flaky.log" 2> /dev/null)
 grep -qE '^[0-9-]+T[0-9:]+ self-flaky commit=[0-9a-z]+ load=[0-9.]+ jobs=2 first-log=/.*/self-flaky\.first/test\.log$' <<< "$flaky_line" \
@@ -72,6 +81,18 @@ artifacts=${first_log%/self-flaky.first/test.log}
 [ -e "$artifacts/shells/self-flaky.first/edited-by-the-first-run" ] && [ ! -e "$artifacts/shells/self-flaky/edited-by-the-first-run" ] \
     && pass "LOCKTEST_KEEP=1: the second run had a fresh copy of the shell, the first's kept aside" \
     || failed "the copies of the shell under $artifacts/shells"
+if grep -q '^warning: no memory cap' "$work/run.out"; then
+    echo "SKIP the memory cap: neither the user's service manager nor prlimit can be used here"
+else
+    grep -q '^memory cap: 200M per process' "$work/run.out" \
+        && pass "the run said the cap (200M)" || failed "no 'memory cap: 200M per process' line"
+    grep -qx '    FAIL self-capped: the process logging to hog.log killed at the memory cap (200M.*)' "$work/run.out" \
+        && pass "a process past the cap: stopped, and said so" || failed "no line saying self-capped's process was killed at the memory cap"
+    grep -qx '  FAIL  self-capped — and again, alone' <<< "$summary" \
+        && pass "… and its scenario fails" || failed "self-capped did not FAIL"
+    ! grep -q 'allocated' "$artifacts/self-capped/hog.log" 2> /dev/null \
+        || failed "the process past the cap finished its allocation"
+fi
 [ "$failures" = 0 ] || { echo "--- run.sh's output:"; cat "$work/run.out"; }
 
 echo

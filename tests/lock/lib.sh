@@ -15,6 +15,11 @@
 #                          side): what a test looks for among processes, and what run.sh
 #                          sweeps after it — never a sibling test's
 #   LOCKTEST_RUNTIME       this test's private, short runtime dir (run.sh removes it)
+#   H2S_TEST_MEMORY_MAX    the memory cap on each process spawn() starts (0: none), and
+#   H2S_TEST_USER_RUNTIME_DIR, H2S_TEST_USER_BUS
+#                          the caller's runtime dir and bus, through which the cap's scopes
+#                          are asked of the user's service manager (tests/memory-cap.sh);
+#                          kept here, unset from the environment the stack inherits
 #
 # and of the caller's own environment only PATH, TMPDIR, USER, LOGNAME, TZ, LOCALE_ARCHIVE,
 # XDG_DATA_DIRS, and two settings for a test:
@@ -101,6 +106,13 @@ unset WAYLAND_DISPLAY DISPLAY HYPRLAND_INSTANCE_SIGNATURE HYPRLAND_CMD NOTIFY_SO
 # own, as in a session without one.
 unset LC_ALL LC_CTYPE LANGUAGE QT_IM_MODULE QT_IM_MODULES GTK_IM_MODULE XMODIFIERS
 export LANG=en_US.UTF-8
+# The memory cap: chosen with the caller's runtime dir and bus, which then leave the
+# environment — the stack sees only its private ones
+# shellcheck source=../memory-cap.sh
+source "$LOCKTEST_DIR/../memory-cap.sh"
+memory_cap_init quiet
+unset H2S_TEST_MEMORY_MAX H2S_TEST_USER_RUNTIME_DIR H2S_TEST_USER_BUS
+CAP_UNITS=() CAP_LOGS=()
 
 stack_stop() {
     local group
@@ -113,18 +125,33 @@ stack_stop() {
     done
     for group in "${PROCESS_GROUPS[@]}"; do kill -KILL -- "-$group" 2> /dev/null; done
     PROCESS_GROUPS=()
+    # A process stopped at the memory cap: said, and the test fails (its scope is cleared
+    # from the service manager by the look)
+    local index capped=""
+    for index in "${!CAP_LOGS[@]}"; do
+        memory_cap_hit "${CAP_UNITS[$index]}" 1 "${CAP_LOGS[$index]}" || continue
+        printf '    FAIL %s: the process logging to %s %s\n' "${LOCKTEST_TEST_ID##*/}" "${CAP_LOGS[$index]##*/}" "$(memory_cap_note)"
+        capped=1
+    done
+    CAP_UNITS=() CAP_LOGS=()
     # The dir itself is run.sh's to remove (also when this bash is killed)
     rm -rf "${RUN:?}"/* 2> /dev/null
+    [ -z "$capped" ] || exit 1
 }
 trap stack_stop EXIT
 trap 'exit 1' INT TERM
 
 # spawn <log> <command...>: in a process group of its own (so it is stopped with all its
-# children), with a hard time limit
+# children), with a hard time limit, under the memory cap — a scope of its own (with what it
+# starts: the launcher's shells share the launcher's), entered by exec, so the command is
+# still timeout's child and of the group
 spawn() {
-    local output=$1
+    local output=$1 tag
     shift
-    setsid timeout "$LOCKTEST_PROCESS_TIMEOUT" "$@" > "$output" 2>&1 < /dev/null &
+    tag=${output##*/}
+    memory_cap_wrap "lt-${tag%.log}"
+    CAP_UNITS+=("$MEMORY_CAP_UNIT") CAP_LOGS+=("$output")
+    setsid timeout "$LOCKTEST_PROCESS_TIMEOUT" "${MEMORY_CAP_PREFIX[@]}" "$@" > "$output" 2>&1 < /dev/null &
     PROCESS_GROUPS+=($!)
     SPAWNED_PID=$!
 }

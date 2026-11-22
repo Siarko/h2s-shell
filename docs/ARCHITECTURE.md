@@ -1791,6 +1791,13 @@ keyboard its window takes); the others are packed by the time each took last
 asynchronous suite, 0.1 s for another) into as many shards as it takes for none to run longer
 than the longest suite, at most half the processors' worth at once, and no more than the
 memory available holds at about 1.1 GB a shard (`-j <n>` says how many).
+Each shard's Quickshell runs under a memory cap (`tests/memory-cap.sh`, shared with the lock
+bed, where it caps each process of the stack): `H2S_TEST_MEMORY_MAX` (1536M by default, `0`
+for none), a scope of the user's service manager (`systemd-run --user --scope` with
+`MemoryMax` and no swap) where it can be reached and hands out the memory controller, else an
+address-space limit of four times the cap (`prlimit`), else a warning. A suite that runs away
+(a loop that keeps appending) is stopped at the cap and named in the verdict ("killed at the
+memory cap"), instead of filling the machine's memory.
 The plan is computed (`plan_shards` in `tests/count-suites.sh`), never kept by hand. Each
 shard is the runner again on its suites, with its own verdict, printed when it ends; the
 verdict over them wants every suite run to report exactly once. The whole set takes about

@@ -15,6 +15,11 @@
 # h2s-shell launcher runs, else qs or quickshell on PATH. The run's first lines say what was
 # taken; a missing tool is a set-up error (exit 2) that names it.
 #
+# Each Quickshell runs under a memory cap (tests/memory-cap.sh: H2S_TEST_MEMORY_MAX, 1536M by
+# default, 0 for none), so that a suite that runs away is stopped there instead of filling
+# the machine's memory; the compositor, which runs no test code, has none. A Quickshell
+# stopped at the cap is said so by the verdict, with the suites that had not reported.
+#
 # Nothing here is shared with another run but the processor — every run has its own
 # compositor, runtime dir and home — so these runners take no lock and run side by side
 # (the lock test bed, whose tests depend on timing, takes one: tests/lock/run.sh). The
@@ -35,7 +40,8 @@
 #                                          the summary; returns 1 on any FAIL line, a
 #                                          TypeError / ReferenceError, a non-zero exit of
 #                                          Quickshell (a crash after a partial summary
-#                                          included), a time-out, a suite reporting 0/0, more
+#                                          included), a time-out, a stop at the memory
+#                                          cap (HEADLESS_CAPPED), a suite reporting 0/0, more
 #                                          PASS lines than the summaries count (a check after
 #                                          its suite reported), a suite that needs a
 #                                          process of its own (OWN-PROCESS) beside others,
@@ -74,6 +80,8 @@ headless_cleanup() {
         done
         kill -KILL -- "-$quickshell_pid" 2> /dev/null
         [ -n "$quickshell_gone" ] || kill -KILL "$quickshell_pid" 2> /dev/null
+        # A scope stopped at the cap stays listed by the service manager until cleared
+        memory_cap_hit "${headless_cap_unit:-}" 1 > /dev/null 2>&1
     fi
     # The compositor: asked to end, waited for (it takes some tens of milliseconds; two
     # seconds at most), and what is left of its group then is killed. labwc_pid is the
@@ -109,14 +117,18 @@ headless_resolve() {
     ulimit -c 0 2> /dev/null
     # shellcheck disable=SC2034  # read by resolve.sh
     temp_base=${TMPDIR:-/tmp}
+    # shellcheck source=memory-cap.sh
+    source "$REPO/tests/memory-cap.sh"
     # A shard of tests/run-unit.sh: the runner that started it has printed what was taken
     # (and handed it on: LOCKTEST_QS, H2S_TEST_TOOLS); a set-up error still shows (stderr)
     if [ -n "${HEADLESS_QUIET_RESOLVE:-}" ]; then
         # shellcheck source=lock/resolve.sh
         source "$LOCKTEST_DIR/resolve.sh" > /dev/null
+        memory_cap_init quiet
     else
         # shellcheck source=lock/resolve.sh
         source "$LOCKTEST_DIR/resolve.sh"
+        memory_cap_init
     fi
 }
 
@@ -148,9 +160,14 @@ headless_run() {
     shift 2
     HEADLESS_LOG=$work/unit.log
     headless_started=$SECONDS
+    HEADLESS_CAPPED=""
+    memory_cap_wrap quickshell
+    headless_cap_unit=$MEMORY_CAP_UNIT
     # Above tests.qml's whole-run limit (_runLimitMs, 420 s), so that the runner names a
     # suite that hangs before this ends it; labwc's (540 s, above) outlasts this
-    "${isolated[@]}" "$@" WAYLAND_DISPLAY=wayland-0 QT_QPA_PLATFORM=wayland \
+    # The cap's words first: systemd-run execs what follows, so the pid is Quickshell's
+    # chain (env, setpriv, timeout) all the same
+    "${MEMORY_CAP_PREFIX[@]}" "${isolated[@]}" "$@" WAYLAND_DISPLAY=wayland-0 QT_QPA_PLATFORM=wayland \
         "$SETPRIV" --no-new-privs timeout 480 "$LOCKTEST_QS" -p "$root" > "$HEADLESS_LOG" 2>&1 < /dev/null &
     # Waited for, not run in the foreground: bash runs a trap only when the foreground
     # command ends, so an interrupt would be held until Quickshell is done
@@ -158,6 +175,8 @@ headless_run() {
     wait "$quickshell_pid"
     HEADLESS_STATUS=$?
     quickshell_pid=""
+    memory_cap_hit "$headless_cap_unit" "$HEADLESS_STATUS" "$HEADLESS_LOG" && HEADLESS_CAPPED=1
+    headless_cap_unit=""
     [ -n "$output_copy" ] && cp "$HEADLESS_LOG" "$output_copy"
     cat "$HEADLESS_LOG"
 }
@@ -173,10 +192,24 @@ headless_verdict() {
     echo "$summary" | sed 's/^/  /'
     [ "$fails" -gt 0 ] && { echo "  $fails check(s) FAILED"; failed=1; }
     [ "$errors" -gt 0 ] && { echo "  $errors TypeError/ReferenceError line(s)"; grep -E 'TypeError|ReferenceError' "$HEADLESS_LOG" | head -n 10 | sed 's/^/    /'; failed=1; }
-    [ "$status" = 124 ] && { echo "  quickshell timed out"; failed=1; }
-    # Any other non-zero status is a failure too: a crash (139: SIGSEGV) after a partial
-    # summary with no FAIL line in it must not pass
-    [ "$status" != 0 ] && [ "$status" != 124 ] && { echo "  quickshell exited with status $status"; failed=1; }
+    if [ -n "${HEADLESS_CAPPED:-}" ]; then
+        # What was running then: the selected suites that had not reported, else all the
+        # selected ones (the cap can be reached after the last report), else "quickshell"
+        local running="" wanted
+        if [ "${1:-}" = exactly ]; then
+            for wanted in "${@:2}"; do
+                grep -q -F -- "--- $wanted: " <<< "$summary" || running="$running${running:+ }$wanted"
+            done
+            [ -n "$running" ] || running="${*:2}"
+        fi
+        echo "  ${running:-quickshell}: $(memory_cap_note)"
+        failed=1
+    else
+        [ "$status" = 124 ] && { echo "  quickshell timed out"; failed=1; }
+        # Any other non-zero status is a failure too: a crash (139: SIGSEGV) after a partial
+        # summary with no FAIL line in it must not pass
+        [ "$status" != 0 ] && [ "$status" != 124 ] && { echo "  quickshell exited with status $status"; failed=1; }
+    fi
     reported=$(printf '%s\n' "$summary" | grep -c -- '^--- ')
     [ "$reported" -lt "$expected" ] && { echo "  only $reported of the $expected suites $where reported"; failed=1; }
     # A suite that checked nothing cannot fail, so it does not pass either

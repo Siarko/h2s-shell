@@ -20,6 +20,9 @@
 #   own-beside FormatTest and LockRulesTest in one shard, Format saying it
 #              needs a process of its own (OWN-PROCESS)                       → must fail
 #   inherited  H2S_UNIT_SHARD set from outside: a whole run still in shards   → must pass
+#   capped     under a memory cap of 200M (H2S_TEST_MEMORY_MAX), Format's shard takes
+#              400 MB after its summary: stopped, said to be killed at the memory cap,
+#              naming the suite                                               → must fail
 #
 # with suites named to the runner (the `obedient` stand-in, which ends well everywhere):
 #
@@ -243,6 +246,7 @@ selecting_stand_in timeout '' '[ -n "$format" ] && exit 124; exit 0'
 selecting_stand_in partial '[ -n "$format" ] && names=("${names[@]/FormatTest/}") && names=(${names[@]})'
 selecting_stand_in empty '' '[ -n "$format" ] && echo "  INFO: --- Empty: 0/0 passed ---"; exit 0'
 selecting_stand_in late '' '[ -n "$format" ] && echo "  INFO:   PASS: a check after its suite reported"; exit 0'
+selecting_stand_in capped '' '[ -n "$format" ] && s=$(head -c 419430400 /dev/zero | tr "\\0" x) && echo "allocated ${#s}"; exit 0'
 selecting_stand_in own-beside '' '[ -n "$format" ] && echo "  INFO: OWN-PROCESS: Format"; exit 0'
 # Crashes in SidePanel's shard, and makes itself no executable for the shards after it
 selecting_stand_in mixed '' '[[ ":${H2S_TEST_SUITES:-}:" == *:SidePanelTest:* ]] && { chmod -x "$0"; kill -SEGV $$; }; exit 0'
@@ -313,6 +317,12 @@ reason_under_shard() {
     under=$(grep -A1 -E "^  shard [0-9]+ \($2\) failed \(status [0-9]+\):$" "$work/$1" | sed -n 2p)
     [ "$under" = "    $3" ]
 }
+# … only its start (prlimit's cap says more after the size)
+reason_under_shard_starts() {
+    local under
+    under=$(grep -A1 -E "^  shard [0-9]+ \($2\) failed \(status [0-9]+\):$" "$work/$1" | sed -n 2p)
+    [ "${under#"    $3"}" != "$under" ]
+}
 check crash "… and why again, under the shard in the verdict over the shards" \
     reason_under_shard crash.log FormatTest "quickshell exited with status 139"
 verdict timeout timeout 1 "${three[@]}"
@@ -330,6 +340,15 @@ check mixed "… and which could not be set up" grep -q "^  shard [0-9] (.*) cou
 verdict own-beside own-beside 1 FormatTest LockRulesTest
 check own-beside "said so" grep -q "^  Format needs a process of its own, and 2 suites reported in it" "$work/own-beside.log"
 H2S_UNIT_SHARD=1:1 verdict inherited obedient 0 "${three[@]}"
+H2S_TEST_MEMORY_MAX=200M verdict capped capped 1 "${three[@]}"
+if grep -q '^warning: no memory cap' "$work/capped.log"; then
+    echo "SKIP capped: neither the user's service manager nor prlimit can be used here"
+else
+    check capped "said the cap" grep -q "^memory cap: 200M per process" "$work/capped.log"
+    check capped "said Format's shard was killed at the memory cap, under the shard" \
+        reason_under_shard_starts capped.log FormatTest "Format: killed at the memory cap (200M"
+    check capped "… before it finished allocating" bash -c '! grep -q "^allocated" "$1"' _ "$work/capped.log"
+fi
 check inherited "still three shards" grep -q "^run-unit.sh: 3 suites in 3 shards" "$work/inherited.log"
 
 verdict selected obedient 0 FormatTest LockRulesTest
