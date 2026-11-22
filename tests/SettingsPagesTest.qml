@@ -7,6 +7,8 @@ import qs.singletons
 // unnoticed until then. The notifications page's toast rows are checked built.
 TestCase {
     suiteName: "SettingsPages"
+    // The globals it pins for a while, put back key by key
+    property GlobalsPin _globalsPin: GlobalsPin {}
 
     readonly property var _files: [
         "Bar.qml",
@@ -210,7 +212,6 @@ TestCase {
         const page = component.createObject(null, { editIndex: 0 });
         if (page === null)
             return fail("the notifications page builds: " + component.errorString().trim());
-        const savedGlobals = Config.globals;
         const editors = () => Array.from(page.children).filter(child => typeof child.key === "string" && child.entry !== undefined);
         const editorOf = key => editors().find(editor => editor.key === key);
         const queueKeys = ["notifications.criticalToastLimit", "notifications.stayingToastLimit",
@@ -227,9 +228,9 @@ TestCase {
                                         editorOf(queueKeys[1]).entry.min, editorOf(queueKeys[1]).entry.max]), "[1,3,1,5]",
                         "critical 1 to 3, staying 1 to 5");
 
-            Config.globals = JSON.stringify(Object.assign(JSON.parse(savedGlobals || "{}"), { "notifications.toasts": true }));
+            _globalsPin.use({ "notifications.toasts": true });
             assert(queueKeys.every(key => editorOf(key).available), "available with toasts on");
-            Config.globals = JSON.stringify(Object.assign(JSON.parse(savedGlobals || "{}"), { "notifications.toasts": false }));
+            _globalsPin.use({ "notifications.toasts": false });
             assert(queueKeys.every(key => !editorOf(key).available), "greyed out with toasts off");
 
             const infoOf = editor => _find(editor, item => item.objectName === "info");
@@ -243,7 +244,7 @@ TestCase {
                    "the tip follows the icon's pointer area (lit: a tap shows it too)");
             assert(!infoOf(editorOf("notifications.movableToasts")).visible, "a row without info shows no icon");
         } finally {
-            Config.globals = savedGlobals;
+            _globalsPin.restore();
             page.destroy();
         }
     }

@@ -293,10 +293,21 @@ Target: **lock bed ≤ 100 s** at `-j 8` here; **full set ≤ 150 s** on Arch.
 ### 4.1 Shared state
 
 - A suite runs with fresh singletons: per-process shards (§3.1) give it for the long
-  suites; the packed shards of short suites keep a check in `TestCase`: after `run()` /
-  `finish()` the runner compares a fingerprint of `Config`'s and `Profiles`' stored values
-  and `Modules.host`'s loaded list with the one taken before, and fails the suite that left
-  them changed ("left Config.disabledModules changed").
+  suites; the packed shards of short suites keep a check (T8: `tests/SharedState.qml`,
+  read by `tests/SharedStateReader.qml`): a snapshot when a suite starts, compared when it
+  reports, fails the suite that left it changed ("left Config.disabledModules changed",
+  keys only, at most six). Read: Config's stored fields, Profiles (profiles, globals, active
+  profiles, screen locked, simulated facts, open panels), ModuleLists, Toasts' override and
+  state, `Shell.settingsPageIds`, the Theme switches, Notifier's record mode, and — where a
+  suite of the process names them — WifiManager, NetworkProfiles, VpnManager, VpnLockdown
+  and GpuDevices (building them starts their readers). Asynchronous suites start once the
+  startup's writes have settled and are judged once no suite beside them runs and the state
+  has settled again. A suite that pins globals for a while puts back only those keys
+  (`tests/GlobalsPin.qml`), never the whole text it saved.
+  Out of scope, and why: the module host (Modules) — only `ownProcess` suites reach it, and
+  those are not checked; reading it would build the host in every shard. A synchronous
+  suite's writes left to the event loop land before the asynchronous suites' snapshots (the
+  settle absorbs them): a synchronous suite cannot wait for a turn.
 - A suite that throws is ended and its shard's remaining suites still run in a fresh
   process (the runner restarts the shard without it), so one exception does not poison
   others' state.

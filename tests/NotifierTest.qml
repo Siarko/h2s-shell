@@ -11,6 +11,8 @@ import qs.singletons.io
 TestCase {
     id: suite
     suiteName: "Notifier"
+    // The globals it pins for a while, put back key by key
+    property GlobalsPin _globalsPin: GlobalsPin {}
 
     property Component _shellToast: Component {
         ShellNotificationHudItem {
@@ -564,7 +566,6 @@ TestCase {
     // which queue each goes to, the stacks' order, the limits and badges, how long each
     // shows (ToastRules.timing) and which one counts down
     function _toastTimes() {
-        const savedGlobals = Config.globals;
         Toasts.screensOverride = [{ name: "queue-screen", focused: true, fullscreen: false, workspace: 1 }];
         const made = [];
         let nextId = 9001;
@@ -591,7 +592,7 @@ TestCase {
         const counting = toast => toast !== null && toast._counting && countdownOf(toast).running;
         const badge = queue => _find(stack, item => item.objectName === queue + "Badge");
         const settings = change => {
-            Config.globals = JSON.stringify(Object.assign(JSON.parse(savedGlobals || "{}"), change));
+            _globalsPin.use(change);
         };
         // Every toast that is leaving slides out to the end
         const settle = () => {
@@ -982,7 +983,7 @@ TestCase {
         clear();
 
         Toasts.screensOverride = null;
-        Config.globals = savedGlobals;
+        _globalsPin.restore();
         for (const object of made)
             object.destroy();
     }
@@ -993,9 +994,8 @@ TestCase {
     // went back in its queue — or gone when that queue takes nothing now. Dragging under real
     // input events: ToastDragTest.
     function _modals() {
-        const savedGlobals = Config.globals;
         const settings = change => {
-            Config.globals = JSON.stringify(Object.assign(JSON.parse(savedGlobals || "{}"), change));
+            _globalsPin.use(change);
         };
         settings({});
         Toasts.clearHudQueue();
@@ -1095,7 +1095,7 @@ TestCase {
 
         Toasts.clearHudQueue();
         Toasts.screensOverride = null;
-        Config.globals = savedGlobals;
+        _globalsPin.restore();
         for (const object of made)
             object.destroy();
     }
@@ -1104,8 +1104,7 @@ TestCase {
     // Toasts.watchAnnounces): its toast comes back once through the queue, or on
     // screen counts its time again; stand-in notifications, a stack on a stand-in toasts' screen
     function _announces() {
-        const savedGlobals = Config.globals;
-        Config.globals = JSON.stringify(Object.assign(JSON.parse(savedGlobals || "{}"), { "notifications.toastDuration": 5 }));
+        _globalsPin.use({ "notifications.toastDuration": 5 });
         Toasts.screensOverride = [{ name: "announce-screen", focused: true, fullscreen: false, workspace: 1 }];
         const made = [];
         let nextId = 9101;
@@ -1178,10 +1177,10 @@ TestCase {
         quiet("cleared");
 
         // Toasts off, no toast screen, the centre open: nothing slides in
-        Config.globals = JSON.stringify(Object.assign(JSON.parse(savedGlobals || "{}"), { "notifications.toasts": false }));
+        _globalsPin.use({ "notifications.toasts": false });
         replace(job, { "x-qs-announce": "5" });
         quiet("toasts off: an announce brings nothing");
-        Config.globals = JSON.stringify(Object.assign(JSON.parse(savedGlobals || "{}"), { "notifications.toastDuration": 5 }));
+        _globalsPin.use({ "notifications.toastDuration": 5 });
         Toasts.screensOverride = [];
         replace(job, { "x-qs-announce": "6" });
         Toasts.screensOverride = [{ name: "announce-screen", focused: true, fullscreen: false, workspace: 1 }];
@@ -1201,7 +1200,7 @@ TestCase {
         quiet("an outside app's replacement, or another run's announce: nothing, as before");
 
         Toasts.screensOverride = null;
-        Config.globals = savedGlobals;
+        _globalsPin.restore();
         for (const object of made)
             object.destroy();
     }

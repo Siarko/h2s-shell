@@ -63,6 +63,32 @@ QtObject {
     property var refuse: null
 
     property var _jobs: []
+    // The timings' clock (ms): monotonic (Quickshell's ElapsedTimer), unmoved by the wall clock
+    property ElapsedTimer _clock: ElapsedTimer {}
+
+    function _now() {
+        return Number(_clock.elapsedMs());
+    }
+
+    // A run's timers as the runner kept them: { armed: { <timer>: ms }, armedAt, fired: { <timer>:
+    // ms since the run started } } — what the runner's suite checks the limits against, unmoved
+    // by how late a loaded event loop hands over the answer
+    function _timingsOf(handle) {
+        return handle?._timings ?? null;
+    }
+
+    // A timer of a run fired: early (Qt's timers may), it waits the rest; then the event
+    function _fired(job, name) {
+        const elapsed = _now() - job.clockStart;
+        const remainder = CommandRules.timerRemainder(job.timings.armed[name], elapsed - (job.timings.armedAt[name] ?? 0));
+        if (remainder > 0 && job.item) {
+            job.item[name].interval = remainder;
+            job.item[name].restart();
+            return;
+        }
+        job.timings.fired[name] = elapsed;
+        _dispatch(job, { type: name });
+    }
     property var _deferred: []
     property bool _gone: false
     readonly property bool _toolsKnown: tools?.known === true
@@ -87,6 +113,9 @@ QtObject {
             // queued: done, its answer waiting in `_deferred` for the flush
             item: null, starting: false, queued: false, muted: false, truncated: false,
             stdout: "", stderr: "", lastStderr: "", startedAt: 0,
+            // Its timers, on the monotonic clock from its start (_startProcess): the interval
+            // each was armed with, and when it was armed and fired (_timingsOf)
+            clockStart: 0, timings: { armed: {}, armedAt: {}, fired: {} },
             lineCount: { stdout: 0, stderr: 0 },
             refusal: problem !== "" ? problem : given.problem
         };
@@ -99,6 +128,9 @@ QtObject {
                     root._cancel(job);
             }
         };
+        // Its timings, for the runner's own suite (_timingsOf): not enumerable, nothing a
+        // caller lists
+        Object.defineProperty(handle, "_timings", { value: job.timings });
         if (_gone) {
             job.state.phase = "done";
             return handle;
@@ -152,6 +184,8 @@ QtObject {
             break;
         case "timer":
             if (item) {
+                job.timings.armed[effect.name] = effect.ms;
+                job.timings.armedAt[effect.name] = _now() - job.clockStart;
                 item[effect.name].interval = effect.ms;
                 item[effect.name].restart();
             }
@@ -180,6 +214,7 @@ QtObject {
         item.process.command = CommandRules.commandLine(job.argv, tools, job.state.timeoutMs, job.state.killAfterMs, job.state.endWithShell);
         item.process.environment = CommandRules.mergedEnvironment(root.environment, job.options.environment);
         job.startedAt = Date.now();
+        job.clockStart = _now();
         // A program that cannot start may be reported inside the next line: its answer
         // waits for the flush, so that done is never called inside start()
         job.starting = true;
@@ -293,10 +328,10 @@ QtObject {
                 }
             }
             property Timer watchdog: Timer {
-                onTriggered: root._dispatch(run.job, { type: "watchdog" })
+                onTriggered: root._fired(run.job, "watchdog")
             }
             property Timer kill: Timer {
-                onTriggered: root._dispatch(run.job, { type: "kill" })
+                onTriggered: root._fired(run.job, "kill")
             }
         }
     }

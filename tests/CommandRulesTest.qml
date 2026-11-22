@@ -151,6 +151,10 @@ TestCase {
         assert(rules.guards(tools, 1) && !rules.guards(tools, 0) && rules.guards(tools, 0, true) && rules.guards({ setpriv: "/usr/bin/setpriv" }, 1, true)
                && !rules.guards({ setpriv: "/usr/bin/setpriv" }, 1) && !rules.guards({ timeout: "/usr/bin/timeout", setpriv: "" }, 0, true) && !rules.guards(undefined, 0, true),
                "guarded (setpriv in front): wrapped, or endWithShell where setpriv was found");
+        assertEqual(rules.timerRemainder(300, 300) + " " + rules.timerRemainder(300, 450), "0 0", "a timer fired at or past its interval: due");
+        assertEqual(rules.timerRemainder(300, 273), 27, "… fired early: the rest still to wait");
+        assertEqual(rules.timerRemainder(300, 299.2), 1, "… a fraction of a ms early: one more");
+        assertEqual(rules.timerRemainder(undefined, 10) + " " + rules.timerRemainder(300, NaN), "0 0", "… nothing to measure by: due");
         assert(!rules.waitsForTools(0) && !rules.waitsForTools(0, false) && rules.waitsForTools(1) && rules.waitsForTools(0, true),
                "waits for the look-up: a run with a limit or with endWithShell; one without either starts at once");
         assertEqual(rules.wrapperTools.map(tool => tool.name).join(), "timeout,setpriv", "the two programs looked for");

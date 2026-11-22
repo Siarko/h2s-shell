@@ -236,6 +236,16 @@ Singleton {
 
     // Whether a run waits for the look-up of `timeout` and `setpriv` before it is started:
     // only one that takes them (a limit, or `endWithShell`). Any other starts at once.
+    // A runner's timer fired after `elapsedMs` of the `armedMs` it was armed with (both on a
+    // monotonic clock): the ms still to wait, 0 when it is due. Qt's timers fire early by a
+    // few percent (more under load): a limit is kept at least as long as it was asked for.
+    function timerRemainder(armedMs, elapsedMs) {
+        const armed = Number(armedMs), elapsed = Number(elapsedMs);
+        if (!Number.isFinite(armed) || !Number.isFinite(elapsed))
+            return 0;
+        return Math.max(0, Math.ceil(armed - elapsed));
+    }
+
     function waitsForTools(timeoutMs, endWithShell) {
         return timeoutMs > 0 || endWithShell === true;
     }

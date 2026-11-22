@@ -40,6 +40,8 @@ QtObject {
     property real _startedMs: 0
     // How long it took, from its start to finish(): its summary may come later (finish)
     property real _tookMs: -1
+    // finish() was called: its summary may still wait (finish)
+    property bool _finished: false
     // The shared state when this suite started (SharedState.snapshot), compared when it reports;
     // null when it is not checked
     property var _stateBefore: null
@@ -102,27 +104,27 @@ QtObject {
     }
 
     function finish() {
-        if (done)
+        if (_finished)
             return;
+        _finished = true;
         _tookMs = Math.max(0, Math.round(Date.now() - _startedMs));
-        done = true;
         SharedState.running = SharedState.running.filter(other => other !== suite);
-        // While a suite that ran beside it still runs, what it changed for a while would count
-        // as this one's: checked, and reported, once the last of them has finished
-        if (_stateBefore !== null && SharedState.running.length > 0) {
-            SharedState.unreported = SharedState.unreported.concat([suite]);
+        // A checked suite is judged later (SharedState.judgeLater): once no suite that ran
+        // beside it still runs — what one of them changed for a while would count as this
+        // one's — and the state has settled, so that a write this suite left to the event
+        // loop is judged on it
+        if (_stateBefore !== null) {
+            SharedState.judgeLater(suite);
             return;
         }
+        _report();
+    }
+
+    // The verdict: what it left changed (when checked), its summary, and done
+    function _report() {
         _checkState();
         _summary();
-        if (SharedState.running.length === 0) {
-            const unreported = SharedState.unreported;
-            SharedState.unreported = [];
-            for (const other of unreported) {
-                other._checkState();
-                other._summary();
-            }
-        }
+        done = true;
     }
 
     Component.onCompleted: {

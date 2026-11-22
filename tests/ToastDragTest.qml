@@ -20,6 +20,8 @@ import qs.singletons
 TestCase {
     id: root
     suiteName: "ToastDrag"
+    // The globals it pins for a while, put back key by key
+    property GlobalsPin _globalsPin: GlobalsPin {}
     asynchronous: true
 
     property var _window: PanelWindow {
@@ -144,9 +146,8 @@ TestCase {
 
     function runAsync() {
         driver.wait(300); // the window shown
-        const savedGlobals = Config.globals;
         const settings = change => {
-            Config.globals = JSON.stringify(Object.assign(JSON.parse(savedGlobals || "{}"), change));
+            _globalsPin.use(change);
         };
         settings({});
         Toasts.clearHudQueue();
@@ -300,7 +301,7 @@ TestCase {
 
         Toasts.clearHudQueue();
         Toasts.screensOverride = null;
-        Config.globals = savedGlobals;
+        _globalsPin.restore();
         for (const object of made)
             object.destroy();
         finish();

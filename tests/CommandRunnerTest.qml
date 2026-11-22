@@ -343,15 +343,21 @@ TestCase {
             assertEqual(wrapped.stdout, "started", "… with what it printed until then");
             const watchdog = _runs.limitBare.result;
             assertEqual(watchdog.timedOut + " " + watchdog.ok + " " + watchdog.code + " " + watchdog.failedToStart, "true false -1 false", "past the limit, bare: the runner's watchdog ends it, timedOut");
-            // The runner's own timers are Qt timers, which fire early under load (up to 9 % seen
-            // in a shard beside window suites): the lower bound tells "at the limit" from "at once"
-            assert(watchdog.durationMs >= 200 && watchdog.durationMs < 5000, "… at the limit (" + watchdog.durationMs + " ms)");
+            // The runner's own watchdog, on its monotonic clock (not the answer's durationMs,
+            // which a loaded event loop makes late): armed with the limit, fired at it — never before
+            const watchdogTimings = bare._timingsOf(_runs.limitBare.handle);
+            assertEqual(watchdogTimings?.armed.watchdog, 300, "… its watchdog armed with the limit");
+            assert(watchdogTimings?.fired.watchdog - watchdogTimings?.armedAt.watchdog >= 300,
+                   "… and fired at it (" + watchdogTimings?.fired.watchdog + " ms)");
             const killedWrapped = _runs.stubbornWrapped.result;
             assertEqual(killedWrapped.timedOut + " " + killedWrapped.ok, "true false", "TERM shrugged off, inside timeout: its KILL ends it, timedOut");
             assert(killedWrapped.durationMs >= 500 && killedWrapped.durationMs < 5000, "… killAfterMs after the limit (" + killedWrapped.durationMs + " ms)");
             const killedBare = _runs.stubbornBare.result;
             assertEqual(killedBare.timedOut + " " + killedBare.ok + " " + killedBare.code, "true false -1", "TERM shrugged off, bare: the runner's KILL ends it, timedOut");
-            assert(killedBare.durationMs >= 400 && killedBare.durationMs < 5000, "… killAfterMs after the limit (" + killedBare.durationMs + " ms)");
+            const killTimings = bare._timingsOf(_runs.stubbornBare.handle);
+            assertEqual(killTimings?.armed.kill, 200, "… its KILL armed killAfterMs after the limit");
+            assert(killTimings?.fired.kill - killTimings?.armedAt.kill >= 200 && killTimings?.armedAt.kill >= killTimings?.fired.watchdog,
+                   "… and sent then (" + (killTimings?.fired.kill - killTimings?.fired.watchdog) + " ms after the watchdog)");
             assertEqual(_runs.inTime.result.ok + " " + _runs.inTime.result.timedOut, "true false", "a run that ends in time: the watchdog never speaks");
             assertEqual(_runs.limitNoSetpriv.result.timedOut + " " + _runs.limitNoSetpriv.result.code, "true -1", "timeout but no setpriv: the watchdog keeps the limit");
             _cancelling();

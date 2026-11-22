@@ -39,6 +39,8 @@
 #              one with a process of its own is not checked, and says so      → must fail
 #   beside     (the same) two asynchronous suites in one process: the one that finishes
 #              while the other has changed something for a while passes        → must pass
+#   pinned     (the same) a suite that leaves a global setting behind, beside one that pins
+#              another and puts back only what it pinned: the leak fails      → must fail
 #
 # tests/run-modules.sh with --suite, on the fixture module tests/fixtures/modules/good — the
 # first two with the real Quickshell, so tests-modules.qml's part is checked too:
@@ -464,6 +466,45 @@ beside_status=$?
 check beside "run-unit.sh exited 0 (it exited $beside_status)" test "$beside_status" = 0
 check beside "both ran in one process" grep -q "^Unit suites ([0-9]* s, quickshell exit 0)" "$work/beside.log"
 check beside "the one that finished first passed" grep -q -- "^  --- Quick: 1/1 passed" "$work/beside.log"
+
+# pinned: (the same) a suite that leaves a global setting behind, beside one that pins
+# another for a while and puts back only what it pinned (GlobalsPin): the leak is still seen
+tree_copy "$work/pinned"
+cat > "$work/pinned/tests/LeakBesideTest.qml" << 'QML'
+import QtQuick
+import qs.singletons
+TestCase {
+    suiteName: "LeakBeside"
+    asynchronous: true
+    function runAsync() {
+        const globals = JSON.parse(Config.globals || "{}");
+        globals["general.debug"] = true;
+        Config.globals = JSON.stringify(globals);
+        Qt.callLater(() => { assert(true, "left a global setting behind"); finish(); });
+    }
+}
+QML
+cat > "$work/pinned/tests/PinnerTest.qml" << 'QML'
+import QtQuick
+TestCase {
+    suiteName: "Pinner"
+    asynchronous: true
+    property var other: null
+    property GlobalsPin pin: GlobalsPin {}
+    property Timer later: Timer { interval: 500; onTriggered: { pin.restore(); finish(); } }
+    function runAsync() {
+        pin.use({ "notifications.toasts": false });
+        assert(true, "pinned a global setting for a while");
+        later.start();
+    }
+}
+QML
+sed -e 's/^\(    property var _promises: PromisesTest {}\)$/    property var _leakBeside: LeakBesideTest {}\n    property var _pinner: PinnerTest { other: _leakBeside }\n\1/' "$REPO/tests.qml" > "$work/pinned/tests.qml"
+"$work/pinned/tests/run-unit.sh" PinnerTest > "$work/pinned.log" 2>&1
+pinned_status=$?
+check pinned "run-unit.sh exited 1 (it exited $pinned_status)" test "$pinned_status" = 1
+check pinned "the suite that leaked failed, naming the globals" grep -q "FAIL: left Config.globals, Profiles.globals changed" "$work/pinned.log"
+check pinned "… counted on it" grep -q -- "^  --- LeakBeside: 1/2 passed, 1 FAILED" "$work/pinned.log"
 
 runner=run-modules.sh
 good=$REPO/tests/fixtures/modules/good

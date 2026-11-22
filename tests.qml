@@ -19,7 +19,7 @@ QtObject {
     // Each suite that shares its process leaves the shared state as it found it, or fails
     // (SharedState, TestCase): the check reads it with this
     readonly property QtObject _stateReader: SharedStateReader {}
-    readonly property bool _stateChecked: { SharedState.reader = root._stateReader; return true; }
+    readonly property bool _stateChecked: { SharedState.reader = root._stateReader; SharedState.checking = root._stateReader !== null; return true; }
     // Animations instant, so suites do not wait on them, unless a suite selected here tests
     // one (TestCase.animations). Set with the bindings, before any suite runs; in an object
     // of its own, as listing this object's properties for _suites reads them all.
@@ -149,7 +149,8 @@ QtObject {
         onTriggered: {
             _waited += interval;
             for (const suite of root._asyncSuites) {
-                if (suite.done)
+                // Finished, its verdict waiting for the state to settle (TestCase.finish)
+                if (suite.done || suite._finished)
                     continue;
                 const limit = root.timeLimitOf(suite);
                 if (_waited >= limit) {
