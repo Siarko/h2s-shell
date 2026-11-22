@@ -69,20 +69,37 @@ Singleton {
     function idleBlock(inhibitors, uid) {
         if (!Array.isArray(inhibitors) || typeof uid !== "number" || !Number.isInteger(uid) || uid < 0)
             return { held: "unknown", holders: [] };
-        const line = (value, limit) => {
-            const text = typeof value === "string"
-                ? value.replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]+/g, " ").replace(/\s+/g, " ").trim() : "";
-            return text.length > limit ? text.slice(0, limit - 1) + "\u2026" : text;
-        };
+        return _blocks(inhibitors, inhibitor => inhibitor?.uid === uid && _blocksWhat(inhibitor, "idle")
+            && _line(inhibitor.who, 40).toLowerCase() !== "h2s-shell");
+    }
+
+    // logind's inhibitors → whether a `sleep` block inhibitor holds (`systemd-inhibit
+    // --what=sleep`: a backup, a download), of any user — logind refuses or delays a Suspend
+    // while one holds, root's too: { held: true | false | "unknown", holders: [{ who, why }] }
+    // as idleBlock's. Delay inhibitors (the shell's own, UPower's) only delay a sleep and do
+    // not count.
+    function sleepBlock(inhibitors) {
+        if (!Array.isArray(inhibitors))
+            return { held: "unknown", holders: [] };
+        return _blocks(inhibitors, inhibitor => _blocksWhat(inhibitor, "sleep"));
+    }
+
+    function _blocksWhat(inhibitor, what) {
+        return inhibitor?.mode === "block" && typeof inhibitor.what === "string" && inhibitor.what.split(":").includes(what);
+    }
+
+    // One line, capped
+    function _line(value, limit) {
+        const text = typeof value === "string"
+            ? value.replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]+/g, " ").replace(/\s+/g, " ").trim() : "";
+        return text.length > limit ? text.slice(0, limit - 1) + "\u2026" : text;
+    }
+
+    function _blocks(inhibitors, counts) {
         const holders = [];
         for (const inhibitor of inhibitors) {
-            if (inhibitor?.uid !== uid || inhibitor.mode !== "block" || typeof inhibitor.what !== "string"
-                    || !inhibitor.what.split(":").includes("idle"))
-                continue;
-            const who = line(inhibitor.who, 40);
-            if (who.toLowerCase() === "h2s-shell")
-                continue;
-            holders.push({ who: who || "an app", why: line(inhibitor.why, 80) });
+            if (counts(inhibitor))
+                holders.push({ who: _line(inhibitor.who, 40) || "an app", why: _line(inhibitor.why, 80) });
         }
         return { held: holders.length > 0, holders: holders.slice(0, 5) };
     }
@@ -90,10 +107,77 @@ Singleton {
     // The idle reader's whole output — `id -u`'s line, then gdbus's ListInhibitors answer —
     // → idleBlock()
     function idleBlockFromOutput(output) {
+        const read = _inhibitorsRead(output);
+        return idleBlock(read.inhibitors, read.uid);
+    }
+
+    // The same output → sleepBlock()
+    function sleepBlockFromOutput(output) {
+        return sleepBlock(_inhibitorsRead(output).inhibitors);
+    }
+
+    function _inhibitorsRead(output) {
         const text = typeof output === "string" ? output : "";
         const newline = text.indexOf("\n");
         const first = (newline < 0 ? text : text.slice(0, newline)).trim();
-        const uid = /^[0-9]{1,10}$/.test(first) ? Number(first) : null;
-        return idleBlock(newline < 0 ? null : LockIoRules.parseInhibitors(text.slice(newline + 1)), uid);
+        return {
+            uid: /^[0-9]{1,10}$/.test(first) ? Number(first) : null,
+            inhibitors: newline < 0 ? null : LockIoRules.parseInhibitors(text.slice(newline + 1))
+        };
+    }
+
+    // ---- What logind says of sleep (singletons/lock/LogindSleep.qml reads it) ----
+
+    // A Can* answer as gdbus prints it (`('yes',)`) → "yes", "no", "challenge", "na", or
+    // "unknown" for anything else (a failed call printed nothing)
+    function canAnswer(output) {
+        const match = /^\('(yes|no|challenge|na)',?\)$/.exec(String(output ?? "").trim());
+        return match === null ? "unknown" : match[1];
+    }
+
+    // logind's IdleAction and IdleActionUSec properties as gdbus prints them (`(<'suspend'>,)`,
+    // `(<uint64 1800000000>,)`) → { action, after (whole seconds) }, or null when either is
+    // not understood. "ignore" is logind's default: it does nothing by itself
+    function idleAction(actionOutput, usecOutput) {
+        const action = /^\(<'([a-z-]{1,40})'>,?\)$/.exec(String(actionOutput ?? "").trim());
+        const usec = /^\(<(?:uint64 )?([0-9]{1,20})>,?\)$/.exec(String(usecOutput ?? "").trim());
+        if (action === null || usec === null)
+            return null;
+        return { action: action[1], after: Math.round(Number(usec[1]) / 1000000) };
+    }
+
+    // The sleep reader's whole output: sections headed `[CanSuspend]`, `[IdleAction]`,
+    // `[IdleActionUSec]`, each with gdbus's answer (nothing where the call failed) →
+    // { canSuspend: canAnswer(), idleAction: idleAction() }
+    function sleepSupport(output) {
+        const sections = {};
+        let current = "";
+        for (const line of String(output ?? "").split("\n")) {
+            const header = /^\[([A-Za-z]+)\]$/.exec(line.trim());
+            if (header !== null) {
+                current = header[1];
+                sections[current] = "";
+            } else if (current !== "") {
+                sections[current] += line + "\n";
+            }
+        }
+        return {
+            canSuspend: canAnswer(sections.CanSuspend),
+            idleAction: idleAction(sections.IdleAction, sections.IdleActionUSec)
+        };
+    }
+
+    // The sleep call's output — gdbus's answer or error, then `[exit <status>]` — → { ok,
+    // error }: ok only for status 0 with logind's empty answer `()`; `error` gdbus's words on
+    // one line, capped, for the log
+    function suspendOutcome(output) {
+        const text = String(output ?? "").trim();
+        const match = /^([\s\S]*)\n?\[exit ([0-9]{1,3})\]$/.exec(text);
+        if (match === null)
+            return { ok: false, error: "no answer" };
+        const said = match[1].replace(/[\u0000-\u001f\u007f]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 200);
+        if (match[2] === "0" && said === "()")
+            return { ok: true, error: "" };
+        return { ok: false, error: said || "gdbus exited with " + match[2] };
     }
 }

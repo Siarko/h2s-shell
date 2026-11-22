@@ -22,6 +22,17 @@ TestCase {
         assertEqual(result.state.phase, "shown", "quiet, slept unlocked: shown");
         assertEqual(_actions(result), "notify@1000", "… the notification, with the sleep's time");
 
+        // The shell's own sleep after idle, which the settings leave unlocked: not counted
+        const chosen = Object.assign(slept("unlocked", 1500), { leftUnlocked: true });
+        result = rules.step(quiet, chosen);
+        assert(result.state.phase === "quiet" && _actions(result) === "", "quiet, the idle sleep the settings leave unlocked: no notice");
+        result = rules.step(waiting, chosen);
+        assert(result.state.phase === "waiting" && result.state.at === 1000, "… waiting: the line keeps its sleep");
+        result = rules.step(shown, chosen);
+        assert(result.state.phase === "shown" && result.state.at === 1000 && _actions(result) === "", "… shown: left as it is");
+        assertEqual(rules.step(shown, Object.assign(slept("locked"), { leftUnlocked: true })).state.phase, "quiet",
+                    "… a sleep that locked all the same counts as locked");
+
         result = rules.step(shown, { type: "closed", at: 1000 });
         assertEqual(result.state.phase, "waiting", "shown, closed: waiting (acknowledged)");
         assertEqual(result.state.at, 1000, "… the time kept for the page's line");

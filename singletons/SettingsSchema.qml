@@ -90,6 +90,8 @@ Singleton {
 
     // The times offered for a stage of being away (seconds): 1 min to 1 h
     readonly property var idlePresets: [60, 120, 300, 600, 900, 1800, 3600]
+    // Sleep after idle: from ten minutes to two hours
+    readonly property var sleepPresets: [600, 900, 1800, 3600, 7200]
 
     // The core's settings; then the loaded modules' (Modules.settingEntries: keys mod.<id>.*,
     // each naming its `module`), which go with their module when it is turned off — a
@@ -204,6 +206,13 @@ Singleton {
           presets: [30, 60, 120, 300, 0], zeroLabel: "Never" },
         { key: "lockscreen.lockOnSleep", label: "Lock before the computer sleeps",
           group: "lockscreen", type: "bool", default: false },
+        // Sleep after idle: the whole computer (logind's Suspend), from the last input on the
+        // one idle clock; only where logind allows it without a password (IdleRules.config)
+        { key: "lockscreen.sleepEnabled", label: "Sleep when idle", group: "lockscreen",
+          type: "bool", default: false },
+        { key: "lockscreen.sleepTimeout", label: "Sleep after", group: "lockscreen",
+          type: "number", min: 60, max: 86400, suffix: "s", default: 1800, presets: root.sleepPresets,
+          hint: "Counted from your last input." },
         { key: "lockscreen.notificationsOnLock", label: "Show notifications on lock screen",
           group: "lockscreen", type: "bool", default: true,
           legacy: ["lockscreen", "notificationsOnLock"] },

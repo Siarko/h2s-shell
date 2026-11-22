@@ -503,6 +503,17 @@ The interface modules are written against (`qs.api`), versioned on its own
   in counts as input. Set on Settings → When away ("Set per monitor": a card per monitor,
   a monitor not connected kept and forgettable), or over IPC: `idle state` lists the
   monitors, `idle setMonitorTimes <id> <json|default>`.
+- Sleep when idle: Settings → When away → Sleep (off by default; 10 min to 2 h from your last
+  input, in profiles as `lockscreen.sleepEnabled` and `lockscreen.sleepTimeout`). The whole
+  computer, through logind, without ever asking for a password: where the system would ask
+  for one, the section says so and the shell does not sleep it. Apps keeping the screen on
+  hold it while unlocked; a program blocking sleep (a backup) pauses it, and the timeline says
+  who. It locks first when "Lock before the computer sleeps" is on, or when the idle lock
+  comes no later; otherwise the section says beforehand that it sleeps unlocked, and the
+  sleep notice says nothing about such a sleep. When logind already sleeps the computer by
+  itself after idle (its IdleAction), the section says so: whichever comes first acts. The
+  timeline marks the sleep across all monitors; a sleep long after the rest sits after a
+  break, so the minutes keep their room.
 - Safe mode has a banner, under the bar and at the top of Settings → Modules: why the shell
   started without modules, the modules on when it crashed and one installed or updated in
   the last day, with "Open Modules" and "Load modules" (loads them again without a

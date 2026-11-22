@@ -75,8 +75,9 @@ Singleton {
         return state?.phase === "waiting" ? state.at : -1;
     }
 
-    // `event`: { type: "slept", outcome: "locked" | "unlocked" | "unknown", at } (after the
-    // resume), { type: "closed", at } (the notification about the sleep at `at` closed: ×,
+    // `event`: { type: "slept", outcome: "locked" | "unlocked" | "unknown", at, leftUnlocked }
+    // (after the resume; `leftUnlocked`: the shell's own sleep after idle, which the settings
+    // leave unlocked — not counted, as unknown), { type: "closed", at } (the notification about the sleep at `at` closed: ×,
     // or its action; a close of one since replaced is ignored), or
     // { type: "restarted" } (the shell started with this remembered state). → { state,
     // actions }: notify { at } (show the notification, replacing one shown), withdraw (take
@@ -86,6 +87,8 @@ Singleton {
         const stay = { state: current, actions: [] };
         switch (event?.type) {
         case "slept":
+            if (event.outcome === "unlocked" && event.leftUnlocked === true)
+                return stay;
             if (event.outcome === "unlocked") {
                 const at = Number(event.at) || 0;
                 if (current.phase === "quiet" || current.phase === "shown")

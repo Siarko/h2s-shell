@@ -600,7 +600,14 @@ launcher agree on the contract described under "Recovery" below):
   (`HelperRules.wantsScreenSaverName`; otherwise it releases the name and leaves the
   queue) — and reports the apps' requests and the name's owner —
   `HelperRules.serviceStatus`), and a logind `idle` block read at the deadlines that would
-  start a stage (`singletons/lock/LogindIdleBlock.qml`, `ListInhibitors`). IPC: `idle state` (JSON, with the monitors' ids) and
+  start a stage (`singletons/lock/LogindIdleBlock.qml`, `ListInhibitors`). The sleep after
+  idle is a stage of the whole machine: `singletons/lock/LogindSleep.qml` reads logind's
+  `CanSuspend` and `IdleAction` (at the start and when the page opens; the stage exists only
+  on "yes") and makes the one call, `Suspend(false)` (non-interactive: never a password
+  prompt), when the rules return `sleep`; the same `ListInhibitors` read gives logind's
+  `sleep` blocks, which the rules take in the same step, locked or not. A sleep the settings
+  leave unlocked is flagged (`Idle.sleepLeftUnlocked`) for the sleep notice, which then
+  does not count it. IPC: `idle state` (JSON, with the monitors' ids) and
   `idle setMonitorTimes <id> <json|default>` (one monitor's entry in
   `lockscreen.monitorIdle`, `IdleRules.withMonitorTimes`).
 - **Adapters** — `singletons/lock/`, thin: I/O to events, effects to I/O, no decisions.

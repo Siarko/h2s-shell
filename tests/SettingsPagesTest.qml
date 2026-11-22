@@ -323,7 +323,8 @@ TestCase {
         "lockscreen.screensaverEnabled": false, "lockscreen.screenOffEnabled": false, "lockscreen.lockscreenEnabled": false,
         "lockscreen.perMonitor": false, "lockscreen.monitorIdle": {}, "lockscreen.screensaverCommands": false,
         "lockscreen.notificationsOnScreensaver": true, "lockscreen.notificationsOnLock": true,
-        "lockscreen.screensaverTimeout": 300, "lockscreen.screenOffTimeout": 900, "lockscreen.lockAfter": 1200
+        "lockscreen.screensaverTimeout": 300, "lockscreen.screenOffTimeout": 900, "lockscreen.lockAfter": 1200,
+        "lockscreen.sleepEnabled": false, "lockscreen.sleepTimeout": 1800, "lockscreen.lockOnSleep": false
     })
 
     function _away(change) {
@@ -340,7 +341,7 @@ TestCase {
         try {
             _away({});
             const titles = _sectionsOf(page).map(section => section.title);
-            assertEqual(titles.join(" | "), "Screensaver | Lock screen | Keeping the screen on | Commands",
+            assertEqual(titles.join(" | "), "Screensaver | Lock screen | Sleep | Keeping the screen on | Commands",
                         "When away: the sections in the order things happen, then the rest");
             const timeline = named("awayTimeline");
             const perMonitor = editorIn(page, "lockscreen.perMonitor");
@@ -415,6 +416,8 @@ TestCase {
                         JSON.stringify({ screensaverEnabled: true, screensaverTimeout: 300, screenOffEnabled: true, screenOffTimeout: 600 }),
                         "… a click writes the whole entry");
 
+            _whenAwaySleep(page, named, editorIn, timeline);
+
             // The lock screen's section at the top on request
             const sectionTop = () => lockSection.mapToItem(page.contentItem, 0, 0).y - Theme.settings.pageMargin;
             assert(page.showSection("lock") && page.contentY > 0
@@ -425,6 +428,53 @@ TestCase {
             _globalsPin.restore();
             page.destroy();
         }
+    }
+
+    // The Sleep section and the sleep on the timeline, with logind's answers handed to the page
+    function _whenAwaySleep(page, named, editorIn, timeline) {
+        const caption = () => _find(timeline, item => item.objectName === "timelineCaption").text;
+        const sleepSwitch = editorIn(named("sleepSection").frame, "lockscreen.sleepEnabled");
+        assert(sleepSwitch !== null, "the sleep's switch on its section's title line");
+        _away({});
+        page.sleepSupport = { canSuspend: "challenge", idleAction: null };
+        assert(!sleepSwitch.enabled, "CanSuspend challenge: the switch greyed");
+        assertEqual(named("sleepCaption").text, "Not available here: the system asks for a password to sleep.", "… and why");
+        _away({ "lockscreen.sleepEnabled": true });
+        assert(!named("sleepTimes").open && !named("timelineSleep").visible, "… switched on all the same: no time, nothing on the timeline");
+        page.sleepSupport = { canSuspend: "yes", idleAction: { action: "ignore", after: 0 } };
+        _away({});
+        assert(sleepSwitch.enabled, "CanSuspend yes: the switch active");
+        assertEqual(named("sleepCaption").text, "The computer does not sleep by itself when idle.", "… off: said so");
+        assert(!named("sleepTimes").open && !named("systemSleeps").visible, "… its time shut; logind ignoring idle: no warning");
+
+        _away({ "lockscreen.sleepEnabled": true, "lockscreen.lockscreenEnabled": true, "lockscreen.screensaverEnabled": true });
+        assert(named("sleepTimes").open, "sleep on: its time open");
+        assertEqual(named("sleepCaption").text, "The computer sleeps when nobody has used it for this long.", "… the line under the title");
+        assertEqual(named("sleepLockLine").text, "Already locked by then (lock at 20 min).", "… the lock at 20 min comes first");
+        const labels = () => timeline.labels.map(label => label.text).join(" | ");
+        assertEqual(labels(), "5 min | Lock 20 min | Sleep 30 min", "the timeline: the sleep's mark");
+        assert(named("timelineSleep").visible && !named("timelineBreak").visible, "… its line across the lanes; no break at 30 min");
+        assertEqual(caption(), "Locks at 20 min. Sleeps at 30 min.", "… the line under it");
+        _away({ "lockscreen.sleepEnabled": true, "lockscreen.lockscreenEnabled": true, "lockscreen.lockAfter": 3600 });
+        assertEqual(named("sleepLockLine").text, "Sleeps unlocked: \"Lock before the computer sleeps\" is off.",
+                    "the lock later than the sleep: said in advance that it sleeps unlocked");
+        _away({ "lockscreen.sleepEnabled": true, "lockscreen.lockOnSleep": true });
+        assertEqual(named("sleepLockLine").text, "Locks first (\"Lock before the computer sleeps\").", "lock before sleep on: it locks first");
+        _away({ "lockscreen.sleepEnabled": true, "lockscreen.sleepTimeout": 7200, "lockscreen.lockscreenEnabled": true, "lockscreen.lockAfter": 900 });
+        assert(named("timelineBreak").visible, "sleep at 2 h after a lock at 15 min: after a break");
+        assert(timeline.xOf(900) > timeline.trackWidth * 0.5, "… the minutes keep their room (the lock past the middle)");
+
+        page.sleepSupport = { canSuspend: "yes", idleAction: { action: "suspend", after: 1800 } };
+        assert(named("systemSleeps").visible && /^The system already puts the computer to sleep after 30 min/.test(named("systemSleeps").text),
+               "logind suspending by itself: the warning");
+        page.sleepBlockers = [{ who: "borg", why: "Backup" }];
+        assertEqual(caption(), "Paused: borg blocks sleep (Backup).", "logind's sleep block: the timeline's line says who");
+        page.sleepBlockers = [];
+        _away({ "lockscreen.perMonitor": true });
+        assert(/The lock and sleep are one for all\./.test(editorIn(page, "lockscreen.perMonitor").hint), "per monitor: the lock and sleep one for all");
+        assert(page.showSection("sleep"), "the sleep's section shown on request");
+        page.sleepSupport = Qt.binding(() => Idle.sleepSupport);
+        page.sleepBlockers = Qt.binding(() => Idle.sleepBlockers);
     }
 
     // The first item under `item` that `matches`; `withResources` also looks at its

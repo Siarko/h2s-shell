@@ -2,7 +2,8 @@ import QtQuick
 import qs.singletons
 
 // What comes into the lock's rules as text (singletons/LockParseRules.qml): the methods
-// script's lines, logind's monitor lines, its GetSession answer and its idle inhibitors.
+// script's lines, logind's monitor lines, its GetSession answer, its idle and sleep
+// inhibitors, what it says of sleep and the sleep call's outcome.
 TestCase {
     suiteName: "LockParseRules"
 
@@ -96,6 +97,63 @@ TestCase {
         assertEqual(LockParseRules.idleBlockFromOutput("1000\n([('idle', 'mpv'").held, "unknown", "idleBlockFromOutput: malformed: unknown");
         assertEqual(LockParseRules.idleBlockFromOutput(listed).held, "unknown", "idleBlockFromOutput: no uid line: unknown");
         assertEqual(LockParseRules.idleBlockFromOutput(null).held, "unknown", "idleBlockFromOutput: nothing: unknown");
+
+        // logind's sleep block (Idle reads it before it asks logind to suspend)
+        const sleepBlock = list => JSON.stringify(LockParseRules.sleepBlock(list));
+        assertEqual(sleepBlock([inhibitor("sleep", "borg", "Backup", "block", 0)]),
+                    JSON.stringify({ held: true, holders: [{ who: "borg", why: "Backup" }] }), "sleepBlock: a sleep block, root's too: held");
+        assertEqual(sleepBlock([inhibitor("sleep:idle", "mpv", "Playing", "block", 1000)]),
+                    JSON.stringify({ held: true, holders: [{ who: "mpv", why: "Playing" }] }), "sleepBlock: sleep among other kinds");
+        assertEqual(sleepBlock([inhibitor("sleep", "h2s-shell", "Lock first", "delay", 1000), inhibitor("sleep", "UPower", "", "delay", 0),
+                                inhibitor("idle", "mpv", "", "block", 1000), inhibitor("sleepy", "x", "", "block", 1000)]),
+                    JSON.stringify({ held: false, holders: [] }), "sleepBlock: delays (the shell's own), other kinds: free");
+        assertEqual(sleepBlock(null), JSON.stringify({ held: "unknown", holders: [] }), "sleepBlock: no list: unknown");
+        assertEqual(LockParseRules.sleepBlock([inhibitor("sleep", "", "a\nb", "block", 0)]).holders[0].who + "/"
+                    + LockParseRules.sleepBlock([inhibitor("sleep", "", "a\nb", "block", 0)]).holders[0].why, "an app/a b",
+                    "sleepBlock: no name: an app; one line");
+        assertEqual(LockParseRules.sleepBlock([inhibitor("sleep", "w".repeat(40), "", "block", 0)]).holders[0].who, "w".repeat(40),
+                    "sleepBlock: a name of exactly the cap kept whole");
+        assertEqual(LockParseRules.sleepBlock(Array(8).fill(inhibitor("sleep", "a", "", "block", 0))).holders.length, 5,
+                    "sleepBlock: at most 5");
+        assertEqual(JSON.stringify(LockParseRules.sleepBlockFromOutput("1000\n([('sleep', 'borg', 'Backup', 'block', uint32 0, uint32 7)],)")),
+                    JSON.stringify({ held: true, holders: [{ who: "borg", why: "Backup" }] }), "sleepBlockFromOutput: the idle reader's output");
+        assertEqual(LockParseRules.sleepBlockFromOutput("1000\n").held, "unknown", "sleepBlockFromOutput: gdbus said nothing: unknown");
+        assertEqual(LockParseRules.sleepBlockFromOutput("x\n(@a(ssssuu) [],)").held, false, "sleepBlockFromOutput: no uid needed");
+
+        // What logind says of sleep
+        for (const answer of ["yes", "no", "challenge", "na"])
+            assertEqual(LockParseRules.canAnswer("('" + answer + "',)\n"), answer, "canAnswer: " + answer);
+        for (const junk of ["", "('maybe',)", "('yes', 'no')", "Error: GDBus.Error", null, "yes"])
+            assertEqual(LockParseRules.canAnswer(junk), "unknown", "canAnswer: " + JSON.stringify(junk) + ": unknown");
+        assertEqual(JSON.stringify(LockParseRules.idleAction("(<'suspend'>,)", "(<uint64 1800000000>,)")),
+                    JSON.stringify({ action: "suspend", after: 1800 }), "idleAction: the action and its time in seconds");
+        assertEqual(JSON.stringify(LockParseRules.idleAction("(<'ignore'>,)\n", "(<uint64 1800000000>,)\n")),
+                    JSON.stringify({ action: "ignore", after: 1800 }), "idleAction: ignore, logind's default");
+        assertEqual(JSON.stringify(LockParseRules.idleAction("(<'suspend-then-hibernate'>,)", "(<1500000>,)")),
+                    JSON.stringify({ action: "suspend-then-hibernate", after: 2 }), "idleAction: a dashed action; rounded seconds");
+        assertEqual(LockParseRules.idleAction("", "(<uint64 1800000000>,)"), null, "idleAction: the action not read: null");
+        assertEqual(LockParseRules.idleAction("(<'suspend'>,)", "Error"), null, "idleAction: the time not read: null");
+        assertEqual(LockParseRules.idleAction("(<'Suspend!'>,)", "(<uint64 1>,)"), null, "idleAction: not a word logind uses: null");
+        const support = LockParseRules.sleepSupport("[CanSuspend]\n('yes',)\n[IdleAction]\n(<'suspend'>,)\n[IdleActionUSec]\n(<uint64 600000000>,)\n");
+        assertEqual(JSON.stringify(support), JSON.stringify({ canSuspend: "yes", idleAction: { action: "suspend", after: 600 } }),
+                    "sleepSupport: the three answers under their headers");
+        assertEqual(JSON.stringify(LockParseRules.sleepSupport("[CanSuspend]\n[IdleAction]\n(<'ignore'>,)\n[IdleActionUSec]\n(<uint64 1>,)\n")),
+                    JSON.stringify({ canSuspend: "unknown", idleAction: { action: "ignore", after: 0 } }), "sleepSupport: a failed CanSuspend: unknown");
+        assertEqual(JSON.stringify(LockParseRules.sleepSupport("")), JSON.stringify({ canSuspend: "unknown", idleAction: null }),
+                    "sleepSupport: nothing: unknown, not read");
+        assertEqual(LockParseRules.sleepSupport("('yes',)\n").canSuspend, "unknown", "sleepSupport: an answer without its header: unknown");
+
+        // The sleep call's outcome
+        assertEqual(JSON.stringify(LockParseRules.suspendOutcome("()\n[exit 0]\n")), JSON.stringify({ ok: true, error: "" }),
+                    "suspendOutcome: logind's empty answer, status 0: taken");
+        assertEqual(JSON.stringify(LockParseRules.suspendOutcome("Error: GDBus.Error:org.freedesktop.login1.OperationInProgress: busy\n[exit 1]")),
+                    JSON.stringify({ ok: false, error: "Error: GDBus.Error:org.freedesktop.login1.OperationInProgress: busy" }),
+                    "suspendOutcome: refused, with gdbus's words");
+        assertEqual(JSON.stringify(LockParseRules.suspendOutcome("\n[exit 127]")), JSON.stringify({ ok: false, error: "gdbus exited with 127" }),
+                    "suspendOutcome: nothing said: the status");
+        assertEqual(LockParseRules.suspendOutcome("odd\n[exit 0]").ok, false, "suspendOutcome: status 0 without logind's answer: not taken");
+        assertEqual(LockParseRules.suspendOutcome("()").ok, false, "suspendOutcome: no status: not taken");
+        assertEqual(LockParseRules.suspendOutcome("x".repeat(500) + "\n[exit 1]").error.length, 200, "suspendOutcome: the words capped");
 
         // LockRules forwards them: its callers read the same answers
         assertEqual(JSON.stringify(LockRules.parseMethods("password\t/etc/pam.d\tlogin")),

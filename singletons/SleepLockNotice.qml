@@ -107,7 +107,8 @@ Singleton {
         if (_phase === "asleep")
             _resumed();
         _generation++;
-        _sleep = { generation: _generation, at: Date.now(), read: null, outcome: "unknown" };
+        // The shell's own sleep after idle, left unlocked by the settings: not counted
+        _sleep = { generation: _generation, at: Date.now(), read: null, outcome: "unknown", leftUnlocked: Idle.sleepLeftUnlocked };
         _phase = "checking";
         _startRead();
         _tick.restart();
@@ -154,7 +155,7 @@ Singleton {
         _reader.stop();
         _phase = "asleep";
         _missedResumeTimer.restart();
-        _log("went to sleep " + _sleep.outcome + " (looked for " + (Date.now() - _sleep.at) + " ms)");
+        _log("went to sleep " + _sleep.outcome + (_sleep.leftUnlocked ? " (the idle sleep, unlocked as the settings say)" : "") + " (looked for " + (Date.now() - _sleep.at) + " ms)");
     }
 
     function _resumed() {
@@ -165,7 +166,7 @@ Singleton {
         _sleep = null;
         _phase = "awake";
         if (sleep !== null && _memory.loaded)
-            _apply(SleepNoticeRules.step(noticeState, { type: "slept", outcome: sleep.outcome, at: sleep.at }));
+            _apply(SleepNoticeRules.step(noticeState, { type: "slept", outcome: sleep.outcome, at: sleep.at, leftUnlocked: sleep.leftUnlocked === true }));
     }
 
     Connections {

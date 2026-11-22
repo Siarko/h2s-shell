@@ -16,10 +16,18 @@ import QtQuick
 // All idle times count from the last input, one clock for every monitor (input on any
 // monitor is input for all):
 //
-//   last input ── saverAfter ── screenOffAfter ──┬── lockAfter (one for the session)
-//                 (stage 1)     (stage 2)        │
+//   last input ── saverAfter ── screenOffAfter ──┬── lockAfter ── sleepAfter (one for the
+//                 (stage 1)     (stage 2)        │                 session, the whole machine)
 //                 each monitor its own times, or the default's ("Set per monitor")
 //   locked ── lockedScreenOffAfter, from the lock or the last input at the lock screen
+//
+// Sleep is the whole computer's: logind's Suspend, asked once per idle period, only where
+// logind answers CanSuspend "yes" (never on "challenge": no password from a timer). The
+// apps keeping the screen on hold it while unlocked, as every stage; logind's own `sleep`
+// block inhibitors (a backup) hold it locked or not — read before the call. An idle lock due
+// at or before it is waited for a moment (sleepLockWait), so a sleep the settings lock
+// before goes down locked; "Lock before the computer sleeps" locks at logind's
+// PrepareForSleep, as for any sleep.
 //
 // Each monitor has the same two stages, each switched on or off with its own time: the OLED
 // with the screensaver off and screens off after 5 min is a monitor that goes straight to
@@ -60,21 +68,27 @@ Singleton {
     // A power action the reading after it does not show (the monitor still on after an off,
     // still off after an on) is asked again after a growing pause (ms)
     readonly property var powerRetry: ({ minimum: 2000, maximum: 300000, tries: 8 })
+    // A sleep due while the idle lock, due at or before it, is not taken yet waits for the
+    // lock this long (ms) after the lock fell due, then goes ahead
+    readonly property int sleepLockWait: 5000
 
     // The profile's values, by their names in the "lockscreen" group, normalised.
     // `values`: { screensaverEnabled, screensaverTimeout, screenOffEnabled, screenOffTimeout,
     // lockscreenEnabled, lockAfter, lockedScreenOffTimeout, perMonitor, monitorIdle
     // ({ monitorId: { screensaverEnabled, screensaverTimeout, screenOffEnabled,
-    // screenOffTimeout } }), screensaverCommands } — times in seconds; `monitors`: the
+    // screenOffTimeout } }), screensaverCommands, sleepEnabled, sleepTimeout, lockOnSleep } —
+    // times in seconds; `monitors`: the
     // connected monitors' ids (make|model|serial, MonitorRules) or objects with an `id` — as
     // read ({ id, base, connector }), a monitor's entry is found under either form of its key
-    // (MonitorRules.overrideFor); `canPowerOff`: a backend can cut a monitor's power. → the
+    // (MonitorRules.overrideFor); `canPowerOff`: a backend can cut a monitor's power;
+    // `canSuspend`: logind's CanSuspend answer ("yes", "no", "challenge", "na", anything else
+    // unknown) — sleep is a stage only on "yes". → the
     // config every other function takes: times in seconds, 0 = never; `saverAfter` and
     // `screenOffAfter` the default's, `times` per connected monitor ({ saverAfter,
     // screenOffAfter }: its entry in `monitorIdle` while `perMonitor` is on, else the
     // default's). A screen-off without power control stays a stage: the screensaver at its
     // time (wanted).
-    function config(values, monitors, canPowerOff) {
+    function config(values, monitors, canPowerOff, canSuspend) {
         const given = values ?? {};
         const power = canPowerOff === true;
         const flag = (value, fallback) => typeof value === "boolean" ? value : fallback;
@@ -135,6 +149,8 @@ Singleton {
             screenOffAfter: defaults.screenOffAfter,
             lockAfter: flag(given.lockscreenEnabled, false) ? seconds(given.lockAfter, 600) : 0,
             lockedScreenOffAfter: seconds(given.lockedScreenOffTimeout, 60),
+            sleepAfter: flag(given.sleepEnabled, false) && canSuspend === "yes" ? seconds(given.sleepTimeout, 1800) : 0,
+            lockOnSleep: flag(given.lockOnSleep, false),
             perMonitor: perMonitor,
             times: times,
             keys: keys,
@@ -221,6 +237,7 @@ Singleton {
             idleSince: now,          // monotonic ms of the last input (moved at a release, a wake)
             busInhibitors: 0,        // org.freedesktop.ScreenSaver inhibits held
             logindIdleBlock: false,  // true, false or "unknown" (a failed read)
+            logindSleepBlock: false, // logind's `sleep` block: true, false or "unknown"
             locked: false,
             lockQuietSince: now,     // the later of the lock and the last input at the lock screen
             lockedDark: false,       // the lock screen's own screen-off reached
@@ -233,6 +250,10 @@ Singleton {
             lockAskedAt: -1,         // monotonic ms of the last ask, -1 none
             lockSince: null,         // a profile switch made the lock due: it counts from then (ms)
             lockAfterSeen: null,     // the config's lockAfter at the last step (null: none yet)
+            sleepAsked: false,       // the sleep asked in this period: not asked again
+            sleepLeftUnlocked: false, // … and the settings leave it unlocked (no notice then)
+            sleepSince: null,        // a profile switch made the sleep due: it counts from then (ms)
+            sleepAfterSeen: null,    // the config's sleepAfter at the last step
             stage: ({}),             // monitor id → 0 none, 1 screensaver, 2 screens off: reached in this period
             commandStarted: false,   // the start command ran in this period
             active: false,           // reported as ActiveChanged
@@ -459,12 +480,54 @@ Singleton {
         return at >= 0 && now >= at;
     }
 
+    // When the sleep is next due (monotonic ms), or -1: from the last input (or a later
+    // profile switch that made it due), once per period; held by the apps keeping the screen
+    // on while unlocked (held) and, unless `ignoreBlock`, by logind's sleep block; an idle
+    // lock due at or before it and not taken yet is waited for up to sleepLockWait
+    function _sleepAt(state, config, ignoreBlock) {
+        const sleepAfter = config.sleepAfter ?? 0;
+        if (state.sleeping || state.sleepAsked || sleepAfter <= 0)
+            return -1;
+        if (held(state) || !_counting(state))
+            return -1;
+        if (ignoreBlock !== true && state.logindSleepBlock === true)
+            return -1;
+        const start = state.sleepSince === null ? state.idleSince : Math.max(state.idleSince, state.sleepSince);
+        let due = start + sleepAfter * 1000;
+        if (config.lockAfter > 0 && !state.locked && !state.lockedThisPeriod) {
+            const lockAt = _lockStart(state) + config.lockAfter * 1000;
+            if (lockAt <= due)
+                due = Math.max(due, lockAt + sleepLockWait);
+        }
+        return due;
+    }
+
+    // The sleep is due: logind is asked to suspend now (Idle reads logind's inhibitors first,
+    // logindReadDue)
+    function sleepDue(state, config, now) {
+        const at = _sleepAt(state, config, false);
+        return at >= 0 && now >= at;
+    }
+
+    // The settings leave a sleep unlocked: neither "Lock before the computer sleeps" nor an
+    // idle lock at or before the sleep — the sleep notice does not count such a sleep
+    function sleepLeftUnlocked(state, config) {
+        return state.locked !== true && config.lockOnSleep !== true
+            && !(config.lockAfter > 0 && config.lockAfter <= config.sleepAfter);
+    }
+
     // logind's idle block is read before it matters, not on a clock (logind sends no signal
     // when one appears): unlocked and not forced, when a stage or the idle lock is due now,
-    // and while a block holds (its re-read, logindRecheck). Idle reads, steps the answer
-    // (logindIdleBlock), then the deadline.
+    // and while a block holds (its re-read, logindRecheck). Its sleep block likewise, locked
+    // or not: when the sleep is due but for it. Idle reads, steps the answers
+    // (logindIdleBlock, logindSleepBlock), then the deadline.
     function logindReadDue(state, config, now) {
-        if (state.sleeping || state.locked || state.forced)
+        if (state.sleeping)
+            return false;
+        const sleepAt = _sleepAt(state, config, true);
+        if (sleepAt >= 0 && now >= sleepAt)
+            return true;
+        if (state.locked || state.forced)
             return false;
         if (state.logindIdleBlock === true)
             return true;
@@ -499,6 +562,11 @@ Singleton {
         if (state.locked && state.inputIdle && !state.lockAttended && config.lockedScreenOffAfter > 0 && !state.lockedDark)
             due.push(state.lockQuietSince + config.lockedScreenOffAfter * 1000);
         if (!state.locked && state.logindIdleBlock === true)
+            due.push(now + logindRecheck);
+        const sleepAt = _sleepAt(state, config, false);
+        if (sleepAt >= 0)
+            due.push(sleepAt);
+        else if (state.logindSleepBlock === true && _sleepAt(state, config, true) >= 0)
             due.push(now + logindRecheck);
         for (const id of Object.keys(state.pendingPower)) {
             const at = _powerRetryAt(state.pendingPower[id]);
@@ -546,6 +614,11 @@ Singleton {
         next.lockAsks = 0;
         next.lockAskedAt = -1;
         next.lockSince = null;
+        next.sleepAsked = false;
+        next.sleepLeftUnlocked = false;
+        next.sleepSince = null;
+        // Read again before the next sleep: a block seen now says nothing of then
+        next.logindSleepBlock = "unknown";
         next.lockedDark = false;
         if (next.locked)
             next.lockQuietSince = now;
@@ -573,7 +646,10 @@ Singleton {
     }
 
     // `event`: { type, … } — inputIdle { idle, since? }, awayIdle { idle, since? },
-    // busInhibitors { count }, logindIdleBlock { held: true | false | "unknown" }, power
+    // busInhibitors { count }, logindIdleBlock { held: true | false | "unknown", sleepHeld? }
+    // (logind's idle block and, from the same read, its sleep block), logindSleepBlock { held }
+    // (the sleep block alone), sleepFailed (logind refused
+    // the sleep asked: not asked again in this period), power
     // { power: { id: "on" | "off" | other } }, deadline, config, monitors, locked,
     // unlocked, sleep, resumed, force (IPC), busForce (D-Bus SetActive(true): as force, never
     // while locked or going to sleep — busForceTakes), activity (D-Bus SimulateUserActivity, and input on a
@@ -588,7 +664,8 @@ Singleton {
     // one going off: it takes the keys), powerOff { ids }, endCommand, startCommand, power
     // actions asked again { ids: [id], attempt } (a reading since the last ask showed the
     // monitor otherwise; a `restore`'s first with `restore: true`, first of all), powerGaveUp
-    // { ids, on } (asked powerRetry.tries times: not asked again), lock, active { active },
+    // { ids, on } (asked powerRetry.tries times: not asked again), lock, sleep { leftUnlocked }
+    // (logind's Suspend; after the lock; `leftUnlocked`: sleepLeftUnlocked), active { active },
     // lockBlack { black }. The start command comes, and `active` turns true unlocked, once
     // every monitor that goes dark has (allDark).
     function step(state, event, config, now) {
@@ -632,6 +709,10 @@ Singleton {
             if (next.logindIdleBlock === true && value !== true)
                 _released(next, now);
             next.logindIdleBlock = value;
+            // The same read's sleep block, in the same step: the sleep is never asked on one
+            // half of a read
+            if ("sleepHeld" in event)
+                next.logindSleepBlock = event.sleepHeld === true ? true : event.sleepHeld === false ? false : "unknown";
             break;
         }
         case "power": {
@@ -657,6 +738,12 @@ Singleton {
             }
             break;
         }
+        case "logindSleepBlock":
+            next.logindSleepBlock = event.held === true ? true : event.held === false ? false : "unknown";
+            break;
+        case "sleepFailed":
+            next.sleepLeftUnlocked = false;
+            break;
         case "lockAttended":
             next.lockAttended = event.attended === true;
             break;
@@ -808,6 +895,15 @@ Singleton {
                 next.lockSince = now;
         }
         next.lockAfterSeen = config.lockAfter;
+        // The same for the sleep: a switch that makes it due counts from the switch
+        const sleepAfter = config.sleepAfter ?? 0;
+        if (next.sleepAfterSeen !== null && next.sleepAfterSeen !== sleepAfter) {
+            const before = _sleepAt(next, { sleepAfter: next.sleepAfterSeen, lockAfter: config.lockAfter }, true);
+            const after = _sleepAt(next, config, true);
+            if (after >= 0 && after <= now && !(before >= 0 && before <= now))
+                next.sleepSince = now;
+        }
+        next.sleepAfterSeen = sleepAfter;
         // Unplugged monitors leave without an action
         for (const id of Object.keys(next.shown)) {
             if (!config.monitors.includes(id))
@@ -917,6 +1013,12 @@ Singleton {
             next.lockAskedAt = now;
             // `attempt`: 1 the first ask, more for an ask again (Idle logs the first of those)
             actions.push({ type: "lock", attempt: next.lockAsks });
+        }
+        // After the lock: logind's PrepareForSleep then finds it on its way
+        if (sleepDue(next, config, now)) {
+            next.sleepAsked = true;
+            next.sleepLeftUnlocked = sleepLeftUnlocked(next, config);
+            actions.push({ type: "sleep", leftUnlocked: next.sleepLeftUnlocked });
         }
         const active = next.locked || dark;
         if (active !== next.active) {

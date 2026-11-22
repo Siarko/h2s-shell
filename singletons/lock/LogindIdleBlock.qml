@@ -7,7 +7,9 @@ import qs.singletons
 // --what=idle`, video players): ListInhibitors (a read: no polkit, nothing changed) and this
 // user's uid, decided by LockParseRules.idleBlock. Idle says when (IdleRules.logindReadDue).
 // One read at a time; start() while one runs is dropped (the running one answers with what
-// is there now). A failed, timed-out or malformed read is "unknown", never "free"; a read
+// is there now). The same list says whether a `sleep` block holds (`sleepBlock`,
+// LockParseRules.sleepBlock: a backup), read before Idle asks logind to suspend. A failed,
+// timed-out or malformed read is "unknown", never "free"; a read
 // that has not answered after `watchdog` ms (gdbus's own timeout covers the call, not
 // connecting to the bus) is ended and answers "unknown", whatever it printed so far.
 //
@@ -24,6 +26,9 @@ Scope {
     property int watchdog: 7000
     // The last read's outcome: { held: true | false | "unknown", holders: [{ who, why }] }
     property var block: ({ held: "unknown", holders: [] })
+    // The same read's sleep block: { held: true | false | "unknown", holders: [{ who, why }] },
+    // set before `read` is sent
+    property var sleepBlock: ({ held: "unknown", holders: [] })
     // Reads answered so far
     property int reads: 0
     readonly property bool running: _query.running
@@ -65,6 +70,7 @@ Scope {
                 return;
             _watchdog.stop();
             const outcome = _timedOut ? LockParseRules.idleBlock(null, null) : LockParseRules.idleBlockFromOutput(_output);
+            root.sleepBlock = _timedOut ? LockParseRules.sleepBlock(null) : LockParseRules.sleepBlockFromOutput(_output);
             _output = "";
             root.block = outcome;
             root.reads++;

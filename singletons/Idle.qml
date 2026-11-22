@@ -13,7 +13,9 @@ import qs.singletons.lock
 // LogindIdleBlock) — one event at a time, and carries out the actions they return: the
 // screensaver's picture per monitor (`shownFor`, which the screensaver's windows follow), the
 // monitors' power (ScreenPower), the lock surface's black fallback (`lockBlack`), the idle
-// lock (Lockscreen.lock("idle")), the start and end commands. The screensaver interface
+// lock (Lockscreen.lock("idle")), the sleep (logind's Suspend, LogindSleep — only where
+// logind answers CanSuspend "yes", read at the start and when the settings page opens), the
+// start and end commands. The screensaver interface
 // (org.freedesktop.ScreenSaver, the helper's: ScreenSaverClient) brings the apps keeping the
 // screen on and their activity, and is told the screensaver's state. One Timer runs to the
 // rules' next deadline; nothing here decides when.
@@ -62,6 +64,21 @@ Singleton {
     // logind's idle blocks at the last read that found them held, listed while the state
     // counts the block held
     property var _logindHolders: []
+    // logind's sleep blocks as last read ([{ who, why }]), while the state counts one held:
+    // they pause the sleep, locked or not
+    readonly property var sleepBlockers: _state.logindSleepBlock === true ? _logindSleepHolders : []
+    property var _logindSleepHolders: []
+    // What logind allows and does about sleep: { canSuspend: "yes" | "no" | "challenge" |
+    // "na" | "unknown", idleAction: { action, after } | null } (LockParseRules.sleepSupport)
+    readonly property var sleepSupport: _logindSleep.support
+    // The sleep the shell asked for is under way and the settings leave it unlocked (no lock
+    // before sleep, no idle lock before it): the sleep notice does not count it
+    readonly property bool sleepLeftUnlocked: _state.sleepAsked === true && _state.sleepLeftUnlocked === true
+
+    // Read again what logind allows (the settings page, when it opens)
+    function refreshSleepSupport() {
+        _logindSleep.refresh();
+    }
 
     // What the screen with this connector name shows unlocked: "on" (the desktop), "saver"
     // (the screensaver) or "off" (powered off, under a plain black surface that takes the
@@ -96,7 +113,10 @@ Singleton {
         lockedScreenOffTimeout: Profiles.value("lockscreen.lockedScreenOffTimeout"),
         perMonitor: Profiles.value("lockscreen.perMonitor"),
         monitorIdle: Profiles.value("lockscreen.monitorIdle"),
-        screensaverCommands: Profiles.value("lockscreen.screensaverCommands")
+        screensaverCommands: Profiles.value("lockscreen.screensaverCommands"),
+        sleepEnabled: Profiles.value("lockscreen.sleepEnabled"),
+        sleepTimeout: Profiles.value("lockscreen.sleepTimeout"),
+        lockOnSleep: Profiles.value("lockscreen.lockOnSleep")
     })
     // A profile switch changes several values in one pass: one config event after it
     on_ValuesChanged: Qt.callLater(root._settingsChanged)
@@ -111,7 +131,7 @@ Singleton {
     }
 
     function _config() {
-        return IdleRules.config(_values, _monitorEntries, _powerControl);
+        return IdleRules.config(_values, _monitorEntries, _powerControl, _logindSleep.support.canSuspend);
     }
 
     function _monitorListChanged() {
@@ -187,6 +207,11 @@ Singleton {
                 _log("warning", "the idle lock was not taken: asking again while it is due, with a growing pause");
             Lockscreen.lock("idle");
             break;
+        case "sleep":
+            _log("info", "idle: asking logind to suspend" + (action.leftUnlocked ? " (unlocked, as the settings say)" : ""));
+            if (!_logindSleep.suspend())
+                _dispatch({ type: "sleepFailed" });
+            break;
         case "powerOff":
         case "powerOn":
             // The first ask, the first ask again (a reading showed it did not take), and each off
@@ -253,7 +278,8 @@ Singleton {
         path: Helper.available ? Helper.path : ""
         // The name only while an idle job of the shell's is on: left free for an idle daemon
         // otherwise
-        own: HelperRules.wantsScreenSaverName(IdleRules.config(root._values, root._monitorEntries, root._powerControl))
+        own: HelperRules.wantsScreenSaverName(IdleRules.config(root._values, root._monitorEntries, root._powerControl,
+                                                                _logindSleep?.support?.canSuspend))
         active: root._busActive
         activeSinceMs: root._busActiveSinceMs
         idleSeconds: () => root._state.inputIdle ? (root._now() - root._state.idleSince) / 1000 : 0
@@ -288,6 +314,7 @@ Singleton {
 
     Component.onCompleted: {
         _tellOldKey();
+        _logindSleep.refresh();
         _restoreScreens();
         if (Lockscreen.attended)
             _dispatch({ type: "lockAttended", attended: true });
@@ -424,8 +451,46 @@ Singleton {
             _logindTold = told;
         }
         _logindHolders = block.held === true ? block.holders : [];
-        _dispatch({ type: "logindIdleBlock", held: block.held });
+        const sleep = _logindIdle.sleepBlock;
+        const sleepTold = sleep.held === true ? sleep.holders.map(holder => holder.who + " (" + holder.why + ")").join(", ") : "";
+        if (sleepTold !== _logindSleepTold) {
+            if (sleepTold !== "")
+                _log("info", "logind: sleep blocked by " + sleepTold);
+            _logindSleepTold = sleepTold;
+        }
+        _logindSleepHolders = sleep.held === true ? sleep.holders : [];
+        _dispatch({ type: "logindIdleBlock", held: block.held, sleepHeld: sleep.held });
         _deadlineAfterAnswer();
+    }
+    property string _logindSleepTold: ""
+
+    // ---- Sleep: what logind allows, and the call ----
+
+    // The answer logged when it changes
+    property string _sleepSupportTold: ""
+
+    function _sleepSupportRead(support) {
+        const told = support.canSuspend + " " + JSON.stringify(support.idleAction);
+        if (told !== _sleepSupportTold) {
+            _log(support.canSuspend === "unknown" ? "warning" : "info", "logind: CanSuspend " + support.canSuspend
+                 + (support.idleAction === null ? ", IdleAction not read"
+                    : ", IdleAction " + support.idleAction.action + " after " + support.idleAction.after + " s"));
+            _sleepSupportTold = told;
+        }
+        // The config follows the answer (sleep is a stage only on "yes")
+        _dispatch({ type: "config" });
+    }
+
+    LogindSleep {
+        id: _logindSleep
+        toolDirectory: TestSeams.lockTools
+        onRead: support => root._sleepSupportRead(support)
+        onSuspended: (ok, error) => {
+            if (ok)
+                return;
+            root._log("warning", "logind did not suspend: " + error);
+            root._dispatch({ type: "sleepFailed" });
+        }
     }
 
     LogindIdleBlock {
@@ -489,6 +554,8 @@ Singleton {
                 idleFor: now - root._state.idleSince,
                 busHolders: root.busHolders,
                 screenSaverService: root.screenSaverService,
+                sleepSupport: root.sleepSupport,
+                sleepBlockers: root.sleepBlockers,
                 nextDeadlineIn: deadline < 0 ? -1 : deadline - now
             });
         }

@@ -265,11 +265,11 @@ shows its wallpaper at once. Rules: `singletons/WallpaperRules.qml`; state:
 ## Screensaver and lock screen
 
 The shell does idle itself: from Wayland idle notifications (ext-idle-notify) it runs up
-to three stages, each counted from the last input and each with its own switch and time in
+to four stages, each counted from the last input and each with its own switch and time in
 Settings → When away — the screensaver (`screensaverEnabled`, `screensaverTimeout`), screens
-off ("Turn screens off", `screenOffTimeout`) and the lock ("Lock when idle", `lockAfter`);
-on the lock screen, screens off again after `lockedScreenOffTimeout`. All but the lock
-screen's screen-off are off by default. No idle daemon is needed; one can still run beside it
+off ("Turn screens off", `screenOffTimeout`), the lock ("Lock when idle", `lockAfter`) and
+sleep (`sleepEnabled`, `sleepTimeout`); on the lock screen, screens off again after
+`lockedScreenOffTimeout`. All but the lock screen's screen-off are off by default. No idle daemon is needed; one can still run beside it
 (below, "hypridle and other idle daemons").
 
 - **Screensaver** — after `screensaverTimeout` the screen is covered by a black surface
@@ -436,6 +436,19 @@ screen's screen-off are off by default. No idle daemon is needed; one can still 
   the lock (at most 4 s), so the desktop is not what shows on waking. The fingerprint and
   key conversations stop for the sleep and start again after it, with the methods looked
   for again; the inhibitor is taken again after every wake, and when it is lost.
+- **Sleep when idle** — with Settings → When away → Sleep on (`sleepEnabled`, after
+  `sleepTimeout`, 30 minutes by default), the shell asks logind to suspend the whole computer
+  (`Suspend`, non-interactive) once per idle period. Only where logind answers `CanSuspend`
+  "yes" (read at the start and when the page opens): where a polkit rule wants a password
+  ("challenge") the section says "Not available here: the system asks for a password to
+  sleep" and nothing is asked. Apps keeping the screen on hold it while unlocked, not while
+  locked; logind's `sleep` block inhibitors (`systemd-inhibit --what=sleep`, a backup) are
+  read before the call and pause it, locked or not ("Paused: borg blocks sleep" under the
+  timeline). An idle lock due no later than the sleep is waited for a moment, so it goes down
+  locked; "Lock before the computer sleeps" locks at the sleep as for any other. With neither,
+  the section says beforehand that it sleeps unlocked, and the notice below does not count
+  that sleep. logind's own `IdleAction` (logind.conf) is read and, when it acts, the section
+  says so — whichever comes first acts. The same on NixOS and Arch (systemd-logind on both).
 - **Not locked while asleep** — at each sleep the shell looks whether the session is
   locked: its own lock, the compositor's lock state on Hyprland (`hyprctl -j locked`), else
   logind's LockedHint (set by lockers that report their lock). For that it holds a logind
@@ -467,7 +480,7 @@ so for each job pick one side and turn it off on the other:
 | Lock before sleep | "Lock before the computer sleeps" (`lockOnSleep`) | `before_sleep_cmd = loginctl lock-session` |
 | Screens on after a wake | always: the monitors the shell turned off | `after_sleep_cmd = hyprctl dispatch dpms on` (needed while hypridle turns screens off) |
 | Apps keeping the screen on | always, while unlocked: Wayland inhibitors, logind `idle` blocks, and `org.freedesktop.ScreenSaver` when the shell holds the name | `ignore_wayland_inhibit`, `ignore_systemd_inhibit`, `ignore_dbus_inhibit` in `general` |
-| Suspend when idle | none | a `listener` with `on-timeout = systemctl suspend` |
+| Suspend when idle | the Sleep section's switch, `sleepTimeout` (logind's `Suspend`) | a `listener` with `on-timeout = systemctl suspend` |
 
 Whichever side locks, the lock is the shell's: it follows logind's Lock signal for its
 session, so `loginctl lock-session` (and a power key set to `lock` in logind.conf) locks it.
@@ -651,7 +664,7 @@ Behaviour pages:
 | **Media** | audio visualiser style, layout and frame rate; the cover's rounding and rotation |
 | **Bar** | the content of the three sections, including each widget's popup mode and preset |
 | **Notifications** | toasts: on or off, whether apps choose how long, the time, one at a time or a column, each queue's limit, moving by dragging, resident ones counting down, the screen and a fullscreen window there; code-extraction regex patterns |
-| **When away** | what happens while nobody uses the computer, in the order it happens. At the top, "Set per monitor" and a timeline from the last input: a lane per monitor (per monitor) with its screensaver and screen-off, the lock as one line across them, the commands' moment; times that would collide labelled on the other side of the line; always drawn, its line under it saying what the lock screen does, nothing at all, or which app keeps the screen on ("Paused: …"). **Screensaver** (its switch on the title line): its time, "Turn screens off" and its time, the per-monitor cards, how it looks (fades, notifications) — dimmed while no monitor shows it. **Lock screen** ("Lock when idle" on the title line, which dims only its time; the rest serves every lock): lock before sleep (off by default) and the sleep notice's line, screens off on the lock screen, its notifications, signing in (→ Authentication). **Keeping the screen on**: the apps holding it now. **Commands**: the start and end commands, dimmed while no screen goes dark. Parts that open on a switch slide open and shut (at once with reduced motion). Opened at the lock screen's section by the sleep notice; its id stays `lockscreen` (`settings openPage lockscreen`) |
+| **When away** | what happens while nobody uses the computer, in the order it happens. At the top, "Set per monitor" and a timeline from the last input: a lane per monitor (per monitor) with its screensaver and screen-off, the lock and the sleep as lines across them (a sleep long after the rest after a break "≈"), the commands' moment; times that would collide labelled on the other side of the line; always drawn, its line under it saying what the lock screen does, nothing at all, or which app keeps the screen on or blocks sleep ("Paused: …"). **Screensaver** (its switch on the title line): its time, "Turn screens off" and its time, the per-monitor cards, how it looks (fades, notifications) — dimmed while no monitor shows it. **Lock screen** ("Lock when idle" on the title line, which dims only its time; the rest serves every lock): lock before sleep (off by default) and the sleep notice's line, screens off on the lock screen, its notifications, signing in (→ Authentication). **Sleep** (its switch on the title line; "Not available here" with the reason where logind will not let the shell sleep the computer without a password): its time, whether it locks first or sleeps unlocked, and a warning when logind sleeps the computer by itself. **Keeping the screen on**: the apps holding it now. **Commands**: the start and end commands, dimmed while no screen goes dark. Parts that open on a switch slide open and shut (at once with reduced motion). Opened at the lock screen's section by the sleep notice; its id stays `lockscreen` (`settings openPage lockscreen`) |
 | **Dictation** | transcript preview, pending counter, music pause, socket path and debug (always global), and the daemon's wake configuration (read-only) |
 | **Performance** | polling rates of hardware, temperatures, disk and network, GPU load sampling, graph heartbeat, the system power profile |
 

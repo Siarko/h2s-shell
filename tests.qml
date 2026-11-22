@@ -123,6 +123,7 @@ QtObject {
     property var _screenPowerReading: ScreenPowerReadingTest {}
     property var _wlopmScreenPowerReading: WlopmScreenPowerReadingTest {}
     property var _logindIdleBlockReading: LogindIdleBlockReadingTest {}
+    property var _logindSleepReading: LogindSleepReadingTest {}
     property var _pamStackRules: PamStackRulesTest {}
     property var _pamStacksReading: PamStacksReadingTest {}
     property var _helper: HelperTest {}

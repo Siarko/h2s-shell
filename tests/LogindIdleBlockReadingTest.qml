@@ -100,10 +100,13 @@ TestCase {
         _then("the first read answered", () => _answered(), () => {
             assertEqual(_block(), JSON.stringify({ held: true, holders: [{ who: "mpv", why: "Playing 'film.mkv'" }] }),
                         "an idle block of this user's: held; the greeter's, sleep delays and the shell's own left out");
+            assertEqual(JSON.stringify(_reader.sleepBlock), JSON.stringify({ held: true, holders: [{ who: "mpv", why: "Playing 'film.mkv'" }] }),
+                        "the same read's sleep block: mpv's sleep:idle block holds sleep; delays do not");
             _readWith("none");
         });
         _then("the second read answered", () => _answered(), () => {
             assertEqual(_block(), free, "no idle block of this user's: free");
+            assertEqual(_reader.sleepBlock.held, false, "… no sleep block either");
             _readWith("malformed");
         });
         _then("the malformed read answered", () => _answered(), () => {
@@ -140,6 +143,7 @@ TestCase {
         });
         _then("the hanging read answered", () => _answered(), () => {
             assertEqual(_block(), unknown, "a gdbus that never ends: unknown, its partial list discarded");
+            assertEqual(_reader.sleepBlock.held, "unknown", "… its sleep block too");
             const took = Date.now() - _hangStarted;
             assert(took >= 400 && took < 3000, "… ended by the watchdog (500 ms here), took " + took + " ms");
             assert(!_reader.running, "… the process ended");

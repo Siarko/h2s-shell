@@ -3,7 +3,8 @@ pragma Singleton
 import QtQuick
 
 // What the "When away" settings page shows, decided: the timeline's lanes, marks and where
-// their labels go, the line under it, the apps keeping the screen on, a monitor's name.
+// their labels go, the line under it, the apps keeping the screen on, a monitor's name, the
+// Sleep section's lines.
 // Pure functions; times in whole seconds, 0 = off. A lane's times are IdleRules.config's
 // per monitor: { saverAfter, screenOffAfter }.
 QtObject {
@@ -18,6 +19,15 @@ QtObject {
     // An app's name and its reason, as shown (one line each, capped)
     readonly property int maxWho: 40
     readonly property int maxWhy: 80
+    // A sleep this much later than everything before it (and past an hour) sits on a
+    // compressed tail after a break, so the minutes keep their room: the minutes get
+    // `mainShare` of the track, the stretch up to the sleep `tailShare`, the rest after it
+    readonly property real breakRatio: 3
+    readonly property int breakMinimum: 3600
+    readonly property real mainShare: 0.7
+    readonly property real tailShare: 0.15
+    // The axis past a sleep on the compressed tail
+    readonly property real tailRoom: 1.1
 
     function _seconds(value) {
         return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : 0;
@@ -73,29 +83,61 @@ QtObject {
         };
     }
 
-    // Something happens when you are away: a stage on some lane, or the idle lock
-    function anything(lanes, lockAfter) {
-        return _seconds(lockAfter) > 0 || allDarkAt(lanes) >= 0;
+    // Something happens when you are away: a stage on some lane, the idle lock or the sleep
+    function anything(lanes, lockAfter, sleepAfter) {
+        return _seconds(lockAfter) > 0 || _seconds(sleepAfter) > 0 || allDarkAt(lanes) >= 0;
     }
 
-    // Where the axis ends (seconds): past the last of the stages, the lock and the commands
-    function axisEnd(lanes, lockAfter, commandsAt) {
-        const moments = [axisMinimum / axisRoom, _seconds(lockAfter), _seconds(commandsAt)];
+    // Where the axis ends (seconds): past the last of the stages, the lock, the commands and
+    // the sleep
+    function axisEnd(lanes, lockAfter, commandsAt, sleepAfter) {
+        const moments = [axisMinimum / axisRoom, _seconds(lockAfter), _seconds(commandsAt), _seconds(sleepAfter)];
         for (const times of Array.isArray(lanes) ? lanes : [])
             moments.push(_seconds(times?.saverAfter), _seconds(times?.screenOffAfter));
         return Math.max(axisMinimum, Math.round(Math.max(...moments) * axisRoom));
     }
 
+    // The timeline's axis: { end, breakAt } in seconds. A sleep past breakMinimum and more
+    // than breakRatio times the axis of everything before it — something being on before it —
+    // goes after a break at `breakAt` (that axis's end), the axis then ending a little past
+    // the sleep; else `breakAt` is -1 and the axis linear to axisEnd
+    function axis(lanes, lockAfter, commandsAt, sleepAfter) {
+        const sleep = _seconds(sleepAfter);
+        const before = axisEnd(lanes, lockAfter, commandsAt, 0);
+        if (anything(lanes, lockAfter, 0) && sleep > breakMinimum && sleep > breakRatio * before)
+            return { end: Math.round(sleep * tailRoom), breakAt: before, sleepAt: sleep };
+        return { end: axisEnd(lanes, lockAfter, commandsAt, sleep), breakAt: -1, sleepAt: sleep };
+    }
+
+    // Where `t` (seconds) stands on an axis (axis()), from 0 to 1
+    function place(t, given) {
+        const end = Math.max(1, Number(given?.end) || 1);
+        const at = Math.max(0, Math.min(Number(t) || 0, end));
+        const breakAt = Number(given?.breakAt);
+        if (!(breakAt > 0))
+            return at / end;
+        const sleep = Number(given.sleepAt);
+        if (at <= breakAt)
+            return mainShare * at / breakAt;
+        if (at <= sleep)
+            return mainShare + tailShare * (at - breakAt) / (sleep - breakAt);
+        return mainShare + tailShare + (1 - mainShare - tailShare) * (at - sleep) / Math.max(1, end - sleep);
+    }
+
     // One lane's stretches from 0 to `end`: [{ from, to, kind }], kind "on" (the desktop),
-    // "saver" or "off". A screen-off before the screensaver hides it; without power control
-    // the screen-off shows the screensaver
-    function segments(times, end, canPowerOff) {
+    // "saver", "off" or "asleep" (from `sleepAfter`, the whole computer). A screen-off before
+    // the screensaver hides it; without power control the screen-off shows the screensaver.
+    // A stretch is cut at `breakAt` (> 0), so the break shows as a gap
+    function segments(times, end, canPowerOff, sleepAfter, breakAt) {
         const last = _seconds(end);
         const saver = _seconds(times?.saverAfter);
         const off = _seconds(times?.screenOffAfter);
-        const kindAt = at => off > 0 && at >= off ? (canPowerOff === true ? "off" : "saver")
+        const sleep = _seconds(sleepAfter);
+        const cut = _seconds(breakAt);
+        const kindAt = at => sleep > 0 && at >= sleep ? "asleep"
+            : off > 0 && at >= off ? (canPowerOff === true ? "off" : "saver")
             : saver > 0 && at >= saver ? "saver" : "on";
-        const cuts = [0, saver, off].filter((value, index) => index === 0 || value > 0 && value < last)
+        const cuts = [0, saver, off, sleep, cut].filter((value, index) => index === 0 || value > 0 && value < last)
             .sort((first, second) => first - second);
         const list = [];
         for (let i = 0; i < cuts.length; i++) {
@@ -103,7 +145,7 @@ QtObject {
             if (to <= cuts[i])
                 continue;
             const kind = kindAt(cuts[i]);
-            if (list.length > 0 && list[list.length - 1].kind === kind)
+            if (list.length > 0 && list[list.length - 1].kind === kind && cuts[i] !== cut)
                 list[list.length - 1].to = to;
             else
                 list.push({ from: cuts[i], to: to, kind: kind });
@@ -114,9 +156,9 @@ QtObject {
     // The marks above and below the line: [{ t, text, kind }] — each lane's stage times
     // ("5 min"; equal times of two lanes once; a screensaver only where it shows,
     // showsSaver), "Commands 5 min" while the commands run
-    // (`commandsAt` ≥ 0), "Lock 20 min" — in time order, at one time the stages first, the
-    // lock last
-    function marks(lanes, lockAfter, commandsAt, durationOf, canPowerOff) {
+    // (`commandsAt` ≥ 0), "Lock 20 min", "Sleep 30 min" — in time order, at one time the
+    // stages first, then the commands, the lock, the sleep
+    function marks(lanes, lockAfter, commandsAt, durationOf, canPowerOff, sleepAfter) {
         const label = typeof durationOf === "function" ? durationOf : seconds => seconds + " s";
         const list = [];
         const add = (t, text, kind) => {
@@ -134,7 +176,9 @@ QtObject {
             add(commandsAt, "Commands " + label(commandsAt), "commands");
         if (_seconds(lockAfter) > 0)
             add(lockAfter, "Lock " + label(lockAfter), "lock");
-        const order = { time: 0, commands: 1, lock: 2 };
+        if (_seconds(sleepAfter) > 0)
+            add(sleepAfter, "Sleep " + label(sleepAfter), "sleep");
+        const order = { time: 0, commands: 1, lock: 2, sleep: 3 };
         return list.sort((first, second) => first.t - second.t || order[first.kind] - order[second.kind]);
     }
 
@@ -179,9 +223,10 @@ QtObject {
         return list;
     }
 
-    // The line under the timeline, always one: who holds the stages, nothing at all, or
-    // where the lock comes and what the lock screen does. `facts`: { holders, anything,
-    // lockAfter, perMonitor, lockedScreenOffAfter, canPowerOff }
+    // The line under the timeline, always one: who holds the stages, who blocks the sleep
+    // (logind's sleep blocks, while the sleep is on), nothing at all, or where the lock comes
+    // and then the sleep or what the lock screen does. `facts`: { holders, sleepBlockers,
+    // anything, lockAfter, sleepAfter, perMonitor, lockedScreenOffAfter, canPowerOff }
     function caption(facts, durationOf) {
         const label = typeof durationOf === "function" ? durationOf : seconds => seconds + " s";
         const held = Array.isArray(facts?.holders) ? facts.holders : [];
@@ -190,13 +235,79 @@ QtObject {
             return "Paused: " + first.who + " keeps the screen on" + (first.why ? " (" + first.why + ")" : "")
                 + (held.length > 1 ? ", and " + (held.length - 1) + " more" : "") + ".";
         }
+        const sleepAfter = _seconds(facts?.sleepAfter);
+        const blockers = Array.isArray(facts?.sleepBlockers) ? facts.sleepBlockers : [];
+        if (sleepAfter > 0 && blockers.length > 0) {
+            const first = blockers[0];
+            return "Paused: " + (_line(first?.who, maxWho) || "an app") + " blocks sleep"
+                + (_line(first?.why, maxWhy) ? " (" + _line(first.why, maxWhy) + ")" : "")
+                + (blockers.length > 1 ? ", and " + (blockers.length - 1) + " more" : "") + ".";
+        }
         if (facts?.anything !== true)
             return "Nothing happens when you are away.";
         const lockAfter = _seconds(facts?.lockAfter);
         const lockedOff = _seconds(facts?.lockedScreenOffAfter);
         return (lockAfter > 0 ? "Locks at " + label(lockAfter) + (facts?.perMonitor === true ? " on every monitor. " : ". ") : "No lock when idle. ")
-            + (lockedOff > 0 ? "Locked: screens " + (facts?.canPowerOff === true ? "off" : "black") + " after " + label(lockedOff) + " without input."
-                             : "Locked: screens stay on.");
+            + (sleepAfter > 0 ? "Sleeps at " + label(sleepAfter) + "."
+               : lockedOff > 0 ? "Locked: screens " + (facts?.canPowerOff === true ? "off" : "black") + " after " + label(lockedOff) + " without input."
+               : "Locked: screens stay on.");
+    }
+
+    // ---- The Sleep section ----
+
+    // Why the shell cannot sleep the computer here, from logind's CanSuspend answer; "" where
+    // it can ("yes")
+    function sleepUnavailable(canSuspend) {
+        switch (canSuspend) {
+        case "yes":
+            return "";
+        case "challenge":
+            return "Not available here: the system asks for a password to sleep";
+        case "na":
+            return "Not available here: this computer cannot sleep";
+        case "no":
+            return "Not available here: the system does not allow it";
+        default:
+            return "Not available here: the system did not say whether it can sleep";
+        }
+    }
+
+    // Whether the sleep locks first, said under its time: "Lock before the computer sleeps"
+    // on; else an idle lock at or before it; else it sleeps unlocked — said in advance.
+    // `facts`: { lockOnSleep, lockAfter (0 = no idle lock), sleepAfter }
+    function sleepLockLine(facts, durationOf) {
+        const label = typeof durationOf === "function" ? durationOf : seconds => seconds + " s";
+        const lockAfter = _seconds(facts?.lockAfter);
+        if (facts?.lockOnSleep === true)
+            return "Locks first (\"Lock before the computer sleeps\").";
+        if (lockAfter > 0 && lockAfter <= _seconds(facts?.sleepAfter))
+            return "Already locked by then (lock at " + label(lockAfter) + ").";
+        return "Sleeps unlocked: \"Lock before the computer sleeps\" is off.";
+    }
+
+    // What logind does by itself after idle (its IdleAction, `{ action, after }` as read), as
+    // a warning beside the shell's sleep — whichever comes first acts; "" when it does
+    // nothing that ends the session's work (ignore, lock), or was not read
+    function systemSleeps(idleAction, durationOf) {
+        const label = typeof durationOf === "function" ? durationOf : seconds => seconds + " s";
+        const action = typeof idleAction?.action === "string" ? idleAction.action : "";
+        const words = {
+            "suspend": "puts the computer to sleep",
+            "hybrid-sleep": "puts the computer to sleep",
+            "suspend-then-hibernate": "puts the computer to sleep",
+            "sleep": "puts the computer to sleep",
+            "hibernate": "hibernates the computer",
+            "poweroff": "turns the computer off",
+            "halt": "turns the computer off",
+            "reboot": "restarts the computer",
+            "kexec": "restarts the computer"
+        };
+        if (!Object.prototype.hasOwnProperty.call(words, action))
+            return "";
+        const what = words[action];
+        const after = _seconds(idleAction.after);
+        return "The system already " + what + (after > 0 ? " after " + label(after) : "") + " without input (logind's IdleAction). "
+            + "With this on too, whichever comes first acts.";
     }
 
     // A monitor's name on its card and its lane, from its id (make|model|serial, a twin's

@@ -2,7 +2,7 @@ import QtQuick
 import qs.singletons
 
 // The "When away" page's decisions: the timeline's lanes, marks and the labels' sides, the
-// line under it, the holders, a monitor's name
+// line under it, the holders, a monitor's name, the Sleep section's lines
 TestCase {
     suiteName: "AwayViewRules"
 
@@ -107,6 +107,77 @@ TestCase {
                     "Paused: Firefox keeps the screen on (Playing video).", "a holder takes the line");
         assertEqual(caption({ holders: [{ who: "mpv", why: "" }, { who: "an app (unnamed)", why: "" }, { who: "x", why: "" }], anything: false }),
                     "Paused: mpv keeps the screen on, and 2 more.", "… the first named, the rest counted, even with nothing on");
+
+        // --- the sleep on the timeline ---
+        assert(rules.anything([{ saverAfter: 0, screenOffAfter: 0 }], 0, 1800), "the sleep alone is something");
+        assertEqual(rules.axisEnd([{ saverAfter: 300, screenOffAfter: 0 }], 600, -1, 1800), Math.round(1800 * 1.18), "the axis past the sleep");
+        const linear = rules.axis([{ saverAfter: 300, screenOffAfter: 600 }], 900, -1, 1800);
+        assertEqual(JSON.stringify(linear), JSON.stringify({ end: Math.round(1800 * 1.18), breakAt: -1, sleepAt: 1800 }),
+                    "sleep at 30 min after a lock at 15: one linear axis");
+        assertEqual(rules.axis([{ saverAfter: 300, screenOffAfter: 0 }], 1200, -1, 3600).breakAt, -1, "an hour, three times the rest: still linear");
+        const broken = rules.axis([{ saverAfter: 300, screenOffAfter: 600 }], 900, -1, 7200);
+        assertEqual(JSON.stringify(broken), JSON.stringify({ end: Math.round(7200 * 1.1), breakAt: Math.round(900 * 1.18), sleepAt: 7200 }),
+                    "sleep at 2 h after a lock at 15 min: after a break, the minutes up to it");
+        assertEqual(rules.axis([{ saverAfter: 0, screenOffAfter: 0 }], 0, -1, 7200).breakAt, -1, "nothing before the sleep: no break");
+        assertEqual(rules.axis([{ saverAfter: 0, screenOffAfter: 0 }], 600, -1, 3600).breakAt, -1, "a sleep at an hour exactly: no break (past an hour only)");
+        assertEqual(rules.axis([{ saverAfter: 0, screenOffAfter: 0 }], 2034, -1, 7200).breakAt, -1, "… nor at exactly three times the rest");
+        assertEqual(rules.axis([{ saverAfter: 0, screenOffAfter: 0 }], 2100, -1, 7200).breakAt, -1, "a sleep less than three times the rest: no break");
+        assertEqual(rules.axis([{ saverAfter: 0, screenOffAfter: 0 }], 2000, -1, 7200).breakAt, 2360, "… more than that: a break");
+        const at = (t, given) => Math.round(rules.place(t, given) * 1000);
+        assertEqual([0, 900, linear.end, linear.end * 2].map(t => at(t, linear)).join(" "), "0 " + Math.round(900 / linear.end * 1000) + " 1000 1000",
+                    "linear: in proportion, kept on the axis");
+        assertEqual([0, broken.breakAt / 2, broken.breakAt, (broken.breakAt + 7200) / 2, 7200, broken.end].map(t => at(t, broken)).join(" "),
+                    "0 350 700 775 850 1000", "with a break: the minutes 70 %, the stretch to the sleep 15 %, after it the rest");
+        assertEqual(stretches(rules.segments({ saverAfter: 300, screenOffAfter: 600 }, 2124, true, 1800)),
+                    "on:0-300 saver:300-600 off:600-1800 asleep:1800-2124", "the sleep: asleep to the end, on every lane");
+        assertEqual(stretches(rules.segments({ saverAfter: 0, screenOffAfter: 0 }, 7920, true, 7200, 1062)),
+                    "on:0-1062 on:1062-7200 asleep:7200-7920", "a stretch cut at the break, so it shows as a gap");
+        assertEqual(stretches(rules.segments({ saverAfter: 300, screenOffAfter: 3600 }, 2124, true, 1800)),
+                    "on:0-300 saver:300-1800 asleep:1800-2124", "a screen-off after the sleep never comes");
+        assertEqual(marks(rules.marks([{ saverAfter: 300, screenOffAfter: 0 }], 1800, -1, minutes, true, 1800)),
+                    "time:5 min | lock:Lock 30 min | sleep:Sleep 30 min", "the sleep's mark: at one time after the lock");
+        assertEqual(marks(rules.marks([{ saverAfter: 0, screenOffAfter: 0 }], 0, -1, minutes, true, 0)), "", "no sleep: no mark");
+
+        // --- the Sleep section ---
+        assertEqual(rules.sleepUnavailable("yes"), "", "CanSuspend yes: available");
+        assertEqual(rules.sleepUnavailable("challenge"), "Not available here: the system asks for a password to sleep",
+                    "challenge: the password named");
+        assert(rules.sleepUnavailable("na").startsWith("Not available here: ") && rules.sleepUnavailable("no").startsWith("Not available here: ")
+               && rules.sleepUnavailable(undefined).startsWith("Not available here: "), "na, no, not read: not available");
+        const lockLine = facts => rules.sleepLockLine(facts, minutes);
+        assertEqual(lockLine({ lockOnSleep: true, lockAfter: 0, sleepAfter: 1800 }), "Locks first (\"Lock before the computer sleeps\").",
+                    "lock before sleep on: it locks first");
+        assertEqual(lockLine({ lockOnSleep: false, lockAfter: 900, sleepAfter: 1800 }), "Already locked by then (lock at 15 min).",
+                    "the idle lock before it");
+        assertEqual(lockLine({ lockOnSleep: false, lockAfter: 1800, sleepAfter: 1800 }), "Already locked by then (lock at 30 min).",
+                    "… at the same time (the sleep waits for it)");
+        assertEqual(lockLine({ lockOnSleep: false, lockAfter: 3600, sleepAfter: 1800 }), "Sleeps unlocked: \"Lock before the computer sleeps\" is off.",
+                    "the idle lock later: said in advance that it sleeps unlocked");
+        assertEqual(lockLine({ lockOnSleep: false, lockAfter: 0, sleepAfter: 1800 }), "Sleeps unlocked: \"Lock before the computer sleeps\" is off.",
+                    "… no idle lock: the same");
+        assertEqual(rules.systemSleeps({ action: "suspend", after: 1800 }, minutes),
+                    "The system already puts the computer to sleep after 30 min without input (logind's IdleAction). With this on too, whichever comes first acts.",
+                    "logind suspends by itself: said, a warning");
+        assertEqual(rules.systemSleeps({ action: "suspend", after: 0 }, minutes),
+                    "The system already puts the computer to sleep without input (logind's IdleAction). With this on too, whichever comes first acts.",
+                    "… with no time of its own: none said");
+        assert(rules.systemSleeps({ action: "hibernate", after: 600 }, minutes).startsWith("The system already hibernates the computer after 10 min"),
+               "… hibernates");
+        assert(rules.systemSleeps({ action: "poweroff", after: 600 }, minutes).startsWith("The system already turns the computer off"), "… powers off");
+        for (const quiet of [{ action: "ignore", after: 1800 }, { action: "lock", after: 1800 }, null, { action: "toString", after: 1 }])
+            assertEqual(rules.systemSleeps(quiet, minutes), "", "nothing said for " + JSON.stringify(quiet));
+        assertEqual(caption({ holders: [], anything: true, lockAfter: 900, sleepAfter: 1800, lockedScreenOffAfter: 60, canPowerOff: true }),
+                    "Locks at 15 min. Sleeps at 30 min.", "the lock, then the sleep");
+        assertEqual(caption({ holders: [], anything: true, lockAfter: 0, sleepAfter: 1800, lockedScreenOffAfter: 60, canPowerOff: true }),
+                    "No lock when idle. Sleeps at 30 min.", "no idle lock, the sleep");
+        assertEqual(caption({ holders: [], sleepBlockers: [{ who: "borg", why: "Backup" }, { who: "x", why: "" }], anything: true, sleepAfter: 1800 }),
+                    "Paused: borg blocks sleep (Backup), and 1 more.", "logind's sleep block takes the line");
+        assertEqual(caption({ holders: [], sleepBlockers: [{ who: "borg", why: "" }], anything: true, sleepAfter: 1800 }),
+                    "Paused: borg blocks sleep.", "… one, without a reason");
+        assertEqual(caption({ holders: [], sleepBlockers: [{ who: "borg", why: "" }], anything: true, lockAfter: 900, sleepAfter: 0,
+                              lockedScreenOffAfter: 0 }), "Locks at 15 min. Locked: screens stay on.", "… only while the sleep is on");
+        assertEqual(caption({ holders: [{ who: "mpv", why: "" }], sleepBlockers: [{ who: "borg", why: "" }], anything: true, sleepAfter: 1800 }),
+                    "Paused: mpv keeps the screen on.", "an app keeping the screen on comes first: it holds everything");
 
         // --- the holders ---
         const listed = list => list.map(holder => holder.who + "/" + holder.why).join(" | ");

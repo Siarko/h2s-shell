@@ -6,7 +6,7 @@ import qs.singletons
 
 // "When away": what happens while nobody uses the computer, edited in the profile picked in
 // the settings window. Its sections in the order things happen — the screensaver (and the
-// screens turned off), the lock screen —, then what keeps the screen on and the commands;
+// screens turned off), the lock screen, sleep —, then what keeps the screen on and the commands;
 // each stage's switch on its section's title line. At the top, under the page's heading
 // and without a title of its own: "Set per monitor" and the timeline of it all.
 Flickable {
@@ -30,6 +30,15 @@ Flickable {
     readonly property bool _lockOn: _edited("lockscreen.lockscreenEnabled") === true
     readonly property bool _perMonitor: _edited("lockscreen.perMonitor") === true
     readonly property bool _commandsOn: _edited("lockscreen.screensaverCommands") === true
+    readonly property bool _sleepOn: _edited("lockscreen.sleepEnabled") === true
+    readonly property bool _lockOnSleep: _edited("lockscreen.lockOnSleep") === true
+    // What logind allows and does about sleep (Idle.sleepSupport), and its sleep blocks
+    // (Idle.sleepBlockers)
+    property var sleepSupport: Idle.sleepSupport
+    property var sleepBlockers: Idle.sleepBlockers
+    // The shell sleeps the computer only on "yes"
+    readonly property string _canSuspend: sleepSupport?.canSuspend ?? "unknown"
+    readonly property string _sleepUnavailable: AwayViewRules.sleepUnavailable(_canSuspend)
     readonly property var _monitorMap: _edited("lockscreen.monitorIdle")
     // The map comes from a profile above, or the default: its cards' choices dimmed
     readonly property bool _mapInherited: !("lockscreen.monitorIdle" in Profiles.effectiveGlobals)
@@ -48,8 +57,11 @@ Flickable {
         lockedScreenOffTimeout: _edited("lockscreen.lockedScreenOffTimeout"),
         perMonitor: _perMonitor,
         monitorIdle: _monitorMap,
-        screensaverCommands: _commandsOn
-    }, Idle.monitors, _canPowerOff)
+        screensaverCommands: _commandsOn,
+        sleepEnabled: _sleepOn,
+        sleepTimeout: _edited("lockscreen.sleepTimeout"),
+        lockOnSleep: _lockOnSleep
+    }, Idle.monitors, _canPowerOff, _canSuspend)
     // The timeline's lanes: one per connected monitor while per monitor, else one for all
     // The connected monitors' names, twins told apart by their connectors
     readonly property var _monitorNames: AwayViewRules.monitorNames(Idle.monitors)
@@ -99,7 +111,8 @@ Flickable {
            ScreenPower.unavailable?.hint ?? ""].filter(part => part !== "").join(". ")
 
     // The sections by name, for `section`
-    readonly property var sections: ({ screensaver: _saverSection, lock: _lockSection, awake: _awakeSection, commands: _commandsSection })
+    readonly property var sections: ({ screensaver: _saverSection, lock: _lockSection, sleep: _sleepSection, awake: _awakeSection,
+                                       commands: _commandsSection })
 
     function showSection(name) {
         const target = sections[name];
@@ -111,7 +124,11 @@ Flickable {
     }
 
     onSectionChanged: Qt.callLater(_showRequested)
-    Component.onCompleted: Qt.callLater(_showRequested)
+    Component.onCompleted: {
+        // What logind allows may have changed since the start (a polkit rule, a new kernel)
+        Idle.refreshSleepSupport();
+        Qt.callLater(_showRequested);
+    }
     function _showRequested() {
         if (section !== "")
             showSection(section);
@@ -139,7 +156,7 @@ Flickable {
         SchemaSettingEditor {
             key: "lockscreen.perMonitor"
             editIndex: root.editIndex
-            hint: root._perMonitor ? "Each monitor its own screensaver and screen-off times. The lock is one for all."
+            hint: root._perMonitor ? "Each monitor its own screensaver and screen-off times. The lock and sleep are one for all."
                                    : "One set of times for every monitor."
         }
 
@@ -151,6 +168,8 @@ Flickable {
             perMonitor: root._perMonitor
             lockAfter: root._config.lockAfter
             commandsAt: root._commandsOn ? root._allDarkAt : -1
+            sleepAfter: root._config.sleepAfter
+            sleepBlockers: root.sleepBlockers
             lockedScreenOffAfter: root._config.lockedScreenOffAfter
             canPowerOff: root._canPowerOff
             holders: Idle.holders
@@ -389,6 +408,76 @@ Flickable {
             }
         }
 
+        // ── Sleep: the whole computer, its switch on the title line ──────────
+
+        SettingsSection {
+            id: _sleepSection
+            objectName: "sleepSection"
+            title: "Sleep"
+            Layout.fillWidth: true
+            spacing: 2
+            buttons: SchemaSettingEditor {
+                objectName: "sleepSwitch"
+                key: "lockscreen.sleepEnabled"
+                editIndex: root.editIndex
+                inline: true
+                labelShown: false
+                available: root._sleepUnavailable === ""
+                Layout.fillWidth: false
+            }
+
+            Hint {
+                objectName: "sleepCaption"
+                text: root._sleepUnavailable !== "" ? root._sleepUnavailable + "."
+                    : root._sleepOn ? "The computer sleeps when nobody has used it for this long."
+                    : "The computer does not sleep by itself when idle."
+                Layout.bottomMargin: 4
+            }
+
+            Reveal {
+                objectName: "sleepTimes"
+                open: root._sleepOn && root._sleepUnavailable === ""
+                SchemaSettingEditor {
+                    key: "lockscreen.sleepTimeout"
+                    editIndex: root.editIndex
+                    inline: true
+                    label: "after"
+                }
+                Hint {
+                    objectName: "sleepLockLine"
+                    text: AwayViewRules.sleepLockLine({
+                        lockOnSleep: root._lockOnSleep, lockAfter: root._config.lockAfter, sleepAfter: root._config.sleepAfter
+                    }, seconds => Format.duration(seconds))
+                    Layout.bottomMargin: 4
+                }
+            }
+
+            // logind sleeps the computer by itself too (its IdleAction): said, not prevented
+            Rectangle {
+                id: _systemSleeps
+                readonly property string text: AwayViewRules.systemSleeps(root.sleepSupport?.idleAction ?? null, seconds => Format.duration(seconds))
+                objectName: "systemSleeps"
+                visible: text !== ""
+                Layout.fillWidth: true
+                Layout.topMargin: 4
+                implicitHeight: visible ? _systemSleepsText.implicitHeight + 14 : 0
+                radius: Theme.settings.cardRadius
+                color: Qt.alpha(Theme.warning, 0.10)
+                border.width: Theme.border.width
+                border.color: Theme.warning
+                Text {
+                    id: _systemSleepsText
+                    anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; leftMargin: 10; rightMargin: 10 }
+                    text: _systemSleeps.text
+                    textFormat: Text.PlainText
+                    wrapMode: Text.WordWrap
+                    font.family: Theme.fontFamily
+                    font.pixelSize: Theme.fontSizeSmall
+                    color: Theme.textPrimary
+                }
+            }
+        }
+
         // ── Keeping the screen on: who holds it now ──────────────────────────
 
         SettingsSection {
@@ -421,7 +510,7 @@ Flickable {
             }
             Hint {
                 Layout.topMargin: 4
-                text: "Apps that ask to keep the screen on delay the screensaver, the screens turned off and the lock, on every monitor. Not on the lock screen."
+                text: "Apps that ask to keep the screen on delay the screensaver, the screens turned off, the lock and sleep, on every monitor. Not on the lock screen."
             }
         }
 

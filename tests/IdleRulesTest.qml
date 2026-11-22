@@ -20,14 +20,16 @@ TestCase {
                 return action.type + ":" + action.active;
             if (action.black !== undefined)
                 return action.type + ":" + action.black;
+            if (action.leftUnlocked !== undefined)
+                return action.type + ":" + (action.leftUnlocked ? "unlocked" : "locked");
             return action.type;
         }).join(",");
     }
 
-    function _machine(values, monitors, canPowerOff) {
+    function _machine(values, monitors, canPowerOff, canSuspend) {
         const rules = IdleRules;
         const self = {
-            config: rules.config(values, monitors, canPowerOff),
+            config: rules.config(values, monitors, canPowerOff, canSuspend),
             state: rules.initial(0),
             now: 0,
             actions: "",
@@ -42,7 +44,7 @@ TestCase {
             return self;
         };
         self.reconfigure = (ms, newValues, newMonitors, newCanPowerOff) => {
-            self.config = rules.config(newValues, newMonitors ?? monitors, newCanPowerOff ?? canPowerOff);
+            self.config = rules.config(newValues, newMonitors ?? monitors, newCanPowerOff ?? canPowerOff, canSuspend);
             return self.at(ms, { type: "config" });
         };
         self.next = () => rules.nextDeadline(self.state, self.config, self.now);
@@ -93,6 +95,7 @@ TestCase {
         _profiles();
         _monitors();
         _sleep();
+        _sleepStage();
         _forced();
         _unknowns();
         _powerReadBack();
@@ -1140,6 +1143,167 @@ TestCase {
         assertEqual(locked.actions, "powerOn:lcd,hideSaver:lcd,endCommand",
                     "resumed while locked: the monitors the shell turned off on again, the lock stays (active)");
         assertEqual(locked.next(), 960000, "… the lock screen's screen-off from the resume");
+    }
+
+    // Sleep after idle: the whole computer, logind's Suspend, once per idle period
+    function _sleepStage() {
+        const rules = IdleRules;
+        // (The lock screen's own screen-off off: its steps would stand between)
+        const values = { sleepEnabled: true, sleepTimeout: 1800, lockedScreenOffTimeout: 0 };
+        assertEqual(rules.config(values, ["lcd"], true, "yes").sleepAfter, 1800, "sleep on where logind answers CanSuspend yes: a stage");
+        for (const answer of ["challenge", "no", "na", "unknown", undefined])
+            assertEqual(rules.config(values, ["lcd"], true, answer).sleepAfter, 0,
+                        "CanSuspend " + answer + ": no sleep stage (never called; challenge would ask for a password)");
+        assertEqual(rules.config({ sleepTimeout: 1800 }, ["lcd"], true, "yes").sleepAfter, 0, "sleep off unless switched on");
+        assertEqual(rules.config({ sleepEnabled: true }, ["lcd"], true, "yes").sleepAfter, 1800, "… its time unset: 30 min");
+        const challenged = _machine(values, ["lcd"], true, "challenge").idle(5000, 0);
+        assertEqual(challenged.next(), -1, "challenge: no deadline for it");
+        challenged.at(4000000, { type: "deadline" });
+        assertEqual(challenged.actions, "", "… nor a call, however long idle");
+        assert(!rules.logindReadDue(challenged.state, challenged.config, 4000000), "… nor a read for it");
+
+        // The due time, from the last input; asked once per period
+        const plain = _machine(values, ["lcd"], true, "yes").idle(5000, 0);
+        assertEqual(plain.next(), 1800000, "due 30 min after the last input");
+        assert(!rules.sleepDue(plain.state, plain.config, 1799999) && rules.sleepDue(plain.state, plain.config, 1800000),
+               "… not a moment before");
+        assert(rules.logindReadDue(plain.state, plain.config, 1800000), "… logind's inhibitors read first");
+        plain.deadline();
+        assertEqual(plain.actions, "sleep:unlocked", "then the sleep asked, unlocked as the settings say (no lock before it)");
+        assertEqual(plain.next(), -1, "… asked once");
+        plain.at(3600000, { type: "deadline" });
+        assertEqual(plain.actions, "", "… not again in the same period");
+        assert(!rules.logindReadDue(plain.state, plain.config, 3600000), "… nor read for again");
+        plain.at(3601000, { type: "sleep" }).at(3700000, { type: "resumed" });
+        assertEqual(plain.state.sleepAsked, false, "the resume: a new period");
+        plain.idle(3705000, 3700000);
+        assertEqual(plain.next(), 3700000 + 1800000, "… the sleep due again from the resume");
+        plain.input(3800000).idle(3805000, 3800000);
+        assertEqual(plain.next(), 3800000 + 1800000, "input: counted from it");
+
+        // Held by the apps keeping the screen on, unlocked only
+        const held = _machine(values, ["lcd"], true, "yes").idle(5000, 0);
+        held.at(60000, { type: "busInhibitors", count: 1 });
+        assertEqual(held.next(), -1, "an app keeping the screen on holds the sleep");
+        held.at(2000000, { type: "deadline" });
+        assertEqual(held.actions, "", "… past its time too");
+        held.at(2100000, { type: "busInhibitors", count: 0 });
+        assertEqual(held.next(), 2100000 + 1800000, "released: counted from the release");
+        const wayland = _machine(values, ["lcd"], true, "yes").at(5000, { type: "inputIdle", idle: true, since: 0 });
+        assertEqual(wayland.next(), -1, "a Wayland client holding idle off holds the sleep");
+        const lockedHeld = _machine(values, ["lcd"], true, "yes").idle(5000, 0);
+        lockedHeld.at(10000, { type: "locked" }).at(20000, { type: "busInhibitors", count: 1 });
+        assertEqual(lockedHeld.next(), 1800000, "locked: the apps are ignored, the sleep comes at its time");
+        lockedHeld.deadline();
+        assertEqual(lockedHeld.actions, "sleep:locked", "… asked, from a locked session");
+        const forced = _machine(_with(values, { screensaverEnabled: true, screensaverTimeout: 300 }), ["lcd"], true, "yes");
+        forced.at(1000, { type: "busInhibitors", count: 1 }).at(2000, { type: "force" });
+        assertEqual(forced.next(), 2000 + 1500000, "a forced screensaver: counted from it as the stages are, no app holds it");
+
+        // logind's sleep block: read before the call, locked or not; held → paused, read again
+        const blocked = _machine(values, ["lcd"], true, "yes").idle(5000, 0);
+        blocked.at(1800000, { type: "logindSleepBlock", held: true });
+        assertEqual(blocked.actions, "", "a sleep block held (a backup): no call");
+        assertEqual(blocked.next(), 1800000 + IdleRules.logindRecheck, "… read again after a while");
+        assert(rules.logindReadDue(blocked.state, blocked.config, blocked.next()), "… a read then");
+        blocked.at(1830000, { type: "logindSleepBlock", held: false });
+        assertEqual(blocked.actions, "sleep:unlocked", "free again: the sleep asked");
+        const oneRead = _machine(values, ["lcd"], true, "yes").idle(5000, 0)
+            .at(1800000, { type: "logindIdleBlock", held: false, sleepHeld: true });
+        assert(oneRead.actions === "" && oneRead.state.logindSleepBlock === true,
+               "one read's idle and sleep blocks in one step: the sleep block holds (never asked on half a read)");
+        assertEqual(_machine(values, ["lcd"], true, "yes").idle(5000, 0).at(1800000, { type: "logindIdleBlock", held: false }).state.logindSleepBlock,
+                    false, "an idle block's read alone leaves the sleep block as it was");
+        assertEqual(_machine(values, ["lcd"], true, "yes").at(1000, { type: "logindIdleBlock", held: false, sleepHeld: "junk" }).state.logindSleepBlock,
+                    "unknown", "a sleep block not understood: unknown");
+        const lockedBlock = _machine(values, ["lcd"], true, "yes").idle(5000, 0).at(10000, { type: "locked" });
+        assert(rules.logindReadDue(lockedBlock.state, lockedBlock.config, 1800000), "locked: logind's sleep block is still read");
+        lockedBlock.at(1800000, { type: "logindSleepBlock", held: true });
+        assertEqual(lockedBlock.actions, "", "… and holds the sleep");
+        assertEqual(lockedBlock.next(), 1800000 + IdleRules.logindRecheck, "… read again");
+        const unread = _machine(values, ["lcd"], true, "yes").idle(5000, 0).at(1800000, { type: "logindSleepBlock", held: "unknown" });
+        assertEqual(unread.actions, "sleep:unlocked", "a failed read: asked anyway (logind itself refuses while a block holds)");
+        const stale = _machine(values, ["lcd"], true, "yes").idle(5000, 0).at(1800000, { type: "logindSleepBlock", held: true });
+        stale.input(1900000);
+        assertEqual(stale.state.logindSleepBlock, "unknown", "input: a block seen before says nothing of the next sleep");
+        stale.idle(1905000, 1900000);
+        assertEqual(stale.next(), 1900000 + 1800000, "… the next sleep counted, read before it");
+
+        // Lock first: an idle lock due at or before the sleep is waited for
+        const both = _machine(_with(values, { lockscreenEnabled: true, lockAfter: 1800 }), ["lcd"], true, "yes").idle(5000, 0);
+        both.deadline();
+        assertEqual(both.actions, "lock", "lock and sleep at one time: the lock asked first, the sleep waits for it");
+        assertEqual(both.next(), 1800000 + IdleRules.sleepLockWait, "… at most a moment");
+        both.at(1801000, { type: "locked" });
+        assertEqual(both.actions, "sleep:locked,active:true", "locked: the sleep now");
+        const refused = _machine(_with(values, { lockscreenEnabled: true, lockAfter: 1800 }), ["lcd"], true, "yes").idle(5000, 0);
+        refused.deadline();
+        refused.deadline();
+        assertEqual(refused.actions, "lock,sleep:locked",
+                    "the lock not taken: asked again, then the sleep after the wait — not taken as the settings' choice (the notice counts it)");
+        const earlier = _machine(_with(values, { lockscreenEnabled: true, lockAfter: 600 }), ["lcd"], true, "yes").idle(5000, 0);
+        earlier.deadline();
+        earlier.at(601000, { type: "locked" });
+        assertEqual(earlier.next(), 1800000, "the lock long before: the sleep at its own time");
+        earlier.deadline();
+        assertEqual(earlier.actions, "sleep:locked", "… from the locked session");
+        const later = _machine(_with(values, { lockscreenEnabled: true, lockAfter: 3600 }), ["lcd"], true, "yes").idle(5000, 0);
+        assertEqual(later.next(), 1800000, "the idle lock later than the sleep: not waited for");
+        later.deadline();
+        assertEqual(later.actions, "sleep:unlocked", "… it sleeps unlocked, as the settings say");
+        const onSleep = _machine(_with(values, { lockOnSleep: true }), ["lcd"], true, "yes").idle(5000, 0);
+        onSleep.deadline();
+        assertEqual(onSleep.actions, "sleep:locked", "Lock before the computer sleeps: asked as locked (it locks at PrepareForSleep)");
+        assert(!rules.sleepLeftUnlocked({ locked: false }, rules.config(_with(values, { lockscreenEnabled: true, lockAfter: 1800 }), [], true, "yes")),
+               "an idle lock at the sleep's time: not left unlocked");
+        assert(rules.sleepLeftUnlocked({ locked: false }, rules.config(_with(values, { lockscreenEnabled: true, lockAfter: 1801 }), [], true, "yes")),
+               "… a second later: left unlocked");
+        const failed = _machine(values, ["lcd"], true, "yes").idle(5000, 0);
+        failed.deadline().at(1801000, { type: "sleepFailed" });
+        assert(failed.state.sleepAsked && !failed.state.sleepLeftUnlocked, "logind refused: not asked again, and no sleep of ours to excuse");
+        assertEqual(failed.next(), -1, "… no deadline for it");
+
+        // A switch that makes the sleep due counts from the switch, never sleeps at once
+        const switched = _machine({}, ["lcd"], true, "yes").idle(5000, 0);
+        switched.reconfigure(3600000, values);
+        assertEqual(switched.actions, "", "sleep switched on past its time: not at once");
+        assertEqual(switched.next(), 3600000 + 1800000, "… counted from the switch");
+        const notYet = _machine({ sleepEnabled: true, sleepTimeout: 3600 }, ["lcd"], true, "yes").idle(5000, 0);
+        notYet.reconfigure(600000, values);
+        assertEqual(notYet.next(), 1800000, "a shorter time not yet reached: from the last input");
+        const dueThen = _machine({ sleepEnabled: true, sleepTimeout: 3600, lockedScreenOffTimeout: 0 }, ["lcd"], true, "yes").idle(5000, 0);
+        dueThen.reconfigure(1800000, values);
+        assertEqual(dueThen.next(), 3600000, "shortened to just now: due from the switch, not at once");
+        const dueAnyway = _machine({ sleepEnabled: true, sleepTimeout: 3600, lockedScreenOffTimeout: 0 }, ["lcd"], true, "yes").idle(5000, 0);
+        dueAnyway.reconfigure(3600000, values);
+        assertEqual(dueAnyway.actions, "sleep:unlocked", "shortened just as the sleep fell due: it is asked, not put off");
+        const blockedSwitch = _machine(values, ["lcd"], true, "yes").idle(5000, 0).at(1800000, { type: "logindSleepBlock", held: true });
+        blockedSwitch.reconfigure(2000000, _with(values, { sleepTimeout: 1700 }));
+        blockedSwitch.at(2010000, { type: "logindIdleBlock", held: false, sleepHeld: false });
+        assertEqual(blockedSwitch.actions, "sleep:unlocked", "a time changed while a block held the sleep due: asked once the block goes");
+        const firstStep = _machine(values, ["lcd"], true, "yes").idle(1800000, 0);
+        assertEqual(firstStep.actions, "sleep:unlocked", "a sleep due at the step that makes the idle known: asked");
+        const forcedFirst = _machine(_with(values, { screensaverEnabled: true, screensaverTimeout: 1800 }), ["lcd"], true, "yes")
+            .at(2000000, { type: "force" });
+        assert(forcedFirst.actions.split(",").includes("sleep:unlocked"),
+               "the very first step: a sleep already due is asked, no switch to count from: " + forcedFirst.actions);
+        const second = _machine({ sleepEnabled: true, sleepTimeout: 1 }, ["lcd"], true, "yes").idle(500, 0);
+        assertEqual(second.next(), 1000, "a sleep after one second: due after it, with no lock to wait for");
+        second.deadline();
+        assertEqual(second.actions, "sleep:unlocked", "… asked then");
+        assert(rules.sleepLeftUnlocked({ locked: false }, rules.config(_with(values, { lockscreenEnabled: true, lockAfter: 1 }), [], true, "yes")) === false,
+               "an idle lock after one second, before the sleep: not left unlocked");
+        const heldBlocked = _machine(values, ["lcd"], true, "yes").idle(5000, 0).at(1800000, { type: "logindSleepBlock", held: true });
+        heldBlocked.at(1810000, { type: "busInhibitors", count: 1 });
+        assertEqual(heldBlocked.next(), -1, "blocked, then an app keeps the screen on: no re-read for the sleep while that holds");
+        const freed = _machine(values, ["lcd"], true, "yes").idle(5000, 0).at(1800000, { type: "logindIdleBlock", held: false, sleepHeld: true });
+        freed.at(1830000, { type: "logindIdleBlock", held: false, sleepHeld: false });
+        assertEqual(freed.actions, "sleep:unlocked", "the next read finds the sleep block gone: the sleep asked");
+        const answered = _machine(values, ["lcd"], true, "unknown").idle(5000, 0);
+        answered.config = rules.config(values, ["lcd"], true, "yes");
+        answered.at(3600000, { type: "config" });
+        assertEqual(answered.actions, "", "logind's yes coming late: no sleep at once");
+        assertEqual(answered.next(), 3600000 + 1800000, "… counted from then");
     }
 
     function _forced() {

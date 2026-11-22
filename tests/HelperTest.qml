@@ -118,6 +118,9 @@ TestCase {
         assertEqual(wants(resolved({ perMonitor: true, monitorIdle: { m: { screenOffEnabled: true } } }, true)), true,
                     "… only one monitor's own screen-off on: asked for");
         assertEqual(wants(resolved({ lockscreenEnabled: true }, false)), true, "… the idle lock on: asked for");
+        assertEqual(wants(IdleRules.config(values({ sleepEnabled: true }), [], true, "yes")), true, "… the sleep on: asked for");
+        assertEqual(wants(IdleRules.config(values({ sleepEnabled: true }), [], true, "challenge")), false,
+                    "… the sleep switched on where logind will not let the shell sleep: not a stage, left free");
         assertEqual(wants(resolved({ lockedScreenOffTimeout: 30, lockOnSleep: true }, true)), false,
                     "… the lock screen's screen-off and the lock before sleep do not count (requests are ignored while locked)");
         assertEqual(wants({ saverAfter: "300", lockAfter: -1 }), false, "… only a positive number of seconds is a stage");

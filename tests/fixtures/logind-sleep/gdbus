@@ -1,0 +1,40 @@
+#!/bin/sh
+# A stand-in for gdbus (tests/LogindSleepReadingTest.qml), started through a link in the
+# suite's scratch directory; no bus is reached. It answers logind's CanSuspend with that
+# directory's `can-suspend` (failing as gdbus does without it), the Manager's IdleAction and
+# IdleActionUSec properties from `idle-action` ("<action> <microseconds>"; failing without
+# it), and takes Suspend: each call noted in `calls` with its argument, answered "()" — or
+# refused, status 1, while a `refuse` file is there. With a `hang` file it never ends. Anything
+# else it is asked fails.
+here=$(dirname "$0")
+case " $* " in
+    *" call --system --dest org.freedesktop.login1 --object-path /org/freedesktop/login1 "*) ;;
+    *) echo "Error: the stand-in only knows logind's Manager on the system bus" >&2; exit 2 ;;
+esac
+[ -f "$here/hang" ] && exec sleep 30
+for argument in "$@"; do last=$argument; done
+case " $* " in
+    *" --method org.freedesktop.login1.Manager.CanSuspend "*)
+        [ -f "$here/can-suspend" ] || { echo "Error: GDBus.Error:org.freedesktop.DBus.Error.ServiceUnknown: no logind" >&2; exit 1; }
+        echo "('$(cat "$here/can-suspend")',)"
+        ;;
+    *" --method org.freedesktop.DBus.Properties.Get org.freedesktop.login1.Manager IdleAction "*)
+        [ -f "$here/idle-action" ] || { echo "Error: GDBus.Error:org.freedesktop.DBus.Error.ServiceUnknown: no logind" >&2; exit 1; }
+        read -r action usec < "$here/idle-action"
+        echo "(<'$action'>,)"
+        ;;
+    *" --method org.freedesktop.DBus.Properties.Get org.freedesktop.login1.Manager IdleActionUSec "*)
+        [ -f "$here/idle-action" ] || { echo "Error: GDBus.Error:org.freedesktop.DBus.Error.ServiceUnknown: no logind" >&2; exit 1; }
+        read -r action usec < "$here/idle-action"
+        echo "(<uint64 $usec>,)"
+        ;;
+    *" --method org.freedesktop.login1.Manager.Suspend "*)
+        echo "Suspend $last" >> "$here/calls"
+        if [ -f "$here/refuse" ]; then
+            echo "Error: GDBus.Error:org.freedesktop.login1.OperationInProgress: There's already a shutdown or sleep operation in progress" >&2
+            exit 1
+        fi
+        echo "()"
+        ;;
+    *) echo "Error: the stand-in does not know this call" >&2; exit 2 ;;
+esac

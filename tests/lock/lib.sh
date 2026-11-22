@@ -536,7 +536,12 @@ notification_server_up() {
 #                    without it; logind_inhibitors writes it), and never ends while
 #                    logind/hang exists (a bus that does not answer)
 #                    `gdbus call … SetLockedHint <bool>` notes "call SetLockedHint <path>
-#                    <bool>" in logind/log; `… Properties.Get … LockedHint` answers false
+#                    <bool>" in logind/log; `… Properties.Get … LockedHint` answers false;
+#                    `… CanSuspend` answers logind/can-suspend ("yes" without it), the
+#                    Manager's IdleAction and IdleActionUSec logind/idle-action ("<action>
+#                    <µs>", "ignore 0" without it); `… Suspend <bool>` notes "call Suspend
+#                    <bool>" and, as logind does, sends PrepareForSleep(true) (refused with
+#                    logind/refuse-suspend) — the wake is the test's (logind_signal wake)
 #                    ("call LockedHint")
 #   systemd-inhibit  notes "hold <pid> <time>" in logind/log, runs the command it was given
 #                    (the shell's `read -r release`) and notes "release <pid> <time>" when
@@ -592,6 +597,35 @@ case "\$1" in
                 echo "call ListInhibitors" >> "\$log"
                 [ -f "$WORK/logind/hang" ] && exec $coreutils/sleep 60
                 cat "$WORK/logind/inhibitors" 2> /dev/null || echo "(@a(ssssuu) [],)"
+                exit 0
+                ;;
+            *".CanSuspend "*)
+                # What logind allows (Idle reads it at the start): logind/can-suspend
+                echo "call CanSuspend" >> "\$log"
+                echo "('\$(cat "$WORK/logind/can-suspend" 2> /dev/null || echo yes)',)"
+                exit 0
+                ;;
+            *" IdleAction "*|*" IdleActionUSec "*)
+                # logind's own idle action (Idle reads it): logind/idle-action
+                read -r action usec < "$WORK/logind/idle-action" 2> /dev/null || { action=ignore; usec=0; }
+                case " \$* " in
+                    *" IdleAction "*) echo "(<'\$action'>,)" ;;
+                    *) echo "(<uint64 \$usec>,)" ;;
+                esac
+                exit 0
+                ;;
+            *".Suspend "*)
+                # The sleep the shell asks for after idle: noted with its argument; then, as
+                # logind does, PrepareForSleep(true) to every listener — the wake is the test's
+                for argument in "\$@"; do last=\$argument; done
+                echo "call Suspend \$last" >> "\$log"
+                if [ -f "$WORK/logind/refuse-suspend" ]; then
+                    echo "Error: GDBus.Error:org.freedesktop.login1.OperationInProgress: There's already a shutdown or sleep operation in progress" >&2
+                    exit 1
+                fi
+                echo true > "\$preparing"
+                echo "/org/freedesktop/login1: org.freedesktop.login1.Manager.PrepareForSleep (true,)" >> "\$signals"
+                echo "()"
                 exit 0
                 ;;
             *" LockedHint "*)
