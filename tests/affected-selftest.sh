@@ -210,7 +210,25 @@ check "on a segment: against its own start from master" is "$(printf 'tests/run-
 git -C "$tree" checkout -q work
 git -C "$tree" branch -q -f segment-a work
 run "$tree"
-check "a branch merged into a segment: against the segment's start" is "$(printf 'tests/run-unit.sh ATest BTest\ntests/lock/run.sh three')"
+check "a branch merged into its segment: against where it was made" is "tests/run-unit.sh ATest"
+
+# Two segments, the newer made from the older; a branch from the newer: its own change only
+git -C "$tree" checkout -q -b segment-old master
+echo 'Item { property int value: 5 }' > "$tree/singletons/Helper.qml"
+commit "old segment: Helper"
+git -C "$tree" checkout -q -b segment-new
+echo 'Item { property int value: 2 }' > "$tree/singletons/Orphan.qml"
+commit "new segment: Orphan"
+git -C "$tree" checkout -q -b slice
+echo 'Item { property int value: B.value + 4; property string script: "/scripts/run.sh" }' > "$tree/singletons/A.qml"
+commit "slice: A"
+run "$tree"
+check "a branch from the newer of two segments: its own change only" is "tests/run-unit.sh ATest"
+git -C "$tree" branch -q -f segment-new slice
+run "$tree"
+check "… and once merged into it" is "tests/run-unit.sh ATest"
+git -C "$tree" checkout -q work
+git -C "$tree" branch -q -D segment-old segment-new slice
 
 # Paths the tree no longer has
 git -C "$tree" checkout -q -b deletions
@@ -231,7 +249,8 @@ git -C "$tree" checkout -q work
 git -C "$tree" branch -q -D deletions
 git -C "$tree" checkout -q master
 run "$tree"
-check "on master, against a segment-* branch made from it: nothing changed" bash -c '[ "$1" = 0 ] && [ -z "$2" ]' _ "$STATUS" "$OUTPUT"
+check "on master, every other branch containing it: status 2, a range asked for" \
+    bash -c '[ "$1" = 2 ] && grep -q "name a range" <<< "$2"' _ "$STATUS" "$ERRORS"
 git -C "$tree" branch -q -D segment-a work
 run "$tree"
 check "on master, with no other branch to compare with: status 2, a range asked for" \

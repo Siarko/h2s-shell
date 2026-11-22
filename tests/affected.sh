@@ -2,10 +2,10 @@
 # The tests a change needs: the unit suites, module fixture parts, self-tests and lock
 # scenarios, printed as the commands that run them, one per line — and run with --run.
 #
-#   tests/affected.sh                  the branch's change: from its merge-base with the
-#                                      nearest segment-* branch or master (the one fewest
-#                                      commits back; never the branch itself), working tree
-#                                      and untracked files included
+#   tests/affected.sh                  the branch's change: from the nearest base (the
+#                                      fewest commits back) of where it left a segment-*
+#                                      branch or master and where it was made, working
+#                                      tree and untracked files included
 #   tests/affected.sh <range>          what `git diff --name-only <range>` names
 #                                      (88991e4^!, master...HEAD, HEAD~3; a single commit
 #                                      is that commit against the working tree, as git diff)
@@ -90,16 +90,25 @@ elif [ -n "$range" ]; then
     git diff --name-only --no-renames "$range" -- > "$work/changed" 2> "$work/error" ||
         { echo "affected.sh: not a range git diff takes: $range ($(head -n 1 "$work/error"))" >&2; exit 2; }
 else
+    # The candidates: where HEAD left each segment-* branch and master (a branch that
+    # contains HEAD, HEAD merged into it, says nothing), and where the current branch was
+    # made (its reflog's first entry: still right after it was merged into its segment).
+    # The base is the nearest: the fewest commits from it to HEAD.
     base="" best=""
     head=$(git rev-parse HEAD)
+    current=$(git symbolic-ref --quiet --short HEAD || echo "")
+    candidates=()
     for branch in $(git for-each-ref --format='%(refname:short)' 'refs/heads/segment-*' refs/heads/master); do
         candidate=$(git merge-base HEAD "$branch" 2> /dev/null) || continue
-        if [ "$candidate" = "$head" ]; then
-            # The branch contains HEAD (HEAD is that segment, or merged into it): its own
-            # start, where it left master, is the base; master containing HEAD is none
-            [ "$branch" != master ] || continue
-            candidate=$(git merge-base "$branch" master 2> /dev/null) || continue
+        [ "$candidate" = "$head" ] || candidates+=("$candidate")
+    done
+    if [ -n "$current" ] && [ "$current" != master ]; then
+        created=$(git reflog show --format=%H "refs/heads/$current" -- 2> /dev/null | tail -n 1)
+        if [ -n "$created" ] && git merge-base --is-ancestor "$created" HEAD 2> /dev/null; then
+            candidates+=("$created")
         fi
+    fi
+    for candidate in "${candidates[@]}"; do
         distance=$(git rev-list --count "$candidate..HEAD")
         if [ -z "$best" ] || [ "$distance" -lt "$best" ]; then base=$candidate best=$distance; fi
     done
