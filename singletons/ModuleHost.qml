@@ -1511,7 +1511,15 @@ Scope {
         }
         _guardClear.interval = guardClearMs;
         _guardClear.restart();
+        _guardTiming = { armedMs: guardClearMs, armedAt: Number(_guardClock.elapsedMs()), firedAt: -1 };
         _applyGuarded();
+    }
+
+    // The guard's timer as it was armed and fired, on a monotonic clock (ms): { armedMs,
+    // armedAt, firedAt (-1 before) }, null before the first answer. For the host's suite, which
+    // cannot time the timer from outside; a frozen copy, nothing of the timer reachable
+    function _guardTimings() {
+        return _guardTiming === null ? null : Object.freeze(Object.assign({}, _guardTiming));
     }
 
     // Lived guardClearMs: its count back to 0
@@ -2285,6 +2293,12 @@ Scope {
     // The shell has lived long enough: whatever kills it now is not a start-up crash loop
     Timer {
         id: _guardClear
-        onTriggered: root._clearGuard()
+        onTriggered: {
+            if (root._guardTiming !== null)
+                root._guardTiming = Object.assign({}, root._guardTiming, { firedAt: Number(root._guardClock.elapsedMs()) });
+            root._clearGuard();
+        }
     }
+    property var _guardTiming: null
+    property ElapsedTimer _guardClock: ElapsedTimer {}
 }

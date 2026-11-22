@@ -366,16 +366,18 @@ TestCase {
             assert(host.guard?.cleared !== true, "inside guardClearMs: not cleared");
             // Now a short window, from the next load's answer on
             host.guardClearMs = 300;
-            suite._guardArmedAt = -1;
-            suite._guardClearedAt = -1;
             host.load(_dirs(["good"]), {});
         });
         _then("the counter is cleared after the window", () => host.guard?.cleared === true && _counterReads("123:9 0"), () => {
             assertEqual(_counter, "123:9 0", "lived guardClearMs: the count back to 0");
-            // From the answer (the window's timer armed with it) to the clearing, on a monotonic
-            // clock: a loaded machine only makes it longer; Qt's coarse timers may fire 5 % early
-            const lived = _guardClearedAt - _guardArmedAt;
-            assert(_guardArmedAt >= 0 && lived >= 285, "… not before guardClearMs from the answer (" + lived + " ms)");
+            // The guard's timer, as the host armed and fired it (its monotonic clock): armed with
+            // guardClearMs, and fired after that window. Qt fires a coarse timer early, under load
+            // more than its nominal 5 % (275 of 300 ms seen on NixOS): half the interval still
+            // tells a window kept from none
+            const timings = host._guardTimings();
+            assertEqual(timings?.armedMs, 300, "… its timer armed with guardClearMs");
+            const lived = (timings?.firedAt ?? -1) - (timings?.armedAt ?? 0);
+            assert(timings?.firedAt >= 0 && lived >= 150, "… and fired after that window (" + lived + " ms from its start)");
             // The long window again: the next counts are read before anything clears them
             host.guardClearMs = 600000;
             suite._made = null;
@@ -1469,22 +1471,6 @@ TestCase {
     property var _exists: null
     // The start counter's file as last read, and whether a read is under way
     property string _counter: ""
-    // When the start guard answered (its window armed) and when it cleared, on a monotonic clock
-    property real _guardArmedAt: -1
-    property real _guardClearedAt: -1
-    property ElapsedTimer _monotonic: ElapsedTimer {}
-    property Connections _guardWatch: Connections {
-        target: suite.host
-        function onGuardChanged() {
-            const guard = suite.host.guard;
-            if (guard === null)
-                return;
-            if (guard.cleared === true)
-                suite._guardClearedAt = Number(suite._monotonic.elapsedMs());
-            else
-                suite._guardArmedAt = Number(suite._monotonic.elapsedMs());
-        }
-    }
     property bool _readingCounter: false
     // Whether the counter file reads `expected`: a step's condition, read anew while it waits
     function _counterReads(expected) {
