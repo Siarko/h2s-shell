@@ -32,6 +32,22 @@ Singleton {
         return typeof connector === "string" && /^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/.test(connector);
     }
 
+    // An id as this file makes them, given from outside (an IPC, a settings file):
+    // `make|model|serial` or a twin's `make|model|serial|connector`, each field without
+    // control characters and at most 80 long (empty fields allowed: a panel may report none),
+    // the connector a valid one. A bare connector name or an object key like `__proto__` is
+    // no id
+    function validId(id) {
+        if (typeof id !== "string" || /[\u0000-\u001f\u007f]/.test(id))
+            return false;
+        const fields = id.split("|");
+        if (fields.length !== 3 && fields.length !== 4)
+            return false;
+        if (fields.some(field => field.length > 80))
+            return false;
+        return fields.length === 3 || validConnector(fields[3]);
+    }
+
     function isBuiltIn(connector) {
         const name = String(connector ?? "");
         return builtInPrefixes.some(prefix => name.startsWith(prefix));

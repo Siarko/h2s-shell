@@ -57,8 +57,8 @@ Singleton {
     readonly property bool _powerControl: ScreenPower.canPowerOff && ScreenPower.monitors.length > 0
     // [{ id, connector }]: ScreenPower's monitors with power control, else the screens
     readonly property var _monitorEntries: _powerControl
-        ? ScreenPower.monitors.map(monitor => ({ id: monitor.id, connector: monitor.connector }))
-        : Quickshell.screens.map(screen => ({ id: screen.name, connector: screen.name }))
+        ? ScreenPower.monitors.map(monitor => ({ id: monitor.id, base: monitor.base, connector: monitor.connector }))
+        : Quickshell.screens.map(screen => ({ id: screen.name, base: screen.name, connector: screen.name }))
     readonly property var _monitors: _monitorEntries.map(monitor => monitor.id)
     on_MonitorsChanged: Qt.callLater(root._monitorListChanged)
 
@@ -89,7 +89,7 @@ Singleton {
     }
 
     function _config() {
-        return IdleRules.config(_values, _monitors, _powerControl);
+        return IdleRules.config(_values, _monitorEntries, _powerControl);
     }
 
     function _monitorListChanged() {
@@ -442,12 +442,18 @@ Singleton {
         }
 
         // h2s-shell ipc call idle setMonitorWay '<id>' off   (a MonitorRules id, as `state`'s
-        // monitors list them; "default", "screensaver" or "off"): written where the setting's
-        // value comes from now (Profiles.writeInEffect); applies while "Set per monitor" is on
+        // monitors list them, or one of a monitor not connected; "default", "screensaver" or
+        // "off"): written where the setting's value comes from now (Profiles.writeInEffect);
+        // applies while "Set per monitor" is on. Only once the monitors are read: a connected
+        // monitor's entry goes under the form of its id it has now
         function setMonitorWay(id: string, way: string): string {
-            const map = IdleRules.withMonitorWay(Profiles.value("lockscreen.monitorBlanking"), id, way);
+            if (!root._powerControl)
+                return "not understood: the monitors are not read (no power control)";
+            const connected = root._monitorEntries.find(monitor => MonitorRules.overrideKeys(monitor).includes(id));
+            const map = IdleRules.withMonitorWay(Profiles.value("lockscreen.monitorBlanking"), connected ?? id, way);
             if (map === null)
-                return "not understood: a monitor id and one of " + IdleRules.monitorWays.join(", ");
+                return "not understood: a monitor id (make|model|serial), one of " + IdleRules.monitorWays.join(", ")
+                    + ", at most " + IdleRules.maxMonitorWays + " monitors";
             return Profiles.writeInEffect("lockscreen.monitorBlanking", map) === false ? "not written" : "ok";
         }
     }

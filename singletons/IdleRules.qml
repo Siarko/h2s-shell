@@ -55,7 +55,8 @@ Singleton {
     // lockscreenEnabled, lockAfter, lockedScreenOffTimeout, blanking, perMonitor,
     // monitorBlanking ({ monitorId: way }), screensaverCommands } — times in seconds;
     // `monitors`: the connected monitors' ids (make|model|serial, MonitorRules) or objects
-    // with an `id`; `canPowerOff`: a backend can cut a monitor's power. → the config every
+    // with an `id` — as read ({ id, base, connector }), a monitor's override is found under
+    // either form of its key (MonitorRules.overrideFor); `canPowerOff`: a backend can cut a monitor's power. → the config every
     // other function takes: times in seconds, 0 = never; `ways` resolved per monitor to
     // "screensaver" or "off" — "off" without power control and "slideshow" (not built)
     // fall back to the screensaver.
@@ -70,6 +71,8 @@ Singleton {
             return Math.max(0, number);
         };
         const ids = [];
+        // Each id's monitor as given, for its override under either form of its key
+        const byId = {};
         // Two connected monitors with one id (MonitorRules should have told them apart):
         // kept once, and reported, not merged silently
         const duplicates = [];
@@ -77,10 +80,12 @@ Singleton {
             const id = typeof monitor === "string" ? monitor : monitor?.id;
             if (typeof id !== "string" || id === "")
                 continue;
-            if (!ids.includes(id))
+            if (!ids.includes(id)) {
                 ids.push(id);
-            else if (!duplicates.includes(id))
+                byId[id] = monitor;
+            } else if (!duplicates.includes(id)) {
                 duplicates.push(id);
+            }
         }
         const defaultWay = ways.includes(given.blanking) ? given.blanking : "screensaver";
         const perMonitor = flag(given.perMonitor, false);
@@ -88,7 +93,7 @@ Singleton {
             ? given.monitorBlanking : {};
         const resolved = {};
         for (const id of ids) {
-            const own = overrides[id];
+            const own = MonitorRules.overrideFor(overrides, byId[id]);
             const way = ways.includes(own) ? own : defaultWay;
             resolved[id] = way === "off" && power ? "off" : "screensaver";
         }
@@ -112,21 +117,34 @@ Singleton {
     // profile's `blanking`)
     readonly property var monitorWays: ["default", "screensaver", "off"]
 
-    // The per-monitor map with one monitor's way set: `map` the current `monitorBlanking`,
-    // `id` a MonitorRules id (connected or not: the others' entries are kept as they are),
-    // `way` one of `monitorWays` — "default" drops the entry. → the new map, or null when the
-    // id or the way is not understood (nothing written).
-    function withMonitorWay(map, id, way) {
-        if (typeof id !== "string" || id === "" || id.length > 256 || !monitorWays.includes(way))
+    // At most this many entries in `monitorBlanking` (connected or not): a new one beyond it
+    // is refused; changing or dropping one is always possible
+    readonly property int maxMonitorWays: 32
+
+    // The per-monitor map with one monitor's way set: `map` the current `monitorBlanking`;
+    // `monitor` a connected monitor as read ({ id, base, connector }: its entry is written
+    // under its id, and the other form of its key — the plain `base` of a twin, or a twin's
+    // `base|connector` of one alone — dropped) or a MonitorRules id (a monitor not
+    // connected); `way` one of `monitorWays` — "default" drops the entry. The other monitors'
+    // entries are kept as they are. → the new map, or null when the id or the way is not
+    // understood, or a new entry would pass `maxMonitorWays` (nothing written).
+    function withMonitorWay(map, monitor, way) {
+        const id = typeof monitor === "string" ? monitor : monitor?.id;
+        if (!MonitorRules.validId(id) || !monitorWays.includes(way))
             return null;
-        const result = {};
+        const keys = MonitorRules.overrideKeys(typeof monitor === "string" ? id : monitor);
         const given = map !== null && typeof map === "object" && !Array.isArray(map) ? map : {};
+        const result = {};
         for (const key of Object.keys(given)) {
-            if (key !== id)
+            if (!keys.includes(key))
                 result[key] = given[key];
         }
-        if (way !== "default")
+        const isNew = !keys.some(key => key in given);
+        if (way !== "default") {
+            if (isNew && Object.keys(result).length >= maxMonitorWays)
+                return null;
             result[id] = way;
+        }
         return result;
     }
 

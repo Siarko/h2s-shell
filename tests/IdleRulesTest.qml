@@ -291,24 +291,59 @@ TestCase {
     function _monitorWays() {
         const rules = IdleRules;
         const keys = map => JSON.stringify(map);
-        assertEqual(keys(rules.withMonitorWay({}, "oled", "off")), keys({ oled: "off" }), "a way set");
-        assertEqual(keys(rules.withMonitorWay({ oled: "off", gone: "screensaver" }, "oled", "screensaver")),
-                    keys({ gone: "screensaver", oled: "screensaver" }),
+        const oled = "Samsung|Odyssey|S1";
+        const gone = "Dell|U27|X9";
+        assertEqual(keys(rules.withMonitorWay({}, oled, "off")), keys({ [oled]: "off" }), "a way set");
+        assertEqual(keys(rules.withMonitorWay({ [oled]: "off", [gone]: "screensaver" }, oled, "screensaver")),
+                    keys({ [gone]: "screensaver", [oled]: "screensaver" }),
                     "a way changed; a monitor not connected keeps its entry");
-        assertEqual(keys(rules.withMonitorWay({ oled: "off", gone: "off" }, "oled", "default")), keys({ gone: "off" }),
+        assertEqual(keys(rules.withMonitorWay({ [oled]: "off", [gone]: "off" }, oled, "default")), keys({ [gone]: "off" }),
                     "default: the entry dropped, the others kept");
-        assertEqual(keys(rules.withMonitorWay(null, "oled", "off")), keys({ oled: "off" }), "no map yet: a new one");
-        assertEqual(keys(rules.withMonitorWay(["junk"], "oled", "off")), keys({ oled: "off" }), "a list is no map");
-        assertEqual(rules.withMonitorWay({}, "oled", "slideshow"), null, "slideshow, not built: refused");
-        assertEqual(rules.withMonitorWay({}, "oled", "saver"), null, "a way not understood: refused");
+        assertEqual(keys(rules.withMonitorWay(null, oled, "off")), keys({ [oled]: "off" }), "no map yet: a new one");
+        assertEqual(keys(rules.withMonitorWay(["junk"], oled, "off")), keys({ [oled]: "off" }), "a list is no map");
+        assertEqual(rules.withMonitorWay({}, oled, "slideshow"), null, "slideshow, not built: refused");
+        assertEqual(rules.withMonitorWay({}, oled, "saver"), null, "a way not understood: refused");
+        const given = { [oled]: "off" };
+        rules.withMonitorWay(given, oled, "default");
+        assertEqual(keys(given), keys({ [oled]: "off" }), "the map given is not changed");
+
+        // Only ids of MonitorRules' shape
         assertEqual(rules.withMonitorWay({}, "", "off"), null, "no id: refused");
-        assertEqual(rules.withMonitorWay({}, "x".repeat(300), "off"), null, "an id too long: refused");
-        const given = { oled: "off" };
-        rules.withMonitorWay(given, "oled", "default");
-        assertEqual(keys(given), keys({ oled: "off" }), "the map given is not changed");
+        assertEqual(rules.withMonitorWay({}, "DP-2", "off"), null, "a connector name: refused");
+        assertEqual(rules.withMonitorWay({}, "__proto__", "off"), null, "an object key: refused");
+        assertEqual(rules.withMonitorWay({}, "a|b", "off"), null, "two fields: refused");
+        assertEqual(rules.withMonitorWay({}, "a|b|c|DP-1|x", "off"), null, "five fields: refused");
+        assertEqual(rules.withMonitorWay({}, "a|b|c|bad name", "off"), null, "a twin's connector not valid: refused");
+        assertEqual(rules.withMonitorWay({}, "a\nb|c|d", "off"), null, "a control character: refused");
+        assertEqual(rules.withMonitorWay({}, "x".repeat(81) + "||", "off"), null, "a field over 80: refused");
+        assertEqual(keys(rules.withMonitorWay({}, "||", "off")), keys({ "||": "off" }), "empty fields: taken");
+        assertEqual(keys(rules.withMonitorWay({}, "A|B||DP-1", "off")), keys({ "A|B||DP-1": "off" }), "a twin's id: taken");
+
+        // At most maxMonitorWays entries
+        const full = {};
+        for (let i = 0; i < rules.maxMonitorWays; i++)
+            full["M|" + i + "|"] = "off";
+        assertEqual(rules.withMonitorWay(full, oled, "off"), null, "a new entry beyond the cap: refused");
+        assertEqual(rules.withMonitorWay(full, "M|0|", "screensaver")["M|0|"], "screensaver", "… one changed: taken");
+        assertEqual(Object.keys(rules.withMonitorWay(full, "M|0|", "default")).length, rules.maxMonitorWays - 1,
+                    "… one dropped: taken");
+
+        // A monitor's key changes form (alone → twin and back): its way follows it
+        const twin = { id: "A|B||DP-1", base: "A|B|", connector: "DP-1" };
+        assertEqual(rules.config({ perMonitor: true, monitorBlanking: { "A|B|": "off" } }, [twin], true).ways["A|B||DP-1"], "off",
+                    "set alone, now a twin: its way found under the plain form");
+        const alone = { id: "A|B|", base: "A|B|", connector: "DP-1" };
+        assertEqual(rules.config({ perMonitor: true, monitorBlanking: { "A|B||DP-1": "off" } }, [alone], true).ways["A|B|"], "off",
+                    "set as a twin, now alone: its way found under the twin's form");
+        assertEqual(keys(rules.withMonitorWay({ "A|B|": "off", [gone]: "off" }, twin, "screensaver")),
+                    keys({ [gone]: "off", "A|B||DP-1": "screensaver" }),
+                    "written under the form it has now, the other form dropped");
+        assertEqual(keys(rules.withMonitorWay({ "A|B||DP-1": "off" }, alone, "default")), keys({}),
+                    "default drops it under either form");
+
         // Read back by config: the override applies only with Set per monitor on
-        const map = rules.withMonitorWay({}, "lcd", "off");
-        assertEqual(rules.config({ perMonitor: true, monitorBlanking: map }, ["lcd", "oled"], true).ways.lcd, "off",
+        const map = rules.withMonitorWay({}, "L|C|D", "off");
+        assertEqual(rules.config({ perMonitor: true, monitorBlanking: map }, ["L|C|D", oled], true).ways["L|C|D"], "off",
                     "the map written is the one config reads");
     }
 
