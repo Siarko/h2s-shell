@@ -1,0 +1,5 @@
+#!/bin/sh
+# A stand-in for a cava that cannot run (tests/CavaReadingTest.qml): what the dynamic
+# loader prints when a library it was built against is gone, and the shell's code for it.
+echo "cava: error while loading shared libraries: libsndio.so.7: cannot open shared object file: No such file or directory" >&2
+exit 127

@@ -4,6 +4,7 @@ import Quickshell
 import Quickshell.Io
 import QtQuick
 import qs.singletons
+import qs.singletons.media
 
 // The music visualiser's levels, 0–1 per band, left and right channel: from cava while a
 // player is there, an ambient wave when cava gives nothing, falling flat while paused.
@@ -13,7 +14,9 @@ import qs.singletons
 // shown a paused player while another plays, they fall flat rather than move to the
 // other's sound. Cava itself keeps running meanwhile — restarting it at every pause (and
 // every brief "paused" a player reports while seeking) dropped the bars and its
-// calibration each time.
+// calibration each time. cava runs through CavaReader: a cava that fails is tried again with
+// a backoff and logged when that changes, the ambient wave showing meanwhile; where it
+// stands is `cavaState` and `cavaProblem`.
 Singleton {
     id: root
 
@@ -27,6 +30,11 @@ Singleton {
     }
     // Whether cava has sent levels since it started; until then the ambient wave shows
     property bool useCava: false
+    // Where cava stands, for a view of the shell's status (CavaReader): "stopped",
+    // "starting", "running" or "failed", and why it failed ("" otherwise). A failed cava
+    // is tried again with a backoff; the ambient wave shows meanwhile.
+    readonly property string cavaState: _cava.state
+    readonly property string cavaProblem: _cava.problem
 
     property int _viewers: 0
     readonly property bool _active: _viewers > 0 && Music.hasPlayer
@@ -59,12 +67,18 @@ Singleton {
     // Writes the config and (re)starts cava while active. A Process must not be started by
     // a declarative `running:` binding — see CLAUDE.md.
     function _restartCava() {
-        _cava.running = false;
-        if (!_active)
+        if (!_active) {
+            _cava.active = false;
             return;
+        }
         const template = _cavaTemplate.text();
         _cavaGenerated.setText(template.replace(/^framerate\s*=.*$/m, "framerate = " + _cavaFps));
-        Qt.callLater(() => _cava.running = root._active);
+        Qt.callLater(() => {
+            if (_cava.active)
+                _cava.restart();
+            else
+                _cava.active = root._active;
+        });
     }
 
     FileView {
@@ -84,25 +98,23 @@ Singleton {
     // Real audio data from cava: a line of "level;level;…", the left channel's bands treble
     // to bass, then the right's bass to treble — mirrored, as cava draws stereo, with the
     // bass in the middle
-    Process {
+    CavaReader {
         id: _cava
-        command: ["cava", "-p", _cavaGenerated.path]
-        stdout: SplitParser {
-            onRead: line => {
-                const levels = line.split(";").filter(part => part !== "").map(part => parseInt(part) / 100.0);
-                // The shown player is not playing: what cava hears is another's. Flat, but
-                // there — a ring or strip at rest rather than nothing, as cava's silence was
-                if (!Music.playing) {
-                    if (root.leftBars.length === 0) {
-                        root.leftBars = new Array(levels.length / 2).fill(0);
-                        root.rightBars = new Array(levels.length / 2).fill(0);
-                    }
-                    return;
+        configPath: _cavaGenerated.path
+        onLevels: line => {
+            const levels = line.split(";").filter(part => part !== "").map(part => parseInt(part) / 100.0);
+            // The shown player is not playing: what cava hears is another's. Flat, but
+            // there — a ring or strip at rest rather than nothing, as cava's silence was
+            if (!Music.playing) {
+                if (root.leftBars.length === 0) {
+                    root.leftBars = new Array(levels.length / 2).fill(0);
+                    root.rightBars = new Array(levels.length / 2).fill(0);
                 }
-                root.useCava = true;
-                root.leftBars = levels.slice(0, levels.length / 2);
-                root.rightBars = levels.slice(levels.length / 2);
+                return;
             }
+            root.useCava = true;
+            root.leftBars = levels.slice(0, levels.length / 2);
+            root.rightBars = levels.slice(levels.length / 2);
         }
     }
 

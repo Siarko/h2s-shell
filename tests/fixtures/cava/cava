@@ -1,0 +1,8 @@
+#!/bin/sh
+# A stand-in for a working cava (tests/CavaReadingTest.qml): takes `-p <config>` as cava
+# does, prints a line of levels in its raw ascii format now and then, until it is stopped.
+[ "$1" = "-p" ] && [ -n "$2" ] || { echo "the stand-in takes -p <config>" >&2; exit 2; }
+while :; do
+    echo "10;20;30;40;40;30;20;10;"
+    sleep 0.1
+done

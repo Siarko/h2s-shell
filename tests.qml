@@ -56,6 +56,8 @@ QtObject {
     property var _curvePoints: CurvePointsTest {}
     property var _notificationMarkup: NotificationMarkupTest {}
     property var _roundedOutline: RoundedOutlineTest {}
+    property var _cavaRules: CavaRulesTest {}
+    property var _cavaReading: CavaReadingTest {}
     property var _coverColors: CoverColorsTest {}
     property var _playerRules: PlayerRulesTest {}
     property var _barText: BarTextTest {}
