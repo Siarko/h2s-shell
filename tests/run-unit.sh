@@ -217,6 +217,16 @@ print_shard() {
     cat "$work/shard-$index.out"
 }
 
+# shard_reasons <index>: why the shard failed, as its verdict said (the lines of its last
+# verdict block that are not a suite's summary), so that the end of the output says it
+shard_reasons() {
+    local reasons
+    reasons=$(sed -n '/^Unit suites (/h; /^Unit suites (/!H; ${x;p}' "$work/shard-$1.out" 2> /dev/null \
+        | grep -E -- '^  [^ ]' | grep -v -E -- '^  --- ')
+    [ -n "$reasons" ] || reasons="  (no verdict: its output is above)"
+    printf '%s\n' "$reasons" | sed 's/^/  /'
+}
+
 next=0
 while [ "$next" -lt ${#shards[@]} ] || [ ${#running[@]} -gt 0 ]; do
     while [ "$next" -lt ${#shards[@]} ] && [ ${#running[@]} -lt "$jobs" ]; do
@@ -254,7 +264,11 @@ for index in "${!shards[@]}"; do
     case "${shard_status[$index]}" in
         0) ;;
         2) echo "  shard $((index + 1)) (${shards[$index]}) could not be set up"; set_up=1 ;;
-        *) echo "  shard $((index + 1)) (${shards[$index]}) failed (status ${shard_status[$index]}): its verdict is above"; failed=1 ;;
+        *)
+            echo "  shard $((index + 1)) (${shards[$index]}) failed (status ${shard_status[$index]}):"
+            shard_reasons "$index"
+            failed=1
+            ;;
     esac
 done
 reported=$(printf '%s\n' "$summary" | grep -c -- '^--- ')

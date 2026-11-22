@@ -197,8 +197,11 @@ headless_verdict() {
     if [ "${1:-}" = exactly ]; then
         shift
         [ "$reported" -gt "$expected" ] && { echo "  $reported suites reported, $expected were $where"; failed=1; }
+        # A here-string, not printf piped into grep -q: grep ends at the first match, and
+        # under pipefail a printf still writing then (it writes line by line) is killed by
+        # SIGPIPE, which made a suite that had reported "not report" now and then under load
         for name in "$@"; do
-            printf '%s\n' "$summary" | grep -q -F -- "--- $name: " || { echo "  $name did not report"; failed=1; }
+            grep -q -F -- "--- $name: " <<< "$summary" || { echo "  $name did not report"; failed=1; }
         done
     fi
     [ -n "$summary" ] || { echo "  no suite reported: quickshell did not run them"; failed=1; }

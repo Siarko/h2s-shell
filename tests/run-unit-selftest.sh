@@ -71,6 +71,10 @@
 #                       during the cleanup: the same
 #
 #   tests/run-unit-selftest.sh
+#   UNIT_SELFTEST_KEEP=1 tests/run-unit-selftest.sh   the work dir kept, each case's log in it
+#
+# A case whose runner ends with another status than expected prints the runner's own reasons
+# (its verdicts' lines), so that one failing now and then says why.
 #
 # It takes no lock, as the runner takes none: another run beside it shares only the
 # processor. Each case starts the runner's private headless compositor (nothing shows); no shell runs
@@ -81,7 +85,16 @@ set -uo pipefail
 
 REPO=$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)
 work=$(mktemp -d "${TMPDIR:-/tmp}/ut-self.XXXXXX") || exit 2
-trap 'rm -rf "$work"' EXIT
+# remove_work: the work dir, unless UNIT_SELFTEST_KEEP=1 asks to keep it (each case's log,
+# <case>.log, and the stand-ins); its path is said then
+remove_work() {
+    if [ "${UNIT_SELFTEST_KEEP:-0}" = 1 ]; then
+        echo "kept: $work"
+    else
+        rm -rf "$work"
+    fi
+}
+trap remove_work EXIT
 # The shard plan's times: none (the defaults), never the user's
 export H2S_UNIT_TIMES=$work/no-times
 # shellcheck source=count-suites.sh
@@ -235,6 +248,16 @@ selecting_stand_in own-beside '' '[ -n "$format" ] && echo "  INFO: OWN-PROCESS:
 selecting_stand_in mixed '' '[[ ":${H2S_TEST_SUITES:-}:" == *:SidePanelTest:* ]] && { chmod -x "$0"; kill -SEGV $$; }; exit 0'
 three=(FormatTest SidePanelTest ModulesTest)
 
+# runner_reasons <log>: why the runner ended as it did, in its own words — the lines of its
+# verdicts that are not a suite's summary, and a set-up error (a line naming the runner) —
+# so that a case failing now and then says why; the end of the log when there are none
+runner_reasons() {
+    local reasons
+    reasons=$(grep -E -- "^  [^ -]|^$runner: " "$1" | grep -v -E -- '^  INFO:|^run-unit.sh: (running|[0-9]+ suites in)' | awk '!seen[$0]++' | head -n 20)
+    [ -n "$reasons" ] || reasons=$(tail -n 6 "$1")
+    printf '%s\n' "$reasons" | sed 's/^/    /'
+}
+
 # verdict <case> <stand-in, or "real" for the Quickshell the runners find> <expected status>
 #         [<argument of the runner>…]: the runner is $runner
 runner=run-unit.sh
@@ -251,7 +274,7 @@ verdict() {
         echo "PASS $name: $runner exited $status"
     else
         echo "FAIL $name: $runner exited $status, expected $expected_status"
-        tail -n 6 "$work/$name.log" | sed 's/^/    /'
+        runner_reasons "$work/$name.log"
         failures=$((failures + 1))
     fi
 }
@@ -283,6 +306,15 @@ check serial "three shards, one at a time" grep -q "^run-unit.sh: 3 suites in 3 
 verdict crash crash 1 "${three[@]}"
 check crash "said which shard" grep -q "^  shard [0-9] (FormatTest) failed (status 1)" "$work/crash.log"
 check crash "… and why" grep -q "^  quickshell exited with status 139" "$work/crash.log"
+# The line under the shard's in the verdict over the shards (read whole, not piped into
+# grep -q: under pipefail a writer cut off by grep's early end would fail the check)
+reason_under_shard() {
+    local under
+    under=$(grep -A1 -E "^  shard [0-9]+ \($2\) failed \(status [0-9]+\):$" "$work/$1" | sed -n 2p)
+    [ "$under" = "    $3" ]
+}
+check crash "… and why again, under the shard in the verdict over the shards" \
+    reason_under_shard crash.log FormatTest "quickshell exited with status 139"
 verdict timeout timeout 1 "${three[@]}"
 check timeout "said so" grep -q "^  quickshell timed out" "$work/timeout.log"
 verdict partial partial 1 "${three[@]}"
@@ -611,7 +643,7 @@ stop_runner() {
     runner_processes=()
     runner_dirs=()
 }
-trap 'trap "" INT TERM HUP; stop_runner; rm -rf "$work"' EXIT
+trap 'trap "" INT TERM HUP; stop_runner; remove_work' EXIT
 
 # interrupt <case> <stand-in> <processes it makes the runner have> [twice]
 interrupt() {
