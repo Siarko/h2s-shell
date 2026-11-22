@@ -4,7 +4,7 @@
 # FLAKY (the run still fails, the flaky log gets its line, the first log is kept), one that
 # fails twice is a FAIL — and the memory cap on what a scenario spawns: under a cap of 200M
 # (H2S_TEST_MEMORY_MAX), a process that takes 400 MB is stopped, and the scenario fails
-# saying so. The scenarios start no stack: they live in a directory of this script's
+# saying so; a budget that holds one stack at the cap runs one test at a time. The scenarios start no stack: they live in a directory of this script's
 # (LOCKTEST_EXTRA_TESTS), and the run takes a lock file of its own, so a real run of the bed
 # may go on meanwhile.
 #
@@ -56,7 +56,7 @@ hog=$SPAWNED_PID
 check_within 60 "the process that allocates past the cap has ended" eval '! kill -0 -- "-$hog" 2> /dev/null'
 EOF
 # A run of its own: not the budget or way of a runner this one was started by
-env -u H2S_TEST_MEMORY_MODE -u H2S_TEST_SLICE -u H2S_TEST_MEMORY_BUDGET H2S_TEST_MEMORY_MAX=200M H2S_TEST_MEMORY_AS_FLOOR=0 LOCKTEST_KEEP=1 LOCKTEST_LOCK_FILE="$work/bed.flock" LOCKTEST_EXTRA_TESTS="$work/tests" XDG_CACHE_HOME="$work/cache" \
+env -u H2S_TEST_MEMORY_MODE -u H2S_TEST_SLICE H2S_TEST_MEMORY_BUDGET=1G H2S_TEST_MEMORY_MAX=200M H2S_TEST_MEMORY_AS_FLOOR=0 LOCKTEST_KEEP=1 LOCKTEST_LOCK_FILE="$work/bed.flock" LOCKTEST_EXTRA_TESTS="$work/tests" XDG_CACHE_HOME="$work/cache" \
     TMPDIR="$work/temp" timeout 300 "$LOCKTEST_DIR/run.sh" -j 2 self-flaky self-failing self-passing self-capped \
     > "$work/run.out" 2>&1 < /dev/null
 status=$?
@@ -93,6 +93,16 @@ else
         && pass "… and its scenario fails" || failed "self-capped did not FAIL"
     ! grep -q 'allocated' "$artifacts/self-capped/hog.log" 2> /dev/null \
         || failed "the process past the cap finished its allocation"
+fi
+# A budget of one cap: the tests run one at a time, and the run says why
+env -u H2S_TEST_MEMORY_MODE -u H2S_TEST_SLICE -u LOCKTEST_JOBS H2S_TEST_MEMORY_BUDGET=1G H2S_TEST_MEMORY_MAX=1G \
+    LOCKTEST_LOCK_FILE="$work/bed.flock" LOCKTEST_EXTRA_TESTS="$work/tests" XDG_CACHE_HOME="$work/cache" \
+    TMPDIR="$work/temp" timeout 120 "$LOCKTEST_DIR/run.sh" self-passing > "$work/small.out" 2>&1 < /dev/null
+if grep -q '^memory cap: .* in scopes of the user' "$work/small.out"; then
+    grep -q '^run.sh: 1 at a time, fewer than the cores allow: memory for 1 stacks at the memory cap (1G) in the run budget of 1G$' "$work/small.out" \
+        && pass "a budget of one cap: one test at a time, said" || failed "a budget of one cap: no '1 at a time' line"
+else
+    echo "SKIP a budget of one cap: no budget without the user's service manager"
 fi
 [ "$failures" = 0 ] || { echo "--- run.sh's output:"; cat "$work/run.out"; }
 

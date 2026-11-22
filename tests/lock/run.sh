@@ -79,7 +79,8 @@ LONG_TESTS=(
 # ---- Jobs -----------------------------------------------------------------------------
 # How many tests run at once: -j N (or -jN, --jobs N) before the test names, else
 # LOCKTEST_JOBS, else from the cores: a quarter of them, at least 4 and at most 8, and
-# never more than one fewer than the cores. Each test is two compositors and a Qt shell:
+# never more than one fewer than the cores, nor more stacks than the run's memory budget
+# holds (below, once the budget is known). Each test is two compositors and a Qt shell:
 # with 5 at once on 6 cores (load 12) the launcher's restart tests no longer fit their
 # schedule, so a 6-core machine keeps 4; 32 threads take 8.
 jobs=${LOCKTEST_JOBS:-}
@@ -94,6 +95,7 @@ while [ $# -gt 0 ]; do
     esac
 done
 set -- "${args[@]+"${args[@]}"}"
+jobs_given=$jobs
 if [ -z "$jobs" ]; then
     cores=$(nproc 2> /dev/null || echo 2)
     jobs=$((cores / 4))
@@ -258,6 +260,17 @@ source "$LOCKTEST_DIR/resolve.sh" {lock_fd}<&-
 source "$LOCKTEST_DIR/../memory-cap.sh"
 memory_cap_init {lock_fd}<&-
 trap 'memory_cap_finish {lock_fd}<&-' EXIT
+# Tests at once (when not given): no more than the budget holds stacks at the memory cap
+# (memory_cap_jobs; without a budget, the memory available less a reserve, a stack taken at
+# some 1 GB: the shell under its launcher measured 0.45 GB, the compositors and the input
+# client 0.2 GB)
+if [ -z "$jobs_given" ]; then
+    memory_jobs=$(memory_cap_jobs 1000000)
+    if [ "$memory_jobs" -lt "$jobs" ]; then
+        echo "run.sh: $memory_jobs at a time, fewer than the cores allow: memory for $memory_jobs stacks at the memory cap (${MEMORY_CAP_LABEL:-none})${MEMORY_CAP_BUDGET_LABEL:+ in the run budget of $MEMORY_CAP_BUDGET_LABEL}"
+        jobs=$memory_jobs
+    fi
+fi
 
 # The launcher under test starts with SIGHUP reset (lib.sh: a run started with it ignored,
 # nohup, would hand that on, and bash cannot trap it): env's --default-signal, coreutils 8.31

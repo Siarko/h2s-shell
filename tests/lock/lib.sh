@@ -143,6 +143,12 @@ stack_stop() {
         capped=1
     done
     CAP_UNITS=() CAP_LOGS=()
+    if memory_cap_slice_gone; then
+        printf '    FAIL %s: the run'"'"'s memory budget (%s) had ended: the stack ran outside it\n' \
+            "${LOCKTEST_TEST_ID##*/}" "$MEMORY_CAP_SLICE"
+        capped=1
+    fi
+    memory_cap_finish
     # The dir itself is run.sh's to remove (also when this bash is killed)
     rm -rf "${RUN:?}"/* 2> /dev/null
     [ -z "$capped" ] || exit 1

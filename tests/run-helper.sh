@@ -28,7 +28,8 @@
 # builds it, with its own cmake, compiler and Qt), =system cmake, a C++ compiler and Qt 6's
 # development files from the system; unset, nix where there is a `nix` command. Part 5 takes
 # dbus-daemon, gdbus, labwc and Quickshell as tests/headless.sh does. Nothing is written
-# outside its temporary directories; the only bus is the run's own.
+# outside its temporary directories; the only bus is the run's own. The helper, its bus and
+# its clients run under the runners' memory cap and budget (tests/memory-cap.sh).
 #
 # Exit status: 0 when every check passed, 1 when one failed, 2 when it could not be set up
 # (a missing tool is named with its use).
@@ -58,7 +59,12 @@ fi
 
 work=$(mktemp -d "${TMPDIR:-/tmp}/run-helper.XXXXXX") || setup_error "cannot create a temp dir"
 helper_pid=""
-trap '[ -n "$helper_pid" ] && kill "$helper_pid" 2> /dev/null; rm -rf "$work"' EXIT
+# The helper under the memory cap, in the run's budget (tests/memory-cap.sh; made here when
+# run alone, ended with it)
+# shellcheck source=memory-cap.sh
+source "$REPO/tests/memory-cap.sh"
+trap '[ -n "$helper_pid" ] && kill "$helper_pid" 2> /dev/null; rm -rf "$work"; memory_cap_finish' EXIT
+memory_cap_init
 failed=0
 check() {
     local description=$1
@@ -99,7 +105,8 @@ check "… and its usage on standard error" grep -q "usage: h2s-helper" "$work/u
 check "no subcommand: exit 2" test $? = 2
 
 # The ping conversation, as the shell holds it: a pipe each way
-coproc HELPER { exec "$helper" ping 2> "$work/ping.err"; }
+memory_cap_wrap helper
+coproc HELPER { exec "${MEMORY_CAP_PREFIX[@]}" "$helper" ping 2> "$work/ping.err"; }
 helper_pid=$HELPER_PID
 to_helper=${HELPER[1]}
 from_helper=${HELPER[0]}

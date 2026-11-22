@@ -41,6 +41,7 @@ part crashed 139
 part no-tool 2 "some-runner.sh: labwc not found on PATH (the headless compositor)"
 part bed 0
 part slow 0 "" "" "end good"
+part brief 0 "" 1
 part after-bad 0 "" "" "end bad"
 part bad-after-good 1 "" "" "end good"
 part slower 0 "" 30
@@ -86,6 +87,18 @@ before() {
 
 run "first|good" "second|good-too"
 check "all pass: status 0" status_is 0
+# A memory budget of one cap (a run of its own, not a budget this self-test was started in):
+# the parts one after another, and said why
+inherited_memory=$(declare -p H2S_TEST_MEMORY_MODE H2S_TEST_SLICE H2S_TEST_MEMORY_BUDGET H2S_TEST_MEMORY_MAX 2> /dev/null)
+unset H2S_TEST_MEMORY_MODE H2S_TEST_SLICE H2S_TEST_MEMORY_BUDGET H2S_TEST_MEMORY_MAX
+H2S_TEST_MEMORY_MAX=1G H2S_TEST_MEMORY_BUDGET=1G run "first|brief" "second|good"
+if says "^memory cap: .* in scopes of the user"; then
+    check "a budget of one cap: said the parts go one after another" says "^run-all.sh: the parts one after another: the run's memory budget (1G)"
+    check "a budget of one cap: the second started after the first ended" in_order "end brief" "start good"
+else
+    echo "  SKIP a budget of one cap: no budget without the user's service manager"
+fi
+eval "$inherited_memory"
 check "all pass: both named as PASS" test "$(grep -c '^  PASS     ' <<< "$OUTPUT")" = 2
 check "all pass: says passed" says "^run-all.sh: passed$"
 

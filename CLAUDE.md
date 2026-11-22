@@ -119,8 +119,9 @@ which the outermost runner makes and the runners it starts share (`tests/run-all
 slice of the run (`systemd-run --user`; over SSH only when the manager outlives the
 connection: lingering, or a local session); else an address-space limit of four times the cap,
 at least 8 GB, and no budget (`prlimit`; a low cap kills normal runs there); else a warning.
-The runners say which in their first lines, and size shards and mutants at once by the budget
-over the cap. A test that runs away is stopped instead of filling the machine's memory, and
+The runners say which in their first lines, and size shards, mutants and lock stacks at once by
+the budget over the cap (without a budget, the memory available less the reserve over what a
+process may grow to); a budget under two caps runs `run-all.sh`'s parts one after another. A test that runs away is stopped instead of filling the machine's memory, and
 its verdict says `<suite>: killed at the memory cap (1536M)` or `… at the run's memory budget`
 (the lock bed names the scenario and the process); `tests/mutate.sh` counts such a mutant as
 killed, shown as "killed (memory cap)".

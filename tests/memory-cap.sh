@@ -20,9 +20,14 @@
 # available when the run starts less a reserve for the user's programs — 8 GB or a quarter
 # of the machine's memory, whichever is larger —, and never less than one cap; 0 means none.
 # The runner started first makes it and hands it on (H2S_TEST_SLICE, H2S_TEST_MEMORY_MODE in
-# the environment), so the runners it starts share it; one started alone makes its own. How
-# many shards or mutants run at once is then bounded by the budget over the cap
-# (memory_cap_jobs).
+# the environment), so the runners it starts share it; one started alone makes its own. A
+# runner handed a budget never makes another beside it: when it cannot confirm the slice
+# (ended, or the manager not answering after a few tries) it says so and takes the
+# address-space limit. How many shards, mutants or lock stacks run at once is bounded by the
+# budget over the cap (memory_cap_jobs); a budget that holds fewer than two caps is said with
+# why (what is available, the reserve), and tests/run-all.sh then runs its parts one at a
+# time. A run whose slice ends under it (a scope started then would make the slice again
+# without its limit) is a set-up error its runner reports.
 #
 # How, in order of preference:
 #   systemd  each process in a transient scope of the user's service manager
@@ -49,8 +54,8 @@
 #            normal runs in this mode, and the floor keeps the default one clear of them
 #            (H2S_TEST_MEMORY_AS_FLOOR sets another floor: the self-tests' small caps).
 #            An allocation past it fails and the process ends (an abort, an error status).
-#            No budget: shards and mutants at once are bounded by the memory available over
-#            the cap.
+#            No budget: shards and mutants at once are bounded by the memory available, less
+#            the reserve, over the address-space limit less 3 GB.
 #   none     neither works: a warning says so, and the processes run without a cap.
 #
 #   memory_cap_init [quiet]       chooses the way, once per process (MEMORY_CAP_MODE: systemd,
@@ -73,6 +78,9 @@
 #   memory_cap_note               the words a runner puts after what was killed: "killed at
 #                                 the memory cap (<cap>)", "killed at the run's memory budget
 #                                 (<budget> …)"
+#   memory_cap_slice_gone         the run's budget ended under its processes (a set-up error)
+#   memory_cap_budget_small       the budget holds fewer than two processes at their cap: the
+#                                 runners' parts go one at a time
 #   memory_cap_start_failed <log> the line of systemd-run's that says it could not start the
 #                                 scope (a bus that timed out under load), or false
 
@@ -141,6 +149,8 @@ memory_cap_stop_stale_slices() {
         pid=${pid%%_*}
         [[ "$pid" =~ ^[0-9]+$ ]] || continue
         kill -0 "$pid" 2> /dev/null && continue
+        # Only an empty one: a pid can be taken again by another process
+        [ "$(memory_cap_systemctl show -p TasksCurrent --value "$slice" 2> /dev/null)" = 0 ] || continue
         memory_cap_systemctl stop "$slice" > /dev/null 2>&1
     done
 }
@@ -168,13 +178,33 @@ memory_cap_slice_ooms() {
     echo 0
 }
 
+# What a run leaves the user's programs: 8 GB or a quarter of the machine's memory,
+# whichever is larger
+memory_cap_reserve() {
+    local reserve=$(( $(memory_cap_meminfo MemTotal) / 4 ))
+    [ "$reserve" -ge $((8 * 1024 * 1024 * 1024)) ] || reserve=$((8 * 1024 * 1024 * 1024))
+    echo "$reserve"
+}
+
+# memory_cap_parent_slice: the state of the slice the runner that started this one made —
+# "active", another state the manager reports (it has ended), or "" when the manager could
+# not be asked (a bus that timed out under load: asked again a few times)
+memory_cap_parent_slice() {
+    local state
+    for _ in 1 2 3 4 5; do
+        state=$(memory_cap_systemctl show -p ActiveState --value "$H2S_TEST_SLICE" 2> /dev/null) \
+            && [ -n "$state" ] && { echo "$state"; return; }
+        sleep 0.2
+    done
+}
+
 memory_cap_init() {
-    local quiet=${1:-} probe value default_budget reserve
+    local quiet=${1:-} probe value default_budget reserve available state
     [ -z "${MEMORY_CAP_READY:-}" ] || return 0
     MEMORY_CAP_READY=1
     MEMORY_CAP_MODE=none MEMORY_CAP_BYTES="" MEMORY_CAP_SERIAL=0 MEMORY_CAP_EXPAND=()
     MEMORY_CAP_SLICE="" MEMORY_CAP_OWNER="" MEMORY_CAP_SLICE_EVENTS="" MEMORY_CAP_HIT=""
-    MEMORY_CAP_BUDGET_LABEL="" MEMORY_CAP_BUDGET_BYTES=""
+    MEMORY_CAP_BUDGET_LABEL="" MEMORY_CAP_BUDGET_BYTES="" MEMORY_CAP_BUDGET_WHY=""
     declare -gA MEMORY_CAP_BASE=()
     if [ -n "${H2S_TEST_USER_RUNTIME_DIR:-}" ]; then
         MEMORY_CAP_USER_RUNTIME_DIR=$H2S_TEST_USER_RUNTIME_DIR MEMORY_CAP_USER_BUS=${H2S_TEST_USER_BUS:-}
@@ -195,35 +225,45 @@ memory_cap_init() {
         MEMORY_CAP_LABEL=1536M MEMORY_CAP_BYTES=$(memory_cap_bytes 1536M)
     }
 
-    # A runner started by another: the way and the budget it chose, the budget's slice still
-    # there (one left over from a run that has ended is not joined)
+    # A runner started by another: the way and the budget it chose. Its budget is never
+    # made again beside it (that would be twice the budget): when its slice cannot be
+    # confirmed, this runner takes the address-space limit instead, and says why
     case "${H2S_TEST_MEMORY_MODE:-}" in
         systemd)
-            if [ -z "${H2S_TEST_SLICE:-}" ] \
-                || [ "$(memory_cap_systemctl show -p ActiveState --value "$H2S_TEST_SLICE" 2> /dev/null)" = active ]; then
+            state=active
+            [ -z "${H2S_TEST_SLICE:-}" ] || state=$(memory_cap_parent_slice)
+            if [ "$state" = active ]; then
                 MEMORY_CAP_MODE=systemd MEMORY_CAP_SLICE=${H2S_TEST_SLICE:-}
                 MEMORY_CAP_BUDGET_LABEL=${H2S_TEST_MEMORY_BUDGET:-}
                 [ "$MEMORY_CAP_BUDGET_LABEL" != 0 ] || MEMORY_CAP_BUDGET_LABEL=""
+            else
+                echo "warning: the run's memory budget ($H2S_TEST_SLICE) $([ -n "$state" ] && echo "has ended ($state)" || echo "cannot be confirmed: the user's service manager does not answer"): this runner takes the address-space limit instead" >&2
+                type -P prlimit > /dev/null && prlimit --as="$(memory_cap_address_space)" -- true 2> /dev/null \
+                    && MEMORY_CAP_MODE=prlimit
             fi
             ;;
         prlimit | none) MEMORY_CAP_MODE=$H2S_TEST_MEMORY_MODE ;;
     esac
 
-    if [ -z "${H2S_TEST_MEMORY_MODE:-}" ] || { [ "$H2S_TEST_MEMORY_MODE" = systemd ] && [ "$MEMORY_CAP_MODE" = none ]; }; then
+    if [ -z "${H2S_TEST_MEMORY_MODE:-}" ]; then
         # The budget: given, else the memory available less the reserve, at least one cap
         value=${H2S_TEST_MEMORY_BUDGET:-}
         if [ "$value" != 0 ]; then
             if [ -n "$value" ] && MEMORY_CAP_BUDGET_BYTES=$(memory_cap_bytes "$value") && [ "$MEMORY_CAP_BUDGET_BYTES" -gt 0 ]; then
-                :
+                MEMORY_CAP_BUDGET_WHY=" (H2S_TEST_MEMORY_BUDGET)"
             else
                 [ -z "$value" ] || echo "warning: H2S_TEST_MEMORY_BUDGET is '$value', not a size (24G; 0 for none): the default is taken" >&2
-                reserve=$(( $(memory_cap_meminfo MemTotal) / 4 ))
-                [ "$reserve" -ge $((8 * 1024 * 1024 * 1024)) ] || reserve=$((8 * 1024 * 1024 * 1024))
-                default_budget=$(( $(memory_cap_meminfo MemAvailable) - reserve ))
+                reserve=$(memory_cap_reserve)
+                available=$(memory_cap_meminfo MemAvailable)
+                default_budget=$((available - reserve))
                 [ "$default_budget" -ge "$MEMORY_CAP_BYTES" ] || default_budget=$MEMORY_CAP_BYTES
                 MEMORY_CAP_BUDGET_BYTES=$default_budget
+                MEMORY_CAP_BUDGET_WHY=" (only $(memory_cap_label "$available") available, a reserve of $(memory_cap_label "$reserve") kept)"
             fi
             MEMORY_CAP_BUDGET_LABEL=$(memory_cap_label "$MEMORY_CAP_BUDGET_BYTES")
+            # Said only when it holds fewer than two processes at their cap: runners then go
+            # one at a time (memory_cap_budget_small)
+            memory_cap_budget_small || MEMORY_CAP_BUDGET_WHY=""
         fi
         if [ -n "$MEMORY_CAP_USER_RUNTIME_DIR" ] && type -P systemd-run > /dev/null && type -P systemctl > /dev/null \
             && memory_cap_manager_lasts; then
@@ -255,7 +295,7 @@ memory_cap_init() {
         H2S_TEST_SLICE=$MEMORY_CAP_SLICE H2S_TEST_MEMORY_BUDGET=${MEMORY_CAP_BUDGET_LABEL:-0} \
         H2S_TEST_USER_RUNTIME_DIR=$MEMORY_CAP_USER_RUNTIME_DIR H2S_TEST_USER_BUS=$MEMORY_CAP_USER_BUS
     case "$MEMORY_CAP_MODE" in
-        systemd) [ -n "$quiet" ] || echo "memory cap: $MEMORY_CAP_LABEL per process, ${MEMORY_CAP_BUDGET_LABEL:-no budget} for the whole run, in scopes of the user's service manager (H2S_TEST_MEMORY_MAX, H2S_TEST_MEMORY_BUDGET; 0 for none)" ;;
+        systemd) [ -n "$quiet" ] || echo "memory cap: $MEMORY_CAP_LABEL per process, ${MEMORY_CAP_BUDGET_LABEL:-no budget} for the whole run$MEMORY_CAP_BUDGET_WHY, in scopes of the user's service manager (H2S_TEST_MEMORY_MAX, H2S_TEST_MEMORY_BUDGET; 0 for none)" ;;
         prlimit) [ -n "$quiet" ] || echo "memory cap: $MEMORY_CAP_LABEL per process, as an address-space limit of $(memory_cap_label "$(memory_cap_address_space)"), no budget for the whole run (prlimit: the user's service manager cannot be reached, or may stop before the run ends; H2S_TEST_MEMORY_MAX, 0 for none)" ;;
         none) echo "warning: no memory cap: neither the user's service manager (systemd-run --user, with the memory controller) nor prlimit can be used here; a test that runs away can fill the machine's memory" >&2 ;;
     esac
@@ -274,6 +314,15 @@ memory_cap_finish() {
     MEMORY_CAP_OWNER=""
 }
 
+# memory_cap_budget_small: the run's budget holds fewer than two processes at their cap
+memory_cap_budget_small() {
+    [ -n "${MEMORY_CAP_BUDGET_LABEL:-}" ] && [ "$MEMORY_CAP_BUDGET_LABEL" != 0 ] && [ -n "${MEMORY_CAP_BYTES:-}" ] \
+        && [ "$(memory_cap_bytes "$MEMORY_CAP_BUDGET_LABEL")" -lt $((2 * MEMORY_CAP_BYTES)) ]
+}
+
+# With a budget: the budget over the cap. Without one: the memory available less the
+# reserve, over what a process may grow to — under prlimit the address-space limit less the
+# some 3 GB a Quickshell reserves without using, with no cap the <kB a job> given
 memory_cap_jobs() {
     local per_job_bytes=$(($1 * 1024)) jobs available
     if [ "${MEMORY_CAP_MODE:-none}" = systemd ] && [ -n "${MEMORY_CAP_BUDGET_LABEL:-}" ] \
@@ -281,9 +330,13 @@ memory_cap_jobs() {
         jobs=$(( $(memory_cap_bytes "$MEMORY_CAP_BUDGET_LABEL") / MEMORY_CAP_BYTES ))
     else
         available=$(memory_cap_meminfo MemAvailable)
-        [[ "$available" =~ ^[0-9]+$ ]] || { echo 16; return; }
-        [ -z "${MEMORY_CAP_BYTES:-}" ] || per_job_bytes=$MEMORY_CAP_BYTES
-        jobs=$((available / per_job_bytes))
+        [[ "$available" =~ ^[0-9]+$ ]] || { echo 1; return; }
+        case "${MEMORY_CAP_MODE:-none}" in
+            prlimit) per_job_bytes=$(( $(memory_cap_address_space) - 3 * 1024 * 1024 * 1024 )) ;;
+            systemd) per_job_bytes=$MEMORY_CAP_BYTES ;;
+        esac
+        [ "$per_job_bytes" -ge $((1024 * 1024 * 1024)) ] || per_job_bytes=$((1024 * 1024 * 1024))
+        jobs=$(( (available - $(memory_cap_reserve)) / per_job_bytes ))
     fi
     [ "$jobs" -ge 1 ] || jobs=1
     echo "$jobs"
@@ -316,7 +369,7 @@ memory_cap_wrap() {
 }
 
 memory_cap_hit() {
-    local unit=$1 status=$2 log=${3:-} result state
+    local unit=$1 status=$2 log=${3:-} result state peak
     MEMORY_CAP_HIT=""
     [ "$status" != 0 ] || return 1
     case "${MEMORY_CAP_MODE:-none}" in
@@ -332,8 +385,13 @@ memory_cap_hit() {
             # A scope that failed stays listed until cleared; one that ended well is gone
             [ "$state" != failed ] || memory_cap_systemctl reset-failed "$unit" > /dev/null 2>&1
             [ "$result" = oom-kill ] || return 1
+            # The budget only when the slice reached its limit meanwhile and this scope did not
+            # reach its own (scopes that die together share the slice's count)
             MEMORY_CAP_HIT=cap
-            [ "$(memory_cap_slice_ooms)" -gt "${MEMORY_CAP_BASE[$unit]:-0}" ] && MEMORY_CAP_HIT=budget
+            if [ "$(memory_cap_slice_ooms)" -gt "${MEMORY_CAP_BASE[$unit]:-0}" ]; then
+                peak=$(memory_cap_systemctl show -p MemoryPeak --value "$unit" 2> /dev/null)
+                [[ "$peak" =~ ^[0-9]+$ ]] && [ "$peak" -ge "$MEMORY_CAP_BYTES" ] || MEMORY_CAP_HIT=budget
+            fi
             return 0
             ;;
         prlimit)
@@ -357,4 +415,11 @@ memory_cap_note() {
 memory_cap_start_failed() {
     [ "${MEMORY_CAP_MODE:-none}" = systemd ] && [ -r "${1:-}" ] || return 1
     grep -a -m 1 -E '^Failed to (start transient scope unit|connect to )' "$1" 2> /dev/null
+}
+
+# memory_cap_slice_gone: the run's budget had ended while its processes ran (a scope started
+# then would make the slice again, without its limit): a set-up error, said by the runner
+memory_cap_slice_gone() {
+    [ "${MEMORY_CAP_MODE:-none}" = systemd ] && [ -n "${MEMORY_CAP_SLICE:-}" ] || return 1
+    [ "$(memory_cap_systemctl show -p ActiveState --value "$MEMORY_CAP_SLICE" 2> /dev/null)" != active ]
 }

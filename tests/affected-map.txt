@@ -68,7 +68,7 @@ tests/SharedStateReader.qml unit:all self:tests/run-unit-selftest.sh
 tests/run-unit.sh unit:all self:tests/run-unit-selftest.sh
 tests/count-suites.sh unit:all self:tests/run-unit-selftest.sh
 tests/headless.sh unit:all modules:all self:tests/run-unit-selftest.sh
-tests/memory-cap.sh unit:all modules:all lock:all self:tests/run-unit-selftest.sh self:tests/lock/selftest.sh self:tests/mutate-selftest.sh
+tests/memory-cap.sh unit:all modules:all lock:all self:tests/run-unit-selftest.sh self:tests/lock/selftest.sh self:tests/mutate-selftest.sh self:tests/run-all-selftest.sh self:tests/run-helper.sh
 tests/run-modules.sh modules:all self:tests/run-unit-selftest.sh
 tests/fixtures/pkexec-on-path/* modules:all
 tests/run-all.sh self:tests/run-all-selftest.sh

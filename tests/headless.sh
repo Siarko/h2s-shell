@@ -217,6 +217,9 @@ headless_verdict() {
     elif start_failure=$(memory_cap_start_failed "$HEADLESS_LOG"); then
         echo "  quickshell could not be started under the memory cap: $start_failure"
         failed=1
+    elif [ "$status" != 0 ] && memory_cap_slice_gone; then
+        echo "  the run's memory budget ($MEMORY_CAP_SLICE) had ended: quickshell ran outside it (exit $status)"
+        failed=1
     else
         [ "$status" = 124 ] && { echo "  quickshell timed out"; failed=1; }
         # Any other non-zero status is a failure too: a crash (139: SIGSEGV) after a partial
@@ -249,6 +252,15 @@ headless_verdict() {
         for name in "$@"; do
             grep -q -F -- "--- $name: " <<< "$summary" || { echo "  $name did not report"; failed=1; }
         done
+    fi
+    # The compositor stopped at its cap or the budget under the suites: said, not left to
+    # pass for a failure of theirs (looked at only when it is gone: a live one has nothing
+    # to say, and its scope would be waited for)
+    if [ -n "${headless_labwc_unit:-}" ] && ! kill -0 "${labwc_pid:-0}" 2> /dev/null \
+        && memory_cap_hit "$headless_labwc_unit" 1; then
+        echo "  the compositor (labwc): $(memory_cap_note)"
+        headless_labwc_unit=""
+        failed=1
     fi
     [ -n "$summary" ] || { echo "  no suite reported: quickshell did not run them"; failed=1; }
     return $failed

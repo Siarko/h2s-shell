@@ -298,7 +298,7 @@ remote collect "$id" > "$log" 2> "$work/collect.err" || {
 
 echo
 echo "==== remote log: $log"
-grep -E '^(tools|quickshell|launcher|lock bed launcher|memory cap):|^warning: no memory cap' "$log" | awk '!seen[$0]++'
+grep -E '^(tools|quickshell|launcher|lock bed launcher|memory cap):|^warning: (no memory cap|the run.s memory budget)' "$log" | awk '!seen[$0]++'
 summary_line=$(grep -n '^All (' "$log" | tail -n 1 | cut -d: -f 1)
 if [ -n "$summary_line" ]; then
     # The tail before the summary, then the summary itself

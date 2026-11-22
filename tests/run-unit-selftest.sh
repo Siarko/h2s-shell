@@ -24,6 +24,9 @@
 #              shards of Format and SidePanel each hold 250 MB at once, under the cap,
 #              over the budget together: one is stopped, said to be killed at the run's
 #              memory budget                                                  → must fail
+#   parent-gone  a runner handed a budget that has ended (or a service manager that does
+#              not answer): it says so and takes the address-space limit, no budget of
+#              its own beside the parent's                                     → must pass
 #   capped     under a memory cap of 200M (H2S_TEST_MEMORY_MAX), Format's shard takes
 #              400 MB after its summary: stopped, said to be killed at the memory cap,
 #              naming the suite                                               → must fail
@@ -361,7 +364,18 @@ else
     check budget "said a shard was killed at the run's memory budget" \
         grep -q -E "^    (Format|SidePanel): killed at the run's memory budget \(450M" "$work/budget.log"
 fi
-H2S_TEST_MEMORY_MAX=200M H2S_TEST_MEMORY_AS_FLOOR=0 verdict capped capped 1 "${three[@]}"
+if systemctl --user show -p Version > /dev/null 2>&1; then
+    H2S_TEST_MEMORY_MODE=systemd H2S_TEST_SLICE=h2s_test_1_gone.slice H2S_TEST_MEMORY_BUDGET=1G \
+        verdict parent-gone obedient 0 FormatTest
+    check parent-gone "said the parent's budget has ended" grep -q "^warning: the run's memory budget (h2s_test_1_gone.slice) has ended" "$work/parent-gone.log"
+    check parent-gone "… and took the address-space limit, no budget of its own" \
+        bash -c 'grep -q "^memory cap: .*address-space limit" "$1" && ! grep -q "in scopes of the user" "$1"' _ "$work/parent-gone.log"
+fi
+H2S_TEST_MEMORY_MODE=systemd H2S_TEST_SLICE=h2s_test_1_gone.slice H2S_TEST_MEMORY_BUDGET=1G \
+    H2S_TEST_USER_RUNTIME_DIR=$work/no-manager verdict parent-unanswered obedient 0 FormatTest
+check parent-unanswered "said the parent's budget cannot be confirmed, took the address-space limit" \
+    bash -c 'grep -q "^warning: the run.s memory budget (h2s_test_1_gone.slice) cannot be confirmed" "$1" && grep -q "^memory cap: .*address-space limit" "$1"' _ "$work/parent-unanswered.log"
+H2S_TEST_MEMORY_MAX=200M H2S_TEST_MEMORY_BUDGET=1G H2S_TEST_MEMORY_AS_FLOOR=0 verdict capped capped 1 "${three[@]}"
 if grep -q '^warning: no memory cap' "$work/capped.log"; then
     echo "SKIP capped: neither the user's service manager nor prlimit can be used here"
 else

@@ -16,7 +16,8 @@
 # it goes: its scenarios time the shell, and it takes the machine-wide lock itself.
 # The parts share one memory budget (tests/memory-cap.sh, H2S_TEST_MEMORY_BUDGET), made here
 # and handed on in the environment: whatever they start side by side, together they never
-# take more than it; it ends with this runner.
+# take more than it; it ends with this runner. A budget that holds fewer than two processes
+# at the memory cap runs the parts one after another (unless -j says otherwise).
 #
 #   tests/run-all-selftest.sh                           this runner's own verdict
 #   tests/run-system-selftest.sh                        the system runner's own verdict
@@ -78,6 +79,7 @@ while [ $# -gt 0 ]; do
     esac
     shift
 done
+jobs_given=$jobs
 if [ -n "$jobs" ]; then
     [[ "$jobs" =~ ^[1-9][0-9]{0,2}$ ]] || usage
 else
@@ -122,6 +124,12 @@ logs=$(mktemp -d "${TMPDIR:-/tmp}/run-all.XXXXXX") || { echo "run-all.sh: cannot
 source "$REPO/tests/memory-cap.sh"
 trap 'rm -rf "$logs"; memory_cap_finish' EXIT
 memory_cap_init
+# A budget that holds fewer than two processes at their cap (a small machine, or little
+# memory free now): parts side by side would stop each other at it, so they go one at a time
+if [ -z "$jobs_given" ] && memory_cap_budget_small; then
+    jobs=1
+    echo "run-all.sh: the parts one after another: the run's memory budget ($MEMORY_CAP_BUDGET_LABEL) holds fewer than two processes at the memory cap ($MEMORY_CAP_LABEL)"
+fi
 
 count=${#parts[@]}
 names=() commands=()

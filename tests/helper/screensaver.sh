@@ -60,7 +60,9 @@ stop_all() {
 }
 trap 'stop_all; headless_cleanup' EXIT
 
-dbus-daemon --nofork --nopidfile --config-file="$REPO/tests/helper/session.conf" --address="$bus" > "$dir/daemon.log" 2>&1 &
+# The bus and the helpers under the memory cap, in the run's budget, as the suites are
+memory_cap_wrap dbus-daemon
+"${MEMORY_CAP_PREFIX[@]}" dbus-daemon --nofork --nopidfile --config-file="$REPO/tests/helper/session.conf" --address="$bus" > "$dir/daemon.log" 2>&1 &
 started+=($!)
 for _ in $(seq 1 100); do [ -S "$dir/socket" ] && break; sleep 0.05; done
 [ -S "$dir/socket" ] || { cat "$dir/daemon.log" >&2; setup_error "the private bus did not start"; }
@@ -80,11 +82,12 @@ declare -A to_fd=() pid_of=()
 start() {
     local name=$1
     shift
+    memory_cap_wrap "$name"
     mkfifo "$dir/$name.in"
     # Without the inputs of the others held open (each would never see its end)
     (
         for fd in "${to_fd[@]}"; do eval "exec $fd>&-"; done
-        exec "$@"
+        exec "${MEMORY_CAP_PREFIX[@]}" "$@"
     ) < "$dir/$name.in" > "$dir/$name.out" 2> "$dir/$name.err" &
     pid_of[$name]=$!
     started+=($!)
