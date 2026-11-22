@@ -43,7 +43,14 @@ Singleton {
             // The field empties whenever this changes: input taken, prompt moved or gone to
             // sleep
             fieldEpoch: state.prompt.fieldEpoch,
-            methods: LockStepRules.passiveMethods.map(method => _passiveView(method, state.passive[method.name]))
+            methods: LockStepRules.passiveMethods.map(method => _passiveView(method, state.passive[method.name])),
+            // Somebody is at the lock screen: the prompt awake, a check or an unlock under way, a
+            // question asked, or a passive method's error on show (a finger not recognised:
+            // somebody touched the reader — not its "place your finger", said every round).
+            // The lock screen's screen-off waits meanwhile (IdleRules)
+            attended: state.prompt.owner !== null || busy || asking
+                || LockStepRules.passiveMethods.some(method => state.passive[method.name]?.messageIsError === true
+                                                              && (state.passive[method.name]?.message ?? "") !== "")
         };
     }
 

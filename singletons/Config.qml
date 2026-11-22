@@ -57,6 +57,9 @@ Singleton {
     // as JSON, ModuleUpdateRules.autoRunRecord; "" never ran): remembered, so a restart does
     // not run it again
     property alias moduleUpdates: _adapter.moduleUpdates
+    // The monitors the shell turned off and has not seen on again (Idle, IdleRules.turnedOff):
+    // remembered, so a shell restarted while they are off turns them on again — and only them
+    property alias screensOff: _adapter.screensOff
     // The file itself, for the backup taken before a migration
     readonly property string path: _file.path
 
@@ -147,6 +150,7 @@ Singleton {
             property string acknowledgedModules: ""
             property string sleepLockNotice: ""
             property string moduleUpdates: ""
+            property list<string> screensOff: []
             // The shell version that last wrote this file — for reference, and for
             // migrations that need to know what wrote it
             property string writtenBy: ""

@@ -39,6 +39,21 @@ TestCase {
         assertEqual(JSON.stringify(LockRules.describe(fresh)), JSON.stringify(described), "LockRules.describe forwards");
         const event = { type: "submit", surface: "s1", text: "pw" };
         assertEqual(JSON.stringify(LockRules.describeEvent(event)), JSON.stringify(LockViewRules.describeEvent(event)), "LockRules.describeEvent forwards");
+        // Attended: somebody at the lock screen, so its screen-off waits
+        const withState = changes => Object.assign({}, fresh, changes);
+        assertEqual(LockViewRules.view(fresh).attended, false, "attended: nobody at a fresh state");
+        assertEqual(LockViewRules.view(withState({ prompt: Object.assign({}, fresh.prompt, { owner: 1 }) })).attended, true,
+                    "attended: the prompt awake");
+        assertEqual(LockViewRules.view(withState({ password: Object.assign({}, fresh.password, { status: "verifying" }) })).attended, true,
+                    "attended: a password being checked");
+        assertEqual(LockViewRules.view(withState({ password: Object.assign({}, fresh.password, { status: "asking", question: "Code:" }) })).attended,
+                    true, "attended: a question asked");
+        const passive = (message, isError) => withState({ passive: Object.assign({}, fresh.passive, {
+            fingerprint: Object.assign({}, fresh.passive.fingerprint, { status: "running", message: message, messageIsError: isError }) }) });
+        assertEqual(LockViewRules.view(passive("Place your finger on the reader", false)).attended, false,
+                    "attended: not for a fingerprint's every-round hint");
+        assertEqual(LockViewRules.view(passive("Failed to match fingerprint", true)).attended, true,
+                    "attended: a finger not recognised: somebody at the reader");
         const effect = { type: "respondPam", method: "password", conversation: 3, text: "pw" };
         assertEqual(JSON.stringify(LockRules.describeEffect(effect)), JSON.stringify(LockViewRules.describeEffect(effect)), "LockRules.describeEffect forwards");
     }

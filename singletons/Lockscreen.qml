@@ -56,6 +56,9 @@ Singleton {
     // below): the screen is locked whatever the rules' state says, so nothing may act as if
     // it were not (the idle lock, the screensaver)
     readonly property bool locked: _view.locked || _restorePending
+    // Somebody at the lock screen (LockViewRules: the prompt awake, a check under way): Idle
+    // holds the lock screen's screen-off meanwhile
+    readonly property bool attended: _view.attended === true
     // The start has read the lock marker (or there is none to read), and `restoring` says
     // whether it is taking a lock back: until then a session the compositor holds locked may
     // still look unlocked here (LockNotice waits for both)

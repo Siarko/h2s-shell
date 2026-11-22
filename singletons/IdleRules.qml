@@ -43,6 +43,9 @@ Singleton {
     // An idle lock asked for and not taken (no `locked` came: refused, the compositor busy)
     // is asked again while it is due, after a growing pause (ms)
     readonly property var lockRetry: ({ minimum: 5000, maximum: 300000 })
+    // A power action the reading after it does not show (the monitor still on after an off,
+    // still off after an on) is asked again after a growing pause (ms)
+    readonly property var powerRetry: ({ minimum: 2000, maximum: 300000 })
 
     // The ways a monitor goes dark at "Screensaver after"
     readonly property var ways: ["screensaver", "off", "slideshow"]
@@ -127,8 +130,12 @@ Singleton {
             commandStarted: false,   // the start command ran in this period
             active: false,           // reported as ActiveChanged
             lockBlack: false,        // the lock surface drawn plain black
+            lockAttended: false,     // somebody at the lock screen (the prompt awake, a check under way)
             shown: ({}),             // monitor id → "on" | "saver" | "off": what is in place
-            power: ({})              // monitor id → "on" | "off" | "unknown": as last read
+            power: ({}),             // monitor id → "on" | "off" | "unknown": as last read
+            // monitor id → { on, at, tries, read }: a power action not yet seen in a reading
+            // (`read`: what a reading since the last ask said, null for none yet)
+            pendingPower: ({})
         };
     }
 
@@ -176,7 +183,7 @@ Singleton {
     function lockedDark(state, config, now) {
         if (state.sleeping)
             return state.lockedDark;
-        return state.locked && state.inputIdle && config.lockedScreenOffAfter > 0
+        return state.locked && state.inputIdle && !state.lockAttended && config.lockedScreenOffAfter > 0
             && now - state.lockQuietSince >= config.lockedScreenOffAfter * 1000;
     }
 
@@ -217,6 +224,42 @@ Singleton {
     }
 
     // The pause before asking for the idle lock again after `asks` asks not taken
+    // The pause before a power action is asked again after `tries` asks the readings did
+    // not show
+    function powerRetryDelay(tries) {
+        if (tries <= 0)
+            return 0;
+        return Math.min(powerRetry.maximum, powerRetry.minimum * Math.pow(2, tries - 1));
+    }
+
+    // When a pending power action is asked again, or -1: only once a reading since the last
+    // ask said otherwise
+    function _powerRetryAt(pending) {
+        if (pending.read === null || pending.read === (pending.on ? "on" : "off"))
+            return -1;
+        return pending.at + powerRetryDelay(pending.tries);
+    }
+
+    // The monitors the shell has turned off and not yet seen on again: what a restarted shell
+    // must turn back on (Idle remembers them), and nothing else — a monitor another program
+    // turned off is never touched
+    function turnedOff(state) {
+        const ids = Object.keys(state.shown).filter(id => state.shown[id] === "off");
+        for (const id of Object.keys(state.pendingPower)) {
+            if (!ids.includes(id))
+                ids.push(id);
+        }
+        return ids.sort();
+    }
+
+    // At the start: of the monitors a previous run turned off (`remembered`), those connected
+    // and read as off — to turn on again. `monitors`: [{ id, power }]
+    function restoreOnStart(remembered, monitors) {
+        const ids = Array.isArray(remembered) ? remembered.map(String) : [];
+        return (monitors ?? []).filter(monitor => ids.includes(monitor?.id) && monitor.power === "off")
+            .map(monitor => monitor.id);
+    }
+
     function lockRetryDelay(asks) {
         if (asks <= 0)
             return 0;
@@ -256,10 +299,15 @@ Singleton {
         const lockAt = _lockAt(state, config.lockAfter);
         if (lockAt >= 0)
             due.push(lockAt);
-        if (state.locked && state.inputIdle && config.lockedScreenOffAfter > 0 && !state.lockedDark)
+        if (state.locked && state.inputIdle && !state.lockAttended && config.lockedScreenOffAfter > 0 && !state.lockedDark)
             due.push(state.lockQuietSince + config.lockedScreenOffAfter * 1000);
         if (!state.locked && state.logindIdleBlock === true)
             due.push(now + logindRecheck);
+        for (const id of Object.keys(state.pendingPower)) {
+            const at = _powerRetryAt(state.pendingPower[id]);
+            if (at >= 0)
+                due.push(at);
+        }
         return due.length === 0 ? -1 : Math.max(now, Math.min(...due));
     }
 
@@ -269,6 +317,9 @@ Singleton {
         const next = Object.assign({}, state);
         next.shown = Object.assign({}, state.shown);
         next.power = Object.assign({}, state.power);
+        next.pendingPower = {};
+        for (const id of Object.keys(state.pendingPower ?? {}))
+            next.pendingPower[id] = Object.assign({}, state.pendingPower[id]);
         return next;
     }
 
@@ -307,12 +358,14 @@ Singleton {
     // unlocked, sleep, resumed, force, activity (D-Bus SimulateUserActivity, and input on a
     // forced screensaver's surface: before baseTime has passed no inputIdle(true) came, so
     // no inputIdle(false) will — the surface sends `activity`; ignored while locked, where
-    // video players send it every ~30 s). `config`: from config() — passed at every
+    // video players send it every ~30 s), lockAttended { attended } (somebody at the lock
+    // screen: the prompt awake, a check under way — its screen-off waits). `config`: from config() — passed at every
     // step, so a changed profile or monitor list is the "config"/"monitors" event with the
     // new one. → { state, actions, ignored }. Actions, in this order: powerOn { ids },
     // hideSaver { ids }, showSaver { ids } (a surface for every monitor leaving "on", also
-    // one going off: it takes the keys), powerOff { ids }, endCommand, startCommand, lock,
-    // active { active }, lockBlack { black }.
+    // one going off: it takes the keys), powerOff { ids }, endCommand, startCommand, power
+    // actions asked again { ids: [id], attempt } (a reading since the last ask showed the
+    // monitor otherwise), lock, active { active }, lockBlack { black }.
     function step(state, event, config, now) {
         const next = _copy(state);
         const actions = [];
@@ -360,6 +413,24 @@ Singleton {
             next.power = {};
             for (const id of Object.keys(read))
                 next.power[id] = read[id] === "on" || read[id] === "off" ? read[id] : "unknown";
+            // A pending action seen done is over; otherwise the reading is kept for its retry
+            for (const id of Object.keys(next.pendingPower)) {
+                const pending = next.pendingPower[id];
+                if (!(id in next.power))
+                    continue;
+                if (next.power[id] === (pending.on ? "on" : "off"))
+                    delete next.pendingPower[id];
+                else
+                    pending.read = next.power[id];
+            }
+            break;
+        }
+        case "lockAttended": {
+            const attended = event.attended === true;
+            // Nobody at the lock screen any more: its quiet time starts now
+            if (next.lockAttended && !attended)
+                next.lockQuietSince = Math.max(next.lockQuietSince, now);
+            next.lockAttended = attended;
             break;
         }
         case "deadline":
@@ -426,6 +497,10 @@ Singleton {
             if (!config.monitors.includes(id))
                 delete next.power[id];
         }
+        for (const id of Object.keys(next.pendingPower)) {
+            if (!config.monitors.includes(id))
+                delete next.pendingPower[id];
+        }
         next.stage = stage(next, config, now);
         next.lockedDark = lockedDark(next, config, now);
         const want = wanted(next, config, now);
@@ -458,6 +533,24 @@ Singleton {
             actions.push({ type: "powerOff", ids: powerOff });
         actions.push(...early);
         next.shown = want;
+        for (const id of powerOn)
+            next.pendingPower[id] = { on: true, at: now, tries: 1, read: null };
+        for (const id of powerOff)
+            next.pendingPower[id] = { on: false, at: now, tries: 1, read: null };
+        // Power actions the readings did not show: asked again, after their pause
+        // (`attempt`: Idle logs the first ask again)
+        if (!next.sleeping) {
+            for (const id of Object.keys(next.pendingPower)) {
+                const pending = next.pendingPower[id];
+                const at = _powerRetryAt(pending);
+                if (at < 0 || now < at)
+                    continue;
+                pending.tries += 1;
+                pending.at = now;
+                pending.read = null;
+                actions.push({ type: pending.on ? "powerOn" : "powerOff", ids: [id], attempt: pending.tries });
+            }
+        }
 
         if (next.stage >= 1 && !next.commandStarted && config.commands) {
             actions.push({ type: "startCommand" });

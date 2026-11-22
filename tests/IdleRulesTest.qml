@@ -80,6 +80,77 @@ TestCase {
         _sleep();
         _forced();
         _unknowns();
+        _powerReadBack();
+        _lockAttended();
+    }
+
+    // What the readings say after a power action: done, or asked again with a growing pause
+    function _powerReadBack() {
+        const direct = { screenOffEnabled: true, screenOffTimeout: 600 };
+        const machine = _machine(direct, ["oled"], true);
+        machine.idle(5000, 0).deadline();
+        assertEqual(machine.actions, "showSaver:oled,powerOff:oled,active:true", "(off at its time)");
+        assertEqual(machine.state.pendingPower.oled.on, false, "the off is pending until a reading shows it");
+        machine.at(600100, { type: "power", power: { oled: "on" } });
+        assertEqual(machine.actions, "", "a reading still on (a dispatch that did nothing): not at once");
+        assertEqual(machine.next(), 602000, "… asked again after the shortest pause");
+        machine.deadline();
+        assertEqual(machine.actions, "powerOff:oled", "… asked again");
+        assertEqual(machine.state.pendingPower.oled.tries, 2, "… the second try");
+        assertEqual(machine.next(), -1, "… no further deadline until a reading says otherwise again");
+        machine.at(602200, { type: "power", power: { oled: "unknown" } });
+        assertEqual(machine.next(), 606000, "a reading that failed: asked again too, the pause doubled");
+        machine.at(606000, { type: "deadline" });
+        assertEqual(machine.actions, "powerOff:oled", "… asked a third time");
+        machine.at(606100, { type: "power", power: { oled: "off" } });
+        assertEqual(machine.actions, "", "read off: done");
+        assertEqual(Object.keys(machine.state.pendingPower).length, 0, "… nothing pending");
+        assertEqual(machine.next(), -1, "… no deadline left");
+        assertEqual(IdleRules.powerRetryDelay(40), IdleRules.powerRetry.maximum, "the pause grows up to its longest");
+
+        // Power on that did not take: a key at the lock screen must bring the monitor back
+        machine.input(700000);
+        assertEqual(machine.actions, "powerOn:oled,hideSaver:oled,active:false", "input: on again");
+        machine.at(700100, { type: "power", power: { oled: "off" } });
+        machine.at(702000, { type: "deadline" });
+        assertEqual(machine.actions, "powerOn:oled", "still off after the on: asked again");
+        machine.at(702100, { type: "power", power: { oled: "on" } });
+        assertEqual(Object.keys(machine.state.pendingPower).length, 0, "read on: done");
+
+        // A monitor another program turned off (hypridle) is never touched
+        const other = _machine(direct, ["lcd"], true);
+        other.at(1000, { type: "power", power: { lcd: "off" } });
+        assertEqual(other.actions, "", "off by another program: no action");
+        assertEqual(other.next(), -1, "… and nothing to ask again");
+        assertEqual(IdleRules.turnedOff(other.state).length, 0, "… not one the shell turned off");
+
+        // What a restarted shell turns back on
+        assertEqual(IdleRules.turnedOff(machine.state).join(" "), "", "on and read on: nothing to remember");
+        const off = _machine(direct, ["oled", "lcd"], true);
+        off.idle(5000, 0).deadline();
+        assertEqual(IdleRules.turnedOff(off.state).join(" "), "lcd oled", "turned off by the shell: remembered");
+        assertEqual(IdleRules.restoreOnStart(["oled", "gone"], [{ id: "oled", power: "off" }, { id: "lcd", power: "off" },
+                                                                 { id: "tv", power: "on" }]).join(" "), "oled",
+                    "at the start: only remembered monitors, connected and read off, are turned on");
+        assertEqual(IdleRules.restoreOnStart("junk", [{ id: "oled", power: "off" }]).length, 0, "nothing remembered: nothing");
+    }
+
+    // Somebody at the lock screen (the prompt awake, a fingerprint or password check under
+    // way): its screen-off waits, and counts from when they are gone
+    function _lockAttended() {
+        const machine = _machine({}, ["lcd"], true);
+        machine.at(10000, { type: "locked" });
+        machine.idle(15000, 10000);
+        machine.at(20000, { type: "lockAttended", attended: true });
+        assertEqual(machine.next(), -1, "attended: the lock screen's screen-off waits");
+        machine.at(90000, { type: "deadline" });
+        assertEqual(machine.actions, "", "… nothing off past its time");
+        machine.at(100000, { type: "lockAttended", attended: false });
+        assertEqual(machine.next(), 160000, "nobody any more: its time from then");
+        machine.deadline();
+        assertEqual(machine.actions, "showSaver:lcd,powerOff:lcd,lockBlack:true", "… then off");
+        machine.at(170000, { type: "lockAttended", attended: true });
+        assertEqual(machine.actions, "powerOn:lcd,hideSaver:lcd,lockBlack:false", "attended again (a check started): on");
     }
 
     function _config() {
@@ -540,7 +611,7 @@ TestCase {
         machine.at(63000, { type: "power", power: { lcd: "off" } });
         assertEqual(machine.actions, "", "one monitor not read: the lock surface stays black");
         machine.at(64000, { type: "power", power: { lcd: "off", oled: "on" } });
-        assertEqual(machine.actions, "", "a cut that failed: still black");
+        assertEqual(machine.actions, "powerOff:oled", "a cut that failed: still black, the cut asked again (its pause over)");
         assertEqual(machine.at(65000, { type: "nonsense" }).ignored, "unknown event", "an unknown event: ignored");
         assertEqual(machine.actions, "", "… no action");
         const state = machine.state;

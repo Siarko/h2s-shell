@@ -498,7 +498,10 @@ launcher agree on the contract described under "Recovery" below):
   returns: the picture per monitor (`shownFor(connector)`, which each screen's screensaver
   window follows: the screensaver, or plain black over a monitor turned off), the monitors'
   power (`ScreenPower.setPower`; every reading of `ScreenPower.monitors` is a `monitors`
-  and a `power` event), the lock surface's black fallback (`lockBlack`), the idle lock (`Lockscreen.lock("idle")`), the start and end commands.
+  and a `power` event: an action a reading does not show is asked again with a growing
+  pause; the monitors it turned off are remembered in `Config.screensOff`, so a restarted
+  shell turns those, and only those, on again), the lock surface's black fallback
+  (`lockBlack`; the lock screen's screen-off waits while `Lockscreen.attended`), the idle lock (`Lockscreen.lock("idle")`), the start and end commands.
   Its two `IdleMonitor`s (`singletons/lock/IdleWatch.qml`: one ignoring Wayland idle
   inhibitors, one respecting them) are made once with a fixed 5 s, so a settings change
   never ends an idle period; every stage counts from the last input. One `Timer` runs to

@@ -26,7 +26,7 @@ PanelWindow {
     // What this screen shows (Idle.shownFor: "on" also while locked, where the lock screen
     // is what shows): the screensaver, or "off" — powered off, under this surface plain
     // black and at once (in case the power cut fails), still taking the keys
-    readonly property string _way: Idle.shownFor(root.screen?.name ?? "")
+    readonly property string _way: Idle.shownFor(root.modelData?.name ?? "")
     readonly property bool _show: _way !== "on"
     readonly property bool _off: _way === "off"
     // The window is shown, still clear, before the fade in starts: mapping it and its

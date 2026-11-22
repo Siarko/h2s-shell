@@ -50,8 +50,12 @@ Singleton {
         return entry ? (_state.shown[entry.id] ?? "on") : "on";
     }
 
-    // [{ id, connector }]: ScreenPower's monitors where it can cut their power, else the screens
-    readonly property var _monitorEntries: ScreenPower.canPowerOff
+    // Power control: a backend, and the monitors read at least once (until then, or with no
+    // monitor in its list, the screens with the screensaver: nothing may lose the screensaver
+    // or the lock screen's blackout to a reading that failed)
+    readonly property bool _powerControl: ScreenPower.canPowerOff && ScreenPower.monitors.length > 0
+    // [{ id, connector }]: ScreenPower's monitors with power control, else the screens
+    readonly property var _monitorEntries: _powerControl
         ? ScreenPower.monitors.map(monitor => ({ id: monitor.id, connector: monitor.connector }))
         : Quickshell.screens.map(screen => ({ id: screen.name, connector: screen.name }))
     readonly property var _monitors: _monitorEntries.map(monitor => monitor.id)
@@ -82,7 +86,7 @@ Singleton {
     }
 
     function _config() {
-        return IdleRules.config(_values, _monitors, ScreenPower.canPowerOff);
+        return IdleRules.config(_values, _monitors, _powerControl);
     }
 
     function _monitorListChanged() {
@@ -91,7 +95,8 @@ Singleton {
 
     // Each reading of ScreenPower's: the power as read ("unknown" for a failed reading)
     function _powerRead() {
-        if (!ScreenPower.canPowerOff)
+        _restoreScreens();
+        if (!_powerControl)
             return;
         const power = {};
         for (const monitor of ScreenPower.monitors)
@@ -125,6 +130,7 @@ Singleton {
                 _state = result.state;
                 for (const action of result.actions)
                     _run(action);
+                _remember();
             }
         } finally {
             _dispatching = false;
@@ -157,7 +163,13 @@ Singleton {
             break;
         case "powerOff":
         case "powerOn":
-            _log("info", (action.type === "powerOff" ? "screens off: " : "screens on: ") + action.ids.join(", "));
+            // The first ask, and the first ask again (a reading showed it did not take); the
+            // further ones, after a growing pause, are not logged
+            if (action.attempt === undefined)
+                _log("info", (action.type === "powerOff" ? "screens off: " : "screens on: ") + action.ids.join(", "));
+            else if (action.attempt === 2)
+                _log("warning", "monitor " + action.ids.join(", ") + " not turned " + (action.type === "powerOff" ? "off" : "on")
+                     + " as asked: asking again, with a growing pause");
             for (const id of action.ids)
                 ScreenPower.setPower(id, action.type === "powerOn");
             break;
@@ -216,6 +228,9 @@ Singleton {
 
     Component.onCompleted: {
         _tellOldKey();
+        _restoreScreens();
+        if (Lockscreen.attended)
+            _dispatch({ type: "lockAttended", attended: true });
         if (Lockscreen.locked)
             _dispatch({ type: "locked" });
         else
@@ -243,6 +258,53 @@ Singleton {
         function onMonitorsChanged() {
             root._powerRead();
         }
+        // Set after the monitors of the same reading
+        function onMonitorsReadChanged() {
+            root._restoreScreens();
+        }
+    }
+
+    Connections {
+        target: Lockscreen
+        function onAttendedChanged() {
+            root._dispatch({ type: "lockAttended", attended: Lockscreen.attended });
+        }
+    }
+
+    Connections {
+        target: Config
+        function onReadyChanged() {
+            root._restoreScreens();
+        }
+    }
+
+    // Monitors a previous run turned off (Config.screensOff): turned on at the first reading
+    // once the config is read — a restart or a crash while they were off left them so, and
+    // Hyprland turns nothing on at input by default. Until then nothing is written over the
+    // list; monitors another program turned off are never in it
+    property bool _screensRestored: false
+    readonly property bool _configUsable: Config.ready && !Config.loadFailed
+
+    function _restoreScreens() {
+        if (_screensRestored || !_configUsable || !ScreenPower.canPowerOff || !ScreenPower.monitorsRead)
+            return;
+        _screensRestored = true;
+        const ids = IdleRules.restoreOnStart(Array.from(Config.screensOff ?? []), ScreenPower.monitors)
+            .filter(id => _state.shown[id] !== "off");
+        if (ids.length > 0) {
+            _log("warning", "monitors turned off before the shell restarted, turned on again: " + ids.join(", "));
+            for (const id of ids)
+                ScreenPower.setPower(id, true);
+        }
+        _remember();
+    }
+
+    function _remember() {
+        if (!_screensRestored || !_configUsable)
+            return;
+        const ids = IdleRules.turnedOff(_state);
+        if (JSON.stringify(ids) !== JSON.stringify(Array.from(Config.screensOff ?? [])))
+            Config.screensOff = ids;
     }
 
     Timer {
