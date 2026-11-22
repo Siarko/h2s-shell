@@ -171,7 +171,8 @@ Singleton {
                 _log("info", "idle: locking");
             else if (action.attempt === 2)
                 _log("warning", "the idle lock was not taken: asking again while it is due, with a growing pause");
-            Lockscreen.lock("idle");
+            // Not over another program's session lock (read first on Hyprland)
+            Lockscreen.lockWhenFree("idle");
             break;
         case "powerOff":
         case "powerOn":
@@ -271,7 +272,7 @@ Singleton {
         _restoreScreens();
         if (Lockscreen.attended)
             _dispatch({ type: "lockAttended", attended: true });
-        if (Lockscreen.locked)
+        if (_sessionLocked)
             _dispatch({ type: "locked" });
         else
             _arm();
@@ -418,12 +419,10 @@ Singleton {
         onRead: block => root._logindRead(block)
     }
 
-    Connections {
-        target: Lockscreen
-        function onLockedChanged() {
-            root._dispatch({ type: Lockscreen.locked ? "locked" : "unlocked" });
-        }
-    }
+    // Locked by the shell, or by another program as read (Lockscreen.foreignLocked): either
+    // way no idle lock is asked, and the lock screen's screen-off applies
+    readonly property bool _sessionLocked: Lockscreen.locked || Lockscreen.foreignLocked
+    on_SessionLockedChanged: root._dispatch({ type: _sessionLocked ? "locked" : "unlocked" })
 
     Connections {
         target: SystemSleep
@@ -435,7 +434,7 @@ Singleton {
             _missedResume.stop();
             root._dispatch({ type: "resumed" });
             // A block may have ended (or begun) over the sleep: read it again
-            if (!Lockscreen.locked)
+            if (!root._sessionLocked)
                 _logindIdle.start();
         }
     }

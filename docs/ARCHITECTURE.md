@@ -564,7 +564,11 @@ launcher agree on the contract described under "Recovery" below):
   and a `power` event: an action a reading does not show is asked again with a growing
   pause; the monitors it turned off are remembered in `Config.screensOff`, so a restarted
   shell turns those, and only those, on again), the lock surface's black fallback
-  (`lockBlack`; the lock screen's screen-off waits while `Lockscreen.attended`), the idle lock (`Lockscreen.lock("idle")`), the start and end commands.
+  (`lockBlack`; the lock screen's screen-off waits while `Lockscreen.attended`), the idle lock (`Lockscreen.lockWhenFree("idle")`: on Hyprland `hyprctl -j locked` is read
+  first, and another program's lock read as held (`Lockscreen.foreignLocked`,
+  `singletons/lock/ForeignLock.qml` around the pure `LockRules.foreignStep`) counts as locked
+  for `IdleRules` and the `screen.locked` fact, read again with a growing pause until it
+  ends; a refusal of the shell's lock reads it too), the start and end commands.
   Its two `IdleMonitor`s (`singletons/lock/IdleWatch.qml`: one ignoring Wayland idle
   inhibitors, one respecting them) are made once with a fixed 5 s, so a settings change
   never ends an idle period; every stage counts from the last input. One `Timer` runs to

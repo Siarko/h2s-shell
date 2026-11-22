@@ -45,7 +45,8 @@ TestCase {
         "PersistentProperties _helperSweepOnce",
         "Process _helperSweep",
         "FileView _lockRestarts",
-        "LockedHint _lockedHint"
+        "LockedHint _lockedHint",
+        "ForeignLock _foreign"
     ]
 
     // The root's direct children of a QML text, in order, as "Type name"

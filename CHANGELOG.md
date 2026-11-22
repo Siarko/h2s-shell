@@ -1039,6 +1039,9 @@ The interface modules are written against (`qs.api`), versioned on its own
   action used to be an empty button.
 
 ### Fixed
+- Another program's lock screen (hyprlock) is seen under Hyprland: the shell no longer asks
+  for its idle lock over it (Hyprland ended the shell for that), and "screen locked"
+  profiles apply while it lasts.
 - On Arch, Settings → Authentication now says what the administrator prompt asks first:
   polkit's PAM stack is read where Arch keeps it (`/usr/lib/pam.d`), its `include
   system-auth` followed.

@@ -311,6 +311,8 @@ Singleton {
         LockStepRules.log(transaction, "warning", "the compositor refused the lock"
             + (phase.status === "unlocking" ? " (an unlock by " + phase.pending.reason + " was waiting for it)" : ""));
         _leaveLock(transaction, "denied", "", false);
+        // Another program's session lock is the usual cause: the driver looks (foreignStep)
+        LockStepRules.emit(transaction, "checkForeignLock", {});
     }
 
     // The lock's first effects are always lockCompositor and announceLocked(true), whatever
@@ -1304,4 +1306,140 @@ Singleton {
         return typeof value === "boolean" ? value : schemaDefault === true;
     }
 
+    // ------------------------------------------------------------------------------------
+    // Another program's session lock (notes/plans/idle-lock-flow.md §10)
+    // ------------------------------------------------------------------------------------
+    // Wayland shows no client another's session lock; the compositor refuses ours while one
+    // is in force. On Hyprland `hyprctl -j locked` tells (`canRead`); elsewhere only the
+    // refusal does, and the idle lock's growing pause (IdleRules) stands in for a poll. A
+    // lock read as held counts as the session locked (the `screen.locked` fact, no idle
+    // lock) and is read again after a growing pause until it ends.
+    //
+    //   foreignInitial()                       → state
+    //   foreignStep(state, event, settings)    → { state, actions, ignored }
+    //
+    // `settings`: { canRead (the compositor can be asked: Hyprland), pollMaximum (the longest
+    // pause between reads, ms; foreignPoll.maximum when not a positive number) }.
+    //
+    // Events: lockWanted { source } (a lock that waits for the read: the idle lock),
+    // refused (the compositor refused ours: checkForeignLock), pollDue, answer { serial,
+    // outcome: "locked" | "unlocked" | "unknown", ownLock: the shell has a lock asked or
+    // held }, ownLocked (the compositor confirmed the shell's own lock). Actions: read
+    // { serial }, held { held }, poll { ms }, lock { source }, log { level, message }.
+
+    readonly property var foreignPoll: ({ minimum: 1000, maximum: 30000 })
+
+    function foreignInitial() {
+        return { held: false, reading: 0, serial: 0, polls: 0, pendingLock: "", told: "" };
+    }
+
+    // The pause before the n-th read again of a held lock: doubling, bounded
+    function foreignPollDelay(polls, maximum) {
+        const bound = typeof maximum === "number" && isFinite(maximum) && maximum > 0 ? maximum : foreignPoll.maximum;
+        return Math.min(bound, foreignPoll.minimum * Math.pow(2, Math.max(0, polls - 1)));
+    }
+
+    function foreignStep(state, event, settings) {
+        const canRead = settings?.canRead === true;
+        const next = Object.assign({}, state);
+        const actions = [];
+        const read = () => {
+            next.serial++;
+            next.reading = next.serial;
+            actions.push({ type: "read", serial: next.reading });
+        };
+        const tell = (key, level, message) => {
+            if (next.told === key)
+                return;
+            next.told = key;
+            actions.push({ type: "log", level: level, message: message });
+        };
+        const poll = () => {
+            next.polls++;
+            actions.push({ type: "poll", ms: foreignPollDelay(next.polls, settings?.pollMaximum) });
+        };
+        const release = () => {
+            next.held = false;
+            next.polls = 0;
+            actions.push({ type: "held", held: false });
+        };
+        switch (event?.type) {
+        case "lockWanted": {
+            const source = typeof event.source === "string" && event.source !== "" ? event.source : "request";
+            if (next.held)
+                return { state: state, actions: [], ignored: "another program holds the session lock" };
+            if (!canRead) {
+                actions.push({ type: "lock", source: source });
+                break;
+            }
+            next.pendingLock = source;
+            if (next.reading === 0)
+                read();
+            break;
+        }
+        case "refused":
+            if (!canRead || next.held || next.reading !== 0)
+                return { state: state, actions: [], ignored: !canRead ? "cannot read the compositor's lock" : "already known or being read" };
+            read();
+            break;
+        case "pollDue":
+            if (!next.held || next.reading !== 0)
+                return { state: state, actions: [], ignored: "nothing to poll" };
+            read();
+            break;
+        case "answer": {
+            // Late answers lose: one read counts, the last asked
+            if (next.reading === 0 || event.serial !== next.reading)
+                return { state: state, actions: [], ignored: "late answer" };
+            next.reading = 0;
+            const pending = next.pendingLock;
+            next.pendingLock = "";
+            // A lock of the shell's own asked meanwhile: whatever Hyprland says is ours
+            if (event.ownLock === true) {
+                if (next.held)
+                    release();
+                break;
+            }
+            if (event.outcome === "locked") {
+                if (!next.held) {
+                    next.held = true;
+                    next.polls = 0;
+                    actions.push({ type: "held", held: true });
+                }
+                tell("held", "info", "another program holds the session lock: the shell counts the session locked and asks no lock of its own while it lasts");
+                poll();
+            } else if (event.outcome === "unlocked") {
+                if (next.held) {
+                    release();
+                    tell("ended", "info", "the other program's session lock ended");
+                }
+                if (pending !== "")
+                    actions.push({ type: "lock", source: pending });
+            } else {
+                // Unknown is not proof either way: a held lock stays held (read again later),
+                // a lock wanted is asked for, as without Hyprland
+                tell("unknown", "warning", "could not read whether the compositor holds a session lock" + (next.held ? ": still counted as held" : ""));
+                if (next.held)
+                    poll();
+                else if (pending !== "")
+                    actions.push({ type: "lock", source: pending });
+            }
+            break;
+        }
+        case "ownLocked":
+            if (!next.held && next.reading === 0 && next.pendingLock === "")
+                return { state: state, actions: [], ignored: "no other lock known" };
+            // Only one session lock at a time: the other one is over, and a read under way
+            // would see ours
+            next.reading = 0;
+            next.pendingLock = "";
+            if (next.held)
+                release();
+            next.told = "";
+            break;
+        default:
+            return { state: state, actions: [], ignored: "unknown event" };
+        }
+        return { state: next, actions: actions, ignored: "" };
+    }
 }

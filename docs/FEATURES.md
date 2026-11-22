@@ -298,6 +298,12 @@ Two stages, both driven by Wayland idle notifications and both counted from the 
   logind.conf) and `h2s-shell ipc call lockscreen lock`; a request while locked changes
   nothing. The lock is reported to logind (the session's `LockedHint`) once the compositor
   holds it, and cleared at the unlock. Every lock starts afresh: nothing of one lock carries into the next.
+  Another program's session lock (another locker) is seen under Hyprland (`hyprctl -j
+  locked`, read before the idle lock and when the compositor refuses the shell's): while it
+  lasts the shell asks no idle lock, the `screen.locked` profile condition holds, and
+  `lockscreen status` says `foreign-locked`; it is read again with a growing pause (1 s to
+  30 s) until it ends. Elsewhere the compositor's refusal is all that shows it, and the idle
+  lock is asked again with a growing pause.
 - **The prompt** — on one screen at a time; it wakes on a key, pointer motion or a click,
   and sleeps after 10 s without activity (a question left unanswered is cancelled then, a
   password check under way is not). A click on another screen brings it there; keys typed

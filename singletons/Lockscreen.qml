@@ -59,6 +59,10 @@ Singleton {
     // The compositor holds a lock of this shell's: confirmed (secure), or one it could not
     // take back — the screen is locked now, not on its way (SleepLockNotice)
     readonly property bool lockConfirmed: _sessionLock.secure || _restorePending
+    // Another program holds the session lock, as read on Hyprland (singletons/lock/
+    // ForeignLock.qml): not this shell's lock, but the session counts as locked (the
+    // `screen.locked` fact, Idle)
+    readonly property bool foreignLocked: _foreign.held
     // logind's object path of this shell's session ("" while unknown)
     readonly property string sessionPath: _logind.sessionPath
     // Somebody at the lock screen (LockViewRules: the prompt awake, a check under way): Idle
@@ -78,6 +82,12 @@ Singleton {
     // Locking needs no proof, so anything may ask (the IPC, idle, a future button)
     function lock(source) {
         _api?.lock(source);
+    }
+
+    // The same, once it is read that no other program holds the session lock (on Hyprland;
+    // elsewhere at once): the idle lock, which must not be asked over another's
+    function lockWhenFree(source) {
+        _foreign.lockWhenFree(source);
     }
 
     // ---- For the lock surfaces (screensaver/LockSurface.qml) ----
@@ -123,6 +133,13 @@ Singleton {
     // ---- The driver ----
 
     property var _view: LockRules.view(LockRules.initial({}))
+    // The rules' last announceLocked, and the fact reported from it and another's lock
+    property bool _announcedLocked: false
+    onForeignLockedChanged: _reportScreenLocked()
+
+    function _reportScreenLocked() {
+        Profiles.screenLocked = _announcedLocked || foreignLocked;
+    }
     // The compositor holds a lock this shell had (the marker says so) and has refused to let
     // it take that lock back — Hyprland without misc:allow_session_lock_restore. Retried
     // with a growing pause; see the "Recovery" note above
@@ -385,7 +402,8 @@ Singleton {
                 _sessionLock.locked = false;
                 break;
             case "announceLocked":
-                Profiles.screenLocked = effect.locked;
+                root._announcedLocked = effect.locked;
+                root._reportScreenLocked();
                 // No reload while locked, from file changes: a reload carries the lock over
                 // now (`restored`), but that is the recovery path, not one to take at every
                 // file written while the owner is away. At the unlock file watching is
@@ -405,6 +423,9 @@ Singleton {
                 break;
             case "reportLockedHint":
                 _lockedHint.report(effect.locked);
+                break;
+            case "checkForeignLock":
+                _foreign.refused();
                 break;
             case "detectMethods":
                 scopeFor(effect)?.detect(effect.generation);
@@ -670,8 +691,10 @@ Singleton {
         // signal: inside an unlock effect that is the old session, which the rules then
         // ignore once a new lock has begun
         _sessionLock.secureStateChanged.connect(() => {
-            if (_sessionLock.secure)
+            if (_sessionLock.secure) {
                 recover({ type: "confirmed" });
+                _foreign.ownLocked();
+            }
             dispatch({
                 type: _sessionLock.secure ? "compositorLocked" : "compositorFinished",
                 session: sessionInForce
@@ -771,7 +794,9 @@ Singleton {
                     restoring: recovery.restoring,
                     restorePending: recovery.restorePending,
                     carriedHeld: _carried.held,
-                    carriedSecure: _carried.secure
+                    carriedSecure: _carried.secure,
+                    // Another program's session lock (LockRules.foreignStep's state)
+                    foreignLock: _foreign.state
                 };
                 return JSON.stringify(described);
             }
@@ -961,11 +986,13 @@ Singleton {
             return status();
         }
 
-        // "locked", "unlocked", or "compositor-locked": the compositor holds a lock this
-        // shell had and refuses to give it back (see "Recovery" in the header) — the screen
-        // is locked, but not by a prompt of this shell's
+        // "locked", "unlocked", "compositor-locked": the compositor holds a lock this shell
+        // had and refuses to give it back (see "Recovery" in the header) — the screen is
+        // locked, but not by a prompt of this shell's — or "foreign-locked": another
+        // program's session lock is read as held
         function status(): string {
-            return root._view.locked ? "locked" : root._restorePending ? "compositor-locked" : "unlocked";
+            return root._view.locked ? "locked" : root._restorePending ? "compositor-locked"
+                : root.foreignLocked ? "foreign-locked" : "unlocked";
         }
 
         // What the lock test bed reads to know where the lock stands: the rules' describe()
@@ -1059,5 +1086,19 @@ Singleton {
         sessionPath: _logind.sessionPath
         toolDirectory: root._toolDirectory
         onLogLine: (level, message) => root._log(level, message)
+    }
+
+    // Another program's session lock (foreignLocked, lockWhenFree). Last among the children:
+    // the ones before keep their positions
+    ForeignLock {
+        id: _foreign
+        ownLock: root.locked
+        // The lock test bed's `foreignPollMaximum` timing (H2S_LOCK_TEST_TIMINGS, ms)
+        pollMaximum: {
+            const given = TestSeams.timings.foreignPollMaximum;
+            return typeof given === "number" && isFinite(given) && given >= 100 ? given : 0;
+        }
+        onLogLine: (level, message) => root._log(level, message)
+        onLockAllowed: source => root.lock(source)
     }
 }
