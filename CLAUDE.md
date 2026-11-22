@@ -45,7 +45,7 @@ tests/affected.sh --run    # while iterating: the suites, scenarios and self-tes
 tests/run-unit.sh FormatTest LockRulesTest   # … or named suites
 tests/lock/run.sh relock fallback            # … or named lock scenarios
 tests/run-all.sh --quick   # a slice's commit: everything but the lock bed, about half a minute
-tests/run-all.sh           # the end of a segment of work: everything, both machines
+tests/run-all.sh           # before merging to master: everything, both machines
 tests/remote-run.sh        # … run on the other machine over SSH (H2S_REMOTE=<destination>)
 tests/mutate.sh <file>     # a new or much changed *Rules.qml: which mutants no suite notices
 tests/soak.sh <suite> 20   # a suite suspected of flaking: 20 runs in a row under CPU load
@@ -62,9 +62,8 @@ subjects, what needs no test); a file placed nowhere fails `tests/affected-selft
 the map gives it a test or `none`. Named suites or scenarios run as well (a suite is named
 by its file in `tests/` without `.qml`, a lock scenario by its file in `tests/lock/tests/`
 without `.sh`; a wrong name is an error, nothing runs). **A slice's commit** needs those plus
-`tests/run-all.sh --quick` on one machine. **The full `tests/run-all.sh`** runs on both machines at
-the end of a segment of work (a group of slices, before it is merged to `master` and deployed),
-not per slice; `tests/remote-run.sh` runs it on the other machine from this one (a branch or
+`tests/run-all.sh --quick` on one machine. **The full `tests/run-all.sh`** runs on both machines
+before a group of slices is merged to `master` and deployed, not per slice; `tests/remote-run.sh` runs it on the other machine from this one (a branch or
 commit sent as a `git bundle`, run in a worktree of its own there, the summary brought back;
 `--attach <id>` collects a run whose connection dropped). Its parts run side by side, the lock
 bed last and alone; it stops at the first failing part
@@ -292,5 +291,5 @@ new kind.
   User-visible strings are the few plain words a person would put on a control. — History
   in comments goes stale; long hints read as machine-written.
 - **One slice = one change with its test.** While iterating run only the suites the change
-  touches, `--quick` before the commit; the full set at the end of a segment. — Small reviewed
+  touches, `--quick` before the commit; the full set before merging to `master`. — Small reviewed
   steps, fast feedback; the full set on both machines took longer than the work it checked.
