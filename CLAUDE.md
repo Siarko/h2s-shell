@@ -58,14 +58,18 @@ scripts/build-helper.sh    # builds the helper (launch.sh does it when needed)
 tests/affected.sh --run    # while iterating: the suites, scenarios and self-tests the change needs
 tests/run-unit.sh FormatTest LockRulesTest   # … or named suites
 tests/lock/run.sh relock fallback            # … or named lock scenarios
-tests/run-all.sh --quick   # a slice's commit: everything but the lock bed, under three minutes
+tests/run-all.sh --quick   # a slice's commit: everything but the lock bed, about half a minute
 tests/run-all.sh           # the end of a segment of work: everything, both machines
+tests/remote-run.sh        # … run on the other machine over SSH (H2S_REMOTE=<destination>)
+tests/mutate.sh <file>     # a new or much changed *Rules.qml: which mutants no suite notices
+tests/soak.sh <suite> 20   # a suite suspected of flaking: 20 runs in a row under CPU load
 ```
 
 **While iterating** run `tests/affected.sh --run`: it runs the unit suites, module fixture
-parts, self-tests and lock scenarios the change needs — the branch against its merge-base with
-the nearest `segment-*` or `master`, the working tree included (a git range as its argument
-names another change; without `--run` it prints the commands, `--why` what each file selects).
+parts, self-tests and lock scenarios the change needs — the branch against its nearest base
+(the fewest commits back of where it left a `segment-*` branch or `master`), the working tree
+and untracked files included (a git range as its argument names another change; without
+`--run` it prints the commands, `--why` each changed file and what it selects).
 The selection is mechanical: each suite covers the QML it uses, transitively, and
 `tests/affected-map.txt` places what that cannot see (scripts, runners, the lock scenarios'
 subjects, what needs no test); a file placed nowhere fails `tests/affected-selftest.sh` until
@@ -74,20 +78,42 @@ by its file in `tests/` without `.qml`, a lock scenario by its file in `tests/lo
 without `.sh`; a wrong name is an error, nothing runs). **A slice's commit** needs those plus
 `tests/run-all.sh --quick` on one machine. **The full `tests/run-all.sh`** runs on both machines at
 the end of a segment of work (a group of slices, before it is merged to `master` and deployed),
-not per slice. It stops at the first failing part
+not per slice; `tests/remote-run.sh` runs it on the other machine from this one (a branch or
+commit sent as a `git bundle`, run in a worktree of its own there, the summary brought back;
+`--attach <id>` collects a run whose connection dropped). Its parts run side by side, the lock
+bed last and alone; it stops at the first failing part
 (`--keep-going` goes on) and ends with a summary naming every part PASS, FAIL or NOT RUN with
-the reason — read it: a part that could not be set up is not a pass. Its parts, each
-runnable alone:
+the reason and its seconds — read it: a part that could not be set up is not a pass. Measured
+on a 32-thread machine: the unit suites about 15 s, `--quick` about 26 s, the full set about
+2.5 minutes, of which the lock bed about 125 s; where memory allows three shards at once, the
+unit suites take about a minute and the lock bed about 250 s. Its parts, each runnable alone:
 
 ```
-tests/run-unit.sh          # the unit suites, in a private headless compositor (--log <file>)
+tests/run-unit.sh          # the unit suites, in parallel shards of private headless compositors (--log <file>)
 tests/run-modules.sh <dir> # a module's suites, against this tree (--suite <name> for some)
 tests/install-test.sh      # install.sh under stand-ins: what it would do, nothing done
 tests/run-helper.sh        # the helper built and run; its build script and launch.sh's look-up
 tests/run-system.sh        # this system's set (tests/system/nixos, tests/system/arch)
 tests/lock/run.sh          # the lock screen, end to end, in an invisible compositor
 tests/*-selftest.sh        # self-tests: the runners' own verdicts, the deploy check's, affected.sh's map
+tests/lock/selftest.sh     # the lock bed's runner: its lint (tests/lock/lint.sh) and FLAKY reruns
 ```
+
+The unit suites run in shards: the runner packs them by the time each took last
+(`~/.cache/h2s-shell-tests/unit-times.txt`) so that no shard runs longer than the longest
+suite; a suite that changes what one process shares says `ownProcess: true` and runs alone.
+A shard's asynchronous suites (`asynchronous: true`, `runAsync()`, `finish()`) run side by
+side, none waiting for another. A lock scenario that fails runs once more at the end, alone: passing then it is
+**FLAKY**, still a failure of the run, with a line in `~/.cache/h2s-shell-tests/flaky.log`.
+`tests/lock/lint.sh`, run by the bed, refuses a `sleep` in a scenario without its reason.
+
+`tests/mutate.sh <file>` applies one mechanical mutation at a time to a `*Rules.qml` or a
+singleton, in scratch copies of the tree, runs the suites `affected.sh` gives for it, and lists
+the mutants that survived. Run it on a new Rules file or after a big change to one — a slice
+may run it on its own file —; each survivor gets a check, or a reason in the slice's report
+why it cannot be told apart (an equivalent mutant). `run-all.sh` runs only its self-test.
+`tests/soak.sh <suite | module dir> <n>` runs a suite n times in a row under busy loops:
+a check that depends on timing fails there in minutes.
 
 Never run `quickshell -p tests.qml` directly: five suites open a small window.
 
@@ -228,6 +254,20 @@ new kind.
   Logs filled with the same line every few seconds.
 - **Live tests wait on conditions, never on fixed sleeps;** a test that cannot fail is
   deleted. — Sleeps make tests flaky under load.
+- **A deadline in a test only guards a hang.** Waits are on conditions, with one generous
+  deadline per kind; an upper time bound is a test of timing, made against a seam or a
+  monotonic clock, and a lock scenario whose subject is a time runs alone (`SERIAL`,
+  `check_timed`). — "Not within 3 s" failed on loaded machines.
+- **Real waits longer than a second come through a seam** in a test (backoffs, pauses,
+  grace windows). — 30 s pauses made scenarios minutes long.
+- **A suite leaves the shared state as it found it** (`TestCase` compares
+  `tests/SharedStateReader.qml`'s snapshot when it reports), or declares `ownProcess: true`. — One
+  suite's writes changed another's verdict.
+- **A new check is seen failing once**: break its subject (`tests/mutate.sh`, or by hand),
+  watch it fail, put it back. A suite that reports 0/0 or a scenario without a PASS line
+  fails. — Checks that could not fail passed review.
+- **What a change runs is `tests/affected.sh`'s answer;** a file it cannot place gets a line
+  in `tests/affected-map.txt` (a test, or `none`). — Choosing suites by memory missed some.
 - **A real I/O path runs in at least one test, against stand-ins.** What test mode or the
   test kit hands a module in its place does not test it: the reading itself (the command,
   its parsing, its steps) gets a suite that runs it on stand-in programs. — Two defects

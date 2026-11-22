@@ -22,8 +22,8 @@ Exit status 0 when every test passed or failed exactly as expected, 1 when one f
 a test marked as failing passed; a test whose stack does not come up counts as failed; so
 does a FLAKY one, below, and a scenario with a fixed sleep that does not say why), 2 when
 the test bed could not be set up before any test ran (tools, launcher, paths), 130 when
-interrupted. A full run takes some two minutes with eight tests at a time (32 threads),
-about three with four, some ten one after another (each test starts its own stack, in
+interrupted. A full run takes some two minutes (about 125 s) with eight tests at a time
+(32 threads), about four on a smaller machine, some ten one after another (each test starts its own stack, in
 2–3 s; the idle tests wait out real idle timeouts, the crash tests Quickshell's 10 s before
 it restarts a crash in place; the launcher's restart pauses are shortened where a test only
 needs their schedule, `--launcher-timings`, and so are the lock's own, `--timings`).

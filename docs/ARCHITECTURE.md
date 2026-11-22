@@ -1745,8 +1745,16 @@ memory available holds at about 1.1 GB a shard (`-j <n>` says how many).
 The plan is computed (`plan_shards` in `tests/count-suites.sh`), never kept by hand. Each
 shard is the runner again on its suites, with its own verdict, printed when it ends; the
 verdict over them wants every suite run to report exactly once. The whole set takes about
-30 s on a 32-thread machine; the floor is `ButtonKindsTest` alone (about 26 s of colour
-animations waited for). `run-unit.sh` also puts
+15 s on a 32-thread machine (15 shards, all at once), and about a minute where the memory
+allows three at a time; the floor is the longest suite alone (`AnchorsTest` and `ModulesTest`,
+about 11 s each). In a unit run every animation that ends takes 1 ms
+(`Theme.instantAnimations`, set by `tests.qml`), so no suite waits on motion; a suite that
+tests an animation keeps them (`TestCase.animations`). Each suite that shares its process is
+checked when it reports: `TestCase` compares the shared state (`tests/SharedStateReader.qml`:
+`Config`'s stored fields, the profiles, the module lists the core reads, the toasts, the Theme
+switches suites flip, and the network's state where a suite names it) with what it was when
+the suite started, and fails it, naming what changed, when it left it otherwise (a suite with
+`ownProcess: true` is not checked). `run-unit.sh` also puts
 stand-ins for `nmcli` and `notify-send` first on `PATH` (`tests/fixtures/unit-path`), for the
 suites that build the real settings window and with it the network readers; it finds labwc and
 Quickshell through `tests/lock/resolve.sh` ("Where the test tools come from", below) and fails on any `FAIL`, a
@@ -1803,6 +1811,10 @@ destroyed while registered, who asked a connect, a slow operation (steps wait on
 provider ids unique to the suite), the popup's VPN section, a card and a provider's page frame
 built with a provider's VPNs.
 
+The window suites drive their window through `tests/WindowDriver.qml`, QtTest's `TestCase`
+used by hand: it counts the window as shown once a frame of it was drawn, and `waitShown()`
+comes before the first event, in place of a fixed wait.
+
 `tests/device/` drives the running shell on a touch device through the whole stack — a
 virtual touchscreen (uinput) → Hyprland → the shell, and the on-screen keyboard reacting —
 which QtTest, sending events to the Qt window directly, cannot reach. It finds what to tap
@@ -1856,6 +1868,52 @@ failed build, a locked session, the log line once per outcome), and that nothing
 helper through pkexec, sudo or the like. The shell's
 side, `HelperRules` and the `--version` reading, is the unit suite `HelperTest`, on
 stand-in programs.
+
+### Which tests a change needs
+
+`tests/affected.sh` answers it mechanically and prints the commands that run them (`--run`
+runs them too, one after another, the lock bed last). The change is the branch's: from its
+nearest base — the fewest commits back of where it left a `segment-*` branch or `master` —
+to the working tree, untracked files included; a git range (`HEAD~3`, `master...HEAD`) or
+`--files <path>…` names another. `--why` prints each changed file and what it selects. A unit
+suite covers its closure: every type and singleton its file names, every path quoted in it,
+transitively; a module fixture part covers `tests-modules.qml`'s closure and its directories;
+a self-test covers itself; a lock scenario covers its file and runs on any change in the lock
+closure. `tests/affected-map.txt` places what a closure cannot see — scripts, the runners, the
+lock scenarios' subjects — and lists what needs no test (`none`). A changed file nothing
+places selects everything. `tests/affected-selftest.sh` runs `affected.sh --check` (every
+tracked file placed, every map line true) and checks the selection on made-up repositories.
+
+### Finding checks that cannot fail, and flakes
+
+A suite that reports 0/0 fails, and so does a lock scenario that ends without a `PASS` line.
+`tests/mutate.sh <file> [<suite>…]` goes further: in scratch copies of the tree (never the
+checkout) it applies one mechanical mutation at a time to a `*Rules.qml` or a singleton —
+`===`↔`!==`, `<`↔`<=`, `&&`↔`||`, `true`↔`false`, a `!` dropped, an integer constant + 1, a
+one-line `return` negated — on code only, not in comments or strings, and runs each mutant
+against the file's own suite first, then the other unit suites `affected.sh` selects for the
+file. A mutant is killed (a suite failed, or it ran past four times the unmutated run's time),
+not compiled, not run, or survived; the survivors are listed with file, line and column, and
+each is a missing check or a mutation that changes nothing. `--list` prints the mutants, `--max
+<n>` (with `--seed`) picks some at random, `-j <n>` runs that many at once (by default as many
+as the unit runner's shards). Suites that fail unmutated end it with status 2. It is run by
+hand on a new or much changed Rules file; `tests/mutate-selftest.sh`, a part of `--quick`,
+checks its verdicts on a fixture Rules file with a mutant of each outcome.
+
+`tests/soak.sh <suite | module dir> <n>` runs one unit suite, or a module's suites, n times
+in a row under busy loops (one per processor, `--load <k>` for k), keeps the output of a run
+that failed and names it: a check that depends on timing fails there in minutes. It exits 1
+when any run failed, 2 when a run could not be set up.
+
+The lock bed runs a scenario that failed once more at the end of its run, alone; passing then
+it is **FLAKY** — still a failure of the run, written to
+`${XDG_CACHE_HOME:-~/.cache}/h2s-shell-tests/flaky.log` with the commit, the machine's load and
+where its first log is kept (`LOCKTEST_RERUN=0` runs nothing twice). `tests/lock/lint.sh`, run
+by the bed on its scenarios and by `tests/lock/selftest.sh`, refuses a fixed `sleep` that does
+not say why on its own line (`# fixed sleep: <reason>`); a scenario waits on conditions, and a
+check whose subject is a time bound runs alone (`check_timed`, `SERIAL`). The full bed takes
+about two minutes on a 32-thread machine and about four where fewer scenarios run at once
+(`tests/lock/README.md`).
 
 ### The test tree
 

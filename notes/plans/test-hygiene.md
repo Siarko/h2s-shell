@@ -469,7 +469,12 @@ Each is one change with its test; "check" is what proves it.
 - **T11 — docs and rules**: CLAUDE.md "Running" and "Development rules" (§6),
   `notes/workflow.md` "Tests", `docs/ARCHITECTURE.md` "Testing" (the asynchronous suites,
   shards, `affected.sh`, the remote run), the runners' headers' times. Check:
-  `docs-check-selftest.sh`; the numbers in the docs are the measured ones.
+  `docs-check-selftest.sh`; the numbers in the docs are the measured ones. Done 2026-11-22:
+  the §6 rules in CLAUDE.md; "Running", `workflow.md` "Tests" and ARCHITECTURE "Testing" (new:
+  "Which tests a change needs", "Finding checks that cannot fail, and flakes") name
+  `affected.sh`, `remote-run.sh`, `mutate.sh`, `soak.sh`, the FLAKY rerun and `lint.sh`. Measured
+  on Arch (32 threads): unit 13.6 s alone, `--quick` 26 s; full runs: Arch ~2.5 min (lock bed
+  ~125 s), NixOS 321 s (unit 59 s, lock bed 249 s).
 
 Expected after T0–T7: unit suites ≤ 15 s, `--quick` ≤ 30 s, lock bed ≤ 100 s, the full
 set ≤ 150 s on Arch; a slice typically runs `affected.sh --run` in seconds plus one

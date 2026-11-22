@@ -95,9 +95,15 @@ The commands, what each part needs and where the tools come from are in `CLAUDE.
   `tests/affected.sh --run` again. A file it cannot place gets a line in
   `tests/affected-map.txt` (a test, or `none`) in the same slice. Authors never run the full set. The slice is merged into the segment's branch
   (`segment-<name>`, made from `master`), not into `master`.
+- **A new `*Rules.qml`, or a big change to one:** the slice may run `tests/mutate.sh <file>`
+  on it (minutes: one unit run per mutant, several at once); each surviving mutant gets a
+  check, or its reason in the slice's report (equivalent to the original, or not worth a
+  check). The end of a segment may run it on the Rules files the segment changed.
 - **The end of a segment** (a group of slices, or a whole step): the lead runs the full
-  `tests/run-all.sh` on both machines on the segment's branch, then fast-forwards `master` and
-  deploys once. Its summary names every part as PASS, FAIL or NOT RUN with the reason, and a
+  `tests/run-all.sh` on both machines on the segment's branch — here, and on the other machine
+  with `H2S_REMOTE=<destination> tests/remote-run.sh <branch>` (it runs in a worktree of its
+  own there; a dropped connection is picked up with `--attach <id>`) — then fast-forwards
+  `master` and deploys once. Its summary names every part as PASS, FAIL or NOT RUN with the reason, and a
   report quotes it, with the tool source and the launcher the run had.
 - Several agents may work at once, but never on the same code (the owner, 2026-11-21):
   slices run side by side only when they touch disjoint files. Before starting one, the lead
@@ -113,9 +119,18 @@ The module repository's own (not part of `tests/run-all.sh`):
 | Module suites | `H2S_SHELL_DIR=<core tree> tests/run.sh [--log <file>] [suites…]` in the module repository | as the unit suites: it hands the module to the core tree's `tests/run-modules.sh` |
 | Module on the lock bed | `H2S_SHELL_DIR=<core tree> tests/lock-bed/run.sh tailscale` | as the lock screen's |
 
+Times, measured 2026-11-22: on the Arch machine (32 threads) the unit suites ~15 s,
+`--quick` ~26 s, the full set ~2.5 min with the lock bed ~125 s; on the NixOS machine (three
+unit shards at once) the unit suites ~60 s, the full set ~5.5 min with the lock bed ~250 s.
+Each runner's summary gives its parts' seconds.
+
 Flaky tests: a single failure in a known flaky test (the tracker's list) is rerun once alone;
-failing twice stops the slice and goes into the tracker. A lock-bed failure seen while other
-runners were going is rerun alone before it is believed.
+failing twice stops the slice and goes into the tracker. The lock bed reruns a failed scenario
+itself, alone, at the end of its run: FLAKY there still fails the run and is a line in
+`~/.cache/h2s-shell-tests/flaky.log` — it goes into the tracker. A lock-bed failure seen while
+other runners were going is rerun alone before it is believed. A suite suspected of depending
+on timing is run with `tests/soak.sh <suite> 20` (20 runs under CPU load) before and after its
+fix.
 
 ## Deploying to the running shell
 
