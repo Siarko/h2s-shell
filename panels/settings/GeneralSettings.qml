@@ -32,7 +32,7 @@ SettingsPage {
     }
 
     // The profile's look: which theme it uses, and how much things move. Behaviour, so per
-    // profile; the theme itself is edited in the Appearance tab (notes/plans/themes.md)
+    // profile; the theme itself is edited in the Appearance tab
     Text {
         text: "Theme and motion"
         font.family: Theme.fontFamily

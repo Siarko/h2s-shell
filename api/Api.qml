@@ -6,7 +6,7 @@ import qs.singletons
 import qs.singletons.io as Io
 import qs.singletons.network
 
-// The module API (notes/plans/modules.md, "Module API 1.0", 1.1, 1.2 and 1.3; notes/plans/api-next.md from 1.4): everything a
+// The module API: everything a
 // module may use of the shell. A module imports `qs.api` and reaches:
 //
 //   Api.version            "1.37" — this shell's module API, "major.minor". A module's manifest

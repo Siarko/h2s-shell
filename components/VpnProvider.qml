@@ -2,8 +2,8 @@ import QtQuick
 import qs.singletons.network
 
 // A VPN provider: VPNs that are not NetworkManager's — the first is the Tailscale module —
-// listed, shown and switched by the shell beside NetworkManager's (VpnManager). The
-// contract, as built, is in notes/plans/tailscale.md §3; this comment is its short form.
+// listed, shown and switched by the shell beside NetworkManager's (VpnManager). This
+// comment is the contract.
 //
 // A provider extends this type and declares it inside the module's own objects:
 //
@@ -78,7 +78,7 @@ import qs.singletons.network
 //   lockdownNote string — what to say about the shell's "block traffic outside a VPN"
 //               ("" for the shell's own sentence): on the VPN page's card whenever blocking
 //               is on, in the popup's row while the VPN is up or coming up. The blocking does
-//               not support provider VPNs (tailscale.md §8).
+//               not support provider VPNs.
 //   rowExtras   Component or null — under the entry's row in the network popup, for a
 //               provider that is no module's (a module puts its elements there through the
 //               place popup.network.connections.vpn.row, own-provider; its old slot

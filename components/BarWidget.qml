@@ -25,7 +25,7 @@ Item {
     // screen — comes over the cell (true) and leaves it (false). Not for a finger: a touch
     // screen reports a press as hover, and a hover popup opened by it could not be closed.
     // The device a hover names cannot tell them apart (a touch is reported as a touch
-    // screen, or as a touchpad when the finger slides in — notes/plans/touch.md), the timing
+    // screen, or as a touchpad when the finger slides in), the timing
     // can: a finger's hover comes with its press, within milliseconds. So hover is passed on
     // only after a moment with no touch press (_hoverSettle).
     signal hover(status: bool)

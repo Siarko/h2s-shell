@@ -8,7 +8,7 @@ import qs.singletons.network
 // System → Network → Overview: the computer's network as NetworkManager has it — whether it
 // is online, the radios and networking itself, each device with its details, and the
 // settings above any one connection: hostname, a global DNS, the connectivity check
-// (NetworkOverview; notes/plans/network.md). Changes apply at once.
+// (NetworkOverview). Changes apply at once.
 Flickable {
     id: root
 
@@ -90,7 +90,7 @@ Flickable {
                         id: _summaryLine
                         required property string modelData
                         readonly property var kindSummary: _summaryModel.byKey[modelData] ?? ({})
-                        // The kind's own page, once it has one (notes/plans/network.md)
+                        // The kind's own page, once it has one
                         readonly property string _page: root._pageOf(kindSummary.kind)
                         Layout.fillWidth: true
                         spacing: 8

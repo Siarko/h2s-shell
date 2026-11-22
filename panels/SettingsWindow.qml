@@ -26,9 +26,9 @@ FloatingWindow {
     // The pages, in the sidebar's order. Each has an id — how the window, the rest of the
     // shell (Shell.openSettings) and IPC (openPage) name it — and a label, free to change
     // or repeat across tabs. The window has two tabs: Behaviour, whose pages edit a
-    // profile, and Appearance, whose pages edit a theme (notes/plans/themes.md, stage 6;
-    // TODO 10.10). `draftGroups`: the theme groups a page edits through a draft, for its ✎;
-    // `separatorBefore`: a line above it in the sidebar.
+    // profile, and Appearance, whose pages edit a theme. `draftGroups`:
+    // the theme groups a page edits through a draft, for its ✎; `separatorBefore`: a line
+    // above it in the sidebar.
     readonly property var corePages: [
         // Profiles manages the profiles; the pages below the line edit the picked one
         { id: "profiles", label: "Profiles", tab: "behaviour", component: profilesComp },
@@ -57,10 +57,9 @@ FloatingWindow {
         { id: "animations", label: "Animations", tab: "appearance", component: animationsComp, draftGroups: ["durations", "curves", "wallpaper"] },
         { id: "other_appearance", label: "Other", tab: "appearance", component: otherLookComp, draftGroups: ["settings", "modal", "calendar", "lock"] },
         // System: this computer's settings, kept by the system or at least never per profile
-        // (notes/plans/polkit.md, TODO 11.36)
         { id: "authentication", label: "Authentication", tab: "system", component: authenticationComp },
         // A group: its pages show under it while one is open (SettingsPageList); clicking
-        // it opens the first (notes/plans/network.md)
+        // it opens the first
         { id: "network", label: "Network", tab: "system", group: true },
         { id: "network_overview", label: "Overview", tab: "system", parent: "network", component: networkOverviewComp },
         // `shown`: only while it has something to show — a kind of device the computer has
@@ -70,7 +69,6 @@ FloatingWindow {
           shown: () => NetworkManager.ethernetDevice !== "" },
         { id: "network_vpn", label: "VPN", tab: "system", parent: "network", component: networkVpnComp },
         // Every module, then the modules' own pages under the group
-        // (notes/plans/modules-management.md §4)
         { id: "modules", label: "Modules", tab: "system", group: true },
         { id: "modules_installed", label: "Installed", tab: "system", parent: "modules", component: modulesComp }
     ]
@@ -219,7 +217,7 @@ FloatingWindow {
             editedTheme = theme;
     }
 
-    // The profile every page edits (notes/plans/global-profiles.md), by name so it
+    // The profile every page edits, by name so it
     // survives reordering; Full, else the first
     property string editedName: "Full"
     readonly property int editIndex: {
@@ -641,7 +639,7 @@ FloatingWindow {
     Component { id: fontsComp;         FontsSettings { themeName: root.editTheme } }
     Component { id: barShapeComp;      BarShapeSettings { themeName: root.editTheme } }
     Component { id: animationsComp;    AnimationsSettings { themeName: root.editTheme } }
-    // The theme's shapes by kind of element (themes stage 7)
+    // The theme's shapes by kind of element
     Component { id: widgetsLookComp;       WidgetsShapeSettings       { themeName: root.editTheme } }
     Component { id: popupsComp;            PopupsShapeSettings        { themeName: root.editTheme } }
     Component { id: controlsComp;          ControlsShapeSettings      { themeName: root.editTheme } }
@@ -670,7 +668,7 @@ FloatingWindow {
 
     // Text fields under touch, as in a browser: a tap off a field takes its focus, so an
     // on-screen keyboard can hide. An ordinary window keeps the keyboard; Qt 6.12 stops
-    // asking for text only when told after a focus change (notes/plans/touch.md) — Qt 6.11
+    // asking for text only when told after a focus change — Qt 6.11
     // cannot, there the keyboard stays until the window loses the focus.
     // Leaves the focus alone while a question is open: a tap would take it from the modal
     TouchTextFocus { watching: !root.modalHost.open }

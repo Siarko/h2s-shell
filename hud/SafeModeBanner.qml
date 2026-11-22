@@ -2,7 +2,7 @@ import QtQuick
 import qs.components
 import qs.singletons
 
-// The shell started without modules (notes/plans/modules-management.md §7): why, in plain
+// The shell started without modules: why, in plain
 // words, the modules on when it crashed and one installed or updated in the last day
 // (ModuleInstallRules.safeModeBanner), with "Open Modules" (Settings → Modules, to turn
 // suspects off) and "Load modules" (the host loads its list again, out of safe mode). Under

@@ -4,14 +4,14 @@ import Quickshell
 import qs.components
 import qs.singletons
 
-// Settings → Modules, "Add a module" (notes/plans/modules-management.md §4, §6.2, §6.9): one
+// Settings → Modules, "Add a module": one
 // field for a repository address or a folder, "Choose folder…" (the shell's file chooser,
 // singletons/FileChooser.qml, in folder mode) and "Install". The install runs in the
 // installer with `preview`: its downloads one row each — a bar (the shared ProgressBar, waving
 // while git reports numbers) and the percent and speed —, then the preview: what the module
 // is and where it comes from, its API, administrator actions and programs, the chain (what it
 // also installs, updates, finds installed, can use, and what cannot be had), what it replaces,
-// where it goes, the statement for every module new to the modules folder (§2), "What's new"
+// where it goes, the statement for every module new to the modules folder, "What's new"
 // (the changelogs, in the page's side panel) and the choice: "Install and enable" / "Install,
 // keep off", or "Install anyway" when a dependency cannot be had, and "Cancel" (the downloads
 // are deleted). A failure says what happened and why, on one line. Only the job this section

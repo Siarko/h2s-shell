@@ -5,7 +5,7 @@ import Quickshell
 import qs.components
 import qs.singletons
 
-// The wallpaper the shell draws (Wallpapers, WallpaperRules; notes/plans/wallpapers.md),
+// The wallpaper the shell draws (Wallpapers, WallpaperRules),
 // edited in the profile picked in the settings window. A file is the same image
 // everywhere and nothing else applies; a folder's images are chosen per scope and mode.
 Flickable {

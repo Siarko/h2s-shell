@@ -5,7 +5,7 @@ import qs.panels
 
 // The bar's position and widgets, edited in the profile picked in the settings window. Each section
 // (left, center, right) is one setting: a profile either inherits it or has its own list
-// of widgets (notes/plans/global-profiles.md). The bar's shape is in the theme:
+// of widgets. The bar's shape is in the theme:
 // Appearance → Bar shape (BarShapeSettings).
 Flickable {
     id: root

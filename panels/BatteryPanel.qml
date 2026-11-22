@@ -7,8 +7,7 @@ import qs.panels.battery
 import qs.singletons
 
 // The battery popup: the charge and what it is doing, the system power profile with an
-// override (notes/plans/battery-popup.md, stage 1), and the history as UPower records it
-// (stage 2). The override lasts until the shell's
+// override, and the history as UPower records it. The override lasts until the shell's
 // profiles next want another power profile — the rule Profiles keeps — and the popup says
 // which profile that is.
 Item {

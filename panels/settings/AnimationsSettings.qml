@@ -8,8 +8,7 @@ import qs.singletons
 // each with its duration and its curve — a popup has one for opening and one for closing —
 // where each value comes from, Reset and Undo, and a preview playing it. Curves come from
 // the library (Curves page) or Qt. Changes go into the theme's draft (ThemeRules,
-// "Drafts"). The profile's animation speed and reduced motion apply on top, not here
-// (notes/plans/themes.md, stage 6).
+// "Drafts"). The profile's animation speed and reduced motion apply on top, not here.
 Flickable {
     id: root
 

@@ -3,7 +3,7 @@ import QtQuick.Layouts
 import qs.components
 import qs.singletons
 
-// Settings → Modules, the update queue (notes/plans/modules-management.md §6.5): its title line
+// Settings → Modules, the update queue: its title line
 // ("Updating" / "Updates finished", "2 of 3", and once it has ended an "×" that closes the
 // list), one row per module (ModuleUpdateRules.rowText, a waving bar while it downloads,
 // "Review" on a row waiting for approval) and, once the whole queue has ended, the one offer to

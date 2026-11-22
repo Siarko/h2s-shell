@@ -6,8 +6,7 @@ import qs.singletons
 // browser. Put it over the window's content, filling it; the window binds its keyboard
 // to `fieldTapped` (exclusive after a tap on a field, none after any other tap).
 //
-// Why it works this way — measured on the Framework (notes/plans/touch.md, "On-screen
-// keyboard, researched"):
+// Why it works this way — measured on the Framework:
 // - Qt asks for an on-screen keyboard (text-input enable) when its window gets the
 //   keyboard, and on Qt 6.11 stops only when the window loses it — moving the focus inside
 //   the window changes nothing. So the *window's* keyboard is what shows and hides it.

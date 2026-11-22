@@ -6,8 +6,8 @@ import qs.singletons
 import qs.singletons.network
 
 // A saved profile's settings (System → Network → Wi-Fi or Ethernet → a profile → Edit
-// connection): general, IPv4, IPv6, DNS, and the Wi-Fi's or the cable's own
-// (notes/plans/network.md). Read once (NetworkProfiles.readSettings); Save sends only what
+// connection): general, IPv4, IPv6, DNS, and the Wi-Fi's or the cable's own.
+// Read once (NetworkProfiles.readSettings); Save sends only what
 // changed, in one `nmcli connection modify` (NetworkRules.editorChanges); wrong fields
 // are marked and keep Save off (NetworkRules.editorErrors). An active profile's changes
 // apply when it connects again: "Save and reconnect" — then "Keep these settings?" for

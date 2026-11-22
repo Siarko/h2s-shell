@@ -7,7 +7,7 @@ import qs.singletons.network
 
 // System → Network → Ethernet: each wired device with its connection (the Overview's card),
 // or that its cable is out; and the wired profiles — which one is in use, connect
-// automatically, priority, use one, forget (notes/plans/network.md). Several profiles make
+// automatically, priority, use one, forget. Several profiles make
 // sense for one cable: home and an office with a fixed address, say. A profile's
 // addresses and DNS are the connection editor's (NetworkConnectionEditor).
 Item {

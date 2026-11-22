@@ -5,8 +5,8 @@ import qs.components
 import qs.singletons
 
 // The theme picked in the sidebar: what it extends, who uses it, what is wrong with it, and
-// managing the library of themes — new, duplicate, rename, delete (notes/plans/themes.md,
-// stage 6). Which theme a profile uses is a profile setting, on the General page.
+// managing the library of themes — new, duplicate, rename, delete.
+// Which theme a profile uses is a profile setting, on the General page.
 Flickable {
     id: root
 

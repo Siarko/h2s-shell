@@ -8,8 +8,7 @@ import qs.singletons
 // fonts, and the sizes by role (ThemeRules.fontTokens), each with a sample, where its
 // value comes from, Reset and Undo. Changes go into the theme's draft like colours do
 // (ThemeRules, "Drafts"). Glyphs a family lacks — Nerd Font icons under another text font
-// — are drawn by Qt from another installed font that has them (notes/plans/themes.md,
-// stage 6).
+// — are drawn by Qt from another installed font that has them.
 Flickable {
     id: root
 

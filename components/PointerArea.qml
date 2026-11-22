@@ -2,7 +2,7 @@ import QtQuick
 import qs.singletons
 
 // The MouseArea of a control that looks different under the pointer — for a mouse and a
-// finger alike (TODO 11.11, 11.14):
+// finger alike:
 //
 // - `lit` instead of `containsMouse` for that look. A finger is "over" a control only
 //   while it presses (Qt synthesises the mouse from it: in on the press, out on the

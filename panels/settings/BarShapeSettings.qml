@@ -6,8 +6,7 @@ import qs.singletons
 // The bar's shape in the theme picked in the sidebar: its size, margins, padding and
 // corners (ThemeRules.barTokenInfo), each with where its value comes from, Reset and Undo.
 // Changes go into the theme's draft (ThemeRules, "Drafts"); previewing shows them on the
-// bar as they are made. Moved here from the Bar page, which keeps the bar's widgets
-// (notes/plans/themes.md, stage 6).
+// bar as they are made. Moved here from the Bar page, which keeps the bar's widgets.
 Flickable {
     id: root
 

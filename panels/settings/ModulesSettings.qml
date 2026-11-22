@@ -5,7 +5,7 @@ import qs.components
 import qs.hud
 import qs.singletons
 
-// System → Modules → Installed (notes/plans/modules-management.md §4): every module as a card,
+// System → Modules → Installed: every module as a card,
 // enabled ones first, then the ones turned off, each group by name
 // (ModuleInstallRules.listOrder); a copy shadowed by another of its id shows inside the
 // winner's card, never as a card of its own. Closed, a card shows the module's icon and name —

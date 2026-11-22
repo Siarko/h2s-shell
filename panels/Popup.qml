@@ -170,7 +170,7 @@ LazyLoader {
         // While one is up on this screen, a popup by a bar at the top is cut to end above it
         // (ScreenKeyboard), its content moved within it: by itself to keep the focused field
         // in sight, or dragged / wheeled. A bar at the bottom is under the keyboard itself,
-        // and popups by a bar at a side are not cut yet (notes/plans/touch.md).
+        // and popups by a bar at a side are not cut yet.
         readonly property real _keyboardLimit: {
             if (!ScreenKeyboard.visible || edge !== "top" || ScreenKeyboard.screenName !== popup.screen?.name)
                 return Infinity;

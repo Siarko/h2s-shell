@@ -3,47 +3,10 @@
 # fails on a file with more, and fails on a line whose count is higher than the file's
 # mentions, so the list only shrinks: a change that rewords a file's mentions lowers its
 # count or removes its line. The list is meant to end empty.
-2 api/Api.qml
-1 Bar.qml
 5 CLAUDE.md
-1 components/BarWidget.qml
-1 components/ModuleContribution.qml
-1 components/ModuleSlot.qml
-1 components/OutsideTapCatcher.qml
-1 components/SmallButton.qml
-1 components/TouchTextFocus.qml
-1 components/VpnProvider.qml
-1 hud/SafeModeBanner.qml
-1 panels/BatteryPanel.qml
-1 panels/Popup.qml
-1 panels/settings/AnimationsSettings.qml
-1 panels/settings/AuthenticationSettings.qml
-1 panels/settings/BarSettings.qml
-1 panels/settings/BarShapeSettings.qml
-1 panels/settings/ColorsSettings.qml
-1 panels/settings/CurvesSettings.qml
-1 panels/settings/FontsSettings.qml
-1 panels/settings/GeneralSettings.qml
-1 panels/settings/ModuleInstallSection.qml
-1 panels/settings/ModulesSettings.qml
-1 panels/settings/ModuleUpdateQueue.qml
-1 panels/settings/NetworkConnectionEditor.qml
-1 panels/settings/NetworkEthernetSettings.qml
-2 panels/settings/NetworkOverviewSettings.qml
-1 panels/settings/NetworkVpnSettings.qml
-1 panels/settings/NetworkWifiSettings.qml
-1 panels/settings/PerformanceSettings.qml
-1 panels/settings/ProfilesSettings.qml
-1 panels/settings/SchemaSettingEditor.qml
-1 panels/settings/ShapeSettings.qml
-1 panels/settings/ThemesSettings.qml
-1 panels/settings/WallpaperSettings.qml
-6 panels/SettingsWindow.qml
-1 panels/widget_settings/HardwareWidgetSettings.qml
 1 scripts/energy-sample.py
 5 scripts/launch.sh
 2 scripts/lock-auth-methods.sh
-1 shell.qml
 1 singletons/Authentication.qml
 1 singletons/BarGeometry.qml
 1 singletons/BarLayout.qml

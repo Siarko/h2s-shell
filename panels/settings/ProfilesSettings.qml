@@ -5,8 +5,7 @@ import qs.components
 import qs.singletons
 
 // The profile list: what is active and why, each profile's conditions, order, enable
-// switch, name, and deletion. Their values are edited on the Performance page. See
-// notes/plans/adaptive-polling.md.
+// switch, name, and deletion. Their values are edited on the Performance page.
 Flickable {
     id: root
 

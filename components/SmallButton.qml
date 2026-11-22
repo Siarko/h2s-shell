@@ -7,7 +7,7 @@ import qs.singletons
 // "cancel", and three with a tone, worn as a border and filled
 // under the pointer: "delete" (stops or removes: red), "warning" (goes on, but think),
 // "success" (a good outcome) — so each kind can be styled on its own
-// (notes/plans/themes-stage7.md). The look of each is ThemeRules.buttonLook. `checked`
+// The look of each is ThemeRules.buttonLook. `checked`
 // shows a toggle that is on (filled with the accent), e.g. a scan running. As tall as its
 // label needs, never less than 24 px, so a larger font in a theme grows it rather than
 // spilling out; made narrower than its label, the label ends in "…".

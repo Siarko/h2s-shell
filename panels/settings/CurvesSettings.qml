@@ -7,8 +7,7 @@ import qs.singletons
 // The curves library (~/.config/h2s_shell/curves.json): named cubic Béziers that themes
 // use for their animation roles, alongside Qt's own curves. Shared by every theme and
 // profile. A curve is edited as a draft — the graph, the numbers and the preview follow
-// it — and written on Save. Assigning curves to roles comes with the Animations page
-// (notes/plans/themes.md, stages 5 and 6).
+// it — and written on Save. Assigning curves to roles comes with the Animations page.
 Flickable {
     id: root
 
