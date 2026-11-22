@@ -13,6 +13,8 @@
 #   the session is not reported active; at 12 s the other shows the screensaver and stays
 #   on, and now the session is active; input brings both back. An entry for a monitor not
 #   connected is kept through it all.
+#   a monitor plugged in: idle again until the first output is off, then an output is
+#   added — that is somebody at the computer: the first output is on again, as at input.
 #
 # hyprctl talks to the nested Hyprland only (the private runtime dir); the session's
 # monitors are never touched.
@@ -169,4 +171,13 @@ import json, sys
 off, saver = json.loads(sys.argv[3]), json.loads(sys.argv[4])
 print(json.dumps({"Gone|Elsewhere|": off, sys.argv[1]: off, sys.argv[2]: saver}, sort_keys=True))' "$off_id" "$saver_id" "$off_times" "$saver_times")
 check "round 3: the monitor not connected keeps its entry" test "$(entries_value)" = "$expected"
+
+# ---- A monitor plugged in ----
+move_pointer 700 400
+move_pointer 720 410
+check_timed 15 "round 4: idle 6 s: the first output off again" dpms_of "$off_output" false
+hyprctl output create headless > /dev/null
+check_within "$GUARD" "round 4: an output plugged in: the first output on again" dpms_of "$off_output" true
+check_within "$GUARD" "round 4: … the shell has it on, a new idle period" shown_is "$off_id" on
+check "round 4: … not active" active_is false
 check "no protocol error" no_protocol_errors

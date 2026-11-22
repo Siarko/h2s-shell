@@ -49,6 +49,10 @@ Singleton {
     // An idle lock asked for and not taken (no `locked` came: refused, the compositor busy)
     // is asked again while it is due, after a growing pause (ms)
     readonly property var lockRetry: ({ minimum: 5000, maximum: 300000 })
+    // A monitor that vanished while dark and is back within this long (ms) is the same
+    // monitor coming back (a monitor that drops off and reconnects on its own), not one
+    // plugged in; one the shell powered off is that whenever it comes back in the period
+    readonly property int replugWindow: 15000
     // A power action the reading after it does not show (the monitor still on after an off,
     // still off after an on) is asked again after a growing pause (ms)
     readonly property var powerRetry: ({ minimum: 2000, maximum: 300000, tries: 8 })
@@ -111,7 +115,11 @@ Singleton {
         const perMonitor = flag(given.perMonitor, false);
         const entries = perMonitor && _isMap(given.monitorIdle) ? given.monitorIdle : {};
         const times = {};
+        // Every key a monitor may have had (MonitorRules.overrideKeys): a monitor coming back
+        // under the other form of its id is still the one that went
+        const keys = {};
         for (const id of ids) {
+            keys[id] = MonitorRules.overrideKeys(byId[id]);
             const entry = MonitorRules.overrideFor(entries, byId[id], monitors);
             times[id] = _isMap(entry) ? stages(entry, own) : Object.assign({}, defaults);
         }
@@ -122,6 +130,7 @@ Singleton {
             lockedScreenOffAfter: seconds(given.lockedScreenOffTimeout, 60),
             perMonitor: perMonitor,
             times: times,
+            keys: keys,
             canPowerOff: power,
             commands: flag(given.screensaverCommands, false),
             monitors: ids,
@@ -209,6 +218,8 @@ Singleton {
             lockedDark: false,       // the lock screen's own screen-off reached
             sleeping: false,
             forced: false,           // the screensaver asked for (IPC, SetActive(true))
+            forcedAt: null,          // monotonic ms it was asked for
+            dark: false,             // every monitor that goes dark has, in this period (allDark)
             lockedThisPeriod: false, // locked in this idle period: the idle lock is not asked again
             lockAsks: 0,             // the idle lock asked this many times in this period, not taken
             lockAskedAt: -1,         // monotonic ms of the last ask, -1 none
@@ -225,7 +236,11 @@ Singleton {
             // reading (`read`: what a reading since the last ask said, null for none yet;
             // `gaveUp`: asked powerRetry.tries times, not asked again — kept until a reading
             // shows it, so a monitor left off stays remembered)
-            pendingPower: ({})
+            pendingPower: ({}),
+            connected: null,         // the monitor ids at the last step (null: no step yet)
+            // monitor id → { at, stage, shellOff }: monitors that vanished while dark in this
+            // period — one back in time is not a plug-in (replugWindow)
+            gone: ({})
         };
     }
 
@@ -275,17 +290,29 @@ Singleton {
             reached = 0;
         if (held(state) || !_counting(state))
             return reached;
-        const idleFor = now - state.idleSince;
-        let timeline = state.forced ? 1 : 0;
-        if (times.saverAfter > 0 && idleFor >= times.saverAfter * 1000)
+        let timeline = 0;
+        if (state.forced) {
             timeline = 1;
-        if (times.screenOffAfter > 0 && idleFor >= times.screenOffAfter * 1000)
-            timeline = 2;
+            if (_offOn(times) && now - state.forcedAt >= _forcedOffAfter(times) * 1000)
+                timeline = 2;
+        } else {
+            const idleFor = now - state.idleSince;
+            if (times.saverAfter > 0 && idleFor >= times.saverAfter * 1000)
+                timeline = 1;
+            if (times.screenOffAfter > 0 && idleFor >= times.screenOffAfter * 1000)
+                timeline = 2;
+        }
         return Math.max(reached, timeline);
     }
 
-    // → { monitorId: 0 | 1 | 2 } for every connected monitor: the stage each has reached now.
-    // A monitor plugged in during idle starts from the clock: past its times, at its stage
+    // A forced screensaver shows on every monitor; a monitor's screen-off then comes as long
+    // after it as it would after its own screensaver (seconds) — after its whole time where
+    // it has no screensaver before the screen-off — never at once
+    function _forcedOffAfter(times) {
+        return times.saverAfter < times.screenOffAfter ? times.screenOffAfter - times.saverAfter : times.screenOffAfter;
+    }
+
+    // → { monitorId: 0 | 1 | 2 } for every connected monitor: the stage each has reached now
     function stage(state, config, now) {
         const result = {};
         for (const id of config.monitors)
@@ -434,6 +461,11 @@ Singleton {
             for (const id of config.monitors) {
                 const times = _timesOf(config, id);
                 const reached = state.stage[id] ?? 0;
+                if (state.forced) {
+                    if (_offOn(times) && reached < 2)
+                        due.push(state.forcedAt + _forcedOffAfter(times) * 1000);
+                    continue;
+                }
                 if (times.saverAfter > 0 && reached < 1)
                     due.push(state.idleSince + times.saverAfter * 1000);
                 if (times.screenOffAfter > 0 && reached < 2)
@@ -461,6 +493,9 @@ Singleton {
         const next = Object.assign({}, state);
         next.shown = Object.assign({}, state.shown);
         next.stage = Object.assign({}, state.stage);
+        next.gone = {};
+        for (const id of Object.keys(state.gone ?? {}))
+            next.gone[id] = Object.assign({}, state.gone[id]);
         next.power = Object.assign({}, state.power);
         next.pendingPower = {};
         for (const id of Object.keys(state.pendingPower ?? {}))
@@ -473,6 +508,8 @@ Singleton {
         next.idleSince = now;
         next.stage = {};
         next.forced = false;
+        next.dark = false;
+        next.gone = {};
         next.lockedThisPeriod = next.locked;
         next.lockAsks = 0;
         next.lockAskedAt = -1;
@@ -624,6 +661,7 @@ Singleton {
             break;
         case "force":
             next.forced = true;
+            next.forcedAt = now;
             next.idleSince = now - config.saverAfter * 1000;
             break;
         case "busForce":
@@ -631,6 +669,7 @@ Singleton {
             // screen's own stages apply and no app starts the screensaver's
             if (busForceTakes(next)) {
                 next.forced = true;
+                next.forcedAt = now;
                 next.idleSince = now - config.saverAfter * 1000;
             }
             break;
@@ -642,6 +681,8 @@ Singleton {
         default:
             return { state: state, actions: [], ignored: "unknown event" };
         }
+        if (_pluggedIn(next, config, now))
+            wake = true;
         // Input while going to sleep is the hand that closed the lid: the resume wakes
         if (wake && !next.sleeping)
             _wake(next, now, actions);
@@ -649,6 +690,40 @@ Singleton {
         if (restored.length > 0)
             actions.unshift({ type: "powerOn", ids: restored, restore: true });
         return { state: next, actions: actions, ignored: "" };
+    }
+
+    // The monitors that came and went since the last step: a monitor plugged in is somebody
+    // at the computer, as input (a new idle period; locked, the lock stays). Not a plug-in:
+    // the first step, a change while going to sleep (the resume wakes), and a monitor that
+    // vanished while dark in this period and is back — powered off by the shell (some
+    // monitors drop off when their power is cut and reconnect), or within replugWindow —
+    // which takes back the stage it had. Vanished while dark: remembered for that (`gone`).
+    function _pluggedIn(next, config, now) {
+        const before = next.connected;
+        next.connected = config.monitors.slice();
+        if (before === null)
+            return false;
+        for (const id of before) {
+            if (config.monitors.includes(id))
+                continue;
+            const shown = next.shown[id] ?? "on";
+            if (shown !== "on")
+                next.gone[id] = { at: now, stage: next.stage[id], shellOff: shown === "off" };
+        }
+        let plugged = false;
+        for (const id of config.monitors) {
+            if (before.includes(id))
+                continue;
+            const key = (config.keys?.[id] ?? [id]).find(candidate => candidate in next.gone);
+            const back = key !== undefined ? next.gone[key] : null;
+            if (back !== null && (back.shellOff || now - back.at <= replugWindow)) {
+                next.stage[id] = back.stage;
+                delete next.gone[key];
+            } else if (!next.sleeping) {
+                plugged = true;
+            }
+        }
+        return plugged;
     }
 
     function _reconcile(next, config, now, actions) {
@@ -733,7 +808,14 @@ Singleton {
             }
         }
 
-        const dark = allDark(next, config, next.stage);
+        // Once every monitor that goes dark has, the period stays dark until input, or until
+        // no monitor goes dark any more (every stage switched off): a monitor given a stage
+        // later, or plugged back, does not take it back
+        if (allDark(next, config, next.stage))
+            next.dark = true;
+        else if (!config.monitors.some(id => _goesDark(_timesOf(config, id), next)))
+            next.dark = false;
+        const dark = next.dark;
         if (dark && !next.commandStarted && config.commands) {
             actions.push({ type: "startCommand" });
             next.commandStarted = true;

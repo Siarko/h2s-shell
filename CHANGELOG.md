@@ -486,7 +486,8 @@ The interface modules are written against (`qs.api`), versioned on its own
   times on another port) its own switches and times for both, on the one clock from your
   last input — the laptop panel off at 2 min, an OLED off at 5 min without a screensaver,
   an LCD with the screensaver at 5 min; a monitor without an entry follows the default.
-  The screensaver commands start once every monitor that goes dark has. Not on a settings
+  The screensaver commands start once every monitor that goes dark has. A monitor plugged
+  in counts as input. Not on a settings
   page yet; for now set over IPC: `idle state` lists the monitors,
   `idle setMonitorTimes <id> <json|default>`.
 - Safe mode has a banner, under the bar and at the top of Settings → Modules: why the shell

@@ -299,8 +299,11 @@ screen's screen-off are off by default. No idle daemon is needed; one can still 
   the default's): the laptop panel off at 2 minutes, an OLED off at 5 without a
   screensaver, an LCD with the screensaver at 5 and off at 15. One clock for all: input on
   any monitor counts for every one, and an app keeping the screen on holds every monitor.
-  A monitor plugged in while you are away goes straight to its stage if its times have
-  passed. The screensaver commands start once every monitor that goes dark has (a monitor
+  A monitor plugged in counts as you being back, as input: whatever was reached ends and
+  the counting starts again from it (on the lock screen the lock stays). A monitor that
+  drops off and reconnects while dark — some do when their power is cut — is not one
+  plugged in. A screensaver started by hand shows on every monitor; each one's screen-off
+  then comes as long after it as after its own screensaver. The screensaver commands start once every monitor that goes dark has (a monitor
   with both stages off is not waited for). Where monitors cannot be turned off, a monitor
   is known by the make, model and serial Qt reports, and its own times still apply (its
   screen-off the black screensaver). The idle lock stays one for the session. Set
