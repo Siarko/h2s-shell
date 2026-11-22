@@ -353,32 +353,26 @@ Singleton {
 
     // What the stack in /etc/pam.d/polkit-1 (its text) does first: "fingerprint-first"
     // (pam_fprintd before pam_unix), "password-first" (pam_unix first: an empty password
-    // goes on to the reader), "password" (no reader), "" (not known: no file, an include)
+    // goes on to the reader), "password" (no reader), "" (not known: no file, an include
+    // that is not in the text). The text alone: pamStackOrderOf takes a stack read across
+    // files.
     function pamStackOrder(text) {
-        let fingerprint = -1, password = -1, index = 0;
-        for (const raw of String(text ?? "").split("\n")) {
-            const line = raw.replace(/#.*$/, "").trim();
-            if (line === "")
-                continue;
-            const tokens = line.split(/\s+/);
-            if (tokens[0].replace(/^-/, "") !== "auth")
-                continue;
-            // The control may be a bracketed list with spaces: the module follows it
-            let at = 1;
-            if (tokens[at]?.startsWith("[")) {
-                while (at < tokens.length && !tokens[at].endsWith("]"))
-                    at++;
-            }
-            const control = tokens[1] ?? "";
-            const module = tokens[at + 1] ?? "";
-            if (control === "include" || control === "substack" || line.startsWith("@include"))
-                return fingerprint < 0 && password < 0 ? "" : (fingerprint >= 0 ? "fingerprint-first" : "password-first");
-            const name = module.slice(module.lastIndexOf("/") + 1);
-            if (name === "pam_fprintd.so" && fingerprint < 0)
-                fingerprint = index;
-            else if (name === "pam_unix.so" && password < 0)
-                password = index;
-            index++;
+        const path = PamStackRules.nixosDirectories[0] + "/polkit-1";
+        return pamStackOrderOf(PamStackRules.stack("polkit-1", typeof text === "string" ? { [path]: text } : {},
+                                                   PamStackRules.nixosDirectories));
+    }
+
+    // The same for a stack PamStackRules.stack read. Where it is not known, the lines
+    // before the first gap decide what they can: a reader or a password already there
+    // comes first; nothing yet is "".
+    function pamStackOrderOf(stack) {
+        const lines = stack && Array.isArray(stack.lines) ? stack.lines.slice(0, Math.max(0, stack.unknownAt ?? 0)) : [];
+        const fingerprint = lines.findIndex(line => line.moduleName === "pam_fprintd.so");
+        const password = lines.findIndex(line => line.moduleName === "pam_unix.so");
+        if (!stack || stack.known !== true) {
+            if (fingerprint < 0 && password < 0)
+                return "";
+            return fingerprint >= 0 && (password < 0 || fingerprint < password) ? "fingerprint-first" : "password-first";
         }
         if (password < 0)
             return fingerprint < 0 ? "" : "fingerprint-first";
