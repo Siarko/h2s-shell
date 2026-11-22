@@ -47,8 +47,9 @@ QML needs no build; one helper is compiled — `scripts/build-helper.sh` (cmake,
 compiler, Qt 6's Core and DBus development files) builds `helper/` into
 `~/.cache/h2s-shell/helper/<checkout>/`, never into the tree. NixOS: the package builds it
 (`nix/package.nix`, into its `libexec/`); Arch: `install.sh` builds it, and
-`scripts/launch.sh` rebuilds it at start when its source changed (a failed build: the shell
-runs without it, said once in the launcher's log). The shell is handed its path as
+`scripts/launch.sh`, when its source changed, hands over the binary it has at once and
+rebuilds in the background for the next start — a start never waits for a build (none yet
+or a failed build: the shell runs without it, said once in the launcher's log). The shell is handed its path as
 `H2S_SHELL_HELPER` (`singletons/Helper.qml`).
 
 ```
@@ -110,7 +111,9 @@ mockup the owner sees before any code (`notes/workflow.md`).
 - **The helper (`helper/`) is I/O only**: it reports and acts on request, decisions stay
   in `*Rules.qml`. A capability goes into it only when Quickshell cannot do it, and leaves
   it when Quickshell can. It talks to the shell in JSON lines on its standard input and
-  output, and ends when its input closes.
+  output, and ends when its input closes. It runs as the user only — never through
+  pkexec or sudo; a privileged action goes through the root-helper path, from a root-owned
+  location (`tests/run-helper.sh` checks no escalation names it).
 - **State and I/O live in `singletons/`.** QML under `widgets/`, `panels/` and `hud/`
   renders that state and calls singleton methods — it should not own system access.
 - **All colours and type sizes come from `singletons/Theme.qml`.** No literal colours

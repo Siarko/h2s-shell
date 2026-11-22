@@ -19,8 +19,8 @@
 # The helper (the checkout's helper/, a small C++/Qt program for what the shell cannot do
 # from QML) is built by scripts/build-helper.sh, as you, into ~/.cache/h2s-shell/helper —
 # with cmake, a C++ compiler (base-devel) and Qt 6's development files (qt6-base). The
-# shell's launcher rebuilds it at start when an update changed its source; a build that
-# fails leaves the shell running without it.
+# shell's launcher rebuilds it in the background when an update changed its source; a
+# build that fails leaves the shell running without it.
 #
 # On NixOS use the flake instead (see the README).
 

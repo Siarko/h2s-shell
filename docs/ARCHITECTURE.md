@@ -75,22 +75,32 @@ the tests use it.
 
 `scripts/launch.sh` finds the helper before starting the shell and hands its path to the
 shell as `H2S_SHELL_HELPER` (empty: none). In this order: `H2S_HELPER`, a path (set and
-empty: no helper at all); the checkout's own build, rebuilt when its source changed
-(`scripts/build-helper.sh --if-changed`) — where the installation brings no helper, or the
-checkout has built one; the installation's, `$H2S_SHELL_LIBEXEC/h2s-helper`. A build is
-bounded in time and not tried while the session is locked by a shell that died. No helper,
-or a build that failed: the shell runs without it, and the launcher's log says so once per
-change of that outcome. `singletons/Helper.qml` runs `--version` once at start and keeps
+empty: no helper at all); the checkout's own build — where the installation brings no
+helper, or the checkout has built one; the installation's, `$H2S_SHELL_LIBEXEC/h2s-helper`.
+A start never waits for a build: when the checkout's source changed since its build
+(`scripts/build-helper.sh --status`), the binary there is handed over as it is and
+`--if-changed` runs in the background (detached, niced) for the next start; with no binary
+yet the shell starts without one. No build while the session is locked by a shell that
+died, and none again for a source that failed to build. No helper: the shell runs without
+it, and the launcher's log says so once per change of that outcome. `singletons/Helper.qml` runs `--version` once at start and keeps
 the state (`missing`, `ready`, `outdated`, `failed`); a feature that uses the helper
 checks `Helper.available`.
 
+The helper runs as the user only — never through pkexec or sudo, and its build never as
+root (`build-helper.sh` refuses). A privileged action goes through the root-helper path,
+from a root-owned location, never one the user can write; `tests/run-helper.sh` checks that no escalation names the helper, its build or
+its path.
+
 `scripts/build-helper.sh` builds the checkout's `helper/` into
 `${XDG_CACHE_HOME:-~/.cache}/h2s-shell/helper/<a hash of the checkout's path>/` (or
-`--out <dir>`), never into the tree: it refuses a directory inside the checkout, a link, or
-one holding files it did not make. The binary is renamed into place, so a running helper
-keeps running; a stamp of the source (`helper/`, the script, the shell's version) beside it
-says whether `--if-changed` has anything to do, and a source that failed to build is not
-tried again until it changes or the script is run without `--if-changed`. It needs cmake,
+`--out <dir>`), never into the tree: it refuses a directory inside the checkout, a link,
+one holding files it did not make, one not the user's, or one inside a directory the group
+or others can write to, and makes it mode 700. The binary is renamed into place, so a
+running helper keeps running; a stamp of the source (`helper/` and the script — not the
+shell's version, which alone rebuilds nothing) beside it says whether `--if-changed` has
+anything to do. The build is bounded (`--time-limit`, 300 s); a source that failed or ran
+out of time is not tried again until it changes or the script is run without
+`--if-changed`. It needs cmake,
 a C++ compiler and Qt 6's development files (Core, DBus).
 
 #### NixOS
@@ -106,7 +116,7 @@ package's helper unless it has built its own.
 `install.sh` installs `cmake`, `base-devel` (the compiler) and `qt6-base` with the other
 packages, and runs `scripts/build-helper.sh` as the user after the clone and at
 `--update`; a build that fails is a warning, not the install's failure. After an update the
-launcher rebuilds the helper at the next start.
+launcher rebuilds the helper in the background; the rebuilt one runs from the next start.
 
 Singletons are created lazily, on first reference. A singleton that nothing touches
 never runs its timers — which is why hardware polling only costs anything when the
@@ -1817,9 +1827,12 @@ build that fails being a warning only. It runs on both systems.
 `ping` conversation driven as the shell drives it (a round trip, what is not a JSON
 object, a line too long, its standard input closed: it ends). Then
 `scripts/build-helper.sh` in a copy of the tree with a stand-in `cmake` (the directories it
-refuses, a build, `--if-changed` with the source unchanged and changed, a failed build),
-and `scripts/launch.sh --helper` with a stand-in build script (each place the helper is
-looked for, a failed build, a locked session, the log line once per outcome). The shell's
+refuses, `--status`, a build, `--if-changed` with the source unchanged, changed and only
+the version changed, a failed build, one past its time limit), and `scripts/launch.sh
+--helper` with a stand-in build script (each place the helper is looked for, a stale build
+handed over at once and rebuilt in the background without being waited for, none yet, a
+failed build, a locked session, the log line once per outcome), and that nothing runs the
+helper through pkexec, sudo or the like. The shell's
 side, `HelperRules` and the `--version` reading, is the unit suite `HelperTest`, on
 stand-in programs.
 

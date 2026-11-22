@@ -416,22 +416,24 @@ discover_modules() {
 
 # The shell's helper (helper/, a C++/Qt program; scripts/build-helper.sh), handed to the
 # shell as H2S_SHELL_HELPER (output, the shell's: the program's path, empty when there is
-# none; singletons/Helper.qml reads it). Looked for in this order:
+# none; singletons/Helper.qml reads it). It runs as the user only, never through pkexec or
+# sudo. Looked for in this order:
 #   1. H2S_HELPER (input): a path to that program; set and empty, no helper at all (the
 #      lock test bed);
-#   2. this checkout's own build (scripts/build-helper.sh --if-changed: rebuilt here when
-#      the helper's source changed since, as after an update) — where the installation
-#      has no helper of its own (Arch), or where this checkout has built one already;
+#   2. this checkout's own build — where the installation has no helper of its own (Arch),
+#      or where this checkout has built one already;
 #   3. the installation's: $H2S_SHELL_LIBEXEC/h2s-helper (the NixOS package's command sets
 #      it to the package's).
-# A build is bounded ($helper_build_seconds s) and not tried while the session is locked
-# by a shell that died (its restart must not wait for a compiler). None found, or a build
-# that failed: the shell runs without it. Said once per change of that outcome (kept in
-# $runtime_dir), never at every start; the build's own output is in its log, beside it.
+# The start never waits for a build: when the checkout's source changed since its build
+# (scripts/build-helper.sh --status, as after an update), the binary there is handed over as
+# it is and the build runs in the background (detached, niced, bounded by the script) for
+# the next start; with no binary yet the shell starts without one. Not while the session is
+# locked by a shell that died, and not again for a source that failed to build (the script
+# remembers; run it by hand). Said once per change of the outcome (kept in $runtime_dir),
+# never at every start; the build's own output is in its log, beside it.
 helper_state=$runtime_dir/h2s-shell-helper
-helper_build_seconds=300
 find_helper() {
-    local found="" outcome="" previous="" build=$shell_dir/scripts/build-helper.sh own=""
+    local found="" outcome="" previous="" build=$shell_dir/scripts/build-helper.sh own="" status="" background=""
     if [ -n "${H2S_HELPER+set}" ]; then
         if [ -z "$H2S_HELPER" ]; then
             outcome="none: H2S_HELPER is set and empty"
@@ -445,23 +447,25 @@ find_helper() {
         if [ -f "$shell_dir/helper/CMakeLists.txt" ] && [ -f "$build" ]; then
             own=$("$BASH" "$build" --print-path 2> /dev/null < /dev/null) || own=""
             if [ -n "$own" ] && { [ -z "${H2S_SHELL_LIBEXEC:-}" ] || [ -x "$own" ]; }; then
-                if died_locked; then
-                    if [ -x "$own" ]; then
-                        found=$own
-                        outcome="found: $found (this checkout's, not rebuilt while the session is locked)"
-                    fi
-                else
-                    if command -v timeout > /dev/null; then
-                        found=$(timeout -k 5 "$helper_build_seconds" "$BASH" "$build" --if-changed < /dev/null) || found=""
-                    else
-                        found=$("$BASH" "$build" --if-changed < /dev/null) || found=""
-                    fi
-                    if [ -n "$found" ]; then
-                        outcome="found: $found (this checkout's build)"
-                    else
-                        outcome="failed: this checkout's build did not work (log: ${own%/*}/build.log)"
-                    fi
-                fi
+                status=$("$BASH" "$build" --status 2> /dev/null < /dev/null) || status=""
+                [ -x "$own" ] && found=$own
+                case "$status" in
+                    current) outcome="found: $own (this checkout's build)" ;;
+                    stale | missing)
+                        if died_locked; then
+                            [ -z "$found" ] || outcome="found: $own (this checkout's, not rebuilt while the session is locked)"
+                        else
+                            background=1
+                            if [ -n "$found" ]; then
+                                outcome="found: $own (this checkout's; its source changed: rebuilding in the background for the next start)"
+                            else
+                                outcome="none yet: building this checkout's in the background for the next start (log: ${own%/*}/build.log)"
+                            fi
+                        fi
+                        ;;
+                    failed) outcome="failed: this checkout's source did not build (log: ${own%/*}/build.log; scripts/build-helper.sh tries again)${found:+, the older build used}" ;;
+                    *) found=""; outcome="failed: scripts/build-helper.sh --status gave no answer" ;;
+                esac
             fi
         fi
         if [ -z "$found" ] && [ -n "${H2S_SHELL_LIBEXEC:-}" ] && [ -x "$H2S_SHELL_LIBEXEC/h2s-helper" ]; then
@@ -469,6 +473,15 @@ find_helper() {
             outcome="found: $found (the installation's)${outcome:+, after $outcome}"
         fi
         [ -n "$outcome" ] || outcome="none: not built (scripts/build-helper.sh builds it)"
+    fi
+    if [ -n "$background" ]; then
+        # Out of this process's session and group: neither a stop of the shell nor the
+        # supervisor's end takes it down halfway (the script's own lock and rename keep a
+        # half-done build from being used)
+        local runner=()
+        command -v setsid > /dev/null && runner+=(setsid)
+        command -v nice > /dev/null && runner+=(nice -n 10)
+        ( trap '' HUP; exec "${runner[@]}" "$BASH" "$build" --if-changed ) < /dev/null > /dev/null 2>&1 &
     fi
     export H2S_SHELL_HELPER="$found"
     [ -f "$helper_state" ] && { IFS= read -r previous < "$helper_state"; } 2> /dev/null

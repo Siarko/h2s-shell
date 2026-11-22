@@ -9,12 +9,15 @@
 #      subcommand, and `ping` driven as the shell drives it: ready, a round trip, what is
 #      not a JSON object, a line too long, and its standard input closed: it ends;
 #   2. scripts/build-helper.sh in a copy of the tree, with a stand-in cmake: the
-#      directories it refuses, --print-path, a build, --if-changed with the source as it
-#      was and changed, a build that fails (and is not tried again by --if-changed);
+#      directories it refuses (also by owner and mode), --print-path, --status, a build,
+#      --if-changed with the source as it was, changed, and only the version changed, a
+#      build that fails or runs out of time (and is not tried again by --if-changed);
 #   3. scripts/launch.sh --helper (what the shell is handed as H2S_SHELL_HELPER) in a copy
 #      of the tree, with a stand-in build-helper.sh: H2S_HELPER given, given empty, the
-#      checkout's build, a failed build, the installation's helper (H2S_SHELL_LIBEXEC),
-#      a session locked by a dead shell — and the launcher's log line, once per outcome.
+#      checkout's build current, stale (handed over at once, rebuilt in the background,
+#      never waited for), missing, failed, the installation's helper (H2S_SHELL_LIBEXEC),
+#      a session locked by a dead shell — and the launcher's log line, once per outcome;
+#   4. nothing runs the helper or its build through pkexec, sudo or the like.
 #
 #   tests/run-helper.sh
 #
@@ -138,6 +141,7 @@ case "\$1" in
     -S) exit 0 ;;
     --build)
         [ -e "$control/fail" ] && { echo "a compiler error" >&2; exit 1; }
+        [ -e "$control/hang" ] && exec sleep 30
         mkdir -p "\$2"
         printf '#!/bin/sh\necho built %s\n' "\$(cat "$control/generation" 2> /dev/null)" > "\$2/h2s-helper"
         chmod +x "\$2/h2s-helper"
@@ -194,6 +198,27 @@ rm "$control/fail"
 echo 3 > "$control/generation"
 build > /dev/null
 check "build-helper without --if-changed: tried again, and built" test $? = 0 -a "$(builds)" = 4 -a "$("$again")" = "built 3"
+check "build-helper: the build directory is the user's alone (700)" test "$(stat -c %a "$(dirname "$first")")" = 700
+check "build-helper --status: current" test "$(build --status)" = current
+sed -i 's/readonly property string number: "[^"]*"/readonly property string number: "99.0.0"/' "$tree/singletons/Version.qml"
+build --if-changed > /dev/null
+check "build-helper --if-changed, only the shell's version changed: no build" test "$(builds)" = 4
+echo "// changed for the status" >> "$tree/helper/src/main.cpp"
+check "build-helper --status, the source changed: stale" test "$(build --status)" = stale
+: > "$control/hang"
+started_at=$SECONDS
+build --if-changed --time-limit 1 > /dev/null
+check "build-helper: a build past its time limit: ended, exit 1" test $? = 1 -a $((SECONDS - started_at)) -lt 10
+check "… said so" grep -q "longer than 1 s" "$work/build.err"
+check "… and counted as failed (--status)" test "$(build --status)" = failed
+build --if-changed > /dev/null
+check "… not tried again by --if-changed" test $? = 1 -a "$(builds)" = 5
+rm "$control/hang"
+check "build-helper --status, nothing built there: missing" test "$(build --out "$work/fresh" --status)" = missing
+mkdir -p "$work/shared"
+chmod 775 "$work/shared"
+build --out "$work/shared/out" > /dev/null
+check "build-helper: a directory in one the group can write to: refused (2)" test $? = 2
 check "build-helper: nothing was written into the checkout" \
     test "$(cd "$tree" && find . -newer "$tree/singletons/Version.qml" -type f | grep -v '^./helper/src/main.cpp$')" = ""
 
@@ -204,57 +229,101 @@ cp "$REPO/scripts/launch.sh" "$REPO/scripts/seams.sh" "$shell/scripts/"
 : > "$shell/helper/CMakeLists.txt"
 printf '#!/bin/sh\nexit 0\n' > "$work/libexec/h2s-helper"
 chmod +x "$work/libexec/h2s-helper"
+# The stand-in: --status answers what control/status says; a build notes its start and end
+# (in builds, kept across cases), takes 3 s with control/slow, and makes the binary
 cat > "$shell/scripts/build-helper.sh" << STANDIN
 #!$(type -P bash)
 echo "build-helper \$*" >> "$control/launcher-log"
 case "\$1" in
     --print-path) echo "$work/own/h2s-helper"; exit 0 ;;
+    --status) cat "$control/status"; exit 0 ;;
 esac
-[ -e "$control/build-fails" ] && exit 1
+echo start >> "$control/builds"
+[ -e "$control/slow" ] && sleep 3
 printf '#!/bin/sh\nexit 0\n' > "$work/own/h2s-helper"
 chmod +x "$work/own/h2s-helper"
-echo "$work/own/h2s-helper"
+echo end >> "$control/builds"
 STANDIN
+: > "$control/builds"
 helper_for() {
     : > "$control/launcher-log"
     env -i PATH="$PATH" HOME="$work/home" XDG_RUNTIME_DIR="$work/runtime" "$@" \
         bash "$shell/scripts/launch.sh" --helper 2> /dev/null
 }
 said() { grep -c "helper: " "$work/runtime/h2s-shell-launcher.log" 2> /dev/null || echo 0; }
-asked_to_build() { grep -q -- "--if-changed" "$control/launcher-log"; }
+last_said() { grep "helper: " "$work/runtime/h2s-shell-launcher.log" | tail -n 1; }
+asked_status() { grep -q -- "--status" "$control/launcher-log"; }
+started() { grep -c start "$control/builds"; }
+settled() { [ "$(grep -c start "$control/builds")" = "$(grep -c end "$control/builds")" ]; }
+wait_for() { local tries=0; until "${@:2}"; do [ "$tries" -ge $(($1 * 20)) ] && return 1; sleep 0.05; tries=$((tries + 1)); done; }
+own_binary() { printf '#!/bin/sh\nexit 0\n' > "$work/own/h2s-helper"; chmod +x "$work/own/h2s-helper"; }
+# (Counted at each try, not once when the check is written)
+more_builds_than() { [ "$(started)" -gt "$1" ]; }
+# A build started in the background shows within this long, or not at all
+no_build_since() { ! wait_for 1 more_builds_than "$1"; }
 
-: > "$control/build-fails"
-check "launch.sh: no installation helper, the build fails: none" test "$(helper_for)" = ""
-check "… the build was asked for (--if-changed)" asked_to_build
-check "… and said in the launcher's log, with 'runs without it'" grep -q "helper: failed: .*the shell runs without it" "$work/runtime/h2s-shell-launcher.log"
+echo missing > "$control/status"
+before=$(started)
+check "launch.sh: no installation helper, none built yet: none this start" test "$(helper_for)" = ""
+check "… the build started in the background, for the next start" wait_for 5 more_builds_than "$before"
+check "… said, with 'runs without it'" grep -q "helper: none yet: building .*the shell runs without it" "$work/runtime/h2s-shell-launcher.log"
+wait_for 10 settled
+echo stale > "$control/status"
+: > "$control/slow"
+before=$(started)
+begun=$SECONDS
+check "launch.sh: the source changed, a build there: that binary at once" test "$(helper_for)" = "$work/own/h2s-helper"
+check "… without waiting for the build (3 s here)" test $((SECONDS - begun)) -le 2
+check "… which runs in the background" wait_for 5 more_builds_than "$before"
+check "… and ends after the launcher has" eval '! settled'
+check "… said" grep -q "rebuilding in the background" <<< "$(last_said)"
+wait_for 10 settled
+rm "$control/slow"
+echo current > "$control/status"
+before=$(started)
+check "launch.sh: the checkout's build is current: it, nothing built" test "$(helper_for)" = "$work/own/h2s-helper"
+check "… nothing built" no_build_since "$before"
 lines=$(said)
 helper_for > /dev/null
 check "… said once: the same outcome again adds no line" test "$(said)" = "$lines"
-rm "$control/build-fails"
-check "launch.sh: no installation helper, the build works: the checkout's" test "$(helper_for)" = "$work/own/h2s-helper"
-check "… and that change of outcome said" test "$(said)" = $((lines + 1))
-check "launch.sh: H2S_HELPER given: that one, nothing built" \
+echo failed > "$control/status"
+before=$(started)
+check "launch.sh: this source failed to build: the older build there, not built again" test "$(helper_for)" = "$work/own/h2s-helper"
+check "… nothing built" no_build_since "$before"
+check "… the failure said, with the log" grep -q "helper: failed: .*build.log" <<< "$(last_said)"
+rm "$work/own/h2s-helper"
+check "launch.sh: failed and no build there, the installation has one: the installation's" \
+    test "$(helper_for H2S_SHELL_LIBEXEC="$work/libexec")" = "$work/libexec/h2s-helper"
+check "launch.sh: the installation has one, this checkout none: the installation's, the checkout not asked" \
+    test "$(helper_for H2S_SHELL_LIBEXEC="$work/libexec")" = "$work/libexec/h2s-helper"
+check "… its status not even asked" eval '! asked_status'
+own_binary
+check "launch.sh: H2S_HELPER given: that one" \
     test "$(helper_for H2S_HELPER="$work/libexec/h2s-helper")" = "$work/libexec/h2s-helper"
-check "… nothing built" eval '! asked_to_build'
-check "launch.sh: H2S_HELPER set and empty: none, nothing built" test "$(helper_for H2S_HELPER=)" = ""
-check "… nothing built" eval '! asked_to_build'
+check "… the checkout not asked" eval '! asked_status'
+check "launch.sh: H2S_HELPER set and empty: none" test "$(helper_for H2S_HELPER=)" = ""
+check "… the checkout not asked" eval '! asked_status'
 check "launch.sh: H2S_HELPER not a program: none" test "$(helper_for H2S_HELPER="$work/nothing")" = ""
-check "launch.sh: the installation has one, this checkout has built its own: the checkout's, rebuilt if changed" \
-    test "$(helper_for H2S_SHELL_LIBEXEC="$work/libexec")" = "$work/own/h2s-helper"
-check "… the build asked for" asked_to_build
-: > "$control/build-fails"
-check "… and when that rebuild fails: the installation's" \
-    test "$(helper_for H2S_SHELL_LIBEXEC="$work/libexec")" = "$work/libexec/h2s-helper"
-rm "$control/build-fails" "$work/own/h2s-helper"
-check "launch.sh: the installation has one, this checkout none: the installation's" \
-    test "$(helper_for H2S_SHELL_LIBEXEC="$work/libexec")" = "$work/libexec/h2s-helper"
-check "… nothing built" eval '! asked_to_build'
-printf '#!/bin/sh\nexit 0\n' > "$work/own/h2s-helper"
-chmod +x "$work/own/h2s-helper"
+echo stale > "$control/status"
 echo "locked key" > "$work/runtime/h2s-shell-lock"
+before=$(started)
 check "launch.sh: the session locked by a shell that died: the checkout's build as it is" test "$(helper_for)" = "$work/own/h2s-helper"
-check "… not rebuilt" eval '! asked_to_build'
+check "… not rebuilt" no_build_since "$before"
 rm "$work/runtime/h2s-shell-lock"
+wait_for 10 settled
+
+# ---- 4. Never as root ------------------------------------------------------------------
+# The helper is the user's program: nothing that names it, its build or its path runs it
+# through a way to become root (a privileged action goes through the root-helper path, from
+# a root-owned location)
+escalation='(pkexec|sudo|doas|run0|su -c)'
+helper_names='(h2s-helper|build-helper|H2S_SHELL_HELPER|H2S_HELPER|H2S_SHELL_LIBEXEC|helper/src)'
+near=$(cd "$REPO" && grep -rnE "$escalation.*$helper_names|$helper_names.*$escalation" \
+    --include='*.sh' --include='*.qml' --include='*.nix' --include='*.cpp' --include='*.h' --include='*.txt' \
+    scripts singletons helper nix install.sh shell.qml api components 2> /dev/null | grep -v ':[0-9]*:[[:space:]]*\(#\|//\)')
+[ -z "$near" ] || printf '%s\n' "$near"
+check "nothing runs the helper or its build through pkexec, sudo, doas, run0 or su" test -z "$near"
+check "build-helper.sh refuses to run as root" grep -q 'id -u)" != 0 ] ||' "$REPO/scripts/build-helper.sh"
 
 echo
 if [ "$failed" = 0 ]; then echo "run-helper.sh: passed"; else echo "run-helper.sh: FAILED"; fi
