@@ -9,7 +9,11 @@
 #              killed; '>=' -> '>' and
 #              18 -> 19 survived, named with their lines; '<' -> '<=' and '>' -> '>=' in
 #              `list<int>` not compiled; the summary says so; exit 0
-#   restored   after the run the copy's file is as it was, and no temp dir is left
+#   untouched  after the run the subject in the tree it ran from is as it was (mutants are
+#              made in mutate.sh's own copies), and no temp dir is left
+#   judged     --judge on canned runs: a load error naming the subject is "not compiled",
+#              after a time-out (124) or a kill (137) too; a TypeError or ReferenceError
+#              naming it is "killed"; a failed check "killed"; 0 "survived"; 2 "not run"
 #   unjudged   a suite that fails unmutated: status 2, no mutant run
 #   refused    a file outside the tree, a test file, a wrong option: status 2
 #
@@ -80,8 +84,8 @@ check "the negated returns killed" grep -q -F "killed  $subject:11:9 " "$work/ru
 check "… both" grep -q -F "killed  $subject:15:9 " "$work/run.log"
 check "the dropped '!' killed" grep -q -F "killed  $subject:15:16 " "$work/run.log"
 
-echo "restored:"
-check "the copy's file as it was" cmp -s "$fixtures/FixtureRules.qml" "$tree/$subject"
+echo "untouched:"
+check "the subject in the tree not changed" cmp -s "$fixtures/FixtureRules.qml" "$tree/$subject"
 check "no temp dir left" test -z "$(ls -A "$work/tmp")"
 
 echo "unjudged:"
@@ -91,6 +95,24 @@ check "status 2 (it was $status)" test "$status" = 2
 check "said the suite failed unmutated" grep -q "MutateFailingTest failed on the unmutated tree" "$work/unjudged.log"
 check "no mutant run" bash -c '! grep -q "^  \[" "$1"' _ "$work/unjudged.log"
 check "no temp dir left" test -z "$(ls -A "$work/tmp")"
+
+echo "judged:"
+error=$'\e[31m ERROR\e[0m:'
+printf '%s   caused by @components/Logger.qml[-1:-1]: Type MutateFixtureRules unavailable\n%s   caused by @%s[8:18]: Expected token `identifier'"'"'\n' \
+    "$error" "$error" "$subject" > "$work/load.log"
+printf 'WARN qml: @%s[11:9]: TypeError: Cannot read property '"'"'x'"'"' of null\n  FAIL: 30 is adult\n' "$subject" > "$work/type.log"
+printf 'WARN qml: @%s[11:9]: ReferenceError: age2 is not defined\n' "$subject" > "$work/reference.log"
+printf '  FAIL: 30 is adult\n  --- MutateFixtureRules: 2/3 passed, 1 FAILED ---\n' > "$work/failed.log"
+judged() { [ "$("$tree/tests/mutate.sh" --judge "$1" "$2" "$subject")" = "$3" ]; }
+check "a load error naming the subject: not compiled" judged "$work/load.log" 1 not-compiled
+check "… after a time-out too" judged "$work/load.log" 124 not-compiled
+check "… after a kill too" judged "$work/load.log" 137 not-compiled
+check "a TypeError naming it: killed" judged "$work/type.log" 1 killed
+check "a ReferenceError naming it: killed" judged "$work/reference.log" 1 killed
+check "a failed check: killed" judged "$work/failed.log" 1 killed
+check "a time-out without a load error: killed" judged "$work/failed.log" 124 killed
+check "status 0: survived" judged "$work/failed.log" 0 survived
+check "status 2: not run" judged "$work/load.log" 2 not-run
 
 echo "refused:"
 mutate --list /etc/hostname > /dev/null 2>&1

@@ -11,6 +11,10 @@
 #   tests/mutate.sh --max <n> …         at most <n> mutants, picked at random (by --seed)
 #   tests/mutate.sh --seed <n> …        the pick of --max (default: a random seed, printed,
 #                                       so that a run can be repeated)
+#   tests/mutate.sh --judge <log> <status> <file>
+#                                       the verdict on one run of the suites — its output
+#                                       and status, the subject's path in the tree (for
+#                                       tests/mutate-selftest.sh)
 #   tests/mutate.sh -j <n> …            at most <n> mutants at once (default: as many as the
 #                                       unit runner would run shards: half the processors,
 #                                       at most 16, no more than the memory holds at about
@@ -25,11 +29,14 @@
 # among the suites, then — only when that one passed — against the others, in one run of
 # tests/run-unit.sh (-j 1) of the copy. Before any mutant, both runs are made on the copy as
 # it is: suites that fail unmutated cannot judge a mutant (status 2). A mutant is
-#   killed        a suite failed (a check, a TypeError, a crash), or the run took longer
-#                 than four times the unmutated run's time (at least 60 s): a hang
 #   survived      every suite passed
-#   not compiled  Quickshell could not load the mutated file (an error naming it at a line)
 #   not run       the runner could not be set up (status 2)
+#   not compiled  Quickshell could not load the mutated file: a load error naming it at a
+#                 line (a syntax error, "Type … unavailable", in the chain of `caused by`),
+#                 whatever the status — a run that hung after it included
+#   killed        else: a suite failed (a check, a TypeError or ReferenceError, a crash),
+#                 or the run took longer than four times the unmutated run's time (at least
+#                 60 s): a hang
 # Lock scenarios and module fixture parts are not run: only unit suites.
 #
 # Tools are taken by tests/run-unit.sh, as always (the pinned ones where there is `nix`, else
@@ -42,8 +49,29 @@ set -uo pipefail
 export LC_ALL=C
 
 REPO=$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd -P)
-usage() { echo "usage: tests/mutate.sh [--list] [--max <n>] [--seed <n>] [-j <n>] <file> [<suite>…]" >&2; exit 2; }
+usage() { echo "usage: tests/mutate.sh [--list] [--max <n>] [--seed <n>] [-j <n>] <file> [<suite>…]  |  tests/mutate.sh --judge <log> <status> <file>" >&2; exit 2; }
 fail() { echo "mutate.sh: $*" >&2; exit 2; }
+
+# verdict <log> <status> <file>: survived, not-run, not-compiled or killed. A load error
+# names the file at a line in Quickshell's `caused by` chain; a JavaScript error at run time
+# (TypeError, ReferenceError, …) names it too, and is a kill
+verdict() {
+    local log=$1 status=$2 subject=$3
+    case "$status" in
+        0) echo survived; return ;;
+        2) echo not-run; return ;;
+    esac
+    if grep -E "caused by @${subject//./\\.}\[[1-9][0-9]*:[0-9]+\]" "$log" 2> /dev/null | grep -q -v -E "(Type|Reference|Range|Syntax|Eval|URI)Error: "; then
+        echo not-compiled
+    else
+        echo killed
+    fi
+}
+if [ "${1:-}" = --judge ]; then
+    [ $# = 4 ] && [ -r "$2" ] && [[ "$3" =~ ^[0-9]+$ ]] || usage
+    verdict "$2" "$3" "$4"
+    exit 0
+fi
 
 list_only=0
 max=""
@@ -194,7 +222,29 @@ NR == target {
 END { exit status }' "$1"
 }
 
-mapfile -t all < <(enumerate "$REPO/$file")
+# The run's temp dir, and in it the subject as it is now: what is enumerated, mutated, put
+# back and quoted, whatever happens to the file in the tree meanwhile
+work=$(mktemp -d "${TMPDIR:-/tmp}/mutate.XXXXXX") || fail "cannot create a temp dir"
+workers=()
+current_run=""
+stop() {
+    trap '' INT TERM HUP
+    local pid
+    for pid in "${workers[@]}"; do kill -TERM "$pid" 2> /dev/null; done
+    for pid in "${workers[@]}"; do wait "$pid" 2> /dev/null; done
+    # An unmutated run under way (its `timeout` hands the TERM on to the runner)
+    if [ -n "$current_run" ]; then
+        kill -TERM "$current_run" 2> /dev/null
+        wait "$current_run" 2> /dev/null
+    fi
+    rm -rf "$work"
+}
+trap stop EXIT
+trap 'exit 130' INT TERM HUP
+subject=$work/subject.qml
+cp "$REPO/$file" "$subject" || fail "cannot copy $file into $work"
+
+mapfile -t all < <(enumerate "$subject")
 [ ${#all[@]} -gt 0 ] || { echo "mutate.sh: $file: no mutants"; exit 0; }
 total=${#all[@]}
 
@@ -202,7 +252,7 @@ total=${#all[@]}
 describe() {
     local line column old new kind source
     IFS=$'\037' read -r line column old new kind <<< "$1"
-    source=$(sed -n "${line}p" "$REPO/$file" | sed 's/^[[:space:]]*//' | cut -c1-90)
+    source=$(sed -n "${line}p" "$subject" | sed 's/^[[:space:]]*//' | cut -c1-90)
     printf "%s:%s:%s  '%s' -> '%s'  | %s\n" "$file" "$line" "$column" "$old" "$new" "$source"
 }
 
@@ -256,17 +306,6 @@ fi
 [ "$jobs" -le ${#picked[@]} ] || jobs=${#picked[@]}
 
 # ---- The copies -------------------------------------------------------------------------
-work=$(mktemp -d "${TMPDIR:-/tmp}/mutate.XXXXXX") || fail "cannot create a temp dir"
-workers=()
-stop() {
-    trap '' INT TERM HUP
-    local pid
-    for pid in "${workers[@]}"; do kill -TERM "$pid" 2> /dev/null; done
-    for pid in "${workers[@]}"; do wait "$pid" 2> /dev/null; done
-    rm -rf "$work"
-}
-trap stop EXIT
-trap 'exit 130' INT TERM HUP
 
 # copy_tree <dest>: the tree as it is, without .git and build results
 copy_tree() {
@@ -279,6 +318,7 @@ copy_tree() {
     done
 }
 copy_tree "$work/tree-0" || fail "cannot copy the tree into $work"
+cp "$subject" "$work/tree-0/$file"
 times_file=${XDG_CACHE_HOME:-${HOME:+$HOME/.cache}}/h2s-shell-tests/unit-times.txt
 [ -r "$times_file" ] && cp "$times_file" "$work/times" 2> /dev/null
 
@@ -314,26 +354,9 @@ if [ ${#rest[@]} -gt 0 ]; then
 fi
 for worker in $(seq 1 $((jobs - 1))); do
     copy_tree "$work/tree-$worker" || fail "cannot copy the tree into $work"
+    cp "$subject" "$work/tree-$worker/$file"
     cp "$work/times-tree-0" "$work/times-tree-$worker" 2> /dev/null
 done
-
-# verdict <log> <status>: killed, survived, not-compiled or not-run
-verdict() {
-    local log=$1 status=$2
-    case "$status" in
-        0) echo survived ;;
-        124 | 137) echo "killed" ;;
-        2) echo not-run ;;
-        *)
-            if ! grep -q -- '--- .*: [0-9]*/[0-9]* passed' "$log" \
-                && grep -q -E "@${file//./\\.}\[[1-9][0-9]*:[0-9]+\]" "$log"; then
-                echo not-compiled
-            else
-                echo killed
-            fi
-            ;;
-    esac
-}
 
 # A worker: the mutants whose index modulo the workers is its number, in its own copy
 work_on() {
@@ -344,19 +367,19 @@ work_on() {
         [ $((index % jobs)) = "$worker" ] || continue
         mutant=${picked[$index]}
         IFS=$'\037' read -r line column old new kind <<< "$mutant"
-        if ! apply "$REPO/$file" "$line" "$column" "$old" "$new" > "$tree/$file"; then
+        if ! apply "$subject" "$line" "$column" "$old" "$new" > "$tree/$file"; then
             outcome=not-run
         else
             run_suites "$tree" "$work/log-$worker" "$first_limit" "${first[@]}"
             status=$?
-            outcome=$(verdict "$work/log-$worker" "$status")
+            outcome=$(verdict "$work/log-$worker" "$status" "$file")
             if [ "$outcome" = survived ] && [ ${#rest[@]} -gt 0 ]; then
                 run_suites "$tree" "$work/log-$worker" "$rest_limit" "${rest[@]}"
                 status=$?
-                outcome=$(verdict "$work/log-$worker" "$status")
+                outcome=$(verdict "$work/log-$worker" "$status" "$file")
             fi
         fi
-        cp "$REPO/$file" "$tree/$file"
+        cp "$subject" "$tree/$file"
         printf '%s\037%s\n' "$outcome" "$mutant" >> "$work/results-$worker"
         echo "  [$((index + 1))/${#picked[@]}] $outcome  $(describe "$mutant")"
     done

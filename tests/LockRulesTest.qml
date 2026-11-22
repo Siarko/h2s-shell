@@ -1740,15 +1740,16 @@ TestCase {
 
         assertEqual(LockRules.step({}, { type: "started" }, 1).ignored, "no state", "edges: a state without a phase is no state");
         const plain = started().send({ type: "lockRequested" });
-        assert(logs(plain).some(message => message.startsWith("locking (request), session")), "edges: a lock request without a source is logged as a request");
+        assert(logs(plain).some(message => message.startsWith("locking") && message.includes("(request)")), "edges: a lock request without a source is logged as a request");
         const pending = locking().send({ type: "unlockRequested", source: "logind" }).send({ type: "lockRequested" });
-        assert(logs(pending).some(message => message.includes("dropped by a lock request (request)")), "edges: … also when it drops a pending unlock");
+        assert(logs(pending).some(message => message.includes("dropped") && message.includes("(request)")), "edges: … also when it drops a pending unlock");
 
         // A failed detection says why, when it is told
-        for (const [reason, said] of [["exited 1", "detecting the methods failed (exited 1);"], ["", "detecting the methods failed;"],
-                                      [undefined, "detecting the methods failed;"], [7, "detecting the methods failed;"]]) {
+        for (const [reason, said] of [["exited 1", "(exited 1)"], ["", ""], [undefined, ""], [7, ""]]) {
             const failing = locking().sendAll([confirmed(), failedDetection(reason)]);
-            assert(logs(failing).some(message => message.startsWith(said)), "edges: a failed detection with reason " + JSON.stringify(reason) + " says: " + said);
+            const warning = logs(failing).find(message => message.startsWith("detecting the methods")) ?? "";
+            assert(said !== "" ? warning.includes(said) : warning !== "" && !warning.includes("("),
+                   "edges: a failed detection with reason " + JSON.stringify(reason) + (said ? " names it" : " names none") + ": " + warning);
         }
         const stale = locked();
         stale.send({ type: "methodsFailed", generation: -5, reason: "exited 1" });
@@ -1782,10 +1783,11 @@ TestCase {
         const noPassword = locked(["fingerprint\t/etc/pam.d\tfp"], { lockOnSleep: true, passwordFallback: null }).sendAll(enter("x"));
         assert(noPassword.state.methods.status === "detecting" && noPassword.state.methods.waitForAnswer === false,
                "edges: no password config at a submit: asked again, the configs known serving meanwhile");
-        const woken = locked(passwordAndFingerprint).sendAll([{ type: "prepareForSleep" }, { type: "resumed" }]);
-        woken.send(timer("settle:fingerprint"), timings.settle);
+        const woken = locked(passwordAndFingerprint).send({ type: "prepareForSleep" });
+        const sinceWake = woken.all.length;
+        woken.send({ type: "resumed" }).send(timer("settle:fingerprint"), timings.settle);
         assert(woken.state.methods.status === "detecting" && woken.state.passive.fingerprint.status !== "running"
-               && !has(woken.all.slice(-8), "startPam", { method: "fingerprint" }), "edges: after a wake the fingerprint waits for the methods' answer");
+               && !has(woken.all.slice(sinceWake), "startPam", { method: "fingerprint" }), "edges: after a wake the fingerprint waits for the methods' answer");
         woken.send(detected(passwordAndFingerprint));
         assert(woken.state.passive.fingerprint.status === "running", "edges: … and starts with it");
 

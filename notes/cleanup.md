@@ -36,6 +36,12 @@ deduplicates within one event-loop tick. Pre-existing; the #1 fix widens the win
 tick, since the enabled-calendar list is now resolved asynchronously. Fix: mark the month
 as in-flight when the fetch starts, not when it finishes.
 
+### `IdleRules` `lockedThisPeriod` always equals `locked` — **candidate for removal**
+
+Every unlock wakes (`_wake` sets it to `locked`) and only `locked` sets it true, so the two
+never differ: tests/mutate.sh's mutants 320:44 and 521 (the flag dropped or never set)
+survive as equivalent. Removing it simplifies `_lockAt`.
+
 ### Files that are too big
 
 The October list (archived below) is mostly split (done.md stage 6). Sizes on 2026-11-21:
