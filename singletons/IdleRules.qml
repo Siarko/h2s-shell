@@ -51,8 +51,12 @@ Singleton {
     readonly property var lockRetry: ({ minimum: 5000, maximum: 300000 })
     // A monitor that vanished while dark and is back within this long (ms) is the same
     // monitor coming back (a monitor that drops off and reconnects on its own), not one
-    // plugged in; one the shell powered off is that whenever it comes back in the period
+    // plugged in: replugWindow after it vanished showing the screensaver, shellOffWindow
+    // after it vanished powered off by the shell (some monitors drop off at their power cut
+    // and come back only later); later than that it is plugged in (a re-plug, its own power
+    // button pressed by somebody back)
     readonly property int replugWindow: 15000
+    readonly property int shellOffWindow: 60000
     // A power action the reading after it does not show (the monitor still on after an off,
     // still off after an on) is asked again after a growing pause (ms)
     readonly property var powerRetry: ({ minimum: 2000, maximum: 300000, tries: 8 })
@@ -118,8 +122,11 @@ Singleton {
         // Every key a monitor may have had (MonitorRules.overrideKeys): a monitor coming back
         // under the other form of its id is still the one that went
         const keys = {};
+        // Each monitor's connector ("" for one given by id only)
+        const connectors = {};
         for (const id of ids) {
             keys[id] = MonitorRules.overrideKeys(byId[id]);
+            connectors[id] = typeof byId[id]?.connector === "string" ? byId[id].connector : "";
             const entry = MonitorRules.overrideFor(entries, byId[id], monitors);
             times[id] = _isMap(entry) ? stages(entry, own) : Object.assign({}, defaults);
         }
@@ -131,6 +138,7 @@ Singleton {
             perMonitor: perMonitor,
             times: times,
             keys: keys,
+            connectors: connectors,
             canPowerOff: power,
             commands: flag(given.screensaverCommands, false),
             monitors: ids,
@@ -238,8 +246,11 @@ Singleton {
             // shows it, so a monitor left off stays remembered)
             pendingPower: ({}),
             connected: null,         // the monitor ids at the last step (null: no step yet)
-            // monitor id → { at, stage, shellOff }: monitors that vanished while dark in this
-            // period — one back in time is not a plug-in (replugWindow)
+            connectors: ({}),        // their connectors, monitor id → connector
+            connectedPower: null,    // the config's canPowerOff at the last step
+            // monitor id → { at, stage, shellOff, connector }: monitors that vanished while
+            // dark in this period — one back in time is not a plug-in (replugWindow,
+            // shellOffWindow)
             gone: ({})
         };
     }
@@ -493,6 +504,7 @@ Singleton {
         const next = Object.assign({}, state);
         next.shown = Object.assign({}, state.shown);
         next.stage = Object.assign({}, state.stage);
+        next.connectors = Object.assign({}, state.connectors ?? {});
         next.gone = {};
         for (const id of Object.keys(state.gone ?? {}))
             next.gone[id] = Object.assign({}, state.gone[id]);
@@ -692,31 +704,63 @@ Singleton {
         return { state: next, actions: actions, ignored: "" };
     }
 
+    // The key in `candidates` ({ id: { connector, … } }) of the monitor `id` names, or "":
+    // one of its own keys (its id under either form), else one on its connector, else one
+    // matching loosely (MonitorRules.looseKey: a field empty on either side matches any — Qt
+    // and the backends do not report the same fields)
+    function _sameMonitor(candidates, id, config) {
+        const exact = (config.keys?.[id] ?? [id]).find(key => key in candidates);
+        if (exact !== undefined)
+            return exact;
+        const connector = config.connectors?.[id] ?? "";
+        const onConnector = Object.keys(candidates).find(key => connector !== "" && candidates[key].connector === connector);
+        if (onConnector !== undefined)
+            return onConnector;
+        return MonitorRules.looseKey(candidates, id, config.monitors);
+    }
+
     // The monitors that came and went since the last step: a monitor plugged in is somebody
     // at the computer, as input (a new idle period; locked, the lock stays). Not a plug-in:
-    // the first step, a change while going to sleep (the resume wakes), and a monitor that
-    // vanished while dark in this period and is back — powered off by the shell (some
-    // monitors drop off when their power is cut and reconnect), or within replugWindow —
-    // which takes back the stage it had. Vanished while dark: remembered for that (`gone`).
+    // the first step; a change while going to sleep (the resume wakes); a change of where the
+    // monitors come from (power control found or lost: the ids may change form), where each
+    // keeps the stage of the one it was (_sameMonitor); and a monitor that vanished while
+    // dark in this period and is back in time (replugWindow, shellOffWindow), which takes
+    // back the stage it had. Vanished while dark: remembered for that (`gone`).
     function _pluggedIn(next, config, now) {
         const before = next.connected;
+        const beforeConnectors = next.connectors ?? {};
+        const sourceChanged = next.connectedPower !== null && next.connectedPower !== config.canPowerOff;
         next.connected = config.monitors.slice();
+        next.connectors = Object.assign({}, config.connectors ?? {});
+        next.connectedPower = config.canPowerOff;
         if (before === null)
             return false;
+        const departed = {};
         for (const id of before) {
             if (config.monitors.includes(id))
                 continue;
+            departed[id] = { connector: beforeConnectors[id] ?? "", stage: next.stage[id] };
             const shown = next.shown[id] ?? "on";
-            if (shown !== "on")
-                next.gone[id] = { at: now, stage: next.stage[id], shellOff: shown === "off" };
+            if (shown !== "on" && !sourceChanged)
+                next.gone[id] = { at: now, stage: next.stage[id], shellOff: shown === "off", connector: beforeConnectors[id] ?? "" };
         }
         let plugged = false;
         for (const id of config.monitors) {
             if (before.includes(id))
                 continue;
-            const key = (config.keys?.[id] ?? [id]).find(candidate => candidate in next.gone);
-            const back = key !== undefined ? next.gone[key] : null;
-            if (back !== null && (back.shellOff || now - back.at <= replugWindow)) {
+            if (sourceChanged) {
+                const was = _sameMonitor(departed, id, config);
+                if (was !== "") {
+                    next.stage[id] = departed[was].stage;
+                    // Shown as it was: the picture in place moves to the new id, no action
+                    if (next.shown[was] !== undefined)
+                        next.shown[id] = next.shown[was];
+                }
+                continue;
+            }
+            const key = _sameMonitor(next.gone, id, config);
+            const back = key !== "" ? next.gone[key] : null;
+            if (back !== null && now - back.at <= (back.shellOff ? shellOffWindow : replugWindow)) {
                 next.stage[id] = back.stage;
                 delete next.gone[key];
             } else if (!next.sleeping) {
@@ -811,9 +855,12 @@ Singleton {
         // Once every monitor that goes dark has, the period stays dark until input, or until
         // no monitor goes dark any more (every stage switched off): a monitor given a stage
         // later, or plugged back, does not take it back
+        // (No monitor connected, or one gone while dark, is no stage switched off: every
+        // monitor dropping off at its power cut keeps the period dark)
         if (allDark(next, config, next.stage))
             next.dark = true;
-        else if (!config.monitors.some(id => _goesDark(_timesOf(config, id), next)))
+        else if (config.monitors.length > 0 && Object.keys(next.gone).length === 0
+                 && !config.monitors.some(id => _goesDark(_timesOf(config, id), next)))
             next.dark = false;
         const dark = next.dark;
         if (dark && !next.commandStarted && config.commands) {

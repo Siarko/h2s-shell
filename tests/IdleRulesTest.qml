@@ -903,14 +903,76 @@ TestCase {
         assert(locked.state.locked && locked.state.lockQuietSince === 420000, "… still locked, the lock screen's quiet time from the plug-in");
 
         // Powered off by the shell, then gone and back (a monitor that drops off at its power
-        // cut): its stage again, nothing woken — also long after
+        // cut): its stage again, nothing woken — within shellOffWindow, a plug-in after it
         const dropped = _machine(values, ["lcd", "oled"], true);
         dropped.idle(5000, 0).deadline();
         dropped.reconfigure(310000, values, ["lcd"]);
-        dropped.reconfigure(400000, values, ["lcd", "oled"]);
-        assertEqual(dropped.actions, "showSaver:oled,powerOff:oled", "powered off by the shell, back: off again, no wake");
+        dropped.reconfigure(310000 + IdleRules.shellOffWindow, values, ["lcd", "oled"]);
+        assertEqual(dropped.actions, "showSaver:oled,powerOff:oled", "powered off by the shell, back within its window: off again, no wake");
         assertEqual(dropped.state.stage.oled, 2, "… its stage taken back");
         assertEqual(Object.keys(dropped.state.gone).length, 0, "… no longer remembered as gone");
+        const replugged = _machine(values, ["lcd", "oled"], true);
+        replugged.idle(5000, 0).deadline();
+        replugged.reconfigure(310000, values, ["lcd"]);
+        replugged.reconfigure(310001 + IdleRules.shellOffWindow, values, ["lcd", "oled"]);
+        assertEqual(replugged.actions, "hideSaver:lcd,endCommand,active:false", "… back later (plugged in again, its button pressed): plugged in");
+        assert(IdleRules.shellOffWindow > IdleRules.replugWindow, "a monitor powered off by the shell is given longer to come back");
+
+        // The only monitor drops off at its power cut, and comes back with Qt's fields for its
+        // id (no make): the same monitor, matched on its connector or loosely
+        const offTimes = { screenOffEnabled: true, screenOffTimeout: 300, screensaverCommands: true };
+        const backend = { id: "Dell|U27|SN", base: "Dell|U27|SN", connector: "DP-1" };
+        const only = _machine(offTimes, [backend], true);
+        only.idle(5000, 0).deadline();
+        assertEqual(only.actions, "showSaver:Dell|U27|SN,powerOff:Dell|U27|SN,startCommand,active:true", "(the only monitor off)");
+        only.reconfigure(301000, offTimes, []);
+        assertEqual(only.actions, "", "every monitor gone while dark: no action, still active");
+        only.reconfigure(302000, offTimes, [{ id: "|U27|SN", base: "|U27|SN", connector: "DP-1" }]);
+        assertEqual(only.actions, "showSaver:|U27|SN,powerOff:|U27|SN", "back under Qt's id, on its connector: off again, no wake, still active");
+        only.reconfigure(303000, offTimes, [backend]);
+        assertEqual(only.actions, "showSaver:Dell|U27|SN,powerOff:Dell|U27|SN", "… and under the backend's id again: off again, no wake");
+        const loose = _machine(offTimes, [backend], true);
+        loose.idle(5000, 0).deadline();
+        loose.reconfigure(301000, offTimes, []);
+        loose.reconfigure(302000, offTimes, ["|U27|SN"]);
+        assertEqual(loose.actions, "showSaver:|U27|SN,powerOff:|U27|SN", "back with no connector known, a field empty: matched loosely");
+        const other = _machine(offTimes, [backend], true);
+        other.idle(5000, 0).deadline();
+        other.reconfigure(301000, offTimes, []);
+        other.reconfigure(302000, offTimes, [{ id: "LG|27GL|9", base: "LG|27GL|9", connector: "DP-2" }]);
+        assertEqual(other.actions, "endCommand,active:false",
+                    "another monitor plugged in where it went: plugged in");
+
+        const named = _machine(offTimes, [backend], true);
+        named.idle(5000, 0).deadline();
+        named.reconfigure(301000, offTimes, []);
+        named.reconfigure(302000, offTimes, [{ id: "|DELL U27|", base: "|DELL U27|", connector: "DP-1" }]);
+        assertEqual(named.actions, "showSaver:|DELL U27|,powerOff:|DELL U27|", "back with fields that match nothing, on its connector: the same monitor");
+        const byIdOnly = _machine(saver, ["lcd", "tv"], true);
+        byIdOnly.idle(5000, 0).deadline();
+        byIdOnly.reconfigure(310000, saver, ["lcd"]);
+        byIdOnly.reconfigure(311000, saver, ["lcd", "dock"]);
+        assertEqual(byIdOnly.actions, "hideSaver:lcd,endCommand,active:false", "another monitor in time, neither with a connector: plugged in");
+        const emptied = _machine(offTimes, [backend], true);
+        emptied.idle(5000, 0).deadline();
+        emptied.reconfigure(301000, offTimes, [], false);
+        assertEqual(emptied.actions, "", "no monitor left as power control goes: still active");
+
+        // Where the monitors come from changes (power control found: Qt's ids, then the
+        // backend's): never a plug-in, each keeps what it had
+        const qtForm = { id: "|U27|SN", base: "|U27|SN", connector: "DP-1" };
+        const start = _machine(offTimes, [qtForm], false);
+        start.idle(5000, 0).deadline();
+        assertEqual(start.actions, "showSaver:|U27|SN,startCommand,active:true", "(no power control: the screensaver at the screen-off's time)");
+        start.reconfigure(301000, offTimes, [backend], true);
+        assertEqual(start.actions, "powerOff:Dell|U27|SN", "power control found: the same monitor under the backend's id, now off — no wake");
+        assertEqual(start.state.stage["Dell|U27|SN"], 2, "… its stage kept");
+        const fresh = _machine(offTimes, [qtForm], false);
+        fresh.idle(5000, 0);
+        fresh.reconfigure(6000, offTimes, [backend], true);
+        assert(fresh.actions === "" && fresh.state.idleSince === 0, "the first reading after a start: no plug-in, the counting goes on");
+        fresh.reconfigure(7000, offTimes, [backend, { id: "LG|27GL|9", base: "LG|27GL|9", connector: "DP-2" }], false);
+        assertEqual(fresh.state.idleSince, 0, "power control lost with a monitor more: not a plug-in either");
 
         // Showing the screensaver, gone and back: within the window the same monitor, after it
         // a plug-in

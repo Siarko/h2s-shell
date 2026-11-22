@@ -301,8 +301,10 @@ screen's screen-off are off by default. No idle daemon is needed; one can still 
   any monitor counts for every one, and an app keeping the screen on holds every monitor.
   A monitor plugged in counts as you being back, as input: whatever was reached ends and
   the counting starts again from it (on the lock screen the lock stays). A monitor that
-  drops off and reconnects while dark — some do when their power is cut — is not one
-  plugged in. A screensaver started by hand shows on every monitor; each one's screen-off
+  drops off while dark and comes back — some do when their power is cut — is not one
+  plugged in: within a minute of the shell turning it off, or 15 seconds while it showed
+  the screensaver (known by its make, model and serial, its connector, or a loose match of
+  them); later it is. A screensaver started by hand shows on every monitor; each one's screen-off
   then comes as long after it as after its own screensaver. The screensaver commands start once every monitor that goes dark has (a monitor
   with both stages off is not waited for). Where monitors cannot be turned off, a monitor
   is known by the make, model and serial Qt reports, and its own times still apply (its
