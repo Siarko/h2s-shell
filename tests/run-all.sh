@@ -32,6 +32,9 @@
 #   tests/deploy-check-selftest.sh                      the deploy check, on canned answers
 #   tests/docs-check-selftest.sh                        the documentation's rules lint, on
 #                                                       stand-ins and on README.md and docs/
+#   tests/notes-ref-check-selftest.sh                   no tracked file mentions the working
+#                                                       notes (beyond its allowance), on
+#                                                       stand-ins and on this checkout
 #   tests/run-unit-selftest.sh                          the unit runner's own verdict
 #   tests/remote-run-selftest.sh                        the remote runner, on a stand-in ssh
 #   tests/affected-selftest.sh                          the tests a change needs: every file
@@ -98,6 +101,7 @@ parts=(
     "supervisor self-test|tests/launcher-selftest.sh"
     "deploy check self-test|tests/deploy-check-selftest.sh"
     "docs rules lint|tests/docs-check-selftest.sh"
+    "notes references guard|tests/notes-ref-check-selftest.sh"
     "unit runner self-test|tests/run-unit-selftest.sh"
     "remote run self-test|tests/remote-run-selftest.sh"
     "affected tests self-test|tests/affected-selftest.sh"

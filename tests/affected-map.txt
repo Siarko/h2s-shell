@@ -32,7 +32,6 @@
 @not-lock toast-* hud-bar-bottom modules modules-notify modules-reload methods-script
 
 # ---- No test needed ------------------------------------------------------------------
-notes/* none
 site/* none
 CLAUDE.md none
 .gitignore none
@@ -57,6 +56,10 @@ tests/device/touchtap.py none
 README.md self:tests/docs-check-selftest.sh
 docs/* self:tests/docs-check-selftest.sh
 tests/docs-check.sh self:tests/docs-check-selftest.sh
+# Any file may come to mention the working notes: every change runs the guard
++* self:tests/notes-ref-check-selftest.sh
+tests/notes-ref-check.sh self:tests/notes-ref-check-selftest.sh
+tests/notes-ref-allowance.txt self:tests/notes-ref-check-selftest.sh
 
 # ---- Runners and their tools -----------------------------------------------------------
 tests.qml unit:all

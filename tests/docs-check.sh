@@ -2,7 +2,8 @@
 # The documentation's hard rules, as a lint over README.md and every Markdown file under
 # docs/ (CLAUDE.md, "Documentation"):
 #
-#   notes-link     a link into notes/ (working notes are never linked from the documents)
+#   outside-link   a relative link that leaves the repository (what is outside it is no
+#                  reader's, even where it happens to exist beside a developer's checkout)
 #   broken-link    a relative link to a file that is not there
 #   environment    a developer's environment: a home path, a checkout folder under ~, a
 #                  machine model, "the owner's machine" (the pattern list below)
@@ -90,8 +91,8 @@ for file in "${files[@]}"; do
         if [ "${target#/}" != "$target" ]; then resolved=$root$target; else resolved=$directory/$target; fi
         resolved=$(realpath -m "$resolved")
         case "$resolved/" in
-            "$root/notes/"*) finding "$file" "$line" notes-link "$target" ;;
-            *) [ -e "$resolved" ] || finding "$file" "$line" broken-link "$target" ;;
+            "$root/"*) [ -e "$resolved" ] || finding "$file" "$line" broken-link "$target" ;;
+            *) finding "$file" "$line" outside-link "$target" ;;
         esac
     done < <(prose "$path" | awk '
         {

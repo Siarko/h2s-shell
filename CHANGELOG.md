@@ -23,7 +23,7 @@ Settings → Lockscreen → "Lock before the computer sleeps" is on (below, unde
 
 ### Module API
 The interface modules are written against (`qs.api`), versioned on its own
-(`Api.version`, notes/plans/modules.md "Module API 1.0").
+(`Api.version`; its reference is `api/Api.qml`).
 - CommandRunner's `_runner`, the internal runner it held, is removed: it was internal, and
   through it a module could change what the runner refuses and read its runs. A run's
   handle carries no state of the runner's either.

@@ -688,8 +688,8 @@ case per recovery scenario of the lock test bed in `tests/LockRecoveryRulesTest.
   holding `<socket>.lock`); with a growing pause. A shell that died while the screen was
   locked (the marker says so) is started again at most 3 times while the session stays
   locked; the fourth death ends the launcher, the compositor keeping the session locked
-  (`notes/decisions.md`: the owner starts the launcher by hand from a text console; FEATURES,
-  "The limit while locked"). "While the session stays locked": the launcher writes its count
+  (the launcher is then started again by hand from a text console; FEATURES, "The limit
+  while locked"). "While the session stays locked": the launcher writes its count
   to `$XDG_RUNTIME_DIR/h2s-shell-lock-restarts` at each such restart, and the shell overwrites
   it when a lock ends (with the marker's "unlocked") — anything but the launcher's own number
   there is an unlock; a new launcher starts at 0. Giving up, it leaves its count in
@@ -1717,10 +1717,14 @@ is run by hand against a running shell after it was updated: it reads the module
 and the Tailscale module's state over the shell's IPC (reads only; no `tailscale` command)
 and fails on a line repeated in the shell's log; `tests/deploy-check-selftest.sh` checks it
 on canned answers. `tests/docs-check.sh` lints `README.md` and `docs/` for the
-documentation's hard rules (no link into `notes/` or to a missing file, no developer's home
-path or machine, a NixOS heading only with an Arch one beside it, English only);
-`tests/docs-check-selftest.sh`, a part of `--quick`, checks it on stand-in Markdown and then
-runs it on the checkout. Each part runs alone too, and takes names for
+documentation's hard rules (no link out of the repository or to a missing file, no
+developer's home path or machine, a NixOS heading only with an Arch one beside it, English
+only); `tests/docs-check-selftest.sh`, a part of `--quick`, checks it on stand-in Markdown
+and then runs it on the checkout. `tests/notes-ref-check.sh` fails on a tracked file that
+refers to the working notes, which are kept outside the repository (the released sections
+of `CHANGELOG.md` excepted; files listed in `tests/notes-ref-allowance.txt`, with the number
+of mentions each may keep, are reported, not failed); `tests/notes-ref-check-selftest.sh`,
+a part of `--quick`, checks it on stand-in trees and then runs it on the checkout. Each part runs alone too, and takes names for
 a part of it; the rest of this section describes them.
 
 The tests are in two kinds of set. The **general** set gives the same verdict on every
@@ -1982,7 +1986,7 @@ files, on either system.
 #### NixOS
 
 - `package`: the flake's package builds (`nix`, into the store; no link, no lock file
-  written); its version is `singletons/Version.qml`'s; `tests/lock`, `notes` and `docs`
+  written); its version is `singletons/Version.qml`'s; `tests/lock`, `docs` and `helper`
   are not in it; its `h2s-shell` command runs the checkout `H2S_SHELL_DIR` names with the
   arguments given, and every program the shell calls is on the `PATH` it sets; the
   built-in modules are in `share/h2s-shell-builtin`, as `builtin-modules/` holds them, not

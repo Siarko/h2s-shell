@@ -19,13 +19,21 @@ check() {
     shift
     if "$@"; then echo "  PASS $description"; else echo "  FAIL $description"; failed=1; fi
 }
-# run <tree> <arguments…>: OUTPUT (stdout), ERRORS (stderr), STATUS
+# run <tree> <arguments…>: OUTPUT (stdout), ERRORS (stderr), STATUS. In this tree every
+# file selects the notes guard (the map's "+*" line): GUARDED says whether it did, and its
+# line is left out of OUTPUT, so the checks read what the file itself selects
+GUARD=tests/notes-ref-check-selftest.sh
 run() {
     local tree=$1
     shift
     OUTPUT=$(cd "$tree" && tests/affected.sh "$@" 2> "$work/stderr")
     STATUS=$?
     ERRORS=$(cat "$work/stderr")
+    GUARDED=0
+    if [ "$tree" = "$REPO" ] && grep -qxF "$GUARD" <<< "$OUTPUT"; then
+        GUARDED=1
+        OUTPUT=$(grep -vxF "$GUARD" <<< "$OUTPUT")
+    fi
 }
 is() { [ "$OUTPUT" = "$1" ]; }
 has_line() { grep -qxF -- "$1" <<< "$OUTPUT"; }
@@ -35,8 +43,9 @@ echo "This tree:"
 run "$REPO" --check
 check "every tracked file is placed and the map is true" [ "$STATUS" = 0 ]
 [ "$STATUS" = 0 ] || printf '%s\n' "$OUTPUT" | sed 's/^/    /'
-run "$REPO" --files notes/tracker.md
-check "a note selects nothing" is ""
+run "$REPO" --files .gitignore
+check "a file that needs no test selects nothing" is ""
+check "… but the notes guard, as every file does" [ "$GUARDED" = 1 ]
 run "$REPO" --files tests/TestCase.qml
 check "TestCase selects every unit suite" has_line "tests/run-unit.sh"
 check "… and both module fixture parts" [ "$(grep -c '^tests/run-modules.sh ' <<< "$OUTPUT")" = 2 ]
@@ -47,6 +56,7 @@ run "$REPO" --files singletons/Format.qml
 check "Format selects FormatTest" has "FormatTest"
 run "$REPO" --files tests/lock/tests/relock.sh
 check "a scenario selects itself" is "tests/lock/run.sh relock"
+check "… and the notes guard" [ "$GUARDED" = 1 ]
 run "$REPO" --files scripts/launch.sh
 check "the launcher selects its self-test" has_line "tests/launcher-selftest.sh"
 check "… and the restart and supervisor scenarios" bash -c 'grep -q "^tests/lock/run.sh .*restart-kill-locked.*supervisor" <<< "$1"' _ "$OUTPUT"
@@ -68,7 +78,7 @@ check "… and is named" grep -q "nowhere/new-file.txt is placed nowhere" <<< "$
 
 # ---- A made-up repository --------------------------------------------------------------
 tree=$work/tree
-mkdir -p "$tree/tests/lock/tests" "$tree/singletons" "$tree/screensaver" "$tree/notes" "$tree/scripts" "$tree/fixtures/mod"
+mkdir -p "$tree/tests/lock/tests" "$tree/singletons" "$tree/screensaver" "$tree/site" "$tree/scripts" "$tree/fixtures/mod"
 cp "$REPO/tests/affected.sh" "$REPO/tests/count-suites.sh" "$tree/tests/"
 cat > "$tree/tests.qml" << 'EOF'
 Item {
@@ -108,7 +118,7 @@ echo 'Item {}' > "$tree/tests-modules.qml"
 printf 'import qs.singletons\nItem { Shared {} Old {} }\n' > "$tree/screensaver/Surface.qml"
 echo 'module' > "$tree/fixtures/mod/main.qml"
 echo 'echo run' > "$tree/scripts/run.sh"
-echo 'notes' > "$tree/notes/plan.md"
+echo 'page' > "$tree/site/page.md"
 for name in one two three; do echo 'echo PASS' > "$tree/tests/lock/tests/$name.sh"; done
 cat > "$tree/tests/run-all.sh" << 'EOF'
 parts=(
@@ -124,7 +134,7 @@ for runner in tests/run-unit.sh tests/run-modules.sh tests/lock/run.sh tests/x-s
 done
 cat > "$tree/tests/affected-map.txt" << 'EOF'
 @lock-roots screensaver/*
-notes/* none
+site/* none
 .gitignore none
 tests/run-all.sh self:tests/x-selftest.sh
 tests/affected* self:tests/x-selftest.sh
@@ -174,7 +184,7 @@ run "$tree" --files fixtures/mod/main.qml
 check "a module part's file selects that part" is "tests/run-modules.sh fixtures/mod"
 run "$tree" --files tests/TestCase.qml
 check "modules:all and unit:all" is "$(printf 'tests/run-unit.sh\ntests/run-modules.sh fixtures/mod')"
-run "$tree" --files notes/plan.md
+run "$tree" --files site/page.md
 check "a none file selects nothing" bash -c '[ -z "$1" ] && [ "$2" = 0 ]' _ "$OUTPUT" "$STATUS"
 run "$tree" --files tests/lock/tests/three.sh tests/x-selftest.sh
 check "a scenario and a self-test select themselves" is "$(printf 'tests/x-selftest.sh\ntests/lock/run.sh three')"
@@ -188,11 +198,11 @@ echo 'Item { property int value: B.value + 3; property string script: "/scripts/
 commit "work: A"
 run "$tree"
 check "the branch against segment-a, not master: A's change only" is "tests/run-unit.sh ATest"
-echo 'more notes' >> "$tree/notes/plan.md"
+echo 'more' >> "$tree/site/page.md"
 echo 'echo PASS' > "$tree/tests/lock/tests/four.sh"
 run "$tree"
 check "the working tree and untracked files count" is "$(printf 'tests/run-unit.sh ATest\ntests/lock/run.sh four')"
-git -C "$tree" checkout -q notes/plan.md
+git -C "$tree" checkout -q site/page.md
 rm "$tree/tests/lock/tests/four.sh"
 run "$tree" "master..work"
 check "an explicit range" is "$(printf 'tests/run-unit.sh ATest BTest\ntests/lock/run.sh three')"
@@ -274,7 +284,7 @@ echo 'gone/* none' >> "$tree/tests/affected-map.txt"
 echo 'Item {}' > "$tree/singletons/Loose.qml"
 git -C "$tree" add singletons/Loose.qml
 echo '@not-lock nobody*' >> "$tree/tests/affected-map.txt"
-echo 'notes/* unit:NoSuchTest lock:nothing* self:tests/missing.sh' >> "$tree/tests/affected-map.txt"
+echo 'site/* unit:NoSuchTest lock:nothing* self:tests/missing.sh' >> "$tree/tests/affected-map.txt"
 run "$tree" --check
 check "--check fails" [ "$STATUS" = 1 ]
 check "… naming a tracked file placed nowhere" has "not placed: stray.txt"

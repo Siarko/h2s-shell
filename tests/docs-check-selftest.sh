@@ -23,16 +23,17 @@ check() {
     if "$@"; then echo "  PASS $description"; else echo "  FAIL $description"; failed=1; fi
 }
 
-# tree <name>: a stand-in checkout with a good README.md, docs/guide.md and notes/
+# tree <name>: a stand-in checkout with a good README.md and docs/guide.md, in a directory
+# that holds a file beside it (outside.md), as a checkout may sit beside other repositories
 tree() {
-    local dir=$work/$1
-    mkdir -p "$dir/docs/dev" "$dir/notes"
-    echo "# notes" > "$dir/notes/tracker.md"
+    local dir=$work/$1/checkout
+    mkdir -p "$dir/docs/dev"
+    echo "# beside the checkout" > "$work/$1/outside.md"
     cat > "$dir/README.md" << 'EOF'
 # A shell
 
 See the [guide](docs/guide.md), the [changes](CHANGELOG.md#unreleased) and
-[the site](https://example.org/notes/page.html).
+[the site](https://example.org/page.html).
 
 ## Install
 
@@ -59,11 +60,11 @@ A heading named Architecture is not about Arch.
 One heading naming both.
 
 ```
-[not a link](../notes/tracker.md)
+[not a link](../../outside.md)
 #### NixOS
 ```
 
-Inline code is not a link either: `[x](../notes/tracker.md)`.
+Inline code is not a link either: `[x](../../outside.md)`.
 
 [ref]: dev/architecture.md
 EOF
@@ -74,7 +75,7 @@ EOF
 run() {
     local name=$1
     shift
-    OUTPUT=$("$LINT" --rules --root "$work/$name" "$@" 2>&1)
+    OUTPUT=$("$LINT" --rules --root "$work/$name/checkout" "$@" 2>&1)
     STATUS=$?
 }
 status_is() { [ "$STATUS" = "$1" ]; }
@@ -87,17 +88,19 @@ check "a good tree: status 0" status_is 0
 check "a good tree: says passed, with the files it read" says "^docs-check: passed (3 files)$"
 check "a good tree: no finding" findings_are 0
 
-tree notes-link
-echo "Working notes: [tracker](../notes/tracker.md)." >> "$work/notes-link/docs/guide.md"
-echo "[todo]: notes/tracker.md" >> "$work/notes-link/README.md"
-run notes-link
-check "a link into notes/: status 1" status_is 1
-check "a link into notes/: found in docs/, with its line" says "^docs/guide.md:21: notes-link: ../notes/tracker.md$"
-check "a link into notes/: a reference definition in the README too" says "^README.md:15: notes-link: notes/tracker.md$"
-check "a link into notes/: those two only" findings_are 2
+tree outside
+echo "Beside: [it](../../outside.md)." >> "$work/outside/checkout/docs/guide.md"
+echo "[beside]: ../outside.md" >> "$work/outside/checkout/README.md"
+echo "Gone too: [far](../../../nowhere.md)." >> "$work/outside/checkout/README.md"
+run outside
+check "a link out of the repository: status 1" status_is 1
+check "a link out of the repository: found in docs/, though the file is there" says "^docs/guide.md:21: outside-link: ../../outside.md$"
+check "a link out of the repository: a reference definition in the README too" says "^README.md:15: outside-link: ../outside.md$"
+check "a link out of the repository: one to nothing is that, not a broken link" says "^README.md:16: outside-link: ../../../nowhere.md$"
+check "a link out of the repository: those three only" findings_are 3
 
 tree broken
-echo "Gone: [old](dev/gone.md#part)." >> "$work/broken/docs/guide.md"
+echo "Gone: [old](dev/gone.md#part)." >> "$work/broken/checkout/docs/guide.md"
 run broken
 check "a link to a missing file: status 1" status_is 1
 check "a link to a missing file: named broken-link" says "^docs/guide.md:21: broken-link: dev/gone.md$"
@@ -105,8 +108,8 @@ check "a link to a missing file: named broken-link" says "^docs/guide.md:21: bro
 tree environment
 printf '%s\n' "Run it from /home/alice/src/shell." "Seen on the Framework 12 only." \
     "As on the owner's machine." "Or C:\\Users\\bob\\shell." "Clone it into ~/src/shell." \
-    >> "$work/environment/docs/dev/architecture.md"
-printf '%s\n' '```' 'cd /Users/carol/shell' '```' >> "$work/environment/README.md"
+    >> "$work/environment/checkout/docs/dev/architecture.md"
+printf '%s\n' '```' 'cd /Users/carol/shell' '```' >> "$work/environment/checkout/README.md"
 run environment
 check "a developer's environment: status 1" status_is 1
 check "a developer's environment: a home path" says "^docs/dev/architecture.md:2: environment: Run it from /home/alice"
@@ -118,7 +121,7 @@ check "a developer's environment: in a code block too" says "^README.md:16: envi
 check "a developer's environment: those six only" findings_are 6
 
 tree nixos-only
-cat >> "$work/nixos-only/docs/guide.md" << 'EOF'
+cat >> "$work/nixos-only/checkout/docs/guide.md" << 'EOF'
 
 ## Updating
 
@@ -143,7 +146,7 @@ check "one system without the other: an Arch heading alone" says "^docs/guide.md
 check "one system without the other: the paired README is fine" findings_are 2
 
 tree apart
-cat >> "$work/apart/docs/guide.md" << 'EOF'
+cat >> "$work/apart/checkout/docs/guide.md" << 'EOF'
 
 ## Installing
 
@@ -161,8 +164,8 @@ run apart
 check "the two systems under different parents: both found" findings_are 2
 
 tree polish
-echo "Ta funkcja jest gotowa." >> "$work/polish/docs/guide.md"
-echo "Zażółć gęślą jaźń." >> "$work/polish/README.md"
+echo "Ta funkcja jest gotowa." >> "$work/polish/checkout/docs/guide.md"
+echo "Zażółć gęślą jaźń." >> "$work/polish/checkout/README.md"
 run polish
 check "text not in English: status 1" status_is 1
 check "text not in English: a Polish word" says "^docs/guide.md:21: english: Ta funkcja jest gotowa.$"
@@ -171,7 +174,7 @@ check "text not in English: those two only" findings_are 2
 
 run good --release
 check "a wrong option: status 2" status_is 2
-mkdir -p "$work/empty"
+mkdir -p "$work/empty/checkout"
 run empty
 check "a tree with no README.md and no docs/: status 2" status_is 2
 
