@@ -111,6 +111,7 @@ QtObject {
     property var _sleepNoticeRules: SleepNoticeRulesTest {}
     property var _monitorRules: MonitorRulesTest {}
     property var _screenPowerReading: ScreenPowerReadingTest {}
+    property var _logindIdleBlockReading: LogindIdleBlockReadingTest {}
     // A new suite: its one line above this comment
 
     // Every suite registered above, read from this object's own properties, and those of them

@@ -1,0 +1,1 @@
+([('sleep', 'UPower', 'Pause device polling', 'delay', uint32 0, uint32 2450), ('idle', 'gdm', 'Greeter', 'block', uint32 60, uint32 700), ('handle-lid-switch', 'mpv', 'x', 'block', uint32 @UID@, uint32 3100)],)

@@ -9,7 +9,8 @@ import qs.singletons.lock
 // Idleness, the screensaver and the idle lock: the I/O around IdleRules
 // (notes/plans/idle-lock-flow.md, §8 "Wiring"). It feeds the rules the facts — input idle
 // from two IdleMonitors, the lock from Lockscreen, sleep from SystemSleep, the profile's
-// settings — one event at a time, and carries out the actions they return: the
+// settings, logind's idle block (read before a stage would start, LogindIdleBlock) — one
+// event at a time, and carries out the actions they return: the
 // screensaver's picture per monitor (`shownFor`, which the screensaver's windows follow),
 // the monitors' power (ScreenPower), the lock surface's black fallback (`lockBlack`), the
 // idle lock (Lockscreen.lock("idle")), the start and end commands. One Timer runs to the
@@ -315,7 +316,50 @@ Singleton {
         id: _deadline
         repeat: false
         // An early expiry is harmless: the step finds nothing due and arms again
-        onTriggered: root._dispatch({ type: "deadline" })
+        onTriggered: root._deadlineReached()
+    }
+
+    // A stage or the idle lock due, or a held block's re-read: logind's idle block is read
+    // first, and the deadline stepped after its answer (a read takes at most gdbus's 5 s)
+    property bool _deadlineAfterRead: false
+
+    function _deadlineReached() {
+        if (_deadlineAfterRead)
+            return;
+        if (IdleRules.logindReadDue(_state, _config(), _now())) {
+            _deadlineAfterRead = true;
+            _logindIdle.start();
+            return;
+        }
+        _dispatch({ type: "deadline" });
+    }
+
+    // The outcome logged when it changes: held (by whom), free again, unreadable
+    property string _logindTold: ""
+
+    function _logindRead(block) {
+        const told = block.held === true ? "held:" + block.holders.map(holder => holder.who + " (" + holder.why + ")").join(", ")
+            : block.held === false ? "free" : "unknown";
+        if (told !== _logindTold) {
+            if (block.held === true)
+                _log("info", "logind: an app keeps the screen on: " + told.slice(5));
+            else if (block.held === false && _logindTold !== "")
+                _log("info", "logind: no app keeps the screen on");
+            else if (block.held !== true && block.held !== false)
+                _log("warning", "could not read logind's idle inhibitors: not counted as keeping the screen on");
+            _logindTold = told;
+        }
+        _dispatch({ type: "logindIdleBlock", held: block.held });
+        if (_deadlineAfterRead) {
+            _deadlineAfterRead = false;
+            _dispatch({ type: "deadline" });
+        }
+    }
+
+    LogindIdleBlock {
+        id: _logindIdle
+        toolDirectory: TestSeams.lockTools
+        onRead: block => root._logindRead(block)
     }
 
     Connections {
@@ -334,6 +378,9 @@ Singleton {
         function onResumed() {
             _missedResume.stop();
             root._dispatch({ type: "resumed" });
+            // A block may have ended (or begun) over the sleep: read it again
+            if (!Lockscreen.locked)
+                _logindIdle.start();
         }
     }
 

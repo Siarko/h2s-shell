@@ -291,6 +291,18 @@ Singleton {
         return at >= 0 && now >= at;
     }
 
+    // logind's idle block is read before it matters, not on a clock (logind sends no signal
+    // when one appears): unlocked and not forced, when a stage or the idle lock is due now,
+    // and while a block holds (its re-read, logindRecheck). Idle reads, steps the answer
+    // (logindIdleBlock), then the deadline.
+    function logindReadDue(state, config, now) {
+        if (state.sleeping || state.locked || state.forced)
+            return false;
+        if (state.logindIdleBlock === true)
+            return true;
+        return stage(state, config, now) > state.stage || lockDue(state, config, now);
+    }
+
     // → the next moment `wanted`, `lockDue` or `lockBlack` changes (monotonic ms, never
     // before `now`), or −1. Idle runs one Timer to it.
     function nextDeadline(state, config, now) {

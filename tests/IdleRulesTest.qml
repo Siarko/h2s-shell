@@ -495,12 +495,34 @@ TestCase {
         // logind: an idle block, read at deadlines
         const logind = _machine(values, ["lcd"], true);
         logind.idle(5000, 0);
+        const readDue = (machine, ms) => IdleRules.logindReadDue(machine.state, machine.config, ms);
+        assert(!readDue(logind, 299999), "logind's block not read before a stage is due");
+        assert(readDue(logind, 300000), "… read when the screensaver is due");
         logind.at(300000, { type: "logindIdleBlock", held: true });
         logind.at(300000, { type: "deadline" });
         assertEqual(logind.actions, "", "logind's idle block holds the screensaver");
         assertEqual(logind.next(), 330000, "… read again later (logind sends no signal)");
+        assert(readDue(logind, 310000), "… while held, read at its re-read");
         logind.at(330000, { type: "logindIdleBlock", held: false });
         assertEqual(logind.next(), 630000, "released: counted from the read that saw it gone");
+        assert(!readDue(logind, 629999), "… free: not read again until the next stage is due");
+        assert(readDue(logind, 630000), "… read then");
+        logind.at(630000, { type: "deadline" });
+        assert(!readDue(logind, 640000), "the screensaver reached: not read until screen-off is due");
+        assert(readDue(logind, 680000), "… read at screen-off");
+        logind.at(631000, { type: "logindIdleBlock", held: true });
+        logind.at(632000, { type: "locked" });
+        assert(!readDue(logind, 700000), "locked: never read (inhibitors are ignored there)");
+        logind.at(633000, { type: "unlocked" });
+        logind.at(634000, { type: "sleep" });
+        assert(!readDue(logind, 700000), "asleep: never read");
+
+        const busHeld = _machine(values, ["lcd"], true);
+        busHeld.idle(5000, 0);
+        busHeld.at(100000, { type: "busInhibitors", count: 1 });
+        assert(!readDue(busHeld, 400000), "another inhibitor holds: nothing due, nothing read");
+        busHeld.at(100000, { type: "force" });
+        assert(!readDue(busHeld, 400000), "forced: inhibitors ignored, nothing read");
 
         const failed = _machine(values, ["lcd"], true);
         failed.idle(5000, 0);

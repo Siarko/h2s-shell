@@ -2,7 +2,7 @@ import QtQuick
 import qs.singletons
 
 // What comes into the lock's rules as text (singletons/LockParseRules.qml): the methods
-// script's lines, logind's monitor lines and its GetSession answer.
+// script's lines, logind's monitor lines, its GetSession answer and its idle inhibitors.
 TestCase {
     suiteName: "LockParseRules"
 
@@ -64,6 +64,38 @@ TestCase {
         assertEqual(LockParseRules.parseSessionPath(""), "", "parseSessionPath: nothing");
         assertEqual(LockParseRules.parseSessionPath("(objectpath '/org/freedesktop/login1/user/_1000',)"), "",
                     "parseSessionPath: a path that is no session");
+
+        // logind's idle block (Idle reads it before a stage would start)
+        const inhibitor = (what, who, why, mode, uid) => ({ what: what, who: who, why: why, mode: mode, uid: uid, pid: 1 });
+        const block = (list, uid) => JSON.stringify(LockParseRules.idleBlock(list, uid === undefined ? 1000 : uid));
+        assertEqual(block([inhibitor("idle", "mpv", "Playing", "block", 1000)]),
+                    JSON.stringify({ held: true, holders: [{ who: "mpv", why: "Playing" }] }), "idleBlock: an idle block of this user's: held");
+        assertEqual(block([inhibitor("sleep:idle:shutdown", "Totem", "", "block", 1000)]),
+                    JSON.stringify({ held: true, holders: [{ who: "Totem", why: "" }] }), "idleBlock: idle among other kinds");
+        assertEqual(block([inhibitor("idle", "gdm", "Greeter", "block", 60), inhibitor("idle", "x", "y", "delay", 1000),
+                           inhibitor("sleep", "UPower", "z", "block", 1000), inhibitor("idlesomething", "w", "", "block", 1000),
+                           inhibitor("idle", "h2s-shell", "own", "block", 1000)]),
+                    JSON.stringify({ held: false, holders: [] }),
+                    "idleBlock: another user's, a delay, other kinds and the shell's own do not count: free");
+        assertEqual(block([]), JSON.stringify({ held: false, holders: [] }), "idleBlock: no inhibitors: free");
+        assertEqual(block(null), JSON.stringify({ held: "unknown", holders: [] }), "idleBlock: no list (a failed read): unknown");
+        assertEqual(block([], null), JSON.stringify({ held: "unknown", holders: [] }), "idleBlock: no uid: unknown");
+        const odd = LockParseRules.idleBlock([inhibitor("idle", "<b>a</b>\n" + "b".repeat(60), "line\none " + "c".repeat(100), "block", 1000),
+                                              inhibitor("idle", "", "", "block", 1000)], 1000).holders;
+        assertEqual(odd[0].who.length, 40, "idleBlock: a long name capped");
+        assert(odd[0].who.startsWith("<b>a</b> b") && odd[0].why.startsWith("line one c") && odd[0].why.length === 80,
+                   "idleBlock: one line, capped, kept as plain text");
+        assertEqual(odd[1].who, "an app", "idleBlock: no name: an app");
+        assertEqual(LockParseRules.idleBlock(Array(8).fill(inhibitor("idle", "a", "", "block", 1000)), 1000).holders.length, 5,
+                    "idleBlock: at most 5 holders");
+        const listed = "([('sleep', 'UPower', 'Pause', 'delay', uint32 0, uint32 2), ('idle', 'mpv', 'Playing \\'a\\'', 'block', uint32 1000, uint32 3)],)";
+        assertEqual(JSON.stringify(LockParseRules.idleBlockFromOutput("1000\n" + listed)),
+                    JSON.stringify({ held: true, holders: [{ who: "mpv", why: "Playing 'a'" }] }), "idleBlockFromOutput: id -u, then the list");
+        assertEqual(LockParseRules.idleBlockFromOutput("1000\n(@a(ssssuu) [],)\n").held, false, "idleBlockFromOutput: an empty list: free");
+        assertEqual(LockParseRules.idleBlockFromOutput("1000\n").held, "unknown", "idleBlockFromOutput: gdbus said nothing (it failed): unknown");
+        assertEqual(LockParseRules.idleBlockFromOutput("1000\n([('idle', 'mpv'").held, "unknown", "idleBlockFromOutput: malformed: unknown");
+        assertEqual(LockParseRules.idleBlockFromOutput(listed).held, "unknown", "idleBlockFromOutput: no uid line: unknown");
+        assertEqual(LockParseRules.idleBlockFromOutput(null).held, "unknown", "idleBlockFromOutput: nothing: unknown");
 
         // LockRules forwards them: its callers read the same answers
         assertEqual(JSON.stringify(LockRules.parseMethods("password\t/etc/pam.d\tlogin")),

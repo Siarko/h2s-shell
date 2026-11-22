@@ -4,7 +4,7 @@ import Quickshell
 import QtQuick
 
 // The lock's rules, what comes in as text: the methods script's lines and logind's, read
-// into what LockRules takes. Pure: text in, values out.
+// into what LockRules and IdleRules take. Pure: text in, values out.
 Singleton {
     id: root
 
@@ -57,5 +57,43 @@ Singleton {
         const match = /^\(objectpath '(\/org\/freedesktop\/login1\/session\/[A-Za-z0-9_]+)',?\)$/
             .exec(String(output ?? "").trim());
         return match === null ? "" : match[1];
+    }
+
+    // logind's inhibitors (LockIoRules.parseInhibitors) and this user's uid → whether an
+    // `idle` block inhibitor of this user's holds (`systemd-inhibit --what=idle`, video
+    // players): { held: true | false | "unknown", holders: [{ who, why }] }. "unknown" for no
+    // list or no uid — a failed or malformed read is never "free". Delay inhibitors (logind
+    // has none for idle), other users' (a greeter's) and the shell's own do not count.
+    // `holders`: as they may be shown — one line, capped (who 40, why 80 characters), at
+    // most 5, in logind's order.
+    function idleBlock(inhibitors, uid) {
+        if (!Array.isArray(inhibitors) || typeof uid !== "number" || !Number.isInteger(uid) || uid < 0)
+            return { held: "unknown", holders: [] };
+        const line = (value, limit) => {
+            const text = typeof value === "string"
+                ? value.replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]+/g, " ").replace(/\s+/g, " ").trim() : "";
+            return text.length > limit ? text.slice(0, limit - 1) + "\u2026" : text;
+        };
+        const holders = [];
+        for (const inhibitor of inhibitors) {
+            if (inhibitor?.uid !== uid || inhibitor.mode !== "block" || typeof inhibitor.what !== "string"
+                    || !inhibitor.what.split(":").includes("idle"))
+                continue;
+            const who = line(inhibitor.who, 40);
+            if (who.toLowerCase() === "h2s-shell")
+                continue;
+            holders.push({ who: who || "an app", why: line(inhibitor.why, 80) });
+        }
+        return { held: holders.length > 0, holders: holders.slice(0, 5) };
+    }
+
+    // The idle reader's whole output — `id -u`'s line, then gdbus's ListInhibitors answer —
+    // → idleBlock()
+    function idleBlockFromOutput(output) {
+        const text = typeof output === "string" ? output : "";
+        const newline = text.indexOf("\n");
+        const first = (newline < 0 ? text : text.slice(0, newline)).trim();
+        const uid = /^[0-9]{1,10}$/.test(first) ? Number(first) : null;
+        return idleBlock(newline < 0 ? null : LockIoRules.parseInhibitors(text.slice(newline + 1)), uid);
     }
 }
