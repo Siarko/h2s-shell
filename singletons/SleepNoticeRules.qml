@@ -21,6 +21,40 @@ Singleton {
 
     readonly property var phases: ["quiet", "shown", "waiting"]
 
+    // ---- The look at sleep: what one sleep's outcome is ----
+    // Between PrepareForSleep and the freeze the shell looks, every `lookEvery` ms, whether
+    // the session is locked. "locked" ends the look at once. "unlocked" is final only at
+    // `lookDeadline` — a locker of another program may still be coming up — and the shell's
+    // own lock on its way (lock before sleep, not yet confirmed) is waited for while its own
+    // inhibitor holds the machine anyway (`ownDeadline`, LockStepRules' inhibitorFallback),
+    // and is "unknown" past it, never "unlocked". A locker that locks only after the look
+    // ends (or at resume) counts as unlocked: the contents were there, unlocked, in RAM.
+    readonly property int lookEvery: 250
+    readonly property int lookDeadline: 1000
+    readonly property int ownDeadline: 4000
+
+    // `facts`: { read: the last
+    // answered read of this sleep ("locked" | "unlocked" | "unknown", or null for none yet),
+    // ownLocked (the shell's lock locking or locked), ownConfirmed (the compositor confirmed
+    // it), elapsed (ms since the signal) }. → { outcome, done, lookAgain }: done — the look
+    // ends with `outcome`; lookAgain — read again after lookEvery.
+    function look(facts) {
+        const elapsed = Number(facts?.elapsed);
+        const time = isFinite(elapsed) && elapsed >= 0 ? elapsed : 0;
+        const read = ["locked", "unlocked", "unknown"].includes(facts?.read) ? facts.read : "unknown";
+        if (facts?.ownConfirmed === true || read === "locked")
+            return { outcome: "locked", done: true, lookAgain: false };
+        if (facts?.ownLocked === true) {
+            // The shell's own lock coming up: never "unlocked" while it is
+            if (time < ownDeadline)
+                return { outcome: "unknown", done: false, lookAgain: true };
+            return { outcome: "unknown", done: true, lookAgain: false };
+        }
+        if (time < lookDeadline)
+            return { outcome: read, done: false, lookAgain: true };
+        return { outcome: read, done: true, lookAgain: false };
+    }
+
     // `at`: the time (wall clock ms) of the unlocked sleep the notice is about, 0 in quiet
     function initial() {
         return { phase: "quiet", at: 0 };

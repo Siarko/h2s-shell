@@ -2,11 +2,13 @@
 # A stand-in for hyprctl (tests/SleepLockStateReadingTest.qml), started through a link in the
 # suite's scratch directory: `-j locked` answers that directory's `compositor` as Hyprland
 # prints it (over several lines), and fails as hyprctl does without a compositor when there
-# is no such file. Anything else it is asked fails.
+# is no such file; with "hang" in it, it never answers (a compositor stuck). Anything else it
+# is asked fails.
 here=$(dirname "$0")
 [ "$*" = "-j locked" ] || { echo "the stand-in only knows -j locked" >&2; exit 2; }
 if [ ! -f "$here/compositor" ]; then
     echo "HYPRLAND_INSTANCE_SIGNATURE was set, but no socket was found" >&2
     exit 1
 fi
+[ "$(cat "$here/compositor")" = hang ] && exec sleep 30
 printf '{\n    "locked": %s\n}\n' "$(cat "$here/compositor")"

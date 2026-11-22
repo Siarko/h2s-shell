@@ -596,9 +596,11 @@ launcher agree on the contract described under "Recovery" below):
   looks: the shell's own lock confirmed by the compositor, else
   `singletons/lock/SleepLockState.qml` (`hyprctl -j locked` on Hyprland, and logind's
   LockedHint for the session, decided by `LockIoRules.sleepLockState`: the compositor's word
-  first, a LockedHint true is locked, false or a failed read unknown). Not locked: once more
-  after 0.5 s; the inhibitor is let go when it has looked, at the latest 1 s after the
-  signal. After the resume the outcome (locked, unlocked, unknown) goes to
+  first, a LockedHint true is locked, false or a failed read unknown; hyprctl and gdbus a
+  second each). It reads again every 250 ms until `SleepNoticeRules.look` ends the look:
+  at once when locked, "unlocked" only at its 1 s deadline, the shell's own lock on its way
+  waited for while the lock's inhibitor holds (unknown past that, never unlocked); then the
+  inhibitor is let go. After the resume the outcome (locked, unlocked, unknown) goes to
   `SleepNoticeRules.step` (the cycle quiet → shown → waiting, tested in
   `tests/SleepNoticeRulesTest.qml`): a critical notification, closed means acknowledged, a
   line on the Lockscreen page while it waits for a sleep that locks. The state is kept in

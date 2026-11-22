@@ -375,11 +375,6 @@ TestCase {
         assertEqual(rules.sleepLockState("compositor {\"locked\": \"yes\"}\n"), "unknown", "a locked that is no boolean: unknown");
         for (const nothing of ["", "\n", "garbage", "hint ", "hint Error: no session", null, undefined, 42, "compositor {"])
             assertEqual(rules.sleepLockState(nothing), "unknown", "nothing readable: unknown (" + JSON.stringify(nothing) + ")");
-        assertEqual(rules.sleepLookOutcome(true, "unlocked"), "locked", "the shell's own lock confirmed: locked, whatever was read");
-        assertEqual(rules.sleepLookOutcome(false, "unlocked"), "unlocked", "not its own: what was read");
-        assertEqual(rules.sleepLookOutcome(false, "locked"), "locked", "… another program's lock");
-        assertEqual(rules.sleepLookOutcome(false, undefined), "unknown", "no read: unknown");
-        assertEqual(rules.sleepLookOutcome(false, "maybe"), "unknown", "… nor anything else");
         assertEqual(JSON.stringify(rules.sleepNoticeSaved('{"phase":"waiting","at":5}')), JSON.stringify({ phase: "waiting", at: 5 }),
                     "the remembered notice state read back");
         for (const other of ["", "none", "both:GNOME Shell", "[1]", "null", "{", null, 7])

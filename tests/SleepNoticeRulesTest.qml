@@ -102,5 +102,25 @@ TestCase {
         assertEqual(told.join("|"), "notify@10||||notify@40",
                     "told, acknowledged, still unfixed (silent), fixed (silent), failing again: told again");
         assertEqual(state.phase, "shown", "… and shown");
+
+        // --- the look at sleep ---
+        const look = facts => JSON.stringify(rules.look(facts));
+        const answer = (outcome, done, lookAgain) => JSON.stringify({ outcome: outcome, done: done, lookAgain: lookAgain });
+        assertEqual(look({ read: "locked", elapsed: 10 }), answer("locked", true, false), "read locked: done at once");
+        assertEqual(look({ read: "unlocked", ownConfirmed: true, elapsed: 10 }), answer("locked", true, false),
+                    "the shell's own lock confirmed: locked, whatever was read");
+        assertEqual(look({ read: "unlocked", elapsed: 500 }), answer("unlocked", false, true),
+                    "unlocked before the deadline: looked at again (another locker may still come up)");
+        assertEqual(look({ read: "unlocked", elapsed: 1000 }), answer("unlocked", true, false), "unlocked at the deadline: unlocked");
+        assertEqual(look({ read: null, elapsed: 1200 }), answer("unknown", true, false), "no answer by the deadline (a hung read): unknown");
+        assertEqual(look({ read: "unknown", elapsed: 1000 }), answer("unknown", true, false), "unknown at the deadline: unknown");
+        assertEqual(look({ read: "unlocked", ownLocked: true, elapsed: 1500 }), answer("unknown", false, true),
+                    "the shell's own lock still coming up past the deadline: looked at on (its inhibitor holds the machine)");
+        assertEqual(look({ read: "unlocked", ownLocked: true, elapsed: 4000 }), answer("unknown", true, false),
+                    "… past its own deadline: unknown, never unlocked");
+        assertEqual(look({ read: "unlocked", ownLocked: true, ownConfirmed: true, elapsed: 2000 }), answer("locked", true, false),
+                    "… confirmed: locked");
+        assertEqual(look({ read: "maybe", elapsed: "x" }), answer("unknown", false, true), "facts not understood: unknown, looked at again");
+        assertEqual(look(undefined), answer("unknown", false, true), "no facts: unknown, looked at again");
     }
 }

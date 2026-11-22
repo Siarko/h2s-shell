@@ -526,14 +526,6 @@ Singleton {
         return hint;
     }
 
-    // The outcome of one look: the shell's own lock confirmed by the compositor is locked
-    // whatever was read; otherwise what was read (sleepLockState), or unknown without a read
-    function sleepLookOutcome(ownLocked, read) {
-        if (ownLocked === true)
-            return "locked";
-        return read === "locked" || read === "unlocked" ? read : "unknown";
-    }
-
     // The sleep notice's remembered state as Config keeps it (JSON text; "" for none) →
     // the object for SleepNoticeRules.restore, or null when it is not one (an older
     // version's text, a broken file): restore makes that quiet

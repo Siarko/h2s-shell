@@ -1,7 +1,8 @@
 # The sleep notice by outcome (SleepLockNotice), through the logind stand-ins (stack_start
 # --logind) and the bed's own Hyprland, lock before sleep off (the default): the shell holds
-# an inhibitor of its own while awake and lets it go within 1 s of PrepareForSleep, having
-# looked whether the session is locked. Unlocked (the bed's Hyprland says so: `hyprctl -j
+# an inhibitor of its own while awake and lets it go once it has looked whether the session
+# is locked: at once when locked, at the look's 1 s deadline when not (it reads again every
+# quarter second meanwhile: another locker may still come up) — within 1.5 s here. Unlocked (the bed's Hyprland says so: `hyprctl -j
 # locked`; the stand-in's LockedHint false alone would be unknown) → after the resume the
 # critical notice, once; closed → waiting, the page's line, remembered in the config; another
 # unlocked sleep while waiting → no second notice; a locked sleep → fixed, nothing said; the
@@ -54,7 +55,8 @@ check "the lock's own is not (lock before sleep is off)" test "$(grep -c '^hold'
 logind_signal sleep
 check_within "$GUARD" "PrepareForSleep, unlocked: the inhibitor let go" check_released
 log "PrepareForSleep to the release: $(check_release_seconds) s"
-check "… within 1 s" check_released_within 1
+check "… within 1.5 s (the look's deadline is 1 s)" check_released_within 1.5
+check "… not before the deadline" test "$(check_release_seconds | cut -d. -f1)" -ge 1
 check_within "$GUARD" "the look ended" slept 1
 check "… unlocked" slept_as unlocked
 check "nothing said before the resume" shows_are 0
@@ -85,7 +87,7 @@ check_within "$GUARD" "locked" compositor_locked
 logind_signal sleep
 check_within "$GUARD" "asleep, locked: the inhibitor let go" check_released
 log "PrepareForSleep to the release: $(check_release_seconds) s"
-check "… within 1 s" check_released_within 1
+check "… at once (within 0.5 s)" check_released_within 0.5
 check_within "$GUARD" "the look ended" slept 3
 check "… locked" slept_as locked
 logind_signal wake

@@ -548,7 +548,7 @@ The interface modules are written against (`qs.api`), versioned on its own
   a colour of its own, "Modal dimming" (Colors → Backgrounds).
 - The shell tells you when the screen was not locked while the computer slept: at each
   sleep it looks whether the session is locked (its own lock, Hyprland's lock state, else
-  logind's LockedHint; it holds the sleep back for at most a second to look), and after an
+  logind's LockedHint; it holds the sleep back for about a second to look), and after an
   unlocked one shows a critical notification, "Not locked while asleep", once. Closing it
   leaves a line on Settings → Lockscreen until a sleep locks; the next unlocked sleep after
   that is told again. No program is named or guessed; a sleep whose lock state could not be

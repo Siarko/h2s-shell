@@ -23,6 +23,11 @@ TestCase {
     property bool _ready: false
     property int _readsBefore: 0
     property string _calls: ""
+    property double _startedAt: 0
+    property Timer _stopSoon: Timer {
+        interval: 200
+        onTriggered: suite._reader.stop()
+    }
 
     property Component _readerComponent: Component {
         SleepLockState {}
@@ -71,13 +76,15 @@ TestCase {
     }
 
     // The next read, the compositor and the hint as given ("" for none: that stand-in fails)
-    function _readWith(compositor, hint) {
+    function _readWith(compositor, hint, started) {
         _ready = false;
         _sh("rm -f \"$1/compositor\" \"$1/hint\" \"$1/calls\"\n"
             + "[ -z \"$2\" ] || echo \"$2\" > \"$1/compositor\"\n"
             + "[ -z \"$3\" ] || echo \"$3\" > \"$1/hint\"", [_scratch, compositor, hint], () => {
             suite._readsBefore = suite._reader.reads;
+            suite._startedAt = Date.now();
             suite._reader.start();
+            started?.();
             suite._ready = true;
         });
     }
@@ -144,6 +151,18 @@ TestCase {
         });
         _then("no gdbus at all: answered", () => _answered(), () => {
             assertEqual(_reader.outcome, "unknown", "no gdbus at all: unknown");
+            _make();
+            _readWith("hang", "true");
+        });
+        _then("a hyprctl that never answers: answered", () => _answered(), () => {
+            const took = Date.now() - suite._startedAt;
+            assert(took < 3000, "a hyprctl that never answers is given a second, not more (" + took + " ms)");
+            assertEqual(_reader.outcome, "locked", "… and the hint read after it");
+            _readWith("hang", "", () => suite._stopSoon.start());
+        });
+        _then("a read stopped: answered", () => _answered(), () => {
+            assert(Date.now() - suite._startedAt < 1000, "stop() ends a running read at once");
+            assertEqual(_reader.outcome, "unknown", "… as unknown");
         });
         _clock.start();
         _sh("set -e; mkdir -p \"$1\"; ln -s \"$2/gdbus\" \"$2/hyprctl\" \"$1/\"", [_scratch, _fixtures], code => {

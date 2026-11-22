@@ -419,9 +419,10 @@ PanelWindow {
             return found === null ? "not found" : found.testDismiss() ? "" : "not open";
         }
 
-        // The sleep notice's state and its look at sleep (SleepLockNotice.describe)
+        // The sleep notice's state and its look at sleep (SleepLockNotice.describe); in test
+        // mode only ("{}" otherwise)
         function sleepNotice(): string {
-            return SleepLockNotice.describe();
+            return Modules.host.testMode ? SleepLockNotice.describe() : "{}";
         }
 
         // How many toasts wait in each queue, as the badges count them: { critical, staying,

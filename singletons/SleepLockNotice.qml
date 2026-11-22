@@ -10,11 +10,10 @@ import qs.singletons.lock
 // The shell holds a sleep delay inhibitor of its own while awake ("Check the screen is
 // locked before sleep"), so that at logind's PrepareForSleep it has a moment to look before
 // the machine goes down: the shell's own lock confirmed by the compositor, else what the
-// compositor or logind says (SleepLockState). Locked: let go at once. Otherwise it looks once
-// more after `_lookAgain` (again while the shell's own lock is on its way) and lets go then,
-// at the latest `_deadline` after the signal — whatever was read by then is the outcome
-// ("unknown" without an answer). After the resume
-// the outcome goes to SleepNoticeRules, whose actions show or withdraw the critical
+// compositor or logind says (SleepLockState). It reads again every quarter second until
+// SleepNoticeRules.look says the look is done — at once when locked, "unlocked" only at its
+// deadline (1 s), the shell's own lock on its way waited for — and lets go then. After the
+// resume the outcome goes to SleepNoticeRules, whose actions show or withdraw the critical
 // notification; closing it (× or its action) acknowledges it. The inhibitor is taken again
 // after the wake, or when no wake was heard for `_missedResume` of running time.
 //
@@ -31,15 +30,13 @@ Singleton {
     readonly property string summary: "Not locked while asleep"
     readonly property string body: "The screen was not locked while the computer slept."
 
-    readonly property int _lookAgain: 500
-    readonly property int _deadline: 1000
     readonly property int _missedResume: 60000
     readonly property bool _configUsable: Config.ready && !Config.loadFailed
 
     // "awake" (inhibitor held), "checking" (PrepareForSleep heard, looking), "asleep"
     // (looked, inhibitor let go, waiting for the resume)
     property string _phase: "awake"
-    // The sleep being looked at: { generation, at, looks, outcome }
+    // The sleep being looked at: { generation, at, read (the last answer), outcome }
     property var _sleep: null
     property int _generation: 0
     property var _handle: null
@@ -110,54 +107,51 @@ Singleton {
         if (_phase === "asleep")
             _resumed();
         _generation++;
-        _sleep = { generation: _generation, at: Date.now(), looks: 0, outcome: "unknown" };
+        _sleep = { generation: _generation, at: Date.now(), read: null, outcome: "unknown" };
         _phase = "checking";
-        _deadlineTimer.restart();
-        _look();
+        _startRead();
+        _tick.restart();
+        _evaluate();
     }
 
-    function _look() {
-        if (_phase !== "checking")
-            return;
-        _sleep.looks++;
-        if (Lockscreen.lockConfirmed) {
-            _sleep.outcome = "locked";
-            _finish();
-            return;
-        }
-        // One read at a time: one still running answers this look if it is this sleep's; an
-        // earlier sleep's is ignored, and the deadline ends the look
+    // One read at a time: a read still running (a hung one: hyprctl and gdbus are bounded to
+    // a second each, and the end of the look stops it) is left to answer
+    function _startRead() {
         if (_reader.running)
             return;
         _reader.generation = _sleep.generation;
         _reader.start();
     }
 
+    // SleepNoticeRules.look decides: done (the outcome final, the inhibitor let go), or look
+    // on — a new read at each tick
+    function _evaluate(fromTick) {
+        if (_phase !== "checking")
+            return;
+        const result = SleepNoticeRules.look({
+            read: _sleep.read, ownLocked: Lockscreen.locked, ownConfirmed: Lockscreen.lockConfirmed,
+            elapsed: Date.now() - _sleep.at
+        });
+        _sleep.outcome = result.outcome;
+        if (result.done)
+            _finish();
+        else if (fromTick === true && result.lookAgain)
+            _startRead();
+    }
+
     function _read(outcome) {
         // Late answers lose: a read started for an earlier sleep, or after this one's look ended
         if (_phase !== "checking" || _reader.generation !== _sleep.generation)
             return;
-        _sleep.outcome = LockIoRules.sleepLookOutcome(Lockscreen.lockConfirmed, outcome);
-        // The shell's own lock on its way (lock before sleep): looked at again until the
-        // deadline, its confirmation ends the look at once (below)
-        if (_sleep.outcome === "locked" || (_sleep.looks >= 2 && !Lockscreen.locked))
-            _finish();
-        else
-            _lookAgainTimer.restart();
-    }
-
-    // The deadline: whatever was read by then, unless the shell's own lock is confirmed
-    function _deadlinePassed() {
-        if (_phase === "checking" && Lockscreen.lockConfirmed)
-            _sleep.outcome = "locked";
-        _finish();
+        _sleep.read = outcome;
+        _evaluate();
     }
 
     function _finish() {
         if (_phase !== "checking")
             return;
-        _lookAgainTimer.stop();
-        _deadlineTimer.stop();
+        _tick.stop();
+        _reader.stop();
         _phase = "asleep";
         _missedResumeTimer.restart();
         _log("went to sleep " + _sleep.outcome + " (looked for " + (Date.now() - _sleep.at) + " ms)");
@@ -176,12 +170,7 @@ Singleton {
 
     Connections {
         target: Lockscreen
-        function onLockConfirmedChanged() {
-            if (root._phase === "checking" && Lockscreen.lockConfirmed) {
-                root._sleep.outcome = "locked";
-                root._finish();
-            }
-        }
+        function onLockConfirmedChanged() { root._evaluate(); }
     }
 
     Connections {
@@ -212,15 +201,10 @@ Singleton {
     }
 
     Timer {
-        id: _lookAgainTimer
-        interval: root._lookAgain
-        onTriggered: root._look()
-    }
-
-    Timer {
-        id: _deadlineTimer
-        interval: root._deadline
-        onTriggered: root._deadlinePassed()
+        id: _tick
+        interval: SleepNoticeRules.lookEvery
+        repeat: true
+        onTriggered: root._evaluate(true)
     }
 
     // Running time only (a timer stands still while the machine sleeps): this long awake

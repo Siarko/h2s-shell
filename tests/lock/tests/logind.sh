@@ -5,7 +5,8 @@
 # confirmed, no passive method runs while suspending and they start again after the wake.
 # Also: a monitor that dies is started again, an inhibitor that dies is taken again, and
 # the resume ends a screensaver that was up when the machine went to sleep (it counts as
-# input), and the lock is reported to logind (SetLockedHint, recorded by the stand-in). Lock
+# input), and the lock is reported to logind (SetLockedHint, recorded by the stand-in); the
+# sleep notice's look waits for the shell's own lock and says nothing after it. Lock
 # before sleep is off by default: switched on here; the screensaver too.
 
 stack_start --logind --methods "password fingerprint" --settings '{"lockscreen.lockOnSleep": true,
@@ -65,6 +66,11 @@ order=$(tail -n +"$sleep_line" "$WORK/shell.log" | grep -a -o 'event {"type":"co
 log "after PrepareForSleep: $order"
 check "the inhibitor was released only after the compositor confirmed the lock" \
     test "$order" = 'event {"type":"compositorLocked","session":2} effect {"type":"releaseInhibitor"} '
+# The sleep notice's look (SleepLockNotice): the shell's own lock, coming up after the
+# PrepareForSleep, is waited for — never a false "unlocked"
+notice_looked() { tail -n +"$sleep_line" "$WORK/shell.log" | grep -aq '\[SleepLockNotice\] went to sleep'; }
+check_within "$GUARD" "the sleep notice looked" notice_looked
+check "… and saw it locked" grep -aq '\[SleepLockNotice\] went to sleep locked ' <<< "$(tail -n +"$sleep_line" "$WORK/shell.log")"
 sleep 1 # fixed sleep: a negative claim: no conversation starts while suspending
 check "no fingerprint conversation while suspending" no_finger_waiters
 check "the fingerprint is paused" state_is fingerprint_status paused
@@ -79,6 +85,8 @@ logind_signal wake
 # From the log, not the state: with still no input the screensaver comes again 5 s later
 saver_ended_after_wake() { tail -n +"$wake_line" "$WORK/shell.log" | grep -aq '\[Idle\] the screensaver goes'; }
 check_within "$GUARD" "the resume (PrepareForSleep(false)) ends the screensaver" saver_ended_after_wake
+notice_phase() { shell_ipc shelltest sleepNotice | python3 -I -c 'import json, sys; print(json.load(sys.stdin)["notice"]["phase"])'; }
+check "no sleep notice after the resume (the sleep went down locked)" test "$(notice_phase)" = quiet
 check_within "$GUARD" "after the wake the inhibitor is taken again" lines_more_than "$holds_before" '^hold' "$WORK/logind/log"
 check_within "$GUARD" "after the wake a fingerprint conversation runs" _one_finger_waiter
 finger ok

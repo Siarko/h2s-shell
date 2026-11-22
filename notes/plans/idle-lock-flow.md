@@ -251,7 +251,10 @@ What it would report wrongly:
 - before the first sleep it knows nothing (the "possible" case today is the same);
 - a locker that locks after the look but before the freeze reads as "unlocked" (a false
   alarm), and one that locks only at resume reads as "unlocked" (true: the contents were in
-  RAM unlocked, and visible at the wake for a moment);
+  RAM unlocked, and visible at the wake for a moment). Decided: a locker later than the
+  look's 1 s deadline counts as unlocked; the look reads every 250 ms until then, so one
+  that locks within the second (hypridle starting hyprlock) is seen. Looking on while other
+  sleep delay inhibitors of the user are held was considered and left out for now;
 - off Hyprland, a locker that does not set `LockedHint` reads as unknown — nothing said;
 - a sleep while already locked by idle says nothing about the next lid close: only sleeps
   from an unlocked session count;
@@ -608,9 +611,11 @@ machine is checked at the slice and, if used, the owner asked (decisions, "Data 
 Replaces `SleepLockers` and the name lists in `LockIoRules` (§4). The shell holds a sleep
 delay inhibitor always (`h2s-shell`, "Checks the screen is locked before sleep"), not only
 with `lockOnSleep`. At `PrepareForSleep(true)` it looks: own lock, else `hyprctl -j locked` on
-Hyprland, else `LockedHint`; once more after 500 ms if unlocked; then releases (at once when
-already locked; ≤ 1 s otherwise; `lockOnSleep` keeps today's longer hold until the lock is
-confirmed). The outcome of a sleep is `locked`, `unlocked` or `unknown`; a sleep that started
+Hyprland, else `LockedHint`; again every 250 ms; then releases — at once when locked,
+"unlocked" only at the 1 s deadline, and while the shell's own lock is still coming up
+(`lockOnSleep`) it looks on as long as the lock's own inhibitor holds (≤ 4 s), "unknown"
+past that, never "unlocked". The look's decisions are `SleepNoticeRules.look` (pure, cases
+in `SleepNoticeRulesTest`). The outcome of a sleep is `locked`, `unlocked` or `unknown`; a sleep that started
 from an already locked session is `locked`.
 
 ### The cycle: `SleepNoticeRules.step(state, event)`

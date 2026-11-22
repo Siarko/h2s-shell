@@ -388,7 +388,8 @@ Two stages, both driven by Wayland idle notifications and both counted from the 
   locked: its own lock, the compositor's lock state on Hyprland (`hyprctl -j locked`), else
   logind's LockedHint (set by lockers that report their lock). For that it holds a logind
   delay inhibitor of its own while awake ("Check the screen is locked before sleep") and
-  lets go as soon as it has looked, at the latest a second after the sleep began. After a
+  lets go as soon as it has seen a lock, or a second after the sleep began when it has not
+(longer only while its own lock before sleep is still coming up). After a
   sleep that went down unlocked it shows a critical notification, "Not locked while asleep",
   once; closing it acknowledges it, and Settings → Lockscreen keeps a line until a sleep
   locks. The next unlocked sleep after that is told again. No program is named: off
