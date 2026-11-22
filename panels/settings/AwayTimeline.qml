@@ -7,7 +7,7 @@ import qs.singletons
 // What happens when you are away, as a line from your last input: one lane, or one per
 // monitor, each with its stretches (the desktop, the screensaver, off, asleep, hibernated);
 // the lock one line across every lane, the sleep and the hibernation others (the whole
-// computer), the commands' moment a grey one; the last of the sleep and the hibernation,
+// computer), each command entry's moment a grey one; the last of the sleep and the hibernation,
 // long after the rest, on a compressed tail after a break "≈"
 // (AwayViewRules.axis); the times as labels above the lanes,
 // or below where they would touch (AwayViewRules.placeLabels); one line under it. Always
@@ -22,8 +22,8 @@ ColumnLayout {
     property bool perMonitor: false
     // Seconds; 0 = no idle lock
     property int lockAfter: 0
-    // The commands' moment (seconds), -1 while they do not run
-    property int commandsAt: -1
+    // The command entries' moments: [{ t (seconds), number }] (AwayViewRules.commandMarks)
+    property var commands: []
     // Seconds; 0 = no sleep after idle
     property int sleepAfter: 0
     // The hibernation as IdleRules.config gives it ({ on, from, at, after }), or null
@@ -42,7 +42,7 @@ ColumnLayout {
     readonly property real laneLabelWidth: perMonitor ? 150 : 0
     readonly property real trackWidth: Math.max(1, width - laneLabelWidth)
     // { end, breakAt, tailAt } (seconds)
-    readonly property var axis: AwayViewRules.axis(_times, lockAfter, commandsAt, sleepAfter, hibernateAt)
+    readonly property var axis: AwayViewRules.axis(_times, lockAfter, commands, sleepAfter, hibernateAt)
     readonly property int axisEnd: axis.end
     readonly property string caption: AwayViewRules.caption({
         holders: holders, sleepBlockers: sleepBlockers, anything: anything, lockAfter: lockAfter, sleepAfter: sleepAfter, hibernate: hibernate,
@@ -53,7 +53,7 @@ ColumnLayout {
         return trackWidth * AwayViewRules.place(t, axis);
     }
 
-    readonly property var marks: AwayViewRules.marks(_times, lockAfter, commandsAt, seconds => Format.duration(seconds), canPowerOff, sleepAfter,
+    readonly property var marks: AwayViewRules.marks(_times, lockAfter, commands, seconds => Format.duration(seconds), canPowerOff, sleepAfter,
                                                      hibernateAt)
     // Each mark's label where it goes: [{ text, kind, left, row }]
     readonly property var labels: {
@@ -197,14 +197,19 @@ ColumnLayout {
             }
         }
 
-        // The commands' moment: a grey line across the lanes
-        Rectangle {
-            visible: root.commandsAt > 0
-            x: root.laneLabelWidth + root.xOf(root.commandsAt) - 1
-            width: 2
-            height: parent.height
-            color: Theme.textSecondary
-            opacity: 0.8
+        // Each command entry's moment: a grey line across the lanes
+        Repeater {
+            model: ScriptModel { values: root.commands.map(mark => String(mark.t)).filter((t, index, all) => all.indexOf(t) === index) }
+
+            Rectangle {
+                required property string modelData
+                objectName: "timelineCommand"
+                x: root.laneLabelWidth + root.xOf(Number(modelData)) - 1
+                width: 2
+                height: parent.height
+                color: Theme.textSecondary
+                opacity: 0.8
+            }
         }
 
         // The sleep: the whole computer, a line across every lane

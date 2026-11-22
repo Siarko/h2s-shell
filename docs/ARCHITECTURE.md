@@ -579,7 +579,7 @@ launcher agree on the contract described under "Recovery" below):
   and a `power` event: an action a reading does not show is asked again with a growing
   pause; the monitors it turned off are remembered in `Config.screensOff`, so a restarted
   shell turns those, and only those, on again), the lock surface's black fallback
-  (`lockBlack`; the lock screen's screen-off waits while `Lockscreen.attended`), the idle lock (`Lockscreen.lock("idle")`), the start and end commands. Another program's
+  (`lockBlack`; the lock screen's screen-off waits while `Lockscreen.attended`), the idle lock (`Lockscreen.lock("idle")`), the command entries' commands (`runCommand`, detached). Another program's
   session lock read as held (`Lockscreen.foreignLocked`, `singletons/lock/ForeignLock.qml`
   around the pure `LockRules.foreignStep`) counts as locked for `IdleRules` and the
   `screen.locked` fact; it is read again with a growing pause until it ends (three

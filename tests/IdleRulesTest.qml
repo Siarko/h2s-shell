@@ -20,6 +20,8 @@ TestCase {
                 return action.type + ":" + action.active;
             if (action.black !== undefined)
                 return action.type + ":" + action.black;
+            if (action.type === "runCommand")
+                return action.which + ":" + action.id;
             if (action.leftUnlocked !== undefined)
                 return action.type + (action.thenHibernate === true ? "+hibernate" : "") + ":" + (action.leftUnlocked ? "unlocked" : "locked");
             return action.type;
@@ -72,7 +74,10 @@ TestCase {
         return self;
     }
 
-    readonly property var saver: ({ screensaverEnabled: true, screensaverTimeout: 300, screensaverCommands: true })
+    // The default command entry ("every screen dark") with its two commands: today's start
+    // and back commands
+    readonly property var darkCommands: ({ id: "d", moment: "dark", monitors: null, go: "start", back: "end" })
+    readonly property var saver: ({ screensaverEnabled: true, screensaverTimeout: 300, commandEntries: [darkCommands] })
 
     function _with(base, extra) {
         return Object.assign({}, base, extra);
@@ -111,7 +116,170 @@ TestCase {
         _powerReadBack();
         _lockAttended();
         _restore();
+        _commandEntries();
         _edges();
+    }
+
+    // The command entries: each its moment, its "go" then, its "back" at the moment's end
+    function _commandEntries() {
+        const rules = IdleRules;
+        const entry = (id, moment, monitors) => ({ id: id, moment: moment, monitors: monitors, go: id + "-go", back: id + "-back" });
+        const desk = ["lcd", "oled", "clock"];
+        // The LCD's screensaver at 5 min, the OLED off at 5 min, the small clock off after 1 h
+        const deskTimes = { lcd: _entry(300, 0), oled: _entry(0, 300), clock: _entry(0, 3600) };
+
+        // Waiting for two of three monitors
+        const two = _machine(_own({ commandEntries: [entry("pair", "dark", ["lcd", "oled"]), entry("all", "dark", null)] }, deskTimes), desk, true);
+        two.idle(5000, 0).deadline();
+        assertEqual(two.actions, "showSaver:lcd+oled,powerOff:oled,go:pair",
+                    "an entry waiting for the LCD and the OLED: its go at 5 min, when both are dark");
+        assertEqual(two.next(), 3600000, "… the next deadline: the clock's screen-off");
+        two.deadline();
+        assertEqual(two.actions, "showSaver:clock,powerOff:clock,go:all,active:true", "the default entry (every monitor): at 1 h, with active");
+        two.input(3700000);
+        assertEqual(two.actions, "powerOn:oled+clock,hideSaver:lcd+oled+clock,back:pair,back:all,active:false",
+                    "input: both entries' backs, in the order their gos ran");
+        assertEqual(JSON.stringify(two.state.commandsRun), "[]", "… none due any more");
+
+        // A monitor that never goes dark is not waited for
+        const always = _with(deskTimes, { clock: _entry(0, 0) });
+        const never = _machine(_own({ commandEntries: [entry("all", "dark", null), entry("named", "dark", ["lcd", "clock"]),
+                                                        entry("clockOnly", "dark", ["clock"])] }, always), desk, true);
+        never.idle(5000, 0).deadline();
+        assertEqual(never.actions, "showSaver:lcd+oled,powerOff:oled,go:all,go:named,active:true",
+                    "the clock never dark: every screen dark at 5 min, an entry naming the clock and the LCD too");
+        assertEqual(rules.commandWaits(entry("named", "dark", ["lcd", "clock"]), never.config, false).join(" "), "lcd",
+                    "… it waits for the LCD only");
+        assertEqual(rules.commandWaits(entry("clockOnly", "dark", ["clock"]), never.config, false).length, 0,
+                    "an entry naming only the clock: its moment never comes");
+        assert(!never.state.commandsRun.some(record => record.id === "clockOnly"), "… its go never runs");
+        assertEqual(rules.commandWaits(entry("clockOnly", "dark", ["clock"]), never.config, true).join(" "), "clock",
+                    "… with the screensaver forced every monitor goes dark: it waits for the clock");
+        assertEqual(rules.commandWaits(entry("gone", "dark", ["Dell|U27|SN"]), never.config, false).length, 0,
+                    "an entry naming a monitor not connected: nothing to wait for");
+        const twinKeys = rules.config({ screensaverEnabled: true }, [{ id: "A|B||DP-1", base: "A|B|", connector: "DP-1" }], true);
+        assertEqual(rules.commandWaits(entry("twin", "dark", ["A|B|"]), twinKeys, false).join(" "), "A|B||DP-1",
+                    "a monitor named under the other form of its key: waited for");
+
+        // Locked: the go at any lock, the back at the unlock — not at input on the lock screen
+        const lockEntries = { screensaverEnabled: true, screensaverTimeout: 300, lockedScreenOffTimeout: 0, commandEntries: [darkCommands, entry("away", "lock", null)] };
+        const lock = _machine(lockEntries, ["lcd"], true);
+        lock.at(1000, { type: "locked" });
+        assertEqual(lock.actions, "go:away,active:true", "locked by hand: the lock entry's go");
+        lock.idle(10000, 5000).deadline();
+        assertEqual(lock.actions, "showSaver:lcd,go:d", "… idle reaches the screensaver's time under the lock: the dark entry's go");
+        lock.input(400000);
+        assertEqual(lock.actions, "hideSaver:lcd,back:d", "input at the lock screen: the dark entry's back (the first input), not the lock's");
+        lock.at(410000, { type: "locked" });
+        assertEqual(lock.actions, "", "a locked event while locked: no go again");
+        lock.at(420000, { type: "unlocked" });
+        assertEqual(lock.actions, "back:away,active:false", "the unlock: the lock entry's back");
+        lock.at(430000, { type: "unlocked" });
+        assertEqual(lock.actions, "", "… once");
+
+        // Before sleep: the go at any sleep, the back at the resume
+        const sleepEntries = { screensaverEnabled: true, screensaverTimeout: 300, commandEntries: [darkCommands, entry("nap", "sleep", null)] };
+        const nap = _machine(sleepEntries, ["lcd"], true);
+        nap.at(1000, { type: "sleep" });
+        assertEqual(nap.actions, "go:nap", "going to sleep (logind's PrepareForSleep): the sleep entry's go");
+        nap.at(1500, { type: "sleep" });
+        assertEqual(nap.actions, "", "… once for one sleep");
+        nap.at(2000, { type: "inputIdle", idle: false });
+        assertEqual(nap.actions, "", "input while going to sleep: no back (the resume ends it)");
+        nap.at(60000, { type: "resumed" });
+        assertEqual(nap.actions, "back:nap", "the resume: its back");
+        const darkNap = _machine(sleepEntries, ["lcd"], true).idle(5000, 0).deadline();
+        darkNap.at(400000, { type: "sleep" });
+        darkNap.at(500000, { type: "resumed" });
+        assertEqual(darkNap.actions, "hideSaver:lcd,back:nap,back:d,active:false", "asleep with the screens dark: the resume ends both moments");
+
+        // Back only after go
+        const early = _machine(lockEntries, ["lcd"], true).idle(5000, 0);
+        early.input(100000);
+        assertEqual(early.actions, "", "input before the screens went dark: no back");
+        const addedLocked = _machine({ commandEntries: [] }, ["lcd"], true).at(1000, { type: "locked" });
+        addedLocked.reconfigure(2000, { commandEntries: [entry("away", "lock", null)] });
+        assertEqual(addedLocked.actions, "", "a lock entry added while locked: its moment has passed, no go");
+        addedLocked.at(3000, { type: "unlocked" });
+        assertEqual(addedLocked.actions, "active:false", "… so no back at the unlock");
+
+        // A stage switched off after the go: the back still waits for the return
+        const off = _machine(_with(saver, { screenOffEnabled: true, screenOffTimeout: 600 }), ["lcd"], true).idle(5000, 0).deadline();
+        assertEqual(off.actions, "showSaver:lcd,go:d,active:true", "(the go at the screensaver)");
+        off.reconfigure(400000, { screenOffEnabled: true, screenOffTimeout: 600, commandEntries: [darkCommands] });
+        assertEqual(off.actions, "hideSaver:lcd", "the screensaver switched off while the screen-off is to come: hidden, no back");
+        off.reconfigure(410000, { commandEntries: [darkCommands] });
+        assertEqual(off.actions, "active:false", "every stage switched off: not active, still no back (still away)");
+        off.input(420000);
+        assertEqual(off.actions, "back:d", "… the back at the return");
+
+        // The schema's default (every screen dark, no commands): nothing runs, as with no commands before
+        const defaults = _with(saver, { commandEntries: SettingsSchema.entry("lockscreen.commandEntries").default });
+        assertEqual(JSON.stringify(rules.config(defaults, ["lcd"], true).commands.map(kept => [kept.moment, kept.monitors, kept.go, kept.back])),
+                    JSON.stringify([["dark", null, "", ""]]), "the default list: one \"every screen dark\" entry without commands");
+        const quiet = _machine(defaults, ["lcd"], true).idle(5000, 0).deadline();
+        assertEqual(quiet.actions, "showSaver:lcd,active:true", "… its moment comes, nothing runs");
+        quiet.input(400000);
+        assertEqual(quiet.actions, "hideSaver:lcd,active:false", "… nor at the return");
+        const backOnly = _machine(_with(saver, { commandEntries: [{ id: "b", moment: "dark", monitors: null, go: "", back: "here" }] }), ["lcd"], true);
+        backOnly.idle(5000, 0).deadline().input(400000);
+        assertEqual(backOnly.actions, "hideSaver:lcd,back:b,active:false", "an entry with a back only: its moment came, the back at the return");
+
+        // A profile switched mid-idle: the back of the go that ran, whatever the new list says
+        const switched = _machine(saver, ["lcd"], true).idle(5000, 0).deadline();
+        switched.reconfigure(400000, { screensaverEnabled: true, screensaverTimeout: 300, commandEntries: [entry("other", "dark", null)] });
+        assertEqual(switched.actions, "go:other", "a profile with another dark entry, its moment passed: its go at the switch");
+        switched.reconfigure(410000, { screensaverEnabled: true, screensaverTimeout: 300, commandEntries: [] });
+        assertEqual(switched.actions, "", "a profile without entries: nothing runs at the switch");
+        switched.input(420000);
+        assertEqual(switched.actions, "hideSaver:lcd,back:d,back:other,active:false", "… at the return the backs of both gos, as they were");
+        const sameId = _machine(saver, ["lcd"], true).idle(5000, 0).deadline();
+        sameId.reconfigure(400000, _with(saver, { commandEntries: [Object.assign({}, darkCommands, { back: "changed" })] }));
+        assertEqual(sameId.actions, "", "the same entry in another profile: its go not again");
+        const backs = [];
+        IdleRules.step(sameId.state, { type: "inputIdle", idle: false }, sameId.config, 410000).actions
+            .filter(action => action.type === "runCommand").forEach(action => backs.push(action.which + " " + action.command));
+        assertEqual(backs.join(","), "back end", "… and the back that runs is the one of the go");
+
+        // The entries understood
+        assertEqual(JSON.stringify(rules.commandEntry({ id: "x", moment: "lock" })), JSON.stringify({ id: "x", moment: "lock", monitors: null, go: "", back: "" }),
+                    "an entry without monitors and commands: none of either");
+        for (const [bad, why] of [[{ id: "", moment: "dark" }, "an empty id"], [{ id: "x", moment: "idle" }, "an unknown moment"],
+                                  [{ id: "x", moment: "dark", monitors: "lcd" }, "monitors not a list"],
+                                  [{ id: "x", moment: "dark", monitors: [""] }, "an empty monitor key"],
+                                  [{ id: "x", moment: "dark", go: 5 }, "a command not a string"],
+                                  [{ id: "x", moment: "dark", back: "a".repeat(rules.maxCommandLength + 1) }, "a command too long"],
+                                  [{ id: "a\nb", moment: "dark" }, "an id with a line break"], [[], "a list"], [null, "nothing"]])
+            assertEqual(rules.commandEntry(bad), null, why + ": not understood");
+        assert(rules.commandEntry({ id: "x", moment: "dark", go: "a".repeat(rules.maxCommandLength) }) !== null, "a command of the longest length: taken");
+        assertEqual(rules.commandEntries([{ id: "a", moment: "lock" }, { id: "a", moment: "sleep" }, { id: "b", moment: "nope" }, { id: "c", moment: "sleep" }])
+                    .map(kept => kept.id + ":" + kept.moment).join(" "), "a:lock c:sleep", "a list: a taken id and one not understood left out");
+        assertEqual(rules.commandEntries("junk").length, 0, "not a list: no entries");
+        const many = [];
+        for (let i = 0; i < rules.maxCommandEntries + 2; i++)
+            many.push({ id: "e" + i, moment: "lock" });
+        assertEqual(rules.commandEntries(many).length, rules.maxCommandEntries, "at most maxCommandEntries kept");
+        assertEqual(rules.maxCommandEntries, 16, "… 16");
+        assertEqual(rules.withCommandEntry(many.slice(0, 16), "new", { id: "new", moment: "lock" }), null, "one more than the most: refused");
+        const list = [{ id: "a", moment: "lock", go: "x" }, { id: "b", moment: "sleep" }];
+        assertEqual(rules.withCommandEntry(list, "a", { id: "a", moment: "dark", monitors: ["lcd"], go: "y" }).map(kept => kept.id + ":" + kept.moment + ":" + kept.go).join(" "),
+                    "a:dark:y b:sleep:", "an entry changed in place");
+        assertEqual(rules.withCommandEntry(list, "c", { id: "c", moment: "dark" }).map(kept => kept.id).join(" "), "a b c", "a new one at the end");
+        assertEqual(rules.withCommandEntry(list, "a", null).map(kept => kept.id).join(" "), "b", "one dropped");
+        assertEqual(rules.withCommandEntry(list, "a", { id: "a", moment: "nope" }), null, "an entry not understood: nothing written");
+        assertEqual(rules.withCommandEntry(list, "a", { id: "b", moment: "lock" }), null, "an entry under another id: nothing written");
+        assertEqual(rules.newCommandId([], 35), "cz", "a new id from the seed");
+        assertEqual(rules.newCommandId([{ id: "cz", moment: "lock" }], 35), "c10", "… the next free one when taken");
+
+        // Retired keys still set: told, never carried over
+        assertEqual(rules.retiredKeys({ "lockscreen.screensaverCommands": false, "lockscreen.screensaverStartCommand": "",
+                                        "lockscreen.screensaverEndCommand": " " }).join(" "), "",
+                    "the old commands off and empty (both development machines): nothing to tell");
+        assertEqual(rules.retiredKeys({ "lockscreen.screensaverCommands": true }).join(" "), "lockscreen.screensaverCommands", "the old switch on: told");
+        assertEqual(rules.retiredKeys({ "lockscreen.screensaverEndCommand": "playerctl play" }).join(" "), "lockscreen.screensaverCommands",
+                    "an old command written: told");
+        assertEqual(rules.retiredKeys({ "lockscreen.lockscreenTimeout": 5 }).join(" "), "lockscreen.lockscreenTimeout", "the old lock time: told");
+        assertEqual(rules.retiredKeys(null).length, 0, "no profile values: nothing");
     }
 
     // What tests/mutate.sh found no check for
@@ -158,7 +326,7 @@ TestCase {
         assert(!rules.lockedDark(lockedNever.state, lockedNever.config, 1000000) && lockedNever.next() === -1,
                "the lock screen's screen-off at 0: never");
         const commands = _machine(saver, ["lcd"], false).idle(5000, 0).deadline().input(400000);
-        assertEqual(commands.actions, "hideSaver:lcd,endCommand,active:false", "(input: the command ended)");
+        assertEqual(commands.actions, "hideSaver:lcd,back:d,active:false", "(input: the command ended)");
         commands.idle(405000, 400000).input(410000);
         assertEqual(commands.actions, "", "… and not again at the next input");
         assert(commands.state.inputIdle === false && commands.next() === -1, "input: not idle, nothing due");
@@ -363,16 +531,16 @@ TestCase {
         machine.at(200000, { type: "deadline" });
         assertEqual(machine.actions, "", "a timer early: nothing");
         machine.deadline();
-        assertEqual(machine.actions, "showSaver:lcd+oled,startCommand,active:true",
-                    "Screensaver after: the screensaver on every monitor, the start command, active");
+        assertEqual(machine.actions, "showSaver:lcd+oled,go:d,active:true",
+                    "Screensaver after: the screensaver on every monitor, the go command, active");
         assertEqual(machine.shown(), "lcd=saver oled=saver", "… both show it");
         assertEqual(machine.next(), -1, "… nothing further set");
         machine.at(400000, { type: "deadline" });
         assertEqual(machine.actions, "", "a deadline with nothing due: no action twice");
 
-        const quiet = _machine(_with(saver, { screensaverCommands: false }), ["lcd"], true);
+        const quiet = _machine(_with(saver, { commandEntries: [] }), ["lcd"], true);
         quiet.idle(5000, 0).deadline();
-        assertEqual(quiet.actions, "showSaver:lcd,active:true", "commands off: no start command");
+        assertEqual(quiet.actions, "showSaver:lcd,active:true", "commands off: no go command");
     }
 
     function _perMonitorTimes() {
@@ -380,13 +548,13 @@ TestCase {
         const oledOff = _own(saver, { oled: oledTimes });
         const machine = _machine(oledOff, ["lcd", "oled"], true);
         machine.idle(5000, 0).deadline();
-        assertEqual(machine.actions, "showSaver:lcd+oled,powerOff:oled,startCommand,active:true",
+        assertEqual(machine.actions, "showSaver:lcd+oled,powerOff:oled,go:d,active:true",
                     "the OLED's own screen-off at the LCD's screensaver time: off, under a black surface that takes the keys");
         assertEqual(machine.shown(), "lcd=saver oled=off", "… what is in place");
 
         const noPower = _machine(oledOff, ["lcd", "oled"], false);
         noPower.idle(5000, 0).deadline();
-        assertEqual(noPower.actions, "showSaver:lcd+oled,startCommand,active:true",
+        assertEqual(noPower.actions, "showSaver:lcd+oled,go:d,active:true",
                     "no power control: the OLED's screen-off is the screensaver at its time");
         assertEqual(noPower.shown(), "lcd=saver oled=saver", "… both the screensaver");
 
@@ -404,7 +572,7 @@ TestCase {
         // A laptop: its panel off (its backlight costs power on black)
         const laptop = _machine(_own(saver, { panel: _entry(0, 120) }), ["panel"], true);
         laptop.idle(5000, 0).deadline();
-        assertEqual(laptop.actions, "showSaver:panel,powerOff:panel,startCommand,active:true",
+        assertEqual(laptop.actions, "showSaver:panel,powerOff:panel,go:d,active:true",
                     "the laptop panel's own screen-off at 2 min: powered off then");
 
         // Times changed during idle: applied at once
@@ -427,14 +595,14 @@ TestCase {
                     "2 min: the panel off; the commands and active wait for the other monitors");
         assertEqual(desk.next(), 300000, "… next the OLED's and the LCD's");
         desk.deadline();
-        assertEqual(desk.actions, "showSaver:lcd+oled,powerOff:oled,startCommand,active:true",
+        assertEqual(desk.actions, "showSaver:lcd+oled,powerOff:oled,go:d,active:true",
                     "5 min: every monitor dark: the commands, active");
         assertEqual(desk.next(), 900000, "… next the LCD's screen-off");
         desk.deadline();
         assertEqual(desk.actions, "powerOff:lcd", "15 min: the LCD off too");
         assertEqual(desk.shown(), "lcd=off oled=off panel=off", "… all off");
         desk.input(1000000);
-        assertEqual(desk.actions, "powerOn:lcd+oled+panel,hideSaver:lcd+oled+panel,endCommand,active:false", "input wakes all");
+        assertEqual(desk.actions, "powerOn:lcd+oled+panel,hideSaver:lcd+oled+panel,back:d,active:false", "input wakes all");
         desk.idle(1005000, 1000000);
         assertEqual(desk.next(), 1120000, "… each monitor's times again from the input");
 
@@ -450,14 +618,14 @@ TestCase {
         assertEqual(reached.actions, "powerOn:panel", "the panel's screen-off switched off: back to its screensaver, its own");
         assertEqual(reached.shown(), "lcd=on oled=on panel=saver", "… the others untouched");
         reached.reconfigure(150000, _own(saver, { panel: _entry(0, 0), oled: oledTimes }));
-        assertEqual(reached.actions, "hideSaver:panel", "both its stages switched off: the desktop, without the end command");
+        assertEqual(reached.actions, "hideSaver:panel", "both its stages switched off: the desktop, without the back command");
 
         // A monitor with both stages off never goes dark and is not waited for
         const never = _machine(_own(saver, { lcd: _entry(0, 0) }), ["lcd", "oled"], true);
         never.idle(5000, 0);
         assertEqual(never.next(), 300000, "a monitor with both stages off: no time of its own");
         never.deadline();
-        assertEqual(never.actions, "showSaver:oled,startCommand,active:true",
+        assertEqual(never.actions, "showSaver:oled,go:d,active:true",
                     "the OLED's screensaver: the commands and active, not waiting for the LCD");
         assertEqual(never.shown(), "lcd=on oled=saver", "… the LCD keeps the desktop");
         const none = _machine(_own(saver, { lcd: _entry(0, 0), oled: _entry(0, 0) }), ["lcd", "oled"], true);
@@ -466,7 +634,7 @@ TestCase {
         none.at(400000, { type: "deadline" });
         assertEqual(none.actions, "", "… no commands, never active");
         none.at(410000, { type: "force" });
-        assertEqual(none.actions, "showSaver:lcd+oled,startCommand,active:true",
+        assertEqual(none.actions, "showSaver:lcd+oled,go:d,active:true",
                     "a forced screensaver: on every monitor, whatever its own stages");
 
         // A monitor in the config before a step has seen it (the monitors event still queued):
@@ -481,13 +649,13 @@ TestCase {
         // stage mid-idle does not take active back
         const given = _machine(_own(saver, { tv: _entry(0, 0) }), ["lcd", "tv"], true);
         given.idle(5000, 0).deadline();
-        assertEqual(given.actions, "showSaver:lcd,startCommand,active:true", "(the LCD dark, the TV never)");
+        assertEqual(given.actions, "showSaver:lcd,go:d,active:true", "(the LCD dark, the TV never)");
         given.reconfigure(310000, _own(saver, { tv: _entry(600, 0) }));
         assertEqual(given.actions, "", "the TV given a later stage mid-idle: still active, nothing ends");
         given.deadline();
         assertEqual(given.actions, "showSaver:tv", "… its screensaver at its time, no command again");
         given.reconfigure(610000, _own({}, { tv: _entry(0, 0) }));
-        assertEqual(given.actions, "hideSaver:lcd+tv,active:false", "every stage switched off: not active (no end command: still away)");
+        assertEqual(given.actions, "hideSaver:lcd+tv,active:false", "every stage switched off: not active (no back command: still away)");
         given.reconfigure(620000, _own(saver, { tv: _entry(0, 0) }));
         assertEqual(given.actions, "showSaver:lcd,active:true", "… a stage on again, past its time: active again, the command not twice");
     }
@@ -650,28 +818,28 @@ TestCase {
         const machine = _machine(values, ["lcd", "oled", "panel"], true);
         machine.idle(5000, 0).deadline();
         machine.input(350000);
-        assertEqual(machine.actions, "powerOn:oled,hideSaver:lcd+oled+panel,endCommand,active:false",
-                    "input at the screensaver: the OLED on, every screensaver hidden, the end command, inactive");
+        assertEqual(machine.actions, "powerOn:oled,hideSaver:lcd+oled+panel,back:d,active:false",
+                    "input at the screensaver: the OLED on, every screensaver hidden, the back command, inactive");
         assertEqual(machine.shown(), "lcd=on oled=on panel=on", "… all show the desktop");
         machine.idle(355000, 350000);
         assertEqual(machine.next(), 650000, "… the counting starts at the input");
         machine.deadline();
         machine.deadline();
         machine.input(1000000);
-        assertEqual(machine.actions, "powerOn:lcd+oled+panel,hideSaver:lcd+oled+panel,endCommand,active:false",
+        assertEqual(machine.actions, "powerOn:lcd+oled+panel,hideSaver:lcd+oled+panel,back:d,active:false",
                     "input with every screen off: all on");
 
-        const quiet = _machine(_with(saver, { screensaverCommands: false }), ["lcd"], true);
+        const quiet = _machine(_with(saver, { commandEntries: [] }), ["lcd"], true);
         quiet.idle(5000, 0).deadline();
         quiet.input(310000);
-        assertEqual(quiet.actions, "hideSaver:lcd,active:false", "no start command ran: no end command");
+        assertEqual(quiet.actions, "hideSaver:lcd,active:false", "no go command ran: no back command");
         quiet.input(320000);
         assertEqual(quiet.actions, "", "input again: nothing to undo");
 
         const user = _machine(saver, ["lcd"], true);
         user.idle(5000, 0).deadline();
         user.at(310000, { type: "activity" });
-        assertEqual(user.actions, "hideSaver:lcd,endCommand,active:false",
+        assertEqual(user.actions, "hideSaver:lcd,back:d,active:false",
                     "an app's SimulateUserActivity counts as input");
         assertEqual(user.next(), 610000, "… the counting starts there");
     }
@@ -759,7 +927,7 @@ TestCase {
         assertEqual(bus.actions, "", "released: nothing at once");
         assertEqual(bus.next(), 800000, "… the counting starts at the release");
         bus.deadline();
-        assertEqual(bus.actions, "showSaver:lcd,startCommand,active:true", "… the screensaver from there");
+        assertEqual(bus.actions, "showSaver:lcd,go:d,active:true", "… the screensaver from there");
         assertEqual(bus.next(), 850000, "… screen-off and lock from there too");
 
         // A stage reached stays when an app starts holding
@@ -825,7 +993,7 @@ TestCase {
         const failed = _machine(values, ["lcd"], true);
         failed.idle(5000, 0);
         failed.at(300000, { type: "logindIdleBlock", held: "unknown" });
-        assertEqual(failed.actions, "showSaver:lcd,startCommand,active:true",
+        assertEqual(failed.actions, "showSaver:lcd,go:d,active:true",
                     "a failed read is unknown, not held: the screensaver comes (it ends at the first input)");
 
         // Locked: keep-awake requests are ignored
@@ -839,7 +1007,7 @@ TestCase {
         locked.deadline();
         assertEqual(locked.actions, "showSaver:lcd,powerOff:lcd,lockBlack:true", "… and the screens go off");
         locked.deadline();
-        assertEqual(locked.actions, "startCommand", "… idle reaches Screensaver after under the lock: the start command, the screens stay off");
+        assertEqual(locked.actions, "go:d", "… idle reaches Screensaver after under the lock: the go command, the screens stay off");
         locked.at(320000, { type: "busInhibitors", count: 0 });
         assertEqual(locked.actions, "", "a release while locked moves nothing");
         assertEqual(locked.state.idleSince, 0, "… the counting still from the last input");
@@ -847,19 +1015,19 @@ TestCase {
 
     function _profiles() {
         // Battery → AC during idle: the screensaver shown at 10 s stays under a 300 s profile
-        const battery = { screensaverEnabled: true, screensaverTimeout: 10, screensaverCommands: true };
+        const battery = { screensaverEnabled: true, screensaverTimeout: 10, commandEntries: [darkCommands] };
         const machine = _machine(battery, ["lcd"], true);
         machine.idle(5000, 0).deadline();
-        assertEqual(machine.actions, "showSaver:lcd,startCommand,active:true", "the battery profile's screensaver at 10 s");
+        assertEqual(machine.actions, "showSaver:lcd,go:d,active:true", "the battery profile's screensaver at 10 s");
         machine.reconfigure(20000, saver);
         assertEqual(machine.actions, "", "a profile with a longer time mid-idle: the screensaver stays, nothing ends");
         machine.reconfigure(30000, _with(saver, { screenOffEnabled: true, screenOffTimeout: 60 }));
         assertEqual(machine.next(), 60000, "later stages take the new times");
         machine.reconfigure(40000, { screensaverEnabled: false });
         assertEqual(machine.actions, "hideSaver:lcd,active:false",
-                    "a profile with the screensaver off: hidden, without the end command (still away)");
+                    "a profile with the screensaver off: hidden, without the back command (still away)");
         machine.input(50000);
-        assertEqual(machine.actions, "endCommand", "… which runs when the user comes back");
+        assertEqual(machine.actions, "back:d", "… which runs when the user comes back");
 
         const off = _machine(_with(saver, { screenOffEnabled: true, screenOffTimeout: 600 }), ["lcd"], true);
         off.idle(5000, 0).deadline();
@@ -898,19 +1066,19 @@ TestCase {
         const machine = _machine(values, ["lcd"], true);
         machine.idle(5000, 0).deadline();
         machine.reconfigure(310000, values, ["lcd", "oled"]);
-        assertEqual(machine.actions, "hideSaver:lcd,endCommand,active:false",
-                    "a monitor plugged in during idle: as input — the screensaver gone, the end command, not active");
+        assertEqual(machine.actions, "hideSaver:lcd,back:d,active:false",
+                    "a monitor plugged in during idle: as input — the screensaver gone, the back command, not active");
         assertEqual(machine.shown(), "lcd=on oled=on", "… every monitor on");
         assertEqual(machine.next(), 610000, "… counted again from the plug-in, every stage and the lock");
         machine.deadline();
-        assertEqual(machine.actions, "showSaver:lcd+oled,powerOff:oled,startCommand,active:true", "… then each at its time again");
+        assertEqual(machine.actions, "showSaver:lcd+oled,powerOff:oled,go:d,active:true", "… then each at its time again");
         machine.at(611000, { type: "power", power: { lcd: "on", oled: "off" } });
         machine.reconfigure(620000, values, ["lcd"]);
         assertEqual(machine.actions, "", "a monitor unplugged: no action");
         assertEqual(machine.shown(), "lcd=saver", "… dropped from what is shown");
         assertEqual(Object.keys(machine.state.power).join(" "), "lcd", "… and from the power read");
         machine.input(630000);
-        assertEqual(machine.actions, "hideSaver:lcd,endCommand,active:false", "input: only the connected monitor");
+        assertEqual(machine.actions, "hideSaver:lcd,back:d,active:false", "input: only the connected monitor");
 
         // Plugged in while nothing was reached: the counting starts again from it
         const early = _machine(saver, ["lcd"], true);
@@ -925,7 +1093,7 @@ TestCase {
         locked.deadline();
         locked.at(410000, { type: "locked" });
         locked.reconfigure(420000, _with(saver, { screenOffEnabled: true, screenOffTimeout: 400 }), ["lcd", "tv"]);
-        assertEqual(locked.actions, "powerOn:lcd,hideSaver:lcd,endCommand", "plugged in while locked: on again, the end command; still active");
+        assertEqual(locked.actions, "powerOn:lcd,hideSaver:lcd,back:d", "plugged in while locked: on again, the back command; still active");
         assert(locked.state.locked && locked.state.lockQuietSince === 420000, "… still locked, the lock screen's quiet time from the plug-in");
 
         // Powered off by the shell, then gone and back (a monitor that drops off at its power
@@ -941,16 +1109,16 @@ TestCase {
         replugged.idle(5000, 0).deadline();
         replugged.reconfigure(310000, values, ["lcd"]);
         replugged.reconfigure(310001 + IdleRules.shellOffWindow, values, ["lcd", "oled"]);
-        assertEqual(replugged.actions, "hideSaver:lcd,endCommand,active:false", "… back later (plugged in again, its button pressed): plugged in");
+        assertEqual(replugged.actions, "hideSaver:lcd,back:d,active:false", "… back later (plugged in again, its button pressed): plugged in");
         assert(IdleRules.shellOffWindow > IdleRules.replugWindow, "a monitor powered off by the shell is given longer to come back");
 
         // The only monitor drops off at its power cut, and comes back with Qt's fields for its
         // id (no make): the same monitor, matched on its connector or loosely
-        const offTimes = { screenOffEnabled: true, screenOffTimeout: 300, screensaverCommands: true };
+        const offTimes = { screenOffEnabled: true, screenOffTimeout: 300, commandEntries: [darkCommands] };
         const backend = { id: "Dell|U27|SN", base: "Dell|U27|SN", connector: "DP-1" };
         const only = _machine(offTimes, [backend], true);
         only.idle(5000, 0).deadline();
-        assertEqual(only.actions, "showSaver:Dell|U27|SN,powerOff:Dell|U27|SN,startCommand,active:true", "(the only monitor off)");
+        assertEqual(only.actions, "showSaver:Dell|U27|SN,powerOff:Dell|U27|SN,go:d,active:true", "(the only monitor off)");
         only.reconfigure(301000, offTimes, []);
         assertEqual(only.actions, "", "every monitor gone while dark: no action, still active");
         only.reconfigure(302000, offTimes, [{ id: "|U27|SN", base: "|U27|SN", connector: "DP-1" }]);
@@ -966,7 +1134,7 @@ TestCase {
         other.idle(5000, 0).deadline();
         other.reconfigure(301000, offTimes, []);
         other.reconfigure(302000, offTimes, [{ id: "LG|27GL|9", base: "LG|27GL|9", connector: "DP-2" }]);
-        assertEqual(other.actions, "endCommand,active:false",
+        assertEqual(other.actions, "back:d,active:false",
                     "another monitor plugged in where it went: plugged in");
 
         // A monitor that comes back powered after every cut: asked again after a growing pause,
@@ -1012,7 +1180,7 @@ TestCase {
         gaveUp.input(clock += 1000);
         assertEqual(Object.keys(gaveUp.state.offAsks).length, 0, "input: the asks counted afresh");
         gaveUp.idle(clock + 5000, clock).deadline();
-        assertEqual(gaveUp.actions, "showSaver:Dell|U27|SN,powerOff:Dell|U27|SN,startCommand,active:true", "… the next period off at once again");
+        assertEqual(gaveUp.actions, "showSaver:Dell|U27|SN,powerOff:Dell|U27|SN,go:d,active:true", "… the next period off at once again");
 
         // Back while showing the screensaver: never asked off, so its screen-off comes at once
         const saverBack = _machine(_with(offTimes, { screensaverEnabled: true, screensaverTimeout: 60 }), [backend], true);
@@ -1043,19 +1211,19 @@ TestCase {
         sameLate.idle(5000, 0).deadline();
         sameLate.reconfigure(301000, offTimes, []);
         sameLate.reconfigure(301001 + IdleRules.shellOffWindow, offTimes, [backend]);
-        assertEqual(sameLate.actions, "endCommand,active:false",
+        assertEqual(sameLate.actions, "back:d,active:false",
                     "the same id back after its window (switched on by its button): plugged in");
         const otherLate = _machine(offTimes, [backend], true);
         otherLate.idle(5000, 0).deadline();
         otherLate.reconfigure(301000, offTimes, []);
         otherLate.reconfigure(301001 + IdleRules.shellOffWindow, offTimes, [{ id: "LG|27GL|9", base: "LG|27GL|9", connector: "DP-1" }]);
-        assertEqual(otherLate.actions, "endCommand,active:false", "another monitor on its connector after the window: plugged in");
+        assertEqual(otherLate.actions, "back:d,active:false", "another monitor on its connector after the window: plugged in");
         const saverLate = _machine(saver, [backend], true);
         saverLate.idle(5000, 0).deadline();
         saverLate.reconfigure(301000, saver, []);
         assertEqual(saverLate.actions, "", "(the screensaver monitor gone: still active)");
         saverLate.reconfigure(317000, saver, [backend]);
-        assertEqual(saverLate.actions, "endCommand,active:false", "the screensaver monitor back after 16 s: plugged in");
+        assertEqual(saverLate.actions, "back:d,active:false", "the screensaver monitor back after 16 s: plugged in");
 
         const named = _machine(offTimes, [backend], true);
         named.idle(5000, 0).deadline();
@@ -1066,7 +1234,7 @@ TestCase {
         byIdOnly.idle(5000, 0).deadline();
         byIdOnly.reconfigure(310000, saver, ["lcd"]);
         byIdOnly.reconfigure(311000, saver, ["lcd", "dock"]);
-        assertEqual(byIdOnly.actions, "hideSaver:lcd,endCommand,active:false", "another monitor in time, neither with a connector: plugged in");
+        assertEqual(byIdOnly.actions, "hideSaver:lcd,back:d,active:false", "another monitor in time, neither with a connector: plugged in");
         const emptied = _machine(offTimes, [backend], true);
         emptied.idle(5000, 0).deadline();
         emptied.reconfigure(301000, offTimes, [], false);
@@ -1077,7 +1245,7 @@ TestCase {
         const qtForm = { id: "|U27|SN", base: "|U27|SN", connector: "DP-1" };
         const start = _machine(offTimes, [qtForm], false);
         start.idle(5000, 0).deadline();
-        assertEqual(start.actions, "showSaver:|U27|SN,startCommand,active:true", "(no power control: the screensaver at the screen-off's time)");
+        assertEqual(start.actions, "showSaver:|U27|SN,go:d,active:true", "(no power control: the screensaver at the screen-off's time)");
         start.reconfigure(301000, offTimes, [backend], true);
         assertEqual(start.actions, "powerOff:Dell|U27|SN", "power control found: the same monitor under the backend's id, now off — no wake");
         assertEqual(start.state.stage["Dell|U27|SN"], 2, "… its stage kept");
@@ -1100,14 +1268,14 @@ TestCase {
         after.idle(5000, 0).deadline();
         after.reconfigure(310000, saver, ["lcd"]);
         after.reconfigure(310001 + IdleRules.replugWindow, saver, ["lcd", "tv"]);
-        assertEqual(after.actions, "hideSaver:lcd,endCommand,active:false", "… back after the window: plugged in");
+        assertEqual(after.actions, "hideSaver:lcd,back:d,active:false", "… back after the window: plugged in");
 
         // Gone while showing the desktop, back: plugged in
         const onGone = _machine(_own(saver, { tv: _entry(600, 0) }), ["lcd", "tv"], true);
         onGone.idle(5000, 0).deadline();
         onGone.reconfigure(310000, _own(saver, { tv: _entry(600, 0) }), ["lcd"]);
         onGone.reconfigure(311000, _own(saver, { tv: _entry(600, 0) }), ["lcd", "tv"]);
-        assertEqual(onGone.actions, "hideSaver:lcd,endCommand,active:false", "gone while on, back at once: plugged in");
+        assertEqual(onGone.actions, "hideSaver:lcd,back:d,active:false", "gone while on, back at once: plugged in");
 
         // Back under the other form of its id (a twin's connector): the same monitor
         const twin = { id: "A|B||DP-1", base: "A|B|", connector: "DP-1" };
@@ -1122,7 +1290,7 @@ TestCase {
         // Not plug-ins: the first step, and a change while going to sleep
         const first = _machine(saver, ["lcd", "tv"], true);
         first.idle(5000, 0).deadline();
-        assertEqual(first.actions, "showSaver:lcd+tv,startCommand,active:true", "the monitors at the first step: none plugged in");
+        assertEqual(first.actions, "showSaver:lcd+tv,go:d,active:true", "the monitors at the first step: none plugged in");
         first.at(310000, { type: "sleep" });
         first.reconfigure(320000, saver, ["lcd", "tv", "dock"]);
         assertEqual(first.actions, "", "a monitor appearing while going to sleep: nothing (the resume wakes)");
@@ -1140,7 +1308,7 @@ TestCase {
         machine.at(311000, { type: "inputIdle", idle: false });
         assertEqual(machine.actions, "", "… the hand that closed the lid wakes nothing");
         machine.at(900000, { type: "resumed" });
-        assertEqual(machine.actions, "hideSaver:lcd,endCommand,active:false",
+        assertEqual(machine.actions, "hideSaver:lcd,back:d,active:false",
                     "resumed: counts as input, no screensaver over the desktop after a wake");
         assertEqual(machine.state.idleSince, 900000, "… the counting from the resume");
 
@@ -1150,7 +1318,7 @@ TestCase {
         locked.at(700000, { type: "locked" });
         locked.at(710000, { type: "sleep" });
         locked.at(900000, { type: "resumed" });
-        assertEqual(locked.actions, "powerOn:lcd,hideSaver:lcd,endCommand",
+        assertEqual(locked.actions, "powerOn:lcd,hideSaver:lcd,back:d",
                     "resumed while locked: the monitors the shell turned off on again, the lock stays (active)");
         assertEqual(locked.next(), 960000, "… the lock screen's screen-off from the resume");
     }
@@ -1551,7 +1719,7 @@ TestCase {
         // (no screensaver, off at 2 min) shows the screensaver, off 2 min later
         const panel = _machine(_own(saver, { panel: _entry(0, 120), lcd: _entry(300, 900) }), ["lcd", "panel"], true);
         panel.at(1000, { type: "force" });
-        assertEqual(panel.actions, "showSaver:lcd+panel,startCommand,active:true", "forced: the screensaver on every monitor, none off");
+        assertEqual(panel.actions, "showSaver:lcd+panel,go:d,active:true", "forced: the screensaver on every monitor, none off");
         assertEqual(panel.next(), 121000, "… the panel's screen-off its own time after the force");
         panel.deadline();
         assertEqual(panel.actions, "powerOff:panel", "… then off");
@@ -1568,14 +1736,14 @@ TestCase {
 
         const machine = _machine(_with(saver, { lockscreenEnabled: true, lockAfter: 600 }), ["lcd"], true);
         machine.at(1000, { type: "force" });
-        assertEqual(machine.actions, "showSaver:lcd,startCommand,active:true", "forced: the screensaver now");
+        assertEqual(machine.actions, "showSaver:lcd,go:d,active:true", "forced: the screensaver now");
         assertEqual(machine.next(), 301000, "… the stages after it as if idle since Screensaver after");
         machine.at(2000, { type: "busInhibitors", count: 1 });
         assertEqual(machine.next(), 301000, "… held stages ignored");
         machine.at(6000, { type: "inputIdle", idle: true, since: 1000 });
         assertEqual(machine.next(), 301000, "… idleness reported later moves nothing");
         machine.input(10000);
-        assertEqual(machine.actions, "hideSaver:lcd,endCommand,active:false", "input ends it");
+        assertEqual(machine.actions, "hideSaver:lcd,back:d,active:false", "input ends it");
         machine.idle(15000, 10000);
         assertEqual(machine.next(), -1, "… then the inhibitor holds again");
 
@@ -1584,7 +1752,7 @@ TestCase {
         const early = _machine(saver, ["lcd"], true);
         early.at(1000, { type: "force" });
         early.at(4000, { type: "activity" });
-        assertEqual(early.actions, "hideSaver:lcd,endCommand,active:false", "forced, then a key within 5 s (activity): hidden");
+        assertEqual(early.actions, "hideSaver:lcd,back:d,active:false", "forced, then a key within 5 s (activity): hidden");
 
         const off = _machine({}, ["lcd"], true);
         off.at(1000, { type: "force" });
@@ -1594,12 +1762,12 @@ TestCase {
         const bus = _machine(saver, ["lcd"], true);
         assert(IdleRules.busForceTakes(bus.state), "SetActive(true) unlocked: it takes");
         bus.at(1000, { type: "busForce" });
-        assertEqual(bus.actions, "showSaver:lcd,startCommand,active:true", "… the screensaver now");
+        assertEqual(bus.actions, "showSaver:lcd,go:d,active:true", "… the screensaver now");
         const busLocked = _machine(_own(saver, { oled: oledTimes }), ["oled"], true);
         busLocked.at(1000, { type: "locked" });
         assert(!IdleRules.busForceTakes(busLocked.state), "SetActive(true) locked: it does not take");
         busLocked.at(2000, { type: "busForce" });
-        assertEqual(busLocked.actions, "", "… nothing turned off, no start command at the lock");
+        assertEqual(busLocked.actions, "", "… nothing turned off, no go command at the lock");
         assertEqual(busLocked.state.forced, false, "… and nothing forced for after the unlock");
         const busAsleep = _machine(saver, ["lcd"], true);
         busAsleep.at(1000, { type: "sleep" });

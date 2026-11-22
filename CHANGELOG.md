@@ -499,10 +499,18 @@ The interface modules are written against (`qs.api`), versioned on its own
   times on another port) its own switches and times for both, on the one clock from your
   last input — the laptop panel off at 2 min, an OLED off at 5 min without a screensaver,
   an LCD with the screensaver at 5 min; a monitor without an entry follows the default.
-  The screensaver commands start once every monitor that goes dark has. A monitor plugged
-  in counts as input. Set on Settings → When away ("Set per monitor": a card per monitor,
+  A monitor plugged in counts as input. Set on Settings → When away ("Set per monitor": a card per monitor,
   a monitor not connected kept and forgettable), or over IPC: `idle state` lists the
   monitors, `idle setMonitorTimes <id> <json|default>`.
+- Commands when you go away and come back: Settings → When away → Commands, a list of
+  entries, each with its moment and two commands — one when the moment comes, one at its
+  end, only after the first ran: every screen it waits for dark (by default every monitor
+  that goes dark; pick the monitors as chips — a small always-on display left out) and
+  your first input, a lock and the unlock, a sleep (the shell's or another's) and the
+  resume. Each entry with a command is a mark on the timeline (▸1, ▸2).
+  `lockscreen.commandEntries` replaces `screensaverCommands`, `screensaverStartCommand`
+  and `screensaverEndCommand`; those are not carried over (a profile that still uses
+  them is told once in the log).
 - Sleep when idle: Settings → When away → Sleep (off by default; 10 min to 2 h from your last
   input, in profiles as `lockscreen.sleepEnabled` and `lockscreen.sleepTimeout`). The whole
   computer, through logind, without ever asking for a password: where the system would ask

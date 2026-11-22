@@ -134,7 +134,7 @@ Singleton {
         lockedScreenOffTimeout: Profiles.value("lockscreen.lockedScreenOffTimeout"),
         perMonitor: Profiles.value("lockscreen.perMonitor"),
         monitorIdle: Profiles.value("lockscreen.monitorIdle"),
-        screensaverCommands: Profiles.value("lockscreen.screensaverCommands"),
+        commandEntries: Profiles.value("lockscreen.commandEntries"),
         sleepEnabled: Profiles.value("lockscreen.sleepEnabled"),
         sleepTimeout: Profiles.value("lockscreen.sleepTimeout"),
         lockOnSleep: Profiles.value("lockscreen.lockOnSleep"),
@@ -217,11 +217,10 @@ Singleton {
         case "hideSaver":
             _log("info", "the screensaver goes");
             break;
-        case "startCommand":
-            _runCommand("lockscreen.screensaverStartCommand");
-            break;
-        case "endCommand":
-            _runCommand("lockscreen.screensaverEndCommand");
+        case "runCommand":
+            // Detached: the shell neither waits for it nor ends it
+            if (typeof action.command === "string" && action.command.trim() !== "")
+                Quickshell.execDetached(["sh", "-c", action.command]);
             break;
         case "lock":
             // The first ask, and the first ask again (refused, or no lock came); the
@@ -278,12 +277,6 @@ Singleton {
         return ({ Suspend: "suspend", SuspendThenHibernate: "suspend, then hibernate", Hibernate: "hibernate" })[method] ?? "sleep";
     }
 
-    function _runCommand(key) {
-        const command = Profiles.value(key) ?? "";
-        if (Profiles.value("lockscreen.screensaverCommands") === true && command.trim() !== "")
-            Quickshell.execDetached(["sh", "-c", command]);
-    }
-
     function _arm() {
         const now = _now();
         const deadline = IdleRules.nextDeadline(_state, _config(), now);
@@ -327,22 +320,30 @@ Singleton {
         }
     }
 
+    // Retired keys are not carried over (unused where they would apply, IdleRules.retiredKeys):
     // "Lock after" replaced `lockscreenTimeout` (counted from the screensaver's start when it
-    // was on); the old key is not carried over (unused where it would apply). A profile that
-    // still holds it is told once per profile and shell run, naming the new one
+    // was on), the command entries the two screensaver commands. A profile that still uses
+    // one is told once per profile, key and shell run, naming what replaced it
     property var _oldKeyTold: ({})
-    readonly property var _profilesWithOldKey: (Profiles.profiles ?? [])
-        .filter(profile => profile?.set && "lockscreen.lockscreenTimeout" in profile.set)
-        .map(profile => String(profile.name ?? ""))
-    on_ProfilesWithOldKeyChanged: _tellOldKey()
+    readonly property var _profilesWithOldKeys: (Profiles.profiles ?? [])
+        .map(profile => ({ name: String(profile?.name ?? ""), keys: IdleRules.retiredKeys(profile?.set) }))
+        .filter(profile => profile.keys.length > 0)
+    on_ProfilesWithOldKeysChanged: _tellOldKey()
+
+    readonly property var _replacedBy: ({
+        "lockscreen.lockscreenTimeout": "\"Lock after\" is lockscreen.lockAfter now, counted from the last input",
+        "lockscreen.screensaverCommands": "commands are lockscreen.commandEntries now (Settings → When away → Commands)"
+    })
 
     function _tellOldKey() {
-        for (const name of _profilesWithOldKey) {
-            if (_oldKeyTold[name])
-                continue;
-            _oldKeyTold[name] = true;
-            _log("warning", "profile \"" + name + "\" still sets lockscreen.lockscreenTimeout, which is no longer read: "
-                + "\"Lock after\" is lockscreen.lockAfter now, counted from the last input");
+        for (const profile of _profilesWithOldKeys) {
+            for (const key of profile.keys) {
+                const told = profile.name + "\n" + key;
+                if (_oldKeyTold[told])
+                    continue;
+                _oldKeyTold[told] = true;
+                _log("warning", "profile \"" + profile.name + "\" still sets " + key + ", which is no longer read: " + _replacedBy[key]);
+            }
         }
     }
 

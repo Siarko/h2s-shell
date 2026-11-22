@@ -4,7 +4,7 @@ import QtQuick
 
 // What the "When away" settings page shows, decided: the timeline's lanes, marks and where
 // their labels go, the line under it, the apps keeping the screen on, a monitor's name, the
-// Sleep and Hibernate sections' lines.
+// Sleep and Hibernate sections' lines, the command entries' moments and lines.
 // Pure functions; times in whole seconds, 0 = off. A lane's times are IdleRules.config's
 // per monitor: { saverAfter, screenOffAfter }.
 QtObject {
@@ -41,7 +41,7 @@ QtObject {
         return stages.length === 0 ? -1 : Math.min(...stages);
     }
 
-    // When every monitor that goes dark has (the commands' moment), or -1 when none does
+    // When every monitor that goes dark has, or -1 when none does
     function allDarkAt(lanes) {
         const moments = (Array.isArray(lanes) ? lanes : []).map(firstDark).filter(value => value >= 0);
         return moments.length === 0 ? -1 : Math.max(...moments);
@@ -90,10 +90,16 @@ QtObject {
         return _seconds(lockAfter) > 0 || _seconds(sleepAfter) > 0 || _seconds(hibernateAt) > 0 || allDarkAt(lanes) >= 0;
     }
 
-    // Where the axis ends (seconds): past the last of the stages, the lock, the commands, the
-    // sleep and the hibernation
-    function axisEnd(lanes, lockAfter, commandsAt, sleepAfter, hibernateAt) {
-        const moments = [axisMinimum / axisRoom, _seconds(lockAfter), _seconds(commandsAt), _seconds(sleepAfter), _seconds(hibernateAt)];
+    // The command entries' marks as given ([{ t, number }], commandMarks), those with a time
+    function _commands(commands) {
+        return (Array.isArray(commands) ? commands : []).filter(mark => _seconds(mark?.t) > 0);
+    }
+
+    // Where the axis ends (seconds): past the last of the stages, the lock, the command
+    // entries' moments (`commands`, commandMarks), the sleep and the hibernation
+    function axisEnd(lanes, lockAfter, commands, sleepAfter, hibernateAt) {
+        const moments = [axisMinimum / axisRoom, _seconds(lockAfter), _seconds(sleepAfter), _seconds(hibernateAt)]
+            .concat(_commands(commands).map(mark => mark.t));
         for (const times of Array.isArray(lanes) ? lanes : [])
             moments.push(_seconds(times?.saverAfter), _seconds(times?.screenOffAfter));
         return Math.max(axisMinimum, Math.round(Math.max(...moments) * axisRoom));
@@ -105,15 +111,16 @@ QtObject {
     // hibernation) — something being on before it — goes after a break at `breakAt` (that
     // axis's end), the axis then ending a little past it; else `breakAt` is -1 and the axis
     // linear to axisEnd
-    function axis(lanes, lockAfter, commandsAt, sleepAfter, hibernateAt) {
+    function axis(lanes, lockAfter, commands, sleepAfter, hibernateAt) {
         const sleep = _seconds(sleepAfter);
         const hibernate = _seconds(hibernateAt);
         const tail = hibernate > 0 ? hibernate : sleep;
         const sleepBefore = hibernate > 0 ? sleep : 0;
-        const before = axisEnd(lanes, lockAfter, commandsAt, sleepBefore, 0);
+        // A command entry at the tail (before sleep) goes with it, after the break
+        const before = axisEnd(lanes, lockAfter, _commands(commands).filter(mark => !(tail > 0 && mark.t >= tail)), sleepBefore, 0);
         if (anything(lanes, lockAfter, sleepBefore, 0) && tail > breakMinimum && tail > breakRatio * before)
             return { end: Math.round(tail * tailRoom), breakAt: before, tailAt: tail };
-        return { end: axisEnd(lanes, lockAfter, commandsAt, sleep, hibernate), breakAt: -1, tailAt: tail };
+        return { end: axisEnd(lanes, lockAfter, commands, sleep, hibernate), breakAt: -1, tailAt: tail };
     }
 
     // Where `t` (seconds) stands on an axis (axis()), from 0 to 1
@@ -165,11 +172,11 @@ QtObject {
 
     // The marks above and below the line: [{ t, text, kind }] — each lane's stage times
     // ("5 min"; equal times of two lanes once; a screensaver only where it shows,
-    // showsSaver), "Commands 5 min" while the commands run
-    // (`commandsAt` ≥ 0), "Lock 20 min", "Sleep 30 min", "Hibernate 2 h 20 min" (`hibernateAt`,
-    // from the last input) — in time order, at one time the stages first, then the commands,
-    // the lock, the sleep, the hibernation
-    function marks(lanes, lockAfter, commandsAt, durationOf, canPowerOff, sleepAfter, hibernateAt) {
+    // showsSaver), "▸1 5 min" for each command entry with a time (`commands`, commandMarks),
+    // "Lock 20 min", "Sleep 30 min", "Hibernate 2 h 20 min" (`hibernateAt`,
+    // from the last input) — in time order, at one time the stages first, then the lock, the
+    // sleep, the hibernation, then the command entries (whose moment those are)
+    function marks(lanes, lockAfter, commands, durationOf, canPowerOff, sleepAfter, hibernateAt) {
         const label = typeof durationOf === "function" ? durationOf : seconds => seconds + " s";
         const list = [];
         const add = (t, text, kind) => {
@@ -183,16 +190,19 @@ QtObject {
                     add(t, label(t), "time");
             }
         }
-        if (typeof commandsAt === "number" && commandsAt > 0)
-            add(commandsAt, "Commands " + label(commandsAt), "commands");
+        for (const mark of _commands(commands))
+            add(mark.t, "\u25B8" + mark.number + " " + label(mark.t), "commands");
         if (_seconds(lockAfter) > 0)
             add(lockAfter, "Lock " + label(lockAfter), "lock");
         if (_seconds(sleepAfter) > 0)
             add(sleepAfter, "Sleep " + label(sleepAfter), "sleep");
         if (_seconds(hibernateAt) > 0)
             add(hibernateAt, "Hibernate " + label(hibernateAt), "hibernate");
-        const order = { time: 0, commands: 1, lock: 2, sleep: 3, hibernate: 4 };
-        return list.sort((first, second) => first.t - second.t || order[first.kind] - order[second.kind]);
+        const order = { time: 0, lock: 1, sleep: 2, hibernate: 3, commands: 4 };
+        // Equal ones keep the order they were added in (the entries' order): sort() need not be stable
+        return list.map((mark, index) => ({ mark: mark, index: index }))
+            .sort((first, second) => first.mark.t - second.mark.t || order[first.mark.kind] - order[second.mark.kind] || first.index - second.index)
+            .map(item => item.mark);
     }
 
     // Where the labels go: `labels` [{ x, width }] in the marks' order, `x` the mark's place
@@ -365,6 +375,86 @@ QtObject {
         const after = _seconds(idleAction.after);
         return "The system already " + what + (after > 0 ? " after " + label(after) : "") + " without input (logind's IdleAction). "
             + "With this on too, whichever comes first acts.";
+    }
+
+    // ---- Command entries ----
+
+    // When an entry's moment comes, in seconds from the last input, or -1 when it does not
+    // come by the clock: "dark" the last of the monitors it waits for (IdleRules.commandWaits)
+    // to go dark, -1 with none; "lock" the idle lock, "sleep" the sleep (or the hibernation in
+    // its place) — -1 while off: they come only by hand or another's. `facts`: { config
+    // (IdleRules.config), lockAfter, sleepAt }
+    function commandAt(entry, facts) {
+        if (entry?.moment === "lock")
+            return _seconds(facts?.lockAfter) > 0 ? facts.lockAfter : -1;
+        if (entry?.moment === "sleep")
+            return _seconds(facts?.sleepAt) > 0 ? facts.sleepAt : -1;
+        const config = facts?.config ?? {};
+        const moments = IdleRules.commandWaits(entry, config, false)
+            .map(id => firstDark(config.times?.[id] ?? { saverAfter: config.saverAfter, screenOffAfter: config.screenOffAfter }));
+        return moments.length === 0 ? -1 : Math.max(...moments);
+    }
+
+    // An entry's moment as its line says it, and whether it can still come: { text, greyed }.
+    // `names`: monitor id → its name (monitorNames)
+    function commandMoment(entry, facts, names, durationOf) {
+        const label = typeof durationOf === "function" ? durationOf : seconds => seconds + " s";
+        const at = commandAt(entry, facts);
+        if (entry?.moment === "lock")
+            return { text: at > 0 ? "Locked (" + label(at) + ", or by hand)" : "Locked (by hand)", greyed: false };
+        if (entry?.moment === "sleep")
+            return { text: at > 0 ? "Before sleep (" + label(at) + ", or any sleep)" : "Before any sleep", greyed: false };
+        const waited = IdleRules.commandWaits(entry, facts?.config ?? {}, false);
+        if (waited.length === 0)
+            return { text: "No screen goes dark", greyed: true };
+        const who = !Array.isArray(entry?.monitors) ? "Every screen"
+            : waited.map(id => _line(names?.[id] ?? monitorName(id, ""), maxWho)).join(" and ");
+        return { text: who + " dark (" + label(at) + ")", greyed: false };
+    }
+
+    // An entry's two commands on its line, each cut short; "No commands yet" for neither
+    function commandLine(entry) {
+        const go = _line(entry?.go, 200);
+        const back = _line(entry?.back, 200);
+        if (go === "" && back === "")
+            return "No commands yet";
+        const shorten = command => command === "" ? "\u2014" : command.length > maxCommand ? command.slice(0, maxCommand - 1) + "\u2026" : command;
+        return shorten(go) + "   /   back: " + shorten(back);
+    }
+    readonly property int maxCommand: 40
+
+    // The timeline's marks of the entries: [{ t, number }] — each entry with a command whose
+    // moment comes by the clock (commandAt), numbered by its place in the list from 1
+    function commandMarks(entries, facts) {
+        const list = [];
+        (Array.isArray(entries) ? entries : []).forEach((entry, index) => {
+            const at = commandAt(entry, facts);
+            if (at > 0 && (_line(entry?.go, 1) !== "" || _line(entry?.back, 1) !== ""))
+                list.push({ t: at, number: index + 1 });
+        });
+        return list;
+    }
+
+    // The editor's chips: each connected monitor ({ id }) with whether the entry waits for it,
+    // whether it goes dark and when — [{ id, ticked, dark, at }]; a monitor that never goes
+    // dark is never ticked (not waited for)
+    function commandChips(entry, facts, monitors) {
+        const config = facts?.config ?? {};
+        const waited = IdleRules.commandWaits(entry, config, false);
+        return (Array.isArray(monitors) ? monitors : []).map(monitor => {
+            const id = typeof monitor === "string" ? monitor : monitor?.id;
+            const at = firstDark(config.times?.[id] ?? { saverAfter: config.saverAfter, screenOffAfter: config.screenOffAfter });
+            return { id: id, ticked: waited.includes(id), dark: at > 0, at: at };
+        });
+    }
+
+    // The monitors an entry names after a chip's click: `id` ticked or unticked, the list
+    // starting from the ones it waits for now when it named none (every one that goes dark)
+    function commandMonitorsToggled(entry, facts, id) {
+        const waited = IdleRules.commandWaits(entry, facts?.config ?? {}, false);
+        const named = Array.isArray(entry?.monitors) ? entry.monitors.slice() : waited;
+        const keys = (facts?.config?.keys?.[id] ?? [id]);
+        return waited.includes(id) ? named.filter(key => !keys.includes(key)) : named.concat([id]);
     }
 
     // A monitor's name on its card and its lane, from its id (make|model|serial, a twin's

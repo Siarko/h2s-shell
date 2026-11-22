@@ -30,7 +30,6 @@ Flickable {
     readonly property bool _offOn: _edited("lockscreen.screenOffEnabled") === true
     readonly property bool _lockOn: _edited("lockscreen.lockscreenEnabled") === true
     readonly property bool _perMonitor: _edited("lockscreen.perMonitor") === true
-    readonly property bool _commandsOn: _edited("lockscreen.screensaverCommands") === true
     readonly property bool _sleepOn: _edited("lockscreen.sleepEnabled") === true
     readonly property bool _lockOnSleep: _edited("lockscreen.lockOnSleep") === true
     // What logind allows and does about sleep (Idle.sleepSupport), and its sleep blocks
@@ -78,7 +77,7 @@ Flickable {
         lockedScreenOffTimeout: _edited("lockscreen.lockedScreenOffTimeout"),
         perMonitor: _perMonitor,
         monitorIdle: _monitorMap,
-        screensaverCommands: _commandsOn,
+        commandEntries: _edited("lockscreen.commandEntries"),
         sleepEnabled: _sleepOn,
         sleepTimeout: _edited("lockscreen.sleepTimeout"),
         lockOnSleep: _lockOnSleep,
@@ -97,7 +96,45 @@ Flickable {
         : [{ key: "all", name: "", times: { saverAfter: _config.saverAfter, screenOffAfter: _config.screenOffAfter } }]
     readonly property var _laneTimes: _lanes.map(lane => lane.times)
     readonly property bool _anySaver: AwayViewRules.anySaver(_laneTimes, _canPowerOff)
-    readonly property int _allDarkAt: AwayViewRules.allDarkAt(_laneTimes)
+
+    // The command entries as understood, what their moments need, and their marks
+    readonly property var _commandEntries: _config.commands
+    readonly property var _commandFacts: ({
+        config: _config,
+        lockAfter: _config.lockAfter,
+        sleepAt: _config.sleepAfter > 0 ? _config.sleepAfter : AwayViewRules.hibernateAt(_hibernateInEffect)
+    })
+    readonly property var _commandMarks: AwayViewRules.commandMarks(_commandEntries, _commandFacts)
+    // The connected monitors' names by id, for the entries' moments and chips
+    readonly property var _namesById: {
+        const names = {};
+        Idle.monitors.forEach((monitor, index) => names[monitor.id] = _monitorNames[index]);
+        return names;
+    }
+    // The list comes from a profile above, or the default: dimmed until changed here
+    readonly property bool _commandsInherited: !("lockscreen.commandEntries" in Profiles.effectiveGlobals)
+        && Profiles.profiles[editIndex]?.set?.["lockscreen.commandEntries"] === undefined
+    // The entry open for editing ("" none)
+    property string editingCommand: ""
+
+    // One entry written into the edited profile's list (whole, or null: dropped)
+    function setCommandEntry(id, entry) {
+        const list = IdleRules.withCommandEntry(_commandEntries, id, entry);
+        if (list === null)
+            return false;
+        if (entry === null && editingCommand === id)
+            editingCommand = "";
+        return Profiles.writeSetting(editIndex, "lockscreen.commandEntries", list) !== false;
+    }
+
+    // A new entry at the end, open for editing: "Locked", without commands
+    function addCommandEntry() {
+        const id = IdleRules.newCommandId(_commandEntries, Date.now());
+        if (!setCommandEntry(id, { id: id, moment: "lock", monitors: null, go: "", back: "" }))
+            return false;
+        editingCommand = id;
+        return true;
+    }
 
     // The default's four times, as a monitor's own start from them (IdleRules.monitorTimes)
     readonly property var _defaultTimes: {
@@ -190,7 +227,7 @@ Flickable {
             lanes: root._lanes
             perMonitor: root._perMonitor
             lockAfter: root._config.lockAfter
-            commandsAt: root._commandsOn ? root._allDarkAt : -1
+            commands: root._commandMarks
             sleepAfter: root._config.sleepAfter
             hibernate: root._hibernateInEffect
             sleepBlockers: root.sleepBlockers
@@ -612,34 +649,47 @@ Flickable {
             title: "Commands"
             Layout.fillWidth: true
             spacing: 4
+            // The list's source and pin on the title line: it is one value in a profile
+            buttons: SchemaSettingEditor {
+                objectName: "commandsSource"
+                key: "lockscreen.commandEntries"
+                editIndex: root.editIndex
+                inline: true
+                labelShown: false
+                Layout.fillWidth: false
+            }
 
-            // Dimmed, not hidden, while no monitor goes dark: their moment never comes
-            ExpandingRow {
-                objectName: "commandsRow"
-                label: "Run commands"
-                hint: !root._commandsOn ? "Off"
-                    : root._allDarkAt >= 0 ? "On, at " + Format.duration(root._allDarkAt) + ", when every screen is dark"
-                    : "On, when every screen is dark"
-                enabled: root._allDarkAt >= 0
-                opacity: enabled ? 1 : 0.4
+            Hint {
+                text: "Each runs its first command at its moment and the second when you come back."
+            }
+            Repeater {
+                model: ScriptModel { values: root._commandEntries.map(entry => entry.id) }
 
-                ColumnLayout {
-                    spacing: 0
-                    SchemaSettingEditor {
-                        key: "lockscreen.screensaverCommands"
-                        editIndex: root.editIndex
-                    }
-                    SchemaSettingEditor {
-                        key: "lockscreen.screensaverStartCommand"
-                        editIndex: root.editIndex
-                        available: root._commandsOn
-                    }
-                    SchemaSettingEditor {
-                        key: "lockscreen.screensaverEndCommand"
-                        editIndex: root.editIndex
-                        available: root._commandsOn
-                    }
+                CommandEntryCard {
+                    required property string modelData
+                    required property int index
+                    objectName: "commandEntry"
+                    number: index + 1
+                    entry: root._commandEntries.find(item => item.id === modelData) ?? ({ id: modelData, moment: "dark", monitors: null, go: "", back: "" })
+                    moment: AwayViewRules.commandMoment(entry, root._commandFacts, root._namesById, seconds => Format.duration(seconds))
+                    chips: AwayViewRules.commandChips(entry, root._commandFacts, Idle.monitors)
+                    names: root._namesById
+                    editing: root.editingCommand === modelData
+                    dimmed: root._commandsInherited
+                    onEdited: changed => root.setCommandEntry(modelData, changed)
+                    onRemoved: root.setCommandEntry(modelData, null)
+                    onEditToggled: root.editingCommand = editing ? "" : modelData
+                    onChipClicked: id => root.setCommandEntry(modelData, Object.assign({}, entry, {
+                        monitors: AwayViewRules.commandMonitorsToggled(entry, root._commandFacts, id)
+                    }))
                 }
+            }
+            SmallButton {
+                objectName: "commandAdd"
+                label: "Add commands"
+                fontSize: Theme.fontSizeSmall
+                available: root._commandEntries.length < IdleRules.maxCommandEntries
+                onClicked: root.addCommandEntry()
             }
         }
     }

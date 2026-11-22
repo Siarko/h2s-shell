@@ -1,13 +1,14 @@
 # A profile switch while the screensaver shows (unplugging a laptop, a battery level, a
 # module's fact) is no input: the idle monitors are made once, so nothing starts the idle
 # count again. The profiles depend on facts of the test's own, set over the profiles IPC
-# (`simulate`); the screensaver commands write a line each to a file.
+# (`simulate`); the "every screen dark" command entry writes a line for each command to a file.
 #
 #   a profile with another screensaver time: the screensaver stays, no command runs;
 #   back again: it stays;
 #   a profile with the screensaver off: it goes, without the end command (the user is still
 #   away); input then ends the idle period: the end command runs, once.
-# Full still carries the old `lockscreenTimeout` (no longer read): the log says so, once.
+# Full still carries the old `lockscreenTimeout` and the old commands' switch on (neither
+# read any more): the log says so, once each.
 
 commands=$WORK/screensaver-commands
 : > "$commands"
@@ -18,9 +19,9 @@ commands = sys.argv[2]
 profiles = [
     {"name": "Full", "enabled": True, "when": {}, "set": {
         "lockscreen.screensaverEnabled": True, "lockscreen.screensaverTimeout": 5,
-        "lockscreen.screensaverCommands": True, "lockscreen.lockscreenTimeout": 5,
-        "lockscreen.screensaverStartCommand": "echo start >> " + commands,
-        "lockscreen.screensaverEndCommand": "echo end >> " + commands}},
+        "lockscreen.lockscreenTimeout": 5, "lockscreen.screensaverCommands": True,
+        "lockscreen.commandEntries": [{"id": "dark", "moment": "dark", "monitors": None,
+                                       "go": "echo start >> " + commands, "back": "echo end >> " + commands}]}},
     {"name": "Longer", "enabled": True, "when": {"fact": "locktest.longer", "is": True},
      "set": {"lockscreen.screensaverTimeout": 600}},
     {"name": "Off", "enabled": True, "when": {"fact": "locktest.off", "is": True},
@@ -90,4 +91,6 @@ check_within "$GUARD" "input ends it" no_screensaver_layer
 check_within "$GUARD" "… and the end command ran, once" commands_are "start end "
 check "the old lockscreenTimeout in a profile: told once, naming lockAfter" \
     test "$(grep -ac 'still sets lockscreen.lockscreenTimeout.*lockscreen.lockAfter' "$WORK/shell.log")" = 1
+check "the old commands' switch on in a profile: told once, naming commandEntries" \
+    test "$(grep -ac 'still sets lockscreen.screensaverCommands.*lockscreen.commandEntries' "$WORK/shell.log")" = 1
 check "no protocol error" no_protocol_errors

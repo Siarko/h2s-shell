@@ -9,11 +9,65 @@ TestCase {
     readonly property var rules: AwayViewRules
     readonly property var minutes: seconds => Format.duration(seconds)
 
+    // The command entries: their moments, lines, marks and the editor's chips
+    function _commands() {
+        const own = (saverAfter, screenOffAfter) => ({ screensaverEnabled: saverAfter > 0, screensaverTimeout: saverAfter || 300,
+                                                       screenOffEnabled: screenOffAfter > 0, screenOffTimeout: screenOffAfter || 600 });
+        // The OLED off at 5 min, the LCD's screensaver at 5 min, the clock off after 1 h
+        const config = IdleRules.config({ perMonitor: true, lockscreenEnabled: true, lockAfter: 1200,
+                                          monitorIdle: { oled: own(0, 300), lcd: own(300, 0), clock: own(0, 3600) } },
+                                        ["oled", "lcd", "clock"], true);
+        const facts = { config: config, lockAfter: 1200, sleepAt: 0 };
+        const names = { oled: "OLED", lcd: "LCD", clock: "Clock" };
+        const entry = (moment, monitors, go, back) => ({ id: "e", moment: moment, monitors: monitors, go: go ?? "", back: back ?? "" });
+        const moment = given => rules.commandMoment(given, facts, names, minutes);
+        assertEqual(moment(entry("dark", null)).text, "Every screen dark (1 h)", "every screen: when the last goes dark");
+        assertEqual(moment(entry("dark", ["oled", "lcd"])).text, "OLED and LCD dark (5 min)", "two of three: named, when both are dark");
+        assertEqual(moment(entry("lock", null)).text, "Locked (20 min, or by hand)", "locked: the idle lock's time");
+        assertEqual(moment(entry("sleep", null)).text, "Before any sleep", "before sleep with sleep off: any sleep");
+        assertEqual(rules.commandMoment(entry("sleep", null), Object.assign({}, facts, { sleepAt: 1800 }), names, minutes).text,
+                    "Before sleep (30 min, or any sleep)", "… with sleep on: its time");
+        assertEqual(rules.commandMoment(entry("lock", null), Object.assign({}, facts, { lockAfter: 0 }), names, minutes).text,
+                    "Locked (by hand)", "locked with the idle lock off: by hand");
+        assert(!moment(entry("lock", null)).greyed && !moment(entry("sleep", null)).greyed, "a lock and a sleep can always come: never greyed");
+        const never = moment(entry("dark", ["gone|monitor|1"]));
+        assert(never.greyed && never.text === "No screen goes dark", "a dark entry waiting for no connected monitor: greyed");
+        const allOff = rules.commandMoment(entry("dark", null), { config: IdleRules.config({}, ["lcd"], true) }, names, minutes);
+        assert(allOff.greyed, "no monitor goes dark: greyed");
+        assertEqual(rules.commandAt(entry("dark", ["clock"]), facts), 3600, "the clock alone: at 1 h");
+
+        assertEqual(rules.commandLine(entry("dark", null, "playerctl pause", "playerctl play")), "playerctl pause   /   back: playerctl play",
+                    "the line: both commands");
+        assertEqual(rules.commandLine(entry("dark", null, "", "x")), "\u2014   /   back: x", "… a dash for one not set");
+        assertEqual(rules.commandLine(entry("dark", null)), "No commands yet", "… none: said so");
+        assertEqual(rules.commandLine(entry("dark", null, "a".repeat(60), "")).split("   /")[0], "a".repeat(39) + "\u2026", "… a long one cut short");
+        assertEqual(rules.commandLine(entry("dark", null, "one\ntwo", "")).split("   /")[0], "one two", "… on one line");
+
+        const marks = rules.commandMarks([entry("dark", ["oled", "lcd"], "a"), entry("lock", null, "", "b"), entry("sleep", null, "c"),
+                                          entry("dark", null), entry("dark", ["gone|monitor|1"], "d")], facts);
+        assertEqual(marks.map(mark => mark.number + "@" + mark.t).join(" "), "1@300 2@1200",
+                    "the marks: entries with a command and a time, numbered by place (sleep off, none without commands, none never dark)");
+
+        const chips = rules.commandChips(entry("dark", ["lcd"]), facts, [{ id: "oled" }, { id: "lcd" }, { id: "clock" }]);
+        assertEqual(chips.map(chip => chip.id + (chip.ticked ? "+" : "-") + chip.at).join(" "), "oled-300 lcd+300 clock-3600",
+                    "the chips: each monitor, ticked where waited for, its dark time");
+        const darkless = IdleRules.config({ perMonitor: true, screensaverEnabled: true, monitorIdle: { clock: own(0, 0) } }, ["lcd", "clock"], true);
+        const always = rules.commandChips(entry("dark", null), { config: darkless }, ["lcd", "clock"]);
+        assertEqual(always.map(chip => chip.id + (chip.ticked ? "+" : "-") + (chip.dark ? "dark" : "never")).join(" "), "lcd+dark clock-never",
+                    "a monitor that never goes dark: not ticked, not waited for");
+        assertEqual(JSON.stringify(rules.commandMonitorsToggled(entry("dark", null), facts, "clock")), JSON.stringify(["oled", "lcd"]),
+                    "every screen, one unticked: the others named");
+        assertEqual(JSON.stringify(rules.commandMonitorsToggled(entry("dark", ["lcd"]), facts, "oled")), JSON.stringify(["lcd", "oled"]),
+                    "a monitor ticked: added");
+        assertEqual(JSON.stringify(rules.commandMonitorsToggled(entry("dark", ["lcd"]), facts, "lcd")), "[]", "the last unticked: none named");
+    }
+
     function _placed(list) {
         return list.map(label => label.row + "@" + Math.round(label.left)).join(" ");
     }
 
     function run() {
+        _commands();
         // --- dark moments ---
         assertEqual(rules.firstDark({ saverAfter: 300, screenOffAfter: 900 }), 300, "a monitor goes dark at its first stage");
         assertEqual(rules.firstDark({ saverAfter: 0, screenOffAfter: 120 }), 120, "… its screen-off when it has no screensaver");
@@ -42,7 +96,7 @@ TestCase {
         assertEqual(rules.axisEnd([{ saverAfter: 60, screenOffAfter: 0 }], 0, -1), 600, "never shorter than 10 min");
         assertEqual(rules.axisEnd([{ saverAfter: 300, screenOffAfter: 900 }], 1200, -1), Math.round(1200 * 1.18), "past the last mark: the lock");
         assertEqual(rules.axisEnd([{ saverAfter: 300, screenOffAfter: 1800 }], 1200, -1), Math.round(1800 * 1.18), "… or a screen-off after it");
-        assertEqual(rules.axisEnd([{ saverAfter: 0, screenOffAfter: 0 }], 0, 3600), Math.round(3600 * 1.18), "… or the commands");
+        assertEqual(rules.axisEnd([{ saverAfter: 0, screenOffAfter: 0 }], 0, [{ t: 3600, number: 1 }]), Math.round(3600 * 1.18), "… or a command entry");
 
         // --- a lane's stretches ---
         const stretches = list => list.map(part => part.kind + ":" + part.from + "-" + part.to).join(" ");
@@ -62,10 +116,15 @@ TestCase {
                     "the stages and the lock, in time order");
         assertEqual(marks(rules.marks([{ saverAfter: 600, screenOffAfter: 900 }], 600, -1, minutes)), "time:10 min | lock:Lock 10 min | time:15 min",
                     "at one time the stage first, the lock after it");
-        assertEqual(marks(rules.marks(desk, 1200, 300, minutes)), "time:2 min | time:5 min | commands:Commands 5 min | time:15 min | lock:Lock 20 min",
-                    "equal times of two lanes once; the commands' moment between a stage and the lock");
-        assertEqual(marks(rules.marks([{ saverAfter: 0, screenOffAfter: 300 }], 300, 300, minutes)), "time:5 min | commands:Commands 5 min | lock:Lock 5 min",
-                    "at one time: the stage, the commands, the lock");
+        assertEqual(marks(rules.marks(desk, 1200, [{ t: 300, number: 1 }], minutes)), "time:2 min | time:5 min | commands:\u25B81 5 min | time:15 min | lock:Lock 20 min",
+                    "equal times of two lanes once; a command entry's moment after the stage");
+        assertEqual(marks(rules.marks([{ saverAfter: 0, screenOffAfter: 300 }], 300, [{ t: 300, number: 1 }, { t: 300, number: 2 }], minutes)),
+                    "time:5 min | lock:Lock 5 min | commands:\u25B81 5 min | commands:\u25B82 5 min",
+                    "at one time: the stage, the lock, then the command entries in their order");
+        assertEqual(marks(rules.marks([{ saverAfter: 0, screenOffAfter: 0 }], 0, [{ t: 1800, number: 1 }], minutes, true, 1800)),
+                    "sleep:Sleep 30 min | commands:\u25B81 30 min", "a before-sleep entry after the sleep's mark");
+        assertEqual(marks(rules.marks([{ saverAfter: 0, screenOffAfter: 0 }], 0, [{ t: 0, number: 1 }], minutes)), "",
+                    "a command entry without a time: no mark");
         assertEqual(marks(rules.marks([{ saverAfter: 600, screenOffAfter: 300 }], 0, -1, minutes, true)), "time:5 min",
                     "a screensaver after the screen-off is no mark: nothing happens there");
         assertEqual(marks(rules.marks([{ saverAfter: 600, screenOffAfter: 300 }], 0, -1, minutes, false)), "time:5 min | time:10 min",

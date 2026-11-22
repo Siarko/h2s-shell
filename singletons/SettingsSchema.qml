@@ -15,7 +15,7 @@ import QtQuick
 //              "bool", "string", "stringList"; or a structured value with its own editor
 //              on its page ("barSection", "hardwarePopup", "color", "wallpaperSubset",
 //              "wallpaperSlots", "wallpaperWeekdays", "vpnWithNetworks", "vpnLockdownNetworks",
-//              "monitorIdle"),
+//              "monitorIdle", "commandEntries"),
 //              overridden as a whole
 //   default  — value of the system profile
 //   min/max  — for interval, number and slider
@@ -162,14 +162,16 @@ Singleton {
         { key: "lockscreen.notificationsOnScreensaver", label: "Show notifications on screensaver",
           group: "lockscreen", type: "bool", default: true,
           legacy: ["lockscreen", "notificationsOnScreensaver"] },
-        { key: "lockscreen.screensaverCommands", label: "Run commands when every screen has gone dark, and when you come back",
-          group: "lockscreen", type: "bool", default: false, legacy: ["lockscreen", "screensaverExecCmd"],
-          hint: "They follow your idle time, not the screensaver's visibility: locking the screen does not end it, coming back to the lock prompt does." },
-        { key: "lockscreen.screensaverStartCommand", label: "When every screen is dark", group: "lockscreen",
-          type: "string", default: "", legacy: ["lockscreen", "screensaverExecSleep"],
-          hint: "Run with sh -c, detached from the shell" },
-        { key: "lockscreen.screensaverEndCommand", label: "When you come back", group: "lockscreen",
-          type: "string", default: "", legacy: ["lockscreen", "screensaverExecWakeup"] },
+        // What runs when you go away and come back: a list of entries, each with its moment —
+        // "dark" (the monitors it waits for: null every monitor that goes dark, else their
+        // ids as MonitorRules gives them), "lock" (any lock), "sleep" (any sleep) — and two
+        // commands for sh -c, run detached: "go" when the moment comes, "back" at its end
+        // (input, the unlock, the resume), only after its "go" ran. An entry:
+        // { id, moment, monitors, go, back } (IdleRules.commandEntry); written through
+        // IdleRules.withCommandEntry. The default: one "every screen dark" entry without
+        // commands
+        { key: "lockscreen.commandEntries", label: "Commands", group: "lockscreen",
+          type: "commandEntries", default: [{ id: "dark", moment: "dark", monitors: null, go: "", back: "" }] },
         { key: "lockscreen.screensaverNotificationDetail", label: "Notifications on the screensaver show",
           group: "lockscreen", type: "enum", default: "full", options: [
               { value: "full", label: "In full" },

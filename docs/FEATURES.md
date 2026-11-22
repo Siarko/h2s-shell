@@ -275,12 +275,21 @@ sleep (`sleepEnabled`, `sleepTimeout`) and hibernation (`hibernateEnabled`,
 
 - **Screensaver** — after `screensaverTimeout` the screen is covered by a black surface
   that fades in, optionally showing the notification list. It takes the keyboard while it
-  shows: the key that wakes the screen reaches no window. Commands can be configured to
-  run when it activates and deactivates (on idleness: under a lock too, the end command
-  when the user is back, at the prompt as well). A lock while it shows takes the screen
+  shows: the key that wakes the screen reaches no window. Commands run when you go away and
+  come back (see "Commands" below). A lock while it shows takes the screen
   and the screensaver goes; an unlock counts as the user being back, with or without input
   (logind's Unlock). A profile switch while it shows keeps it (one that turns it off hides
-  it without the end command); waking from sleep ends it.
+  it without the commands for coming back); waking from sleep ends it.
+- **Commands** — a list of entries (`lockscreen.commandEntries`, one value in a profile,
+  overridden as a whole), each with its moment and two commands for `sh -c`, run detached:
+  the first when the moment comes, the second at its end, and only after the first ran.
+  Moments: every screen it waits for dark (by default every monitor that goes dark; a
+  monitor that never does is not waited for; the end: your first input), locked (any lock;
+  the end: the unlock, not input at the lock screen), before sleep (any sleep, the shell's
+  or another program's; the end: the resume). The second command that runs is the one of
+  the first: a profile switched while you are away (a stage switched off, another list)
+  still runs it when you come back. The default is one "every screen dark" entry without
+  commands.
 - **Screens off** — the shell turns monitors off itself at "Turn screens off after"
   (`screenOffTimeout`, off by default); with the screensaver off, straight from the
   desktop (an OLED's own protection mode starts even on a black picture). Input, an unlock and waking from sleep turn them on again, and so does a shell
@@ -308,8 +317,7 @@ sleep (`sleepEnabled`, `sleepTimeout`) and hibernation (`hibernateEnabled`,
   them); later it is. A monitor that comes back on after each power cut is turned off again
   after a growing pause, and after a few tries left under a black surface until you are
   back. A screensaver started by hand shows on every monitor; each one's screen-off
-  then comes as long after it as after its own screensaver. The screensaver commands start once every monitor that goes dark has (a monitor
-  with both stages off is not waited for). Where monitors cannot be turned off, a monitor
+  then comes as long after it as after its own screensaver. Where monitors cannot be turned off, a monitor
   is known by the make, model and serial Qt reports, and its own times still apply (its
   screen-off the black screensaver). The idle lock stays one for the session. Set on
   Settings → When away ("Set per monitor": a card per monitor, "Same as all monitors" or
@@ -504,7 +512,7 @@ so for each job pick one side and turn it off on the other:
 
 | Job | In the shell (Settings → When away) | In hypridle (`hypridle.conf`) |
 |---|---|---|
-| Screensaver, dimming | the Screensaver section's switch, `screensaverTimeout`; the start and end commands (`screensaverCommands`, `screensaverStartCommand`, `screensaverEndCommand`) run once every monitor that goes dark has and when the user is back | a `listener` whose `on-timeout` dims (`brightnessctl`) and whose `on-resume` restores |
+| Screensaver, dimming | the Screensaver section's switch, `screensaverTimeout`; the command entries (`commandEntries`) run when every screen they wait for is dark, at a lock or before sleep, and at the end of that moment | a `listener` whose `on-timeout` dims (`brightnessctl`) and whose `on-resume` restores |
 | Screens off | "Turn screens off" and `screenOffTimeout` (per monitor with `perMonitor` and `monitorIdle`) | a `listener` with `on-timeout = hyprctl dispatch dpms off` and `on-resume = hyprctl dispatch dpms on` |
 | Screens off on the lock screen | `lockedScreenOffTimeout` (60 s by default; 0 leaves it to the daemon) | a short `listener` that turns screens off only while locked |
 | Lock when idle | "Lock when idle", `lockAfter` | a `listener` whose `on-timeout` is `loginctl lock-session` |
@@ -698,7 +706,7 @@ Behaviour pages:
 | **Media** | audio visualiser style, layout and frame rate; the cover's rounding and rotation |
 | **Bar** | the content of the three sections, including each widget's popup mode and preset |
 | **Notifications** | toasts: on or off, whether apps choose how long, the time, one at a time or a column, each queue's limit, moving by dragging, resident ones counting down, the screen and a fullscreen window there; code-extraction regex patterns |
-| **When away** | what happens while nobody uses the computer, in the order it happens. At the top, "Set per monitor" and a timeline from the last input: a lane per monitor (per monitor) with its screensaver and screen-off, the lock, the sleep and the hibernation as lines across them (the last of them, long after the rest, after a break "≈"), the commands' moment; times that would collide labelled on the other side of the line; always drawn, its line under it saying what the lock screen does, nothing at all, or which app keeps the screen on or blocks sleep ("Paused: …"). **Screensaver** (its switch on the title line): its time, "Turn screens off" and its time, the per-monitor cards, how it looks (fades, notifications) — dimmed while no monitor shows it. **Lock screen** ("Lock when idle" on the title line, which dims only its time; the rest serves every lock): lock before sleep (off by default) and the sleep notice's line, screens off on the lock screen, its notifications, signing in (→ Authentication). **Sleep** (its switch on the title line; "Not available here" with the reason where logind will not let the shell sleep the computer without a password): its time, whether it locks first or sleeps unlocked, and a warning when logind sleeps the computer by itself. **Hibernate** (its switch on the title line; "Not available here" with the reason): its time — after sleeping with sleep on (the system's delay compared, Apply on Arch, the NixOS option named), else after the lock, the screensaver or the last input — and when that is from the last input. **Keeping the screen on**: the apps holding it now. **Commands**: the start and end commands, dimmed while no screen goes dark. Parts that open on a switch slide open and shut (at once with reduced motion). Opened at the lock screen's section by the sleep notice; its id stays `lockscreen` (`settings openPage lockscreen`) |
+| **When away** | what happens while nobody uses the computer, in the order it happens. At the top, "Set per monitor" and a timeline from the last input: a lane per monitor (per monitor) with its screensaver and screen-off, the lock, the sleep and the hibernation as lines across them (the last of them, long after the rest, after a break "≈"), a mark for each command entry's moment (▸1, ▸2); times that would collide labelled on the other side of the line; always drawn, its line under it saying what the lock screen does, nothing at all, or which app keeps the screen on or blocks sleep ("Paused: …"). **Screensaver** (its switch on the title line): its time, "Turn screens off" and its time, the per-monitor cards, how it looks (fades, notifications) — dimmed while no monitor shows it. **Lock screen** ("Lock when idle" on the title line, which dims only its time; the rest serves every lock): lock before sleep (off by default) and the sleep notice's line, screens off on the lock screen, its notifications, signing in (→ Authentication). **Sleep** (its switch on the title line; "Not available here" with the reason where logind will not let the shell sleep the computer without a password): its time, whether it locks first or sleeps unlocked, and a warning when logind sleeps the computer by itself. **Hibernate** (its switch on the title line; "Not available here" with the reason): its time — after sleeping with sleep on (the system's delay compared, Apply on Arch, the NixOS option named), else after the lock, the screensaver or the last input — and when that is from the last input. **Keeping the screen on**: the apps holding it now. **Commands**: a list of entries, each a line (its number, its moment with its time — greyed when it can no longer come —, its two commands cut short, Edit, Remove); editing opens its moment (Screens dark, Locked, Before sleep), for Screens dark the monitors it waits for as chips with their dark times (one that never goes dark greyed, not waited for), and its two commands; "Add commands". Parts that open on a switch slide open and shut (at once with reduced motion). Opened at the lock screen's section by the sleep notice; its id stays `lockscreen` (`settings openPage lockscreen`) |
 | **Dictation** | transcript preview, pending counter, music pause, socket path and debug (always global), and the daemon's wake configuration (read-only) |
 | **Performance** | polling rates of hardware, temperatures, disk and network, GPU load sampling, graph heartbeat, the system power profile |
 

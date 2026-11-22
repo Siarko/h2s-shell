@@ -46,13 +46,20 @@ import QtQuick
 // off. Without power control a monitor's screen-off is the black screensaver at that time.
 //
 // A stage reached stays until input, per monitor — an inhibitor arriving, a profile with
-// longer times — unless the profile switches it off (a screensaver turned off is hidden, without the end
-// command: the user is still away). Inhibitors (Wayland, the screensaver bus interface,
+// longer times — unless the profile switches it off (a screensaver turned off is hidden, without the
+// "back" commands: the user is still away). Inhibitors (Wayland, the screensaver bus interface,
 // logind's idle block) hold the next stage while unlocked and are ignored while locked; a
 // released inhibitor restarts the counting at its release; an inhibitor holds every
 // monitor (none says which monitor it is for). Locking never turns a monitor on; only
-// input does. The commands and `active` start once every monitor with a stage on has gone
-// dark; a monitor with both stages off is not waited for.
+// input does. `active` starts once every monitor with a stage on has gone dark; a monitor
+// with both stages off is not waited for.
+//
+// The commands are a list of entries, each with its moment and two commands: "go" when the
+// moment comes, "back" at its end — screens dark (the monitors it waits for, by default
+// every one that goes dark; the end: input), locked (any lock; the end: the unlock), before
+// sleep (any sleep; the end: the resume). An entry's "back" runs only after its "go" ran,
+// and the "back" that runs is the one of that "go": a profile switched while away (the
+// stage switched off, the list another) still runs it at the return.
 //
 // Facts that could not be read are unknown, never the comfortable answer: a monitor's power
 // is "off" only when read as off, and logind's block is held only when read as held.
@@ -93,8 +100,9 @@ Singleton {
     // `values`: { screensaverEnabled, screensaverTimeout, screenOffEnabled, screenOffTimeout,
     // lockscreenEnabled, lockAfter, lockedScreenOffTimeout, perMonitor, monitorIdle
     // ({ monitorId: { screensaverEnabled, screensaverTimeout, screenOffEnabled,
-    // screenOffTimeout } }), screensaverCommands, sleepEnabled, sleepTimeout, lockOnSleep,
-    // hibernateEnabled, hibernateTimeout } — times in seconds; `monitors`: the
+    // screenOffTimeout } }), commandEntries ([{ id, moment, monitors, go, back }]:
+    // commandEntries()), sleepEnabled, sleepTimeout, lockOnSleep, hibernateEnabled,
+    // hibernateTimeout } — times in seconds; `monitors`: the
     // connected monitors' ids (make|model|serial, MonitorRules) or objects with an `id` — as
     // read ({ id, base, connector }), a monitor's entry is found under either form of its key
     // (MonitorRules.overrideFor); `canPowerOff`: a backend can cut a monitor's power;
@@ -110,7 +118,8 @@ Singleton {
     // "lock", "saver" or "input": where it counts from), at (that moment, seconds from the
     // last input), after (the profile's time) } — hibernateBase; `hibernateAfter`: the stage
     // on the clock with sleep off (at + after, 0 = none); `sleepThenHibernate`: the sleep
-    // asks SuspendThenHibernate.
+    // asks SuspendThenHibernate; `commands`: the command entries understood
+    // (commandEntries()).
     function config(values, monitors, canPowerOff, canSuspend, canHibernate, canSuspendThenHibernate) {
         const given = values ?? {};
         const power = canPowerOff === true;
@@ -190,7 +199,7 @@ Singleton {
             keys: keys,
             connectors: connectors,
             canPowerOff: power,
-            commands: flag(given.screensaverCommands, false),
+            commands: commandEntries(given.commandEntries),
             monitors: ids,
             duplicates: duplicates
         };
@@ -286,6 +295,110 @@ Singleton {
         return result;
     }
 
+    // ---- Command entries ----
+
+    // The moments an entry can wait for: every monitor it waits for dark, the session
+    // locked, the computer going to sleep
+    readonly property var commandMoments: ["dark", "lock", "sleep"]
+    // At most this many entries are kept; a command at most this long
+    readonly property int maxCommandEntries: 16
+    readonly property int maxCommandLength: 4096
+
+    // One entry as given (the settings, the page) → the entry kept, or null when not
+    // understood: { id (1–64 characters, no control characters), moment (commandMoments),
+    // monitors (null: every monitor that goes dark; else the ids of the monitors it waits
+    // for, as `config`'s monitors name them), go, back (commands for sh -c, "" none) }
+    function commandEntry(given) {
+        if (!_isMap(given))
+            return null;
+        const id = given.id;
+        if (typeof id !== "string" || id.length === 0 || id.length > 64 || /[\u0000-\u001f\u007f]/.test(id))
+            return null;
+        if (!commandMoments.includes(given.moment))
+            return null;
+        const monitors = given.monitors ?? null;
+        if (monitors !== null && !(Array.isArray(monitors) && monitors.length <= maxMonitorEntries
+                                   && monitors.every(key => typeof key === "string" && key.length > 0 && key.length <= 400
+                                                     && !/[\u0000-\u001f\u007f]/.test(key))))
+            return null;
+        const command = value => value === undefined || value === null ? "" : typeof value === "string" && value.length <= maxCommandLength ? value : null;
+        const go = command(given.go);
+        const back = command(given.back);
+        if (go === null || back === null)
+            return null;
+        return { id: id, moment: given.moment, monitors: monitors === null ? null : monitors.slice(), go: go, back: back };
+    }
+
+    // The list as given → the entries understood, in order: one not understood, or with an
+    // id taken by an earlier one, left out; at most maxCommandEntries
+    function commandEntries(list) {
+        const result = [];
+        for (const given of Array.isArray(list) ? list : []) {
+            const entry = commandEntry(given);
+            if (entry !== null && !result.some(kept => kept.id === entry.id) && result.length < maxCommandEntries)
+                result.push(entry);
+        }
+        return result;
+    }
+
+    // The list with one entry set (`entry` whole, under its id: replaced in place, or added
+    // at the end) or dropped (`entry` null, `id` given). → the new list, or null when the
+    // entry is not understood or one more would pass maxCommandEntries (nothing written)
+    function withCommandEntry(list, id, entry) {
+        const given = commandEntries(list);
+        if (entry === null)
+            return given.filter(kept => kept.id !== id);
+        const understood = commandEntry(entry);
+        if (understood === null || understood.id !== id)
+            return null;
+        const index = given.findIndex(kept => kept.id === id);
+        if (index < 0) {
+            if (given.length >= maxCommandEntries)
+                return null;
+            return given.concat([understood]);
+        }
+        given[index] = understood;
+        return given;
+    }
+
+    // A new entry's id, not taken in `list`: from `seed` (the page's clock), so entries added
+    // in two profiles are told apart
+    function newCommandId(list, seed) {
+        const taken = commandEntries(list).map(entry => entry.id);
+        let number = Math.max(0, Math.floor(Number(seed) || 0));
+        while (taken.includes("c" + number.toString(36)))
+            number++;
+        return "c" + number.toString(36);
+    }
+
+    // The connected monitors a "screens dark" entry waits for: those it names (either form
+    // of a monitor's key) or, naming none, every one — of them, those that go dark
+    // (`forced`: the screensaver forced, every monitor does)
+    function commandWaits(entry, config, forced) {
+        const state = { forced: forced === true };
+        const named = Array.isArray(entry?.monitors) ? entry.monitors : null;
+        return (config?.monitors ?? []).filter(id => {
+            if (named !== null && !(config.keys?.[id] ?? [id]).some(key => named.includes(key)))
+                return false;
+            return _goesDark(_timesOf(config, id), state);
+        });
+    }
+
+    // Retired keys a profile still sets in use (`set`: the profile's values): "Lock after"'s
+    // old `lockscreenTimeout`, and the two screensaver commands with their switch — in use
+    // when the switch is on or a command is written; never carried over
+    function retiredKeys(set) {
+        const values = _isMap(set) ? set : {};
+        const keys = [];
+        if ("lockscreen.lockscreenTimeout" in values)
+            keys.push("lockscreen.lockscreenTimeout");
+        const written = key => typeof values[key] === "string" && values[key].trim() !== "";
+        if (values["lockscreen.screensaverCommands"] === true || written("lockscreen.screensaverStartCommand")
+                || written("lockscreen.screensaverEndCommand"))
+            keys.push("lockscreen.screensaverCommands");
+        return keys;
+    }
+
     // The facts at the start: somebody is here, nothing is shown. `now`: monotonic ms.
     function initial(now) {
         return {
@@ -316,7 +429,9 @@ Singleton {
             sleepSince: null,        // a profile switch made the sleep due: it counts from then (ms)
             sleepAfterSeen: null,    // the whole computer's stage at the last step (machineAfter)
             stage: ({}),             // monitor id → 0 none, 1 screensaver, 2 screens off: reached in this period
-            commandStarted: false,   // the start command ran in this period
+            // The command entries whose "go" ran and whose "back" is due at their moment's
+            // end: [{ id, moment, back }] — the "back" as it was when the "go" ran
+            commandsRun: [],
             active: false,           // reported as ActiveChanged
             lockBlack: false,        // the lock surface drawn plain black
             lockAttended: false,     // somebody at the lock screen (the prompt awake, a check under way)
@@ -742,10 +857,46 @@ Singleton {
         next.lockedDark = false;
         if (next.locked)
             next.lockQuietSince = now;
-        if (next.commandStarted) {
-            actions.push({ type: "endCommand" });
-            next.commandStarted = false;
+        _commandsBack(next, "dark", actions);
+    }
+
+    // An entry's moment came: its "go" (none for an empty command), its "back" due at the end
+    function _commandGo(next, entry, actions) {
+        next.commandsRun = next.commandsRun.concat([{ id: entry.id, moment: entry.moment, back: entry.back }]);
+        if (entry.go.trim() !== "")
+            actions.push({ type: "runCommand", id: entry.id, which: "go", command: entry.go });
+    }
+
+    // A moment ended: the "back" of each entry of it whose "go" ran
+    function _commandsBack(next, moment, actions) {
+        const run = next.commandsRun ?? [];
+        for (const record of run) {
+            if (record.moment === moment && record.back.trim() !== "")
+                actions.push({ type: "runCommand", id: record.id, which: "back", command: record.back });
         }
+        next.commandsRun = run.filter(record => record.moment !== moment);
+    }
+
+    function _commandRan(next, entry) {
+        return (next.commandsRun ?? []).some(record => record.id === entry.id && record.moment === entry.moment);
+    }
+
+    // The entries of a moment that come with an event (locked, sleep): each whose "go" has
+    // not run
+    function _commandsGo(next, config, moment, actions) {
+        for (const entry of config.commands ?? []) {
+            if (entry.moment === moment && !_commandRan(next, entry))
+                _commandGo(next, entry, actions);
+        }
+    }
+
+    // A "screens dark" entry's moment: every monitor it waits for has gone dark — naming
+    // none, the period's own dark (every monitor that goes dark has, kept until input)
+    function _commandDark(next, config, entry) {
+        if (entry.monitors === null)
+            return next.dark;
+        const waited = commandWaits(entry, config, next.forced);
+        return waited.length > 0 && waited.every(id => (next.stage[id] ?? 0) >= 1);
     }
 
     // A read of logind's sleep block answered at `now`
@@ -790,15 +941,16 @@ Singleton {
     // step, so a changed profile or monitor list is the "config"/"monitors" event with the
     // new one. → { state, actions, ignored }. Actions, in this order: powerOn { ids },
     // hideSaver { ids }, showSaver { ids } (a surface for every monitor leaving "on", also
-    // one going off: it takes the keys), powerOff { ids }, endCommand, startCommand, power
+    // one going off: it takes the keys), powerOff { ids }, runCommand { id, which: "go" |
+    // "back", command } (a command entry's, the "back"s of a moment's end first), power
     // actions asked again { ids: [id], attempt } (a reading since the last ask showed the
     // monitor otherwise; a `restore`'s first with `restore: true`, first of all), powerGaveUp
     // { ids, on } (asked powerRetry.tries times: not asked again), lock, sleep { leftUnlocked,
     // thenHibernate } (logind's Suspend, or SuspendThenHibernate; after the lock;
     // `leftUnlocked`: sleepLeftUnlocked) or hibernate { leftUnlocked } (logind's Hibernate,
     // sleep being off), active { active },
-    // lockBlack { black }. The start command comes, and `active` turns true unlocked, once
-    // every monitor that goes dark has (allDark).
+    // lockBlack { black }. `active` turns true unlocked once every monitor that goes dark has
+    // (allDark); a command entry's "go" comes at its moment, its "back" at the moment's end.
     function step(state, event, config, now) {
         const next = _copy(state);
         const actions = [];
@@ -903,6 +1055,7 @@ Singleton {
             break;
         case "locked":
             if (!next.locked) {
+                _commandsGo(next, config, "lock", actions);
                 next.locked = true;
                 next.lockQuietSince = now;
                 next.lockedThisPeriod = true;
@@ -912,14 +1065,18 @@ Singleton {
             break;
         case "unlocked":
             if (next.locked) {
+                _commandsBack(next, "lock", actions);
                 next.locked = false;
                 wake = true;
             }
             break;
         case "sleep":
+            if (!next.sleeping)
+                _commandsGo(next, config, "sleep", actions);
             next.sleeping = true;
             break;
         case "resumed":
+            _commandsBack(next, "sleep", actions);
             next.sleeping = false;
             wake = true;
             break;
@@ -1079,7 +1236,8 @@ Singleton {
             if (from !== "off" && to === "off")
                 powerOff.push(id);
         }
-        // endCommand, from a wake, was pushed first; keep it after the pictures
+        // The commands of an event (a wake's "back"s, a lock's "go"s) were pushed first; keep
+        // them after the pictures
         const early = actions.splice(0, actions.length);
         if (powerOn.length > 0)
             actions.push({ type: "powerOn", ids: powerOn });
@@ -1144,9 +1302,9 @@ Singleton {
                  && !config.monitors.some(id => _goesDark(_timesOf(config, id), next)))
             next.dark = false;
         const dark = next.dark;
-        if (dark && !next.commandStarted && config.commands) {
-            actions.push({ type: "startCommand" });
-            next.commandStarted = true;
+        for (const entry of config.commands ?? []) {
+            if (entry.moment === "dark" && !_commandRan(next, entry) && _commandDark(next, config, entry))
+                _commandGo(next, entry, actions);
         }
         if (lockDue(next, config, now)) {
             next.lockAsks++;

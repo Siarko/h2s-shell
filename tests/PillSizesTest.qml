@@ -26,6 +26,7 @@ TestCase {
         "panels/WidgetSettingsPane.qml": "s",
         "panels/calendar/RecurrenceEditor.qml": "-,-",
         "panels/settings/AnimationsSettings.qml": "-,m",
+        "panels/settings/CommandEntryCard.qml": "m,m",
         "panels/settings/ConditionEditor.qml": "s,s,s,s,s,s,s,s",
         "panels/settings/CurvesSettings.qml": "-,-,-,-",
         "panels/settings/MonitorTimesCard.qml": "m,m,m",

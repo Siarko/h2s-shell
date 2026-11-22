@@ -1,6 +1,6 @@
 # The screensaver and the lock screen together: the screensaver after 5 s idle, no idle lock
 # (the locks come from logind's Lock and the IPC, so that each order can be set up), the
-# screensaver commands on, each writing a line to a file — they run on idleness, so the file
+# "every screen dark" command entry's two commands, each writing a line to a file — they run on idleness, so the file
 # says when the shell saw the user go and come back, also under the lock.
 #
 #   screensaver up, then a lock: the lock takes the screen, the screensaver's layer goes; the
@@ -16,9 +16,8 @@
 commands=$WORK/screensaver-commands
 : > "$commands"
 stack_start --logind --settings '{"lockscreen.screensaverEnabled": true, "lockscreen.screensaverTimeout": 5,
-    "lockscreen.lockscreenEnabled": false, "lockscreen.screensaverCommands": true,
-    "lockscreen.screensaverStartCommand": "echo start >> '"$commands"'",
-    "lockscreen.screensaverEndCommand": "echo end >> '"$commands"'"}'
+    "lockscreen.lockscreenEnabled": false, "lockscreen.commandEntries": [{"id": "dark", "moment": "dark", "monitors": null,
+    "go": "echo start >> '"$commands"'", "back": "echo end >> '"$commands"'"}]}'
 
 screensaver_layer() {
     hyprctl -j layers | python3 -I -c '

@@ -321,7 +321,8 @@ TestCase {
     property Item _shortStage: Item { width: 720; height: 400 }
     readonly property var _awayOff: ({
         "lockscreen.screensaverEnabled": false, "lockscreen.screenOffEnabled": false, "lockscreen.lockscreenEnabled": false,
-        "lockscreen.perMonitor": false, "lockscreen.monitorIdle": {}, "lockscreen.screensaverCommands": false,
+        "lockscreen.perMonitor": false, "lockscreen.monitorIdle": {},
+        "lockscreen.commandEntries": [{ id: "dark", moment: "dark", monitors: null, go: "", back: "" }],
         "lockscreen.notificationsOnScreensaver": true, "lockscreen.notificationsOnLock": true,
         "lockscreen.screensaverTimeout": 300, "lockscreen.screenOffTimeout": 900, "lockscreen.lockAfter": 1200,
         "lockscreen.sleepEnabled": false, "lockscreen.sleepTimeout": 1800, "lockscreen.lockOnSleep": false,
@@ -365,17 +366,19 @@ TestCase {
             const lockSection = named("lockSection");
             for (const key of ["lockscreen.lockOnSleep", "lockscreen.lockedScreenOffTimeout", "lockscreen.notificationsOnLock"])
                 assert(editorIn(lockSection, key).enabled && editorIn(lockSection, key).opacity === 1, "… " + key + " stays active: it serves every lock");
-            assert(!named("commandsRow").enabled, "no screen goes dark: the commands dimmed");
+            const firstEntry = () => _find(page, item => item.objectName === "commandEntry" && item.number === 1);
+            assert(firstEntry() !== null && firstEntry().moment.greyed && firstEntry().moment.text === "No screen goes dark",
+                   "no screen goes dark: the default entry stays, its moment greyed");
 
             // Set up: the screensaver, the screen-off, the lock
             _away({ "lockscreen.screensaverEnabled": true, "lockscreen.screenOffEnabled": true, "lockscreen.lockscreenEnabled": true,
-                    "lockscreen.screensaverCommands": true });
+                    "lockscreen.commandEntries": [{ id: "dark", moment: "dark", monitors: null, go: "pause", back: "play" }] });
             assert(named("screensaverTimes").open && named("screenOffTimes").open, "set up: the stages' times open");
             assert(named("screensaverLook").enabled && named("lockTimes").enabled, "… the look and the lock's time active");
-            assert(named("commandsRow").enabled && /^On, at 5 min/.test(named("commandsRow").hint), "… the commands at the first screen dark: " + named("commandsRow").hint);
+            assertEqual(firstEntry().moment.text, "Every screen dark (5 min)", "… the commands' entry at the first screen dark");
             assertEqual(timeline.implicitHeight, offHeight, "… the timeline as tall as with everything off");
             const labels = () => timeline.labels.map(label => label.text + "@" + label.row).join(" ");
-            assertEqual(labels(), "5 min@0 Commands 5 min@1 15 min@0 Lock 20 min@0", "… its labels, a colliding one below");
+            assertEqual(labels(), "5 min@0 \u25B81 5 min@1 15 min@0 Lock 20 min@0", "… its labels, a colliding one below");
             assertEqual(_find(timeline, item => item.objectName === "timelineCaption").text.split(".")[0], "Locks at 20 min", "… the line under it: the lock");
 
             // The screensaver off, screens turned off: its look dimmed where the screen-off is a real one
@@ -417,6 +420,7 @@ TestCase {
                         JSON.stringify({ screensaverEnabled: true, screensaverTimeout: 300, screenOffEnabled: true, screenOffTimeout: 600 }),
                         "… a click writes the whole entry");
 
+            _whenAwayCommands(page, named, timeline);
             _whenAwaySleep(page, named, editorIn, timeline);
             _whenAwayHibernate(page, named, editorIn, timeline);
 
@@ -430,6 +434,66 @@ TestCase {
             _globalsPin.restore();
             page.destroy();
         }
+    }
+
+    // The Commands section: the list, its marks on the timeline, adding, editing, removing
+    function _whenAwayCommands(page, named, timeline) {
+        const cards = () => _children(page, item => item.objectName === "commandEntry").sort((first, second) => first.number - second.number);
+        const kept = () => Profiles.effectiveGlobals["lockscreen.commandEntries"];
+        _away({ "lockscreen.screensaverEnabled": true, "lockscreen.lockscreenEnabled": true,
+                "lockscreen.commandEntries": [{ id: "dark", moment: "dark", monitors: null, go: "playerctl pause", back: "playerctl play" },
+                                              { id: "away", moment: "lock", monitors: null, go: "status away", back: "status here" },
+                                              { id: "nap", moment: "sleep", monitors: null, go: "", back: "" }] });
+        assertEqual(cards().map(card => card.moment.text).join(" | "), "Every screen dark (5 min) | Locked (20 min, or by hand) | Before any sleep",
+                    "the list: each entry's moment with its time");
+        assertEqual(_find(cards()[0], item => item.objectName === "commandLine").text, "playerctl pause   /   back: playerctl play",
+                    "… its two commands on its line");
+        assertEqual(_find(cards()[2], item => item.objectName === "commandLine").text, "No commands yet", "… an entry without commands says so");
+        const labels = () => timeline.labels.map(label => label.text).join(" | ");
+        assertEqual(labels(), "5 min | \u25B81 5 min | Lock 20 min | \u25B82 20 min", "the timeline: a mark for each entry with a command");
+        assertEqual(_children(timeline, item => item.objectName === "timelineCommand").length, 2, "… a line at each of their moments");
+
+        // Greyed: its moment can no longer come; the entry stays
+        _away({ "lockscreen.lockscreenEnabled": true, "lockscreen.commandEntries": [{ id: "dark", moment: "dark", monitors: null, go: "x", back: "" }] });
+        assert(cards().length === 1 && cards()[0].moment.greyed, "no screen goes dark: the entry stays, its moment greyed");
+        assertEqual(_children(timeline, item => item.objectName === "timelineCommand").length, 0, "… and no mark on the timeline");
+
+        // Adding: a "Locked" entry at the end, open for editing
+        _away({ "lockscreen.screensaverEnabled": true, "lockscreen.commandEntries": [{ id: "dark", moment: "dark", monitors: null, go: "x", back: "" }] });
+        named("commandAdd").clicked();
+        assertEqual(kept().map(entry => entry.moment).join(" "), "dark lock", "\"Add commands\": a Locked entry written at the end");
+        const added = () => cards()[1];
+        assert(added() !== undefined && added().editing && _find(added(), item => item.objectName === "commandEditor").open, "… open for editing");
+        assertEqual(added().moment.text, "Locked (by hand)", "… locked by hand: the idle lock is off");
+        _find(added(), item => item.objectName === "commandGo").saved("notify-send away");
+        assertEqual(kept()[1].go, "notify-send away", "a command written into the entry");
+        const choice = _children(added(), item => item.objectName === "commandMomentChoice").find(pill => pill.label === "Before sleep");
+        choice.clicked();
+        assertEqual(kept()[1].moment, "sleep", "a moment picked");
+        assertEqual(kept()[1].go, "notify-send away", "… its commands kept");
+        _find(added(), item => item.objectName === "commandEdit").clicked();
+        assert(!added().editing, "Done: the editor shut");
+
+        // The chips: the monitors it waits for
+        if (Idle.monitors.length > 0) {
+            const first = cards()[0];
+            _find(first, item => item.objectName === "commandEdit").clicked();
+            const chips = _children(first, item => item.objectName === "commandChip");
+            assertEqual(chips.length, Idle.monitors.length, "editing a dark entry: a chip per connected monitor");
+            assert(chips.every(chip => chip.picked), "… every screen dark: each one that goes dark ticked");
+            chips[0].clicked();
+            assertEqual(JSON.stringify(kept()[0].monitors), JSON.stringify(Idle.monitors.slice(1).map(monitor => monitor.id)),
+                        "a chip unticked: the entry names the others");
+            if (Idle.monitors.length === 1)
+                assert(cards()[0].moment.greyed, "… none left: its moment greyed");
+        } else {
+            console.warn("no monitors in this run: the chips not checked");
+        }
+
+        // Removing
+        _find(cards()[1], item => item.objectName === "commandRemove").confirmed();
+        assertEqual(kept().map(entry => entry.id).join(" "), "dark", "Remove: the entry dropped");
+        assert(page.setCommandEntry("dark", { id: "dark", moment: "nope" }) === false && kept().length === 1, "an entry not understood: nothing written");
     }
 
     // The Sleep section and the sleep on the timeline, with logind's answers handed to the page
@@ -589,5 +653,16 @@ TestCase {
                 return found;
         }
         return null;
+    }
+
+    // Every item under `item` that `matches`
+    function _children(item, matches) {
+        const found = [];
+        for (const child of Array.from(item.children ?? [])) {
+            if (matches(child))
+                found.push(child);
+            found.push(..._children(child, matches));
+        }
+        return found;
     }
 }
