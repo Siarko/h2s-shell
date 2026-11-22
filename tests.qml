@@ -16,6 +16,10 @@ QtObject {
     // First, before any suite runs: the suites use the real Config singleton, whose
     // file is the user's
     readonly property bool _configReadOnly: { Config.readOnly = true; return true; }
+    // Each suite that shares its process leaves the shared state as it found it, or fails
+    // (SharedState, TestCase): the check reads it with this
+    readonly property QtObject _stateReader: SharedStateReader {}
+    readonly property bool _stateChecked: { SharedState.reader = root._stateReader; return true; }
     // Animations instant, so suites do not wait on them, unless a suite selected here tests
     // one (TestCase.animations). Set with the bindings, before any suite runs; in an object
     // of its own, as listing this object's properties for _suites reads them all.

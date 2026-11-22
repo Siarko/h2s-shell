@@ -34,6 +34,11 @@
 #   real       (the real Quickshell) FormatTest named: Format reports, alone  → must pass
 #   limited    (the real Quickshell, a copy of the tree) a suite that never finishes, with
 #              its own 2 s limit: fails as timed out at that limit             → must fail
+#   leaky      (the same) a suite that leaves the shared state changed fails naming the keys
+#              (an asynchronous one too, at most six named); one that puts it back passes;
+#              one with a process of its own is not checked, and says so      → must fail
+#   beside     (the same) two asynchronous suites in one process: the one that finishes
+#              while the other has changed something for a while passes        → must pass
 #
 # tests/run-modules.sh with --suite, on the fixture module tests/fixtures/modules/good — the
 # first two with the real Quickshell, so tests-modules.qml's part is checked too:
@@ -312,18 +317,31 @@ verdict renamed renamed 1 FormatTest LockRulesTest
 verdict real real 0 FormatTest
 check real "Format reported, alone" reports_only real.log "Format"
 
+# tree_copy <dir>: a copy of the tree to put suites of its own into. The runner takes its tree
+# from where it is, so the copy has run-unit.sh itself and a tests.qml of its own (written by
+# the case); the rest of the tree is linked.
+tree_copy() {
+    local directory=$1 entry
+    mkdir -p "$directory/tests"
+    for entry in "$REPO"/* "$REPO"/.[!.]*; do
+        case "${entry##*/}" in tests.qml|tests|.git) continue ;; esac
+        ln -s "$entry" "$directory/${entry##*/}"
+    done
+    for entry in "$REPO"/tests/*; do ln -s "$entry" "$directory/tests/${entry##*/}"; done
+    rm "$directory/tests/run-unit.sh"
+    cp "$REPO/tests/run-unit.sh" "$directory/tests/"
+}
+# with_suites <dir> <type>…: the copy's tests.qml, tests.qml with those suites registered too
+with_suites() {
+    local directory=$1 type lines=""
+    shift
+    for type in "$@"; do lines="$lines    property var _${type,}: ${type} {}\\n"; done
+    sed -e "s/^\(    property var _promises: PromisesTest {}\)$/${lines}\1/" "$REPO/tests.qml" > "$directory/tests.qml"
+}
+
 # limited: an asynchronous suite that never finishes and sets its own limit (2 s) fails as
-# timed out at that limit, not at the runner's default. The runner takes its tree from where
-# it is, so a copy of it beside a tests.qml with that suite added runs that file; the rest of
-# the tree is linked.
-mkdir -p "$work/limited/tests"
-for entry in "$REPO"/* "$REPO"/.[!.]*; do
-    case "${entry##*/}" in tests.qml|tests|.git) continue ;; esac
-    ln -s "$entry" "$work/limited/${entry##*/}"
-done
-for entry in "$REPO"/tests/*; do ln -s "$entry" "$work/limited/tests/${entry##*/}"; done
-rm "$work/limited/tests/run-unit.sh"
-cp "$REPO/tests/run-unit.sh" "$work/limited/tests/"
+# timed out at that limit, not at the runner's default
+tree_copy "$work/limited"
 cat > "$work/limited/tests/HungTest.qml" << 'QML'
 TestCase {
     suiteName: "Hung"
@@ -331,7 +349,7 @@ TestCase {
     timeLimitMs: 2000
 }
 QML
-sed -e 's/^\(    property var _promises: PromisesTest {}\)$/    property var _hung: HungTest {}\n\1/' "$REPO/tests.qml" > "$work/limited/tests.qml"
+with_suites "$work/limited" HungTest
 limited_started=$SECONDS
 "$work/limited/tests/run-unit.sh" HungTest > "$work/limited.log" 2>&1
 limited_status=$?
@@ -339,6 +357,113 @@ limited_took=$((SECONDS - limited_started))
 check limited "run-unit.sh exited 1 (it exited $limited_status)" test "$limited_status" = 1
 check limited "the suite failed as timed out at its own limit" grep -q "FAIL: timed out (2 s)" "$work/limited.log"
 check limited "… well before the runner's default (it took ${limited_took} s)" test "$limited_took" -lt 60
+
+# leaky: (the real Quickshell, a copy of the tree) a suite that leaves the shared state
+# changed fails, naming what changed; one that puts it back passes; an asynchronous one is
+# checked when it reports, at most six keys named; one with a process of its own is not
+# checked, and says so
+tree_copy "$work/leaky"
+cat > "$work/leaky/tests/LeakyTest.qml" << 'QML'
+import qs.singletons
+TestCase {
+    suiteName: "Leaky"
+    function run() {
+        Config.disabledModules = ["leaky"];
+        assert(true, "changed the modules turned off");
+    }
+}
+QML
+cat > "$work/leaky/tests/TidyTest.qml" << 'QML'
+import qs.singletons
+TestCase {
+    suiteName: "Tidy"
+    function run() {
+        // A copy: a list property read is the live list
+        const saved = Array.from(Config.disabledModules);
+        Config.disabledModules = ["tidy"];
+        assert(true, "changed the modules turned off");
+        Config.disabledModules = saved;
+    }
+}
+QML
+cat > "$work/leaky/tests/ManyTest.qml" << 'QML'
+import QtQuick
+import qs.singletons
+TestCase {
+    suiteName: "Many"
+    asynchronous: true
+    function runAsync() {
+        Config.sleepLockNotice = "many";
+        Config.moduleUpdates = "many";
+        Config.screensOff = ["many"];
+        Config.gcal.viewMode = "many";
+        Config.audio.appVolumes = "many";
+        Config.network.vpnMemory = "many";
+        Notifier.recordOnly = !Notifier.recordOnly;
+        Theme.nerdFontWarningDismissed = !Theme.nerdFontWarningDismissed;
+        Qt.callLater(() => { assert(true, "changed eight things"); finish(); });
+    }
+}
+QML
+cat > "$work/leaky/tests/OwnLeakyTest.qml" << 'QML'
+import qs.singletons
+TestCase {
+    suiteName: "OwnLeaky"
+    ownProcess: true
+    function run() {
+        Config.disabledModules = ["own"];
+        assert(true, "changed the modules turned off");
+    }
+}
+QML
+with_suites "$work/leaky" LeakyTest TidyTest ManyTest OwnLeakyTest
+"$work/leaky/tests/run-unit.sh" LeakyTest TidyTest ManyTest OwnLeakyTest > "$work/leaky.log" 2>&1
+leaky_status=$?
+check leaky "run-unit.sh exited 1 (it exited $leaky_status)" test "$leaky_status" = 1
+check leaky "the suite that leaked failed, naming what" grep -q "FAIL: left Config.disabledModules changed$" "$work/leaky.log"
+check leaky "… and counted it" grep -q -- "^  --- Leaky: 1/2 passed, 1 FAILED" "$work/leaky.log"
+check leaky "the suite that put it back passed" grep -q -- "^  --- Tidy: 1/1 passed" "$work/leaky.log"
+check leaky "the asynchronous one failed, six keys named and the rest counted" \
+    grep -q "FAIL: left Config.audio.appVolumes, Config.gcal.viewMode, Config.moduleUpdates, Config.network.vpnMemory, Config.screensOff, Config.sleepLockNotice and 2 more changed$" "$work/leaky.log"
+check leaky "the one with a process of its own passed" grep -q -- "^  --- OwnLeaky: 1/1 passed" "$work/leaky.log"
+check leaky "… and said it was not checked" grep -q "SHARED-STATE: not checked for OwnLeaky: it runs in a process of its own" "$work/leaky.log"
+
+# beside: (the same) two asynchronous suites in one process (one is given the other): the one
+# that finishes first while the other has changed something for a while is not blamed for it
+tree_copy "$work/beside"
+cat > "$work/beside/tests/WhileTest.qml" << 'QML'
+import QtQuick
+import qs.singletons
+TestCase {
+    suiteName: "While"
+    asynchronous: true
+    property var saved: []
+    property Timer later: Timer { interval: 500; onTriggered: { Config.enabledModules = saved; finish(); } }
+    function runAsync() {
+        saved = Array.from(Config.enabledModules);
+        Config.enabledModules = ["while"];
+        assert(true, "changed the built-in modules turned on, for a while");
+        later.start();
+    }
+}
+QML
+cat > "$work/beside/tests/QuickTest.qml" << 'QML'
+import QtQuick
+TestCase {
+    suiteName: "Quick"
+    asynchronous: true
+    property var other: null
+    function runAsync() {
+        Qt.callLater(() => { assert(true, "changed nothing"); finish(); });
+    }
+}
+QML
+sed -e 's/^\(    property var _promises: PromisesTest {}\)$/    property var _while: WhileTest {}\n    property var _quick: QuickTest { other: _while }\n\1/' "$REPO/tests.qml" > "$work/beside/tests.qml"
+"$work/beside/tests/run-unit.sh" QuickTest > "$work/beside.log" 2>&1
+beside_status=$?
+check beside "run-unit.sh exited 0 (it exited $beside_status)" test "$beside_status" = 0
+check beside "both ran in one process" grep -q "^Unit suites ([0-9]* s, quickshell exit 0)" "$work/beside.log"
+check beside "the one that finished first passed" grep -q -- "^  --- Quick: 1/1 passed" "$work/beside.log"
 
 runner=run-modules.sh
 good=$REPO/tests/fixtures/modules/good

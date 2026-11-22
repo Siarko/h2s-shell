@@ -677,6 +677,8 @@ TestCase {
     }
 
     function runAsync() {
+        // The saves below pin the VPN links and the kill switch as globals: put back at the end
+        _savedGlobals = Config.globals;
         try {
             run();
         } catch (error) {
@@ -694,6 +696,7 @@ TestCase {
     readonly property string _goneNetwork: "a4-network-gone"
     readonly property string _linkedVpn: "a4test:one"
     property bool _savedRecordOnly: false
+    property string _savedGlobals: ""
     property double _saveStarted: 0
     property Timer _saveWait: Timer {
         interval: 25
@@ -705,6 +708,7 @@ TestCase {
         const component = Qt.createComponent(Quickshell.shellDir + "/panels/settings/NetworkConnectionEditor.qml");
         if (component.status !== Component.Ready) {
             fail("NetworkConnectionEditor does not compile: " + component.errorString());
+            Config.globals = _savedGlobals;
             finish();
             return;
         }
@@ -791,6 +795,7 @@ TestCase {
         VpnManager.setVpnsWith(_raceNetwork, []);
         VpnLockdown.setFor(_raceNetwork, false);
         Notifier.recordOnly = _savedRecordOnly;
+        Config.globals = _savedGlobals;
         finish();
     }
 }

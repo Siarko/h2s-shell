@@ -61,6 +61,7 @@ tests/docs-check.sh self:tests/docs-check-selftest.sh
 # ---- Runners and their tools -----------------------------------------------------------
 tests.qml unit:all
 tests/TestCase.qml unit:all modules:all
+tests/SharedStateReader.qml unit:all self:tests/run-unit-selftest.sh
 tests/run-unit.sh unit:all self:tests/run-unit-selftest.sh
 tests/count-suites.sh unit:all self:tests/run-unit-selftest.sh
 tests/headless.sh unit:all modules:all self:tests/run-unit-selftest.sh

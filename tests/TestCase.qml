@@ -38,6 +38,13 @@ QtObject {
     // When it started (ms since the epoch), for the time its summary gives: tests/run-unit.sh
     // plans its shards from those times
     property real _startedMs: 0
+    // How long it took, from its start to finish(): its summary may come later (finish)
+    property real _tookMs: -1
+    // The shared state when this suite started (SharedState.snapshot), compared when it reports;
+    // null when it is not checked
+    property var _stateBefore: null
+    // The asynchronous suites that ran while this one did: a difference may be theirs
+    property var _beside: []
 
     function assert(condition, message) {
         if (condition) {
@@ -68,17 +75,54 @@ QtObject {
 
     function runAsync() {}
 
+    // Whether this suite's leftovers are checked: when the runner checks, and the suite shares
+    // its process (a suite with a process of its own may leave it changed)
+    readonly property bool _stateChecked: SharedState.checking && !ownProcess
+
+    function _takeState() {
+        if (_stateChecked)
+            _stateBefore = SharedState.snapshot();
+    }
+
+    // Fails the suite when it left the shared state other than it found it, naming what changed
+    function _checkState() {
+        if (_stateBefore === null)
+            return;
+        const changed = SharedState.changedKeys(_stateBefore, SharedState.snapshot());
+        _stateBefore = null;
+        if (changed.length > 0)
+            fail("left " + SharedState.listed(changed, SharedState.maxListed) + " changed"
+                 + (_beside.length > 0 ? " (beside it ran: " + _beside.join(", ") + ")" : ""));
+    }
+
     function _summary() {
         const total = _passed + _failed;
         console.log("--- " + suiteName + ": " + _passed + "/" + total + " passed" + (_failed > 0 ? ", " + _failed + " FAILED" : "")
-                    + " (" + Math.max(0, Math.round(Date.now() - _startedMs)) + " ms) ---\n");
+                    + " (" + (_tookMs >= 0 ? _tookMs : Math.max(0, Math.round(Date.now() - _startedMs))) + " ms) ---\n");
     }
 
     function finish() {
         if (done)
             return;
-        _summary();
+        _tookMs = Math.max(0, Math.round(Date.now() - _startedMs));
         done = true;
+        SharedState.running = SharedState.running.filter(other => other !== suite);
+        // While a suite that ran beside it still runs, what it changed for a while would count
+        // as this one's: checked, and reported, once the last of them has finished
+        if (_stateBefore !== null && SharedState.running.length > 0) {
+            SharedState.unreported = SharedState.unreported.concat([suite]);
+            return;
+        }
+        _checkState();
+        _summary();
+        if (SharedState.running.length === 0) {
+            const unreported = SharedState.unreported;
+            SharedState.unreported = [];
+            for (const other of unreported) {
+                other._checkState();
+                other._summary();
+            }
+        }
     }
 
     Component.onCompleted: {
@@ -86,9 +130,16 @@ QtObject {
             return;
         if (ownProcess)
             console.log("OWN-PROCESS: " + suiteName);
+        if (ownProcess && SharedState.checking)
+            console.log("SHARED-STATE: not checked for " + suiteName + ": it runs in a process of its own");
         if (asynchronous) {
-            Qt.callLater(() => {
+            const start = () => {
                 console.log("\n=== " + suite.suiteName + " ===");
+                for (const other of SharedState.running) {
+                    other._beside = other._beside.concat([suite.suiteName]);
+                    suite._beside = suite._beside.concat([other.suiteName]);
+                }
+                SharedState.running = SharedState.running.concat([suite]);
                 suite._startedMs = Date.now();
                 try {
                     suite.runAsync();
@@ -96,11 +147,19 @@ QtObject {
                     suite.fail("threw: " + error);
                     suite.finish();
                 }
-            });
+            };
+            // A checked suite starts once the shell's startup has written what it writes, or
+            // that would count as the suite's; the suites starting together take their
+            // snapshots before any of them runs
+            if (_stateChecked)
+                SharedState.whenSettled(() => suite._takeState(), start);
+            else
+                Qt.callLater(start);
             return;
         }
         console.log("\n=== " + suiteName + " ===");
         _startedMs = Date.now();
+        _takeState();
         // A suite that throws counts as failed, not as missing: it used to stop before its
         // summary, and nothing said so
         try {
@@ -108,6 +167,7 @@ QtObject {
         } catch (error) {
             fail("threw: " + error);
         }
+        _checkState();
         _summary();
     }
 }
