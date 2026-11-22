@@ -74,7 +74,13 @@ uint ScreenSaverInterface::GetSessionIdleTime()
 
 bool ScreenSaverInterface::SetActive(bool active)
 {
-    return m_service->setActive(active);
+    // Ending the screensaver is the user's input, not an app's: false, nothing done
+    if (!active)
+        return false;
+    // Whether it took is the shell's answer (not while locked)
+    setDelayedReply(true);
+    m_service->askSetActive(message());
+    return false;
 }
 
 // ---- The service ----------------------------------------------------------------------
@@ -86,15 +92,11 @@ ScreenSaverService::ScreenSaverService(const QDBusConnection &bus, LineChannel *
     // Not from 1: a cookie an app kept from an earlier run of the helper is unlikely to be
     // one handed out again (and UnInhibit takes only the caller's own anyway)
     , m_nextCookie(QRandomGenerator::global()->bounded(1u, 1u << 20))
-    , m_idleTimer(new QTimer(this))
+    , m_reportTimer(new QTimer(this))
 {
-    m_idleTimer->setSingleShot(true);
-    m_idleTimer->setInterval(idleAnswerMs);
-    connect(m_idleTimer, &QTimer::timeout, this, [this] {
-        for (const QDBusMessage &call : std::as_const(m_idleAsks))
-            m_bus.send(call.createErrorReply(QDBusError::Failed, QStringLiteral("The shell did not answer")));
-        m_idleAsks.clear();
-    });
+    m_reportTimer->setSingleShot(true);
+    m_reportTimer->setInterval(reportDelayMs);
+    connect(m_reportTimer, &QTimer::timeout, this, &ScreenSaverService::sendHolders);
     connect(channel, &LineChannel::message, this, &ScreenSaverService::shellMessage);
 }
 
@@ -105,8 +107,7 @@ bool ScreenSaverService::start()
     for (const QString &path : objectPaths) {
         auto *interface = new ScreenSaverInterface(this);
         if (!m_bus.registerObject(path, interface, QDBusConnection::ExportAllSlots | QDBusConnection::ExportAllSignals)) {
-            m_channel->send({{QStringLiteral("event"), QStringLiteral("error")},
-                             {QStringLiteral("message"), QStringLiteral("could not register ") + path}});
+            sendError(QStringLiteral("could not register ") + path);
             return false;
         }
         m_interfaces.append(interface);
@@ -114,26 +115,43 @@ bool ScreenSaverService::start()
     const QDBusReply<QDBusConnectionInterface::RegisterServiceReply> reply = m_bus.interface()->registerService(
         QString::fromLatin1(serviceName), QDBusConnectionInterface::QueueService, QDBusConnectionInterface::DontAllowReplacement);
     if (!reply.isValid()) {
-        m_channel->send({{QStringLiteral("event"), QStringLiteral("error")},
-                         {QStringLiteral("message"), QStringLiteral("could not ask for the name: ") + reply.error().message()}});
+        sendError(QStringLiteral("could not ask for the name: ") + reply.error().message());
         return false;
     }
     reportName();
     return true;
 }
 
+// The process behind a connection (0 when the bus will not say)
+uint ScreenSaverService::callerPid(const QString &caller) const
+{
+    const QDBusReply<uint> pid = m_bus.interface()->servicePid(caller);
+    return pid.isValid() ? pid.value() : 0;
+}
+
+bool ScreenSaverService::roomFor(const QString &caller, uint pid) const
+{
+    if (m_holds.size() >= maxCookies)
+        return false;
+    int byCaller = 0;
+    int byProcess = 0;
+    for (const Hold &hold : std::as_const(m_holds)) {
+        byCaller += hold.caller == caller ? 1 : 0;
+        byProcess += pid != 0 && hold.pid == pid ? 1 : 0;
+    }
+    return byCaller < maxPerCaller && byProcess < maxPerCaller;
+}
+
 uint ScreenSaverService::inhibit(const QString &caller, const QString &application, const QString &reason)
 {
-    int callerHolds = 0;
-    for (const Hold &hold : std::as_const(m_holds))
-        callerHolds += hold.caller == caller ? 1 : 0;
-    if (callerHolds >= maxPerCaller || m_holds.size() >= maxCookies)
+    const uint pid = callerPid(caller);
+    if (!roomFor(caller, pid))
         return 0;
     uint cookie = m_nextCookie;
     while (cookie == 0 || m_holds.contains(cookie))
         ++cookie;
     m_nextCookie = cookie + 1;
-    m_holds.insert(cookie, Hold{caller, capped(application, maxTextLength), capped(reason, maxTextLength)});
+    m_holds.insert(cookie, Hold{caller, pid, capped(application, maxAppLength), capped(reason, maxReasonLength)});
     reportHolders();
     return cookie;
 }
@@ -162,24 +180,61 @@ uint ScreenSaverService::activeTime() const
 
 void ScreenSaverService::askIdle(const QDBusMessage &call)
 {
-    if (m_idleAsks.size() >= maxIdleAsks) {
+    ask(AskKind::Idle, call);
+}
+
+void ScreenSaverService::askSetActive(const QDBusMessage &call)
+{
+    ask(AskKind::SetActive, call);
+}
+
+// One question to the shell per call, with an id of its own: its answer replies to that
+// call only, and a call not answered in time gets its fallback (expire)
+void ScreenSaverService::ask(AskKind kind, const QDBusMessage &call)
+{
+    if (m_asks.size() >= maxAsks) {
         m_bus.send(call.createErrorReply(QDBusError::LimitsExceeded, QStringLiteral("Too many waiting calls")));
         return;
     }
-    m_idleAsks.append(call);
-    // One question for every call waiting
-    if (m_idleAsks.size() == 1) {
-        m_channel->send(eventLine("askIdle"));
-        m_idleTimer->start();
-    }
+    const quint64 id = m_nextAsk++;
+    m_asks.insert(id, Ask{kind, call});
+    QJsonObject message = eventLine(kind == AskKind::Idle ? "askIdle" : "setActive");
+    message.insert(QStringLiteral("id"), qint64(id));
+    m_channel->send(message);
+    QTimer::singleShot(answerMs, this, [this, id] { expire(id); });
 }
 
-bool ScreenSaverService::setActive(bool active)
+void ScreenSaverService::expire(quint64 id)
 {
-    QJsonObject message = eventLine("setActive");
-    message.insert(QStringLiteral("active"), active);
-    m_channel->send(message);
-    return true;
+    const auto found = m_asks.constFind(id);
+    if (found == m_asks.constEnd())
+        return;
+    if (found->kind == AskKind::Idle)
+        m_bus.send(found->call.createErrorReply(QDBusError::Failed, QStringLiteral("The shell did not answer")));
+    else
+        m_bus.send(found->call.createReply(QVariant::fromValue(false)));
+    m_asks.remove(id);
+}
+
+void ScreenSaverService::answer(const QJsonObject &message)
+{
+    const double number = message.value(QStringLiteral("answer")).toDouble(-1);
+    const quint64 id = std::isfinite(number) && number > 0 ? quint64(number) : 0;
+    const auto found = m_asks.constFind(id);
+    // Late (its call already had its fallback) or never asked: dropped
+    if (found == m_asks.constEnd())
+        return;
+    if (found->kind == AskKind::Idle) {
+        const double seconds = message.value(QStringLiteral("idleSeconds")).toDouble(-1);
+        if (!std::isfinite(seconds) || seconds < 0) {
+            sendError(QStringLiteral("idleSeconds is not a number of seconds"));
+            return;
+        }
+        m_bus.send(found->call.createReply(QVariant::fromValue(uint(qMin(seconds, 4294967295.0)))));
+    } else {
+        m_bus.send(found->call.createReply(QVariant::fromValue(message.value(QStringLiteral("taken")).toBool(false))));
+    }
+    m_asks.remove(id);
 }
 
 void ScreenSaverService::shellMessage(const QJsonObject &message)
@@ -195,27 +250,41 @@ void ScreenSaverService::shellMessage(const QJsonObject &message)
         }
         return;
     }
-    if (message.contains(QStringLiteral("idleSeconds"))) {
-        answerIdle(message.value(QStringLiteral("idleSeconds")));
+    if (message.contains(QStringLiteral("answer"))) {
+        answer(message);
         return;
     }
-    m_channel->send({{QStringLiteral("event"), QStringLiteral("error")},
-                     {QStringLiteral("message"), QStringLiteral("unknown message")}});
+    if (message.value(QStringLiteral("adopt")).isArray()) {
+        adopt(message.value(QStringLiteral("adopt")));
+        return;
+    }
+    sendError(QStringLiteral("unknown message"));
 }
 
-void ScreenSaverService::answerIdle(const QJsonValue &seconds)
+// The holders of the helper before this one (it ended; the shell kept its last list): taken
+// over with their cookies where their caller is still on the bus and nothing holds the
+// cookie, within the same limits as a new Inhibit
+void ScreenSaverService::adopt(const QJsonValue &list)
 {
-    const double value = seconds.toDouble(-1);
-    if (!std::isfinite(value) || value < 0) {
-        m_channel->send({{QStringLiteral("event"), QStringLiteral("error")},
-                         {QStringLiteral("message"), QStringLiteral("idleSeconds is not a number of seconds")}});
-        return;
+    bool changed = false;
+    for (const QJsonValue &value : list.toArray()) {
+        const QJsonObject entry = value.toObject();
+        const QString caller = entry.value(QStringLiteral("caller")).toString();
+        const double number = entry.value(QStringLiteral("cookie")).toDouble(0);
+        if (!caller.startsWith(QLatin1Char(':')) || !std::isfinite(number) || number < 1 || number > 4294967295.0)
+            continue;
+        const uint cookie = uint(number);
+        if (m_holds.contains(cookie) || !m_bus.interface()->isServiceRegistered(caller).value())
+            continue;
+        const uint pid = callerPid(caller);
+        if (!roomFor(caller, pid))
+            continue;
+        m_holds.insert(cookie, Hold{caller, pid, capped(entry.value(QStringLiteral("app")).toString(), maxAppLength),
+                                    capped(entry.value(QStringLiteral("reason")).toString(), maxReasonLength)});
+        changed = true;
     }
-    const uint answer = uint(qMin(value, 4294967295.0));
-    m_idleTimer->stop();
-    for (const QDBusMessage &call : std::as_const(m_idleAsks))
-        m_bus.send(call.createReply(QVariant::fromValue(answer)));
-    m_idleAsks.clear();
+    if (changed)
+        reportHolders();
 }
 
 void ScreenSaverService::ownerChanged(const QString &name, const QString &oldOwner, const QString &newOwner)
@@ -263,27 +332,41 @@ void ScreenSaverService::reportName()
     m_channel->send(message);
 }
 
+// The list goes when no change has come for a moment: a client inhibiting and releasing in
+// a loop makes one report, not one per call
 void ScreenSaverService::reportHolders()
+{
+    if (!m_reportTimer->isActive())
+        m_reportTimer->start();
+}
+
+void ScreenSaverService::sendHolders()
 {
     QJsonArray list;
     for (auto it = m_holds.constBegin(); it != m_holds.constEnd(); ++it) {
         list.append(QJsonObject{{QStringLiteral("app"), it->application},
                                 {QStringLiteral("reason"), it->reason},
-                                {QStringLiteral("cookie"), qint64(it.key())}});
+                                {QStringLiteral("cookie"), qint64(it.key())},
+                                {QStringLiteral("caller"), it->caller}});
     }
     QJsonObject message = eventLine("inhibitors");
     message.insert(QStringLiteral("list"), list);
     m_channel->send(message);
 }
 
+void ScreenSaverService::sendError(const QString &text)
+{
+    m_channel->send({{QStringLiteral("event"), QStringLiteral("error")}, {QStringLiteral("message"), text}});
+}
+
 // The process behind a bus name, by the name the kernel keeps for it (/proc/<pid>/comm:
 // at most 15 characters); "" when the bus or /proc will not say
 QString ScreenSaverService::processName(const QString &busName) const
 {
-    const QDBusReply<uint> pid = m_bus.interface()->servicePid(busName);
-    if (!pid.isValid() || pid.value() == 0)
+    const uint pid = callerPid(busName);
+    if (pid == 0)
         return QString();
-    QFile file(QStringLiteral("/proc/%1/comm").arg(pid.value()));
+    QFile file(QStringLiteral("/proc/%1/comm").arg(pid));
     if (!file.open(QIODevice::ReadOnly))
         return QString();
     QString name = QString::fromUtf8(file.read(64)).trimmed();

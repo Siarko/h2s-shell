@@ -61,8 +61,8 @@ Singleton {
     // ---- `h2s-helper screensaver` (singletons/helper/ScreenSaverClient.qml) ----
 
     // How long an app's name and its reason may be where the shell shows them
-    readonly property int maxAppLength: 60
-    readonly property int maxReasonLength: 120
+    readonly property int maxAppLength: 64
+    readonly property int maxReasonLength: 128
     readonly property int maxOwnerLength: 40
     // Holders kept from one list (the helper allows 64)
     readonly property int maxHolders: 64
@@ -75,8 +75,9 @@ Singleton {
     // One line from the helper → the message, its text from apps made plain and capped; null
     // for a line that is not one of the protocol's:
     //   { event: "ready", protocol }       { event: "name", owned, owner }
-    //   { event: "inhibitors", list: [{ app, reason, cookie }] }   (sorted by cookie)
-    //   { event: "activity" }   { event: "setActive", active }   { event: "askIdle" }
+    //   { event: "inhibitors", list: [{ app, reason, cookie, caller }] }   (sorted by
+    //       cookie; caller: the app's unique bus name, "" when not one)
+    //   { event: "activity" }   { event: "setActive", id }   { event: "askIdle", id }
     //   { event: "error", message }
     function readServiceLine(line) {
         let message = null;
@@ -101,16 +102,17 @@ Singleton {
                 return null;
             const list = message.list
                 .filter(entry => entry !== null && typeof entry === "object" && Number.isInteger(entry.cookie) && entry.cookie > 0)
-                .map(entry => ({ app: plainLine(entry.app, maxAppLength), reason: plainLine(entry.reason, maxReasonLength), cookie: entry.cookie }))
+                .map(entry => ({ app: plainLine(entry.app, maxAppLength), reason: plainLine(entry.reason, maxReasonLength), cookie: entry.cookie,
+                                 caller: typeof entry.caller === "string" && /^:[0-9]+\.[0-9]+$/.test(entry.caller) ? entry.caller : "" }))
                 .sort((first, second) => first.cookie - second.cookie)
                 .slice(0, maxHolders);
             return { event: "inhibitors", list: list };
         }
         case "activity":
+            return { event: "activity" };
         case "askIdle":
-            return { event: message.event };
         case "setActive":
-            return typeof message.active === "boolean" ? { event: "setActive", active: message.active } : null;
+            return Number.isInteger(message.id) && message.id > 0 ? { event: message.event, id: message.id } : null;
         case "error":
             return { event: "error", message: plainLine(message.message, 200) };
         default:
@@ -124,10 +126,24 @@ Singleton {
         return { active: active === true, since: since };
     }
 
-    // The answer to askIdle: whole seconds without input, never negative
-    function idleMessage(seconds) {
+    // The answer to askIdle `id`: whole seconds without input, never negative
+    function idleMessage(id, seconds) {
         const value = Number(seconds);
-        return { idleSeconds: isFinite(value) && value > 0 ? Math.floor(value) : 0 };
+        return { answer: id, idleSeconds: isFinite(value) && value > 0 ? Math.floor(value) : 0 };
+    }
+
+    // The answer to setActive `id` (an app's SetActive(true)): whether it took
+    function setActiveMessage(id, taken) {
+        return { answer: id, taken: taken === true };
+    }
+
+    // The holders of a helper that ended, handed to the next one to take over (those with a
+    // caller; the helper keeps the ones whose caller is still on the bus); null for none
+    function adoptMessage(holders) {
+        const list = (Array.isArray(holders) ? holders : [])
+            .filter(holder => holder?.caller && Number.isInteger(holder.cookie) && holder.cookie > 0)
+            .map(holder => ({ caller: holder.caller, app: holder.app, reason: holder.reason, cookie: holder.cookie }));
+        return list.length > 0 ? { adopt: list } : null;
     }
 
     // The screensaver interface as the Screensaver page tells it → { state, line }:

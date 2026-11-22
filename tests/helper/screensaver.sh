@@ -7,13 +7,18 @@
 # A dbus-daemon of the run's own (tests/helper/session.conf, its socket in the run's
 # directory; never the session's bus), then:
 #   1. the helper driven as the shell drives it, apps played by the test client and gdbus:
-#      ready and the name owned; Inhibit → its holder (markup and a 10 kB reason come
-#      through as text, cut at 1000 characters); another caller's cookie cannot be removed;
-#      UnInhibit; a caller leaving the bus drops its cookies (also a gdbus call that leaves
-#      at once); 16 cookies a caller; SimulateUserActivity and SetActive forwarded, on both
-#      paths; GetActive / GetActiveTime / ActiveChanged follow the shell's state (one signal
-#      per change, on each path); GetSessionIdleTime answered by the shell, or an error when
-#      it does not answer; its standard input closed → it ends and the name is free; the
+#      ready and the name owned; Inhibit → its holder with its caller (markup comes through
+#      as text, the app's name cut at 64 characters, a 10 kB reason at 128); another
+#      caller's cookie cannot be removed; UnInhibit; a caller leaving the bus drops its
+#      cookies (also a gdbus call that leaves at once); a client flooding Inhibit/UnInhibit
+#      makes a few reports; 16 cookies a caller, also over two connections of one process;
+#      SimulateUserActivity forwarded, on both paths; SetActive(true) answered with the
+#      shell's answer (false unanswered), SetActive(false) false and not asked; GetActive /
+#      GetActiveTime / ActiveChanged follow the shell's state (one signal per change, on each
+#      path); GetSessionIdleTime answered by the shell per call (a late answer answers no
+#      newer call), or an error when it does not answer; holders of a helper before taken
+#      over where their caller is on the bus; its standard input closed → it ends and the
+#      name is free; the
 #      name held by another connection → said with that program's name, and taken when it
 #      leaves; no bus → an error line, exit 1;
 #   2. the shell's side (singletons/helper/ScreenSaverClient.qml) against the same helper on
@@ -98,7 +103,7 @@ wait_gone() { local tries=0; until gone "$1" || [ "$tries" -ge 100 ]; do sleep 0
 call() { gdbus call --session --dest org.freedesktop.ScreenSaver --object-path "$1" --method "org.freedesktop.ScreenSaver.$2" "${@:3}" 2>&1; }
 name_free() { [ "$(gdbus call --session --dest org.freedesktop.DBus --object-path /org/freedesktop/DBus --method org.freedesktop.DBus.NameHasOwner org.freedesktop.ScreenSaver)" = "(false,)" ]; }
 holders() { printf '{"event":"inhibitors","list":[%s]}' "$1"; }
-holder() { printf '{"app":"%s","cookie":%s,"reason":"%s"}' "$1" "$2" "$3"; }
+holder() { printf '{"app":"%s","caller":"%s","cookie":%s,"reason":"%s"}' "$1" "$2" "$3" "$4"; }
 cookie_of() { sed -n 's/^cookie \([0-9][0-9]*\)$/\1/p' <<< "$1"; }
 
 echo "the helper on a private bus"
@@ -114,39 +119,61 @@ check "the apps are on the bus" test "$(next first)$(next second)$(next watcher)
 tell watcher watch
 check "one watches ActiveChanged on both paths" test "$(next watcher)" = watching
 
+tell first unique
+first_name=$(next first | sed -n 's/^unique //p')
+tell second unique
+second_name=$(next second | sed -n 's/^unique //p')
 long=$(head -c 10240 /dev/zero | tr '\0' r)
-tell first "$(printf 'inhibit\t<b>Player</b> & co\t%s' "$long")"
+tell first "$(printf 'inhibit\t<b>Player</b> & co %s\t%s' "$long" "$long")"
 reply=$(next first)
 first_cookie=$(cookie_of "$reply")
 check "Inhibit: a cookie" test -n "$first_cookie"
-check "… the holder reported: the app's name as it was sent, the 10 kB reason cut at 1000 characters" \
-    test "$(next helper)" = "$(holders "$(holder '<b>Player</b> & co' "$first_cookie" "${long:0:1000}")")"
+check "… the holder reported with its caller: markup as text, the app's name cut at 64 characters, the 10 kB reason at 128" \
+    test "$(next helper)" = "$(holders "$(holder "<b>Player</b> & co ${long:0:45}" "$first_name" "$first_cookie" "${long:0:128}")")"
 tell second "path	/ScreenSaver"
 next second > /dev/null
 tell second "$(printf 'inhibit\tmpv\tvideo playing')"
 second_cookie=$(cookie_of "$(next second)")
 check "Inhibit on /ScreenSaver: both holders, by cookie" \
-    grep -q "\"cookie\":$second_cookie,\"reason\":\"video playing\"" <<< "$(next helper)"
+    grep -q "$(holder mpv "$second_name" "$second_cookie" "video playing")" <<< "$(next helper)"
 check "… two cookies apart" test -n "$second_cookie" -a "$second_cookie" != "$first_cookie"
 tell first "uninhibit	$second_cookie"
 check "UnInhibit of another caller's cookie: answered" test "$(next first)" = ok
 tell first "uninhibit	$first_cookie"
 next first > /dev/null
 check "… left it (the next report, after the caller's own UnInhibit, still holds it)" \
-    test "$(next helper)" = "$(holders "$(holder mpv "$second_cookie" "video playing")")"
+    test "$(next helper)" = "$(holders "$(holder mpv "$second_name" "$second_cookie" "video playing")")"
 tell second "$(printf 'inhibit\tmpv\tsecond one')"
 next second > /dev/null
 next helper > /dev/null
 close_input second
 check "a caller leaving the bus holding two cookies: both dropped, in one report" test "$(next helper)" = "$(holders "")"
 gdbus_cookie=$(call /org/freedesktop/ScreenSaver Inhibit gdbus "one call" | sed -n 's/^(uint32 \([0-9]*\),)$/\1/p')
-check "a gdbus Inhibit (its connection ends at once): reported" test "$(next helper)" = "$(holders "$(holder gdbus "$gdbus_cookie" "one call")")"
-check "… and dropped as it leaves" test "$(next helper)" = "$(holders "")"
+report=$(next helper)
+[ "$report" = "$(holders "")" ] || report=$(next helper)
+check "a gdbus Inhibit (its connection ends at once): handed a cookie, then dropped as it leaves" \
+    test -n "$gdbus_cookie" -a "$report" = "$(holders "")"
+
+tell first "flood	200"
+check "a client inhibiting and releasing 200 times in a row: done" test "$(next first)" = flooded
+# Quiet for longer than the helper gathers changes (75 ms): every report has gone
+sleep 0.3
+reports=$(($(wc -l < "$dir/helper.out") - $(cat "$dir/helper.read")))
+check "… a few reports, not 400 ($reports)" test "$reports" -ge 1 -a "$reports" -le 40
+until [ "$reports" -le 0 ]; do last=$(next helper); reports=$((reports - 1)); done
+check "… the last one empty" test "$last" = "$(holders "")"
 
 for i in $(seq 1 16); do tell first "$(printf 'inhibit\tmany\t%s' "$i")"; done
-for i in $(seq 1 16); do next first > /dev/null; next helper > /dev/null; done
+for i in $(seq 1 16); do next first > /dev/null; done
 tell first "$(printf 'inhibit\tmany\t17')"
 check "a 17th cookie for one caller: refused (LimitsExceeded)" test "$(next first)" = "error org.freedesktop.DBus.Error.LimitsExceeded"
+tell first "$(printf 'inhibit2\tmany\t17')"
+check "… also through a second connection of the same process" test "$(next first)" = "error org.freedesktop.DBus.Error.LimitsExceeded"
+sixteen() { [ "$(tail -n 1 "$dir/helper.out" | grep -o '"cookie"' | wc -l)" = 16 ]; }
+tries=0
+until sixteen || [ "$tries" -ge 100 ]; do sleep 0.05; tries=$((tries + 1)); done
+check "… the 16 reported" sixteen
+wc -l < "$dir/helper.out" > "$dir/helper.read"
 tell first exit
 check "… the caller gone, its 16 dropped" test "$(next helper)" = "$(holders "")"
 
@@ -154,8 +181,25 @@ call /ScreenSaver SimulateUserActivity > /dev/null
 check "SimulateUserActivity (on /ScreenSaver): forwarded" test "$(next helper)" = '{"event":"activity"}'
 call /org/freedesktop/ScreenSaver SimulateUserActivity > /dev/null
 check "… and on /org/freedesktop/ScreenSaver" test "$(next helper)" = '{"event":"activity"}'
-check "SetActive(true): forwarded, answered true" test "$(call /ScreenSaver SetActive true)" = "(true,)"
-check "… the shell told" test "$(next helper)" = '{"active":true,"event":"setActive"}'
+call /ScreenSaver SetActive true > "$dir/set.answer" &
+set_call=$!
+asked=$(next helper)
+set_id=$(sed -n 's/^{"event":"setActive","id":\([0-9]*\)}$/\1/p' <<< "$asked")
+check "SetActive(true): the shell asked, with an id" test -n "$set_id"
+tell helper "{\"answer\":$set_id,\"taken\":true}"
+wait "$set_call"
+check "… taken: true to the app" test "$(cat "$dir/set.answer")" = "(true,)"
+call /ScreenSaver SetActive true > "$dir/set.answer" &
+set_call=$!
+set_id=$(next helper | sed -n 's/^{"event":"setActive","id":\([0-9]*\)}$/\1/p')
+tell helper "{\"answer\":$set_id,\"taken\":false}"
+wait "$set_call"
+check "SetActive(true) not taken (the shell locked): false to the app" test "$(cat "$dir/set.answer")" = "(false,)"
+started_at=$SECONDS
+check "SetActive(true) unanswered: false after 2 s" test "$(call /ScreenSaver SetActive true)" = "(false,)"
+check "… (within a few seconds)" test $((SECONDS - started_at)) -le 4
+next helper > /dev/null
+check "SetActive(false): false, and the shell not asked" test "$(call /ScreenSaver SetActive false)" = "(false,)"
 
 check "GetActive before the shell said anything: false" test "$(call /org/freedesktop/ScreenSaver GetActive)" = "(false,)"
 check "GetActiveTime then: 0" test "$(call /org/freedesktop/ScreenSaver GetActiveTime)" = "(uint32 0,)"
@@ -168,7 +212,8 @@ active_time=$(call /ScreenSaver GetActiveTime | sed -n 's/^(uint32 \([0-9]*\),)$
 check "GetActiveTime: from the shell's time ($active_time s)" test "${active_time:-0}" -ge 30 -a "${active_time:-0}" -le 40
 tell helper '{"active":true,"since":1}'
 tell helper '{"what":1}'
-check "the same state again (then a line it does not know: an error)" test "$(next helper)" = '{"event":"error","message":"unknown message"}'
+check "the same state again (then a line it does not know: an error; SetActive(false) asked nothing before it)" \
+    test "$(next helper)" = '{"event":"error","message":"unknown message"}'
 tell watcher active
 check "… no second ActiveChanged" test "$(next watcher)" = "active true"
 tell helper '{"active":false}'
@@ -178,15 +223,41 @@ check "… GetActive false" test "$(call /ScreenSaver GetActive)" = "(false,)"
 
 call /ScreenSaver GetSessionIdleTime > "$dir/idle.answer" &
 idle_call=$!
-check "GetSessionIdleTime: the shell asked" test "$(next helper)" = '{"event":"askIdle"}'
-tell helper '{"idleSeconds":7}'
-wait "$idle_call"
-check "… its answer is the reply" test "$(cat "$dir/idle.answer")" = "(uint32 7,)"
+idle_id=$(next helper | sed -n 's/^{"event":"askIdle","id":\([0-9]*\)}$/\1/p')
+check "GetSessionIdleTime: the shell asked, with an id" test -n "$idle_id"
+call /ScreenSaver GetSessionIdleTime > "$dir/idle2.answer" &
+idle_call2=$!
+idle_id2=$(next helper | sed -n 's/^{"event":"askIdle","id":\([0-9]*\)}$/\1/p')
+check "… a second call: an id of its own" test -n "$idle_id2" -a "$idle_id2" != "$idle_id"
+tell helper "{\"answer\":$idle_id2,\"idleSeconds\":9}"
+tell helper "{\"answer\":$idle_id,\"idleSeconds\":7}"
+wait "$idle_call" "$idle_call2"
+check "… each call gets its own answer" test "$(cat "$dir/idle.answer") $(cat "$dir/idle2.answer")" = "(uint32 7,) (uint32 9,)"
 started_at=$SECONDS
 idle_unanswered=$(call /ScreenSaver GetSessionIdleTime)
 check "… unanswered: an error after 2 s" grep -q "org.freedesktop.DBus.Error.Failed" <<< "$idle_unanswered"
 check "… (within a few seconds)" test $((SECONDS - started_at)) -le 4
-next helper > /dev/null
+late_id=$(next helper | sed -n 's/^{"event":"askIdle","id":\([0-9]*\)}$/\1/p')
+call /ScreenSaver GetSessionIdleTime > "$dir/idle3.answer" &
+idle_call3=$!
+newer_id=$(next helper | sed -n 's/^{"event":"askIdle","id":\([0-9]*\)}$/\1/p')
+tell helper "{\"answer\":$late_id,\"idleSeconds\":1}"
+tell helper "{\"answer\":$newer_id,\"idleSeconds\":3}"
+wait "$idle_call3"
+check "… its late answer does not answer a newer call" test "$(cat "$dir/idle3.answer")" = "(uint32 3,)"
+
+# A helper that ended: the next takes over its holders whose callers are still on the bus
+start adopter "$client"
+next adopter > /dev/null
+tell adopter unique
+adopter_name=$(next adopter | sed -n 's/^unique //p')
+tell helper "{\"adopt\":[{\"caller\":\"$adopter_name\",\"app\":\"kept\",\"reason\":\"still here\",\"cookie\":4242},{\"caller\":\":1.9999\",\"app\":\"gone\",\"reason\":\"\",\"cookie\":4243},{\"caller\":\"not-unique\",\"app\":\"odd\",\"reason\":\"\",\"cookie\":4244}]}"
+check "adopt: the holder whose caller is on the bus taken over, the others not" \
+    test "$(next helper)" = "$(holders "$(holder kept "$adopter_name" 4242 "still here")")"
+tell adopter "uninhibit	4242"
+next adopter > /dev/null
+check "… and its caller can give it back" test "$(next helper)" = "$(holders "")"
+tell adopter exit
 
 close_input helper
 check "its standard input closed (the shell gone): it ends" wait_gone helper

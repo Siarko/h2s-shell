@@ -8,7 +8,9 @@ import qs.tests
 // The shell's side of `h2s-helper screensaver` (singletons/helper/ScreenSaverClient.qml)
 // against the real helper, on tests/run-helper.sh's private bus (never the session's): the
 // name taken and said, an app (the test client, helper/tests/client.cpp) inhibiting with
-// markup in its reason — a holder, plain text —, SimulateUserActivity and SetActive heard,
+// markup in its reason — a holder, plain text —, SimulateUserActivity heard, SetActive(true)
+// answered with what the shell says (SetActive(false) not asked), the helper killed and its
+// successor taking over the app's request,
 // the screensaver's state answering GetActive and sent as ActiveChanged on both paths,
 // GetSessionIdleTime answered from the shell, UnInhibit, an app leaving the bus with a
 // cookie, a second helper finding the name taken (by whom) and getting it when the first
@@ -25,6 +27,8 @@ TestCase {
     property var _second: null
     property var _activities: 0
     property var _setActive: []
+    property bool _setActiveTakes: true
+    property int _heldCookie: 0
     property var _lines: []
     property var _steps: []
     property var _step: null
@@ -34,6 +38,10 @@ TestCase {
     property Component _clientComponent: Component {
         ScreenSaverClient {
             idleSeconds: () => 42.6
+            setActive: () => {
+                suite._setActive = suite._setActive.concat([suite._setActiveTakes]);
+                return suite._setActiveTakes;
+            }
         }
     }
 
@@ -60,7 +68,6 @@ TestCase {
         }
         _first = _clientComponent.createObject(suite, { path: _helper });
         _first.activity.connect(() => suite._activities += 1);
-        _first.setActiveAsked.connect(active => suite._setActive = suite._setActive.concat([active]));
         _steps = [
             { what: "the helper runs and owns the name", until: () => _first.state === "running" && _first.name.owned === true },
             { what: "no holders at first", until: () => _first.holders.length === 0 },
@@ -72,8 +79,14 @@ TestCase {
             { what: "… with the cookie the app was handed",
               until: () => _lines.some(line => line === "cookie " + _first.holders[0]?.cookie) },
             { what: "SimulateUserActivity: heard", run: () => _tell("activity"), until: () => _activities === 1 },
-            { what: "SetActive(true): heard", run: () => _tell("setactive\ttrue"), until: () => _setActive.join(",") === "true" },
-            { what: "GetActive before the shell said: false", run: () => _tell("active"), until: () => _heard("active false") },
+            { what: "SetActive(true): asked of the shell, its answer (taken) the app's", run: () => _tell("setactive\ttrue"),
+              until: () => _setActive.join(",") === "true" && _heard("setactive true") },
+            { what: "SetActive(true) where it does not take (locked): false to the app",
+              run: () => { _setActiveTakes = false; _lines = []; _tell("setactive\ttrue"); },
+              until: () => _setActive.join(",") === "true,false" && _heard("setactive false") },
+            { what: "SetActive(false): false, the shell not asked", run: () => { _lines = []; _tell("setactive\tfalse"); _tell("active"); },
+              until: () => _heard("setactive false") && _heard("active false") && _setActive.length === 2 },
+            { what: "GetActive before the shell said: false", run: () => { _lines = _lines.filter(line => !line.startsWith("active")); _tell("active"); }, until: () => _heard("active false") },
             { what: "the screensaver active: ActiveChanged on /org/freedesktop/ScreenSaver",
               run: () => { _first.activeSinceMs = Date.now() - 5000; _first.active = true; },
               until: () => _heard("ActiveChanged /org/freedesktop/ScreenSaver true") },
@@ -87,6 +100,14 @@ TestCase {
               until: () => _heard("ActiveChanged /org/freedesktop/ScreenSaver false") },
             { what: "UnInhibit: no holders", run: () => _tell("uninhibit\t" + _first.holders[0].cookie), until: () => _first.holders.length === 0 },
             { what: "inhibits again", run: () => _tell("inhibit\tplayer\twatching"), until: () => _first.holders.length === 1 },
+            { what: "the helper killed: its holders gone while none runs",
+              run: () => { _heldCookie = _first.holders[0].cookie; _first._process.signal(9); },
+              until: () => _first.state === "failed" && _first.holders.length === 0 },
+            { what: "… started again, it takes over the app's request, same cookie",
+              until: () => _first.state === "running" && _first.holders.length === 1 && _first.holders[0].cookie === _heldCookie
+                           && _first.holders[0].app === "player" },
+            { what: "… which the app can still give back", run: () => _tell("uninhibit\t" + _heldCookie), until: () => _first.holders.length === 0 },
+            { what: "inhibits once more", run: () => _tell("inhibit\tplayer\twatching"), until: () => _first.holders.length === 1 },
             { what: "the app leaves the bus holding it: its cookie dropped",
               run: () => { _app.running = false; }, until: () => !_app.running && _first.holders.length === 0 },
             { what: "a second helper: the name held by the first, said by its process name",

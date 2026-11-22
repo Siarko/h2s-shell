@@ -4,6 +4,8 @@
 //
 //   path <object path>         the path later calls go to (/org/freedesktop/ScreenSaver)
 //   inhibit <app> <reason>     cookie <n> | error <D-Bus error name>
+//   inhibit2 <app> <reason>    the same through a second connection of this process
+//   flood <n>                  n Inhibit and UnInhibit pairs at once: flooded
 //   uninhibit <cookie>         ok | error <name>
 //   activity                   ok | error <name>       (SimulateUserActivity)
 //   active                     active true|false | error <name>
@@ -80,10 +82,12 @@ private:
         }
     }
 
-    QDBusMessage call(const QString &method, const QVariantList &arguments = {})
+    QDBusMessage call(const QString &method, const QVariantList &arguments = {}, bool second = false)
     {
         QDBusMessage message = QDBusMessage::createMethodCall(service, m_path, service, method);
         message.setArguments(arguments);
+        if (second)
+            return QDBusConnection::connectToBus(QDBusConnection::SessionBus, QStringLiteral("second")).call(message, QDBus::Block, 5000);
         return m_bus.call(message, QDBus::Block, 5000);
     }
 
@@ -106,6 +110,15 @@ private:
             say(QStringLiteral("ok"));
         } else if (command == QLatin1String("inhibit")) {
             say(answer(call(QStringLiteral("Inhibit"), {fields.value(1), fields.value(2)}), QStringLiteral("cookie")));
+        } else if (command == QLatin1String("inhibit2")) {
+            say(answer(call(QStringLiteral("Inhibit"), {fields.value(1), fields.value(2)}, true), QStringLiteral("cookie")));
+        } else if (command == QLatin1String("flood")) {
+            const int count = fields.value(1).toInt();
+            for (int i = 0; i < count; ++i) {
+                const QDBusMessage reply = call(QStringLiteral("Inhibit"), {QStringLiteral("flood"), QString::number(i)});
+                call(QStringLiteral("UnInhibit"), {QVariant::fromValue(reply.arguments().value(0).toUInt())});
+            }
+            say(QStringLiteral("flooded"));
         } else if (command == QLatin1String("uninhibit")) {
             const QDBusMessage reply = call(QStringLiteral("UnInhibit"), {QVariant::fromValue(fields.value(1).toUInt())});
             say(reply.type() == QDBusMessage::ErrorMessage ? answer(reply, QString()) : QStringLiteral("ok"));

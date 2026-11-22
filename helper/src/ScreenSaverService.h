@@ -6,16 +6,22 @@
 // call are served (/ScreenSaver, /org/freedesktop/ScreenSaver).
 //
 // Inhibit cookies are kept per caller (its unique bus name) and dropped when the caller
-// leaves the bus (NameOwnerChanged); UnInhibit removes only the caller's own cookie. I/O
-// only: the holders, SimulateUserActivity and SetActive go to the shell as lines, the
-// screensaver's state (GetActive, GetActiveTime, ActiveChanged) comes from it, and what an
-// inhibitor means is decided there (IdleRules).
+// leaves the bus (NameOwnerChanged); UnInhibit removes only the caller's own cookie. A
+// caller, and a process over all its connections, holds at most maxPerCaller. I/O only: the
+// holders, SimulateUserActivity and SetActive go to the shell as lines, the screensaver's
+// state (GetActive, GetActiveTime, ActiveChanged) comes from it, and what an inhibitor or a
+// SetActive means is decided there (IdleRules).
 //
 // Lines to the shell: {"event":"ready","protocol":n}, {"event":"name","owned":true} /
 // {"event":"name","owned":false,"owner":"<process name>"}, {"event":"inhibitors","list":
-// [{"app","reason","cookie"}]}, {"event":"activity"}, {"event":"setActive","active":b},
-// {"event":"askIdle"}, {"event":"error","message":…}. From the shell: {"active":b,
-// "since":<epoch s>}, {"idleSeconds":n}.
+// [{"app","reason","cookie","caller"}]} (at most one per reportDelayMs: a burst of changes
+// is one report), {"event":"activity"}, {"event":"setActive","id":n} (SetActive(true)),
+// {"event":"askIdle","id":n}, {"event":"error","message":…}.
+// From the shell: {"active":b,"since":<epoch s>}; the answers {"answer":n,"idleSeconds":s}
+// and {"answer":n,"taken":b} to the asks of that id (an answer to an ask no longer waiting
+// is dropped: a late one never answers a newer call); {"adopt":[{"caller","app","reason",
+// "cookie"}]}: the holders a helper before this one had, taken over where their caller is
+// still on the bus (the shell hands them back after a restart).
 #pragma once
 
 #include <QDBusConnection>
@@ -63,15 +69,19 @@ class ScreenSaverService : public QObject
 
 public:
     static constexpr const char *serviceName = "org.freedesktop.ScreenSaver";
-    // App names and reasons are text from outside: cut to this many characters here (the
-    // shell caps them again, shorter, for its views)
-    static constexpr int maxTextLength = 1000;
-    // Cookies one caller may hold, and all callers together
+    // App names and reasons are text from outside: cut to these many characters here (the
+    // shell caps them again for its views)
+    static constexpr int maxAppLength = 64;
+    static constexpr int maxReasonLength = 128;
+    // Cookies one caller may hold (by its unique name, and by its process over all its
+    // connections), and all callers together
     static constexpr int maxPerCaller = 16;
     static constexpr int maxCookies = 64;
-    // GetSessionIdleTime calls waiting for the shell at once, and how long they wait
-    static constexpr int maxIdleAsks = 32;
-    static constexpr int idleAnswerMs = 2000;
+    // Calls waiting for the shell's answer at once, and how long each waits
+    static constexpr int maxAsks = 32;
+    static constexpr int answerMs = 2000;
+    // Changes to the holders within this long go to the shell as one report
+    static constexpr int reportDelayMs = 75;
 
     ScreenSaverService(const QDBusConnection &bus, LineChannel *channel, QObject *parent = nullptr);
 
@@ -80,28 +90,42 @@ public:
     bool start();
 
     // For the interfaces: `caller` is the calling connection's unique name. 0 when the
-    // caller (or everyone together) holds as many cookies as allowed
+    // caller (or its process, or everyone together) holds as many cookies as allowed
     uint inhibit(const QString &caller, const QString &application, const QString &reason);
     void unInhibit(const QString &caller, uint cookie);
     void simulateActivity();
     bool active() const { return m_active; }
     uint activeTime() const;
+    // Delayed replies: answered when the shell answers, or at answerMs
     void askIdle(const QDBusMessage &call);
-    bool setActive(bool active);
+    void askSetActive(const QDBusMessage &call);
 
 private:
     struct Hold {
         QString caller;
+        uint pid;
         QString application;
         QString reason;
     };
+    enum class AskKind { Idle, SetActive };
+    struct Ask {
+        AskKind kind;
+        QDBusMessage call;
+    };
 
+    void ask(AskKind kind, const QDBusMessage &call);
+    void answer(const QJsonObject &message);
+    void expire(quint64 id);
     void shellMessage(const QJsonObject &message);
+    void adopt(const QJsonValue &list);
+    bool roomFor(const QString &caller, uint pid) const;
+    uint callerPid(const QString &caller) const;
     void ownerChanged(const QString &name, const QString &oldOwner, const QString &newOwner);
     void reportName();
     void reportHolders();
-    void answerIdle(const QJsonValue &seconds);
+    void sendHolders();
     void dropCaller(const QString &caller);
+    void sendError(const QString &text);
     QString processName(const QString &busName) const;
 
     QDBusConnection m_bus;
@@ -113,6 +137,7 @@ private:
     qint64 m_activeSince = 0;
     // The name's state as last told: "" not yet, "owned", or "owner:<name>"
     QString m_nameTold;
-    QList<QDBusMessage> m_idleAsks;
-    QTimer *m_idleTimer;
+    QMap<quint64, Ask> m_asks;
+    quint64 m_nextAsk = 1;
+    QTimer *m_reportTimer;
 };

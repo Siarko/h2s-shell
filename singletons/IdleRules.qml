@@ -406,6 +406,12 @@ Singleton {
             next.idleSince = Math.max(next.idleSince, at);
     }
 
+    // Whether an app's SetActive(true) (the busForce event) starts the screensaver now: not
+    // while locked, not while going to sleep. Its answer to the app is this
+    function busForceTakes(state) {
+        return state.locked !== true && state.sleeping !== true;
+    }
+
     function _since(event, now) {
         const since = Number(event.since);
         return event.since !== undefined && isFinite(since) ? Math.min(since, now) : now - baseTime;
@@ -414,7 +420,8 @@ Singleton {
     // `event`: { type, … } — inputIdle { idle, since? }, awayIdle { idle, since? },
     // busInhibitors { count }, logindIdleBlock { held: true | false | "unknown" }, power
     // { power: { id: "on" | "off" | other } }, deadline, config, monitors, locked,
-    // unlocked, sleep, resumed, force, activity (D-Bus SimulateUserActivity, and input on a
+    // unlocked, sleep, resumed, force (IPC), busForce (D-Bus SetActive(true): as force, never
+    // while locked or going to sleep — busForceTakes), activity (D-Bus SimulateUserActivity, and input on a
     // forced screensaver's surface: before baseTime has passed no inputIdle(true) came, so
     // no inputIdle(false) will — the surface sends `activity`; ignored while locked, where
     // video players send it every ~30 s), lockAttended { attended } (somebody at the lock
@@ -531,6 +538,14 @@ Singleton {
         case "force":
             next.forced = true;
             next.idleSince = now - config.saverAfter * 1000;
+            break;
+        case "busForce":
+            // An app's SetActive(true): only where it takes (busForceTakes); locked, the lock
+            // screen's own stages apply and no app starts the screensaver's
+            if (busForceTakes(next)) {
+                next.forced = true;
+                next.idleSince = now - config.saverAfter * 1000;
+            }
             break;
         case "activity":
             // Locked: only real input at the lock screen wakes (players keep sending it)

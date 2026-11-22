@@ -239,8 +239,12 @@ Singleton {
         idleSeconds: () => root._state.inputIdle ? (root._now() - root._state.idleSince) / 1000 : 0
         onHoldersChanged: root._dispatch({ type: "busInhibitors", count: holders.length })
         onActivity: root._dispatch({ type: "activity" })
-        // SetActive(true) starts the screensaver; SetActive(false) is activity
-        onSetActiveAsked: active => root._dispatch({ type: active ? "force" : "activity" })
+        // An app's SetActive(true): the screensaver now, where it takes (not while locked)
+        setActive: () => {
+            const taken = IdleRules.busForceTakes(root._state);
+            root._dispatch({ type: "busForce" });
+            return taken;
+        }
     }
 
     // "Lock after" replaced `lockscreenTimeout` (counted from the screensaver's start when it

@@ -725,6 +725,21 @@ TestCase {
         const off = _machine({}, ["lcd"], true);
         off.at(1000, { type: "force" });
         assertEqual(off.actions, "showSaver:lcd,active:true", "forced with the screensaver off: shown now anyway");
+
+        // An app's SetActive(true): as a force while unlocked, nothing while locked or asleep
+        const bus = _machine(saver, ["lcd"], true);
+        assert(IdleRules.busForceTakes(bus.state), "SetActive(true) unlocked: it takes");
+        bus.at(1000, { type: "busForce" });
+        assertEqual(bus.actions, "showSaver:lcd,startCommand,active:true", "… the screensaver now");
+        const busLocked = _machine(_with(saver, { blanking: "off" }), ["oled"], true);
+        busLocked.at(1000, { type: "locked" });
+        assert(!IdleRules.busForceTakes(busLocked.state), "SetActive(true) locked: it does not take");
+        busLocked.at(2000, { type: "busForce" });
+        assertEqual(busLocked.actions, "", "… nothing turned off, no start command at the lock");
+        assertEqual(busLocked.state.forced, false, "… and nothing forced for after the unlock");
+        const busAsleep = _machine(saver, ["lcd"], true);
+        busAsleep.at(1000, { type: "sleep" });
+        assert(!IdleRules.busForceTakes(busAsleep.state), "SetActive(true) going to sleep: it does not take");
     }
 
     function _unknowns() {

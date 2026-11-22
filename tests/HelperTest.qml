@@ -63,29 +63,42 @@ TestCase {
         assertEqual(taken.owner.length, HelperRules.maxOwnerLength, "… its owner's name capped");
         assert(taken.owner.startsWith("<b>kde</b> x"), "… on one line, markup kept as text");
         const holders = line(JSON.stringify({ event: "inhibitors", list: [
-            { app: "mpv", reason: "r".repeat(500), cookie: 9 },
-            { app: "<i>firefox</i>\tbrowser\nnext", reason: "video", cookie: 3 },
+            { app: "mpv", reason: "r".repeat(500), cookie: 9, caller: ":1.42" },
+            { app: "<i>firefox</i>\tbrowser\nnext", reason: "video", cookie: 3, caller: "org.example; rm" },
             { app: "no cookie", reason: "" }, { app: "zero", reason: "", cookie: 0 }, "junk", null] }));
         assertEqual(holders.list.map(holder => holder.cookie).join(","), "3,9", "service: the holders, by cookie, the unreadable ones left out");
         assertEqual(holders.list[0].app, "<i>firefox</i> browser next", "… an app's name on one line, as text");
         assertEqual(holders.list[1].reason.length, HelperRules.maxReasonLength, "… a reason capped");
+        assertEqual(holders.list[1].caller, ":1.42", "… the caller's unique bus name kept");
+        assertEqual(holders.list[0].caller, "", "… what is not a unique name dropped");
         assertEqual(line(JSON.stringify({ event: "inhibitors", list: Array.from({ length: 100 }, (unused, i) => ({ app: "a", reason: "", cookie: i + 1 })) })).list.length,
                     HelperRules.maxHolders, "… at most maxHolders kept");
         assertEqual(line("{\"event\":\"activity\"}").event, "activity", "service: activity");
-        assertEqual(line("{\"event\":\"askIdle\"}").event, "askIdle", "service: the idle time asked");
-        assertEqual(line("{\"event\":\"setActive\",\"active\":true}").active, true, "service: SetActive");
+        assertEqual(line("{\"event\":\"askIdle\",\"id\":4}").id, 4, "service: the idle time asked, with the ask's id");
+        assertEqual(line("{\"event\":\"setActive\",\"id\":5}").id, 5, "service: SetActive(true), with the ask's id");
         assertEqual(line("{\"event\":\"error\",\"message\":\"no bus\"}").message, "no bus", "service: an error, with its message");
         for (const odd of ["", "junk", "[]", "null", "{\"event\":\"what\"}", "{\"event\":\"ready\"}", "{\"event\":\"name\"}",
-                           "{\"event\":\"inhibitors\",\"list\":{}}", "{\"event\":\"setActive\",\"active\":\"yes\"}"])
+                           "{\"event\":\"inhibitors\",\"list\":{}}", "{\"event\":\"setActive\"}", "{\"event\":\"askIdle\",\"id\":0}",
+                           "{\"event\":\"setActive\",\"id\":\"1\"}"])
             assertEqual(line(odd), null, "service: not a line of the protocol (" + odd + "): null");
 
         assertEqual(JSON.stringify(HelperRules.activeMessage(true, 1700000000500)), JSON.stringify({ active: true, since: 1700000000 }),
                     "service: active, since in whole seconds");
         assertEqual(JSON.stringify(HelperRules.activeMessage(false, 1700000000500)), JSON.stringify({ active: false, since: 0 }),
                     "… inactive: no time");
-        assertEqual(HelperRules.idleMessage(12.7).idleSeconds, 12, "service: the idle time in whole seconds");
-        assertEqual(HelperRules.idleMessage(-3).idleSeconds, 0, "… never negative");
-        assertEqual(HelperRules.idleMessage("junk").idleSeconds, 0, "… 0 when not a number");
+        assertEqual(JSON.stringify(HelperRules.idleMessage(4, 12.7)), JSON.stringify({ answer: 4, idleSeconds: 12 }),
+                    "service: the idle time in whole seconds, answering its ask");
+        assertEqual(HelperRules.idleMessage(4, -3).idleSeconds, 0, "… never negative");
+        assertEqual(HelperRules.idleMessage(4, "junk").idleSeconds, 0, "… 0 when not a number");
+        assertEqual(JSON.stringify(HelperRules.setActiveMessage(5, true)), JSON.stringify({ answer: 5, taken: true }),
+                    "service: SetActive answered: taken");
+        assertEqual(HelperRules.setActiveMessage(5, undefined).taken, false, "… anything but true: not taken");
+        assertEqual(JSON.stringify(HelperRules.adoptMessage([{ app: "mpv", reason: "r", cookie: 9, caller: ":1.4" },
+                                                             { app: "x", reason: "", cookie: 3, caller: "" }, null])),
+                    JSON.stringify({ adopt: [{ caller: ":1.4", app: "mpv", reason: "r", cookie: 9 }] }),
+                    "service: the holders handed to the next helper, those with a caller");
+        assertEqual(HelperRules.adoptMessage([]), null, "… none: nothing to send");
+        assertEqual(HelperRules.adoptMessage(undefined), null, "… nor for no list");
 
         const status = HelperRules.serviceStatus;
         assertEqual(JSON.stringify(status("missing", "off", { owned: null })), JSON.stringify({ state: "notBuilt", line: "Not built" }),

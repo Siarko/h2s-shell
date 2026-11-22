@@ -554,6 +554,15 @@ Three sources, all respected while unlocked (hypridle's set), all ignored at the
   screen on. Stop it to let the shell do it." (the name read from the bus, no list), and the
   shell works on without bus inhibitors; when the name frees up the helper takes it (it
   stays queued for it).
+  As built (I10b): `SetActive(true)` is asked of the shell and answers whether it took — never
+  while locked or going to sleep (`IdleRules.busForceTakes`, the `busForce` event);
+  `SetActive(false)` answers false and does nothing (as KDE). Cookies are capped at 16 per
+  unique name and per process (its pid, over all its connections), 64 in all; app names and
+  reasons are cut to 64/128 characters in the helper; the holder list goes to the shell at most
+  once per 75 ms. A helper that ends loses its holders until the next one runs; the shell hands
+  them back (`adopt`) and the new helper keeps those whose caller is still on the bus, with
+  their cookies. Asks to the shell (GetSessionIdleTime, SetActive) carry an id; a late answer
+  answers no newer call.
 - **logind `idle` block inhibitors** (`systemd-inhibit --what=idle`, mpv and others): read with
   `ListInhibitors` at each deadline that would start a stage (logind sends no signal when one
   appears); a failed read counts as "not held" for the screensaver but is logged once — it
