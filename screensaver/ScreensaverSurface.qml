@@ -23,17 +23,34 @@ PanelWindow {
     // full black at once, and only the notifications on top of it faded
     color: "transparent"
 
-    // Shown and not locked: under a lock the lock screen is what shows (Idle.saverOnScreen)
-    readonly property bool _show: Idle.saverOnScreen
+    // What this screen shows (Idle.shownFor: "on" also while locked, where the lock screen
+    // is what shows): the screensaver, or "off" — powered off, under this surface plain
+    // black and at once (in case the power cut fails), still taking the keys
+    readonly property string _way: Idle.shownFor(root.screen?.name ?? "")
+    readonly property bool _show: _way !== "on"
+    readonly property bool _off: _way === "off"
     // The window is shown, still clear, before the fade in starts: mapping it and its
     // first frame took so long the first time that the start of the fade was lost
     property bool _mapped: false
     visible: _mapped
 
+    // The screensaver turned into a monitor going off: black at once
+    on_OffChanged: {
+        if (_off && _show) {
+            _firstFrame.running = false
+            _fadeIn.stop()
+            _content.opacity = 1
+        }
+    }
+
     on_ShowChanged: {
         if (_show) {
             _fadeOut.stop()
             _mapped = true
+            if (_off) {
+                _content.opacity = 1
+                return
+            }
             _firstFrame.ticks = 0
             _firstFrame.running = true
         } else {
@@ -86,7 +103,7 @@ PanelWindow {
 
         // Notification list — top right, below bar
         NotificationList {
-            visible: Profiles.value("lockscreen.notificationsOnScreensaver") ?? true
+            visible: !root._off && (Profiles.value("lockscreen.notificationsOnScreensaver") ?? true)
             anchors {
                 top: parent.top
                 right: parent.right

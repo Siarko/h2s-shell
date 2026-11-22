@@ -73,6 +73,24 @@ Flickable {
         }
 
         SchemaSettingEditor {
+            key: "lockscreen.blanking"
+            editIndex: root.editIndex
+            available: root._screensaverOn && ScreenPower.canPowerOff
+        }
+
+        SchemaSettingEditor {
+            key: "lockscreen.screenOffEnabled"
+            editIndex: root.editIndex
+            available: ScreenPower.canPowerOff
+        }
+
+        SchemaSettingEditor {
+            key: "lockscreen.screenOffTimeout"
+            editIndex: root.editIndex
+            available: ScreenPower.canPowerOff && root._edited("lockscreen.screenOffEnabled") === true
+        }
+
+        SchemaSettingEditor {
             key: "lockscreen.fadeInDuration"
             editIndex: root.editIndex
             available: root._screensaverOn
@@ -142,6 +160,11 @@ Flickable {
             key: "lockscreen.lockAfter"
             editIndex: root.editIndex
             available: root._lockOn
+        }
+
+        SchemaSettingEditor {
+            key: "lockscreen.lockedScreenOffTimeout"
+            editIndex: root.editIndex
         }
 
         SchemaSettingEditor {

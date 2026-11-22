@@ -166,6 +166,19 @@ Singleton {
               { value: "title", label: "Title only" },
               { value: "app", label: "App only" }
           ] },
+        // What every monitor does at "Activate after": the screensaver, or powered off (an
+        // OLED's own protection mode starts even on black; only a power cut avoids it).
+        // Turning off needs the compositor (Hyprland); without it, the screensaver
+        { key: "lockscreen.blanking", label: "When the screensaver starts", group: "lockscreen",
+          type: "enum", default: "screensaver", hint: "Turning screens off needs Hyprland.", options: [
+              { value: "screensaver", label: "Screensaver" },
+              { value: "off", label: "Turn off" }
+          ] },
+        { key: "lockscreen.screenOffEnabled", label: "Turn screens off", group: "lockscreen",
+          type: "bool", default: false, hint: "Needs Hyprland." },
+        { key: "lockscreen.screenOffTimeout", label: "Turn screens off after", group: "lockscreen",
+          type: "number", min: 5, max: 86400, suffix: "s", default: 600,
+          hint: "Counted from your last input." },
         { key: "lockscreen.lockscreenEnabled", label: "Enable lock screen", group: "lockscreen",
           type: "bool", default: false, legacy: ["lockscreen", "lockscreenEnabled"] },
         // From the last input, whether the screensaver is on or not (it replaced
@@ -173,6 +186,12 @@ Singleton {
         { key: "lockscreen.lockAfter", label: "Lock after", group: "lockscreen",
           type: "number", min: 5, max: 86400, suffix: "s", default: 600,
           hint: "Counted from your last input." },
+        // The lock screen's own screen-off: on by default after a minute (0 = never); counted
+        // from the lock or the last input at it. Without power control the lock screen goes
+        // black instead
+        { key: "lockscreen.lockedScreenOffTimeout", label: "Turn screens off on the lock screen after",
+          group: "lockscreen", type: "number", min: 0, max: 86400, suffix: "s", default: 60,
+          hint: "0: never." },
         { key: "lockscreen.lockOnSleep", label: "Lock before the computer sleeps",
           group: "lockscreen", type: "bool", default: false },
         { key: "lockscreen.notificationsOnLock", label: "Show notifications on lock screen",

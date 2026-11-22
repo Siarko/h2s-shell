@@ -455,6 +455,12 @@ The interface modules are written against (`qs.api`), versioned on its own
   file inside the module's directory (≤ 1 MiB).
 
 ### Added
+- Screens off: Settings → Lockscreen → "Turn screens off" (after a time from your last
+  input), and "When the screensaver starts": "Turn off" instead of the screensaver (an
+  OLED's own protection mode starts even on black). On the lock screen the screens go off
+  after a minute without input there ("Turn screens off on the lock screen after", 0 for
+  never); input turns them on, and so do an unlock and waking from sleep. Needs Hyprland;
+  elsewhere the lock screen goes plain black instead.
 - Safe mode has a banner, under the bar and at the top of Settings → Modules: why the shell
   started without modules, the modules on when it crashed and one installed or updated in
   the last day, with "Open Modules" and "Load modules" (loads them again without a

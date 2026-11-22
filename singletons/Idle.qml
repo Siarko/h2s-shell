@@ -10,9 +10,14 @@ import qs.singletons.lock
 // (notes/plans/idle-lock-flow.md, §8 "Wiring"). It feeds the rules the facts — input idle
 // from two IdleMonitors, the lock from Lockscreen, sleep from SystemSleep, the profile's
 // settings — one event at a time, and carries out the actions they return: the
-// screensaver's picture (`saverShown`, which the screensaver's windows follow), the idle
-// lock (Lockscreen.lock("idle")), the start and end commands. One Timer runs to the rules'
-// next deadline; nothing here decides when.
+// screensaver's picture per monitor (`shownFor`, which the screensaver's windows follow),
+// the monitors' power (ScreenPower), the lock surface's black fallback (`lockBlack`), the
+// idle lock (Lockscreen.lock("idle")), the start and end commands. One Timer runs to the
+// rules' next deadline; nothing here decides when.
+//
+// Monitors are ScreenPower's (by MonitorRules' ids) where it can cut their power; elsewhere
+// the screens, by name, all with the screensaver. Every reading of the monitors is a
+// `monitors` and a `power` event: the rules trust a monitor to be off only when read so.
 //
 // The two IdleMonitors are made once, with the rules' fixed base time, and never remade: a
 // new ext-idle notification counts from zero, so remaking one on a settings change ended an
@@ -31,19 +36,37 @@ Singleton {
     // the one state, so a window never reads a new lock beside an old picture (at an unlock
     // it would map for a moment)
     readonly property bool saverOnScreen: saverShown && !_state.locked
+    // The lock surface drawn plain black: the lock screen's screen-off reached while some
+    // monitor is not read as off (no power control, a cut that failed)
+    readonly property bool lockBlack: _state.lockBlack === true
 
-    // Until monitors are told apart (ScreenPower), one picture for all of them
-    readonly property var _monitors: ["all"]
+    // What the screen with this connector name shows unlocked: "on" (the desktop), "saver"
+    // (the screensaver) or "off" (powered off, under a plain black surface that takes the
+    // keys); "on" while locked, where the lock surface is what shows
+    function shownFor(connector) {
+        if (_state.locked)
+            return "on";
+        const entry = _monitorEntries.find(monitor => monitor.connector === connector);
+        return entry ? (_state.shown[entry.id] ?? "on") : "on";
+    }
 
-    // The profile's values, by the rules' names. Screen-off and the lock screen's own
-    // screen-off are not wired yet: off
+    // [{ id, connector }]: ScreenPower's monitors where it can cut their power, else the screens
+    readonly property var _monitorEntries: ScreenPower.canPowerOff
+        ? ScreenPower.monitors.map(monitor => ({ id: monitor.id, connector: monitor.connector }))
+        : Quickshell.screens.map(screen => ({ id: screen.name, connector: screen.name }))
+    readonly property var _monitors: _monitorEntries.map(monitor => monitor.id)
+    on_MonitorsChanged: Qt.callLater(root._monitorListChanged)
+
+    // The profile's values, by the rules' names
     readonly property var _values: ({
         screensaverEnabled: Profiles.value("lockscreen.screensaverEnabled"),
         screensaverTimeout: Profiles.value("lockscreen.screensaverTimeout"),
-        screenOffEnabled: false,
+        screenOffEnabled: Profiles.value("lockscreen.screenOffEnabled"),
+        screenOffTimeout: Profiles.value("lockscreen.screenOffTimeout"),
         lockscreenEnabled: Profiles.value("lockscreen.lockscreenEnabled"),
         lockAfter: Profiles.value("lockscreen.lockAfter"),
-        lockedScreenOffTimeout: 0,
+        lockedScreenOffTimeout: Profiles.value("lockscreen.lockedScreenOffTimeout"),
+        blanking: Profiles.value("lockscreen.blanking"),
         screensaverCommands: Profiles.value("lockscreen.screensaverCommands")
     })
     // A profile switch changes several values in one pass: one config event after it
@@ -59,7 +82,21 @@ Singleton {
     }
 
     function _config() {
-        return IdleRules.config(_values, _monitors, false);
+        return IdleRules.config(_values, _monitors, ScreenPower.canPowerOff);
+    }
+
+    function _monitorListChanged() {
+        _dispatch({ type: "monitors" });
+    }
+
+    // Each reading of ScreenPower's: the power as read ("unknown" for a failed reading)
+    function _powerRead() {
+        if (!ScreenPower.canPowerOff)
+            return;
+        const power = {};
+        for (const monitor of ScreenPower.monitors)
+            power[monitor.id] = monitor.power;
+        _dispatch({ type: "power", power: power });
     }
 
     function _anySaver(state) {
@@ -118,9 +155,17 @@ Singleton {
                 _log("warning", "the idle lock was not taken: asking again while it is due, with a growing pause");
             Lockscreen.lock("idle");
             break;
+        case "powerOff":
+        case "powerOn":
+            _log("info", (action.type === "powerOff" ? "screens off: " : "screens on: ") + action.ids.join(", "));
+            for (const id of action.ids)
+                ScreenPower.setPower(id, action.type === "powerOn");
+            break;
+        case "lockBlack":
+            _log("info", action.black ? "the lock screen goes black (a monitor not read as off)" : "the lock screen shows again");
+            break;
         default:
-            // powerOn / powerOff (no power control yet), active (no screensaver interface
-            // yet), lockBlack (no lock screen screen-off yet): nothing to carry out
+            // active (no screensaver interface yet): nothing to carry out
             break;
         }
     }
@@ -191,6 +236,13 @@ Singleton {
         timeout: IdleRules.baseTime / 1000
         respectInhibitors: true
         onIsIdleChanged: root._dispatch({ type: "awayIdle", idle: isIdle })
+    }
+
+    Connections {
+        target: ScreenPower
+        function onMonitorsChanged() {
+            root._powerRead();
+        }
     }
 
     Timer {

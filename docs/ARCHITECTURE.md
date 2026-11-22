@@ -495,8 +495,10 @@ launcher agree on the contract described under "Recovery" below):
   the password fallback (`LockIoRules.passwordFallback`, from a probe of the machine).
 - **Idle** — `singletons/Idle.qml` feeds the pure `singletons/IdleRules.qml` (input idle,
   the lock, sleep from `SystemSleep`, the profile's settings) and carries out what it
-  returns: the screensaver's picture (`saverShown`, `saverOnScreen`, which the screensaver's
-  windows follow), the idle lock (`Lockscreen.lock("idle")`), the start and end commands.
+  returns: the picture per monitor (`shownFor(connector)`, which each screen's screensaver
+  window follows: the screensaver, or plain black over a monitor turned off), the monitors'
+  power (`ScreenPower.setPower`; every reading of `ScreenPower.monitors` is a `monitors`
+  and a `power` event), the lock surface's black fallback (`lockBlack`), the idle lock (`Lockscreen.lock("idle")`), the start and end commands.
   Its two `IdleMonitor`s (`singletons/lock/IdleWatch.qml`: one ignoring Wayland idle
   inhibitors, one respecting them) are made once with a fixed 5 s, so a settings change
   never ends an idle period; every stage counts from the last input. One `Timer` runs to

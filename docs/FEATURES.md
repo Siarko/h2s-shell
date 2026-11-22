@@ -275,6 +275,15 @@ Two stages, both driven by Wayland idle notifications and both counted from the 
   and the screensaver goes; an unlock counts as the user being back, with or without input
   (logind's Unlock). A profile switch while it shows keeps it (one that turns it off hides
   it without the end command); waking from sleep ends it.
+- **Screens off** — the shell turns monitors off itself: at "Screensaver after" instead of
+  the screensaver (`blanking`: "Turn off" — an OLED's own protection mode starts even on a
+  black picture), and every monitor at "Turn screens off after" (`screenOffTimeout`, off by
+  default). Input, an unlock and waking from sleep turn them on again. On the lock screen
+  they go off after `lockedScreenOffTimeout` without input there (1 minute by default,
+  0 never). It needs a compositor that can cut a monitor's power — Hyprland; elsewhere
+  "Turn off" falls back to the screensaver, and on the lock screen the lock surface goes
+  plain black instead. A screen-off of another program (hypridle's `dpms` listener) can run
+  beside it: each acts on its own times.
 - **Lock screen** — a real `WlSessionLock`, so the compositor enforces it. It can be
   reached on idle (`lockAfter`), and shows a password
   prompt and optionally the notification list — the app's name only by default, or the

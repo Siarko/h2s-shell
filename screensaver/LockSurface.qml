@@ -180,9 +180,12 @@ WlSessionLockSurface {
     }
 
     // The notifications, at the detail the lock screen's setting allows (app only by
-    // default: their text is not for whoever stands at the screen)
+    // default: their text is not for whoever stands at the screen). Gone while the lock
+    // screen is plain black (Idle.lockBlack: its screen-off reached and a monitor not read as
+    // off), until input
     NotificationList {
         readonly property bool shown: (Profiles.value("lockscreen.notificationsOnLock") ?? true) && !root._awake
+                                      && !Idle.lockBlack
         visible: opacity > 0
         opacity: shown ? 1 : 0
         Behavior on opacity { NumberAnimation { duration: Theme.duration("fade"); easing: Theme.curve("fade") } }
