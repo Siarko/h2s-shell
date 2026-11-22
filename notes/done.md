@@ -2588,3 +2588,13 @@ full set on both machines before the merge (`plans/modules-management.md` §9).
   questions for the owner).
 - **Workflow**: tests per slice by `affected.sh` + one `--quick`, the full set and the deploy
   per segment; parallel agents only on disjoint files; nothing ended or deleted by pattern.
+- **Later the same night** (deployed on both machines after the full set passed on both):
+  idle I7 (per-monitor ways: `lockscreen.perMonitor`, `lockscreen.monitorBlanking`, IPC `idle
+  setMonitorWay`; the editor rows come with the pages), I9 (logind idle inhibitors with a 7 s
+  watchdog), I10a (the C++/Qt helper `helper/`, built by the NixOS package and by
+  `scripts/build-helper.sh` on Arch in the background, never as root); PAM 1–3
+  (`PamStackRules` reading stacks as libpam does, `PamStacks` reading both directories — the
+  polkit hint on Arch works —, `PamRuleRules` with the refusals and warnings: credential modules
+  only, arguments that pass without a credential refused, store paths refused); test hygiene
+  T8 (a suite leaves shared state as it found it) with the command runner's timings on a
+  monotonic clock and two module-API holes closed (`run._timings` writable, `runner._runner`).

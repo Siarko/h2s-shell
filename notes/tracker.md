@@ -64,6 +64,12 @@ plans named in done.md).
 
 ## Open points
 
+- **NixOS raw PAM lines from packages** (PAM plan §2.9, slice 3): the rules refuse a module path
+  anywhere in `/nix/store` (any user can add files there), so a raw line like
+  `${pkgs.pam_ldap}/lib/security/pam_ldap.so` cannot be entered in the editor. To decide with
+  the owner before slice 5 (NixOS options): allow store paths only in the NixOS module's own
+  options (written by root in configuration.nix), never in the shell's editor.
+
 For the owner. Until answered, the agent's choice stands.
 
 **To look at on a screen**
