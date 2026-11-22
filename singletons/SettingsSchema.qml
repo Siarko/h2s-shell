@@ -14,7 +14,8 @@ import QtQuick
 //   type     — "interval" (ms, 0 = paused), "number" (a field), "slider", "enum",
 //              "bool", "string", "stringList"; or a structured value with its own editor
 //              on its page ("barSection", "hardwarePopup", "color", "wallpaperSubset",
-//              "wallpaperSlots", "wallpaperWeekdays", "vpnWithNetworks", "vpnLockdownNetworks"),
+//              "wallpaperSlots", "wallpaperWeekdays", "vpnWithNetworks", "vpnLockdownNetworks",
+//              "monitorBlanking"),
 //              overridden as a whole
 //   default  — value of the system profile
 //   min/max  — for interval, number and slider
@@ -174,6 +175,15 @@ Singleton {
               { value: "screensaver", label: "Screensaver" },
               { value: "off", label: "Turn off" }
           ] },
+        // Per-monitor ways: with "Set per monitor" on, a monitor's own way overrides the one
+        // above. Keyed by MonitorRules' ids (make|model|serial, not the connector), so a
+        // monitor keeps its way on another port; a monitor not connected keeps its entry.
+        // A way is "default" (the one above), "screensaver" or "off"; anything else counts as
+        // "default" (IdleRules.config). Edited on the Screensaver page (idle plan, slice I8)
+        { key: "lockscreen.perMonitor", label: "Set per monitor", group: "lockscreen",
+          type: "bool", default: false },
+        { key: "lockscreen.monitorBlanking", label: "Each monitor", group: "lockscreen",
+          type: "monitorBlanking", default: ({}) },
         { key: "lockscreen.screenOffEnabled", label: "Turn screens off", group: "lockscreen",
           type: "bool", default: false, hint: "Needs Hyprland." },
         { key: "lockscreen.screenOffTimeout", label: "Turn screens off after", group: "lockscreen",

@@ -697,7 +697,10 @@ outputs, stand-in `gdbus` / `systemd-inhibit`, never the session's compositor.
    surfaces. `IdleRulesTest` cases; lock bed `outputs.sh` extended (two headless outputs, one
    `off`, one `screensaver`).
 8. **The two pages (I8)** — Screensaver and Lock screen pages per the mockup, the timeline
-   element. `SettingsPagesTest`; the mockup re-run on the real code for the owner.
+   element. With them come I7's editor rows: the "Set per monitor" switch
+   (`lockscreen.perMonitor`) and the per-monitor cards (`lockscreen.monitorBlanking`,
+   written through `IdleRules.withMonitorWay`), which I7 declared and wired without a view;
+   until then the IPC `idle setMonitorWay <id> <way>` sets them. `SettingsPagesTest`; the mockup re-run on the real code for the owner.
 9. **logind idle inhibitors (I9)** — `ListInhibitors` read and parsed (`LockParseRules`).
    Parse cases; a reading suite on a stand-in `gdbus`.
 10. **The helper and its build (I10a)** — §18: the source tree, `scripts/build-helper.sh`,

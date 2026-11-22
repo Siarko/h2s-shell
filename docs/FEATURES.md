@@ -277,8 +277,10 @@ Two stages, both driven by Wayland idle notifications and both counted from the 
   it without the end command); waking from sleep ends it.
 - **Screens off** — the shell turns monitors off itself: at "Screensaver after" instead of
   the screensaver (`blanking`: "Turn off" — an OLED's own protection mode starts even on a
-  black picture), and every monitor at "Turn screens off after" (`screenOffTimeout`, off by
-  default). Input, an unlock and waking from sleep turn them on again, and so does a shell
+  black picture; with `perMonitor` on, each monitor can have its own way in
+  `monitorBlanking`, by make, model and serial: "screensaver" or "off" over the default,
+  set for now with the IPC `idle setMonitorWay <id> <way>`), and every monitor at "Turn
+  screens off after" (`screenOffTimeout`, off by default). Input, an unlock and waking from sleep turn them on again, and so does a shell
   that restarted while they were off; a monitor another program turned off is left alone.
   The lock screen's screen-off waits while somebody is at it (the prompt awake, a check under
   way). On the lock screen

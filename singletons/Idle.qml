@@ -72,6 +72,8 @@ Singleton {
         lockAfter: Profiles.value("lockscreen.lockAfter"),
         lockedScreenOffTimeout: Profiles.value("lockscreen.lockedScreenOffTimeout"),
         blanking: Profiles.value("lockscreen.blanking"),
+        perMonitor: Profiles.value("lockscreen.perMonitor"),
+        monitorBlanking: Profiles.value("lockscreen.monitorBlanking"),
         screensaverCommands: Profiles.value("lockscreen.screensaverCommands")
     })
     // A profile switch changes several values in one pass: one config event after it
@@ -431,11 +433,22 @@ Singleton {
             return JSON.stringify({
                 state: root._state,
                 config: config,
+                monitors: root._monitorEntries,
                 saverShown: root.saverShown,
                 saverOnScreen: root.saverOnScreen,
                 idleFor: now - root._state.idleSince,
                 nextDeadlineIn: deadline < 0 ? -1 : deadline - now
             });
+        }
+
+        // h2s-shell ipc call idle setMonitorWay '<id>' off   (a MonitorRules id, as `state`'s
+        // monitors list them; "default", "screensaver" or "off"): written where the setting's
+        // value comes from now (Profiles.writeInEffect); applies while "Set per monitor" is on
+        function setMonitorWay(id: string, way: string): string {
+            const map = IdleRules.withMonitorWay(Profiles.value("lockscreen.monitorBlanking"), id, way);
+            if (map === null)
+                return "not understood: a monitor id and one of " + IdleRules.monitorWays.join(", ");
+            return Profiles.writeInEffect("lockscreen.monitorBlanking", map) === false ? "not written" : "ok";
         }
     }
 }

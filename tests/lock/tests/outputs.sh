@@ -6,8 +6,26 @@
 #   removed, then re-added: the output showing the prompt is removed (the prompt moves to
 #   the other one) and an output of that kind is added again; a press on the new one
 #   brings the prompt there, and the password typed there unlocks.
+#   each monitor its own way: with the two outputs left, a profile turns the screensaver on
+#   (6 s) with "Set per monitor"; one output's way is "off", the other's "screensaver"
+#   (set over the idle IPC, by MonitorRules' ids). Idle: the "off" one's power is cut
+#   (dpmsStatus false), the other shows the screensaver and stays on; input brings both
+#   back. An override for a monitor not connected is kept through it all.
 #
-# hyprctl talks to the nested Hyprland only (the private runtime dir).
+# hyprctl talks to the nested Hyprland only (the private runtime dir); the session's
+# monitors are never touched.
+
+mkdir -p "$XDG_CONFIG_HOME/h2s_shell"
+python3 -I -c '
+import json, sys
+profiles = [
+    {"name": "Full", "enabled": True, "when": {}, "set": {}},
+    {"name": "Per monitor", "enabled": True, "when": {"fact": "locktest.perMonitor", "is": True},
+     "set": {"lockscreen.screensaverEnabled": True, "lockscreen.screensaverTimeout": 6,
+             "lockscreen.perMonitor": True}},
+]
+json.dump({"profiles": json.dumps(profiles), "widgetPresets": "{}"}, open(sys.argv[1], "w"), indent=2)
+' "$XDG_CONFIG_HOME/h2s_shell/config.json" || abort "cannot write the config"
 
 stack_start
 
@@ -89,3 +107,52 @@ type_text "$LOCKTEST_PASSWORD"
 press_key Return
 check_within 10 "round 2: the password typed on the re-added output unlocks" compositor_unlocked
 check "round 2: the shell says unlocked" shell_status_is unlocked
+
+# ---- Each monitor its own way ----
+idle_json() { shell_ipc idle state | python3 -I -c "import json, sys; print(json.dumps(eval(sys.argv[1], {}, {'state': json.load(sys.stdin)})))" "$1"; }
+power_control() { [ "$(idle_json 'state["config"]["canPowerOff"] and len(state["monitors"]) == 2')" = true ]; }
+# monitor_field <index> <id|connector>: the idle state's monitors, in their order
+monitor_field() { idle_json "state['monitors'][$1]['$2']" | python3 -I -c 'import json, sys; print(json.load(sys.stdin))'; }
+shown_is() { [ "$(idle_json "state['state']['shown'].get('$1', 'on')")" = "\"$2\"" ]; }
+# dpms_of <connector> <true|false>
+dpms_of() {
+    hyprctl -j monitors | python3 -I -c '
+import json, sys
+found = [monitor for monitor in json.load(sys.stdin) if monitor["name"] == sys.argv[1]]
+sys.exit(0 if found and str(found[0].get("dpmsStatus")).lower() == sys.argv[2] else 1)' "$1" "$2"
+}
+# saver_layer_on <connector>: the screensaver's layer is on that output
+saver_layer_on() {
+    hyprctl -j layers | python3 -I -c '
+import json, sys
+monitor = json.load(sys.stdin).get(sys.argv[1], {})
+sys.exit(0 if any(surface.get("namespace") == "screensaver"
+                  for level in monitor.get("levels", {}).values() for surface in level) else 1)' "$1"
+}
+blanking_value() { shell_ipc profiles status | python3 -I -c 'import json, sys; print(json.dumps(json.load(sys.stdin)["values"].get("lockscreen.monitorBlanking"), sort_keys=True))'; }
+
+check_within "$GUARD" "round 3: the shell can turn both outputs off (Hyprland)" power_control
+off_id=$(monitor_field 0 id); off_output=$(monitor_field 0 connector)
+saver_id=$(monitor_field 1 id); saver_output=$(monitor_field 1 connector)
+log "round 3: off: $off_id ($off_output); screensaver: $saver_id ($saver_output)"
+check "round 3: the two outputs have distinct ids" test "$off_id" != "$saver_id"
+check "round 3: a way for a monitor not connected is taken" \
+    test "$(shell_ipc idle setMonitorWay 'Gone|Elsewhere|' off)" = ok
+check "round 3: … the off way set" test "$(shell_ipc idle setMonitorWay "$off_id" off)" = ok
+check "round 3: … the screensaver way set" test "$(shell_ipc idle setMonitorWay "$saver_id" screensaver)" = ok
+check "round 3: a way not understood is refused" test "$(shell_ipc idle setMonitorWay "$saver_id" saver)" != ok
+shell_ipc profiles simulate '{"locktest.perMonitor": true}' > /dev/null
+move_pointer 700 400
+move_pointer 720 410
+check_timed 15 "round 3: idle: the \"off\" output's power is cut" dpms_of "$off_output" false
+check_within "$GUARD" "round 3: … the shell has it off" shown_is "$off_id" off
+check_within "$GUARD" "round 3: the other shows the screensaver" saver_layer_on "$saver_output"
+check "round 3: … and is still on" dpms_of "$saver_output" true
+check "round 3: … the shell says saver" shown_is "$saver_id" saver
+move_pointer 700 400
+move_pointer 720 410
+check_within "$GUARD" "round 3: input: the \"off\" output on again" dpms_of "$off_output" true
+check_within "$GUARD" "round 3: … the screensaver gone" shown_is "$saver_id" on
+expected=$(python3 -I -c 'import json, sys; print(json.dumps({"Gone|Elsewhere|": "off", sys.argv[1]: "off", sys.argv[2]: "screensaver"}, sort_keys=True))' "$off_id" "$saver_id")
+check "round 3: the monitor not connected keeps its way" test "$(blanking_value)" = "$expected"
+check "no protocol error" no_protocol_errors

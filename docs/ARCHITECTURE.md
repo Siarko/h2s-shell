@@ -505,7 +505,9 @@ launcher agree on the contract described under "Recovery" below):
   Its two `IdleMonitor`s (`singletons/lock/IdleWatch.qml`: one ignoring Wayland idle
   inhibitors, one respecting them) are made once with a fixed 5 s, so a settings change
   never ends an idle period; every stage counts from the last input. One `Timer` runs to
-  the rules' next deadline. IPC: `idle state` (JSON).
+  the rules' next deadline. IPC: `idle state` (JSON, with the monitors' ids) and
+  `idle setMonitorWay <id> <way>` (one monitor's entry in `lockscreen.monitorBlanking`,
+  `IdleRules.withMonitorWay`).
 - **Adapters** — `singletons/lock/`, thin: I/O to events, effects to I/O, no decisions.
   Per lock (`LockScope.qml`, created when a lock begins and destroyed when it has ended,
   so destruction is the cleanup): `PamMethod.qml` (one `PamContext` per method,

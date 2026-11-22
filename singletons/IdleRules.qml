@@ -108,6 +108,28 @@ Singleton {
         };
     }
 
+    // What a monitor's entry in `monitorBlanking` may say: its own way, or "default" (the
+    // profile's `blanking`)
+    readonly property var monitorWays: ["default", "screensaver", "off"]
+
+    // The per-monitor map with one monitor's way set: `map` the current `monitorBlanking`,
+    // `id` a MonitorRules id (connected or not: the others' entries are kept as they are),
+    // `way` one of `monitorWays` — "default" drops the entry. → the new map, or null when the
+    // id or the way is not understood (nothing written).
+    function withMonitorWay(map, id, way) {
+        if (typeof id !== "string" || id === "" || id.length > 256 || !monitorWays.includes(way))
+            return null;
+        const result = {};
+        const given = map !== null && typeof map === "object" && !Array.isArray(map) ? map : {};
+        for (const key of Object.keys(given)) {
+            if (key !== id)
+                result[key] = given[key];
+        }
+        if (way !== "default")
+            result[id] = way;
+        return result;
+    }
+
     // The facts at the start: somebody is here, nothing is shown. `now`: monotonic ms.
     function initial(now) {
         return {

@@ -70,6 +70,7 @@ TestCase {
         _config();
         _screensaver();
         _ways();
+        _monitorWays();
         _screenOff();
         _lock();
         _input();
@@ -284,6 +285,31 @@ TestCase {
         changed.reconfigure(320000, saver);
         assertEqual(changed.actions, "powerOn:oled", "… and back to the screensaver: on, its screensaver stays");
         assertEqual(changed.shown(), "lcd=saver oled=saver", "… both the screensaver");
+    }
+
+    // One monitor's way written into the per-monitor map (the IPC; the page's editor later)
+    function _monitorWays() {
+        const rules = IdleRules;
+        const keys = map => JSON.stringify(map);
+        assertEqual(keys(rules.withMonitorWay({}, "oled", "off")), keys({ oled: "off" }), "a way set");
+        assertEqual(keys(rules.withMonitorWay({ oled: "off", gone: "screensaver" }, "oled", "screensaver")),
+                    keys({ gone: "screensaver", oled: "screensaver" }),
+                    "a way changed; a monitor not connected keeps its entry");
+        assertEqual(keys(rules.withMonitorWay({ oled: "off", gone: "off" }, "oled", "default")), keys({ gone: "off" }),
+                    "default: the entry dropped, the others kept");
+        assertEqual(keys(rules.withMonitorWay(null, "oled", "off")), keys({ oled: "off" }), "no map yet: a new one");
+        assertEqual(keys(rules.withMonitorWay(["junk"], "oled", "off")), keys({ oled: "off" }), "a list is no map");
+        assertEqual(rules.withMonitorWay({}, "oled", "slideshow"), null, "slideshow, not built: refused");
+        assertEqual(rules.withMonitorWay({}, "oled", "saver"), null, "a way not understood: refused");
+        assertEqual(rules.withMonitorWay({}, "", "off"), null, "no id: refused");
+        assertEqual(rules.withMonitorWay({}, "x".repeat(300), "off"), null, "an id too long: refused");
+        const given = { oled: "off" };
+        rules.withMonitorWay(given, "oled", "default");
+        assertEqual(keys(given), keys({ oled: "off" }), "the map given is not changed");
+        // Read back by config: the override applies only with Set per monitor on
+        const map = rules.withMonitorWay({}, "lcd", "off");
+        assertEqual(rules.config({ perMonitor: true, monitorBlanking: map }, ["lcd", "oled"], true).ways.lcd, "off",
+                    "the map written is the one config reads");
     }
 
     function _screenOff() {

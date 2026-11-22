@@ -463,6 +463,11 @@ The interface modules are written against (`qs.api`), versioned on its own
   after a minute without input there ("Turn screens off on the lock screen after", 0 for
   never); input turns them on, and so do an unlock and waking from sleep. Needs Hyprland;
   elsewhere the lock screen goes plain black instead.
+- Each monitor its own way at "When the screensaver starts": with `lockscreen.perMonitor`
+  on, `lockscreen.monitorBlanking` gives a monitor (by make, model and serial, so it keeps
+  its way on another port) "screensaver" or "off" over the default — an OLED off, an LCD
+  with the screensaver. Not on a settings page yet; for now set over IPC: `idle state`
+  lists the monitors, `idle setMonitorWay <id> <default|screensaver|off>`.
 - Safe mode has a banner, under the bar and at the top of Settings → Modules: why the shell
   started without modules, the modules on when it crashed and one installed or updated in
   the last day, with "Open Modules" and "Load modules" (loads them again without a
