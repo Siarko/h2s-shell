@@ -194,6 +194,10 @@ TestCase {
         assertEqual(Object.keys(machine.state.pendingPower).length, 0, "… nothing pending");
         assertEqual(machine.next(), -1, "… no deadline left");
         assertEqual(IdleRules.powerRetryDelay(40), IdleRules.powerRetry.maximum, "the pause grows up to its longest");
+        machine.at(650000, { type: "power", power: { oled: "on" } });
+        assertEqual(machine.actions, "powerOff:oled", "read on later while the shell has it off (it came back powered): the off asked again at once");
+        machine.at(650100, { type: "power", power: { oled: "off" } });
+        assertEqual(Object.keys(machine.state.pendingPower).length, 0, "… read off: done");
 
         // Power on that did not take: a key at the lock screen must bring the monitor back
         machine.input(700000);
@@ -942,6 +946,30 @@ TestCase {
         other.reconfigure(302000, offTimes, [{ id: "LG|27GL|9", base: "LG|27GL|9", connector: "DP-2" }]);
         assertEqual(other.actions, "endCommand,active:false",
                     "another monitor plugged in where it went: plugged in");
+
+        // As Idle hands it: the only monitor gone ([]), the same id back
+        const sameBack = _machine(offTimes, [backend], true);
+        sameBack.idle(5000, 0).deadline();
+        sameBack.reconfigure(301000, offTimes, []);
+        sameBack.reconfigure(302000, offTimes, [backend]);
+        assertEqual(sameBack.actions, "showSaver:Dell|U27|SN,powerOff:Dell|U27|SN", "the same id back within its window: off again, no wake");
+        const sameLate = _machine(offTimes, [backend], true);
+        sameLate.idle(5000, 0).deadline();
+        sameLate.reconfigure(301000, offTimes, []);
+        sameLate.reconfigure(301001 + IdleRules.shellOffWindow, offTimes, [backend]);
+        assertEqual(sameLate.actions, "endCommand,active:false",
+                    "the same id back after its window (switched on by its button): plugged in");
+        const otherLate = _machine(offTimes, [backend], true);
+        otherLate.idle(5000, 0).deadline();
+        otherLate.reconfigure(301000, offTimes, []);
+        otherLate.reconfigure(301001 + IdleRules.shellOffWindow, offTimes, [{ id: "LG|27GL|9", base: "LG|27GL|9", connector: "DP-1" }]);
+        assertEqual(otherLate.actions, "endCommand,active:false", "another monitor on its connector after the window: plugged in");
+        const saverLate = _machine(saver, [backend], true);
+        saverLate.idle(5000, 0).deadline();
+        saverLate.reconfigure(301000, saver, []);
+        assertEqual(saverLate.actions, "", "(the screensaver monitor gone: still active)");
+        saverLate.reconfigure(317000, saver, [backend]);
+        assertEqual(saverLate.actions, "endCommand,active:false", "the screensaver monitor back after 16 s: plugged in");
 
         const named = _machine(offTimes, [backend], true);
         named.idle(5000, 0).deadline();

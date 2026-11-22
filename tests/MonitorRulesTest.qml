@@ -224,6 +224,24 @@ TestCase {
         assertEqual(JSON.stringify(rules.screenMonitors([{ name: "DP-2", manufacturer: "Dell", model: "U2419H" }], ["Dell|U2419H|"])),
                     JSON.stringify([{ id: "Dell|U2419H||DP-2", base: "Dell|U2419H|", connector: "DP-2" }]), "… a twin seen before keeps its connector");
         assertEqual(JSON.stringify(rules.screenMonitors(undefined, [])), "[]", "… no screens: none");
+
+        // Where idle's monitors come from
+        const reading = [{ id: "Dell|U27|SN", base: "Dell|U27|SN", connector: "DP-1", power: "off", make: "Dell" }];
+        const qtScreens = [{ name: "DP-1", manufacturer: "", model: "U27", serialNumber: "SN" }];
+        const source = (canPowerOff, seen, monitors) => JSON.stringify(rules.idleMonitors(canPowerOff, seen, monitors, qtScreens));
+        assertEqual(source(true, false, reading), JSON.stringify({ powerControl: true, entries: [{ id: "Dell|U27|SN", base: "Dell|U27|SN", connector: "DP-1" }] }),
+                    "the backend's monitors: power control, its ids");
+        assertEqual(source(true, false, []), JSON.stringify({ powerControl: false, entries: [{ id: "|U27|SN", base: "|U27|SN", connector: "DP-1" }] }),
+                    "… none listed yet: the screens Qt knows");
+        assertEqual(source(true, true, []), JSON.stringify({ powerControl: true, entries: [] }),
+                    "… listed before, none now (every monitor dropped off): as read, no screens standing in");
+        assertEqual(source(false, true, reading), JSON.stringify({ powerControl: false, entries: [{ id: "|U27|SN", base: "|U27|SN", connector: "DP-1" }] }),
+                    "no power control: the screens, whatever was seen");
+        assertEqual(source(true, true, undefined), JSON.stringify({ powerControl: true, entries: [] }), "… no list: none");
+        assert(!rules.backendSeen(false, true, []) && rules.backendSeen(false, true, reading), "seen once the backend lists a monitor");
+        assert(rules.backendSeen(true, true, []), "… kept while the list is empty");
+        assert(!rules.backendSeen(true, false, reading), "… forgotten when power control is lost");
+        assert(!rules.backendSeen("yes", true, null), "… only a true is kept");
         assertEqual(rules.looseKey({ "A|M|S|DP-1": {}, "A|M|": {} }, { id: "A|M|S", base: "A|M|S", connector: "DP-1" }), "",
                     "an exact key holding an object: nothing taken loosely");
         assertEqual(JSON.stringify(rules.notConnected(overrides, [rules.identity(samsung)])), JSON.stringify(["Dell Inc.|U2419H||DP-1"]),

@@ -619,6 +619,12 @@ Singleton {
             next.power = {};
             for (const id of Object.keys(read))
                 next.power[id] = read[id] === "on" || read[id] === "off" ? read[id] : "unknown";
+            // Read on while the shell has it off and nothing is asked (it came back powered:
+            // a reconnect, its own button): the off is asked again, at once
+            for (const id of config.monitors) {
+                if (next.shown[id] === "off" && next.power[id] === "on" && next.pendingPower[id] === undefined)
+                    next.pendingPower[id] = { on: false, at: now, tries: 0, read: "on", gaveUp: false };
+            }
             // A pending action seen done is over; otherwise the reading is kept for its retry
             for (const id of Object.keys(next.pendingPower)) {
                 const pending = next.pendingPower[id];

@@ -211,6 +211,26 @@ Singleton {
         return [program, on === true ? "--on" : "--off", connector];
     }
 
+    // Whether the backend has listed monitors since it could power off: `seen` as it was,
+    // the backend's `canPowerOff` and its `monitors` now (losing power control forgets it)
+    function backendSeen(seen, canPowerOff, monitors) {
+        return canPowerOff === true && (seen === true || (Array.isArray(monitors) && monitors.length > 0));
+    }
+
+    // Where idle's monitors come from: the backend's reading where it can power off and has
+    // listed monitors (backendSeen) — as read from then on, an empty list too: a monitor
+    // dropping off is a monitor gone, and the ids keep the backend's form — else the screens
+    // Qt knows (screenMonitors; a reading that failed or none yet must not lose the
+    // screensaver or the lock screen's blackout). → { powerControl, entries: [{ id, base,
+    // connector }] }
+    function idleMonitors(canPowerOff, seen, monitors, screens) {
+        const list = Array.isArray(monitors) ? monitors : [];
+        if (backendSeen(seen, canPowerOff, list))
+            return { powerControl: true,
+                     entries: list.map(monitor => ({ id: monitor.id, base: monitor.base, connector: monitor.connector })) };
+        return { powerControl: false, entries: screenMonitors(screens, []) };
+    }
+
     // The screens Qt knows ([{ name, manufacturer, model, serialNumber }]) → [{ id, base,
     // connector }], ids as a backend's reading makes them (twins take their connector), for
     // where no backend reads the monitors: per-monitor settings still find their entries
@@ -221,7 +241,7 @@ Singleton {
         const seen = Object.create(null);
         const kept = [];
         for (const screen of Array.isArray(screens) ? screens : []) {
-            if (screen === null || typeof screen !== "object" || typeof screen.name !== "string" || screen.name === "" || seen[screen.name])
+            if (typeof screen?.name !== "string" || screen.name === "" || seen[screen.name])
                 continue;
             seen[screen.name] = true;
             kept.push({ connector: screen.name, make: _field(screen.manufacturer), model: _field(screen.model),

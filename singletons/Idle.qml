@@ -59,31 +59,15 @@ Singleton {
         return entry ? (_state.shown[entry.id] ?? "on") : "on";
     }
 
-    // The backend's last reading that listed monitors, kept while it can power off: a
-    // monitor that drops off at its power cut (the only one, or all) leaves the list empty
-    // for a while, and the screens' ids (Qt's fields, not the backend's) must not stand in —
-    // the rules would see other monitors come and go
-    property var _backendEntries: []
-    function _keepBackendEntries() {
-        if (!ScreenPower.canPowerOff)
-            _backendEntries = [];
-        else if (ScreenPower.monitors.length > 0)
-            _backendEntries = ScreenPower.monitors.map(monitor => ({ id: monitor.id, base: monitor.base, connector: monitor.connector }));
-    }
-    Connections {
-        target: ScreenPower
-        function onMonitorsChanged() { root._keepBackendEntries(); }
-        function onCanPowerOffChanged() { root._keepBackendEntries(); }
-    }
-    // Power control: a backend, and the monitors read at least once (until then the screens
-    // with the screensaver: nothing may lose the screensaver or the lock screen's blackout
-    // to a reading that failed)
-    readonly property bool _powerControl: ScreenPower.canPowerOff && _backendEntries.length > 0
-    // [{ id, base, connector }]: the backend's monitors with power control, else the screens
-    // Qt knows, with ids made the same way (make|model|serial), so per-monitor times apply
-    // there too
-    readonly property var _monitorEntries: _powerControl ? _backendEntries
-        : MonitorRules.screenMonitors(Array.from(Quickshell.screens), [])
+    // The backend has listed monitors since it could power off (MonitorRules.backendSeen):
+    // from then on its list stands as read, an empty one too
+    property bool _backendSeen: false
+    // Where the monitors come from (MonitorRules.idleMonitors): { powerControl, entries }
+    readonly property var _source: MonitorRules.idleMonitors(ScreenPower.canPowerOff, _backendSeen, ScreenPower.monitors,
+                                                             Array.from(Quickshell.screens))
+    readonly property bool _powerControl: _source.powerControl
+    // [{ id, base, connector }]
+    readonly property var _monitorEntries: _source.entries
     readonly property var _monitors: _monitorEntries.map(monitor => monitor.id)
     on_MonitorsChanged: Qt.callLater(root._monitorListChanged)
 
@@ -122,6 +106,7 @@ Singleton {
 
     // Each reading of ScreenPower's: the power as read ("unknown" for a failed reading)
     function _powerRead() {
+        _backendSeen = MonitorRules.backendSeen(_backendSeen, ScreenPower.canPowerOff, ScreenPower.monitors);
         _restoreScreens();
         if (!_powerControl)
             return;
@@ -285,7 +270,6 @@ Singleton {
     }
 
     Component.onCompleted: {
-        _keepBackendEntries();
         _tellOldKey();
         _restoreScreens();
         if (Lockscreen.attended)
