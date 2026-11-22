@@ -564,15 +564,16 @@ launcher agree on the contract described under "Recovery" below):
   and a `power` event: an action a reading does not show is asked again with a growing
   pause; the monitors it turned off are remembered in `Config.screensOff`, so a restarted
   shell turns those, and only those, on again), the lock surface's black fallback
-  (`lockBlack`; the lock screen's screen-off waits while `Lockscreen.attended`), the idle lock (`Lockscreen.lockWhenFree("idle")`: on Hyprland `hyprctl -j locked` is read
-  first, and another program's lock read as held (`Lockscreen.foreignLocked`,
-  `singletons/lock/ForeignLock.qml` around the pure `LockRules.foreignStep`) counts as locked
-  for `IdleRules` and the `screen.locked` fact, read again with a growing pause until it
-  ends; a refusal of the shell's lock reads it too), the start and end commands. Every
-  lock the rules take on Hyprland but a restore waits for that read at `lockCompositor`
-  (`ForeignLock.beforeAsk`): another lock standing, the compositor is not asked (Hyprland
-  ends a client that asks then) and the rules hear `foreignLocked` (the lock ends, a sleep
-  inhibitor is released); so the marker's "locked" means a lock of the shell's own.
+  (`lockBlack`; the lock screen's screen-off waits while `Lockscreen.attended`), the idle lock (`Lockscreen.lock("idle")`), the start and end commands. Another program's
+  session lock read as held (`Lockscreen.foreignLocked`, `singletons/lock/ForeignLock.qml`
+  around the pure `LockRules.foreignStep`) counts as locked for `IdleRules` and the
+  `screen.locked` fact; it is read again with a growing pause until it ends (three
+  unreadable answers in a row and it is no longer counted). Every lock the rules take on
+  Hyprland but a restore waits for a read at `lockCompositor` (`ForeignLock.beforeAsk`;
+  unanswered after 2.5 s it is unknown, and the lock is asked): another lock standing, the
+  compositor is not asked (Hyprland ends a client that asks then) and the rules hear
+  `foreignLocked` (the lock ends, a sleep inhibitor is released); so the marker's "locked"
+  means a lock of the shell's own. The start and a refusal read too.
   Its two `IdleMonitor`s (`singletons/lock/IdleWatch.qml`: one ignoring Wayland idle
   inhibitors, one respecting them) are made once with a fixed 5 s, so a settings change
   never ends an idle period; every stage counts from the last input. One `Timer` runs to

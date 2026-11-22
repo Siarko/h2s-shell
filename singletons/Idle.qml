@@ -171,8 +171,7 @@ Singleton {
                 _log("info", "idle: locking");
             else if (action.attempt === 2)
                 _log("warning", "the idle lock was not taken: asking again while it is due, with a growing pause");
-            // Not over another program's session lock (read first on Hyprland)
-            Lockscreen.lockWhenFree("idle");
+            Lockscreen.lock("idle");
             break;
         case "powerOff":
         case "powerOn":

@@ -6,15 +6,14 @@ import qs.singletons
 // LockRules.foreignStep. On Hyprland `hyprctl -j locked` is read (SleepLockState with no
 // session path: the compositor's word only, bounded to a second) before the compositor is
 // asked for a lock (`beforeAsk()`: Hyprland ends a client that asks while another lock
-// stands), before the idle lock (`lockWhenFree()`), when the compositor refused the shell's
-// lock and at the start (`check()`); a lock read as held is read again after a growing
-// pause until it ends. Elsewhere nothing is read: the refusal is all there is.
+// stands), when the compositor refused the shell's lock and at the start (`check()`); a lock
+// read as held is read again after a growing pause until it ends. A read that has not
+// answered by LockRules.foreignReadDeadline is answered "unknown" (its own answer, later,
+// loses). Elsewhere nothing is read: the refusal is all there is.
 Scope {
     id: root
 
     signal logLine(string level, string message)
-    // A lock asked through lockWhenFree() may go ahead
-    signal lockAllowed(string source)
     // The compositor may be asked for the lock of this session (beforeAsk), or may not
     signal askAllowed(int session)
     signal askDenied(int session)
@@ -22,7 +21,7 @@ Scope {
     // Another program holds the session lock (read so)
     readonly property bool held: _state.held
     readonly property var state: _state
-    // The shell has a lock of its own asked or held (Lockscreen.locked): an answer read then
+    // The shell has a compositor lock of its own asked or held: an answer read then
     // is about that one
     property bool ownLock: false
     property bool onHyprland: (Quickshell.env("HYPRLAND_INSTANCE_SIGNATURE") ?? "") !== ""
@@ -40,10 +39,6 @@ Scope {
         _step({ type: "beforeAsk", session: session });
     }
 
-    function lockWhenFree(source) {
-        _step({ type: "lockWanted", source: source });
-    }
-
     function ownLocked() {
         _step({ type: "ownLocked" });
     }
@@ -56,6 +51,8 @@ Scope {
         for (const action of result.actions) {
             switch (action.type) {
             case "read":
+                _deadline.serial = action.serial;
+                _deadline.restart();
                 _reader.ask(action.serial);
                 break;
             case "poll":
@@ -65,9 +62,6 @@ Scope {
             case "held":
                 if (!action.held)
                     _poll.stop();
-                break;
-            case "lock":
-                root.lockAllowed(action.source);
                 break;
             case "ask":
                 root.askAllowed(action.session);
@@ -108,6 +102,19 @@ Scope {
             // may ask for the next read at once
             const answered = serial;
             Qt.callLater(() => root._step({ type: "answer", serial: answered, outcome: outcome, ownLock: root.ownLock }));
+        }
+    }
+
+    // A read that never answers (a hyprctl that ignores `timeout`'s signal) would hold every
+    // lock after it: answered "unknown" at the deadline
+    Timer {
+        id: _deadline
+        property int serial: 0
+        interval: LockRules.foreignReadDeadline
+        repeat: false
+        onTriggered: {
+            if (root._state.reading === serial)
+                root._step({ type: "answer", serial: serial, outcome: "unknown", ownLock: root.ownLock });
         }
     }
 

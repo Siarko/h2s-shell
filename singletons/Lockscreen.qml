@@ -84,12 +84,6 @@ Singleton {
         _api?.lock(source);
     }
 
-    // The same, once it is read that no other program holds the session lock (on Hyprland;
-    // elsewhere at once): the idle lock, which must not be asked over another's
-    function lockWhenFree(source) {
-        _foreign.lockWhenFree(source);
-    }
-
     // ---- For the lock surfaces (screensaver/LockSurface.qml) ----
     // A surface instance registers itself once its screen is known and gets an id of its
     // own, never reused within the shell's life (what the view's promptSurface names). Every
@@ -1112,7 +1106,7 @@ Singleton {
         onLogLine: (level, message) => root._log(level, message)
     }
 
-    // Another program's session lock (foreignLocked, lockWhenFree). Last among the children:
+    // Another program's session lock (foreignLocked, read before each lock). Last among the children:
     // the ones before keep their positions
     ForeignLock {
         id: _foreign
@@ -1123,6 +1117,5 @@ Singleton {
             return typeof given === "number" && isFinite(given) && given >= 100 ? given : 0;
         }
         onLogLine: (level, message) => root._log(level, message)
-        onLockAllowed: source => root.lock(source)
     }
 }

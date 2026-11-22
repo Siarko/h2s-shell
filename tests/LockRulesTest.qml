@@ -281,18 +281,24 @@ TestCase {
         });
         const acts = (actions, type, match) => has(actions, type, match);
 
-        // The idle lock on Hyprland: read first; free → asked, held → not asked
-        const free = watch(hyprland).send({ type: "lockWanted", source: "idle" });
-        assert(acts(free.actions, "read", { serial: 1 }) && !acts(free.actions, "lock"), "16: the idle lock on Hyprland: the compositor read first, no lock yet");
-        free.answer("unlocked");
-        assert(acts(free.actions, "lock", { source: "idle" }) && !free.state.held, "16: … read unlocked: the lock is asked");
+        // Every lock but a restore reads before the compositor is asked (beforeAsk)
+        const ask = watch(hyprland).send({ type: "beforeAsk", session: 3 });
+        assert(acts(ask.actions, "read", { serial: 1 }) && !acts(ask.actions, "ask"), "16: a lock about to be asked of the compositor on Hyprland: read first, not asked yet");
+        ask.answer("unlocked");
+        assert(acts(ask.actions, "ask", { session: 3 }) && !ask.state.held && ask.actions.length === 1, "16: … read unlocked: asked, for that session, nothing else");
 
-        const taken = watch(hyprland).send({ type: "lockWanted", source: "idle" }).answer("locked");
-        assert(taken.state.held && acts(taken.actions, "held", { held: true }) && !acts(taken.actions, "lock")
-               && acts(taken.actions, "poll", { ms: LockRules.foreignPoll.minimum }) && acts(taken.actions, "log", { level: "info" }),
-               "16: read locked: held (the session counts locked), no lock asked, read again after the first pause, said once");
-        taken.send({ type: "lockWanted", source: "idle" });
-        assert(taken.ignored !== "" && taken.actions.length === 0, "16: … the idle lock asked again while it is held: nothing (no retry, no read)");
+        const taken = watch(hyprland).send({ type: "beforeAsk", session: 4 }).answer("locked");
+        assert(taken.state.held && acts(taken.actions, "askDenied", { session: 4 }) && !acts(taken.actions, "ask")
+               && acts(taken.actions, "held", { held: true }) && acts(taken.actions, "poll", { ms: LockRules.foreignPoll.minimum })
+               && acts(taken.actions, "log", { level: "info" }),
+               "16: read locked: not asked (Hyprland would end the shell), held (the session counts locked), read again after the first pause, said");
+        const order = taken.actions.map(action => action.type);
+        assert(order.indexOf("held") < order.indexOf("askDenied"), "16: … held before the denial reaches the lock rules (the session never shows unlocked)");
+        taken.send({ type: "beforeAsk", session: 5 });
+        assert(acts(taken.actions, "read"), "16: a lock asked while one is known held: read afresh (it may have ended since)");
+        taken.answer("locked");
+        assert(acts(taken.actions, "askDenied", { session: 5 }) && !acts(taken.actions, "held") && !acts(taken.actions, "log"),
+               "16: … still held: denied again, no news, nothing logged again");
 
         // Polls: a growing, bounded pause; the end of the lock brings everything back
         const polls = [];
@@ -306,43 +312,56 @@ TestCase {
         assert(polls.every((ms, i) => i === 0 || ms >= polls[i - 1]) && polls[0] > LockRules.foreignPoll.minimum
                && polls[polls.length - 1] === LockRules.foreignPoll.maximum, "16: the pause grows and stops at the maximum: " + polls.join(", "));
         taken.send({ type: "pollDue" }).answer("unlocked");
-        assert(!taken.state.held && acts(taken.actions, "held", { held: false }) && !acts(taken.actions, "poll") && !acts(taken.actions, "lock")
-               && acts(taken.actions, "log"), "16: the other lock ended: released, polling stops, no lock asked (none was wanted), said");
+        assert(!taken.state.held && acts(taken.actions, "held", { held: false }) && !acts(taken.actions, "poll") && !acts(taken.actions, "ask")
+               && acts(taken.actions, "log"), "16: the other lock ended: released, polling stops, nothing asked (none was waiting), said");
         taken.send({ type: "pollDue" });
         assert(taken.ignored !== "", "16: … a poll timer left over reads nothing");
         assert(LockRules.foreignPollDelay(10, 2000) === 2000 && LockRules.foreignPollDelay(1, 2000) === LockRules.foreignPoll.minimum
                && LockRules.foreignPollDelay(10, -1) === LockRules.foreignPoll.maximum, "16: the test bed's shorter maximum bounds the pause; a bad one is the default");
 
-        // The refusal of the shell's own lock
+        // A check: the refusal of the shell's own lock, the start
         const refused = watch(hyprland).send({ type: "check" });
-        assert(acts(refused.actions, "read"), "16: the compositor refused the shell's lock: read");
+        assert(acts(refused.actions, "read"), "16: a check (a refusal, the start): read");
         refused.answer("locked");
-        assert(refused.state.held, "16: … read locked: held");
+        assert(refused.state.held && !acts(refused.actions, "askDenied"), "16: … read locked: held, nothing to deny");
         const refusedFree = watch(hyprland).send({ type: "check" }).answer("unlocked");
-        assert(!refusedFree.state.held && refusedFree.actions.length === 0, "16: … read unlocked: nothing (no lock was waiting)");
+        assert(!refusedFree.state.held && refusedFree.actions.length === 0, "16: … read unlocked: nothing");
 
-        // Elsewhere only the refusal tells: nothing is read, the idle lock is asked at once
-        const generic = watch(elsewhere).send({ type: "lockWanted", source: "idle" });
-        assert(acts(generic.actions, "lock", { source: "idle" }) && !acts(generic.actions, "read"), "16: without Hyprland the idle lock is asked at once");
+        // Elsewhere only the refusal tells: nothing is read, the compositor is asked at once
+        const generic = watch(elsewhere).send({ type: "beforeAsk", session: 7 });
+        assert(acts(generic.actions, "ask", { session: 7 }) && !acts(generic.actions, "read"), "16: without Hyprland the compositor is asked at once");
         generic.send({ type: "check" });
         assert(generic.ignored !== "" && !generic.state.held, "16: … a refusal reads nothing and claims nothing");
 
-        // A failed read is unknown: never "free", never "held"
-        const unknown = watch(hyprland).send({ type: "lockWanted", source: "idle" }).answer("unknown");
-        assert(!unknown.state.held && acts(unknown.actions, "lock", { source: "idle" }) && acts(unknown.actions, "log", { level: "warning" }),
-               "16: an unreadable answer: not held; the lock wanted is asked, as without Hyprland; said");
-        unknown.send({ type: "lockWanted", source: "idle" }).answer("unknown");
-        assert(!acts(unknown.actions, "log"), "16: … said once, not at every read");
+        // A failed read is unknown: never "free", never a stop to a lock
+        const unknown = watch(hyprland).send({ type: "beforeAsk", session: 6 }).answer("unknown");
+        assert(!unknown.state.held && acts(unknown.actions, "ask", { session: 6 }) && acts(unknown.actions, "log", { level: "warning" }),
+               "16: an unreadable answer: not held; the lock is asked, as without Hyprland; said");
+        unknown.send({ type: "beforeAsk", session: 7 }).answer("unknown");
+        assert(!acts(unknown.actions, "log") && acts(unknown.actions, "ask", { session: 7 }), "16: … said once, not at every read");
         const heldUnknown = watch(hyprland).send({ type: "check" }).answer("locked").send({ type: "pollDue" }).answer("unknown");
         assert(heldUnknown.state.held && acts(heldUnknown.actions, "poll") && !acts(heldUnknown.actions, "held"),
-               "16: held, then unreadable: still held (unsafe to say unlocked), read again later");
+               "16: held, then unreadable: still held for now, read again later");
+        heldUnknown.send({ type: "beforeAsk", session: 8 }).answer("unknown");
+        assert(heldUnknown.state.held && acts(heldUnknown.actions, "ask", { session: 8 }), "16: … a lock asked meanwhile is asked (unknown never stops one)");
+        heldUnknown.send({ type: "pollDue" }).answer("unknown");
+        assert(!heldUnknown.state.held && acts(heldUnknown.actions, "held", { held: false }) && !acts(heldUnknown.actions, "poll")
+               && acts(heldUnknown.actions, "log", { level: "warning" }),
+               "16: … " + LockRules.foreignUnknownLimit + " unreadable answers in a row: no longer counted (the fact is not kept on nothing), polling stops, said");
+        const unknownReset = watch(hyprland).send({ type: "check" }).answer("locked").send({ type: "pollDue" }).answer("unknown")
+            .send({ type: "pollDue" }).answer("locked").send({ type: "pollDue" }).answer("unknown").send({ type: "pollDue" }).answer("unknown");
+        assert(unknownReset.state.held, "16: … the count is of answers in a row: a readable one starts it again");
 
-        // Late answers lose
-        const late = watch(hyprland).send({ type: "lockWanted", source: "idle" });
+        // Late answers lose; a read that never answers is answered unknown at its deadline
+        const late = watch(hyprland).send({ type: "beforeAsk", session: 3 });
         const lateSerial = late.state.reading;
-        late.send({ type: "ownLocked" });
-        late.send({ type: "answer", serial: lateSerial, outcome: "locked", ownLock: false });
-        assert(late.ignored === "late answer" && !late.state.held, "16: the shell's own lock confirmed during a read: that read's answer is dropped");
+        late.send({ type: "answer", serial: lateSerial, outcome: "unknown" });
+        assert(acts(late.actions, "ask", { session: 3 }), "16: a read unanswered by its deadline (the driver's unknown): the lock is asked");
+        late.send({ type: "answer", serial: lateSerial, outcome: "locked" });
+        assert(late.ignored === "late answer" && !late.state.held, "16: … the real answer arriving after it loses");
+        late.send({ type: "beforeAsk", session: 4 });
+        assert(acts(late.actions, "read"), "16: … and the next lock reads again (nothing stays blocked)");
+        assert(LockRules.foreignReadDeadline > 1000, "16: the deadline is longer than hyprctl's own second");
         const stale = watch(hyprland).send({ type: "check" });
         stale.send({ type: "answer", serial: stale.state.reading + 5, outcome: "locked" });
         assert(stale.ignored === "late answer" && !stale.state.held, "16: an answer for another read is dropped");
@@ -352,34 +371,13 @@ TestCase {
         assert(!own.state.held && !acts(own.actions, "held"), "16: read locked while the shell has its own lock asked: not another's");
         const ownAfter = watch(hyprland).send({ type: "check" }).answer("locked").send({ type: "ownLocked" });
         assert(!ownAfter.state.held && acts(ownAfter.actions, "held", { held: false }), "16: the shell's own lock confirmed: another's is over (one session lock at a time)");
-
-        // Every lock source reads before the compositor is asked (beforeAsk)
-        const ask = watch(hyprland).send({ type: "beforeAsk", session: 3 });
-        assert(acts(ask.actions, "read") && !acts(ask.actions, "ask"), "16: a lock about to be asked of the compositor on Hyprland: read first, not asked yet");
-        ask.answer("unlocked");
-        assert(acts(ask.actions, "ask", { session: 3 }) && !ask.state.held, "16: … read unlocked: asked, for that session");
-        const askHeld = watch(hyprland).send({ type: "beforeAsk", session: 4 }).answer("locked");
-        assert(askHeld.state.held && acts(askHeld.actions, "askDenied", { session: 4 }) && !acts(askHeld.actions, "ask")
-               && acts(askHeld.actions, "held", { held: true }), "16: … read locked: not asked (Hyprland would end the shell), held instead");
-        const order = askHeld.actions.map(action => action.type);
-        assert(order.indexOf("held") < order.indexOf("askDenied"), "16: … held before the denial reaches the lock rules (the session never shows unlocked)");
-        askHeld.send({ type: "beforeAsk", session: 5 });
-        assert(acts(askHeld.actions, "read"), "16: a lock asked while one is known held: read afresh (it may have ended since)");
-        askHeld.answer("unlocked");
-        assert(acts(askHeld.actions, "ask", { session: 5 }) && !askHeld.state.held && acts(askHeld.actions, "held", { held: false }),
-               "16: … ended meanwhile: released and asked");
-        const askUnknown = watch(hyprland).send({ type: "beforeAsk", session: 6 }).answer("unknown");
-        assert(acts(askUnknown.actions, "ask", { session: 6 }), "16: an unreadable answer never stops a lock: asked, as without Hyprland");
-        const askGeneric = watch(elsewhere).send({ type: "beforeAsk", session: 7 });
-        assert(acts(askGeneric.actions, "ask", { session: 7 }) && !acts(askGeneric.actions, "read"), "16: without Hyprland: asked at once");
-        const askBoth = watch(hyprland).send({ type: "lockWanted", source: "idle" }).send({ type: "beforeAsk", session: 8 });
-        assert(askBoth.actions.length === 0, "16: a read under way serves a lock asked meanwhile (one read)");
-        askBoth.answer("unlocked");
-        assert(acts(askBoth.actions, "lock") && acts(askBoth.actions, "ask", { session: 8 }), "16: … its answer serves both");
-        const askOwn = watch(hyprland).send({ type: "beforeAsk", session: 9 }).send({ type: "ownLocked" });
-        assert(askOwn.state.pendingAsk === 0 && askOwn.state.reading === 0, "16: the shell's own lock confirmed: nothing left waiting");
-        const startCheck = watch(hyprland).send({ type: "check" }).answer("locked");
-        assert(startCheck.state.held && !acts(startCheck.actions, "askDenied"), "16: a check (refusal, start) read locked: held, nothing to deny");
+        const askOwn = watch(hyprland).send({ type: "beforeAsk", session: 9 });
+        const ownSerial = askOwn.state.reading;
+        askOwn.send({ type: "ownLocked" });
+        assert(acts(askOwn.actions, "ask", { session: 9 }) && askOwn.state.pendingAsk === 0 && askOwn.state.reading === 0,
+               "16: the shell's own lock confirmed with an ask waiting: the ask goes ahead (the driver drops a stale one), nothing left waiting");
+        askOwn.send({ type: "answer", serial: ownSerial, outcome: "locked" });
+        assert(askOwn.ignored === "late answer", "16: … that read's answer is dropped");
         assertEqual(watch(hyprland).send({ type: "beforeAsk" }).ignored, "no session", "16: beforeAsk without a session is ignored");
 
         // The lock rules: the compositor asked with the source; a foreign lock read ends the
@@ -412,8 +410,10 @@ TestCase {
             total.send(event);
             assert(total.ignored !== "" && total.actions.length === 0, "16: " + JSON.stringify(event) + " is ignored");
         }
-        assert(LockRules.foreignStep(LockRules.foreignInitial(), { type: "lockWanted" }, undefined).actions[0].source === "request",
-               "16: no settings: nothing read; a lock without a source is a request");
+        assert(LockRules.foreignStep(LockRules.foreignInitial(), { type: "beforeAsk", session: 1 }, undefined).actions[0].type === "ask",
+               "16: no settings: nothing read, the compositor asked");
+        assertEqual(LockRules.foreignStep(LockRules.foreignInitial(), { type: "lockWanted", source: "idle" }, hyprland).ignored, "unknown event",
+                    "16: no lock waits on its own for a read: every one is read at the compositor's ask");
     }
 
     // ---- 1. Only these unlock ----
