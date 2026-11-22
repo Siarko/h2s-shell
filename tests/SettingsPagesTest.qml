@@ -404,6 +404,17 @@ TestCase {
             const cardsBefore = _find(page, item => item.objectName === "monitorCard" && item.name === "Acer XB1");
             assert(cardsBefore !== null && cardsBefore.own.screensaverTimeout === 120, "… the entry as it was");
 
+            // A partial entry (written by hand): shown and written whole, over the default's
+            _away({ "lockscreen.perMonitor": true, "lockscreen.screensaverEnabled": true,
+                    "lockscreen.monitorIdle": { "Dell|U2419H|S1": { screenOffEnabled: true, screenOffTimeout: 300 } } });
+            const partial = card();
+            assert(partial !== null && partial.times.screensaverEnabled === true && partial.times.screenOffTimeout === 300,
+                   "a partial entry's card shows the default's screensaver and its own screen-off");
+            partial._with("screenOffTimeout", 600);
+            assertEqual(JSON.stringify(Profiles.effectiveGlobals["lockscreen.monitorIdle"]?.["Dell|U2419H|S1"]),
+                        JSON.stringify({ screensaverEnabled: true, screensaverTimeout: 300, screenOffEnabled: true, screenOffTimeout: 600 }),
+                        "… a click writes the whole entry");
+
             // The lock screen's section at the top on request
             const sectionTop = () => lockSection.mapToItem(page.contentItem, 0, 0).y - Theme.settings.pageMargin;
             assert(page.showSection("lock") && page.contentY > 0

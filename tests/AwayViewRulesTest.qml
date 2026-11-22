@@ -30,6 +30,10 @@ TestCase {
         assert(!rules.anySaver([{ saverAfter: 0, screenOffAfter: 300 }], true), "a lane only turned off does not");
         assert(rules.anySaver([{ saverAfter: 0, screenOffAfter: 300 }], false), "… unless monitors cannot be turned off: the screensaver stands in");
         assert(!rules.anySaver([{ saverAfter: 0, screenOffAfter: 0 }], false), "both off: no screensaver");
+        assert(!rules.anySaver([{ saverAfter: 600, screenOffAfter: 300 }], true), "a screen-off before the screensaver: it never shows");
+        assert(!rules.anySaver([{ saverAfter: 300, screenOffAfter: 300 }], true), "… at the same time neither");
+        assert(rules.anySaver([{ saverAfter: 600, screenOffAfter: 300 }], false), "… without power control it does (the screen-off shows it)");
+        assert(rules.anySaver([{ saverAfter: 600, screenOffAfter: 300 }, { saverAfter: 300, screenOffAfter: 0 }], true), "another lane showing it is enough");
         assert(rules.anything([{ saverAfter: 0, screenOffAfter: 0 }], 600), "the lock alone is something");
         assert(!rules.anything([{ saverAfter: 0, screenOffAfter: 0 }], 0), "nothing on: nothing happens");
         assert(rules.anything([{ saverAfter: 0, screenOffAfter: 60 }], 0), "a stage alone is something");
@@ -62,6 +66,10 @@ TestCase {
                     "equal times of two lanes once; the commands' moment between a stage and the lock");
         assertEqual(marks(rules.marks([{ saverAfter: 0, screenOffAfter: 300 }], 300, 300, minutes)), "time:5 min | commands:Commands 5 min | lock:Lock 5 min",
                     "at one time: the stage, the commands, the lock");
+        assertEqual(marks(rules.marks([{ saverAfter: 600, screenOffAfter: 300 }], 0, -1, minutes, true)), "time:5 min",
+                    "a screensaver after the screen-off is no mark: nothing happens there");
+        assertEqual(marks(rules.marks([{ saverAfter: 600, screenOffAfter: 300 }], 0, -1, minutes, false)), "time:5 min | time:10 min",
+                    "… without power control it stays");
         assertEqual(marks(rules.marks([{ saverAfter: 0, screenOffAfter: 0 }], 0, -1, minutes)), "", "nothing on: no marks");
 
         // --- the labels' sides ---
@@ -109,6 +117,20 @@ TestCase {
         assertEqual(listed(rules.holders([{ app: "", reason: "" }], undefined, false)), "an app/", "a nameless one is an app");
         assertEqual(rules.holders(null, null, false).length, 0, "none");
 
+        // --- a card's times ---
+        const range = { minimum: 5, maximum: 86400 };
+        const defaults = { screensaverEnabled: true, screensaverTimeout: 300, screenOffEnabled: false, screenOffTimeout: 900 };
+        assertEqual(JSON.stringify(rules.cardTimes({ screenOffEnabled: true, screenOffTimeout: 300 }, defaults, range)),
+                    JSON.stringify({ screensaverEnabled: true, screensaverTimeout: 300, screenOffEnabled: true, screenOffTimeout: 300 }),
+                    "a partial entry: the default's for what it lacks, whole");
+        assertEqual(JSON.stringify(rules.cardTimes({ screensaverEnabled: "yes", screensaverTimeout: 2, screenOffEnabled: false, screenOffTimeout: 99999.4, extra: 1 }, defaults, range)),
+                    JSON.stringify({ screensaverEnabled: true, screensaverTimeout: 5, screenOffEnabled: false, screenOffTimeout: 86400 }),
+                    "wrong fields the default's, times clamped to the range, nothing else kept");
+        assertEqual(JSON.stringify(rules.cardTimes(null, defaults, range)), JSON.stringify(defaults), "no entry: the default's");
+        assertEqual(JSON.stringify(rules.cardTimes({ screensaverTimeout: 120.6 }, {}, range)),
+                    JSON.stringify({ screensaverEnabled: false, screensaverTimeout: 121, screenOffEnabled: false, screenOffTimeout: 600 }),
+                    "whole seconds; nothing known: off");
+
         // --- a monitor's name ---
         assertEqual(rules.monitorName("Samsung Electric Company|C27JG5x|H4ZMC00268", "DP-2"), "Samsung C27JG5x", "the make's first word and the model");
         assertEqual(rules.monitorName("BOE|0x0BCA|", "eDP-1"), "Built-in screen", "the built-in panel by its kind");
@@ -117,5 +139,9 @@ TestCase {
         assertEqual(rules.monitorName("||", "DP-3"), "DP-3", "no make or model: the connector");
         assertEqual(rules.monitorName("||", ""), "Monitor", "nothing at all");
         assertEqual(rules.monitorName("|Odyssey|S1", "DP-1"), "Odyssey", "no make: the model");
+        assertEqual(rules.monitorNames([{ id: "Dell|U2419H||DP-1", connector: "DP-1" }, { id: "Dell|U2419H||DP-2", connector: "DP-2" },
+                                        { id: "BOE|X|", connector: "eDP-1" }]).join(" | "),
+                    "Dell U2419H (DP-1) | Dell U2419H (DP-2) | Built-in screen", "twins told apart by their connectors, the rest as named");
+        assertEqual(rules.monitorNames([]).length, 0, "no monitors: no names");
     }
 }

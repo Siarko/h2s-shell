@@ -27,11 +27,13 @@ Rectangle {
 
     readonly property bool connected: connector !== ""
     readonly property bool _own: own !== null && typeof own === "object"
+    // Its times as shown and written: the kept entry over the default's, whole and in range
+    readonly property var times: AwayViewRules.cardTimes(own, defaults, IdleRules.monitorTimeRange)
 
     function _with(field, value) {
-        const times = Object.assign({}, _own ? own : defaults);
-        times[field] = value;
-        edited(times);
+        const changed = Object.assign({}, times);
+        changed[field] = value;
+        edited(changed);
     }
 
     function _defaultLine() {
@@ -176,7 +178,7 @@ Rectangle {
                 fontSize: Theme.fontSizeBody
                 size: "m"
                 opacity: picked && root.dimmed ? 0.5 : 1
-                onClicked: if (!root._own) root.edited(Object.assign({}, root.defaults))
+                onClicked: if (!root._own) root.edited(root.times)
             }
         }
 
@@ -198,19 +200,19 @@ Rectangle {
             spacing: 2
             Stage {
                 label: "Screensaver"
-                on: root.own?.screensaverEnabled === true
-                value: root.own?.screensaverTimeout ?? 300
+                on: root.times.screensaverEnabled
+                value: root.times.screensaverTimeout
                 dimmed: root.dimmed
-                onSwitched: root._with("screensaverEnabled", !root.own.screensaverEnabled)
+                onSwitched: root._with("screensaverEnabled", !root.times.screensaverEnabled)
                 onPicked: value => root._with("screensaverTimeout", value)
             }
             Stage {
                 label: "Turn off"
                 hint: root.canPowerOff ? "" : "Not supported here: the screensaver instead"
-                on: root.own?.screenOffEnabled === true
-                value: root.own?.screenOffTimeout ?? 600
+                on: root.times.screenOffEnabled
+                value: root.times.screenOffTimeout
                 dimmed: root.dimmed
-                onSwitched: root._with("screenOffEnabled", !root.own.screenOffEnabled)
+                onSwitched: root._with("screenOffEnabled", !root.times.screenOffEnabled)
                 onPicked: value => root._with("screenOffTimeout", value)
             }
         }

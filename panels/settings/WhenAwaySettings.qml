@@ -51,10 +51,12 @@ Flickable {
         screensaverCommands: _commandsOn
     }, Idle.monitors, _canPowerOff)
     // The timeline's lanes: one per connected monitor while per monitor, else one for all
+    // The connected monitors' names, twins told apart by their connectors
+    readonly property var _monitorNames: AwayViewRules.monitorNames(Idle.monitors)
     readonly property var _lanes: _perMonitor && Idle.monitors.length > 0
-        ? Idle.monitors.map(monitor => ({
+        ? Idle.monitors.map((monitor, index) => ({
             key: monitor.id,
-            name: AwayViewRules.monitorName(monitor.id, monitor.connector),
+            name: _monitorNames[index],
             times: _config.times[monitor.id] ?? { saverAfter: _config.saverAfter, screenOffAfter: _config.screenOffAfter }
         }))
         : [{ key: "all", name: "", times: { saverAfter: _config.saverAfter, screenOffAfter: _config.screenOffAfter } }]
@@ -222,7 +224,7 @@ Flickable {
                         required property string modelData
                         readonly property var monitor: Idle.monitors.find(entry => entry.id === modelData) ?? null
                         objectName: "monitorCard"
-                        name: AwayViewRules.monitorName(modelData, monitor?.connector ?? "")
+                        name: monitor ? root._monitorNames[Idle.monitors.findIndex(entry => entry.id === modelData)] : AwayViewRules.monitorName(modelData, "")
                         connector: monitor?.connector ?? ""
                         own: {
                             const entry = monitor ? MonitorRules.overrideFor(root._monitorMap, monitor, Idle.monitors)

@@ -37,7 +37,7 @@ FloatingWindow {
         { id: "media", label: "Media", tab: "behaviour", component: mediaComp },
         { id: "bar", label: "Bar", tab: "behaviour", component: barComp },
         { id: "notifications", label: "Notifications", tab: "behaviour", component: notificationsComp },
-        // Its id kept from the Lockscreen page it replaced (IPC openPage, links)
+        // Id `lockscreen`: what IPC `openPage` and saved links name
         { id: "lockscreen", label: "When away", tab: "behaviour", component: awayComp },
         { id: "wallpaper", label: "Wallpaper", tab: "behaviour", component: wallpaperComp },
         { id: "dictation", label: "Dictation", tab: "behaviour", component: sttComp },

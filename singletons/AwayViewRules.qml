@@ -36,11 +36,41 @@ QtObject {
         return moments.length === 0 ? -1 : Math.max(...moments);
     }
 
-    // Some monitor shows the screensaver at some point: its own stage, or its screen-off
-    // where monitors cannot be turned off (the screensaver stands in for it)
+    // A lane shows its screensaver: on, and before its screen-off — or with no power
+    // control, where the screen-off shows the screensaver too
+    function showsSaver(times, canPowerOff) {
+        const saver = _seconds(times?.saverAfter);
+        const off = _seconds(times?.screenOffAfter);
+        return saver > 0 && (off === 0 || saver < off || canPowerOff !== true);
+    }
+
+    // Some monitor shows the screensaver at some point: its own stage (showsSaver), or its
+    // screen-off where monitors cannot be turned off (the screensaver stands in for it)
     function anySaver(lanes, canPowerOff) {
-        return (Array.isArray(lanes) ? lanes : []).some(times => _seconds(times?.saverAfter) > 0
+        return (Array.isArray(lanes) ? lanes : []).some(times => showsSaver(times, canPowerOff)
             || canPowerOff !== true && _seconds(times?.screenOffAfter) > 0);
+    }
+
+    // A monitor's times as its card shows and writes them: its kept entry over the default's
+    // (a field it lacks or holds wrongly is the default's), the four fields only, each time
+    // a whole number within `range` ({ minimum, maximum }: IdleRules.monitorTimeRange). So a
+    // hand-edited, partial entry still shows what idle uses and is written whole
+    function cardTimes(own, defaults, range) {
+        const low = Number(range?.minimum) || 1;
+        const high = Number(range?.maximum) || 86400;
+        const pick = (field, check, fallback) => {
+            const value = own !== null && typeof own === "object" ? own[field] : undefined;
+            return check(value) ? value : check(defaults?.[field]) ? defaults[field] : fallback;
+        };
+        const isFlag = value => typeof value === "boolean";
+        const isTime = value => typeof value === "number" && Number.isFinite(value);
+        const clamp = value => Math.min(high, Math.max(low, Math.round(value)));
+        return {
+            screensaverEnabled: pick("screensaverEnabled", isFlag, false),
+            screensaverTimeout: clamp(pick("screensaverTimeout", isTime, 300)),
+            screenOffEnabled: pick("screenOffEnabled", isFlag, false),
+            screenOffTimeout: clamp(pick("screenOffTimeout", isTime, 600))
+        };
     }
 
     // Something happens when you are away: a stage on some lane, or the idle lock
@@ -82,10 +112,11 @@ QtObject {
     }
 
     // The marks above and below the line: [{ t, text, kind }] — each lane's stage times
-    // ("5 min"; equal times of two lanes once), "Commands 5 min" while the commands run
+    // ("5 min"; equal times of two lanes once; a screensaver only where it shows,
+    // showsSaver), "Commands 5 min" while the commands run
     // (`commandsAt` ≥ 0), "Lock 20 min" — in time order, at one time the stages first, the
     // lock last
-    function marks(lanes, lockAfter, commandsAt, durationOf) {
+    function marks(lanes, lockAfter, commandsAt, durationOf, canPowerOff) {
         const label = typeof durationOf === "function" ? durationOf : seconds => seconds + " s";
         const list = [];
         const add = (t, text, kind) => {
@@ -93,7 +124,8 @@ QtObject {
                 list.push({ t: t, text: text, kind: kind });
         };
         for (const times of Array.isArray(lanes) ? lanes : []) {
-            for (const t of [_seconds(times?.saverAfter), _seconds(times?.screenOffAfter)]) {
+            const saver = showsSaver(times, canPowerOff !== false) ? _seconds(times?.saverAfter) : 0;
+            for (const t of [saver, _seconds(times?.screenOffAfter)]) {
                 if (t > 0)
                     add(t, label(t), "time");
             }
@@ -179,5 +211,15 @@ QtObject {
         const model = _line(fields[1] ?? "", 80);
         const name = [make, model].filter(part => part !== "").join(" ");
         return name !== "" ? name : (port !== "" ? _line(port, 40) : "Monitor");
+    }
+
+    // The connected monitors' names ([{ id, connector }] → names in that order): each its
+    // monitorName, with its connector added where two share one (twins), so lanes and cards
+    // tell them apart
+    function monitorNames(monitors) {
+        const list = Array.isArray(monitors) ? monitors : [];
+        const names = list.map(monitor => monitorName(monitor?.id, monitor?.connector ?? ""));
+        return names.map((name, index) => names.indexOf(name) !== names.lastIndexOf(name) && (list[index]?.connector ?? "") !== ""
+            ? name + " (" + _line(list[index].connector, 40) + ")" : name);
     }
 }

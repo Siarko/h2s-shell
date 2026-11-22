@@ -40,7 +40,7 @@ ColumnLayout {
         return trackWidth * Math.min(t, axisEnd) / axisEnd;
     }
 
-    readonly property var marks: AwayViewRules.marks(_times, lockAfter, commandsAt, seconds => Format.duration(seconds))
+    readonly property var marks: AwayViewRules.marks(_times, lockAfter, commandsAt, seconds => Format.duration(seconds), canPowerOff)
     // Each mark's label where it goes: [{ text, kind, left, row }]
     readonly property var labels: {
         const placed = AwayViewRules.placeLabels(marks.map(mark => ({
