@@ -95,6 +95,8 @@ tests/test-tree.sh unit:TestTreeTest lock:all
 tests/lock-closure.sh unit:ModuleRegistriesTest
 tests/affected.sh self:tests/affected-selftest.sh
 tests/affected-map.txt self:tests/affected-selftest.sh
+tests/mutate.sh self:tests/mutate-selftest.sh
+tests/fixtures/mutate/* self:tests/mutate-selftest.sh
 
 # ---- The shell's entry, install and packaging ------------------------------------------
 shell.qml unit:all lock:all
