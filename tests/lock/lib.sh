@@ -531,11 +531,14 @@ notification_server_up() {
 #                    without it; logind_inhibitors writes it), and never ends while
 #                    logind/hang exists (a bus that does not answer)
 #                    `gdbus call … SetLockedHint <bool>` notes "call SetLockedHint <path>
-#                    <bool>" in logind/log
+#                    <bool>" in logind/log; `… Properties.Get … LockedHint` answers false
+#                    ("call LockedHint")
 #   systemd-inhibit  notes "hold <pid> <time>" in logind/log, runs the command it was given
 #                    (the shell's `read -r release`) and notes "release <pid> <time>" when
 #                    that ends; between logind_signal sleep and wake it refuses, as logind
-#                    does ("refuse <pid> <time>", exit 1, the command not run)
+#                    does ("refuse <pid> <time>", exit 1, the command not run). The sleep
+#                    notice's inhibitor (its reason "Check …") is noted the same way with
+#                    "check-" in front: "check-hold", "check-release", "check-refuse"
 #
 # The shell runs with XDG_SESSION_ID=$LOCKTEST_SESSION_ID.
 LOCKTEST_SESSION_ID=lt1
@@ -579,11 +582,18 @@ case "\$1" in
                 exit 0
                 ;;
             *".ListInhibitors "*)
-                # logind's inhibitors (SleepLockNotice reads them): logind/inhibitors as
+                # logind's inhibitors (Idle reads them): logind/inhibitors as
                 # gdbus prints the list (logind_inhibitors writes it), none without it
                 echo "call ListInhibitors" >> "\$log"
                 [ -f "$WORK/logind/hang" ] && exec $coreutils/sleep 60
                 cat "$WORK/logind/inhibitors" 2> /dev/null || echo "(@a(ssssuu) [],)"
+                exit 0
+                ;;
+            *" LockedHint "*)
+                # The session's LockedHint (SleepLockNotice reads it at sleep): false, as
+                # logind says for a session nobody marked locked
+                echo "call LockedHint" >> "\$log"
+                echo "(<false>,)"
                 exit 0
                 ;;
         esac
@@ -611,19 +621,25 @@ EOF
 #!$bash_path
 # Stand-in for systemd-inhibit in the lock test bed (tests/lock/lib.sh): no bus is reached
 log=$WORK/logind/log
-while [ "\${1#--}" != "\$1" ]; do shift; done
+# The shell holds two: the lock's before sleep ("hold", "release", "refuse") and the sleep
+# notice's look ("check-hold", …), told apart by their reason
+kind=
+while [ "\${1#--}" != "\$1" ]; do
+    case "\$1" in --why=Check*) kind=check- ;; esac
+    shift
+done
 # As logind's Inhibit() does (systemd v260 src/login/logind-dbus.c, method_inhibit): no new
 # delay lock while the sleep it would delay is under way — from PrepareForSleep(true) until
 # the wake (logind/preparing, written by logind_signal)
 if [ "\$(cat "$WORK/logind/preparing" 2> /dev/null)" = true ]; then
-    echo "refuse \$\$ \${EPOCHREALTIME/,/.}" >> "\$log"
+    echo "\${kind}refuse \$\$ \${EPOCHREALTIME/,/.}" >> "\$log"
     echo "Failed to inhibit: The operation inhibition has been requested for is already running" >&2
     exit 1
 fi
-echo "hold \$\$ \${EPOCHREALTIME/,/.}" >> "\$log"
+echo "\${kind}hold \$\$ \${EPOCHREALTIME/,/.}" >> "\$log"
 "\$@"
 status=\$?
-echo "release \$\$ \${EPOCHREALTIME/,/.}" >> "\$log"
+echo "\${kind}release \$\$ \${EPOCHREALTIME/,/.}" >> "\$log"
 exit \$status
 EOF
     chmod +x "$WORK/standins/gdbus" "$WORK/standins/systemd-inhibit"

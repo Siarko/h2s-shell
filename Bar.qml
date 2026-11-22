@@ -376,6 +376,8 @@ PanelWindow {
     //   qs ipc call shelltest popupItemRect calendarAdd
     //   qs ipc call shelltest popupState
     //   qs ipc call shelltest notifierRecorded
+    //   qs ipc call shelltest notifierDismiss 1
+    //   qs ipc call shelltest sleepNotice
     //   qs ipc call shelltest toastBadges
     //   qs ipc call shelltest notificationAction 7 cancel
     //   qs ipc call shelltest notificationDismiss 7
@@ -401,11 +403,25 @@ PanelWindow {
         }
 
         // What Notifier recorded instead of sending (module test mode, as in a test tree):
-        // [{ summary, body, urgency, format }], oldest first
+        // [{ summary, body, urgency, format, kind, handle }], oldest first — `kind` and
+        // `handle` for a notification sent with a handle ("show", "update", "close"; its number)
         function notifierRecorded(): string {
             return JSON.stringify(Notifier.recorded.map(entry => ({
-                summary: entry.summary, body: entry.body, urgency: entry.urgency, format: entry.format
+                summary: entry.summary, body: entry.body, urgency: entry.urgency, format: entry.format,
+                kind: entry.kind ?? "", handle: entry.handle ?? 0
             })));
+        }
+
+        // A recorded notification with a handle dismissed, as its "×" would (test mode only):
+        // "" when done, else why not
+        function notifierDismiss(handle: int): string {
+            const found = Notifier.testHandle(handle);
+            return found === null ? "not found" : found.testDismiss() ? "" : "not open";
+        }
+
+        // The sleep notice's state and its look at sleep (SleepLockNotice.describe)
+        function sleepNotice(): string {
+            return SleepLockNotice.describe();
         }
 
         // How many toasts wait in each queue, as the badges count them: { critical, staying,

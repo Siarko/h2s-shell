@@ -1,0 +1,18 @@
+#!/bin/sh
+# A stand-in for gdbus (tests/SleepLockStateReadingTest.qml), started through a link in the
+# suite's scratch directory: it answers logind's LockedHint of the session asked for with
+# that directory's `hint` ("true" or "false"), and fails as gdbus does when there is no such
+# file. Anything else it is asked fails. Each call is noted in `calls`, with its object path.
+here=$(dirname "$0")
+case " $* " in
+    *" call --system --timeout 1 --dest org.freedesktop.login1 --object-path "*" --method org.freedesktop.DBus.Properties.Get org.freedesktop.login1.Session LockedHint ") ;;
+    *) echo "Error: the stand-in only knows a session's LockedHint" >&2; exit 2 ;;
+esac
+path=; previous=
+for argument in "$@"; do [ "$previous" = --object-path ] && path=$argument; previous=$argument; done
+echo "LockedHint $path" >> "$here/calls"
+if [ ! -f "$here/hint" ]; then
+    echo "Error: GDBus.Error:org.freedesktop.DBus.Error.ServiceUnknown: The name org.freedesktop.login1 was not provided by any .service files" >&2
+    exit 1
+fi
+echo "(<$(cat "$here/hint")>,)"

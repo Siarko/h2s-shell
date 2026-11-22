@@ -384,19 +384,16 @@ Two stages, both driven by Wayland idle notifications and both counted from the 
   the lock (at most 4 s), so the desktop is not what shows on waking. The fingerprint and
   key conversations stop for the sleep and start again after it, with the methods looked
   for again; the inhibitor is taken again after every wake, and when it is lost.
-- **Another locker before sleep** — the shell reads logind's sleep inhibitors (half a
-  minute after it starts, then every 15 minutes, not while locked; a read, no password)
-  to learn whether another program of the user's locks the screen before sleep: one known
-  by name (GNOME Shell, KDE's screen locker, light-locker, …) or one whose reason says it
-  locks the screen. It says so once, in a notification: "The screen stays unlocked during
-  sleep" when "Lock before the computer sleeps" is off and nothing else locks, "Two
-  programs lock the screen before sleep" when it is on and another does (one lock is
-  enough). hypridle, swayidle and xss-lock run the command they are given before sleep —
-  often `loginctl lock-session`, which the shell follows in step with sleep, or nothing
-  that locks — so with them alone nothing is said; neither when the read fails. A notice
-  is remembered (in the config, and for the running shell) and given again only after
-  two reads in a row found the situation changed; while the screen is locked it waits for
-  the unlock. The same on NixOS and Arch (systemd-logind on both).
+- **Not locked while asleep** — at each sleep the shell looks whether the session is
+  locked: its own lock, the compositor's lock state on Hyprland (`hyprctl -j locked`), else
+  logind's LockedHint (set by lockers that report their lock). For that it holds a logind
+  delay inhibitor of its own while awake ("Check the screen is locked before sleep") and
+  lets go as soon as it has looked, at the latest a second after the sleep began. After a
+  sleep that went down unlocked it shows a critical notification, "Not locked while asleep",
+  once; closing it acknowledges it, and Settings → Lockscreen keeps a line until a sleep
+  locks. The next unlocked sleep after that is told again. No program is named: off
+  Hyprland, a locker that does not set LockedHint cannot be seen, and nothing is said then.
+  The state is remembered in the config. The same on NixOS and Arch (systemd-logind on both).
 - **The log** — every authentication event leaves a `[Lockscreen]` line in the shell's
   log (what was asked, started, answered, refused, why a lock ended), never what was
   typed: what to read when unlocking fails on the real machine.

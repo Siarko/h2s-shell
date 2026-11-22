@@ -546,12 +546,13 @@ The interface modules are written against (`qs.api`), versioned on its own
 - Settings → Appearance → Other has a "Settings modal" section: the corners, padding, border,
   spacing and widths of the questions that open over the Settings window; their dimming is
   a colour of its own, "Modal dimming" (Colors → Backgrounds).
-- The shell tells you, once, when locking before sleep is in conflict with what else runs:
-  "The screen stays unlocked during sleep" when "Lock before the computer sleeps" is off
-  and no other program locks the screen before sleep, "Two programs lock the screen before
-  sleep" when it is on and another (GNOME Shell, KDE's screen locker, …) does. Read from
-  logind's sleep inhibitors; hypridle, swayidle and xss-lock (often set to ask logind to
-  lock, which the shell follows) and a failed read say nothing.
+- The shell tells you when the screen was not locked while the computer slept: at each
+  sleep it looks whether the session is locked (its own lock, Hyprland's lock state, else
+  logind's LockedHint; it holds the sleep back for at most a second to look), and after an
+  unlocked one shows a critical notification, "Not locked while asleep", once. Closing it
+  leaves a line on Settings → Lockscreen until a sleep locks; the next unlocked sleep after
+  that is told again. No program is named or guessed; a sleep whose lock state could not be
+  read says nothing.
 - Toasts stack in three queues, top to bottom: critical, staying (until taken away) and
   ordinary (they count down), each showing at most its own number and counting what waits
   on its own "+N" badge beside its lowest toast (the critical badge outlined in red); a

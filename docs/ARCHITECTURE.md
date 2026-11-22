@@ -589,21 +589,23 @@ launcher agree on the contract described under "Recovery" below):
   the latest value wins, a failure logged once and not retried).
   Their small pure helpers are in `singletons/LockIoRules.qml` (tested in
   `tests/LockIoRulesTest.qml`).
-- **Other lockers before sleep** — `singletons/SleepLockNotice.qml`, beside the driver:
-  `singletons/lock/SleepLockers.qml` reads logind's `ListInhibitors` and `id -u` (`gdbus
-  call --system`, a read anyone may make), `LockIoRules.sleepLockers` decides from the
-  sleep delay inhibitors of this user, the shell's own left out: present (a locker by name
-  or by a reason that says it locks the screen), possible (hypridle, swayidle, xss-lock:
-  they run a command of the user's, often logind's Lock, which the shell follows), none, or
-  unknown (a failed read); `sleepNoticeStep` decides the one notice and the key remembered
-  (a `PersistentProperties` for the process, `Config.sleepLockNotice` when the config can
-  be written), forgotten after two quiet reads in a row. No reads while locked. The reading runs
-  against a stand-in gdbus in `tests/SleepLockersReadingTest.qml`, the whole in the lock
-  bed's `sleep-lockers`. Not covered by it: a locker that holds no inhibitor (a lock
-  command run by logind's Lock signal — hypridle's `lock_cmd`, xss-lock — beside the
-  shell's own handling of it), and a second client of the session-lock protocol, which
-  the protocol does not show to other clients; the compositor refuses the second lock,
-  whichever it is.
+- **The sleep notice** — `singletons/SleepLockNotice.qml`, beside the driver: it tells the
+  user, by the outcome of each sleep, when the screen was not locked while the computer
+  slept — no locker is named. While awake it holds a sleep delay inhibitor of its own (a
+  second `SleepInhibitor`, "Check the screen is locked before sleep"); at PrepareForSleep it
+  looks: the shell's own lock confirmed by the compositor, else
+  `singletons/lock/SleepLockState.qml` (`hyprctl -j locked` on Hyprland, and logind's
+  LockedHint for the session, decided by `LockIoRules.sleepLockState`: the compositor's word
+  first, a LockedHint true is locked, false or a failed read unknown). Not locked: once more
+  after 0.5 s; the inhibitor is let go when it has looked, at the latest 1 s after the
+  signal. After the resume the outcome (locked, unlocked, unknown) goes to
+  `SleepNoticeRules.step` (the cycle quiet → shown → waiting, tested in
+  `tests/SleepNoticeRulesTest.qml`): a critical notification, closed means acknowledged, a
+  line on the Lockscreen page while it waits for a sleep that locks. The state is kept in
+  `Config.sleepLockNotice` (JSON). The reading runs against stand-ins in
+  `tests/SleepLockStateReadingTest.qml`, the whole in the lock bed's `sleep-notice`. Not
+  covered: off Hyprland, a locker that does not set LockedHint reads as unknown (nothing
+  said); a locker that locks only after the look reads as unlocked.
 - **Views** — `screensaver/LockSurface.qml` (one per screen, an instance with its own id)
   and `screensaver/LockPrompt.qml` render `Lockscreen.view` and report input. Keys arrive
   in one place per surface — a key catcher that holds the focus; the field never takes it

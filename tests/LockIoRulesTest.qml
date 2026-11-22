@@ -341,7 +341,7 @@ TestCase {
                    "an answer that does not say both facts is no refusal (ask; the launcher bounds the cost): " + JSON.stringify(output));
         assert(!rules.lockSurelyRefused(null) && !rules.lockSurelyRefused({}), "no facts: no refusal");
 
-        // --- other lockers before sleep (SleepLockNotice) ---
+        // --- logind's inhibitors, as gdbus prints them ---
         // logind's ListInhibitors as gdbus prints it (copied from a real answer, names changed)
         const listed = "([('sleep', 'hypridle', \"Hypridle wants to delay sleep until it's before_sleep handling is done.\", 'delay', uint32 1000, uint32 2090), "
             + "('sleep', 'UPower', 'Pause device polling', 'delay', 0, 2450), "
@@ -363,101 +363,26 @@ TestCase {
                               "([('sleep', 'x, 'y', 'delay', 1, 2)],)", null, undefined, 42])
             assertEqual(rules.parseInhibitors(broken), null, "anything but a list is no list: " + JSON.stringify(broken));
 
-        const holder = (who, why, extra) => Object.assign({ what: "sleep", who: who, why: why, mode: "delay", uid: 1000, pid: 7 }, extra ?? {});
-        const lockersOf = (list, uid) => JSON.stringify(rules.sleepLockers(list, uid ?? 1000));
-        assertEqual(lockersOf(parsed), JSON.stringify({ state: "possible", names: ["hypridle"] }),
-                    "hypridle holds one whatever its before_sleep_cmd: only possibly a locker; services and shutdown inhibitors do not count");
-        assertEqual(lockersOf([holder("light-locker", "light-locker is waiting for sleep")]), JSON.stringify({ state: "present", names: ["light-locker"] }),
-                    "a locker known by name");
-        assertEqual(lockersOf([holder("xss-lock", "xss-lock is waiting for sleep")]), JSON.stringify({ state: "possible", names: ["xss-lock"] }),
-                    "xss-lock runs what it is given (often logind's Lock, which the shell follows): only possibly a locker");
-        assertEqual(lockersOf([holder("swayidle", "Setup Up Lock Screen")]), JSON.stringify({ state: "possible", names: ["swayidle"] }),
-                    "swayidle likewise (`before-sleep \"loginctl lock-session\"`), whatever its reason says");
-        assertEqual(lockersOf([holder("GNOME Shell", "GNOME needs to lock the screen")]), JSON.stringify({ state: "present", names: ["GNOME Shell"] }),
-                    "… or by a reason that says it locks the screen");
-        assertEqual(lockersOf([holder("my-locker", "Setting up lock screen")]), JSON.stringify({ state: "present", names: ["my-locker"] }),
-                    "… any name");
-        assertEqual(lockersOf([holder("backup", "Finish the block write"), holder("clock", "Saving the clock")]), JSON.stringify({ state: "none", names: [] }),
-                    "\"block\", \"clock\" are no lock; nor is a reason without the screen or session");
-        assertEqual(lockersOf([holder("h2s-shell", "Lock the screen before sleep")]), JSON.stringify({ state: "none", names: [] }),
-                    "the shell's own inhibitor does not count");
-        assertEqual(lockersOf([holder("xss-lock", "lock", { uid: 120 })]), JSON.stringify({ state: "none", names: [] }),
-                    "another user's (a greeter's) does not count");
-        assertEqual(lockersOf([holder("xss-lock", "lock", { mode: "block" })]), JSON.stringify({ state: "none", names: [] }),
-                    "a block inhibitor stops sleep, it does not lock before it");
-        assertEqual(lockersOf([holder("my-locker", "Setting up lock screen", { what: "handle-lid-switch:sleep" })]),
-                    JSON.stringify({ state: "present", names: ["my-locker"] }), "sleep among other things counts");
-        assertEqual(lockersOf([holder("my-locker", "Setting up lock screen", { what: "shutdown:idle" })]), JSON.stringify({ state: "none", names: [] }),
-                    "… not without it");
-        assertEqual(lockersOf([holder("GNOME Shell", ""), holder("hypridle", "")]), JSON.stringify({ state: "present", names: ["GNOME Shell"] }),
-                    "a locker outweighs a possible one");
-        assertEqual(lockersOf([holder("d", "lock screen"), holder("c", "lock screen"), holder("b", "lock screen"), holder("a", "lock screen"), holder("a", "lock screen")]),
-                    JSON.stringify({ state: "present", names: ["a", "b", "c"] }), "names: once each, sorted, three at most");
-        const longName = rules.sleepLockers([holder("x\n<b>y</b>" + "z".repeat(60), "lock screen")], 1000).names[0];
-        assert(longName.indexOf("\n") < 0 && longName.length <= 40, "a name from outside: one line, capped (" + longName + ")");
-        assertEqual(lockersOf(null), JSON.stringify({ state: "unknown", names: [] }), "no list: unknown, never none");
-        assertEqual(JSON.stringify(rules.sleepLockers([], null)), JSON.stringify({ state: "unknown", names: [] }), "no uid: unknown");
-        assertEqual(lockersOf([], -1), JSON.stringify({ state: "unknown", names: [] }), "… a uid that is none");
-        assertEqual(JSON.stringify(rules.sleepLockersFromOutput("1000\n" + listed)), JSON.stringify({ state: "possible", names: ["hypridle"] }),
-                    "the reader's output: the uid, then the list");
-        assertEqual(rules.sleepLockersFromOutput("1000\n").state, "unknown", "gdbus said nothing (it failed): unknown");
-        assertEqual(rules.sleepLockersFromOutput("").state, "unknown", "nothing at all: unknown");
-        assertEqual(rules.sleepLockersFromOutput("x\n(@a(ssssuu) [],)").state, "unknown", "no uid read: unknown");
-        assertEqual(rules.sleepLockersText({ state: "present", names: ["a", "b"] }), "present: a, b", "the outcome in the log");
-        assertEqual(rules.sleepLockersText(null), "unknown", "… none read");
-        assertEqual(rules.sleepLockersText({ state: "possible", names: { length: 1, 0: "hypridle" } }), "possible: hypridle",
-                    "… names in an array-like (a list that came through a QML signal) as well");
-
-        const otherLocks = { state: "present", names: ["GNOME Shell"] };
-        const noneLocks = { state: "none", names: [] };
-        const maybeLocks = { state: "possible", names: ["hypridle"] };
-        const unknownRead = { state: "unknown", names: [] };
-        const both = rules.sleepLockNotice(otherLocks, true);
-        assertEqual(both?.key, "both:GNOME Shell", "on, and another locks: two lockers race");
-        assertEqual(both?.summary, "Two programs lock the screen before sleep", "… said so");
-        assertEqual(both?.body, "This shell locks it, and GNOME Shell does too. One lock is enough.",
-                    "… saying what the two do; never advising to turn the shell's own lock off");
-        assertEqual(rules.sleepLockNotice({ state: "present", names: ["a", "b"] }, true)?.body, "This shell locks it, and a, b do too. One lock is enough.",
-                    "two others: plural");
-        const unlockedSleep = rules.sleepLockNotice(noneLocks, false);
-        assertEqual(unlockedSleep?.key, "none", "off, and nothing else locks: the screen stays unlocked through sleep");
-        assertEqual(unlockedSleep?.summary, "The screen stays unlocked during sleep", "… said so");
-        assertEqual(rules.sleepLockNotice(otherLocks, false), null, "off, another locks: nothing to say");
-        assertEqual(rules.sleepLockNotice(noneLocks, true), null, "on, nothing else: nothing to say");
-        for (const lockOnSleep of [true, false]) {
-            assertEqual(rules.sleepLockNotice(maybeLocks, lockOnSleep), null, "a maybeLocks locker says nothing (" + lockOnSleep + ")");
-            assertEqual(rules.sleepLockNotice(unknownRead, lockOnSleep), null, "an unknown read says nothing (" + lockOnSleep + ")");
-        }
-        assertEqual(rules.sleepLockNotice(noneLocks, "yes"), null, "a setting that is not a boolean: nothing");
-
-        const step = (key, quiet, lockers, lockOnSleep, fromRead) => rules.sleepNoticeStep({ key: key, quiet: quiet }, lockers, lockOnSleep, fromRead);
-        let told = step("", 0, noneLocks, false, true);
-        assertEqual(told.notice?.key, "none", "a notice not yet given: given");
-        assertEqual(told.memory.key, "none", "… and remembered");
-        told = step("none", 0, noneLocks, false, true);
-        assert(told.notice === null && told.memory.key === "none", "given before: not again (also after a restart: the key is in the config)");
-        told = step("none", 0, unknownRead, false, true);
-        assert(told.notice === null && told.memory.key === "none" && told.memory.quiet === 0, "a failed read changes nothing but the count of quiet reads");
-        told = step("none", 0, noneLocks, true, false);
-        assert(told.notice === null && told.memory.key === "none" && told.memory.quiet === 0,
-               "switched on: nothing to say, the key kept (no read: it does not count)");
-        assertEqual(step("none", 0, noneLocks, false, false).notice, null, "… so switched off again before a read: not told again");
-        told = step("none", 0, noneLocks, true, true);
-        assert(told.notice === null && told.memory.key === "none" && told.memory.quiet === 1, "one read with nothing to say: the key kept");
-        assertEqual(step(told.memory.key, told.memory.quiet, noneLocks, false, true).notice, null,
-                    "… so the problem back at the next read (a blink): not told again");
-        told = step("none", 1, noneLocks, true, true);
-        assert(told.notice === null && told.memory.key === "", "two reads in a row with nothing to say: the key forgotten");
-        assertEqual(step("", told.memory.quiet, noneLocks, false, false).notice?.key, "none", "… so the problem coming back is told again");
-        assertEqual(step("none", 1, unknownRead, false, true).memory.quiet, 0, "a failed read breaks the row");
-        told = step("none", 1, otherLocks, true, true);
-        assertEqual(told.notice?.key, "both:GNOME Shell", "another notice: given at once");
-        assertEqual(told.memory.quiet, 0, "… the count starts over");
-        told = step("both:GNOME Shell", 0, { state: "present", names: ["KDE"] }, true, true);
-        assertEqual(told.notice?.key, "both:KDE", "another locker: told again");
-        told = step("both:GNOME Shell", 0, maybeLocks, true, true);
-        assert(told.notice === null && told.memory.key === "both:GNOME Shell", "a possible locker for one read: nothing, the key kept");
-        const empty = rules.sleepNoticeStep(undefined, unknownRead, true, true);
-        assert(empty.memory.key === "" && empty.memory.quiet === 0, "no memory: none kept");
+        // --- the lock state at sleep (SleepLockNotice) ---
+        assertEqual(rules.sleepLockState("compositor {\"locked\": true}\n"), "locked", "the compositor says locked: locked");
+        assertEqual(rules.sleepLockState("compositor {  \"locked\": false }\nhint (<true>,)\n"), "unlocked",
+                    "the compositor says unlocked: unlocked, whatever the hint says (the compositor holds the lock)");
+        assertEqual(rules.sleepLockState("hint (<true>,)\n"), "locked", "no compositor's word, LockedHint true: locked");
+        assertEqual(rules.sleepLockState("hint (<false>,)\n"), "unknown",
+                    "LockedHint false proves nothing (lockers that do not set it): unknown, never unlocked");
+        assertEqual(rules.sleepLockState("compositor hyprctl: unknown request\nhint (<true>,)\n"), "locked",
+                    "a compositor answer that is no lock state: the hint decides");
+        assertEqual(rules.sleepLockState("compositor {\"locked\": \"yes\"}\n"), "unknown", "a locked that is no boolean: unknown");
+        for (const nothing of ["", "\n", "garbage", "hint ", "hint Error: no session", null, undefined, 42, "compositor {"])
+            assertEqual(rules.sleepLockState(nothing), "unknown", "nothing readable: unknown (" + JSON.stringify(nothing) + ")");
+        assertEqual(rules.sleepLookOutcome(true, "unlocked"), "locked", "the shell's own lock confirmed: locked, whatever was read");
+        assertEqual(rules.sleepLookOutcome(false, "unlocked"), "unlocked", "not its own: what was read");
+        assertEqual(rules.sleepLookOutcome(false, "locked"), "locked", "… another program's lock");
+        assertEqual(rules.sleepLookOutcome(false, undefined), "unknown", "no read: unknown");
+        assertEqual(rules.sleepLookOutcome(false, "maybe"), "unknown", "… nor anything else");
+        assertEqual(JSON.stringify(rules.sleepNoticeSaved('{"phase":"waiting","at":5}')), JSON.stringify({ phase: "waiting", at: 5 }),
+                    "the remembered notice state read back");
+        for (const other of ["", "none", "both:GNOME Shell", "[1]", "null", "{", null, 7])
+            assertEqual(rules.sleepNoticeSaved(other), null, "anything else (an older version's key too): none (" + JSON.stringify(other) + ")");
     }
 }

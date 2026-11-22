@@ -65,7 +65,7 @@ declare -A SERIAL=(
 # order: a test missing here runs anyway, after these.
 LONG_TESTS=(
     modules-launcher restart-no-restore two-outputs notifications restart-crash-locked
-    modules-discovery idle supervisor modules-hung restart-crash-finger sleep-lockers logind
+    modules-discovery idle supervisor modules-hung restart-crash-finger logind
     screensaver-lock restart-locked-limit reload-explicit notifier-progress
 )
 

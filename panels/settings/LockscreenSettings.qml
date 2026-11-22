@@ -172,6 +172,20 @@ Flickable {
             editIndex: root.editIndex
         }
 
+        // The sleep notice was closed and no sleep has locked since (SleepLockNotice keeps the
+        // state in the config; read from there, so the page starts no lock machinery)
+        Hint {
+            readonly property double waitingSince: SleepNoticeRules.waitingSince(
+                SleepNoticeRules.restore(LockIoRules.sleepNoticeSaved(Config.sleepLockNotice)))
+            objectName: "sleepNoticeWaiting"
+            visible: waitingSince >= 0
+            text: visible ? "Not locked while asleep (" + Qt.formatDateTime(new Date(waitingSince), "d MMM, hh:mm")
+                            + "). Waiting for a sleep that locks." : ""
+            color: Theme.warning
+            Layout.topMargin: 4
+            Layout.bottomMargin: 4
+        }
+
         // Not tied to "Enable lock screen" (the idle lock): they apply to every lock — sleep,
         // a shortcut, another program locking the screen
         SchemaSettingEditor {

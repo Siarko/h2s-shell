@@ -35,7 +35,7 @@ QtObject {
     property var _fetch: FetchTest {}
     property var _network: NetworkTest {}
     property var _deviceAddressReading: DeviceAddressReadingTest {}
-    property var _sleepLockersReading: SleepLockersReadingTest {}
+    property var _sleepLockStateReading: SleepLockStateReadingTest {}
     property var _vpnProviders: VpnProvidersTest {}
     property var _calendarDates: CalendarDatesTest {}
     property var _calendarEvents: CalendarEventsTest {}

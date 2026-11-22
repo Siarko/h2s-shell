@@ -56,6 +56,11 @@ Singleton {
     // below): the screen is locked whatever the rules' state says, so nothing may act as if
     // it were not (the idle lock, the screensaver)
     readonly property bool locked: _view.locked || _restorePending
+    // The compositor holds a lock of this shell's: confirmed (secure), or one it could not
+    // take back — the screen is locked now, not on its way (SleepLockNotice)
+    readonly property bool lockConfirmed: _sessionLock.secure || _restorePending
+    // logind's object path of this shell's session ("" while unknown)
+    readonly property string sessionPath: _logind.sessionPath
     // Somebody at the lock screen (LockViewRules: the prompt awake, a check under way): Idle
     // holds the lock screen's screen-off meanwhile
     readonly property bool attended: _view.attended === true

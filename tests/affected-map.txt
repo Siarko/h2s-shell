@@ -105,7 +105,7 @@ flake.lock self:tests/run-system.sh unit:QuickshellPinTest
 nix/* self:tests/run-system.sh
 
 # ---- Started only by shell.qml ---------------------------------------------------------
-singletons/SleepLockNotice.qml unit:SleepNoticeRulesTest lock:sleep-lockers
+singletons/SleepLockNotice.qml unit:SleepNoticeRulesTest lock:sleep-notice
 # (no suite: the shell starting is its check)
 singletons/DictationMusicPause.qml lock:harness
 # (nothing instantiates it: a description of what each hardware source provides)

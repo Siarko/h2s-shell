@@ -4,102 +4,248 @@ import Quickshell
 import QtQuick
 import qs.singletons.lock
 
-// Tells the user, once, when locking before sleep is in conflict with the system
-// (LockIoRules.sleepLockNotice): "Lock before the computer sleeps" is on while another
-// program locks the screen before sleep too (two lockers racing for the screen), or it is
-// off while nothing else does (the screen stays unlocked through sleep). What else locks
-// is read from logind's sleep inhibitors (SleepLockers): first a while after the start, so
-// that idle daemons started with the session have taken theirs, then every 15 minutes; a
-// change of the setting is decided again on the last read.
+// Tells the user when the screen was not locked while the computer slept — by the outcome of
+// each sleep, not by guessing which program locks (SleepNoticeRules has the cycle).
 //
-// Given once: the notice's key is kept for the process (over a reload too) and in the
-// config (Config.sleepLockNotice) when it can be written, and forgotten only after two reads
-// in a row with nothing to say, so the same problem coming back is told again
-// (LockIoRules.sleepNoticeStep). A read that fails says nothing. Not while the session is
-// locked (nobody would see the toast), and no reads then. The outcome goes to the log when
-// it changes.
+// The shell holds a sleep delay inhibitor of its own while awake ("Check the screen is
+// locked before sleep"), so that at logind's PrepareForSleep it has a moment to look before
+// the machine goes down: the shell's own lock confirmed by the compositor, else what the
+// compositor or logind says (SleepLockState). Locked: let go at once. Otherwise it looks once
+// more after `_lookAgain` (again while the shell's own lock is on its way) and lets go then,
+// at the latest `_deadline` after the signal — whatever was read by then is the outcome
+// ("unknown" without an answer). After the resume
+// the outcome goes to SleepNoticeRules, whose actions show or withdraw the critical
+// notification; closing it (× or its action) acknowledges it. The inhibitor is taken again
+// after the wake, or when no wake was heard for `_missedResume` of running time.
+//
+// The state is remembered data (Config.sleepLockNotice, JSON), and kept for the process (a
+// PersistentProperties) where the config cannot be written. Each sleep's outcome is logged.
 Singleton {
     id: root
 
-    readonly property bool _lockOnSleep: Lockscreen.lockOnSleep
-    readonly property bool _sessionLocked: !Lockscreen.startChecked || Lockscreen.locked || Lockscreen.restoring
+    readonly property var noticeState: SleepNoticeRules.restore(LockIoRules.sleepNoticeSaved(_memory.stateText))
+    // The time of the unlocked sleep the notice waits on a fix for, or −1 (the Lock screen
+    // page reads the same from the config)
+    readonly property double waitingSince: SleepNoticeRules.waitingSince(noticeState)
+
+    readonly property string summary: "Not locked while asleep"
+    readonly property string body: "The screen was not locked while the computer slept."
+
+    readonly property int _lookAgain: 500
+    readonly property int _deadline: 1000
+    readonly property int _missedResume: 60000
     readonly property bool _configUsable: Config.ready && !Config.loadFailed
-    // The first read after the start (30 s) and the pause between reads (15 min), or the lock
-    // test bed's `sleepLockers` and `sleepLockersEvery` timings (H2S_LOCK_TEST_TIMINGS, in
-    // ms; LockRules ignores those names)
-    readonly property int _firstRead: _timing("sleepLockers", 30000)
-    readonly property int _readEvery: Math.max(_timing("sleepLockersEvery", 15 * 60 * 1000), 100)
-    property string _loggedOutcome: ""
 
-    on_LockOnSleepChanged: _decide()
-    on_SessionLockedChanged: _decide()
-    on_ConfigUsableChanged: _decide()
-    Component.onCompleted: Qt.callLater(_decide)
+    // "awake" (inhibitor held), "checking" (PrepareForSleep heard, looking), "asleep"
+    // (looked, inhibitor let go, waiting for the resume)
+    property string _phase: "awake"
+    // The sleep being looked at: { generation, at, looks, outcome }
+    property var _sleep: null
+    property int _generation: 0
+    property var _handle: null
 
-    function _timing(name, fallback) {
-        const given = TestSeams.timings[name];
-        return typeof given === "number" && isFinite(given) && given >= 0 ? given : fallback;
+    on_ConfigUsableChanged: _load()
+    Component.onCompleted: Qt.callLater(_load)
+
+    function _log(message) {
+        console.info("[SleepLockNotice] " + message);
     }
 
-    // `fromRead`: called for a read just answered (counts toward forgetting the key)
-    function _decide(fromRead) {
-        if (!Config.ready)
+    // The remembered state, once the config is read; a notification never closed is shown
+    // again (SleepNoticeRules: restarted)
+    function _load() {
+        if (_memory.loaded || !Config.ready)
             return;
-        if (!_memory.loaded) {
-            _memory.loaded = true;
-            _memory.key = _configUsable ? Config.sleepLockNotice : "";
+        _memory.loaded = true;
+        if (_configUsable)
+            _memory.stateText = Config.sleepLockNotice;
+        _apply(SleepNoticeRules.step(noticeState, { type: "restarted" }));
+    }
+
+    function _apply(result) {
+        const text = result.state.phase === "quiet" ? "" : JSON.stringify(result.state);
+        const changed = result.state.phase !== noticeState.phase || result.state.at !== noticeState.at;
+        _memory.stateText = text;
+        if (_configUsable && Config.sleepLockNotice !== text)
+            Config.sleepLockNotice = text;
+        if (changed)
+            _log("notice: " + result.state.phase);
+        for (const action of result.actions) {
+            if (action.type === "notify")
+                _notify(action.at);
+            else if (action.type === "withdraw")
+                _withdraw();
         }
-        if (_reader.reads === 0 || _sessionLocked)
-            return;
-        const step = LockIoRules.sleepNoticeStep({ key: _memory.key, quiet: _memory.quiet }, _reader.lockers,
-                                                 _lockOnSleep, fromRead === true);
-        _memory.key = step.memory.key;
-        _memory.quiet = step.memory.quiet;
-        if (_configUsable && step.memory.key !== Config.sleepLockNotice)
-            Config.sleepLockNotice = step.memory.key;
-        if (step.notice === null)
-            return;
-        console.info("[SleepLockNotice] telling the user: " + step.notice.summary);
-        Notifier.send(step.notice.summary, { body: step.notice.body, format: "plain" });
     }
 
-    SleepLockers {
-        id: _reader
-        toolDirectory: TestSeams.lockTools
-        onRead: lockers => {
-            const text = LockIoRules.sleepLockersText(lockers);
-            if (text !== root._loggedOutcome) {
-                root._loggedOutcome = text;
-                console.info("[SleepLockNotice] other lockers before sleep: " + text);
+    function _notify(at) {
+        _withdraw();
+        // The answer names the sleep it is about: a close of a notification since replaced
+        // is ignored by the rules
+        const closed = () => root._apply(SleepNoticeRules.step(root.noticeState, { type: "closed", at: at }));
+        _handle = Notifier.send(summary, {
+            body: body, format: "plain", urgency: "critical", handle: true,
+            actions: [{ id: "default", label: "Settings", onTriggered: () => {
+                Shell.openSettings("lockscreen");
+                closed();
+            } }],
+            onDismissed: closed
+        });
+        _log("told the user: " + summary);
+    }
+
+    function _withdraw() {
+        const handle = _handle;
+        _handle = null;
+        if (handle && handle.open)
+            handle.close();
+    }
+
+    // ---- The look at sleep ----
+
+    function _goingToSleep() {
+        // A second PrepareForSleep without a wake between: the wake was missed
+        if (_phase === "checking")
+            _finish();
+        if (_phase === "asleep")
+            _resumed();
+        _generation++;
+        _sleep = { generation: _generation, at: Date.now(), looks: 0, outcome: "unknown" };
+        _phase = "checking";
+        _deadlineTimer.restart();
+        _look();
+    }
+
+    function _look() {
+        if (_phase !== "checking")
+            return;
+        _sleep.looks++;
+        if (Lockscreen.lockConfirmed) {
+            _sleep.outcome = "locked";
+            _finish();
+            return;
+        }
+        // One read at a time: one still running answers this look if it is this sleep's; an
+        // earlier sleep's is ignored, and the deadline ends the look
+        if (_reader.running)
+            return;
+        _reader.generation = _sleep.generation;
+        _reader.start();
+    }
+
+    function _read(outcome) {
+        // Late answers lose: a read started for an earlier sleep, or after this one's look ended
+        if (_phase !== "checking" || _reader.generation !== _sleep.generation)
+            return;
+        _sleep.outcome = LockIoRules.sleepLookOutcome(Lockscreen.lockConfirmed, outcome);
+        // The shell's own lock on its way (lock before sleep): looked at again until the
+        // deadline, its confirmation ends the look at once (below)
+        if (_sleep.outcome === "locked" || (_sleep.looks >= 2 && !Lockscreen.locked))
+            _finish();
+        else
+            _lookAgainTimer.restart();
+    }
+
+    // The deadline: whatever was read by then, unless the shell's own lock is confirmed
+    function _deadlinePassed() {
+        if (_phase === "checking" && Lockscreen.lockConfirmed)
+            _sleep.outcome = "locked";
+        _finish();
+    }
+
+    function _finish() {
+        if (_phase !== "checking")
+            return;
+        _lookAgainTimer.stop();
+        _deadlineTimer.stop();
+        _phase = "asleep";
+        _missedResumeTimer.restart();
+        _log("went to sleep " + _sleep.outcome + " (looked for " + (Date.now() - _sleep.at) + " ms)");
+    }
+
+    function _resumed() {
+        if (_phase === "checking")
+            _finish();
+        _missedResumeTimer.stop();
+        const sleep = _sleep;
+        _sleep = null;
+        _phase = "awake";
+        if (sleep !== null && _memory.loaded)
+            _apply(SleepNoticeRules.step(noticeState, { type: "slept", outcome: sleep.outcome, at: sleep.at }));
+    }
+
+    Connections {
+        target: Lockscreen
+        function onLockConfirmedChanged() {
+            if (root._phase === "checking" && Lockscreen.lockConfirmed) {
+                root._sleep.outcome = "locked";
+                root._finish();
             }
-            root._decide(true);
         }
+    }
+
+    Connections {
+        target: SystemSleep
+        function onGoingToSleep() { root._goingToSleep(); }
+        function onResumed() { root._resumed(); }
+    }
+
+    SleepInhibitor {
+        id: _inhibitor
+        why: "Check the screen is locked before sleep"
+        toolDirectory: TestSeams.lockTools
+        wanted: root._phase !== "asleep"
+        onLogLine: (level, message) => {
+            if (level === "warning")
+                console.warn("[SleepLockNotice] " + message);
+            else
+                console.info("[SleepLockNotice] " + message);
+        }
+    }
+
+    SleepLockState {
+        id: _reader
+        property int generation: 0
+        toolDirectory: TestSeams.lockTools
+        sessionPath: Lockscreen.sessionPath
+        onRead: outcome => root._read(outcome)
     }
 
     Timer {
-        interval: root._firstRead
-        running: true
-        onTriggered: {
-            _reader.start();
-            _every.start();
-        }
+        id: _lookAgainTimer
+        interval: root._lookAgain
+        onTriggered: root._look()
     }
 
     Timer {
-        id: _every
-        interval: root._readEvery
-        repeat: true
+        id: _deadlineTimer
+        interval: root._deadline
+        onTriggered: root._deadlinePassed()
+    }
+
+    // Running time only (a timer stands still while the machine sleeps): this long awake
+    // after going down means the resume signal was lost
+    Timer {
+        id: _missedResumeTimer
+        interval: root._missedResume
         onTriggered: {
-            if (!root._sessionLocked)
-                _reader.start();
+            if (root._phase === "asleep") {
+                root._log("no resume signal: taken as awake");
+                root._resumed();
+            }
         }
     }
 
-    // What was told, for this process: over a reload, and where the config cannot keep it
+    // For tests/lock/ (shelltest sleepNotice): the cycle's state, the look
+    function describe() {
+        return JSON.stringify({ notice: noticeState, waitingSince: waitingSince, phase: _phase });
+    }
+
+    // The state for this process (SleepNoticeRules' as JSON, "" for quiet): over a reload,
+    // and where the config cannot keep it
     PersistentProperties {
         id: _memory
         property bool loaded: false
-        property string key: ""
-        property int quiet: 0
+        property string stateText: ""
     }
 }

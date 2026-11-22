@@ -1,1 +1,0 @@
-([('sleep', 'hypridle', "Hypridle wants to delay sleep until it's before_sleep handling is done.", 'delay', uint32 @UID@, uint32 2090), ('sleep', 'NetworkManager', 'NetworkManager needs to turn off networks', 'delay', uint32 0, uint32 890)],)

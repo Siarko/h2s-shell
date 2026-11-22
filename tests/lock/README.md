@@ -294,7 +294,8 @@ the real gdbus first). Unset — always, outside the test bed — nothing change
 appends to `logind/signals` (`logind_signals lock unlock …` appends several in one write,
 so that the shell handles them in one pass — an Unlock before the compositor can have
 confirmed the Lock, `fast-unlock.sh`); the `systemd-inhibit` stand-in records `hold <pid>` and
-`release <pid>` in `logind/log`, each with its time (`inhibitor_held`, `inhibitor_record`; it
+`release <pid>` in `logind/log`, each with its time — the sleep notice's own inhibitor as
+`check-hold`, `check-release` (`sleep-notice`) — (`inhibitor_held`, `inhibitor_record`; it
 runs the shell's command, so it sees the inhibitor's grace after its holder vanished, as
 the real one would hold logind). Between `logind_signal sleep` and `wake` it refuses, as
 logind's `Inhibit()` does while the sleep is under way (systemd's `logind-dbus.c`,
@@ -369,7 +370,7 @@ value, one set to a value that cannot be used is ignored (and named in the log).
 | `H2S_LOCK_SYSTEM` | `TestSeams`, `seams.sh` | `nixos` or `other`: the system the lock takes itself to be on (only with `H2S_LOCK_SYSTEM_PAM_DIR`) |
 | `H2S_LOCK_AUTH_METHODS` | `seams.sh` | an executable that answers for the methods script (the test PAM stacks) |
 | `H2S_LOCK_LEDS_DIR` | `TestSeams` | where the Caps Lock LEDs are read, instead of `/sys/class/leds` |
-| `H2S_LOCK_TEST_TIMINGS` | `TestSeams` | JSON overrides of `LockRules.timings`, and `sleepLockers`, `sleepLockersEvery` (the first read of other lockers before sleep and the pause between reads, `SleepLockNotice`) |
+| `H2S_LOCK_TEST_TIMINGS` | `TestSeams` | JSON overrides of `LockRules.timings` |
 | `H2S_LOCK_TEST_RELOAD` | `TestSeams` | `1`: the `locktest` IPC, `reload(hard)` |
 | `H2S_SHELL_TEST_MODULE_GUARD_MS` | `TestSeams` | the module start guard's window, ms |
 | `H2S_SHELL_TEST_MODULE_CHECK_PATH` | `TestSeams` | a directory put first on the module file check's `PATH` |

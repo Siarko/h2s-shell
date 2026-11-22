@@ -50,8 +50,8 @@ Singleton {
     // the version that wrote it ("" for none)
     property bool acknowledgedModulesInFile: false
     property string writtenByAtLoad: ""
-    // The notice about locking before sleep last given (SleepLockNotice,
-    // LockIoRules.sleepNoticeStep): remembered, so it is given once, not at every start
+    // The sleep notice's state (SleepLockNotice, SleepNoticeRules: JSON, "" while quiet):
+    // remembered, so a restart neither repeats nor loses it
     property alias sleepLockNotice: _adapter.sleepLockNotice
     // The daily automatic module update run's state ({ lastAttemptAt, failures, lastOutcome }
     // as JSON, ModuleUpdateRules.autoRunRecord; "" never ran): remembered, so a restart does

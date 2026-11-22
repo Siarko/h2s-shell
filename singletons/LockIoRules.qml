@@ -7,7 +7,7 @@ import QtQuick
 // deserve tests (tests/LockIoRulesTest.qml): the driver's queue and how it carries out a
 // step, the password fallback, how a Qt key is named for the rules, how a forwarded key
 // edits the prompt's field, how a methods-script run is reported, how long a helper
-// process waits before it is started again, and whether another program locks before sleep
+// process waits before it is started again, and how the lock state at sleep is read
 // (SleepLockNotice). Pure: no clock, no process, no
 // other singleton. The rules themselves are in LockRules; the driver is Lockscreen.
 Singleton {
@@ -391,25 +391,7 @@ Singleton {
         };
     }
 
-    // ---- Other lockers before sleep (SleepLockNotice) ----
-    // Whether something besides this shell locks the screen before the computer sleeps, read
-    // from what logind knows about every system: the sleep "delay" inhibitors, which a
-    // program takes to act before sleep. A locker of the user's own session holds one —
-    // GNOME Shell, KDE's screen locker, xss-lock, swayidle with a before-sleep command,
-    // hypridle — beside services that hold one for other work (NetworkManager, UPower). The
-    // list says who holds each and why, not what it will do: a holder counts as a locker
-    // by its name or by a reason that says it locks the screen. hypridle, swayidle and
-    // xss-lock run whatever they are given — often `loginctl lock-session`, logind's Lock,
-    // which this shell follows (no race at all), or nothing that locks — so they are only
-    // possible lockers, whatever their reason says.
-
-    // Holders that lock the screen before sleep when they hold a sleep inhibitor at all
-    readonly property var sleepLockerNames: ["light-locker", "xfce4-screensaver",
-        "cinnamon-screensaver", "mate-screensaver", "gnome shell", "screen locker", "xscreensaver",
-        "xsecurelock", "hyprlock", "swaylock"]
-    // Holders that run a command of the user's before sleep, which may lock by itself, ask
-    // logind to lock (this shell then locks, in step with sleep) or not lock at all
-    readonly property var possibleSleepLockerNames: ["hypridle", "swayidle", "xss-lock"]
+    // ---- logind's inhibitors (LockParseRules.idleBlock reads them) ----
 
     // logind's ListInhibitors as `gdbus call` prints it (a GVariant:
     // `([('sleep', 'who', "why", 'delay', uint32 1000, uint32 42), …],)`, `(@a(ssssuu) [],)`
@@ -513,110 +495,56 @@ Singleton {
         return at === text.length ? inhibitors : null;
     }
 
-    // A holder's name as it may be shown: one line, no control characters, at most 40
-    // characters ("" when nothing is left)
-    function lockerName(who) {
-        const text = typeof who === "string" ? who.replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]+/g, " ").replace(/\s+/g, " ").trim() : "";
-        return text.length > 40 ? text.slice(0, 39) + "…" : text;
-    }
+    // ---- The lock state at sleep (SleepLockNotice) ----
+    // Whether the session is locked as the machine goes to sleep, from what a compositor or
+    // logind says — no locker is named. The reader (singletons/lock/SleepLockState.qml)
+    // prints one line per answer it got: "compositor <hyprctl -j locked's JSON on one line>"
+    // (on Hyprland) and "hint <gdbus's answer for the session's LockedHint>".
 
-    // The inhibitors read (parseInhibitors) and this user's uid → { state, names }:
-    // "present" (a locker of this user holds a sleep delay inhibitor; `names` says which),
-    // "possible" (only holders that may lock), "none" (the list was read and holds neither),
-    // "unknown" (no list, no uid: a failed read is never "none"). The shell's own inhibitor
-    // (who "h2s-shell") and other users' (a greeter's, another session's) do not count.
-    // `names`: shown names, sorted, at most 3.
-    function sleepLockers(inhibitors, uid) {
-        if (!Array.isArray(inhibitors) || typeof uid !== "number" || !Number.isInteger(uid) || uid < 0)
-            return { state: "unknown", names: [] };
-        const present = new Set();
-        const possible = new Set();
-        for (const inhibitor of inhibitors) {
-            if (inhibitor?.uid !== uid || inhibitor.mode !== "delay" || typeof inhibitor.what !== "string"
-                    || !inhibitor.what.split(":").includes("sleep"))
-                continue;
-            const who = lockerName(inhibitor.who);
-            const key = who.toLowerCase();
-            if (key === "h2s-shell")
-                continue;
-            const why = typeof inhibitor.why === "string" ? inhibitor.why : "";
-            if (possibleSleepLockerNames.includes(key))
-                possible.add(who);
-            else if (sleepLockerNames.includes(key) || (/\block/i.test(why) && /\b(screen|session)\b/i.test(why)))
-                present.add(who || "another program");
+    // The reader's output → "locked" | "unlocked" | "unknown". The compositor's word comes
+    // first: it holds the lock, whoever asked for it. Without it only logind's LockedHint is
+    // left, which lockers that do not call SetLockedHint never set: true means locked, false
+    // proves nothing (unknown). Anything unreadable is unknown, never unlocked.
+    function sleepLockState(output) {
+        const lines = typeof output === "string" && output.length <= 100000 ? output.split("\n") : [];
+        let hint = "unknown";
+        for (const line of lines) {
+            if (line.startsWith("compositor ")) {
+                let answer = null;
+                try {
+                    answer = JSON.parse(line.slice("compositor ".length));
+                } catch (error) {
+                    answer = null;
+                }
+                if (answer !== null && typeof answer === "object" && typeof answer.locked === "boolean")
+                    return answer.locked ? "locked" : "unlocked";
+            } else if (line.startsWith("hint ")) {
+                if (/^\(<true>,\)$/.test(line.slice("hint ".length).trim()))
+                    hint = "locked";
+            }
         }
-        const names = set => Array.from(set).sort().slice(0, 3);
-        if (present.size > 0)
-            return { state: "present", names: names(present) };
-        if (possible.size > 0)
-            return { state: "possible", names: names(possible) };
-        return { state: "none", names: [] };
+        return hint;
     }
 
-    // The reader's whole output — `id -u`'s line, then gdbus's answer — → sleepLockers()
-    function sleepLockersFromOutput(output) {
-        const text = typeof output === "string" ? output : "";
-        const newline = text.indexOf("\n");
-        const first = (newline < 0 ? text : text.slice(0, newline)).trim();
-        const uid = /^[0-9]{1,10}$/.test(first) ? Number(first) : null;
-        return sleepLockers(newline < 0 ? null : parseInhibitors(text.slice(newline + 1)), uid);
+    // The outcome of one look: the shell's own lock confirmed by the compositor is locked
+    // whatever was read; otherwise what was read (sleepLockState), or unknown without a read
+    function sleepLookOutcome(ownLocked, read) {
+        if (ownLocked === true)
+            return "locked";
+        return read === "locked" || read === "unlocked" ? read : "unknown";
     }
 
-    // An array, or an array-like (a list that came through a QML signal), as an array
-    function _list(value) {
-        return Array.isArray(value) ? value : value && typeof value === "object" && typeof value.length === "number" ? Array.from(value) : [];
-    }
-
-    // How an outcome reads in the log, e.g. "present: swayidle" (logged when it changes)
-    function sleepLockersText(lockers) {
-        const state = ["present", "possible", "none"].includes(lockers?.state) ? lockers.state : "unknown";
-        const names = _list(lockers?.names);
-        return names.length > 0 ? state + ": " + names.join(", ") : state;
-    }
-
-    // What the user is told, given the lockers read and the setting (true / false), → null or
-    // { key, summary, body }: two lockers race when the setting is on and another locks; the
-    // screen stays unlocked through sleep when it is off and nothing locks it. A possible
-    // locker or an unknown read says nothing.
-    function sleepLockNotice(lockers, lockOnSleep) {
-        const names = _list(lockers?.names).map(lockerName).filter(name => name !== "");
-        if (lockers?.state === "present" && lockOnSleep === true && names.length > 0) {
-            return {
-                key: "both:" + names.join(","),
-                summary: "Two programs lock the screen before sleep",
-                body: "This shell locks it, and " + names.join(", ") + (names.length === 1 ? " does" : " do")
-                    + " too. One lock is enough."
-            };
+    // The sleep notice's remembered state as Config keeps it (JSON text; "" for none) →
+    // the object for SleepNoticeRules.restore, or null when it is not one (an older
+    // version's text, a broken file): restore makes that quiet
+    function sleepNoticeSaved(text) {
+        if (typeof text !== "string" || text === "" || text.length > 1000)
+            return null;
+        try {
+            const value = JSON.parse(text);
+            return value !== null && typeof value === "object" && !Array.isArray(value) ? value : null;
+        } catch (error) {
+            return null;
         }
-        if (lockers?.state === "none" && lockOnSleep === false) {
-            return {
-                key: "none",
-                summary: "The screen stays unlocked during sleep",
-                body: "Nothing locks it before the computer sleeps. Turn on \"Lock before the computer sleeps\" in Settings → Lockscreen."
-            };
-        }
-        return null;
-    }
-
-    // One decision after a read (`fromRead` true) or a change of the setting or of the lock:
-    // `memory` is { key: the notice last given ("" for none; kept in the config, so a notice
-    // is given once, not at every start), quiet: reads in a row with nothing to say }. →
-    // { notice (null, or sleepLockNotice's to give now), memory (to keep) }. An unknown read
-    // changes nothing but the count; a different notice is given at once; the key is forgotten
-    // only after two reads in a row with nothing to say — so the same problem coming back
-    // later is told again, but not after one read that blinked.
-    function sleepNoticeStep(memory, lockers, lockOnSleep, fromRead) {
-        const key = typeof memory?.key === "string" ? memory.key : "";
-        const quiet = Number.isInteger(memory?.quiet) && memory.quiet > 0 ? memory.quiet : 0;
-        if (!["present", "possible", "none"].includes(lockers?.state))
-            return { notice: null, memory: { key: key, quiet: fromRead === true ? 0 : quiet } };
-        const notice = sleepLockNotice(lockers, lockOnSleep);
-        if (notice === null) {
-            const count = fromRead === true ? quiet + 1 : quiet;
-            return { notice: null, memory: count >= 2 ? { key: "", quiet: count } : { key: key, quiet: count } };
-        }
-        if (notice.key === key)
-            return { notice: null, memory: { key: key, quiet: 0 } };
-        return { notice: notice, memory: { key: notice.key, quiet: 0 } };
     }
 }

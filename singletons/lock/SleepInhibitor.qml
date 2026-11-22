@@ -26,6 +26,8 @@ Scope {
     signal logLine(string level, string message)
 
     property bool wanted: false
+    // What logind lists as its reason (`systemd-inhibit --list`)
+    property string why: "Lock the screen before sleep"
     // Where `systemd-inhibit` is taken from: "" for PATH (see the header)
     property string toolDirectory: ""
     // Whether a systemd-inhibit process is running (held, or being released)
@@ -84,11 +86,11 @@ Scope {
         stdinEnabled: true
         command: ["sh", "-c",
             "exec 3<&0\n"
-            + "\"$0\" --what=sleep --mode=delay --who=h2s-shell '--why=Lock the screen before sleep' "
+            + "\"$0\" --what=sleep --mode=delay --who=h2s-shell \"--why=$2\" "
             + "sh -c \"read -r release || sleep $1\" <&3 3<&- &\n"
             + "wait $!",
             root.toolDirectory !== "" ? root.toolDirectory + "/systemd-inhibit" : "systemd-inhibit",
-            String(root.graceSeconds)]
+            String(root.graceSeconds), root.why]
 
         onRunningChanged: {
             if (running) {
