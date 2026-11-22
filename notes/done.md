@@ -2606,3 +2606,44 @@ full set on both machines before the merge (`plans/modules-management.md` §9).
   `PRIVILEGED_EXIT_MARK`); `tests/soak.sh <suite | module dir> <n>` runs a suite n times under
   busy loops. Every touched suite 20/20 under load. Left: the window suites' short fixed waits
   before checks (none failed under the soak).
+
+## The night's slices (2026-11-22)
+
+On `segment-night7`; each slice reviewed, its tests as the workflow says.
+
+- **Idle I11 — the sleep notice by outcome**: at PrepareForSleep, under a short delay
+  inhibitor of its own, the shell looks whether the session is locked (its own lock, else
+  `hyprctl -j locked`, else logind's LockedHint; `SleepNoticeRules.look`); unlocked at the
+  deadline → a critical notification once after the resume. `SleepLockers` and the program
+  lists removed; lock bed `sleep-notice`.
+- **PAM 4 — `PamEditRules`**: rows → the Arch block and our polkit-1 text (the counted
+  pattern, the closing line, raw lines), text → rows, changes by hand and vendor changes,
+  `adopt`, `build`, `nixosSnippet`; round-trip cases. Two review rounds.
+- **Idle I10b — the ScreenSaver service**: `h2s-helper screensaver` owns
+  `org.freedesktop.ScreenSaver` (both paths, cookies per caller, dropped when it leaves the
+  bus; never replacing another owner); `ScreenSaverClient` feeds holders, activity and
+  `SetActive` to `IdleRules`; `SetActive(true)` never while locked; tested on a private
+  dbus-daemon (`tests/helper/screensaver.sh`) and against the real helper (`tests-helper.qml`).
+- **Idle I12 — a foreign lock seen**: on Hyprland every lock reads `hyprctl -j locked` before
+  asking the compositor; another program's lock counts as locked (no idle lock, `lockscreen
+  status` says foreign-locked), read again with a backoff until it ends; a hung read answers
+  "unknown" at 2.5 s. Lock bed `foreign-lock`, `foreign-lock-hang`.
+- **Idle I14 — the wlopm backend**: `ScreenPower` takes Hyprland's dispatch, else `wlopm`
+  (found by its first reading), else none (`canPowerOff` false with the page's reason);
+  connectors only from the action's own reading, never `*`; stand-in `wlopm` suite.
+- **Tests T6 — the unit flakes, `soak.sh`**: details above ("The night 2026-11-21/22"); a
+  follow-up timed `ModulesTest`'s guard window from the host's own timer on a monotonic clock
+  (NixOS measured 275 ms of 300).
+- **Idle I13 — hypridle and the shell**: FEATURES says which side does which job and how to
+  keep or leave hypridle (NixOS, Arch); the helper asks for the ScreenSaver name only while a
+  stage of the shell's idle is on (protocol 3), so hypridle can own it otherwise; a draft
+  Quickshell feature request for output power (`notes/upstream/`).
+- **Tests T10 — `tests/mutate.sh`**: mutation testing in scratch copies (killed, survived, not
+  compiled, not run), its self-test in `--quick`; run on `LockRules`, `PamRuleRules` and
+  `IdleRules`, each non-equivalent survivor given a check; the equivalent ones noted
+  (`cleanup.md`, IdleRules' `lockedThisPeriod`).
+- **Tests T11 — the docs**: CLAUDE.md's test rules (§6 of the plan), "Running",
+  `workflow.md` "Tests" and ARCHITECTURE "Testing" say what the runners do now, with measured
+  times. The test hygiene plan (T0–T11) is finished; left of it: a crashed shard is not rerun
+  without the suite that threw, no FLAKY rerun per unit shard, and the window suites' short
+  fixed waits before checks.

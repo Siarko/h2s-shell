@@ -466,38 +466,38 @@ Settings → System → Authentication, below the polkit agent's rows, a section
 
 Pure pieces first (no UI, no root), each with its tests; then the I/O; then the views behind
 the agreed mockup.
-1. **Reading stacks** (`PamStackRules`, pure): parse a service with `include`/`substack`/
+1. **Reading stacks** *(done)* (`PamStackRules`, pure): parse a service with `include`/`substack`/
    `@include` followed across an ordered directory list (`/etc/pam.d`, then `/usr/lib/pam.d`;
    NixOS the first only) → the `auth` lines in order, our block and its hash, faillock present;
    `faillock.conf` parsed. `PolkitRules.pamStackOrder` becomes a call of it. Unit cases with
    Arch, NixOS and Debian-style fixtures.
-2. **`PamStacks`** (singleton, read-only): reads polkit-1, sudo, the lock's configs and
+2. **`PamStacks`** *(done)* (singleton, read-only): reads polkit-1, sudo, the lock's configs and
    faillock.conf from both directories (seamed: `seam_vendor_pam_dir` next to
    `seam_system_pam_dir`), plus the facts (NixOS; fingerprint/key ready from the methods
    script's answers). Fixes the empty polkit hint on Arch. Suite on stand-in directories.
-3. **Rules and checks** (`PamRuleRules`, pure): the row model, the control words and their
+3. **Rules and checks** *(done)* (`PamRuleRules`, pure): the row model, the control words and their
    explanations, the methods' details and ranges, `check(rows, facts)` with every R and W
    code (§2.5), raw-line checks (§2.9) included, as a case.
-4. **Text** (`PamEditRules`, pure): rows → the Arch block / our polkit-1 (the `-auth` rule,
+4. **Text** *(done)* (`PamEditRules`, pure): rows → the Arch block / our polkit-1 (the `-auth` rule,
    the counted pattern, the closing lines, raw lines), text → rows, changed-by-hand
    detection, `adopt` (§2.9), round trips; `nixosSnippet(rows, split)`. Unit cases.
-5. **NixOS options** `programs.h2s-shell.pam.{rules,sudo.rules,polkit.rules}` with the
+5. **NixOS options** *(next: first the open point on raw store paths, §2.9)* `programs.h2s-shell.pam.{rules,sudo.rules,polkit.rules}` with the
    translation, conflicts and assertions of §2.7; `polkit.passwordFirst` deprecated. A test
    checks the module's text, and `tests/system/nixos` evaluates it for a case set and compares
    the generated auth lines with `PamEditRules`' for the same rows.
-6. **Trial** (Arch): staging builder + a `PamContext` adapter as in `PamMethod.qml`; suite
+6. **Trial** *(open)* (Arch): staging builder + a `PamContext` adapter as in `PamMethod.qml`; suite
    against lock-bed-style `pam_exec` stacks, the closing lines and the counted pattern
    included (a stand-in counter for pam_faillock).
-7. **Apply / Undo** (Arch): the fixed root command through PrivilegedRuns, one service per run,
+7. **Apply / Undo** *(open)* (Arch): the fixed root command through PrivilegedRuns, one service per run,
    its reply read by `PamEditRules.applyReply`; suite with the stand-in pkexec on a temp dir.
-8. **The Settings modal**: the modules plan's slice (V1); whichever plan reaches it first
+8. **The Settings modal** *(done: the modules plan's V1)*: the modules plan's slice (V1); whichever plan reaches it first
    builds it, the other uses it.
-9. **The rule list element**: rows of pills with the handle, the opened row, the fixed last
+9. **The rule list element** *(open: waits for the mockup's approval)*: rows of pills with the handle, the opened row, the fixed last
    row, the add list (the drag and add patterns of `ReorderList`, keyed by row id); a suite
    with clicks.
-10. **The page**, behind the mockup; then docs (FEATURES, ARCHITECTURE "Authentication"),
+10. **The page** *(open: waits for the mockup's approval)*, behind the mockup; then docs (FEATURES, ARCHITECTURE "Authentication"),
     README "Lock screen", CHANGELOG (Unreleased; new module options are a minor).
-11. **Lock-screen switches** (§2.8): `SettingsSchema` keys, the `LockRules` filter with
+11. **Lock-screen switches** *(open)* (§2.8): `SettingsSchema` keys, the `LockRules` filter with
     cases, the Lockscreen page's block.
 
 ## 7. Decided

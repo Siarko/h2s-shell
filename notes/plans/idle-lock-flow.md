@@ -687,52 +687,52 @@ Each with its test; stand-ins only — no real logind, D-Bus service, polkit or 
 session. "The lock bed" is `tests/lock/run.sh`: its own invisible Hyprland with headless
 outputs, stand-in `gdbus` / `systemd-inhibit`, never the session's compositor.
 
-1. **Idle rules (I1)** — `IdleRules` with §8's cases; `tests/IdleRulesTest.qml`. No wiring.
-2. **Idle rules and wiring (I2)** — `Idle` replaces `Lockscreen`'s idle part; the two fixed
+1. **Idle rules (I1)** *(done)* — `IdleRules` with §8's cases; `tests/IdleRulesTest.qml`. No wiring.
+2. **Idle rules and wiring (I2)** *(done)* — `Idle` replaces `Lockscreen`'s idle part; the two fixed
    IdleMonitors; `lockAfter` from the last input (migration check); the commands follow idle
    periods as today. Tests: `IdleRulesTest`; lock bed `idle.sh`, `idle-lock.sh` updated, new
    `idle-profile.sh` (a profile switch mid-idle keeps the screensaver, no end command), and a
    resume case in `logind.sh` (stand-in `PrepareForSleep(false)`: the screensaver ends).
-3. **Screensaver takes the keyboard (I3)** — Exclusive focus while shown. Lock bed
+3. **Screensaver takes the keyboard (I3)** *(done)* — Exclusive focus while shown. Lock bed
    `key-wake.sh` extended: a key at the screensaver reaches no window (the bed's test client
    records nothing).
-4. **Lock reported to logind (I4)** — `reportLockedHint`. `LockRulesTest` cases; lock bed
+4. **Lock reported to logind (I4)** *(done)* — `reportLockedHint`. `LockRulesTest` cases; lock bed
    `logind.sh`: the stand-in `gdbus` records `SetLockedHint true` / `false`.
-5. **Monitors and their power (I5)** — `MonitorRules` (identity, built-in, twins),
+5. **Monitors and their power (I5)** *(done)* — `MonitorRules` (identity, built-in, twins),
    `ScreenPower` on `hyprctl`. `tests/MonitorRulesTest.qml`; a reading suite running
    `ScreenPower` against a stand-in `hyprctl` (monitors JSON in, dispatches recorded, a failed
    read = unknown).
-6. **Screen-off (I6)** — `screenOff*`, `lockedScreenOffTimeout`, `blanking` (default way);
+6. **Screen-off (I6)** *(done)* — `screenOff*`, `lockedScreenOffTimeout`, `blanking` (default way);
    actions wired to `ScreenPower`; power on at wake and resume; the lock surface's black
    fallback. Tests: `IdleRulesTest`; lock bed `screen-off.sh`: the bed's own headless outputs'
    `dpmsStatus` goes false and back true at input (its private Hyprland; the session's monitors
    are never touched).
-7. **Per-monitor ways (I7)** — `perMonitor`, `monitorBlanking` and its editor; per-monitor
+7. **Per-monitor ways (I7)** *(done)* — `perMonitor`, `monitorBlanking` and its editor; per-monitor
    surfaces. `IdleRulesTest` cases; lock bed `outputs.sh` extended (two headless outputs, one
    `off`, one `screensaver`).
-8. **The two pages (I8)** — Screensaver and Lock screen pages per the mockup, the timeline
+8. **The two pages (I8)** *(open: waits for the owner's look at the mockup)* — Screensaver and Lock screen pages per the mockup, the timeline
    element. With them come I7's editor rows: the "Set per monitor" switch
    (`lockscreen.perMonitor`) and the per-monitor cards (`lockscreen.monitorBlanking`,
    written through `IdleRules.withMonitorWay`), which I7 declared and wired without a view;
    until then the IPC `idle setMonitorWay <id> <way>` sets them. `SettingsPagesTest`; the mockup re-run on the real code for the owner.
-9. **logind idle inhibitors (I9)** — `ListInhibitors` read and parsed (`LockParseRules`).
+9. **logind idle inhibitors (I9)** *(done)* — `ListInhibitors` read and parsed (`LockParseRules`).
    Parse cases; a reading suite on a stand-in `gdbus`.
-10. **The helper and its build (I10a)** — §18: the source tree, `scripts/build-helper.sh`,
+10. **The helper and its build (I10a)** *(done)* — §18: the source tree, `scripts/build-helper.sh`,
     the NixOS package and `install.sh` building it, `launch.sh` finding it (and §6b),
     `CLAUDE.md` and the docs. Tests: `tests/run-helper.sh` builds it and runs a `--version`
     check; `tests/install-test.sh` sees the build step; the package builds on NixOS.
-11. **Screensaver interface (I10b)** — the `screensaver` service, `Idle`'s holder list,
+11. **Screensaver interface (I10b)** *(done)* — the `screensaver` service, `Idle`'s holder list,
     `ActiveChanged`, the name-taken line. Tests: `tests/run-helper.sh` on a private bus (§18);
     a reading suite running the shell's side against the real helper on that bus.
-12. **Sleep notice by outcome (I11)** — §14; `SleepLockers` and the name lists removed.
+12. **Sleep notice by outcome (I11)** *(done)* — §14; `SleepLockers` and the name lists removed.
     `SleepNoticeRulesTest` (the cycle), `LockIoRulesTest` cases; lock bed `logind.sh`: stand-in `PrepareForSleep` with the shell
     unlocked → the notice after resume; locked → none; the inhibitor released within 1 s.
-13. **Foreign lock seen (I12)** — `hyprctl -j locked` at a refusal and at deadlines. Lock bed:
+13. **Foreign lock seen (I12)** *(done)* — `hyprctl -j locked` at a refusal and at deadlines. Lock bed:
     a second locker client in the bed's Hyprland; the shell neither tries the idle lock nor
     says "unlocked".
-14. **hypridle retired (I13)** — docs (§15), both systems; a draft feature request in
+14. **hypridle retired (I13)** *(done)* — docs (§15), both systems; a draft feature request in
     `notes/upstream/` for an output-power type in Quickshell.
-15. **The wlopm backend (I14)** — `ScreenPower` on `wlopm` (§9). A reading suite on a stand-in
+15. **The wlopm backend (I14)** *(done)* — `ScreenPower` on `wlopm` (§9). A reading suite on a stand-in
     `wlopm` (JSON in, `--off`/`--on` recorded); `canPowerOff` false with neither program.
 
 Order: 1–4 first (they help the desktop PC today: the screensaver ↔ lock flow, the keyboard),

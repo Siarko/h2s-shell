@@ -465,7 +465,9 @@ Each is one change with its test; "check" is what proves it.
   stand-in ssh; one real run on the NixOS machine whose summary matches the one made there
   by hand.
 - **T10 — `tests/mutate.sh`** (§6). Check: run on `LockRules.qml` and two other Rules
-  files; surviving mutants listed in the slice's report and given checks or reasons.
+  files; surviving mutants listed in the slice's report and given checks or reasons. Done
+  2026-11-22: run on `LockRules`, `PamRuleRules` and `IdleRules`; every non-equivalent survivor
+  has a check.
 - **T11 — docs and rules**: CLAUDE.md "Running" and "Development rules" (§6),
   `notes/workflow.md` "Tests", `docs/ARCHITECTURE.md` "Testing" (the asynchronous suites,
   shards, `affected.sh`, the remote run), the runners' headers' times. Check:

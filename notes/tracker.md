@@ -7,40 +7,23 @@ go to [done.md](done.md) in full. Plans are in [plans/](plans/); how sessions wo
 
 ## Now
 
-**The owner's answers of 2026-11-21 are in.** The modules management, PAM, documentation and
-architecture clean-up plans are decided and approved (each plan's "Decided" section, the short
-form in [decisions.md](decisions.md)); implementation follows in steps 8 and 11 (and 12, 7).
-The overnight run's work (done.md, "The overnight run") is on `master`. The idle and lock flow
-plan ([plans/idle-lock-flow.md](plans/idle-lock-flow.md)) is decided too (option C: the shell
-owns idle, screensaver, lock and per-monitor screen-off; a C++/Qt helper for the D-Bus
-ScreenSaver service); its one new question is under "Open points". Open with the owner: the
-password prompt on NixOS. Next (the owner, 2026-11-21): step 8 (Modules closed for now) from
-its plan; done so far: the rules (M1, M1b, M1d), the Settings modal (V1), the privileged
-declaration (M1c, API 1.36), the host (M2) — next the packaging of built-in modules (M2b) and
-the installer (M3); after it the owner chooses what follows (the idle
-plan and PAM are ready).
+Next, in this order (the plans: [plans/idle-lock-flow.md](plans/idle-lock-flow.md) §17,
+[plans/pam-config.md](plans/pam-config.md) §6):
 
-**The night 2026-11-21/22 (done, details in done.md):** step 8 (Modules closed for now) is
-finished and deployed on both machines; the test hygiene plan's T0–T5, T7, T9 done (the full set
-~2.5 min on Arch, `--quick` ~26 s, `tests/affected.sh` picks a change's tests); the password
-prompt's layout, `SettingsRow`, Taildrop's "N files" side panel and preferences as settings,
-the supervisor's exit status across a SIGHUP; the idle plan's slices I1–I6 and I9 (the shell's
-own screen-off — off by default, the lock screen's after 1 min). For the owner: the remembered
-authorization plan's 5 questions (`plans/polkit-remembered.md`), the idle settings mockup to
-look at before the pages (I8), the release (core minor, module 0.7.0). Open next: idle I7
-(per-monitor ways), I8 (pages — after the owner's look), I10–I14; PAM slices 1… (1 in review);
-test hygiene T8, T10, T11.
+1. **Idle: the Screensaver and Lock screen pages (I8)**, with the per-monitor editor rows —
+   waits for the owner's look at the idle settings mockup
+   (`~/src/h2s-mockups/idle-settings-planned/`).
+2. **PAM: the NixOS options (slice 5)**, `programs.h2s-shell.pam.*` — first the open point on
+   raw store paths (below).
+3. **PAM: the trial (slice 6)**, Arch.
+4. **PAM: Apply and Undo (slice 7)**, Arch.
+5. **PAM: the lock-screen switches (slice 11)**. The rule list and the page (slices 9–10) wait
+   for the owner's approval of the mockup.
+6. **The remembered administrator authorization**
+   ([plans/polkit-remembered.md](plans/polkit-remembered.md)): the plan waits on the owner's 5
+   questions.
 
-State on 2026-11-21: notifications with a progress bar, Taildrop's list of transfers,
-Taildrop's views reworked (side panel, status pills, the bar wave, Taildrop off, "Save in…")
-and the notification flow (three toast queues, moving and pinning, the HUD clear of the bar)
-are done and on `master` (core) and `main` (module `h2s-shell-tailscale` 0.6.0), not released.
-The Arch machine runs them; the NixOS machine was found on 2026-11-21 still running the shell
-of 2026-11-17 (deploys there had stopped) — the deploy check is to compare both machines.
-Development is on the Arch machine; runs that need `nix` go over SSH to the NixOS machine.
-
-Next, per the owner: the order of work below from step 0 up to and including step 8
-("Modules closed for now"), then the release (core minor, module 0.7.0). One topic at a time.
+For the owner: the idle settings mockup, the 5 questions, the release (below).
 
 The codes in brackets (C1, U2, M3, N2, D7 …) are lookup keys into the plans' slice tables
 ([plans/api-next.md](plans/api-next.md) §7, [plans/taildrop-ui.md](plans/taildrop-ui.md),
@@ -59,8 +42,7 @@ plans named in done.md).
 
 - [ ] Taildrop on a real tailnet: the owner has used it for a while and it works; a failure
       and a stall are hard to see because files go at once.
-- [ ] Releases (the owner, 2026-11-21): not yet — first the order of work up to and including
-      step 8, then the release (core minor, module 0.7.0).
+- [ ] The release (the owner, 2026-11-21: after step 8): core minor, module 0.7.0.
 
 ## Open points
 
@@ -174,8 +156,11 @@ Known risks and leftovers, one line each; the detail is in [done.md](done.md).
   says so (not within 3 s)" and the lock bed's `supervisor`; `FileChooserTest` timed out (90 s).
 - `TaildropLiveTest`: "two-devices: both sent" and "page-devices: both sent" time out under
   load; one unnamed check failed once during D7.
-- `AnchorsTest`: the General page's -28-wide rows are fixed (it waits for layout); an earlier
-  failure on a section's parts' order (U7a) may be another wait that measures too early.
+- `AnchorsTest`: a failure on a section's parts' order (U7a) may be a wait that measures too
+  early.
+- Unit runs: a crashed shard is not rerun without the suite that threw, there is no FLAKY
+  rerun per shard, and the window suites keep short fixed waits before checks (none failed
+  under `tests/soak.sh`).
 - Lock bed: `restart-kill-locked` once on NixOS (keep `LOCKTEST_KEEP=1` artifacts); `harness`
   "the shell's environment can be read" once on NixOS (2026-11-20); `fallback` once (the PAM
   stand-in never answered); `modules-discovery` once saw the supervisor silent 44 s under load;
@@ -186,34 +171,15 @@ Known risks and leftovers, one line each; the detail is in [done.md](done.md).
 
 ## Order of work
 
-Steps 3, 4, 5, 6 and 10 are done (done.md); the API plan's closing slice (Z) is above.
+The API plan's closing slice (Z) is above.
 
-0. Workflow:
-1. Planning, no code:
-   - PAM configuration from the shell: [plans/pam-config.md](plans/pam-config.md), decided
-     and approved 2026-11-21 (§7); implementation is step 11
-   - Installing, updating and removing modules, Settings → Modules, the trust text, the
-     safe-mode banner: [plans/modules-management.md](plans/modules-management.md), decided and
-     approved 2026-11-21 (§10), mockup `~/src/h2s-mockups/modules-settings-planned/`;
-     implementation is step 8
-   - [plans/documentation.md](plans/documentation.md) (§8) and
-     [plans/architecture-cleanup.md](plans/architecture-cleanup.md) (§5): decided and approved
-     2026-11-21; implementation in steps 12 and 7
-   - Idle, screensaver, lock and screen-off: [plans/idle-lock-flow.md](plans/idle-lock-flow.md),
-     decided and approved 2026-11-21 (mockup `~/src/h2s-mockups/idle-settings-planned/`);
-     when it is built is the owner's choice after step 8
-2. Before the release (cut after step 8, the owner 2026-11-21):
+2. Before the release:
    - [ ] cut a minor release (today 2.0.0), the module's 0.7.0 with it
 7. Architecture clean-up per [plans/architecture-cleanup.md](plans/architecture-cleanup.md)
    (splits, hubs, test hooks, the module's read/clock performance, the network editor's
-   save that can lose the kill-switch choice), alongside other steps where slices do not
-   collide — open
-8. Modules closed for now (a state of today, ended by step 15) — open: the trust model
-   written down honestly (no isolation; review covers the project's own modules; for others
-   the prompt's text is the only protection); Settings → Modules (enable, disable, reload,
-   install, update, remove from a repository); the safe-mode banner
-9. Lock — done (done.md, 2026-11-22); the lock clean-up (architecture group D) follows
-11. PAM configuration from the shell — open
+   save that can lose the kill-switch choice, the lock clean-up of group D), alongside other
+   steps where slices do not collide — open
+11. PAM configuration from the shell — open (the slices under "Now")
 12. Documentation per [plans/documentation.md](plans/documentation.md); architecture and API
     chapters — open
 13. Ready for outside authors — open: the author guide and API reference in `docs/`; a
@@ -230,7 +196,7 @@ Steps 3, 4, 5, 6 and 10 are done (done.md); the API plan's closing slice (Z) is 
 
 What the API work must leave possible for 13–15: [plans/api-next/versioning.md](plans/api-next/versioning.md) §11.
 
-After step 8 (the owner, 2026-11-21):
+Open since step 8 was finished (the owner, 2026-11-21: "after step 8"):
 - Rework the development environment: a workspace outside the repository for the sessions'
   notes and other documents that should not live in it (today's `notes/`: tracker, decisions,
   plans, reviews, upstream drafts); the repository keeps code, tests and `docs/`. Plan it with
@@ -258,11 +224,6 @@ Later:
   things, both by module id until then).
 - Modules' own elements published (public styles a theme can set, so libraries of elements
   can exist; building one's own for oneself is allowed now).
-- A remembered polkit authorization (the owner, 2026-11-21): asked once, then quiet for a few
-  minutes, as sudo does; exit-node switching prompts most, and other places want it too. Being
-  Tailscale's operator stays the user's choice. Needs analysis (which actions prompt, polkit's
-  `auth_admin_keep` or temporary authorizations, their scope and safety, NixOS and Arch) and a
-  plan.
 - Disk-space management for the shell's files (module configuration backups, PAM backups …),
   with a list of every place the shell writes files (the owner, 2026-11-21).
 - A login manager of the project's own (the owner, 2026-11-21): analysis and options first.
@@ -287,17 +248,7 @@ before planning or briefing. New decisions are added there, not here.
       against the Repeater-crash rule
 
 Defects and risks:
-- [ ] The public `SettingsRow`: a long value cuts its label (Settings → Tailscale, "Save to"
-      with a long path); the label keeps its full width and the value elides (at most 220 px).
-      `ExpandingRow` has no user on screen yet: show it in the next mockup that needs one
-- [ ] The password prompt's layout (owner 2026-11-21, decisions.md "Privileged runs"): the
-      identity as the first row, "As user" / the name, normal size, above Module; for a
-      module's prompt polkit's own message (which repeats the whole command with the shell's
-      `timeout` wrapper) and the action id (`org.freedesktop.policykit.exec`) move under the
-      collapsed "Command". Prompts not from a module unchanged
-- [ ] The Tailscale popup: a device row with several chosen files shows only "N files" (the
-      names only in Send's tooltip); a click on "N files" is to open Taildrop's side panel
-      (left of the popup), whose list already shows each file with "×" (module)
+- [ ] `ExpandingRow` has no user on screen yet: show it in the next mockup that needs one
 - [ ] `panels/Popup.qml` `contentLoader.onLoaded` sets `availableHeight` / `popupAnimating`
       on a panel unguarded: a readonly one throws and skips the rest (core and module panels)
 - [ ] `singletons/network/VpnLockdown.qml` without the installed script: a network coming up
