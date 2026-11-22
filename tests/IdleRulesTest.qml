@@ -84,6 +84,76 @@ TestCase {
         _powerReadBack();
         _lockAttended();
         _restore();
+        _edges();
+    }
+
+    // What tests/mutate.sh found no check for
+    function _edges() {
+        const rules = IdleRules;
+        for (const unset of [null, ""])
+            assertEqual(rules.config({ screensaverEnabled: true, screensaverTimeout: unset }, [], false).saverAfter, 300,
+                        "a time not set (" + JSON.stringify(unset) + "): the default");
+        assertEqual(rules.config({ monitorBlanking: { oled: "off" } }, ["oled"], true).ways.oled, "screensaver",
+                    "overrides only with Set per monitor on, which is off unless set");
+        const quick = _machine({ screensaverEnabled: true, screensaverTimeout: 1, screenOffEnabled: true, screenOffTimeout: 2 }, ["oled"], true);
+        quick.idle(500, 0);
+        assertEqual(quick.next(), 1000, "a time of one second: due after it");
+        assertEqual([900, 1000, 2000].map(ms => rules.stage(quick.state, quick.config, ms)).join(" "), "0 1 2",
+                    "times of one and two seconds: the screensaver at 1 s, the screens off at 2 s");
+        const offQuick = _machine({ screenOffEnabled: true, screenOffTimeout: 1 }, ["oled"], true).idle(500, 0);
+        assert(offQuick.next() === 1000 && rules.stage(offQuick.state, offQuick.config, 1000) === 2, "screens off after one second");
+        offQuick.deadline().at(1500, { type: "busInhibitors", count: 1 });
+        assertEqual(rules.stage(offQuick.state, offQuick.config, 2000), 2, "… an inhibitor then holds them off");
+        offQuick.at(2500, { type: "sleep" });
+        assertEqual(rules.stage(offQuick.state, offQuick.config, 3000), 2, "… going to sleep keeps the stage reached");
+        assertEqual(rules.powerRetryDelay(0), 0, "no power action asked yet: no pause");
+        const junk = _machine(saver, ["lcd"], false).at(20000, { type: "inputIdle", idle: true, since: "junk" });
+        assertEqual(junk.state.idleSince, 20000 - IdleRules.baseTime, "an idle event with a time not understood: idle for the base time");
+        const first = _machine({ screensaverEnabled: true, screensaverTimeout: 700, lockscreenEnabled: true, lockAfter: 600 }, ["lcd"], false)
+            .at(700000, { type: "force" });
+        assert(first.actions.split(",").includes("lock"), "the first step: a lock already due is asked, no switch to count from: " + first.actions);
+        const dueAlready = _machine({ lockscreenEnabled: true, lockAfter: 60 }, ["lcd"], true).idle(5000, 0);
+        dueAlready.reconfigure(60000, { lockscreenEnabled: true, lockAfter: 30 });
+        assertEqual(dueAlready.actions, "lock", "Lock after shortened just as the lock fell due: it is asked, not put off");
+        const full = {};
+        for (let i = 0; i < IdleRules.maxMonitorWays; i++)
+            full["Make|Model|S" + i] = "off";
+        assertEqual(rules.withMonitorWay(full, "Make|Model|New", "off"), null, "a new monitor's way beyond the most kept: refused");
+        delete full["Make|Model|S0"];
+        assert(rules.withMonitorWay(full, "Make|Model|New", "off") !== null, "… one fewer: taken");
+        const lockQuick = _machine({ lockscreenEnabled: true, lockAfter: 1 }, ["lcd"], true).idle(500, 0);
+        assertEqual(lockQuick.next(), 1000, "Lock after one second: due after it");
+        const lockedQuick = _machine({ lockedScreenOffTimeout: 1 }, ["lcd"], true).at(100, { type: "locked" }).idle(500, 100);
+        assert(lockedQuick.next() === 1100 && rules.lockedDark(lockedQuick.state, lockedQuick.config, 1100),
+               "the lock screen's screen-off after one second: due, and dark, after it");
+        const lockedNever = _machine({ lockedScreenOffTimeout: 0 }, ["lcd"], true).at(100, { type: "locked" }).idle(500, 100);
+        assert(!rules.lockedDark(lockedNever.state, lockedNever.config, 1000000) && lockedNever.next() === -1,
+               "the lock screen's screen-off at 0: never");
+        const commands = _machine(saver, ["lcd"], false).idle(5000, 0).deadline().input(400000);
+        assertEqual(commands.actions, "hideSaver:lcd,endCommand,active:false", "(input: the command ended)");
+        commands.idle(405000, 400000).input(410000);
+        assertEqual(commands.actions, "", "… and not again at the next input");
+        assert(commands.state.inputIdle === false && commands.next() === -1, "input: not idle, nothing due");
+        for (const [held, kept] of [[false, false], [true, true], [undefined, "unknown"], ["yes", "unknown"]])
+            assertEqual(_machine(saver, ["lcd"], false).at(100, { type: "logindIdleBlock", held: held }).state.logindIdleBlock, kept,
+                        "logind's idle block read as " + JSON.stringify(held));
+        const restoring = IdleRules.step(IdleRules.initial(0), { type: "restore", ids: ["oled"] }, rules.config({}, ["oled"], true), 1000);
+        assert(restoring.actions[0].type === "powerOn" && restoring.actions[0].restore === true, "a restore's power-on says it is one");
+        const exact = _machine(saver, ["lcd"], true).idle(5000, 0);
+        exact.reconfigure(60000, _with(saver, { lockscreenEnabled: true, lockAfter: 60 }));
+        assert(exact.actions === "" && exact.next() === 120000, "the lock turned on exactly as long into idle as its time: from the switch");
+        const held = _machine({ screensaverEnabled: true, screensaverTimeout: 1 }, ["lcd"], false);
+        held.idle(500, 0).deadline();
+        assertEqual(held.state.stage, 1, "(the screensaver after 1 s)");
+        held.at(1500, { type: "busInhibitors", count: 1 });
+        assertEqual(rules.stage(held.state, held.config, 2000), 1, "… an inhibitor then holds it there, it stays");
+        assertEqual(rules.lockRetryDelay(0), 0, "no ask yet: no retry pause");
+        const since = _machine(saver, ["lcd"], false).idle(20000, 3000);
+        assertEqual(since.state.idleSince, 3000, "idle since the time the event gives");
+        assertEqual(since.next(), 303000, "… the screensaver counted from it");
+        const none = _machine(saver, ["lcd"], false).idle(5000, 0);
+        none.at(100000, { type: "busInhibitors", count: 0 });
+        assertEqual(none.next(), 300000, "no inhibitor held, none reported: no release, the idle time runs on");
     }
 
     // What the readings say after a power action: done, or asked again with a growing pause

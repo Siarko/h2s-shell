@@ -211,5 +211,64 @@ TestCase {
         assertEqual(rules.rawLine("-auth [success=done default=ignore] pam_ldap.so", {}).reads, "-auth · [success=done default=ignore] · pam_ldap.so",
                     "what a raw line reads as");
         assertEqual(codes([fingerprint("r1"), fixed], arch()).length, 0, "a reader above the system's password: nothing to say");
+
+        // --- edges (tests/mutate.sh) ---
+        assert(!has([fingerprint("r1", "sufficient", { tries: 1 }), fixed], arch(), "R4"), "R4 not: one try");
+        assert(has([fingerprint("r1", "sufficient", { tries: 11 }), fixed], arch(), "R4"), "R4: tries above 10");
+        assert(rules.detailOffered("fingerprint", "timeout", { faillockPresent: false }), "a reader's detail is offered without pam_faillock");
+        assert(!rules.detailOffered("fingerprint", "pin", {}) && !rules.detailOffered("fingerprint", "counted", { faillockPresent: true }),
+               "… a detail the method does not have is not");
+        assertEqual(["0", "30", "60", "90", "3600", "5400", "7200"].map(seconds => rules.duration(seconds)).join(" / "),
+                    "0 s / 30 s / 1 min / 90 s / 1 h / 90 min / 2 h", "durations: whole hours, whole minutes, else seconds");
+        assertEqual(rules.faillockSummary({ deny: 0, failInterval: 900, unlockTime: 600 }), "Counts: off", "faillock off");
+        assertEqual(rules.faillockSummary({ deny: 3, failInterval: 900, unlockTime: 0 }), "Counts: 3 wrong in 15 min lock until reset", "… until reset");
+        assert(!rules.countedHint(null).includes("(") && !rules.countedHint({ deny: 0, failInterval: 60, unlockTime: 0 }).includes("("),
+               "the counting hint without numbers where nothing counts");
+        assert(rules.countedHint({ deny: 1, failInterval: 60, unlockTime: 0 }).includes("(1 wrong in 1 min lock until reset)"), "… with them where it does");
+        assertEqual(rules.nextId([]), "r1", "the first id");
+        assert(!rules.canMove(fixed) && rules.canMove(fingerprint("r1")) && !rules.canEdit(fixed) && rules.canEdit(password("r1")),
+               "only the fixed row cannot be moved or edited");
+        assertEqual(rules.insertRow([fixed], password("r2"), 5).map(item => item.id).join(" "), "r2 system", "a row goes above the fixed row in first place");
+        assertEqual(rules.insertRow(list, password("r2"), 0).map(item => item.id).join(" "), "r2 r1 system", "a row inserted at the top");
+        const three = [fingerprint("r1"), password("r2"), fixed];
+        for (const from of [-1, 3])
+            assertEqual(rules.moveRow(three, from, 0).map(item => item.id).join(" "), "r1 r2 system", "nothing moves from outside the list: " + from);
+        assertEqual(rules.moveRow(three, 1, 0).map(item => item.id).join(" "), "r2 r1 system", "a row moved to the top");
+        assertEqual(rules.removeRow(three, "r1").map(item => item.id).join(" "), "r2 system", "the first row removed, only it");
+        let changed = rules.changeRow(three, "r2", { control: "required" });
+        assert(changed[1].control === "required" && changed[0].control === "sufficient", "the word of the row named changed, only its");
+        changed = rules.changeRow(three, "r1", { details: { timeout: 20 } });
+        assert(changed[0].details.timeout === 20 && changed[0].control === "sufficient", "a detail changed, the word kept");
+        assertEqual(rules.changeRow([raw("r1", "auth sufficient pam_unix.so")], "r1", { control: "required" })[0].control, "", "a raw line takes no word");
+        assert(rules.sameRows([Object.assign(raw("a", "x"), { control: "required" })], [raw("b", "x")]), "a raw line's word does not count");
+        assert(!rules.sameRows([password("a", "sufficient")], [password("b", "required")]), "a row's word does");
+        lists = rules.listsFor({ split: true, sudo: [password("r1")], polkit: [fingerprint("r1")] });
+        assert(lists["sudo"][0].method === "password" && lists["polkit-1"][0].method === "fingerprint", "split: each service its own list");
+        assertEqual(rules.otherService("sudo") + " " + rules.otherService("polkit-1"), "polkit-1 sudo", "the other service");
+        assertEqual(joined.split, false, "joined: not split");
+        const longLine = text => text + " #" + "x".repeat(rules.maxRawLength - text.length - 2);
+        assertEqual(rules.rawLine(longLine("auth sufficient pam_unix.so"), {}).refusal, null, "a raw line of the longest length");
+        assertEqual(rules.rawLine(longLine("auth sufficient pam_unix.so") + "x", {}).reads, "Too long", "… one more character is too long");
+        assertEqual(rules.closingOf([row("r1", "smartcard")], {}), "deny", "an unknown row fails nothing: the deny closing");
+        assert(has([fingerprint("r1"), raw("r2", "auth sufficient pam_unix.so use_first_pass")], arch(), "W10"),
+               "W10: a reader above is no password asked");
+        assert(!has([fixed, raw("r1", "auth required pam_permit.so")], arch(), "R9"), "R9 not: the fixed row present, even first");
+        assert(has([raw("r1", "auth sufficient /home/u/pam_permit.so"), fixed], arch(), "R7")
+               && !has([raw("r1", "auth sufficient /home/u/pam_permit.so"), fixed], arch(), "R9"), "R9 not: a line refused already");
+        assert(!has([raw("r1", "auth sufficient pam_ldap.so"), raw("r2", "auth sufficient pam_krb5.so"), fixed], arch(), "W6"),
+               "W6 not: two lines the checks do not know");
+        for (const unknown of [null, { deny: 0, failInterval: 60, unlockTime: 0 }]) {
+            const text = rules.check([password("r1", "sufficient", true), fingerprint("r2"), fixed], arch({ faillock: unknown }))
+                .warnings.find(warning => warning.code === "W3").text;
+            assertEqual(text, rules.texts.W3, "W3 without numbers: " + JSON.stringify(unknown));
+        }
+        found = rules.check([password("r1", "sufficient", true), fingerprint("r2"), fixed], arch({ faillock: { deny: 1, failInterval: 60, unlockTime: 0 } }))
+            .warnings.find(warning => warning.code === "W3");
+        assertEqual(found.text, "An empty Enter to reach the reader counts as a wrong password (1 lock you out until reset).", "W3: one, until reset");
+        const listWide = [rules.check([], arch()), rules.check([fingerprint("r1")], arch({ fingerprint: "absent", otherService: null })),
+                          rules.check([fingerprint("r1")], arch({ sharedApplyStopped: true, otherService: [password("p1")] }))];
+        const items = listWide.reduce((all, result) => all.concat(result.refusals, result.warnings), []).filter(item => ["R1", "R3", "R5", "W1", "W8"].includes(item.code));
+        assertEqual(items.map(item => item.code).filter((code, i, all) => all.indexOf(code) === i).sort().join(" "), "R1 R3 R5 W1 W8", "(each list-wide code made)");
+        assert(items.every(item => item.row === -1 && item.id === ""), "list-wide items name row −1: " + JSON.stringify(items.map(item => [item.code, item.row])));
     }
 }

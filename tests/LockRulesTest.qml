@@ -255,6 +255,7 @@ TestCase {
         _secrets();
         _totality();
         _livenessCases();
+        _edges();
         _sweep(1600, 24, 20261114);
         assert(_unconfirmedUnlocks === 0, "compositor rule: on every step of every test, unlockCompositor only for a session the compositor confirmed"
                + (_firstUnconfirmedUnlock ? " — " + _unconfirmedUnlocks + " broke it, first: " + _firstUnconfirmedUnlock : ""));
@@ -414,6 +415,31 @@ TestCase {
                "16: no settings: nothing read, the compositor asked");
         assertEqual(LockRules.foreignStep(LockRules.foreignInitial(), { type: "lockWanted", source: "idle" }, hyprland).ignored, "unknown event",
                     "16: no lock waits on its own for a read: every one is read at the compositor's ask");
+
+        // Edges (tests/mutate.sh)
+        assert(acts(watch(hyprland).send({ type: "check" }).actions, "read"), "16: a check from the start reads: nothing is being read yet");
+        assertEqual(watch(hyprland).send({ type: "check" }).answer("locked").send({ type: "check" }).ignored, "already known or being read",
+                    "16: a check while a lock is known held reads nothing");
+        assertEqual(watch(elsewhere).send({ type: "check" }).ignored, "cannot read the compositor's lock", "16: … elsewhere a check cannot read");
+        const minimum = LockRules.foreignPoll.minimum;
+        assertEqual([1, 2, 3].map(polls => LockRules.foreignPollDelay(polls, 1e9)).join(" "), [minimum, 2 * minimum, 4 * minimum].join(" "),
+                    "16: the pause doubles from the minimum");
+        assert(LockRules.foreignPollDelay(3, 0) === LockRules.foreignPollDelay(3) && LockRules.foreignPollDelay(3, 1) === 1,
+               "16: a maximum of 0 is the default, one of 1 ms bounds the pause");
+        // Session 1 is a session: each kind of answer hands its ask on; with none waiting, none
+        assert(acts(watch(hyprland).send({ type: "beforeAsk", session: 1 }).answer("locked", true).actions, "ask", { session: 1 })
+               && acts(watch(hyprland).send({ type: "beforeAsk", session: 1 }).answer("locked").actions, "askDenied", { session: 1 })
+               && acts(watch(hyprland).send({ type: "beforeAsk", session: 1 }).answer("unlocked").actions, "ask", { session: 1 })
+               && acts(watch(hyprland).send({ type: "beforeAsk", session: 1 }).answer("unknown").actions, "ask", { session: 1 })
+               && acts(watch(hyprland).send({ type: "beforeAsk", session: 1 }).send({ type: "ownLocked" }).actions, "ask", { session: 1 }),
+               "16: session 1 asked after every kind of answer, and after a lock of our own");
+        assert(!acts(watch(hyprland).send({ type: "check" }).answer("locked", true).actions, "ask")
+               && !acts(watch(hyprland).send({ type: "check" }).answer("unknown").actions, "ask")
+               && !acts(watch(hyprland).send({ type: "check" }).answer("locked").send({ type: "ownLocked" }).actions, "ask"),
+               "16: nothing asked where no ask waited");
+        const counted = () => watch(hyprland).send({ type: "check" }).answer("unknown").send({ type: "check" });
+        assert(counted().answer("locked", true).state.unknowns === 0 && counted().answer("unlocked").state.unknowns === 0
+               && counted().send({ type: "ownLocked" }).state.unknowns === 0, "16: unknown reads counted afresh after any clear answer, and after our own lock");
     }
 
     // ---- 1. Only these unlock ----
@@ -1703,6 +1729,88 @@ TestCase {
         const other = LockRules.step(poisoned, activity(), base.now + 10);
         assert(other.error === true && other.state === poisoned && other.effects.length === 0 && !other.ignored.includes(typed),
                "11i: an internal error on any other event leaves the state as it was, and its reason holds no secret");
+    }
+
+    // ---- Edges: what tests/mutate.sh found no check for ----
+
+    function _edges() {
+        const failedDetection = reason => state => ({ type: "methodsFailed", generation: state.methods.generation, reason: reason });
+        const logs = machine => of(machine.effects, "log").map(effect => effect.message);
+        const timings = LockRules.timings;
+
+        assertEqual(LockRules.step({}, { type: "started" }, 1).ignored, "no state", "edges: a state without a phase is no state");
+        const plain = started().send({ type: "lockRequested" });
+        assert(logs(plain).some(message => message.startsWith("locking (request), session")), "edges: a lock request without a source is logged as a request");
+        const pending = locking().send({ type: "unlockRequested", source: "logind" }).send({ type: "lockRequested" });
+        assert(logs(pending).some(message => message.includes("dropped by a lock request (request)")), "edges: … also when it drops a pending unlock");
+
+        // A failed detection says why, when it is told
+        for (const [reason, said] of [["exited 1", "detecting the methods failed (exited 1);"], ["", "detecting the methods failed;"],
+                                      [undefined, "detecting the methods failed;"], [7, "detecting the methods failed;"]]) {
+            const failing = locking().sendAll([confirmed(), failedDetection(reason)]);
+            assert(logs(failing).some(message => message.startsWith(said)), "edges: a failed detection with reason " + JSON.stringify(reason) + " says: " + said);
+        }
+        const stale = locked();
+        stale.send({ type: "methodsFailed", generation: -5, reason: "exited 1" });
+        assertEqual(stale.ignored, "stale detection", "edges: a stale failed detection is ignored, as such");
+        stale.send({ type: "pamStartFailed", method: "password", conversation: -9 });
+        assert(stale.ignored !== "", "edges: a refused start of no conversation is ignored");
+
+        // Re-detection when somebody comes back: the window's two ends
+        const window = () => {
+            const machine = locking().sendAll([confirmed(), failedDetection("exited 1")]);
+            machine.send(activity(), 30000);
+            assert(machine.state.methods.status === "detecting" && machine.state.methods.waitForAnswer === false,
+                   "edges: asked again when somebody comes back: the configs known serve meanwhile");
+            return machine.send(failedDetection("exited 1"), 100).send(timer("prompt"), timings.prompt - 100);
+        };
+        assert(has(window().send(activity(), timings.redetect - timings.prompt).effects, "detectMethods"),
+               "edges: asked again exactly " + timings.redetect + " ms after the last ask");
+        assert(!has(window().send(activity(), -timings.prompt).effects, "detectMethods"), "edges: … not in the same millisecond as it");
+        const full = locked(allLines).sendAll([activity(), submit("x"), startFailed("password"), failedDetection("exited 1")]);
+        full.send(timer("prompt"), timings.prompt).send(activity(), timings.redetect + 10000);
+        assert(!LockStepRules.anyPassive(full.state, "unavailable") && !has(full.effects, "detectMethods"),
+               "edges: after a failed re-detection with every method there, nobody coming back asks again");
+
+        // What serves while the methods are asked: the known configs within a lock, nothing after a wake
+        const meanwhile = locked(passwordAndFingerprint).send(pamCompleted("fingerprint", "failed"));
+        meanwhile.sendAll([activity(), submit("x"), startFailed("password")]);
+        assert(meanwhile.state.methods.status === "detecting" && meanwhile.state.passive.fingerprint.status === "backoff",
+               "edges: (re-detecting, the fingerprint backing off)");
+        meanwhile.send(timer("retry:fingerprint"), 1000);
+        assert(has(meanwhile.effects, "startPam", { method: "fingerprint" }), "edges: a re-detection within a lock: the fingerprint's retry starts meanwhile");
+        const noPassword = locked(["fingerprint\t/etc/pam.d\tfp"], { lockOnSleep: true, passwordFallback: null }).sendAll(enter("x"));
+        assert(noPassword.state.methods.status === "detecting" && noPassword.state.methods.waitForAnswer === false,
+               "edges: no password config at a submit: asked again, the configs known serving meanwhile");
+        const woken = locked(passwordAndFingerprint).sendAll([{ type: "prepareForSleep" }, { type: "resumed" }]);
+        woken.send(timer("settle:fingerprint"), timings.settle);
+        assert(woken.state.methods.status === "detecting" && woken.state.passive.fingerprint.status !== "running"
+               && !has(woken.all.slice(-8), "startPam", { method: "fingerprint" }), "edges: after a wake the fingerprint waits for the methods' answer");
+        woken.send(detected(passwordAndFingerprint));
+        assert(woken.state.passive.fingerprint.status === "running", "edges: … and starts with it");
+
+        // A wake noticed without its signal runs the grace period too
+        const recovered = locked().sendAll([{ type: "prepareForSleep" }, timer("minSuspend")], timings.minSuspend).send(activity());
+        assert(recovered.state.sleep.status === "resuming" && "resumeGrace" in recovered.state.timers, "edges: activity after minSuspend: awake, the grace period running");
+        const missed = locked().send({ type: "prepareForSleep" }).send(timer("missedResume"), timings.missedResume);
+        assert(missed.state.sleep.status === "resuming" && "resumeGrace" in missed.state.timers, "edges: no resume signal: awake, the grace period running");
+
+        const slack = locked().send(activity());
+        slack.send(timer("prompt"), timings.prompt - timings.promptSlack);
+        assertEqual(slack.state.prompt.owner, null, "edges: a prompt timer firing within the slack of its deadline puts the prompt to sleep");
+        const info = locked(passwordOnly).sendAll([...enter("pw"), pamMessage("password", { message: "Checking", messageIsError: false })]);
+        assertEqual(info.state.password.pamError, "", "edges: PAM's information is not kept as its error");
+        const waiting = LockRules.view(locked().state).methods.filter(method => method.waiting);
+        assert(waiting.length > 0 && waiting.every(method => !method.isError), "edges: a method just started shows its hint, not an error");
+
+        // An internal error where even the check of the conversation throws: ignored, the state
+        // as it was, the reason as it is when there is no secret
+        const fpState = locked().state;
+        const poisoned = Object.assign({}, fpState, { passive: new Proxy({}, { get: () => { throw new Error("planted at null"); } }) });
+        const outer = LockRules.step(poisoned, { type: "pamCompleted", method: "fingerprint", conversation: conversationOf(fpState, "fingerprint"), result: "failed" },
+                                     200000);
+        assert(outer.error === true && outer.state === poisoned && outer.effects.length === 0 && outer.ignored.includes("planted at null"),
+               "edges: an internal error that throws again in its own check: ignored, nothing changed, its reason whole: " + outer.ignored);
     }
 
     // ---- 12. Re-detection ----
