@@ -20,13 +20,13 @@ socket=$RUN/wayland-1
 hyprland=""
 for pid in $(run_processes); do
     case "$(readlink -f "/proc/$pid/exe" 2> /dev/null)" in *[Hh]yprland*) ;; *) continue ;; esac
-    tr '\0' ' ' < "/proc/$pid/cmdline" 2> /dev/null | grep -q -- "-c $WORK/hypr/hyprland.lua" || continue
+    { tr '\0' ' ' < "/proc/$pid/cmdline"; } 2> /dev/null | grep -q -- "-c $WORK/hypr/hyprland.lua" || continue
     hyprland=$pid
     break
 done
 [[ "$hyprland" =~ ^[0-9]+$ ]] || abort "cannot find the nested Hyprland"
 parent=$(awk '{ print $4 }' "/proc/$hyprland/stat")
-tr '\0' ' ' < "/proc/$parent/cmdline" 2> /dev/null | grep -q "^timeout " || abort "pid $hyprland's parent is not the test's timeout: not killing it"
+{ tr '\0' ' ' < "/proc/$parent/cmdline"; } 2> /dev/null | grep -q "^timeout " || abort "pid $hyprland's parent is not the test's timeout: not killing it"
 [ "$(process_env "$hyprland" LOCKTEST_RUN_ID)" = "$LOCKTEST_RUN_ID" ] || abort "pid $hyprland does not carry the run's marker: not killing it"
 [ "$(process_env "$hyprland" XDG_RUNTIME_DIR)" = "$RUN" ] || abort "pid $hyprland is not in the private runtime dir: not killing it"
 # … and runs the test bed's Hyprland: the program on the test's PATH, or the binary a

@@ -38,7 +38,7 @@ seconds_between() {
 hung_searches() {
     local pid
     for pid in $(test_pgrep -x sleep); do
-        [ "$(tr '\0' ' ' < "/proc/$pid/cmdline" 2> /dev/null)" = "sleep 60 " ] && echo "$pid"
+        [ "$({ tr '\0' ' ' < "/proc/$pid/cmdline"; } 2> /dev/null)" = "sleep 60 " ] && echo "$pid"
     done
 }
 

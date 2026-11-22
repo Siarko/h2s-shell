@@ -971,7 +971,7 @@ assert_shell_process() {
 }
 assert_supervisor_process() {
     [[ "$1" =~ ^[0-9]+$ ]] && [ "$(process_env "$1" LOCKTEST_TEST_ID)" = "$LOCKTEST_TEST_ID" ] \
-        && tr '\0' ' ' < "/proc/$1/cmdline" 2> /dev/null | grep -q "$LOCKTEST_SHELL/scripts/launch\.sh" \
+        && { tr '\0' ' ' < "/proc/$1/cmdline"; } 2> /dev/null | grep -q "$LOCKTEST_SHELL/scripts/launch\.sh" \
         || abort "pid $1 is not the launcher under test: not signalling it"
 }
 

@@ -23,7 +23,7 @@ instances() { "$LOCKTEST_QS" list --all 2> /dev/null | grep -c 'Process ID:'; }
 launchers_of_run() {
     local pid
     for pid in $(run_processes); do
-        tr '\0' ' ' < "/proc/$pid/cmdline" 2> /dev/null | grep -q "$LOCKTEST_SHELL/scripts/launch\.sh" && echo "$pid"
+        { tr '\0' ' ' < "/proc/$pid/cmdline"; } 2> /dev/null | grep -q "$LOCKTEST_SHELL/scripts/launch\.sh" && echo "$pid"
     done
 }
 

@@ -42,7 +42,7 @@ for helper in $(pgrep -P "$SHELL_PID"); do
     # A helper that has exited since pgrep listed it says nothing either way
     environment=$({ tr '\0' '\n' < "/proc/$helper/environ"; } 2> /dev/null) || continue
     [ -n "$environment" ] || continue
-    check "helper $helper ($(tr '\0' ' ' < "/proc/$helper/cmdline" 2> /dev/null | cut -c1-60)) sees no real system bus" \
+    check "helper $helper ($({ tr '\0' ' ' < "/proc/$helper/cmdline"; } 2> /dev/null | cut -c1-60)) sees no real system bus" \
         grep -qxF "DBUS_SYSTEM_BUS_ADDRESS=unix:path=$RUN/no-system-bus" <<< "$environment"
 done
 sleep 2 # fixed sleep: a negative claim: the logind monitors and the sleep inhibitor start with the shell and must fail, not hold one

@@ -11,7 +11,7 @@ check_within "$GUARD" "lock by IPC locks the compositor" compositor_locked
 wait_until 5 _one_finger_waiter || abort "no single fingerprint conversation waiting (found: $(finger_waiters | tr '\n' ' '))"
 waiter=$(finger_waiters)
 helper=$(awk '{ print $4 }' "/proc/$waiter/stat" 2> /dev/null)
-log "conversation $waiter, PAM helper ${helper:-?} ($(tr '\0' ' ' < "/proc/$helper/cmdline" 2> /dev/null | cut -c1-80))"
+log "conversation $waiter, PAM helper ${helper:-?} ($({ tr '\0' ' ' < "/proc/$helper/cmdline"; } 2> /dev/null | cut -c1-80))"
 
 # The process about to be SIGKILLed must be the shell's PAM helper and nothing else: had
 # the conversation already been re-parented, its parent would be the nearest subreaper

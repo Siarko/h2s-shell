@@ -70,7 +70,7 @@ new_supervisor_of_run() {
     local pid
     for pid in $(run_processes); do
         [ "$pid" = "$old_supervisor" ] && continue
-        tr '\0' ' ' < "/proc/$pid/cmdline" 2> /dev/null | grep -q "$LOCKTEST_SHELL/scripts/launch\.sh" || continue
+        { tr '\0' ' ' < "/proc/$pid/cmdline"; } 2> /dev/null | grep -q "$LOCKTEST_SHELL/scripts/launch\.sh" || continue
         [ "$(awk '{ print $6 }' "/proc/$pid/stat" 2> /dev/null)" = "$pid" ] || continue
         echo "$pid"
         return 0
