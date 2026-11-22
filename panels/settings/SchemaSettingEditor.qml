@@ -21,6 +21,9 @@ Item {
     property bool available: true
     // Replaces the schema label where the page knows better, e.g. "Lock after screensaver"
     property string label: ""
+    // Replaces the schema hint where the page knows better, e.g. why a feature is not
+    // available here
+    property string hint: ""
     // A slider's upper bound when it depends on other settings; the schema's otherwise
     property var maximum: undefined
     // Replaces the plain write when an edit has to adjust other settings too, e.g. bar
@@ -302,10 +305,10 @@ Item {
         }
 
         Text {
-            visible: (root.entry?.hint ?? "") !== ""
+            visible: text !== ""
             width: parent.width
             wrapMode: Text.WordWrap
-            text: root.entry?.hint ?? ""
+            text: root.hint !== "" ? root.hint : (root.entry?.hint ?? "")
             textFormat: Text.PlainText
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSizeSmall

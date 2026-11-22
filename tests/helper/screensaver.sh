@@ -17,7 +17,10 @@
 #      GetActiveTime / ActiveChanged follow the shell's state (one signal per change, on each
 #      path); GetSessionIdleTime answered by the shell per call (a late answer answers no
 #      newer call), or an error when it does not answer; holders of a helper before taken
-#      over where their caller is on the bus; its standard input closed → it ends and the
+#      over where their caller is on the bus; the name asked for only after the shell's
+#      {"own":true}, released with the apps' cookies at {"own":false} (another program can
+#      then own it; queued, it leaves the queue) and taken back at {"own":true};
+#      its standard input closed → it ends and the
 #      name is free; the
 #      name held by another connection → said with that program's name, and taken when it
 #      leaves; no bus → an error line, exit 1;
@@ -110,7 +113,9 @@ echo "the helper on a private bus"
 protocol=$(sed -n 's/.*readonly property int protocol: \([0-9]*\).*/\1/p' "$REPO/singletons/HelperRules.qml" | head -n 1)
 start helper "$helper" screensaver
 check "it says it is ready, with its protocol" test "$(next helper)" = "{\"event\":\"ready\",\"protocol\":$protocol}"
-check "… and that it owns org.freedesktop.ScreenSaver" test "$(next helper)" = '{"event":"name","owned":true}'
+check "… and leaves the name alone until the shell says" name_free
+tell helper '{"own":true}'
+check "the shell's own: true → it owns org.freedesktop.ScreenSaver" test "$(next helper)" = '{"event":"name","owned":true}'
 
 start first "$client"
 start second "$client"
@@ -259,6 +264,37 @@ next adopter > /dev/null
 check "… and its caller can give it back" test "$(next helper)" = "$(holders "")"
 tell adopter exit
 
+# Idle turned off in the shell: the name left free for another program, and taken back
+start app "$client"
+next app > /dev/null
+tell app "$(printf 'inhibit\tmpv\tvideo')"
+next app > /dev/null
+next helper > /dev/null
+tell helper '{"own":false}'
+check "the shell's own: false → released" test "$(next helper)" = '{"event":"name","released":true}'
+check "… the apps' cookies dropped" test "$(next helper)" = "$(holders "")"
+check "… and the name is free" name_free
+tell helper '{"own":false}'
+tell helper '{"what":1}'
+check "… own: false again says nothing more" test "$(next helper)" = '{"event":"error","message":"unknown message"}'
+start other "$client"
+next other > /dev/null
+tell other own
+check "… so another program can own it" test "$(next other)" = owned
+other_name=$(head -c 15 "/proc/${pid_of[other]}/comm" | tr -d '\n')
+tell helper '{"own":true}'
+check "own: true while another holds it: queued, and said who ($other_name)" \
+    test "$(next helper)" = "{\"event\":\"name\",\"owned\":false,\"owner\":\"$other_name\"}"
+tell helper '{"own":false}'
+check "own: false while queued: released" test "$(next helper)" = '{"event":"name","released":true}'
+tell other exit
+wait_gone other
+check "… it left the queue: the other program gone, the name stays free" name_free
+tell helper '{"own":true}'
+check "own: true again: the name taken back" test "$(next helper)" = '{"event":"name","owned":true}'
+check "… and answers" test "$(call /ScreenSaver GetActive)" = "(false,)"
+tell app exit
+
 close_input helper
 check "its standard input closed (the shell gone): it ends" wait_gone helper
 wait "${pid_of[helper]}"
@@ -272,6 +308,7 @@ tell holder own
 check "another program takes the name" test "$(next holder)" = owned
 start queued "$helper" screensaver
 next queued > /dev/null
+tell queued '{"own":true}'
 holder_name=$(head -c 15 "/proc/${pid_of[holder]}/comm" | tr -d '\n')
 check "a helper started then: the name held, by that program's name ($holder_name)" \
     test "$(next queued)" = "{\"event\":\"name\",\"owned\":false,\"owner\":\"$holder_name\"}"

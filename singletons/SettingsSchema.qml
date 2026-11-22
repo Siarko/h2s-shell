@@ -169,9 +169,10 @@ Singleton {
           ] },
         // What every monitor does at "Activate after": the screensaver, or powered off (an
         // OLED's own protection mode starts even on black; only a power cut avoids it).
-        // Turning off needs the compositor (Hyprland); without it, the screensaver
+        // Turning off needs the compositor (Hyprland, or wlopm elsewhere); without either,
+        // the screensaver
         { key: "lockscreen.blanking", label: "When the screensaver starts", group: "lockscreen",
-          type: "enum", default: "screensaver", hint: "Turning screens off needs Hyprland.", options: [
+          type: "enum", default: "screensaver", hint: "Turning screens off needs Hyprland, or wlopm elsewhere.", options: [
               { value: "screensaver", label: "Screensaver" },
               { value: "off", label: "Turn off" }
           ] },
@@ -185,7 +186,7 @@ Singleton {
         { key: "lockscreen.monitorBlanking", label: "Each monitor", group: "lockscreen",
           type: "monitorBlanking", default: ({}) },
         { key: "lockscreen.screenOffEnabled", label: "Turn screens off", group: "lockscreen",
-          type: "bool", default: false, hint: "Needs Hyprland." },
+          type: "bool", default: false, hint: "Needs Hyprland, or wlopm elsewhere." },
         { key: "lockscreen.screenOffTimeout", label: "Turn screens off after", group: "lockscreen",
           type: "number", min: 5, max: 86400, suffix: "s", default: 600,
           hint: "Counted from your last input." },

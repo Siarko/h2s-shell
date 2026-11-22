@@ -56,8 +56,11 @@ TestCase {
         const line = HelperRules.readServiceLine;
         assertEqual(JSON.stringify(line("{\"event\":\"ready\",\"protocol\":2}")), JSON.stringify({ event: "ready", protocol: 2 }),
                     "service: ready, with its protocol");
-        assertEqual(JSON.stringify(line("{\"event\":\"name\",\"owned\":true}")), JSON.stringify({ event: "name", owned: true, owner: "" }),
+        assertEqual(JSON.stringify(line("{\"event\":\"name\",\"owned\":true}")), JSON.stringify({ event: "name", owned: true, owner: "", released: false }),
                     "service: the name owned");
+        assertEqual(JSON.stringify(line("{\"event\":\"name\",\"released\":true}")),
+                    JSON.stringify({ event: "name", owned: false, owner: "", released: true }),
+                    "service: the name released (the shell's own: false): not owned");
         const taken = line("{\"event\":\"name\",\"owned\":false,\"owner\":\"<b>kde</b>\\n" + "x".repeat(80) + "\"}");
         assertEqual(taken.owned, false, "service: the name held by another");
         assertEqual(taken.owner.length, HelperRules.maxOwnerLength, "… its owner's name capped");
@@ -100,6 +103,20 @@ TestCase {
         assertEqual(HelperRules.adoptMessage([]), null, "… none: nothing to send");
         assertEqual(HelperRules.adoptMessage(undefined), null, "… nor for no list");
 
+        const wants = HelperRules.wantsScreenSaverName;
+        const none = { screensaverEnabled: false, screenOffEnabled: false, lockscreenEnabled: false };
+        assertEqual(wants(none), false, "name: every idle job off: left free (an idle daemon may own it)");
+        assertEqual(wants(Object.assign({}, none, { screensaverEnabled: true })), true, "name: the screensaver on: asked for");
+        assertEqual(wants(Object.assign({}, none, { screenOffEnabled: true })), true, "… screens off on: asked for");
+        assertEqual(wants(Object.assign({}, none, { lockscreenEnabled: true })), true, "… the idle lock on: asked for");
+        assertEqual(wants(Object.assign({}, none, { lockedScreenOffTimeout: 60, lockOnSleep: true })), false,
+                    "… the lock screen's screen-off and the lock before sleep do not count (requests are ignored while locked)");
+        assertEqual(wants(Object.assign({}, none, { screensaverEnabled: "true", lockscreenEnabled: 1 })), false,
+                    "… anything but true is off");
+        assertEqual(wants(null), false, "… no values: left free");
+        assertEqual(JSON.stringify(HelperRules.ownMessage(true)), JSON.stringify({ own: true }), "name: the word to the helper: own");
+        assertEqual(JSON.stringify(HelperRules.ownMessage(undefined)), JSON.stringify({ own: false }), "… anything but true: release");
+
         const status = HelperRules.serviceStatus;
         assertEqual(JSON.stringify(status("missing", "off", { owned: null })), JSON.stringify({ state: "notBuilt", line: "Not built" }),
                     "status: no helper: not built");
@@ -114,6 +131,9 @@ TestCase {
         assertEqual(held.state, "taken", "status: held by another: taken");
         assertEqual(held.line, "ksmserver answers apps that ask to keep the screen on. Stop it to let the shell do it.",
                     "… the line names it");
+        const released = status("ready", "running", { owned: false, owner: "", released: true });
+        assertEqual(released.state, "released", "status: left free by the shell: released");
+        assertEqual(released.line, "Left to other programs while idle is off", "… the line says why");
         assert(status("ready", "running", { owned: false, owner: "" }).line.startsWith("Another program answers"),
                "… or says another program when its name is not known");
     }

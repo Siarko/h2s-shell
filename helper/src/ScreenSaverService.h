@@ -1,9 +1,12 @@
 // `h2s-helper screensaver`: org.freedesktop.ScreenSaver on the session bus, for the shell.
 //
-// The name is asked for without replacing another owner and without letting another
-// replace it; taken → the shell is told who holds it (that process's name, capped) and the
-// helper stays queued, so it gets the name as soon as it is free. Both object paths apps
-// call are served (/ScreenSaver, /org/freedesktop/ScreenSaver).
+// The name is asked for only while the shell says so ({"own":true}: some idle job of the
+// shell's is on), without replacing another owner and without letting another replace it;
+// taken → the shell is told who holds it (that process's name, capped) and the helper stays
+// queued, so it gets the name as soon as it is free. {"own":false} releases the name, or
+// leaves the queue, and drops the apps' cookies: another program (an idle daemon doing idle
+// instead of the shell) can own it. Until the first {"own":…} the name is not asked for.
+// Both object paths apps call are served (/ScreenSaver, /org/freedesktop/ScreenSaver).
 //
 // Inhibit cookies are kept per caller (its unique bus name) and dropped when the caller
 // leaves the bus (NameOwnerChanged); UnInhibit removes only the caller's own cookie. A
@@ -13,11 +16,12 @@
 // SetActive means is decided there (IdleRules).
 //
 // Lines to the shell: {"event":"ready","protocol":n}, {"event":"name","owned":true} /
-// {"event":"name","owned":false,"owner":"<process name>"}, {"event":"inhibitors","list":
+// {"event":"name","owned":false,"owner":"<process name>"} (while asking for it),
+// {"event":"name","released":true} (after {"own":false}), {"event":"inhibitors","list":
 // [{"app","reason","cookie","caller"}]} (at most one per reportDelayMs: a burst of changes
 // is one report), {"event":"activity"}, {"event":"setActive","id":n} (SetActive(true)),
 // {"event":"askIdle","id":n}, {"event":"error","message":…}.
-// From the shell: {"active":b,"since":<epoch s>}; the answers {"answer":n,"idleSeconds":s}
+// From the shell: {"own":b}; {"active":b,"since":<epoch s>}; the answers {"answer":n,"idleSeconds":s}
 // and {"answer":n,"taken":b} to the asks of that id (an answer to an ask no longer waiting
 // is dropped: a late one never answers a newer call); {"adopt":[{"caller","app","reason",
 // "cookie"}]}: the holders a helper before this one had, taken over where their caller is
@@ -85,8 +89,8 @@ public:
 
     ScreenSaverService(const QDBusConnection &bus, LineChannel *channel, QObject *parent = nullptr);
 
-    // Registers both paths and asks for the name; false (said on the channel) when the bus
-    // will not have the objects
+    // Registers both paths (the name waits for the shell's {"own":true}); false (said on the
+    // channel) when the bus will not have the objects
     bool start();
 
     // For the interfaces: `caller` is the calling connection's unique name. 0 when the
@@ -121,6 +125,7 @@ private:
     bool roomFor(const QString &caller, uint pid) const;
     uint callerPid(const QString &caller) const;
     void ownerChanged(const QString &name, const QString &oldOwner, const QString &newOwner);
+    void setOwning(bool owning);
     void reportName();
     void reportHolders();
     void sendHolders();
@@ -135,7 +140,9 @@ private:
     uint m_nextCookie;
     bool m_active = false;
     qint64 m_activeSince = 0;
-    // The name's state as last told: "" not yet, "owned", or "owner:<name>"
+    // Asking for the name (owning it or queued for it): the shell's last {"own":…}
+    bool m_owning = false;
+    // The name's state as last told: "" not yet, "owned", "owner:<name>" or "released"
     QString m_nameTold;
     QMap<quint64, Ask> m_asks;
     quint64 m_nextAsk = 1;

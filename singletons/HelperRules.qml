@@ -11,7 +11,7 @@ Singleton {
 
     // The line protocol this shell speaks with the helper (helper/src/main.cpp's
     // `protocol`): a helper with another number is out of date, its features off
-    readonly property int protocol: 2
+    readonly property int protocol: 3
 
     // `h2s-helper --version`'s run (CommandRunner's result: { ok, code, stdout, timedOut,
     // failedToStart, truncated }) → { state, version, problem }:
@@ -74,7 +74,8 @@ Singleton {
 
     // One line from the helper → the message, its text from apps made plain and capped; null
     // for a line that is not one of the protocol's:
-    //   { event: "ready", protocol }       { event: "name", owned, owner }
+    //   { event: "ready", protocol }       { event: "name", owned, owner, released }
+    //       (released: true after the shell's { own: false }, owned then false)
     //   { event: "inhibitors", list: [{ app, reason, cookie, caller }] }   (sorted by
     //       cookie; caller: the app's unique bus name, "" when not one)
     //   { event: "activity" }   { event: "setActive", id }   { event: "askIdle", id }
@@ -92,10 +93,12 @@ Singleton {
         case "ready":
             return Number.isInteger(message.protocol) ? { event: "ready", protocol: message.protocol } : null;
         case "name":
+            if (message.released === true)
+                return { event: "name", owned: false, owner: "", released: true };
             if (message.owned === true)
-                return { event: "name", owned: true, owner: "" };
+                return { event: "name", owned: true, owner: "", released: false };
             if (message.owned === false)
-                return { event: "name", owned: false, owner: plainLine(message.owner, maxOwnerLength) };
+                return { event: "name", owned: false, owner: plainLine(message.owner, maxOwnerLength), released: false };
             return null;
         case "inhibitors": {
             if (!Array.isArray(message.list))
@@ -118,6 +121,24 @@ Singleton {
         default:
             return null;
         }
+    }
+
+    // Whether the shell asks for org.freedesktop.ScreenSaver: only while one of its idle jobs
+    // is on — the screensaver, screens off or the idle lock (the profile's
+    // `lockscreen.screensaverEnabled`, `screenOffEnabled`, `lockscreenEnabled`), since apps'
+    // requests hold only those. With all three off the name is left free, so an idle daemon
+    // doing idle instead (hypridle) can own it and hear the apps. The lock screen's own
+    // screen-off does not count: requests are ignored while locked. `values` maps those keys
+    // (without the group) to the profile's values; anything but true is off
+    function wantsScreenSaverName(values) {
+        if (values === null || typeof values !== "object")
+            return false;
+        return values.screensaverEnabled === true || values.screenOffEnabled === true || values.lockscreenEnabled === true;
+    }
+
+    // The shell's word on the name, for the helper
+    function ownMessage(own) {
+        return { own: own === true };
     }
 
     // The screensaver's state for the helper: { active, since (epoch s, 0 when inactive) }
@@ -154,6 +175,7 @@ Singleton {
     //   "answering"  the shell owns org.freedesktop.ScreenSaver
     //   "taken"      another program owns it (the line names it); the shell gets it when
     //                that program lets go
+    //   "released"   the shell leaves it free: none of its idle jobs is on
     // `helperState` is Helper.state, `clientState` ScreenSaverClient.state, `name` its name.
     function serviceStatus(helperState, clientState, name) {
         if (helperState === "missing")
@@ -162,6 +184,8 @@ Singleton {
             return { state: "outdated", line: "The helper is out of date" };
         if (helperState === "failed" || clientState === "failed")
             return { state: "failed", line: "The helper does not answer" };
+        if (clientState === "running" && name?.released === true)
+            return { state: "released", line: "Left to other programs while idle is off" };
         if (clientState === "running" && name?.owned === true)
             return { state: "answering", line: "" };
         if (clientState === "running" && name?.owned === false)

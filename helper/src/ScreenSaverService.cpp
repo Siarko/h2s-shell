@@ -112,14 +112,40 @@ bool ScreenSaverService::start()
         }
         m_interfaces.append(interface);
     }
-    const QDBusReply<QDBusConnectionInterface::RegisterServiceReply> reply = m_bus.interface()->registerService(
-        QString::fromLatin1(serviceName), QDBusConnectionInterface::QueueService, QDBusConnectionInterface::DontAllowReplacement);
-    if (!reply.isValid()) {
-        sendError(QStringLiteral("could not ask for the name: ") + reply.error().message());
-        return false;
-    }
-    reportName();
     return true;
+}
+
+// Asks for the name (queued behind another owner) or gives it up — also its place in the
+// queue — with the apps' cookies: they asked the name's owner, which is no longer this
+void ScreenSaverService::setOwning(bool owning)
+{
+    if (owning && !m_owning) {
+        const QDBusReply<QDBusConnectionInterface::RegisterServiceReply> reply = m_bus.interface()->registerService(
+            QString::fromLatin1(serviceName), QDBusConnectionInterface::QueueService, QDBusConnectionInterface::DontAllowReplacement);
+        if (!reply.isValid()) {
+            sendError(QStringLiteral("could not ask for the name: ") + reply.error().message());
+            return;
+        }
+        m_owning = true;
+        reportName();
+    } else if (!owning) {
+        if (m_owning) {
+            const QDBusReply<bool> reply = m_bus.interface()->unregisterService(QString::fromLatin1(serviceName));
+            if (!reply.isValid())
+                sendError(QStringLiteral("could not release the name: ") + reply.error().message());
+            m_owning = false;
+            if (!m_holds.isEmpty()) {
+                m_holds.clear();
+                reportHolders();
+            }
+        }
+        if (m_nameTold != QLatin1String("released")) {
+            m_nameTold = QStringLiteral("released");
+            QJsonObject message = eventLine("name");
+            message.insert(QStringLiteral("released"), true);
+            m_channel->send(message);
+        }
+    }
 }
 
 // The process behind a connection (0 when the bus will not say)
@@ -239,6 +265,10 @@ void ScreenSaverService::answer(const QJsonObject &message)
 
 void ScreenSaverService::shellMessage(const QJsonObject &message)
 {
+    if (message.value(QStringLiteral("own")).isBool()) {
+        setOwning(message.value(QStringLiteral("own")).toBool());
+        return;
+    }
     if (message.value(QStringLiteral("active")).isBool()) {
         const bool active = message.value(QStringLiteral("active")).toBool();
         const double since = message.value(QStringLiteral("since")).toDouble(0);
@@ -315,6 +345,9 @@ void ScreenSaverService::dropCaller(const QString &caller)
 
 void ScreenSaverService::reportName()
 {
+    // Not asking: the name's owner is none of this helper's business
+    if (!m_owning)
+        return;
     const QDBusReply<QString> owner = m_bus.interface()->serviceOwner(QString::fromLatin1(serviceName));
     // No owner for a moment (between two owners): the next change says who
     if (!owner.isValid() || owner.value().isEmpty())

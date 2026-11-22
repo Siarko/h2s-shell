@@ -581,7 +581,9 @@ launcher agree on the contract described under "Recovery" below):
   for the rules (which count them only while unlocked): the second `IdleMonitor` (Wayland
   inhibitors), `singletons/helper/ScreenSaverClient.qml` (runs `h2s-helper screensaver`,
   which owns `org.freedesktop.ScreenSaver` when the name is free and queues for it when
-  another program holds it, and reports the apps' requests and the name's owner —
+  another program holds it — only while one of the shell's idle stages is on
+  (`HelperRules.wantsScreenSaverName`; otherwise it releases the name and leaves the
+  queue) — and reports the apps' requests and the name's owner —
   `HelperRules.serviceStatus`), and a logind `idle` block read at the deadlines that would
   start a stage (`singletons/lock/LogindIdleBlock.qml`, `ListInhibitors`). IPC: `idle state` (JSON, with the monitors' ids) and
   `idle setMonitorWay <id> <way>` (one monitor's entry in `lockscreen.monitorBlanking`,

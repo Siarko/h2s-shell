@@ -308,10 +308,13 @@ screen's screen-off are off by default. No idle daemon is needed; one can still 
   `/ScreenSaver`): it answers `Inhibit`/`UnInhibit`, `GetActive`, `GetActiveTime`,
   `GetSessionIdleTime`, `SetActive` (true starts the screensaver, not while locked) and
   `SimulateUserActivity` (counts as input), signals `ActiveChanged` (active: a monitor not
-  on, or locked), and drops an app's requests when it leaves the bus. It never takes the
-  name from another owner: while another program holds it (hypridle does, unless told not
-  to), the shell waits in the bus's queue and takes the name when it frees; meanwhile only
-  that program hears apps' requests, and `h2s-shell ipc call idle state` names it
+  on, or locked), and drops an app's requests when it leaves the bus. The shell asks for
+  the name only while one of its idle stages is on ("Enable screensaver", "Turn screens
+  off" or "Enable lock screen"); with all three off it leaves the name free, also its place
+  in the queue, and asks again when one is turned on. It never takes the name from another
+  owner: while another program holds it (hypridle does, unless told not to), the shell
+  waits in the bus's queue and takes the name when it frees; meanwhile only that program
+  hears apps' requests, and `h2s-shell ipc call idle state` names it
   (`screenSaverService`). Without the helper (not built) the shell works without these
   requests.
 - **Lock screen** — a real `WlSessionLock`, so the compositor enforces it. It can be
@@ -456,24 +459,26 @@ lockers race for the screen, and only one can hold it); leave `lock_cmd` out, or
 at the shell's IPC lock — a lock asked while locked changes nothing. Another locker that
 does lock is seen under Hyprland (above, "Lock screen").
 
-**The `org.freedesktop.ScreenSaver` name** has one owner: whichever of the two asks first
-(hypridle asks for it unless `ignore_dbus_inhibit = true`). The shell never takes it away
-and waits for it; hypridle, finding it taken, says "Another service is already providing the
-org.freedesktop.ScreenSaver interface" in its log. Apps' keep-awake requests reach only the
-owner, so give the name to the side whose stages they should hold: with the shell's stages
-in use, set `ignore_dbus_inhibit = true` in hypridle's `general`; with hypridle doing all of
-idle, let it start before the shell.
+**The `org.freedesktop.ScreenSaver` name** has one owner, and apps' keep-awake requests
+reach only that owner. The shell asks for it only while one of its idle stages is on, never
+takes it away from another owner, and otherwise waits in the bus's queue; hypridle asks for
+it unless `ignore_dbus_inhibit = true`, and finding it taken says "Another service is
+already providing the org.freedesktop.ScreenSaver interface" in its log. So with the shell's
+stages in use, set `ignore_dbus_inhibit = true` in hypridle's `general` (or the requests
+reach whichever started first); with all of the shell's stages off, the name is hypridle's.
 
 **Keeping hypridle for everything idle** is a working choice: turn the shell's stages off
 (Settings → Lockscreen: "Enable screensaver", "Turn screens off" and "Enable lock screen"
 off, "Turn screens off on the lock screen after" 0), keep hypridle's listeners, and lock with
-`loginctl lock-session` or the IPC lock. The lock screen itself stays the shell's.
+`loginctl lock-session` or the IPC lock. The shell then leaves `org.freedesktop.ScreenSaver`
+to hypridle, whenever either starts, so apps' requests hold hypridle's listeners. The lock
+screen itself stays the shell's.
 
 **Moving over to the shell** takes the table from right to left: set the times in Settings →
 Lockscreen (each counted from the last input, as hypridle counts), then remove the listeners
 the shell now covers — or hypridle altogether, after which the shell takes the
-`org.freedesktop.ScreenSaver` name by itself (at once while it runs: it waits in the bus's
-queue). Only an idle suspend has no counterpart in the shell. The shell's IPC lock, for
+`org.freedesktop.ScreenSaver` name by itself (at once while it runs and one of its stages is
+on: it waits in the bus's queue). Only an idle suspend has no counterpart in the shell. The shell's IPC lock, for
 hypridle's `lock_cmd` or a key binding, and how to stop hypridle:
 
 #### NixOS
@@ -486,7 +491,8 @@ hypridle's `lock_cmd` or a key binding, and how to stop hypridle:
 #### Arch
 
 - The IPC lock: `$HOME/.config/quickshell/default/scripts/launch.sh ipc call lockscreen
-  lock` (the checkout `install.sh` made; no `h2s-shell` is on `PATH`).
+  lock` — `launch.sh` in the checkout `install.sh` made, which is
+  `${XDG_CONFIG_HOME:-$HOME/.config}/quickshell/default` (no `h2s-shell` is on `PATH`).
 - hypridle as a user service (the package ships `hypridle.service`): `systemctl --user
   disable --now hypridle`; started from `hyprland.lua`'s autostart instead: remove that line
   and end the running one (`pkill hypridle`). Its listeners are in

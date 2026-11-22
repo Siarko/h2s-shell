@@ -25,7 +25,7 @@
 
 namespace {
 
-constexpr int protocol = 2;
+constexpr int protocol = 3;
 
 int usage()
 {

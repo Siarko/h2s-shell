@@ -13,8 +13,9 @@ import qs.tests
 // successor taking over the app's request,
 // the screensaver's state answering GetActive and sent as ActiveChanged on both paths,
 // GetSessionIdleTime answered from the shell, UnInhibit, an app leaving the bus with a
-// cookie, a second helper finding the name taken (by whom) and getting it when the first
-// stops, and a stopped client's helper gone. Each step waits on its condition.
+// cookie, the name left free and taken again as `own` changes, a second helper finding the
+// name taken (by whom) and getting it when the first stops, and a stopped client's helper
+// gone. Each step waits on its condition.
 TestCase {
     id: suite
     suiteName: "ScreenSaverClient"
@@ -110,6 +111,11 @@ TestCase {
             { what: "inhibits once more", run: () => _tell("inhibit\tplayer\twatching"), until: () => _first.holders.length === 1 },
             { what: "the app leaves the bus holding it: its cookie dropped",
               run: () => { _app.running = false; }, until: () => !_app.running && _first.holders.length === 0 },
+            { what: "idle off in the shell (own: false): the name left free",
+              run: () => { _first.own = false; },
+              until: () => _first.name.released === true && HelperRules.serviceStatus("ready", _first.state, _first.name).state === "released" },
+            { what: "… taken again (own: true)", run: () => { _first.own = true; },
+              until: () => _first.name.owned === true && _first.name.released === false },
             { what: "a second helper: the name held by the first, said by its process name",
               run: () => { _second = _clientComponent.createObject(suite, { path: _helper }); },
               until: () => _second.state === "running" && _second.name.owned === false && _second.name.owner === "h2s-helper" },

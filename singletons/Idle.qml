@@ -234,6 +234,9 @@ Singleton {
 
     property ScreenSaverClient _screenSaver: ScreenSaverClient {
         path: Helper.available ? Helper.path : ""
+        // The name only while an idle job of the shell's is on: left free for an idle daemon
+        // otherwise
+        own: HelperRules.wantsScreenSaverName(root._values)
         active: root._busActive
         activeSinceMs: root._busActiveSinceMs
         idleSeconds: () => root._state.inputIdle ? (root._now() - root._state.idleSince) / 1000 : 0

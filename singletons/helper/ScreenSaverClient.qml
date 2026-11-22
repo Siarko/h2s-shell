@@ -17,6 +17,9 @@ QtObject {
 
     // The helper; "" for none (nothing runs)
     property string path: ""
+    // Whether to ask for org.freedesktop.ScreenSaver (HelperRules.wantsScreenSaverName): false
+    // releases it, or leaves the queue for it, and the apps' requests go
+    property bool own: true
     // The screensaver's state, for GetActive, GetActiveTime and ActiveChanged
     property bool active: false
     // When it became active, ms since the epoch (0 unknown)
@@ -29,8 +32,9 @@ QtObject {
     // "off" (no helper) | "starting" | "running" (said it is ready) | "failed" (ended:
     // started again after a pause) | "outdated" (speaks another protocol: not started again)
     property string state: "off"
-    // { owned: true | false | null (not known), owner: "<process name>" }
-    property var name: ({ owned: null, owner: "" })
+    // { owned: true | false | null (not known), owner: "<process name>", released: the shell
+    // leaves it free (`own` false) }
+    property var name: ({ owned: null, owner: "", released: false })
     // [{ app, reason, cookie, caller }]: plain, capped (HelperRules.readServiceLine)
     property var holders: []
 
@@ -47,6 +51,7 @@ QtObject {
     property var _lost: []
 
     onPathChanged: _restart()
+    onOwnChanged: _sendOwn()
     onActiveChanged: _sendActive()
     onActiveSinceMsChanged: _sendActive()
     Component.onCompleted: _restart()
@@ -76,12 +81,17 @@ QtObject {
     function _clear() {
         if (holders.length > 0)
             holders = [];
-        name = { owned: null, owner: "" };
+        name = { owned: null, owner: "", released: false };
     }
 
     function _send(message) {
         if (_process.running)
             _process.write(JSON.stringify(message) + "\n");
+    }
+
+    function _sendOwn() {
+        if (state === "running")
+            _send(HelperRules.ownMessage(own));
     }
 
     function _sendActive() {
@@ -117,14 +127,17 @@ QtObject {
                 return;
             }
             state = "running";
+            _sendOwn();
             _sendActive();
             if (HelperRules.adoptMessage(_lost) !== null)
                 _send(HelperRules.adoptMessage(_lost));
             _lost = [];
             break;
         case "name":
-            name = { owned: message.owned, owner: message.owner };
-            if (message.owned)
+            name = { owned: message.owned, owner: message.owner, released: message.released };
+            if (message.released)
+                _tell("info", "org.freedesktop.ScreenSaver left free: idle is off");
+            else if (message.owned)
                 _tell("info", "answering org.freedesktop.ScreenSaver");
             else
                 _tell("info", "org.freedesktop.ScreenSaver is held by " + (message.owner || "another program")
