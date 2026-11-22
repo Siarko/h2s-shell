@@ -1,8 +1,8 @@
 import QtQuick
 import qs.singletons
 
-// The idle rules (singletons/IdleRules.qml): every case of the plan's table
-// (notes/plans/idle-lock-flow.md §8) and its examples — an OLED turned off, an LCD with the
+// The idle rules (singletons/IdleRules.qml): every case of their table of outcomes and
+// examples — an OLED turned off, an LCD with the
 // screensaver, a laptop panel off, a monitor unplugged, a profile switched mid-idle, input
 // waking all, the lock screen's own screen-off, inhibitors holding while unlocked only.
 // A machine drives the rules as Idle will: events at given times, the Timer at

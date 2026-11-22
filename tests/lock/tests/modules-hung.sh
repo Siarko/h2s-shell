@@ -1,6 +1,5 @@
-# A module whose files hang on read (notes/plans/modules.md §3, "What is known at the first
-# frame"): the shell reads no module file on its GUI thread — module.json, qmldir and the
-# texts for the import check come out of the host's file check, a process under a deadline —
+# A module whose files hang on read: the shell reads no module file on its GUI thread —
+# module.json, qmldir and the texts for the import check come out of the host's file check, a process under a deadline —
 # and nothing the lock screen needs waits for the module host (Profiles reads ModuleLists,
 # plain values). Here every read the check makes hangs: H2S_SHELL_TEST_MODULE_CHECK_PATH puts
 # a `head` that sleeps 40 s first on the check's PATH only (no real mount is involved; the

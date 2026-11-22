@@ -1,4 +1,4 @@
-# The launcher's side of modules (scripts/launch.sh, notes/plans/modules.md):
+# The launcher's side of modules (scripts/launch.sh):
 #
 # (1) Discovery: H2S_SHELL_MODULES as the shell gets it — H2S_SHELL_MODULE_PATH's entries
 #     first, then $XDG_DATA_HOME/h2s-shell/modules/*, then each data dir's
@@ -12,7 +12,7 @@
 #     H2S_SHELL_SAFE_MODE=1, loads no module, and the lock still works; a start that lives
 #     past the quick-death window (30 s) ends it, and the next start picks up a module
 #     installed meanwhile (discovery runs before every start).
-# (3) Sources and confirmations (notes/plans/modules-management.md §3, §5): each module's
+# (3) Sources and confirmations: each module's
 #     source in `modules list` (a data dir the user can write is not the system's); the first
 #     start acknowledges the hand-placed modules it finds
 #     on (the config file keeps them) and writes the modules on to the runtime directory; the

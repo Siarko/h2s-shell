@@ -1,8 +1,8 @@
 import QtQuick
 import qs.singletons
 
-// The lock's rules (singletons/LockRules.qml), by the behaviours of the plan's Stage 1
-// (notes/plans/lockscreen.md, sections 4 and 7). Each numbered part below is one of them;
+// The lock's rules (singletons/LockRules.qml), by the behaviours the lock must have. Each
+// numbered part below is one of them;
 // the seeded sweep at the end checks the invariants over thousands of generated sequences,
 // and a liveness oracle checks from sampled states that the owner can still get in.
 //
@@ -1899,7 +1899,7 @@ TestCase {
         assertEqual(configOf(noOther.effects), "/etc/pam.d/h2s-shell-password", "13: a fallback that is the same config: tried again (there is no other)");
     }
 
-    // ---- 14. A lock carried over a reload (Stage 4) ----
+    // ---- 14. A lock carried over a reload ----
 
     // logind's LockedHint follows the lock the compositor holds: true at its confirmation,
     // false when a confirmed lock ends; never for a lock that was not confirmed

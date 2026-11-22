@@ -57,7 +57,7 @@ check_within 10 "the new shell's fingerprint conversation is the only one" _one_
 finger ok
 check_within 10 "a finger unlocks" compositor_unlocked
 
-# ---- The launcher's clean-up when a shell Quickshell relaunched in place dies (review S2) ----
+# ---- The launcher's clean-up when a shell Quickshell relaunched in place dies ----
 # The relaunched process carries __QUICKSHELL_CRASH_INFO_FD (and _DUMP_PID, _SIGNAL) in its
 # exec-time environment, and so does every PAM helper it forks. The launcher took any
 # `^__QUICKSHELL_CRASH` for Quickshell's crash reporter and spared it: the dead shell's

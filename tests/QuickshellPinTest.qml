@@ -2,7 +2,7 @@ import QtQuick
 import Quickshell
 import qs.singletons
 
-// Pins the Quickshell behaviour the module system rests on (notes/plans/modules.md §2). None of
+// Pins the Quickshell behaviour the module system rests on. None of
 // it is a documented promise of Quickshell's; it was found in its source and tried. A module is
 // a directory outside the scanned tree, with a qmldir of its own, whose files are loaded by
 // file:// URL (singletons/ModuleHost.qml). The fixture tests/fixtures/qs-pin is such a
@@ -114,7 +114,7 @@ TestCase {
         // replaces rows BY POSITION after the first key-equal one: a removal in the middle
         // destroys the LAST delegate and shifts the later items into the earlier delegates.
         // Views give it string keys instead (components/KeyedModel.qml); strings compare
-        // strictly and go to the right rows. notes/upstream/quickshell-scriptmodel-replace.md
+        // strictly and go to the right rows.
         const rows = values => Qt.createQmlObject("import QtQuick\nimport Quickshell\nItem {\n"
             + "    property alias model: model\n    property alias repeater: repeater\n"
             + "    Column { Repeater { id: repeater; model: ScriptModel { id: model" + values + " }\n"

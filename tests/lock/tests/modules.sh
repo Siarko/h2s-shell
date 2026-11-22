@@ -1,4 +1,4 @@
-# Modules in the real shell (notes/plans/modules.md): the shell started by the launcher with
+# Modules in the real shell: the shell started by the launcher with
 # H2S_SHELL_MODULE_PATH naming the fixture modules (tests/fixtures/modules — a directory of
 # modules, which the launcher's discovery turns into one canonical directory each), broken
 # ones among them: a syntax error, a main that throws, a manifest that is not JSON, another

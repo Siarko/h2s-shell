@@ -492,7 +492,7 @@ password stack received (`pam/check-detail.log`, never the text), and `password_
 <text>` gives the line a text would give; `screenshot_output_ppm <output> <name>` takes one
 output.
 
-Restarts (Stage 4): the launcher supervises the shell, so `SHELL_PID` changes when it is
+Restarts: the launcher supervises the shell, so `SHELL_PID` changes when it is
 started again — `wait_for_new_shell <old pid> <seconds>` waits for the new one and sets it.
 `signal_shell <SIG>` signals the shell and `supervisor_release` tells the launcher to let it
 go (SIGUSR1: it is not started again), each only after checking the pid is the run's shell

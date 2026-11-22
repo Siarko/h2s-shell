@@ -1,8 +1,8 @@
 import QtQuick
 import qs.singletons
 
-// The sleep notice's cycle (singletons/SleepNoticeRules.qml): every row of the plan's
-// table (notes/plans/idle-lock-flow.md §14), then whole cycles.
+// The sleep notice's cycle (singletons/SleepNoticeRules.qml): every row of its table of
+// steps, then whole cycles.
 TestCase {
     suiteName: "SleepNoticeRules"
 

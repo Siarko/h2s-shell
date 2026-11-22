@@ -1,4 +1,4 @@
-# Lock requests around a reload (the review of Stage 4, B1). A Quickshell reload builds the
+# Lock requests around a reload. A Quickshell reload builds the
 # new generation with the event loop blocked, then tears the old one down; for that time
 # (about two seconds) an IPC call gets "Not ready to accept queries yet." — and `qs ipc`
 # exits 0 all the same — and a PrepareForSleep reaches neither generation's logind monitor

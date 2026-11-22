@@ -1,4 +1,4 @@
-# The log the owner reads after a failed attempt on the real machine (Stage 6):
+# The log the owner reads after a failed attempt on the real machine:
 # scripts/lock-log.sh finds the running shell's Quickshell log and prints its lock lines,
 # wall-clock stamped and in order, with the supervisor's log. A lock, a wrong password, the
 # right one, the unlock — every step must leave a line, and none may hold typed text.

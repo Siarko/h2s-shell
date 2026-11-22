@@ -1208,7 +1208,7 @@ TestCase {
         _clock.start();
     }
 
-    // ---- Sources and confirmations (notes/plans/modules-management.md §3, §5) ----
+    // ---- Sources and confirmations ----
     //
     // A host that confirms, its places in the test's own directory: a development path, a user
     // root (a folder, a folder turned off, a link to a privileged module), a built-in root

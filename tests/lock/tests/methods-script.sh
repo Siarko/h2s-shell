@@ -9,7 +9,7 @@
 # below), so both systems' answers are checked on every machine; the last checks are that
 # without the seam the machine itself is asked.
 #
-# The contract (notes/plans/lockscreen.md, section 7): exit 0 is an answer, also "not
+# The contract (the script's header): exit 0 is an answer, also "not
 # here"; non-zero when a question could not be answered — within the shell's 5 s, with the
 # lines it could answer printed first.
 

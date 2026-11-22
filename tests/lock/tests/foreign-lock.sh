@@ -59,7 +59,7 @@ press_key Return
 check_within 10 "the password unlocks" compositor_unlocked
 
 # Not asking is what keeps the shell alive: Hyprland, the restore off, ends a client that asks
-# for a lock while another stands (notes/plans/lockscreen.md, section 1). The refusal itself
+# for a lock while another stands. The refusal itself
 # (elsewhere, and its read) is LockRulesTest's.
 check "the shell was never restarted" test "$(grep -c "the shell exited" "$WORK/shell.log")" = 0
 check "no protocol error" no_protocol_errors

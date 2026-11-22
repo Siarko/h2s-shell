@@ -6,7 +6,8 @@
 # the modules' queue of runs as administrator, which reads Modules — and FileChooser, the
 # modules' file chooser, which reads Modules and the lock's state — and SafeModeBanner, the
 # banner about the shell started without modules): printed as
-# "LOCK:<file>", nothing when clean (notes/plans/modules.md §4 item 1; ModuleRegistriesTest).
+# "LOCK:<file>", nothing when clean (the lock screen must work whatever a module does;
+# ModuleRegistriesTest).
 #
 #   tests/lock-closure.sh <shell tree>
 #

@@ -1,4 +1,4 @@
-# Keys right after waking by a key are not lost (defect 9): the key that wakes the prompt
+# Keys right after waking by a key are not lost: the key that wakes the prompt
 # is the first character, then a wrong character, Backspace, the rest of the password and
 # Enter, all typed at once while the prompt is still fading in — and it unlocks. Then an
 # Enter right after a key wake, alone, is refused as empty rather than sent.

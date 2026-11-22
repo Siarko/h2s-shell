@@ -3,7 +3,7 @@ import QtQuick.Layouts
 import qs.singletons
 import qs.singletons.network
 
-// The VPN provider seam (notes/plans/tailscale.md §3): the pure rules in VpnProviderRules
+// The VPN provider seam: the pure rules in VpnProviderRules
 // and VpnWithNetworkRules, and VpnManager's registry driven with the stand-in provider
 // (FakeVpnProvider.qml). Nothing here reaches NetworkManager: only provider ids ("fake:…")
 // are connected, and the unit runner gives nmcli no bus. Asynchronous for the parts that need the event loop: a
@@ -181,7 +181,7 @@ TestCase {
         assertEqual(JSON.stringify(VpnWithNetworkRules.prunedVpnMapping(mapping, profiles)),
                     JSON.stringify({ wired: ["nmvpn", "fake:one", "fake:gone", "away:x", "slow:y"] }),
                     "pruning: every provider id kept — reported, missing from its provider, provider absent or not ready; garbage and deleted UUIDs removed");
-        // The reviewer's probe P1: Tailscale logged out (or one read failed) — ready, nothing reported
+        // Tailscale logged out (or one read failed) — ready, nothing reported
         assertEqual(JSON.stringify(VpnWithNetworkRules.prunedVpnMapping({ wired: ["tailscale:default"] }, profiles, { tailscale: { ready: true, entries: [] } })),
                     JSON.stringify({ wired: ["tailscale:default"] }), "pruning: a ready provider reporting no entry — the user's setting kept");
         assertEqual(JSON.stringify(VpnWithNetworkRules.prunedVpnMapping(mapping, [])), JSON.stringify(mapping), "pruning: nothing before the profiles are read");

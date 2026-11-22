@@ -42,7 +42,7 @@ PROBE_TIMEOUT=5
 # its end (no setup failure, no time-out) and the checks that failed are some of these,
 # at least one. Any other failure is a FAIL. Passing makes it XPASS, which fails the run,
 # so the mark is removed by whoever fixes it rather than left behind.
-# (none at present: `relock`, the regression behind the rework, passes since stage 2)
+# (none at present)
 declare -A EXPECTED_TO_FAIL=(
 )
 declare -A EXPECTED_FAILING_CHECKS=(

@@ -4,7 +4,7 @@
 # lock). The launcher starts it again with a growing pause, at most 3 times while the session
 # stays locked (scripts/launch.sh, "Restarts while locked"); then it gives up and ends. No
 # hot loop, and the compositor stays locked throughout — never unlocked. The owner's way
-# back is then a TTY (notes/plans/lockscreen.md, section 7, "Recovery"): the setting
+# back is then a TTY: the setting
 # switched on, and the launcher started again.
 #
 # The launcher's first pause is shortened (0.1 s instead of 1 s: H2S_LAUNCHER_TEST_TIMINGS);

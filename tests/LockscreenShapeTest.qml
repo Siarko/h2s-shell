@@ -10,7 +10,7 @@ import Quickshell.Io
 // old instance. Nothing in QML can make that independent of order.
 //
 // So a change to the children — one added, removed or moved — changes the list below on
-// purpose, and its review checks the reload path (lock bed: reload-while-locked,
+// purpose, and whoever changes it checks the reload path (lock bed: reload-while-locked,
 // reload-hard, reload-explicit, reload-window, restart-crash-finger for the PAM helper
 // sweep at the end, whose `done` is carried over by position too).
 //

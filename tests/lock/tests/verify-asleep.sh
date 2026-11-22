@@ -1,4 +1,4 @@
-# Adopted from the Stage 2 review (defect 8): the prompt's 10 s sleep must not abort a
+# The prompt's 10 s sleep must not abort a
 # verification under way — the prompt goes to sleep while PAM is still checking, and the
 # verdict still unlocks.
 

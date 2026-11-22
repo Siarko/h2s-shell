@@ -1,12 +1,10 @@
-# The regression behind the rework (notes/plans/lockscreen.md §1): lock, unlock with the
-# password, lock again, unlock with the password again. The second unlock must work as
-# the first did.
+# Lock, unlock with the password, lock again, unlock with the password again. The second
+# unlock must work as the first did.
 #
-# It failed before stage 2: Quickshell 0.3.2 never notifies WlSessionLock's unlock, and the
-# old shell hung everything on that notify, so it never re-armed after the first unlock and
-# dropped the second password before PAM saw it. The driver no longer reads that property
-# through a binding (singletons/Lockscreen.qml). The checks after the first unlock say
-# which part would break.
+# Why it can fail: Quickshell 0.3.2 never notifies WlSessionLock's unlock; a driver that
+# waits on that notify never re-arms after the first unlock and drops the second password
+# before PAM sees it, so the driver does not read that property through a binding
+# (singletons/Lockscreen.qml). The checks after the first unlock say which part would break.
 
 stack_start
 

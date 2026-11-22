@@ -1,4 +1,4 @@
-# Adopted from the Stage 2 review: the single key catcher keeps the keys after pointer
+# The single key catcher keeps the keys after pointer
 # presses — on the field, on the Unlock button, on empty space, before and after waking —
 # and the password typed by keys then unlocks.
 

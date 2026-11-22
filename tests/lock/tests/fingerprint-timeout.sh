@@ -1,4 +1,4 @@
-# Adopted from the system-side review (review-fprintd-timeout.sh): pam_fprintd ends a round
+# pam_fprintd ends a round
 # nobody touches after its `timeout` (30 s by default) with PAM_AUTHINFO_UNAVAIL, which
 # Quickshell reports as Error. Counted as faults, five of them broke the fingerprint for the
 # rest of the lock — after ~4.5 minutes of an untouched lock, until the next wake from

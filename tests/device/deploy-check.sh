@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# After a deploy (notes/workflow.md, "Deploying"): a read-only check of the running shell
+# After a deploy (tests/device/deploy.sh): a read-only check of the running shell
 # against the real Tailscale daemon. It asks the shell, over its IPC, only two read calls —
 # `modules list` and `tailscale state` — and reads the shell's log; it never calls a
 # `tailscale` command, never an IPC call that changes anything (connect, refresh, a setting),

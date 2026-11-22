@@ -1,4 +1,4 @@
-# Dead keys compose (a regression of stage 2: the key catcher was a plain Item, which takes
+# Dead keys compose (a regression once: the key catcher was a plain Item, which takes
 # no part in composition, so a dead key arrived as a key without text and vanished — a
 # password with "é" typed as ´ then e was checked wrong, and "e" alone was accepted in its
 # place). Layout us(intl): the apostrophe key is dead_acute. The password has an é in it.

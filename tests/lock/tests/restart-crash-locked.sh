@@ -36,7 +36,7 @@ check_within 15 "Quickshell's handler restarts it" lines_more_than "$crashes_bef
 # Quickshell 0.3.2's in-place relaunch sometimes comes back without its config path
 # (`Launching config: ""`, "Could not open config file", exit 255): the relaunched process
 # and the crash reporter it forked read the instance info through one shared file offset,
-# and the one that reads second finds nothing (notes/upstream/, finding 5). Then the
+# and the one that reads second finds nothing (a Quickshell defect). Then the
 # launcher starts a fresh shell. Either way: one shell, and it locks again
 wait_until 20 relaunch_decided "$failed_relaunches_before"
 if [ "$(shell_log_count 'Launching config: ""')" -gt "$failed_relaunches_before" ]; then

@@ -1,8 +1,9 @@
 # A file written in the folder the shell runs from, while locked, must not reload the shell:
 # a reload's new WlSessionLock starts with `locked` false and unlocks the session with no
-# authentication (the review's demonstration). The stop-gap: Quickshell.watchFiles is off
+# authentication. The stop-gap: Quickshell.watchFiles is off
 # from the lock to the unlock. After the unlock file watching works again (a write reloads
-# the shell), and the reloaded shell still locks. Carrying a lock across a reload is Stage 4.
+# the shell), and the reloaded shell still locks. Carrying a lock across a reload is the
+# other reload scenarios' (reload-hard, reload-explicit).
 
 stack_start
 

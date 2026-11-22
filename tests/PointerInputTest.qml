@@ -6,7 +6,7 @@ import qs.singletons
 
 // The bar's cells under real input events: a mouse, a finger (QtTest's touch screen),
 // and what each does to hover and to a popup. What Qt makes of a touch is what this
-// guards — measured on the Framework 12 (notes/plans/touch.md, stage 0), relied on by
+// guards — measured on the Framework 12, relied on by
 // BarWidget and PopupWidget. The rules alone: PointerRulesTest. A stylus cannot be sent
 // from QtTest; it was checked on the device.
 //

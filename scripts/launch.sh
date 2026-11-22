@@ -8,9 +8,9 @@
 # The shell is supervised: this script stays, as its parent, and starts it again when it
 # dies (a crash, a kill, the OOM killer) — above all a shell that dies while the screen is
 # locked: the compositor keeps the session locked, and only a new shell can show a prompt
-# again (it finds the lock marker and locks at once; notes/plans/lockscreen.md, section 7,
-# "Restart") — at most 3 times while the session stays locked (see supervise()). See
-# supervise() for what counts as stopping on purpose. One supervisor per
+# again (it finds the lock marker and locks at once) — at most 3 times while the session
+# stays locked (see supervise()). See supervise() for what counts as stopping on purpose.
+# One supervisor per
 # session: it holds $XDG_RUNTIME_DIR/h2s-shell-launcher.lock (flock), and a second launcher
 # waits a little for it to end, then gives up. What it does is logged, timestamped, to
 # $XDG_RUNTIME_DIR/h2s-shell-launcher.log (scripts/lock-log.sh prints it).
@@ -327,7 +327,7 @@ stop_shell() {
     done
 }
 
-# The modules the shell loads (notes/plans/modules.md). Input and output are two variables:
+# The modules the shell loads. Input and output are two variables:
 #   H2S_SHELL_MODULE_PATH   input, the developer's: colon-separated, each a module directory or
 #                           a directory of modules (checkouts being worked on). Read, never
 #                           written here.
@@ -777,7 +777,7 @@ wait_for_shell() {
     done
 }
 
-# Restarts while locked (notes/decisions.md, "Lock supervisor"): a shell that died while the
+# Restarts while locked: a shell that died while the
 # screen was locked is started again at most $max_locked_restarts times while the session
 # stays locked. Then the launcher gives up and ends; the compositor keeps the session locked
 # (never unlocked), and the owner starts the launcher again by hand from a text console. A
@@ -871,7 +871,7 @@ supervise() {
         # Told to stop while the search ran (a --restart's stop_shell: its new launcher waits
         # for this one to end, and a shell started now would be one it never sees)
         [ -n "$stopping" ] && break
-        # Crash-loop safe mode (notes/plans/modules.md): a shell that died quickly twice in a
+        # Crash-loop safe mode: a shell that died quickly twice in a
         # row is started without modules — a module that crashes it at start would otherwise
         # keep the session without a bar, or locked without a prompt. A start that lives past
         # the quick-death window ends it (quick_deaths is counted below).
@@ -913,7 +913,7 @@ supervise() {
         # relaunched but exits 255 — so 255 after a long life is a quick death of a relaunched
         # image, counted (as is a lost status, taken for 255: the safe side). Any other end
         # after 30 s ends the run of quick deaths. The real crash-loop guard is the shell's own
-        # count (notes/plans/modules.md, section 4).
+        # count (ModuleFileRules' start guard).
         if [ $((now - started)) -lt 30 ] || [ "$status" = 255 ]; then
             quick_deaths=$((quick_deaths + 1))
         else

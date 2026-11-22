@@ -1,4 +1,4 @@
-# The supervisor itself (scripts/launch.sh), from the review of Stage 4:
+# The supervisor itself (scripts/launch.sh):
 #
 # (1) A STOPPED shell (SIGSTOP while debugging, SIGTTIN/SIGTTOU from a terminal) is left
 #     alone: with job control on, a plain `wait` returns at a stop, and the supervisor took

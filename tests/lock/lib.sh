@@ -236,7 +236,7 @@ check_timed() {
 #                                    as a hyprctl that hangs)
 # --modules <list>                   H2S_SHELL_MODULE_PATH for the launcher: colon-separated, each a module
 #                                    directory or a directory of modules (the launcher's discovery,
-#                                    notes/plans/modules.md; tests/fixtures/modules holds the fixtures)
+#                                    scripts/launch.sh; tests/fixtures/modules holds the fixtures)
 # --shell-env NAME=value            one more variable in the launcher's (so the shell's) environment
 #                                    (a test seam such as H2S_SHELL_TEST_MODULE_CHECK_PATH); repeatable
 # --data-dirs <list>                 the data dirs the launcher searches for modules (<dir>/h2s-shell/modules/*;
@@ -840,7 +840,7 @@ start_launcher() {
 # The shell process under the supervisor: a child running Quickshell's binary, of this run
 _find_shell_pid() {
     local pid
-    # A launcher that execs the shell instead of supervising it (before Stage 4): the
+    # A launcher that execs the shell instead of supervising it: the
     # launcher's process is the shell
     if [ "$(readlink -f "/proc/${SUPERVISOR_PID:-0}/exe" 2> /dev/null)" = "$(_quickshell_binary)" ]; then
         echo "$SUPERVISOR_PID"
@@ -1238,7 +1238,7 @@ move_pointer() {
 }
 
 # Wakes the prompt by moving the pointer and waits for it to show: a test about
-# authentication should not depend on how a waking key is handled (stage 3 tests that).
+# authentication should not depend on how a waking key is handled (key-wake tests that).
 # Repeated, to a slightly different place each time: the first position a surface sees is
 # no motion (the pointer entering, or the surface appearing under it), and a motion sent
 # before the surface exists reaches nothing.

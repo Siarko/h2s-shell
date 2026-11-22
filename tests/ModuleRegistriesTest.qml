@@ -6,7 +6,7 @@ import qs.components
 import qs.singletons
 import qs.singletons.network
 
-// The core's registries with modules in them (notes/plans/modules.md, M2), on the shell's own
+// The core's registries with modules in them, on the shell's own
 // host (Modules.host) — in a process of its own, as it changes that host, Config's modules
 // turned off and VpnManager's providers, which other suites read or change too:
 // with no module every registry is the core's list itself; the `good` fixture loaded, its
