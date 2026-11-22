@@ -352,20 +352,20 @@ Singleton {
             if (_isMarker(line.replace(/\r$/, "")) || inBlock(i))
                 remove.add(i);
         });
-        // Every auth line outside the block (and one that does not parse but is not another
-        // phase's): @include and other phases' lines stay where they are
+        // Every line outside the block that runs auth lines — an auth line, an @include (it
+        // brings auth lines too: the system's run when it is one, else a raw row the checks
+        // refuse, never dropped), one that does not parse but is not another phase's; the
+        // other phases' lines stay where they are
         const entries = [];
         for (const span of _spans(value)) {
             if (inBlock(span.start))
                 continue;
             const parsed = span.unfinished ? { error: "unfinished" } : PamStackRules.parseLine(span.text);
-            if (parsed.directive !== undefined)
-                continue;
             if (parsed.error !== undefined) {
                 const type = (_words(span.text)[0] ?? "").replace(/^-/, "").toLowerCase();
                 if (["account", "password", "session"].includes(type))
                     continue;
-            } else if (parsed.type !== "auth") {
+            } else if (parsed.directive === undefined && parsed.type !== "auth") {
                 continue;
             }
             entries.push(span);
@@ -401,10 +401,11 @@ Singleton {
     // A hand-made file taken in (§2.9): its auth lines top to bottom as rows — the editor's
     // own forms (the block's lines, a reader or key line as the editor writes it, the
     // counted pattern) as rows, everything else as a raw row in its place; the trailing run
-    // of the service's own lines as the fixed row. → { rows, own, raw, fixed }
+    // of the service's own lines as the fixed row. → { rows, own, raw, fixed, hash (the
+    // text's sha256: build's `facts.replace`, so a Replace acts only on the text taken in) }
     function adopt(text, service, facts) {
         const plan = _adoptPlan(text, service, facts);
-        return { rows: plan.rows, own: plan.own, raw: plan.raw, fixed: plan.fixed };
+        return { rows: plan.rows, own: plan.own, raw: plan.raw, fixed: plan.fixed, hash: sha256(String(text ?? "")) };
     }
 
     // ── Changed by hand ──
@@ -453,18 +454,42 @@ Singleton {
         return result;
     }
 
-    // Our polkit-1 without its first line and block, compared with the vendor file: whether
-    // polkit's own file changed since ours was written ("Apply again to take it over")
-    function vendorChanged(text, vendorText) {
-        if (typeof text !== "string" || typeof vendorText !== "string" || PamStackRules.writtenBy(text) === null)
-            return false;
+    // The lines that run auth lines (auth lines and @include), as spans
+    function _authSpans(text) {
+        return _spans(text).filter(span => {
+            const parsed = PamStackRules.parseLine(span.text);
+            return parsed.directive !== undefined || parsed.type === "auth";
+        });
+    }
+
+    // Our polkit-1 without its first line (null when it is not ours)
+    function _ownRest(text) {
+        if (typeof text !== "string" || PamStackRules.writtenBy(text) === null)
+            return null;
         const newline = text.indexOf("\n");
-        const rest = newline < 0 ? "" : text.slice(newline + 1);
+        return newline < 0 ? "" : text.slice(newline + 1);
+    }
+
+    // Whether polkit's own auth lines changed since ours was written ("Apply again to take
+    // it over"): the auth lines of our polkit-1 outside its block against the vendor file's.
+    // Only auth lines: after a Replace the other phases' lines are the hand-made file's.
+    function vendorChanged(text, vendorText) {
+        const rest = _ownRest(text);
+        if (rest === null || typeof vendorText !== "string")
+            return false;
         const block = PamStackRules.ownBlock(rest);
-        const physical = rest.split("\n");
-        if (block !== null && block.complete)
-            physical.splice(block.beginLine - 1, block.endLine - block.beginLine + 1);
-        return physical.join("\n") !== vendorText;
+        const outside = _authSpans(rest).filter(span => block === null || !block.complete
+                                                || span.start + 1 < block.beginLine || span.start + 1 > block.endLine);
+        const vendor = _authSpans(vendorText);
+        return outside.length !== vendor.length || outside.some((span, i) => !_sameWords(span.text, vendor[i].text));
+    }
+
+    // Whether the service's own lines are the first lines running auth lines in `text`:
+    // what the fixed row stands for, below the shell's block
+    function _systemFollows(text, service, facts) {
+        const system = _systemLines(service, facts);
+        const auth = _authSpans(text);
+        return system.length > 0 && auth.length >= system.length && system.every((line, i) => _sameWords(auth[i].text, line));
     }
 
     // What the page shows for a service's file: { known, changed, reasons, rows (the rows
@@ -490,11 +515,15 @@ Singleton {
     // The new text of a service's file for the rows (§2.6.2). `currentText`: the file as it
     // is (sudo: /etc/pam.d/sudo; polkit: /etc/pam.d/polkit-1, null / undefined when there is
     // none). `facts`: PamRuleRules.check's, with `service`, `vendorText` (polkit: the vendor
-    // file), `replace` (the user took a hand-made file in: its auth lines go into the block)
-    // and optionally `systemLines`. → { ok, text, remove (polkit: delete our file, the
-    // vendor file is in force again), refusals, warnings }. Refused (no text) for rows the
-    // checks refuse — a file changed by hand is R6 unless replaced — or a file not read
-    // ("unread"), never a text that does not parse back to the same lines.
+    // file), `replace` (the user took a hand-made file in: adopt's `hash` of the text taken
+    // in; its auth lines go into the block), `takeOver` (polkit: our file rebuilt from the
+    // vendor file, dropping what a Replace kept) and optionally `systemLines`. Our polkit-1
+    // is otherwise rebuilt from itself, the block swapped in place. → { ok, text, remove
+    // (polkit: delete our file, the vendor file is in force again — only when it would be
+    // the vendor file), refusals, warnings }. Refused (no text) for rows the checks refuse —
+    // a file changed by hand is R6 unless replaced —, a Replace of a text that changed since
+    // ("changed"), a fixed row with the service's own lines not below the block
+    // ("noSystem", unless the shell writes no lines), a file not read ("unread").
     function build(currentText, rows, facts) {
         const known = facts ?? {};
         const service = String(known.service ?? "");
@@ -507,7 +536,9 @@ Singleton {
         if (service === "polkit-1" && currentText !== null && currentText !== undefined && typeof currentText !== "string")
             return _refused("unread", reasonTexts.unread);
         const ownFile = service === "sudo" || typeof currentText === "string";
-        const replace = known.replace === true && ownFile;
+        const replace = ownFile && typeof known.replace === "string" && known.replace !== "";
+        if (replace && sha256(String(currentText)) !== known.replace)
+            return _refused("changed", "The file changed since it was taken in: read it again.");
         const found = replace ? { changed: false } : changes(currentText, service);
         const checked = PamRuleRules.check(rows, Object.assign({}, known, { changedByHand: known.changedByHand === true || found.changed }));
         if (checked.refusals.length > 0)
@@ -520,9 +551,10 @@ Singleton {
             physical = all.filter((line, i) => !plan.remove.has(i));
             at = all.filter((line, i) => i < plan.insertAt && !plan.remove.has(i)).length;
         } else {
-            const base = service === "sudo" ? currentText : known.vendorText;
+            const own = service === "polkit-1" && known.takeOver !== true ? _ownRest(currentText) : null;
+            const base = service === "sudo" ? currentText : (own ?? known.vendorText);
             physical = base.split("\n");
-            const block = service === "sudo" ? PamStackRules.ownBlock(base) : null;
+            const block = PamStackRules.ownBlock(base);
             if (block !== null) {
                 at = block.beginLine - 1;
                 physical.splice(at, block.endLine - block.beginLine + 1);
@@ -531,10 +563,15 @@ Singleton {
                 at = first >= 0 ? first : _endIndex(base, physical);
             }
         }
+        // No lines of ours (the fixed row alone) leaves the file's auth lines as they are
+        if (lines.length > 0 && PamRuleRules.hasFixedRow(rows) && !_systemFollows(physical.slice(at).join("\n"), service, known))
+            return _refused("noSystem", "The system's own lines are not below the shell's: nothing would ask the system's password.",
+                            checked.warnings);
+        const without = physical.join("\n");
         physical.splice(at, 0, ...blockText(lines));
         let text = physical.join("\n");
         if (service === "polkit-1") {
-            if (lines.length === 0 && !replace)
+            if (lines.length === 0 && !replace && without === known.vendorText)
                 return { ok: true, text: null, remove: true, refusals: [], warnings: checked.warnings };
             text = writtenMarker + " " + sha256(text) + "\n" + text;
         }

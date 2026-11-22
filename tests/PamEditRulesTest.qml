@@ -122,8 +122,14 @@ TestCase {
         let noNewline = edit.build(archSudo.replace(/\n$/, ""), [fingerprint("r1"), fixed], facts()).text;
         assertEqual(edit.build(noNewline, [fixed], facts()).text, archSudo.replace(/\n$/, ""), "… removed exactly too");
         const noAuth = "#%PAM-1.0\naccount include system-auth";
-        assertEqual(edit.build(edit.build(noAuth, [fingerprint("r1"), fixed], facts()).text, [fixed], facts()).text, noAuth,
+        assertEqual(edit.build(edit.build(noAuth, [fingerprint("r1")], facts()).text, [fixed], facts()).text, noAuth,
                     "a file without auth lines: the block at the end, removed exactly");
+        assertEqual(codes(edit.build(noAuth, [fingerprint("r1"), fixed], facts())).join(" "), "noSystem",
+                    "… the fixed row there: refused, nothing would ask the system's password");
+        const blockBelow = "auth include system-auth\n" + edit.blockText(["-auth sufficient pam_fprintd.so timeout=10 max-tries=3"]).join("\n") + "\n";
+        assertEqual(codes(edit.build(blockBelow, [fingerprint("r1"), fixed], facts())).join(" "), "noSystem",
+                    "the system's lines above our block: the fixed row refused");
+        assertEqual(edit.build(blockBelow, [fingerprint("r1")], facts()).ok, true, "… without it, the closing line: built");
 
         // The fixed row taken away and put back: only the closing line goes
         const withoutFixed = edit.build(archSudo, [fingerprint("r1")], facts()).text;
@@ -157,7 +163,7 @@ TestCase {
         assertEqual(JSON.stringify(edit.rows(null, "polkit-1", polkit()).map(item => item.method)), "[\"system\"]", "no /etc/pam.d/polkit-1: the system's rows");
         assertEqual(edit.vendorChanged(polkitText, vendorPolkit), false, "the vendor file as copied");
         assertEqual(edit.vendorChanged(polkitText, vendorPolkit + "auth optional pam_permit.so\n"), true, "polkit's own file changed since");
-        assertEqual(edit.state(polkitText, "polkit-1", polkit({ vendorText: vendorPolkit + "# new\n" })).vendorChanged, true, "… the state says so");
+        assertEqual(edit.state(polkitText, "polkit-1", polkit({ vendorText: vendorPolkit + "auth optional pam_permit.so\n" })).vendorChanged, true, "… the state says so");
 
         // --- changed by hand ---
         const sudoText = edit.build(archSudo, [fingerprint("r1"), fixed], facts()).text;
@@ -195,7 +201,7 @@ TestCase {
         assertEqual(adopted.own + "/" + adopted.raw + "/" + adopted.fixed, "2/2/true", "… how many of each");
         assertEqual(JSON.stringify(found.rows), JSON.stringify(adopted.rows), "the state's rows are adopt's");
         assert(!edit.build(handMade, adopted.rows, facts()).ok, "not replaced: build refuses (R6)");
-        built = edit.build(handMade, adopted.rows, facts({ replace: true }));
+        built = edit.build(handMade, adopted.rows, facts({ replace: adopted.hash }));
         assert(built.ok, "replaced: built");
         const readBack = files(archSystemAuth);
         assertEqual(PamStackRules.stack("sudo", Object.assign({}, readBack, { "/etc/pam.d/sudo": built.text })).lines.map(fields).join("\n"),
@@ -211,7 +217,7 @@ TestCase {
         const mixed = sudoText.replace("auth\t\tinclude", "-auth sufficient pam_u2f.so cue\nauth\t\tinclude");
         const mixedRows = edit.adopt(mixed, "sudo", facts()).rows;
         assertEqual(mixedRows.map(item => item.method).join(" "), "fingerprint securityKey system", "our block and a hand line: both as rows");
-        assertEqual(edit.build(mixed, mixedRows, facts({ replace: true })).text, edit.build(archSudo, [fingerprint("r1"), key("r2"), fixed], facts()).text,
+        assertEqual(edit.build(mixed, mixedRows, facts({ replace: edit.adopt(mixed, "sudo", facts()).hash })).text, edit.build(archSudo, [fingerprint("r1"), key("r2"), fixed], facts()).text,
                     "… replaced: one block, the hand line inside it");
         assertEqual(edit.adopt(sudoText.replace("auth\t\tinclude", "auth sufficient pam_u2f.so cue\nauth\t\tinclude"), "sudo", facts()).rows[1].method,
                     "raw", "a key line not in the editor's form (auth, not -auth) stays raw");
@@ -219,8 +225,42 @@ TestCase {
         const handPolkit = vendorPolkit.replace("auth       include", "auth sufficient /usr/lib/security/pam_ldap.so\nauth       include");
         const polkitAdopted = edit.adopt(handPolkit, "polkit-1", polkit());
         assertEqual(polkitAdopted.rows.map(item => item.method).join(" "), "raw system", "a hand-made polkit-1: the vendor's auth lines as the fixed row");
-        built = edit.build(handPolkit, polkitAdopted.rows, polkit({ replace: true }));
+        built = edit.build(handPolkit, polkitAdopted.rows, polkit({ replace: polkitAdopted.hash }));
         assert(built.ok && PamStackRules.writtenBy(built.text) !== null && !edit.changes(built.text, "polkit-1").changed, "… replaced: our file");
+        // A Replace acts only on the text taken in
+        assertEqual(codes(edit.build(handMade + "auth optional pam_permit.so\n", adopted.rows, facts({ replace: adopted.hash }))).join(" "), "changed",
+                    "the file changed since it was taken in: refused");
+        assert(codes(edit.build(handMade, adopted.rows, facts({ replace: true }))).includes("R6"), "a replace without the taken text's hash: R6");
+        // After a Replace on polkit-1 the kept lines stay: the next Apply builds from our file
+        const keptPolkit = handPolkit + "session    optional     pam_keyinit.so force revoke\n";
+        const keptRows = edit.adopt(keptPolkit, "polkit-1", polkit());
+        const replaced = edit.build(keptPolkit, keptRows.rows, polkit({ replace: keptRows.hash })).text;
+        assertEqual(edit.vendorChanged(replaced, vendorPolkit), false, "after a Replace: the vendor's auth lines as copied");
+        assertEqual(edit.vendorChanged(replaced, vendorPolkit.replace("auth       include      system-auth", "auth include system-login")), true,
+                    "… the vendor's auth lines changed since: said");
+        built = edit.build(replaced, [fingerprint("r1"), fixed], polkit());
+        assert(built.ok && built.text.includes("pam_keyinit.so force revoke") && built.text.includes("pam_fprintd.so"),
+               "the next Apply keeps the lines a Replace kept");
+        built = edit.build(replaced, [fixed], polkit());
+        assert(built.ok && !built.remove && built.text.includes("pam_keyinit.so") && PamStackRules.ownBlock(built.text) === null,
+               "… back to the system's rows: our file kept without a block, not removed");
+        built = edit.build(replaced, [fingerprint("r1"), fixed], polkit({ takeOver: true }));
+        assert(built.ok && !built.text.includes("pam_keyinit.so"), "a take-over rebuilds from the vendor file");
+        // A fixed row restored with no system's lines below: refused
+        const noRun = edit.adopt("auth sufficient pam_unix.so try_first_pass\n", "sudo", facts());
+        assertEqual(codes(edit.build("auth sufficient pam_unix.so try_first_pass\n", rules.restoreFixedRow(noRun.rows), facts({ replace: noRun.hash }))).includes("noSystem"),
+                    true, "taken in without the system's lines, the fixed row put back: refused");
+        // @include: never left out of the rows
+        const included = "auth sufficient pam_unix.so try_first_pass\n@include common-auth\naccount required pam_unix.so\n";
+        assertEqual(edit.adopt(included, "sudo", facts()).rows.map(item => item.method).join(" "), "password raw",
+                    "an @include that is not the system's run: a raw row");
+        assert(codes(edit.build(included, edit.adopt(included, "sudo", facts()).rows, facts({ replace: edit.adopt(included, "sudo", facts()).hash }))).includes("R8"),
+               "… which the checks refuse: nothing lost silently");
+        const debian = facts({ systemLines: ["@include common-auth"] });
+        const debianRows = edit.adopt(included, "sudo", debian);
+        assertEqual(debianRows.rows.map(item => item.method).join(" "), "password system", "an @include that is the system's run: the fixed row");
+        built = edit.build(included, debianRows.rows, Object.assign({}, debian, { replace: debianRows.hash }));
+        assert(built.ok && built.text.endsWith("# END h2s-shell\n@include common-auth\naccount required pam_unix.so\n"), "… kept below our block");
         // No trailing run of the system's lines: no fixed row
         assertEqual(edit.adopt("auth sufficient pam_unix.so try_first_pass\n", "sudo", facts()).rows.map(item => item.method).join(" "), "password",
                     "no system's lines at the end: no fixed row");
