@@ -53,7 +53,9 @@ Each brief names:
 - what to report back, in a few lines.
 
 Agents run tests in the foreground, leave no monitors or background work behind and clean up
-only their own temporary files.
+only their own temporary files. Nothing is ended or deleted by pattern (`pkill -f …`,
+`rm -rf /tmp/h2s-locktest.*`): only the pids an agent started and the paths it made — other
+agents' runs go on at the same time.
 
 ## What agents must not touch
 
