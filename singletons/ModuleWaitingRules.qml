@@ -118,17 +118,27 @@ Singleton {
         return { state: { shownKey: key }, action: current.shownKey !== "" ? "replace" : "raise" };
     }
 
-    // The log line for a step's outcome ("" when nothing changed on screen): `count` the
-    // modules waiting
-    function logLine(action, count) {
+    // The log line for what happened on screen ("" for nothing): `outcome` a step's action as
+    // it turned out — "raise", "replace" (the shell's own server shows it), "raise-other",
+    // "replace-other" (another notification daemon shows it, sent plainly), "close",
+    // "close-other" (the one shown is another daemon's: the shell cannot take it back);
+    // `count` the modules waiting
+    function logLine(outcome, count) {
         const what = count === 1 ? "1 module waits" : count + " modules wait";
-        switch (action) {
+        const other = " (another notification daemon shows it; the shell cannot close it)";
+        switch (outcome) {
         case "raise":
             return "notice raised: " + what + " for confirmation";
         case "replace":
             return "notice replaced: " + what + " for confirmation";
+        case "raise-other":
+            return "notice raised: " + what + " for confirmation" + other;
+        case "replace-other":
+            return "notice replaced: " + what + " for confirmation" + other;
         case "close":
             return "notice closed: no module waits for confirmation";
+        case "close-other":
+            return "no module waits for confirmation; the notice stays until closed by hand (another notification daemon shows it)";
         default:
             return "";
         }

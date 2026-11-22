@@ -96,5 +96,12 @@ TestCase {
         assertEqual(ModuleWaitingRules.logLine("raise", 1), "notice raised: 1 module waits for confirmation", "logLine: raised, one");
         assertEqual(ModuleWaitingRules.logLine("replace", 3), "notice replaced: 3 modules wait for confirmation", "logLine: replaced, several");
         assert(ModuleWaitingRules.logLine("close", 0).startsWith("notice closed"), "logLine: closed");
+        assertEqual(ModuleWaitingRules.logLine("raise-other", 2),
+                    "notice raised: 2 modules wait for confirmation (another notification daemon shows it; the shell cannot close it)",
+                    "logLine: raised through another daemon, said");
+        assert(ModuleWaitingRules.logLine("replace-other", 1).startsWith("notice replaced: 1 module waits") && ModuleWaitingRules.logLine("replace-other", 1).includes("another notification daemon"),
+               "logLine: replaced through another daemon, said");
+        assert(!ModuleWaitingRules.logLine("close-other", 0).startsWith("notice closed") && ModuleWaitingRules.logLine("close-other", 0).includes("closed by hand"),
+               "logLine: another daemon's notice is not said to be closed");
     }
 }
