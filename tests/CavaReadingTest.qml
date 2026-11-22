@@ -97,8 +97,8 @@ TestCase {
             assertEqual(_levels.length, 0, "… no levels");
             _reader.program = _fixtures + "/cava";
         });
-        _then("the working cava's levels came", () => _levels.length >= 2, () => {
-            assertEqual(_reader.state, "running", "levels: running");
+        // Running once it has given levels for healthyMs: waited on, not inferred from a count of lines
+        _then("the working cava runs", () => _reader.state === "running" && _levels.length >= 2, () => {
             assertEqual(_reader.problem, "", "… no problem");
             assertEqual(_reader.failures, 0, "… the failures start over");
             assertEqual(_levels[0], "10;20;30;40;40;30;20;10;", "… each line as cava printed it");
@@ -124,7 +124,8 @@ TestCase {
             assertEqual(_missingLogged.length, 1, "… the same outcome, logged once");
             assert(!_missing._retry.running, "… and again not tried by itself");
 
-            _flaky = _readerComponent.createObject(suite, { program: _fixtures + "/cava-flaky", configPath: "/dev/null", healthyMs: 2000 });
+            // A healthy window far past its short life: never counted as running, however loaded
+            _flaky = _readerComponent.createObject(suite, { program: _fixtures + "/cava-flaky", configPath: "/dev/null", healthyMs: 60000 });
             _flaky.logged.connect(line => suite._flakyLogged = suite._flakyLogged.concat([line]));
             _flaky.active = true;
         });
