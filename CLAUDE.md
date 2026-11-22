@@ -20,21 +20,8 @@ rewritten, see the tracker's step 12):
 - **[docs/FEATURES.md](docs/FEATURES.md)** — what the shell does: every widget, panel,
   HUD element, settings page, and the external tools it depends on.
 
-Working notes live in **`notes/`** — not documentation, may be out of date, never linked
-from `docs/` or the README:
-
-- **[notes/tracker.md](notes/tracker.md)** — the one tracker for the shell and its
-  modules: what is next, the order of work, open points. **Start here when resuming work.**
-- **[notes/decisions.md](notes/decisions.md)** — the owner's decisions, by topic; read the
-  topic you work on.
-- **[notes/workflow.md](notes/workflow.md)** — how sessions work: roles, mockups first,
-  review, briefs, what must not be touched, the two machines, deploying, git.
-- **[notes/done.md](notes/done.md)** — done items, numbers kept ("TODO 11.22" in a commit
-  or comment), with their notes.
-- **[notes/cleanup.md](notes/cleanup.md)** — findings from a full read, with severities;
-  check it before "fixing" something.
-- **`notes/plans/`** (designs and plans per feature), **`notes/reviews/`**,
-  **`notes/upstream/`** (drafts of Quickshell issues), `notes/pttd-protocol.md` (dictation).
+The session notes (tracker, decisions, workflow, plans, reviews) live outside this
+repository; nothing in it links to them.
 
 The rules for `docs/`: English only; where NixOS and Arch differ, a "NixOS" and an "Arch"
 subsection — never one system without the other; nothing that names or relies on a

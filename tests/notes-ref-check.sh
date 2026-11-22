@@ -1,8 +1,15 @@
 #!/usr/bin/env bash
 # Code refers to code, and where it truly matters to docs/; never to the working notes,
-# which are kept outside the repository. This check fails on a tracked file that mentions
-# the notes' directory: "notes/" as a path of its own (not "src/notes/" or a module named
-# notes), "../notes", or a variable's directory joined with it ("$root/notes").
+# which are kept outside the repository. This check fails on a file of the repository
+# (tracked, or untracked and not ignored, as tests/affected.sh counts them) that mentions the
+# notes' directory, as a path of its own or joined to another, "notes" ending there or
+# followed by "/" (not "notes-app", "notes.db"):
+#   notes/…, ./notes/…, ../notes             a path of its own (not src/notes/)
+#   dir + "/notes/…"                         a string joined to a directory (in QML too, so
+#                                            a module named notes is named otherwise)
+#   $root/notes, ${root}/notes, "$REPO"/notes   a variable's directory, but not one that is
+#                                            not the repository's: $HOME, $XDG_…, $TMPDIR
+#   $(git rev-parse --show-toplevel)/notes   a command substitution's directory
 #
 # Not checked: CHANGELOG.md from its first released section on (released text stays as it
 # was released), and this check's own files, which have to name what they look for.
@@ -15,7 +22,7 @@
 #
 #   tests/notes-ref-check.sh [--root <dir>] [--list]
 #
-# --root checks another git tree (its tracked files and its own allowance), for the check's
+# --root checks another git tree (its files and its own allowance), for the check's
 # own self-test. --list prints every allowed mention too.
 #
 # Exit status: 0 when nothing but allowed mentions is found, 1 when something else is,
@@ -41,12 +48,24 @@ done
 allowance_file=tests/notes-ref-allowance.txt
 own_files=(tests/notes-ref-check.sh tests/notes-ref-check-selftest.sh "$allowance_file")
 
-# What counts as a mention, as extended regular expressions (GNU grep: \b)
+# What counts as a mention, as extended regular expressions: the directory's name after a
+# prefix (any number of ./ and ../ between), then "/" or the end of the name
 directory=notes
-before='(^|[^A-Za-z0-9_./-])'
-pattern="$before(\\.{1,2}/)*$directory/|$before(\\.{1,2}/)+$directory\\b|\\\$\\{?[A-Za-z_][A-Za-z0-9_]*\\}?/$directory\\b"
+up='(\.{1,2}/)*'
+end='(/|[^A-Za-z0-9_.-]|$)'
+patterns=(
+    "(^|[^A-Za-z0-9_./\$-])$up$directory/"                     # notes/… as a path of its own
+    "(^|[^A-Za-z0-9_./-])(\.{1,2}/)+$directory$end"            # ../notes
+    "[\"'\`]/$up$directory$end"                                # dir + "/notes…"
+    "\\\$\\{?[A-Za-z_][A-Za-z0-9_]*\\}?\"?/$up$directory$end"   # $root/notes, "$REPO"/notes
+    "\\)\"?/$up$directory$end"                                  # $(…)/notes
+)
+pattern=$(IFS='|'; echo "${patterns[*]}")
+# A variable's directory that is not the repository's (matched against the mention itself)
+elsewhere='\$\{?(HOME|XDG_[A-Z_]+|TMPDIR)\}?"?/'
 
-tracked=$(git -C "$root" ls-files 2> /dev/null) || { echo "notes-ref-check.sh: $root is no git tree" >&2; exit 2; }
+tracked=$(git -C "$root" ls-files --cached --others --exclude-standard 2> /dev/null) ||
+    { echo "notes-ref-check.sh: $root is no git tree" >&2; exit 2; }
 
 # The allowance: path -> count
 declare -A allowed=()
@@ -69,7 +88,9 @@ fi
 changelog_released=$(grep -n -m 1 -E '^## \[[0-9]' "$root/CHANGELOG.md" 2> /dev/null | cut -d: -f1)
 mentions=$(cd "$root" && grep -v -x -F "$(printf '%s\n' "${own_files[@]}")" <<< "$tracked" | tr '\n' '\0' |
     xargs -0 -r grep -I -s -d skip -D skip -H -n -o -E -- "$pattern" |
-    awk -F: -v released="${changelog_released:-0}" '!($1 == "CHANGELOG.md" && released > 0 && $2 >= released)')
+    elsewhere=$elsewhere awk -F: -v released="${changelog_released:-0}" '
+        { mention = $0; sub(/^[^:]*:[^:]*:/, "", mention) }
+        !($1 == "CHANGELOG.md" && released > 0 && $2 >= released) && mention !~ ENVIRON["elsewhere"]')
 
 declare -A found=()
 while IFS=: read -r file _; do

@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# Checks tests/notes-ref-check.sh — no tracked file mentions the working notes — on stand-in
-# git trees: a clean one passes; each kind of mention is found with its file and line; what
-# only looks like one (a module named notes, "src/notes/", the word, "notes.db") is not;
-# CHANGELOG.md's released sections and the check's own files are left alone; the allowance
+# Checks tests/notes-ref-check.sh — no file of the repository mentions the working notes —
+# on stand-in git trees: a clean one passes; each kind of mention is found with its file and
+# line, in an untracked file too; what only looks like one ("src/notes/", the word,
+# "notes.db", "notes-app", $HOME's notes, an ignored file) is not; CHANGELOG.md's released
+# sections and the check's own files are left alone; the allowance
 # reports what it lists, and fails on more mentions than it allows and on counts that are
 # too high. Then the check on this checkout, which must pass.
 #
@@ -26,16 +27,23 @@ check() {
 command -v git > /dev/null || { echo "notes-ref-check self-test: no git" >&2; exit 2; }
 word=notes
 
-# tree <name>: a stand-in git tree with nothing to find, everything tracked
+# tree <name>: a stand-in git tree with nothing to find, everything tracked but an ignored file
 tree() {
     local dir=$work/$1
     mkdir -p "$dir/tests" "$dir/src"
     cat > "$dir/src/Module.qml" << EOF
-// A module named $word, installed from src/$word/: no mention
-property string path: versions + "/$word/0.3.0"
+// Installed from src/$word/: no mention
 property string data: "$word.db"
+property string app: "/$word-app/x"
 // Release $word are in the changelog.
 EOF
+    cat > "$dir/src/elsewhere.sh" << EOF
+# Directories that are not the repository's, and names that only begin so
+ls "\$HOME/$word/today.md" "\${XDG_DATA_HOME}/$word" "\$TMPDIR"/$word
+ls ../$word-app "\$dir/$word-app/x" ./$word.txt
+EOF
+    echo ignored.txt > "$dir/.gitignore"
+    echo "ignored: $word/c.md" > "$dir/ignored.txt"
     cat > "$dir/CHANGELOG.md" << EOF
 # Changelog
 
@@ -70,7 +78,7 @@ tree clean
 run clean
 check "a clean tree: status 0" status_is 0
 check "a clean tree: says passed" says "^notes-ref-check: passed$"
-check "a clean tree: no finding (a module named so, src/…/, the word, .db, a released changelog line, its own files)" findings_are 0
+check "a clean tree: no finding (src/…/, the word, .db, $word-app, \$HOME's, an ignored file, a released changelog line, its own files)" findings_are 0
 
 tree found
 cat > "$work/found/src/Thing.qml" << EOF
@@ -78,19 +86,32 @@ cat > "$work/found/src/Thing.qml" << EOF
 Item {}
 EOF
 printf '%s\n' 'excluded = [' "  ../$word" ']' > "$work/found/src/package.nix"
-printf '%s\n' '#!/usr/bin/env bash' "mkdir -p \"\$tree/$word\"" "ls \"\${root}/$word/x\"" > "$work/found/src/run.sh"
+cat > "$work/found/src/run.sh" << EOF
+#!/usr/bin/env bash
+mkdir -p "\$tree/$word"
+ls "\${root}/$word/x"
+ls "\$REPO"/$word/y
+ls "\$(git rev-parse --show-toplevel)/$word/z"
+ls "\$(dirname "\$0")/../$word"
+EOF
+echo "property string plan: shellDir + \"/$word/plan.md\"" > "$work/found/src/Join.qml"
 sed -i "s|- Something.|- Something (./$word/a.md).|" "$work/found/CHANGELOG.md"
 echo "untracked: $word/b.md" > "$work/found/src/untracked.txt"
-git -C "$work/found" add src/Thing.qml src/package.nix src/run.sh CHANGELOG.md
+git -C "$work/found" add src/Thing.qml src/package.nix src/run.sh src/Join.qml CHANGELOG.md
 run found
 check "mentions: status 1" status_is 1
 check "mentions: a path in a comment, with its line" says "^src/Thing.qml:1: // Why: see $word/plans/thing.md$"
 check "mentions: ../ without a slash after" says "^src/package.nix:2:   ../$word$"
 check "mentions: a variable's directory" says "^src/run.sh:2: "
 check "mentions: a variable's directory in braces" says "^src/run.sh:3: "
+check "mentions: a quoted variable's directory" says "^src/run.sh:4: "
+check "mentions: a command substitution's directory" says "^src/run.sh:5: "
+check "mentions: … and ../ after it" says "^src/run.sh:6: "
+check "mentions: a string joined to a directory" says "^src/Join.qml:1: "
 check "mentions: in the changelog's Unreleased section" says "^CHANGELOG.md:5: "
-check "mentions: those five only (not an untracked file)" findings_are 5
-check "mentions: counted" says "^notes-ref-check: 5 finding(s)$"
+check "mentions: in an untracked file" says "^src/untracked.txt:1: "
+check "mentions: those ten only (not an ignored file, not \$HOME's or an XDG directory, not $word-app)" findings_are 10
+check "mentions: counted" says "^notes-ref-check: 10 finding(s)$"
 
 tree allowed
 printf '%s\n' "// $word/a.md" "// and $word/b.md" > "$work/allowed/src/Old.qml"

@@ -24,13 +24,13 @@
 set -uo pipefail
 export LC_ALL=C
 
-root=$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)
+root=$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd -P)
 while [ $# -gt 0 ]; do
     case "$1" in
         --rules) ;;
         --root)
             [ $# -ge 2 ] || { echo "docs-check.sh: --root needs a directory" >&2; exit 2; }
-            root=$(cd "$2" 2> /dev/null && pwd) || { echo "docs-check.sh: no directory $2" >&2; exit 2; }
+            root=$(cd "$2" 2> /dev/null && pwd -P) || { echo "docs-check.sh: no directory $2" >&2; exit 2; }
             shift
             ;;
         *) echo "usage: tests/docs-check.sh [--rules] [--root <dir>]" >&2; exit 2 ;;

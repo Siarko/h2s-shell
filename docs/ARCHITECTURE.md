@@ -1720,12 +1720,13 @@ on canned answers. `tests/docs-check.sh` lints `README.md` and `docs/` for the
 documentation's hard rules (no link out of the repository or to a missing file, no
 developer's home path or machine, a NixOS heading only with an Arch one beside it, English
 only); `tests/docs-check-selftest.sh`, a part of `--quick`, checks it on stand-in Markdown
-and then runs it on the checkout. `tests/notes-ref-check.sh` fails on a tracked file that
-refers to the working notes, which are kept outside the repository (the released sections
-of `CHANGELOG.md` excepted; files listed in `tests/notes-ref-allowance.txt`, with the number
-of mentions each may keep, are reported, not failed); `tests/notes-ref-check-selftest.sh`,
-a part of `--quick`, checks it on stand-in trees and then runs it on the checkout. Each part runs alone too, and takes names for
-a part of it; the rest of this section describes them.
+and then runs it on the checkout. `tests/notes-ref-check.sh` fails on a file of the
+repository (tracked, or untracked and not ignored) that refers to the working notes, which
+are kept outside the repository (the released sections of `CHANGELOG.md` excepted; files
+listed in `tests/notes-ref-allowance.txt`, with the number of mentions each may keep, are
+reported, not failed); `tests/notes-ref-check-selftest.sh`, a part of `--quick`, checks it
+on stand-in trees and then runs it on the checkout. Each part runs alone too, and takes
+names for a part of it; the rest of this section describes them.
 
 The tests are in two kinds of set. The **general** set gives the same verdict on every
 system: the unit and module suites, the lock test bed, `tests/install-test.sh` and the

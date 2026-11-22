@@ -33,10 +33,10 @@ TestCase {
                        versions: [{ dir: "1.2.0-abcdef1", version: "1.2.0", commit: weatherCommit, fetchedAt: "2026-11-20T10:00:00Z" },
                                   { dir: "1.1.0-1234567", version: "1.1.0", commit: "1234567" }],
                        active: "1.2.0-abcdef1", refused: null, installedFor: "", checkedAt: "" },
-            notes: { kind: "folder", address: home + "/src/notes", ref: "",
+            memo: { kind: "folder", address: home + "/src/memo", ref: "",
                      versions: [{ dir: "0.3.0-20261120", version: "0.3.0", commit: "" }], active: "0.3.0-20261120" },
             clipboard: { kind: "repository", address: "git@github.com:anna/h2s-clipboard.git", ref: "",
-                         versions: [{ dir: "0.2.0-1a2b3c4", version: "0.2.0", commit: "1a2b3c4d" }], active: "0.2.0-1a2b3c4", installedFor: "notes" }
+                         versions: [{ dir: "0.2.0-1a2b3c4", version: "0.2.0", commit: "1a2b3c4d" }], active: "0.2.0-1a2b3c4", installedFor: "memo" }
         });
     }
 
@@ -78,7 +78,7 @@ TestCase {
                           { id: "weather", name: "Old weather", state: "duplicate" }, { id: "evil", name: "<b>Evil</b>\nline", state: "safe-mode" }];
         const record = { modules: {
             weather: { versions: [{ dir: "1.2.0-a", fetchedAt: "2026-11-21T11:50:00Z" }, { dir: "1.1.0-b", fetchedAt: "2026-11-01T10:00:00Z" }], active: "1.2.0-a" },
-            notes: { versions: [{ dir: "0.3.0-c", fetchedAt: "2026-11-21T09:00:00Z" }], active: "0.3.0-c" },
+            memo: { versions: [{ dir: "0.3.0-c", fetchedAt: "2026-11-21T09:00:00Z" }], active: "0.3.0-c" },
             old: { versions: [{ dir: "1.0.0-d", fetchedAt: "2026-11-19T09:00:00Z" }], active: "1.0.0-d" },
             future: { versions: [{ dir: "1.0.0-e", fetchedAt: "2026-11-22T09:00:00Z" }], active: "1.0.0-e" },
             garbage: { versions: [{ dir: "x", fetchedAt: "yesterday" }], active: "x" },
@@ -88,7 +88,7 @@ TestCase {
                                              record: record, nowMs: now });
         assertEqual(words.title, "Started without modules", "safe-mode banner: its title");
         assertEqual(words.body, "The shell crashed repeatedly within 30 seconds of starting. Modules on when it crashed: Tailscale, Weather, exitmap. "
-                    + "Weather was updated 10 min ago. notes was installed 3 h ago.",
+                    + "Weather was updated 10 min ago. memo was installed 3 h ago.",
                     "… why, the modules on by name (an id without a status as it is), the last day's installs and updates, newest first");
         assertEqual(JSON.stringify(words.load), JSON.stringify({ label: "Load modules", available: true }), "… Load modules offered");
         assertEqual(JSON.stringify(rules.safeModeBanner({ cause: "launcher", discovering: true }).load), JSON.stringify({ label: "Loading…", available: false }),
@@ -134,9 +134,9 @@ TestCase {
         found = _source(places.versions + "/clipboard/0.2.0-1a2b3c4",
                         { entry: places.user + "/clipboard", isLink: true, target: places.versions + "/clipboard/0.2.0-1a2b3c4" });
         assertEqual(found.label, "From github.com/anna/h2s-clipboard @ 1a2b3c4", "… no ref: the commit, an scp-like address shown as host/path");
-        found = _source(places.versions + "/notes/0.3.0-20261120",
-                        { entry: places.user + "/notes", isLink: true, target: places.versions + "/notes/0.3.0-20261120" });
-        assertEqual(found.source + " | " + found.label, "folder | Copied from /home/anna/src/notes", "a copied folder's record: folder, \"Copied from <path>\"");
+        found = _source(places.versions + "/memo/0.3.0-20261120",
+                        { entry: places.user + "/memo", isLink: true, target: places.versions + "/memo/0.3.0-20261120" });
+        assertEqual(found.source + " | " + found.label, "folder | Copied from /home/anna/src/memo", "a copied folder's record: folder, \"Copied from <path>\"");
 
         // Not the shell's after all: user
         const userOf = (directory, link, given) => _source(directory, link, given).source;
@@ -147,8 +147,8 @@ TestCase {
         assertEqual(userOf(places.versions + "/weather/9.9.9-0000000",
                            { entry: places.user + "/weather", isLink: true, target: places.versions + "/weather/9.9.9-0000000" }), "user",
                     "a version the record does not list: user");
-        assertEqual(userOf(places.versions + "/notes/0.3.0-20261120",
-                           { entry: places.user + "/weather", isLink: true, target: places.versions + "/notes/0.3.0-20261120" }), "user",
+        assertEqual(userOf(places.versions + "/memo/0.3.0-20261120",
+                           { entry: places.user + "/weather", isLink: true, target: places.versions + "/memo/0.3.0-20261120" }), "user",
                     "a link named weather into another id's versions: user");
         assertEqual(userOf(home + "/src/weather", { entry: places.user + "/weather", isLink: true, target: home + "/src/weather" }), "user",
                     "a link with a record, but out of module-versions: user");
@@ -255,8 +255,8 @@ TestCase {
         assertEqual(labels(actions.row) + " | " + labels(actions.opened), "Disable=disable/button, Remove=remove/modal | Reload=reload, Switch version…=switchVersion, Backups…=backups",
                     "safe mode: no update, no check (switching back and backups stay)");
 
-        const folder = { source: "folder", entry: places.user + "/notes", isLink: true };
-        assertEqual(labels(rules.actionsFor({ id: "notes", state: "loaded", enabled: true }, folder, {}).opened),
+        const folder = { source: "folder", entry: places.user + "/memo", isLink: true };
+        assertEqual(labels(rules.actionsFor({ id: "memo", state: "loaded", enabled: true }, folder, {}).opened),
                     "Reload=reload, Copy again=update, Switch version…=switchVersion, Backups…=backups", "a copied folder: copy again, no check");
         const user = _source(places.user + "/player", null);
         actions = rules.actionsFor({ id: "player", state: "loaded", enabled: true }, user, { update: { version: "2", downloaded: true } });
@@ -500,11 +500,11 @@ TestCase {
     function _record() {
         const rules = ModuleInstallRules;
         const record = rules.parseRecord(_recordText());
-        assertEqual(record.ok + " " + Object.keys(record.modules).sort().join(",") + " " + record.dropped.length, "true clipboard,notes,weather 0", "a good record: every entry");
+        assertEqual(record.ok + " " + Object.keys(record.modules).sort().join(",") + " " + record.dropped.length, "true clipboard,memo,weather 0", "a good record: every entry");
         const weather = record.modules.weather;
         assertEqual(weather.kind + " " + weather.address + " " + weather.ref + " " + weather.active + " " + weather.versions.length + " " + weather.refused,
                     "repository https://codeberg.org/anna/weather.git v1.2.0 1.2.0-abcdef1 2 null", "… its fields");
-        assertEqual(record.modules.clipboard.installedFor + " " + record.modules.notes.installedFor + "|", "notes |", "installedFor, \"\" for none");
+        assertEqual(record.modules.clipboard.installedFor + " " + record.modules.memo.installedFor + "|", "memo |", "installedFor, \"\" for none");
         for (const bad of ["", "{", "[]", "null", "42", "\"x\"", null, undefined]) {
             const parsed = rules.parseRecord(bad);
             assertEqual(parsed.ok + " " + Object.keys(parsed.modules).length, "false 0", "unreadable: not ok, no modules — " + JSON.stringify(bad));
@@ -530,7 +530,7 @@ TestCase {
         dropped({ refused: "yes" }, "refused not a record: dropped");
         dropped({ installedFor: "Bad Id" }, "installedFor not an id: dropped");
         assertEqual(withEntry({ refused: { version: "1.3.0", commit: "ffff" } }).modules.weather.refused.version, "1.3.0", "a refused version kept");
-        assert(!ModuleRules.has(rules.parseRecord(JSON.stringify({ notes: Object.assign({}, JSON.parse(_recordText()).notes, { address: "relative" }) })).modules, "notes"),
+        assert(!ModuleRules.has(rules.parseRecord(JSON.stringify({ memo: Object.assign({}, JSON.parse(_recordText()).memo, { address: "relative" }) })).modules, "memo"),
                "a folder's address that is no absolute path: dropped");
         const hostile = rules.parseRecord('{"__proto__": {"kind":"repository"}, "Bad": {}, "constructor": 1}');
         assertEqual(hostile.ok + " " + Object.keys(hostile.modules).length + " " + hostile.dropped.length, "true 0 3", "ids that are no module ids: dropped, the prototype untouched");
@@ -572,7 +572,7 @@ TestCase {
         for (const broken of ["{", "[]", "null", "3", "\"x\""])
             assertEqual(JSON.stringify(rules.parseAcknowledgements(broken)), "{}", "a text that is not a JSON object: {} (asks again, never trusts) — " + broken);
         const mixed = rules.parseAcknowledgements(JSON.stringify({ tailscale: given, Bad: given, weather: { source: "user", address: 3 },
-                                                                     clock: Object.assign({}, given, { source: "elsewhere" }), notes: "yes" }));
+                                                                     clock: Object.assign({}, given, { source: "elsewhere" }), memo: "yes" }));
         assertEqual(Object.keys(mixed).join(","), "tailscale", "entries not well formed are left out: a bad id, a bad field, an unknown source");
 
         const read = (text, facts) => JSON.stringify(rules.readAcknowledgements(text, facts) ?? "undefined");
@@ -687,14 +687,14 @@ TestCase {
         const statuses = [
             { id: "zeta", name: "Zeta", state: "loaded", enabled: true },
             { id: "alpha", name: "alpha", state: "disabled", enabled: false },
-            { id: "notes", name: "Notes", state: "unconfirmed", enabled: true },
+            { id: "memo", name: "Notes", state: "unconfirmed", enabled: true },
             { id: "maps", name: "Maps", state: "approval", enabled: true },
             { id: "beta", name: "Beta", state: "failed", enabled: true },
             { id: "dup", name: "Aaa", state: "duplicate", enabled: true },
             { id: "b2", name: "beta", state: "loaded", enabled: true },
             null, { id: 5 }, { id: "" }
         ];
-        assertEqual(rules.listOrder(statuses).join(","), "b2,beta,zeta,alpha,maps,notes",
+        assertEqual(rules.listOrder(statuses).join(","), "b2,beta,zeta,alpha,maps,memo",
                     "enabled first, then disabled, unconfirmed and held for approval, each by name (case-insensitive) then id; no duplicates");
         assertEqual(rules.listOrder([{ id: "x", state: "loaded" }, { id: "a", state: "loaded" }]).join(","), "a,x", "no name: by id");
         assertEqual(rules.listOrder(null).length, 0, "nothing: nothing");
@@ -790,7 +790,7 @@ TestCase {
         assertEqual(rules.installErrorText({ ok: false, message: "the session was locked: nothing installed" }), "The session was locked", "… another tail");
         assertEqual(rules.installErrorText({ ok: false, message: "not installed: Needs Sync 1.0 — not installed, no address given" }),
                     "Needs Sync 1.0 — not installed, no address given", "… a refused chain: its reason");
-        assertEqual(rules.installErrorText({ ok: false, message: "notes: cancelled", details: { cancelled: true } }), "", "… a cancel: nothing");
+        assertEqual(rules.installErrorText({ ok: false, message: "memo: cancelled", details: { cancelled: true } }), "", "… a cancel: nothing");
         assertEqual(rules.installErrorText({ ok: false, message: "a\nb<b>" }), "A b<b>", "… one line, as written");
 
         assertEqual(rules.stepText({ state: "downloading", percent: 45.4, rate: 1 }, "2.4 MiB/s") + "|" + rules.stepText({ state: "downloading", percent: null }, "")
@@ -798,20 +798,20 @@ TestCase {
                     "45% · 2.4 MiB/s|Downloading…|Verifying…|Verified|Failed|", "step words");
 
         const plan = { complete: true, refused: "", blocking: [], offers: [{ id: "calendar", name: "Calendar" }],
-                       entries: [{ id: "clipboard", name: "Clipboard", kind: "download", neededBy: ["notes"], address: "https://github.com/anna/h2s-clipboard#v0.2.0" },
-                                 { id: "weather", name: "Weather", kind: "update", from: "1.2.0", to: "1.3.0", reason: "Notes needs 1.3", neededBy: ["notes"] },
-                                 { id: "tailscale", name: "Tailscale", kind: "there", neededBy: ["notes"] }] };
+                       entries: [{ id: "clipboard", name: "Clipboard", kind: "download", neededBy: ["memo"], address: "https://github.com/anna/h2s-clipboard#v0.2.0" },
+                                 { id: "weather", name: "Weather", kind: "update", from: "1.2.0", to: "1.3.0", reason: "Notes needs 1.3", neededBy: ["memo"] },
+                                 { id: "tailscale", name: "Tailscale", kind: "there", neededBy: ["memo"] }] };
         const given = {
-            root: { manifest: { id: "notes", name: "Notes", version: "0.4.0", api: "1.30", description: "Sticky notes.", author: "Anna",
+            root: { manifest: { id: "memo", name: "Notes", version: "0.4.0", api: "1.30", description: "Sticky memo.", author: "Anna",
                                 programs: ["xclip"], optionalPrograms: ["wl-copy"], icon: { kind: "glyph", glyph: "" }, privileged: null },
-                    commit: "4f2a9c1aaaa", source: { kind: "repository", address: "https://codeberg.org/anna/h2s-notes#v0.4.0", ref: "v0.4.0" } },
+                    commit: "4f2a9c1aaaa", source: { kind: "repository", address: "https://codeberg.org/anna/h2s-memo#v0.4.0", ref: "v0.4.0" } },
             fetched: { clipboard: { manifest: { id: "clipboard", name: "Clipboard", version: "0.2.0" } } },
-            plan: plan, rootTarget: { kind: "new" }, replaced: [{ directory: "/b/notes", source: "builtin", version: "0.1.0" }], shellApi: "1.36",
-            programs: { xclip: true }, goesTo: "~/.local/share/h2s-shell/modules/notes", previous: { tailscale: "0.6.0", weather: "1.2.0" }
+            plan: plan, rootTarget: { kind: "new" }, replaced: [{ directory: "/b/memo", source: "builtin", version: "0.1.0" }], shellApi: "1.36",
+            programs: { xclip: true }, goesTo: "~/.local/share/h2s-shell/modules/memo", previous: { tailscale: "0.6.0", weather: "1.2.0" }
         };
         const preview = rules.installPreview(given);
-        assertEqual(preview.name + "|" + preview.id + "|" + preview.version + "|" + preview.icon, "Notes|notes|0.4.0|", "preview: name, id, version, icon");
-        assertEqual(preview.source.join("|"), "From codeberg.org/anna/h2s-notes @ v0.4.0|commit 4f2a9c1", "… the source with its commit");
+        assertEqual(preview.name + "|" + preview.id + "|" + preview.version + "|" + preview.icon, "Notes|memo|0.4.0|", "preview: name, id, version, icon");
+        assertEqual(preview.source.join("|"), "From codeberg.org/anna/h2s-memo @ v0.4.0|commit 4f2a9c1", "… the source with its commit");
         assertEqual(preview.api, "asks for 1.30 · this shell has 1.36 — fits", "… the API");
         assertEqual(preview.programs.map(program => program.name + "=" + program.found).join(","), "xclip=true,wl-copy=false", "… programs found and not");
         assertEqual(preview.alsoInstalls.join("|"), "Clipboard 0.2.0 — from github.com/anna/h2s-clipboard (Notes needs it)", "… what it also installs, from where, for whom");
@@ -832,12 +832,12 @@ TestCase {
         assert(rules.planSignature(plan) === rules.planSignature(JSON.parse(JSON.stringify(plan))), "plan signature: the same plan, the same");
         assert(rules.planSignature(plan) !== rules.planSignature(Object.assign({}, plan, { entries: plan.entries.map(entry => Object.assign({}, entry, { kind: "there" })) })),
                "… another role: another");
-        const update = rules.installPreview(Object.assign({}, given, { rootTarget: { kind: "update" }, previous: { notes: "0.3.0" },
+        const update = rules.installPreview(Object.assign({}, given, { rootTarget: { kind: "update" }, previous: { memo: "0.3.0" },
                                                                        plan: Object.assign({}, plan, { entries: [] }) }));
         assertEqual(update.replaces + "|" + update.trust, "Updates Notes 0.3.0 → 0.4.0|null", "… an update of its own: said, no statement");
-        const folder = rules.installPreview(Object.assign({}, given, { root: Object.assign({}, given.root, { source: { kind: "folder", folder: "/src/notes" },
-                                                                                                          manifest: { id: "notes", name: "No<b>tes\n" } }) }));
-        assertEqual(folder.source.join("|") + "|" + folder.name + "|" + folder.icon, "Copied from /src/notes|No<b>tes|N", "… a folder; a name as written, on one line; the letter");
+        const folder = rules.installPreview(Object.assign({}, given, { root: Object.assign({}, given.root, { source: { kind: "folder", folder: "/src/memo" },
+                                                                                                          manifest: { id: "memo", name: "No<b>tes\n" } }) }));
+        assertEqual(folder.source.join("|") + "|" + folder.name + "|" + folder.icon, "Copied from /src/memo|No<b>tes|N", "… a folder; a name as written, on one line; the letter");
     }
 
     function _checks() {
@@ -868,8 +868,8 @@ TestCase {
         // What install was given
         let source = rules.installSource("file:///srv/repos/weather.git#v1.2.0");
         assertEqual(source.kind + " " + source.url + " " + source.ref, "repository file:///srv/repos/weather.git v1.2.0", "install: an address with its ref");
-        source = rules.installSource(home + "/src/notes/");
-        assertEqual(source.kind + " " + source.folder, "folder " + home + "/src/notes", "install: an absolute path is a folder, cleaned");
+        source = rules.installSource(home + "/src/memo/");
+        assertEqual(source.kind + " " + source.folder, "folder " + home + "/src/memo", "install: an absolute path is a folder, cleaned");
         assertEqual(rules.installSource("/srv/../etc").kind, "", "… a path with \"..\": refused");
         assertEqual(rules.installSource("/").kind, "", "… the root: refused");
         assertEqual(rules.installSource("/srv/a\nb").kind, "", "… control characters: refused");
@@ -956,8 +956,8 @@ TestCase {
 
         // The record, changed
         let modules = rules.recordInstalled({}, "clipboard", { kind: "repository", address: "file:///srv/clip.git", ref: "v0.2", dir: "0.2.0-1234567",
-                                                              version: "0.2.0", commit: "1234567", fetchedAt: "t", installedFor: "notes" });
-        assertEqual(modules.clipboard.active + " " + modules.clipboard.installedFor + " " + modules.clipboard.versions.length, "0.2.0-1234567 notes 1", "record: a new module");
+                                                              version: "0.2.0", commit: "1234567", fetchedAt: "t", installedFor: "memo" });
+        assertEqual(modules.clipboard.active + " " + modules.clipboard.installedFor + " " + modules.clipboard.versions.length, "0.2.0-1234567 memo 1", "record: a new module");
         assert(rules.parseRecord(rules.recordText(modules)).modules.clipboard !== undefined, "… what parseRecord reads back");
         const before = JSON.stringify(records.modules);
         modules = rules.recordInstalled(records.modules, "weather", { kind: "repository", address: "https://codeberg.org/anna/weather.git", ref: "main",
@@ -971,14 +971,14 @@ TestCase {
         assertEqual(rules.recordStaged({}, "clipboard", { kind: "repository", address: "file:///srv/c.git", dir: "0.2.0-1234567", version: "0.2.0" }).clipboard.active,
                     "0.2.0-1234567", "… a new module: its only version");
         assert(rules.parseRecord(rules.recordText(staged)).modules.weather !== undefined, "… what parseRecord reads back");
-        const raw = JSON.stringify({ weather: { kind: "repository", future: 1 }, "Bad Id": { x: 1 }, notes: { kind: "folder" } });
-        const spliced = JSON.parse(rules.recordTextWithout(raw, ["notes"]));
+        const raw = JSON.stringify({ weather: { kind: "repository", future: 1 }, "Bad Id": { x: 1 }, memo: { kind: "folder" } });
+        const spliced = JSON.parse(rules.recordTextWithout(raw, ["memo"]));
         assertEqual(JSON.stringify(Object.keys(spliced)) + " " + spliced.weather.future, "[\"weather\",\"Bad Id\"] 1",
                     "remove's record: only the removed entry goes, unknown fields and entries parseRecord dropped stay");
         assertEqual(rules.recordTextWithout("{", ["x"]) + " " + rules.recordTextWithout("[]", ["x"]), "null null", "… a text that is no object: nothing written");
-        const cutEntries = entries.concat([{ entry: places.user + "/notes", isLink: true, target: places.versions + "/notes/0.4.0-20261121120000" }]);
+        const cutEntries = entries.concat([{ entry: places.user + "/memo", isLink: true, target: places.versions + "/memo/0.4.0-20261121120000" }]);
         let reconciled = rules.reconcileRecord({ complete: true, roots: roots, entries: cutEntries }, records);
-        assertEqual(reconciled.changed + " " + reconciled.modules.notes.active + " " + reconciled.modules.notes.versions.map(each => each.version).join(","),
+        assertEqual(reconciled.changed + " " + reconciled.modules.memo.active + " " + reconciled.modules.memo.versions.map(each => each.version).join(","),
                     "true 0.4.0-20261121120000 0.3.0,0.4.0", "reconcile: a link to a version the record does not list: listed and active");
         assertEqual(reconciled.modules.weather.active, "1.2.0-abcdef1", "… the others as they were");
         const switchedEntries = [{ entry: places.user + "/weather", isLink: true, target: places.versions + "/weather/1.1.0-1234567" }];
@@ -999,7 +999,7 @@ TestCase {
         assertEqual(rules.recordWithout(modules, "weather").weather, undefined, "an entry gone");
         assertEqual(rules.recordRestored(modules, "weather", records.modules.weather).weather.active, "1.2.0-abcdef1", "… restored as it was");
         assertEqual(rules.recordRestored(modules, "clipboard", null).clipboard, undefined, "… none before: gone");
-        const text = rules.recordText({ b: records.modules.weather, a: records.modules.notes });
+        const text = rules.recordText({ b: records.modules.weather, a: records.modules.memo });
         assert(text.indexOf("\"a\"") < text.indexOf("\"b\""), "record text: ids in order");
         assertEqual(rules.recordChunks("x".repeat(70000)).map(chunk => chunk.length).join(","), "32768,32768,4464", "… handed over in pieces");
         assertEqual(rules.recordChunks("😀".repeat(20000)).join(""), "😀".repeat(20000), "… never splitting a character");

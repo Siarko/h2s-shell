@@ -32,8 +32,8 @@
 #   tests/deploy-check-selftest.sh                      the deploy check, on canned answers
 #   tests/docs-check-selftest.sh                        the documentation's rules lint, on
 #                                                       stand-ins and on README.md and docs/
-#   tests/notes-ref-check-selftest.sh                   no tracked file mentions the working
-#                                                       notes (beyond its allowance), on
+#   tests/notes-ref-check-selftest.sh                   no file of the repository mentions the
+#                                                       working notes (beyond its allowance), on
 #                                                       stand-ins and on this checkout
 #   tests/run-unit-selftest.sh                          the unit runner's own verdict
 #   tests/remote-run-selftest.sh                        the remote runner, on a stand-in ssh

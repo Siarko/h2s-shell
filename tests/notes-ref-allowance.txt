@@ -5,7 +5,7 @@
 # count or removes its line. The list is meant to end empty.
 2 api/Api.qml
 1 Bar.qml
-20 CLAUDE.md
+5 CLAUDE.md
 1 components/BarWidget.qml
 1 components/ModuleContribution.qml
 1 components/ModuleSlot.qml
@@ -88,7 +88,6 @@
 1 singletons/WallpaperRules.qml
 1 singletons/Wallpapers.qml
 1 tests/device/deploy-check.sh
-1 tests/fixtures/backup/setup.sh
 1 tests/IdleRulesTest.qml
 1 tests/lock-closure.sh
 1 tests/lock/lib.sh
@@ -104,7 +103,6 @@
 1 tests/lock/tests/restart-no-restore-generic.sh
 1 tests/manual/pam-probe.qml
 1 tests/manual/README.md
-2 tests/ModuleBackupTest.qml
 1 tests/ModuleRegistriesTest.qml
 1 tests/ModulesTest.qml
 1 tests/PointerInputTest.qml

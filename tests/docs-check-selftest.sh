@@ -88,6 +88,11 @@ check "a good tree: status 0" status_is 0
 check "a good tree: says passed, with the files it read" says "^docs-check: passed (3 files)$"
 check "a good tree: no finding" findings_are 0
 
+ln -s "$work/good/checkout" "$work/good-link"
+OUTPUT=$("$LINT" --rules --root "$work/good-link" 2>&1)
+STATUS=$?
+check "a good tree through a symbolic link: status 0 (its links stay inside)" status_is 0
+
 tree outside
 echo "Beside: [it](../../outside.md)." >> "$work/outside/checkout/docs/guide.md"
 echo "[beside]: ../outside.md" >> "$work/outside/checkout/README.md"
