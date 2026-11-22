@@ -118,14 +118,7 @@ Flickable {
         }
 
         // ── The family ──
-        Text {
-            Layout.topMargin: 4
-            text: "Family"
-            font.family: Theme.fontFamily
-            font.pixelSize: Theme.fontSizeBody
-            font.bold: true
-            color: Theme.textSecondary
-        }
+        SectionTitle { text: "Family"; divider: false }
 
         RowLayout {
             Layout.fillWidth: true
@@ -198,14 +191,7 @@ Flickable {
         }
 
         // ── The sizes ──
-        Text {
-            Layout.topMargin: 10
-            text: "Sizes"
-            font.family: Theme.fontFamily
-            font.pixelSize: Theme.fontSizeBody
-            font.bold: true
-            color: Theme.textSecondary
-        }
+        SectionTitle { text: "Sizes" }
 
         Repeater {
             model: ThemeRules.fontTokens

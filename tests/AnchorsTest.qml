@@ -789,7 +789,7 @@ TestCase {
         const general = SettingsSchema.keysInGroup("general");
         const appearance = SettingsSchema.keysInGroup("appearance");
         const expected = [["text General", 0]].concat(general.map((key, index) => ["setting " + key, index === 0 ? 8 : 0]),
-                                                      [["text Theme and motion", Theme.settings.sectionGap + Theme.border.width + Theme.settings.sectionLineGap],
+                                                      [["text Theme and motion", Theme.settings.sectionGap],
                                                        ["text Which theme this", Theme.settings.sectionTitleGap]],
                                                       appearance.map((key, index) => ["setting " + key, index === 0 ? 8 : 0]));
         const problems = [];
@@ -2470,7 +2470,7 @@ TestCase {
             console.log("  INFO: the General page's rows (x y width height): "
                         + rows.map(row => row.name + " " + [row.x, row.y, row.width, row.height].map(Math.round).join(" ")).join(" · "));
             assertEqual(_generalLayoutProblems(rows, _generalView.loader.width).join("; "), "",
-                        "the General page's rows: headings, hint and settings at the page's margin, 8, 16 and 2 apart as before");
+                        "the General page's rows: headings, hint and settings at the page's margin, 8 apart, its section a section's gap and its title's");
             const page = _generalView.loader.item;
             assertEqual(page.path + " " + page.appendHost.count + " " + page.appendHost.built, "settings.general 0 false",
                         "the page is the place settings.general, its base the page loader's; no module: its end builds nothing");

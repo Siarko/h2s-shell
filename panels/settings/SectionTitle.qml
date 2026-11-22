@@ -19,14 +19,15 @@ Text {
 
     readonly property bool _hasControls: _controls.children.length > 0
     readonly property real _controlsSpace: Math.max(0, _controls.implicitHeight - contentHeight) / 2
-    // The line and the room under it, inside the top margin
+    // The line and the room under it, in the title's own box (its top padding), so a page
+    // or module that sets Layout.topMargin changes only the room above the line
     readonly property real _lineRoom: divider ? Theme.border.width + Theme.settings.sectionLineGap : 0
 
-    Layout.topMargin: divider ? Theme.settings.sectionGap + _lineRoom : Theme.settings.sectionLineGap
+    Layout.topMargin: divider ? Theme.settings.sectionGap : Theme.settings.sectionLineGap
     Layout.bottomMargin: Theme.settings.sectionTitleGap
     Layout.fillWidth: _hasControls
     rightPadding: _hasControls ? _controls.implicitWidth + 8 : 0
-    topPadding: _hasControls ? _controlsSpace : 0
+    topPadding: _lineRoom + (_hasControls ? _controlsSpace : 0)
     bottomPadding: _hasControls ? _controlsSpace : 0
     textFormat: Text.PlainText
     font.family: Theme.fontFamily
@@ -34,13 +35,13 @@ Text {
     font.bold: true
     color: Theme.textPrimary
 
-    // Drawn in the top margin, across the whole column the title stands in (a title without
-    // controls is only as wide as its text)
+    // At the top of the title's box, across the whole column the title stands in (a title
+    // without controls is only as wide as its text)
     Rectangle {
         objectName: "sectionDivider"
         visible: root.divider
         x: -root.x
-        y: -root._lineRoom
+        y: 0
         width: root.parent ? root.parent.width : root.width
         height: Theme.border.width
         color: Theme.divider
@@ -48,7 +49,9 @@ Text {
 
     RowLayout {
         id: _controls
-        anchors { right: parent.right; verticalCenter: parent.verticalCenter }
+        // Centred on the text's line, under the line's room
+        anchors.right: parent.right
+        y: root._lineRoom + (root.height - root._lineRoom - height) / 2
         visible: root._hasControls
         spacing: 8
     }

@@ -318,22 +318,8 @@ Flickable {
             component Section: ColumnLayout {
                 property string title: ""
                 Layout.fillWidth: true
-                Layout.topMargin: 10
                 spacing: 0
-                Text {
-                    text: parent.title
-                    font.family: Theme.fontFamily
-                    font.pixelSize: Theme.fontSizeBody
-                    font.bold: true
-                    color: Theme.textSecondary
-                    Layout.bottomMargin: 2
-                }
-                Rectangle {
-                    Layout.fillWidth: true
-                    implicitHeight: Theme.border.width
-                    color: Theme.outline
-                    Layout.bottomMargin: 6
-                }
+                SectionTitle { text: parent.title }
             }
 
             // ── By me ──
@@ -581,10 +567,8 @@ Flickable {
         }
 
         // ── How it looks ──
-        Heading {
+        SectionTitle {
             text: "Look"
-            Layout.topMargin: 18
-            Layout.bottomMargin: 4
             opacity: root._on ? 1 : 0.35
         }
 

@@ -115,15 +115,10 @@ Flickable {
                 Layout.bottomMargin: 4
                 spacing: 0
 
-                Text {
+                SectionTitle {
                     visible: _entry.firstOfGroup
-                    Layout.topMargin: _entry.index === 0 ? 4 : 12
-                    Layout.bottomMargin: 4
+                    divider: _entry.index > 0
                     text: _entry.modelData.group
-                    font.family: Theme.fontFamily
-                    font.pixelSize: Theme.fontSizeBody
-                    font.bold: true
-                    color: Theme.textSecondary
                 }
 
                 RowLayout {

@@ -73,24 +73,11 @@ ColumnLayout {
             required property var modelData
             required property int index
             Layout.fillWidth: true
-            Layout.topMargin: index === 0 ? 4 : 10
             spacing: 2
 
-            // A line between sections
-            Rectangle {
-                visible: _section.index > 0
-                Layout.fillWidth: true
-                Layout.bottomMargin: 8
-                height: 1
-                color: Theme.divider
-            }
-
-            Text {
+            SectionTitle {
                 text: _section.modelData.title
-                font.family: Theme.fontFamily
-                font.pixelSize: Theme.fontSizeBody
-                font.bold: true
-                color: Theme.textSecondary
+                divider: _section.index > 0
             }
             Hint {
                 visible: (_section.modelData.hint ?? "") !== ""

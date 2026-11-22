@@ -69,6 +69,9 @@ TestCase {
             Public.Heading { id: plainHeading; text: "Plain" }
             Public.SectionTitle { id: plainTitle; text: "Plain" }
             Public.SectionTitle { id: firstTitle; text: "First"; divider: false }
+            // A margin set by its page (a module's, a title in a row): only the room above
+            // the line changes
+            Public.SectionTitle { id: tightTitle; text: "Tight"; Layout.topMargin: 0 }
         }
 
         WindowDriver {
@@ -412,9 +415,14 @@ TestCase {
         const lineTop = plainLine.mapToItem(headings, 0, 0);
         assertEqual([plainLine.visible, lineTop.x, plainLine.width, plainLine.height].join(" "), "true 0 300 " + Theme.border.width,
                     "a section title's line: across the column, a border thick");
-        assertEqual(plainTitle.y - (lineTop.y + plainLine.height), Theme.settings.sectionLineGap, "… the title its gap under it");
-        assertEqual(plainTitle.Layout.topMargin, Theme.settings.sectionGap + Theme.border.width + Theme.settings.sectionLineGap,
-                    "… the section's room above the line");
+        assertEqual(lineTop.y - plainTitle.y, 0, "… at the top of the title's own box");
+        assertEqual(plainTitle.topPadding - plainLine.height, Theme.settings.sectionLineGap, "… the text its gap under it");
+        assertEqual(plainTitle.Layout.topMargin, Theme.settings.sectionGap, "… the section's room above the line");
+        const tightLine = line(tightTitle);
+        const above = firstTitle.y + firstTitle.height;
+        assertEqual(tightLine.mapToItem(headings, 0, 0).y - above, headings.spacing + firstTitle.Layout.bottomMargin,
+                    "Layout.topMargin: 0 — the line right under the item above, clear of it");
+        assertEqual(tightTitle.topPadding - tightLine.height, Theme.settings.sectionLineGap, "… the text its gap under the line still");
         assertEqual(line(firstTitle).visible + " " + firstTitle.Layout.topMargin, "false " + Theme.settings.sectionLineGap,
                     "divider: false, the first section under a heading: no line, nor its room");
         headings.visible = false;

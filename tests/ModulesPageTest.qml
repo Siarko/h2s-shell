@@ -741,8 +741,14 @@ TestCase {
         _fixture();
         assert(_until(() => _cards().length === 7));
         assertEqual(_named(page, "safeModeBanner").length, 0, "out of safe mode: no banner on the page");
+        // The sections' lines: none above the first under the heading
+        const lines = () => _all(page, child => child.kind === "section" && child.visible && child.title !== "")
+            .sort((first, second) => first.mapToItem(page, 0, 0).y - second.mapToItem(page, 0, 0).y)
+            .map(section => section.title + ":" + section.dividerLine.visible).join(", ");
+        assertEqual(lines(), "Add a module:false, Installed:true", "out of safe mode: no line above Add a module, one above Installed");
         _host.safeMode = true;
         assert(_until(() => (_named(page, "safeModeBanner")[0]?.height ?? 0) > 0), "in safe mode: the banner on the page");
+        assertEqual(lines(), "Installed:false", "… in safe mode, Installed first under the heading: no line above it");
         const banner = _named(page, "safeModeBanner")[0];
         assert(banner.mapToItem(page, 0, 0).y < _cards()[0].mapToItem(page, 0, 0).y, "… above the cards");
         assertEqual(_named(banner, "warningTitle")[0].text, "Started without modules", "… its title");

@@ -60,6 +60,7 @@ AnchorBlock {
         // Above a title: the line, then the room to it (Theme.settings.sectionLineGap)
         Rectangle {
             id: _divider
+            objectName: "sectionDivider"
             visible: root.title !== "" && root.divider
             Layout.fillWidth: true
             Layout.bottomMargin: Theme.settings.sectionLineGap

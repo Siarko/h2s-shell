@@ -203,6 +203,67 @@ TestCase {
                 fail(file + " does not compile: " + component.errorString().trim());
         }
         _notificationsPage();
+        _firstSections();
+    }
+
+    // Every page with sections (SectionTitle, SettingsSection — the one look of a section): a
+    // section right under the page's heading (and its hint or notices) has no line above it,
+    // one after the page's own rows or cards has, as each later one. The pages' sections in
+    // document order, the visible ones with a title; [page, properties, the first's line]
+    property Item _stage: Item { width: 720; height: 1500 }
+    readonly property var _sectionPages: [
+        ["LockscreenSettings", { editIndex: 0 }, false], ["SttSettings", { editIndex: 0 }, false],
+        ["CalendarSettings", { editIndex: 0 }, false], ["BarSettings", { editIndex: 0 }, false],
+        ["PerformanceSettings", { editIndex: 0 }, false], ["FontsSettings", { themeName: "default" }, false],
+        ["ColorsSettings", { themeName: "default" }, false], ["BarShapeSettings", { themeName: "default" }, false],
+        ["WidgetsShapeSettings", { themeName: "default" }, false], ["PopupsShapeSettings", { themeName: "default" }, false],
+        ["ControlsShapeSettings", { themeName: "default" }, false], ["NotificationsShapeSettings", { themeName: "default" }, false],
+        ["OtherShapeSettings", { themeName: "default" }, false],
+        // After the general settings' rows
+        ["GeneralSettings", { editIndex: 0 }, true],
+        // After the mode's row, or the image's
+        ["WallpaperSettings", { editIndex: 0 }, true],
+        // After the theme's own rows, the curve's editor
+        ["ThemesSettings", { themeName: "default" }, true], ["CurvesSettings", {}, true],
+        // After the roles
+        ["AnimationsSettings", { themeName: "default" }, true],
+        // After the summary, the Wi-Fi or wired device's card, the VPNs' cards
+        ["NetworkOverviewSettings", {}, true], ["NetworkWifiSettings", {}, true], ["NetworkEthernetSettings", {}, true],
+        ["NetworkVpnSettings", {}, true]]
+
+    function _sectionsOf(item) {
+        const found = [];
+        for (const child of Array.from(item.children ?? [])) {
+            if (!child.visible)
+                continue;
+            const isTitle = typeof child.divider === "boolean" && typeof child.text === "string";
+            const isSection = typeof child.divider === "boolean" && child.kind === "section";
+            if (isTitle && child.text !== "" || isSection && child.title !== "")
+                found.push(child);
+            if (!isTitle)
+                found.push(..._sectionsOf(child));
+        }
+        return found;
+    }
+
+    function _firstSections() {
+        for (const [name, properties, firstLine] of _sectionPages) {
+            const component = Qt.createComponent(Qt.resolvedUrl("../panels/settings/" + name + ".qml"));
+            const page = component.createObject(_stage, properties);
+            if (page === null) {
+                fail(name + " builds: " + component.errorString().trim());
+                continue;
+            }
+            try {
+                const sections = _sectionsOf(page);
+                const lines = sections.map(section => (section.text ?? "") + (section.kind === "section" ? section.title : "") + ":" + section.divider);
+                assert(sections.length > 0, name + ": sections found");
+                assertEqual(sections.map((section, index) => section.divider === (index > 0 || firstLine) ? "" : lines[index]).join(""), "",
+                            name + ": " + (firstLine ? "a line" : "no line") + " above its first section, a line above each later one — " + lines.join(", "));
+            } finally {
+                page.destroy();
+            }
+        }
     }
 
     // The notifications page: the toast queues' rows after the column's size, in order, and

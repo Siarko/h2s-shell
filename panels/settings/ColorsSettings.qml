@@ -129,14 +129,10 @@ Flickable {
                 Layout.fillWidth: true
                 spacing: 4
 
-                Text {
+                SectionTitle {
                     visible: _entry.firstOfGroup
-                    Layout.topMargin: _entry.index === 0 ? 4 : 10
+                    divider: _entry.index > 0
                     text: _entry.modelData.group
-                    font.family: Theme.fontFamily
-                    font.pixelSize: Theme.fontSizeBody
-                    font.bold: true
-                    color: Theme.textSecondary
                 }
 
                 // The colour: swatch, name and use, where it comes from, hex

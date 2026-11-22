@@ -358,7 +358,7 @@ Flickable {
         }
 
         // ── Preview: a square moving with the curve, and one with the compared curve ──
-        Heading { text: "Preview"; Layout.topMargin: 6 }
+        SectionTitle { text: "Preview" }
 
         CurvePreview {
             id: _preview

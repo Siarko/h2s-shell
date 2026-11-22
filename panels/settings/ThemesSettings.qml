@@ -138,10 +138,8 @@ Flickable {
             Hint { text: "Themes that extend this one, directly or not, are left out: a theme cannot build on itself." }
         }
 
-        Rectangle { Layout.fillWidth: true; height: 1; color: Theme.divider; Layout.topMargin: 4; Layout.bottomMargin: 4 }
-
         // ── New ──
-        Heading { text: "New theme" }
+        SectionTitle { text: "New theme" }
         Field {
             id: _newInput
             placeholder: "Name"
@@ -187,9 +185,7 @@ Flickable {
             Layout.fillWidth: true
             spacing: 6
 
-            Rectangle { Layout.fillWidth: true; height: 1; color: Theme.divider; Layout.topMargin: 4; Layout.bottomMargin: 4 }
-
-            Heading { text: "Rename or delete" }
+            SectionTitle { text: "Rename or delete" }
             RowLayout {
                 Layout.fillWidth: true
                 spacing: 6

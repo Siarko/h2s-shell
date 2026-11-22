@@ -277,14 +277,7 @@ Flickable {
         }
 
         // ── How the wallpaper changes (WallpaperSurface); timed by the two wallpaper roles above ──
-        Text {
-            Layout.topMargin: 18
-            text: "Wallpaper transitions"
-            font.family: Theme.fontFamily
-            font.pixelSize: Theme.fontSizeBody
-            font.bold: true
-            color: Theme.textPrimary
-        }
+        SectionTitle { text: "Wallpaper transitions" }
         Hint {
             text: "Timed and eased by the two Wallpaper roles above. Reduced motion changes the wallpaper at once."
         }
