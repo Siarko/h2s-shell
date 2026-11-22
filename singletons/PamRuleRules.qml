@@ -286,7 +286,9 @@ Singleton {
     readonly property var moduleDirectories: ["/usr/lib/security/", "/lib/security/", "/usr/lib64/security/",
         "/lib64/security/", "/usr/lib/x86_64-linux-gnu/security/", "/lib/x86_64-linux-gnu/security/",
         "/usr/lib/aarch64-linux-gnu/security/", "/lib/aarch64-linux-gnu/security/"]
-    readonly property var nixosModuleDirectories: ["/nix/store/", "/run/current-system/sw/lib/security/"]
+    // On NixOS only the system profile: any user can add a module to the store, so a store
+    // path's file name says nothing about what the module does
+    readonly property var nixosModuleDirectories: ["/run/current-system/sw/lib/security/"]
     // libpam's own modules: NixOS's libpam finds these, and only these, by bare name
     readonly property var libpamModules: ["pam_access", "pam_canonicalize_user", "pam_debug", "pam_deny", "pam_echo",
         "pam_env", "pam_exec", "pam_faildelay", "pam_faillock", "pam_filter", "pam_ftp", "pam_group",
@@ -301,13 +303,32 @@ Singleton {
     readonly property var credentialModules: ["pam_unix.so", "pam_fprintd.so", "pam_u2f.so", "pam_userdb.so"]
     readonly property var _rawMethods: ({ "pam_unix.so": "password", "pam_fprintd.so": "fingerprint", "pam_u2f.so": "securityKey" })
 
+    // Whether a module line asks for a credential: "yes" (pam_unix, pam_fprintd; pam_u2f
+    // without the arguments that let it pass with no key or no touch; pam_userdb with its
+    // database under /etc), "no" (another of libpam's modules, or one of those made to pass
+    // by its arguments), "unknown" (a module the shell does not know)
+    function credentialOf(line) {
+        const name = line.moduleName, args = line.args ?? [];
+        if (name === "pam_u2f.so")
+            return args.includes("nouserok") || args.includes("userpresence=0") ? "no" : "yes";
+        if (name === "pam_userdb.so") {
+            const db = args.filter(word => word.startsWith("db=")).map(word => word.slice(3));
+            return db.length > 0 && db.every(path => path.startsWith("/etc/") && !path.split("/").includes("..")) ? "yes" : "no";
+        }
+        if (credentialModules.includes(name))
+            return "yes";
+        return libpamModules.includes(name) ? "no" : "unknown";
+    }
+
     // One raw line judged alone: { line (PamStackRules.parseLine's, or null), reads ("auth ·
     // sufficient · pam_ldap.so", or why it does not parse), method ("password" / "fingerprint"
-    // / "securityKey" for those modules, else "unknown"), refusal ({ code, text } or null) }.
-    // The list-wide checks (R9) are check()'s.
+    // / "securityKey" for those modules, else "unknown"), credential (credentialOf's, "unknown"
+    // for a line that does not parse), refusal ({ code, text } or null) }. The list-wide
+    // checks (R1, R9) are check()'s.
     function rawLine(text, facts) {
         const result = (line, reads, method, code, refusalText) => ({
-            line, reads, method, refusal: code ? { code, text: refusalText } : null
+            line, reads, method, credential: line ? credentialOf(line) : "unknown",
+            refusal: code ? { code, text: refusalText } : null
         });
         if (typeof text !== "string")
             return result(null, "Not a line", "unknown", "R8", texts.R8);
@@ -363,11 +384,14 @@ Singleton {
         R7: "The module is not in the system's module folders.",
         R8: "Not a PAM line.",
         R9: "This line lets anyone in.",
+        R1deny: "This line refuses everyone: nobody would get in.",
         W1: "Only the reader lets you in. If it breaks, use the other service, su or a root console.",
         W2: "Both needed: without the reader nobody gets in.",
         W3: "An empty Enter to reach the reader counts as a wrong password.",
         W4: "The shell does not know this line: the trial runs it, the checks do not.",
         W5: "Does nothing here: another row decides.",
+        W9: "nullok: an account with an empty password gets in.",
+        W10: "Nothing above asks for the password, so this line never lets you in.",
         W6: "Asked twice: the same method is in another row.",
         W7: "A wrong password is asked again by the last row.",
         W8: "Not saved for both: Apply again to make the lists the same."
@@ -387,12 +411,15 @@ Singleton {
     }
 
     // What a row is to the checks: { method ("password" / "fingerprint" / "securityKey" /
-    // "system" / "unknown"), raw, lets (passing lets the user in at once: sufficient, a
-    // bracketed success=done), fails (failing fails the stack: required, requisite, a
-    // bracketed bad/die), optional, nonCredential (a raw line naming one of libpam's modules
-    // that ask for no credential), refusals }
+    // "system" / "unknown"), raw, atOnce (passing lets the user in at once: sufficient, a
+    // bracketed done on success), okOnSuccess (a bracketed ok on success: in only when the
+    // closing line keeps the result), fails (failing fails the stack: required, requisite, a
+    // bracketed bad/die), optional, credential (raw: credentialOf's), denies (a raw pam_deny
+    // that fails), firstPass (a raw pam_unix use_first_pass: only checks a password asked
+    // above), nullok, refusals }
     function _role(row, service, facts) {
-        const role = { method: "unknown", raw: false, lets: false, fails: false, optional: false, nonCredential: false, refusals: [] };
+        const role = { method: "unknown", raw: false, atOnce: false, okOnSuccess: false, fails: false, optional: false,
+                       credential: "unknown", denies: false, firstPass: false, nullok: false, refusals: [] };
         const method = row?.method;
         if (method === "system") {
             role.method = "system";
@@ -402,18 +429,23 @@ Singleton {
         if (method === "raw") {
             role.raw = true;
             const judged = rawLine(row?.details?.text, facts);
-            role.method = judged.method;
+            // A refused line counts as no method: a module from another place may be anything
+            role.method = judged.refusal ? "unknown" : judged.method;
             if (judged.refusal)
                 role.refusals.push(judged.refusal);
             const line = judged.line;
             if (line !== null) {
                 const actions = line.actions ?? {};
                 const onSuccess = actions.success ?? actions.default;
-                role.lets = line.control === "sufficient" || onSuccess === "done" || onSuccess === "ok";
+                role.atOnce = line.control === "sufficient" || onSuccess === "done";
+                role.okOnSuccess = !role.atOnce && onSuccess === "ok";
                 role.fails = line.control === "required" || line.control === "requisite"
                     || Object.keys(actions).some(key => key !== "success" && (actions[key] === "bad" || actions[key] === "die"));
                 role.optional = line.control === "optional";
-                role.nonCredential = libpamModules.includes(line.moduleName) && !credentialModules.includes(line.moduleName);
+                role.credential = judged.credential;
+                role.denies = line.moduleName === "pam_deny.so" && role.fails;
+                role.firstPass = line.moduleName === "pam_unix.so" && line.args.includes("use_first_pass");
+                role.nullok = line.moduleName === "pam_unix.so" && line.args.includes("nullok");
             }
             return role;
         }
@@ -431,30 +463,54 @@ Singleton {
         }
         if (method === "password" && row.details?.counted === true && facts?.faillockPresent !== true)
             role.refusals.push({ code: "R4", text: texts.R4counted });
-        role.lets = row.control === "sufficient";
+        role.atOnce = row.control === "sufficient";
         role.fails = row.control === "required" || row.control === "requisite";
         role.optional = row.control === "optional";
         return role;
     }
 
-    // Whether a row can decide that the user is in: the fixed row always; an own row unless
-    // optional (optional only beside the fixed row); a raw line only as sufficient, a
-    // bracketed success=done/ok, required or requisite
-    function _canDecide(role, fixedPresent) {
-        if (role.method === "system")
-            return true;
-        if (role.lets || role.fails)
-            return true;
-        return !role.raw && role.optional && fixedPresent;
+    // How the shell's block ends (§2.3): "system" (the fixed row), "permit" (`[default=done]
+    // pam_permit.so`, keeping the result: a row that fails the stack on failure — required,
+    // requisite, a raw bracketed bad/die — is in the list), "deny" (`requisite pam_deny.so`:
+    // only a row that lets in at once lets in)
+    function _closing(roles) {
+        if (roles.some(role => role.method === "system"))
+            return "system";
+        return roles.some(role => role.fails) ? "permit" : "deny";
+    }
+
+    function closingOf(rows, facts) {
+        const list = Array.isArray(rows) ? rows : [];
+        return _closing(list.map(row => _role(row, String(facts?.service ?? ""), facts)));
+    }
+
+    // The rows' roles, each with `decides`: whether it can decide that the user is in — the
+    // fixed row always; a row that lets in at once or fails the stack; a bracketed ok on
+    // success unless the closing line is the deny; an own optional row only beside the fixed
+    // row; a raw pam_unix use_first_pass only below a row that asks for the password
+    function _analyse(list, service, facts) {
+        const roles = list.map(row => _role(row, service, facts));
+        const closing = _closing(roles);
+        roles.forEach((role, i) => {
+            if (role.method === "system")
+                role.decides = true;
+            else if (role.atOnce || role.fails)
+                role.decides = true;
+            else if (role.okOnSuccess)
+                role.decides = closing !== "deny";
+            else
+                role.decides = !role.raw && role.optional && closing === "system";
+            role.unasked = role.firstPass
+                && !roles.slice(0, i).some(above => above.method === "password" && !above.firstPass);
+            if (role.unasked)
+                role.decides = false;
+        });
+        return { roles, closing };
     }
 
     function _hasPassword(rows, service, facts) {
         const list = Array.isArray(rows) ? rows : [];
-        const fixedPresent = hasFixedRow(list);
-        return list.some(row => {
-            const role = _role(row, service, facts);
-            return (role.method === "password" || role.method === "system") && _canDecide(role, fixedPresent);
-        });
+        return _analyse(list, service, facts).roles.some(role => (role.method === "password" || role.method === "system") && role.decides);
     }
 
     // Every refusal and warning for one service's rows. `facts`: { system ("nixos" / …),
@@ -481,7 +537,8 @@ Singleton {
             return { refusals, warnings };
         }
 
-        const roles = list.map(row => _role(row, service, known));
+        const analysed = _analyse(list, service, known);
+        const roles = analysed.roles;
         const ready = method => known[method] === "ready";
         const isReader = role => _readers.includes(role.method);
         const fixedIndex = list.findIndex(row => isFixed(row));
@@ -494,22 +551,27 @@ Singleton {
                 refuse("R4", i, texts.R4fixed);
         });
 
-        // R9: a raw line that can let the user in (sufficient, a bracketed success=done/ok;
-        // required or requisite without the fixed row, where the closing line keeps its
-        // result) naming one of libpam's modules that asks for no credential. Jumps are
-        // refused (R8), so no row is skipped between.
+        // R9: a raw line that can let the user in (sufficient, a bracketed done or ok on
+        // success; required or requisite without the fixed row, where the closing line can
+        // keep its result) with a module that asks for no credential, or made by its
+        // arguments to pass without one. Jumps are refused (R8), so no row is skipped between.
         const fixedPresent = fixedIndex >= 0;
         roles.forEach((role, i) => {
-            if (!role.nonCredential || role.refusals.length > 0)
+            if (!role.raw || role.credential !== "no" || role.refusals.length > 0 || role.denies)
                 return;
-            if (role.lets || (role.fails && !fixedPresent))
+            if (role.atOnce || role.okOnSuccess || (role.fails && !fixedPresent))
                 refuse("R9", i, texts.R9);
         });
 
+        // R1: a raw pam_deny that fails refuses everyone
+        roles.forEach((role, i) => {
+            if (role.denies && role.refusals.length === 0)
+                refuse("R1", i, texts.R1deny);
+        });
+
         // R1: some row can let the user in with what the machine has now
-        const decides = role => _canDecide(role, fixedPresent);
-        const hasPassword = roles.some(role => (role.method === "password" || role.method === "system") && decides(role));
-        const wayIn = hasPassword || roles.some(role => isReader(role) && ready(role.method) && decides(role));
+        const hasPassword = roles.some(role => (role.method === "password" || role.method === "system") && role.decides);
+        const wayIn = hasPassword || roles.some(role => isReader(role) && ready(role.method) && role.decides);
         if (!wayIn)
             refuse("R1", -1, texts.R1);
 
@@ -547,6 +609,18 @@ Singleton {
         roles.forEach((role, i) => {
             if (role.raw && role.method === "unknown" && role.refusals.length === 0)
                 warn("W4", i, texts.W4);
+        });
+
+        // W9: a raw pam_unix line that lets an empty password in
+        roles.forEach((role, i) => {
+            if (role.nullok && role.refusals.length === 0)
+                warn("W9", i, texts.W9);
+        });
+
+        // W10: a raw pam_unix use_first_pass with no password asked above it
+        roles.forEach((role, i) => {
+            if (role.unasked && role.refusals.length === 0)
+                warn("W10", i, texts.W10);
         });
 
         // W5: an own optional row: another row decides, or the closing line does

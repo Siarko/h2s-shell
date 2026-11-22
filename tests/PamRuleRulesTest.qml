@@ -110,8 +110,12 @@ TestCase {
         assert(has([raw("r1", "auth sufficient lib/../../tmp/x.so"), fixed], arch(), "R7"), "R7: … a relative path");
         assert(has([raw("r1", "auth sufficient /nix/store/abc-pam_ldap/lib/security/pam_ldap.so"), fixed], arch(), "R7"), "R7: a store path on Arch");
         assert(!has([raw("r1", "auth sufficient /usr/lib/security/pam_ldap.so"), fixed], arch(), "R7"), "R7 not: the system's folder");
-        assert(!has([raw("r1", "auth sufficient /nix/store/abc-pam_ldap/lib/security/pam_ldap.so"), fixed], arch({ system: "nixos" }), "R7"),
-               "R7 not: the store on NixOS");
+        assert(!has([raw("r1", "auth sufficient /run/current-system/sw/lib/security/pam_ldap.so"), fixed], arch({ system: "nixos" }), "R7"),
+               "R7 not: the system profile on NixOS");
+        assert(has([raw("r1", "auth sufficient /nix/store/abc-evil/lib/security/pam_unix.so"), fixed], arch({ system: "nixos" }), "R7"),
+               "R7: any other store path on NixOS, whatever its file is called (anyone can add to the store)");
+        assert(has([raw("r1", "auth sufficient /nix/store/abc-evil/lib/security/pam_unix.so")], arch({ system: "nixos", otherService: [] }), "R1"),
+               "… and it is no password: no way in");
         for (const bad of ["account required pam_unix.so", "auth sufficient", "auth include system-auth", "@include common-auth",
                            "auth required pam_unix.so\nauth sufficient pam_permit.so", "auth [sucess=done] pam_unix.so"])
             assert(has([raw("r1", bad), fixed], arch(), "R8"), "R8: " + JSON.stringify(bad));
@@ -134,6 +138,35 @@ TestCase {
         assert(!has([raw("r1", "auth sufficient pam_userdb.so db=/etc/x"), fixed], arch(), "R9"), "R9 not: pam_userdb asks for a credential");
         assert(!has([raw("r1", "auth sufficient pam_ldap.so"), fixed], arch(), "R9"), "R9 not: an unknown module (W4)");
         assert(!has([raw("r1", "auth optional pam_succeed_if.so uid >= 0"), fixed], arch(), "R9"), "R9 not: optional cannot let in");
+        // Credential modules made to pass by their arguments
+        assert(has([raw("r1", "auth sufficient pam_u2f.so cue nouserok"), fixed], arch(), "R9"), "R9: pam_u2f nouserok");
+        assert(has([raw("r1", "auth sufficient pam_u2f.so userpresence=0"), fixed], arch(), "R9"), "R9: pam_u2f userpresence=0");
+        assert(!has([raw("r1", "auth sufficient pam_u2f.so cue"), fixed], arch(), "R9"), "R9 not: pam_u2f as it is");
+        assert(!has([raw("r1", "auth optional pam_u2f.so nouserok"), fixed], arch(), "R9"), "R9 not: nouserok on a line that cannot let in");
+        assert(has([raw("r1", "auth sufficient pam_userdb.so db=/home/user/db"), fixed], arch(), "R9"), "R9: pam_userdb with a database outside /etc");
+        assert(has([raw("r1", "auth sufficient pam_userdb.so"), fixed], arch(), "R9"), "R9: pam_userdb without a database");
+        assert(has([raw("r1", "auth sufficient pam_userdb.so db=/etc/../home/u/db"), fixed], arch(), "R9"), "R9: … through ..");
+        assert(has([raw("r1", "auth sufficient pam_unix.so nullok"), fixed], arch(), "W9"), "W9: pam_unix nullok");
+        assert(!has([raw("r1", "auth sufficient pam_unix.so nullok"), fixed], arch(), "R9"), "… only a warning");
+        assert(!has([raw("r1", "auth sufficient pam_unix.so"), fixed], arch(), "W9"), "W9 not: without nullok");
+        // ok on success decides only where the closing line keeps the result
+        assert(has([raw("r1", "auth [success=ok default=ignore] pam_unix.so")], arch({ fingerprint: "absent" }), "R1"),
+               "R1: ok on success before the deny closing lets nobody in");
+        assert(!has([raw("r1", "auth [success=ok default=bad] pam_unix.so")], arch({ fingerprint: "absent" }), "R1"),
+               "R1 not: a bracketed bad picks the permit closing, which keeps the ok");
+        assertEqual(rules.closingOf([raw("r1", "auth [success=ok default=bad] pam_unix.so")], {}), "permit", "a bracketed bad: the permit closing");
+        assertEqual(rules.closingOf([raw("r1", "auth [success=ok default=ignore] pam_unix.so"), fingerprint("r2")], {}), "deny", "no row that fails: the deny closing");
+        assertEqual(rules.closingOf([fingerprint("r1"), fixed], {}), "system", "the fixed row: the system's lines");
+        assert(!has([raw("r1", "auth [success=ok default=ignore] pam_unix.so"), fixed], arch({ fingerprint: "absent" }), "R1"),
+               "R1 not: ok beside the fixed row");
+        // Nobody in
+        assert(has([raw("r1", "auth requisite pam_deny.so"), fixed], arch(), "R1"), "R1: a raw pam_deny that fails");
+        assert(!has([raw("r1", "auth optional pam_deny.so"), fixed], arch(), "R1"), "R1 not: an optional pam_deny");
+        assert(has([raw("r1", "auth sufficient pam_unix.so use_first_pass")], arch({ fingerprint: "absent" }), "R1"),
+               "R1: use_first_pass with no password asked above");
+        assert(has([raw("r1", "auth sufficient pam_unix.so use_first_pass"), fixed], arch(), "W10"), "W10: … a warning");
+        assert(!has([raw("r1", "auth required pam_unix.so"), raw("r2", "auth sufficient pam_unix.so use_first_pass")],
+                    arch({ fingerprint: "absent" }), "W10"), "W10 not: a password asked above");
         // A trailing backslash would join the next line of the file (the system's include) to this one
         for (const joined of ["auth optional pam_permit.so \\", "auth optional pam_permit.so \\  # why", "auth sufficient pam_unix.so a\\b"])
             assert(has([raw("r1", joined), fixed], arch(), "R8"), "R8: a backslash outside brackets: " + JSON.stringify(joined));

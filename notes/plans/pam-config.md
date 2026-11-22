@@ -144,8 +144,9 @@ lost: the system's way of asking the password, pam_faillock's counting, systemd-
 accounts. Without it the shell's block ends with a closing line, so the system's lines are
 never reached — the original `include` line stays in the file, unreached, and putting the row
 back removes only the closing line:
-- a list with a `required` or `requisite` row ends with `auth [default=done] pam_permit.so`
-  (it keeps the result those rows set: their failure stays a failure);
+- a list with a `required` or `requisite` row — or a raw line whose bracketed control has a
+  `bad` or `die` action — ends with `auth [default=done] pam_permit.so` (it keeps the result
+  those rows set: their failure stays a failure, and a raw `success=ok` line's pass lets in);
 - a list of `sufficient`/`optional` rows only ends with `auth requisite pam_deny.so` (reached
   only when no row let the user in). An `optional` row alone then does not let the user in —
   stricter than PAM's own rule, and W5 says so.
@@ -208,10 +209,22 @@ Refused:
 - **R6 Changed by hand**: the service's file is not edited as it is (§2.6.1); the editor is
   read-only until the user takes the file in with "Replace" (§2.9).
 - **R7 Module from a writable place**: a raw line whose module is an absolute path outside the
-  system's module directories (`/usr/lib/security`, NixOS's store) — root would load it.
+  system's module directories (`/usr/lib/security`; on NixOS only
+  `/run/current-system/sw/lib/security`, since any user can add to the store and a store
+  path's file name proves nothing) — root would load it.
 - **R8 Not a line**: a raw line that does not parse, is not an `auth` line, or holds a newline.
-- **R9 Lets anyone in**: a raw line `pam_permit.so` (or `pam_rootok.so` for polkit) as
-  `sufficient`, `[success=done …]` or before every deciding row.
+- **R9 Lets anyone in**: a raw line that can let the user in (`sufficient`, a bracketed `done`
+  or `ok` on success, `required`/`requisite` without the fixed row) is taken only for a
+  module that asks for a credential: `pam_unix`, `pam_fprintd`, `pam_u2f` without `nouserok`
+  or `userpresence=0`, `pam_userdb` with its `db=` under `/etc/`. libpam's other modules
+  (`pam_permit`, `pam_rootok`, `pam_succeed_if`, …) are refused there; a module the shell
+  does not know gets W4. Raw lines with a numeric jump or `reset`, or a backslash outside
+  brackets, are refused under R8.
+- **R1 also**: a raw `pam_deny` line that fails the stack ("nobody would get in"). A row is a
+  way in only if it can decide success: the fixed row; a row that lets in at once or fails the
+  stack; a bracketed `ok` on success unless the closing line is `requisite pam_deny.so`; an own
+  `optional` row beside the fixed row; a raw `pam_unix use_first_pass` only below a row that
+  asks for the password (W10 otherwise).
 
 Warned (Apply stays; the trial proves the rows work now):
 - **W1 Only a reader**: no password row — "Only the reader lets you in. If it breaks, use the
@@ -228,6 +241,8 @@ Warned (Apply stays; the trial proves the rows work now):
   password is asked again by the last row."
 - **W8 Not saved**: split lists that differ only because a shared Apply stopped between the
   two services (§2.6.6).
+- **W9 Empty password**: a raw `pam_unix … nullok` line (the system's own stacks use it).
+- **W10 Never asked**: a raw `pam_unix use_first_pass` line with no password row above it.
 
 ### 2.6 Arch: writing
 
@@ -315,7 +330,9 @@ programs.h2s-shell.pam = {
   "${pkgs.pam_ldap}/lib/security/pam_ldap.so"; args = [ "use_first_pass" ]; }`. NixOS's libpam
   finds a module named without a path only in its own store directory, so the snippet asks for
   the full path: a raw line with a bare module name other than libpam's own is refused there
-  (R8's text: "Needs the module's full path on NixOS").
+  (R8's text: "Needs the module's full path on NixOS"). The checks (R7) take only
+  `/run/current-system/sw/lib/security/` paths, so such a store path in the editor is refused;
+  how the module's own options name a third-party module is open for slice 5.
 - The snippet is built by `PamEditRules.nixosSnippet(rows, split)`, pure, with cases.
 
 ### 2.8 The lock screen
