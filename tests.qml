@@ -120,6 +120,7 @@ QtObject {
     property var _pamStacksReading: PamStacksReadingTest {}
     property var _helper: HelperTest {}
     property var _pamRuleRules: PamRuleRulesTest {}
+    property var _pamEditRules: PamEditRulesTest {}
     // A new suite: its one line above this comment
 
     // Every suite registered above, read from this object's own properties, and those of them
