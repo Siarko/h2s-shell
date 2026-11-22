@@ -10,7 +10,7 @@
 #                     tests/run-all.sh --keep-going)
 #   --host <dest>     the SSH destination, in place of H2S_REMOTE
 #   --repo <path>     the repository on the remote, in place of H2S_REMOTE_REPO (default
-#                     ~/src/h2s-shell)
+#                     ~/Projects/h2s-shell/sources/h2s-shell)
 #   --wait-max <s>    how long to wait for the run (default H2S_REMOTE_WAIT, else 3600 s)
 #   --attach <id>     wait for a run started earlier and collect it
 #
@@ -41,7 +41,7 @@ set -uo pipefail
 REPO=$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)
 SSH=${H2S_REMOTE_SSH:-ssh}
 host=${H2S_REMOTE:-}
-remote_repo=${H2S_REMOTE_REPO:-'~/src/h2s-shell'}
+remote_repo=${H2S_REMOTE_REPO:-'~/Projects/h2s-shell/sources/h2s-shell'}
 wait_max=${H2S_REMOTE_WAIT:-3600}
 poll=${H2S_REMOTE_POLL:-15}
 # Polls that may fail in a row before the connection counts as lost

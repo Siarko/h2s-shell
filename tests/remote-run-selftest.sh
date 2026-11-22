@@ -34,6 +34,8 @@ check() {
 
 address=tester@secret-host.example
 remote_home=$work/remote-home
+# Where remote-run.sh looks for the repository on the remote when not told (~ is remote_home)
+default_repo=$remote_home/Projects/h2s-shell/sources/h2s-shell
 mkdir -p "$remote_home/src" "$work/control" "$work/local-cache" "$work/tmp"
 
 # ---- The stand-in ssh: options, the destination, then the command, run by bash in the
@@ -90,14 +92,14 @@ chmod +x "$local_repo/tests/fake.sh"
 (
     cd "$local_repo" && git init --quiet -b master && git config user.email t@t && git config user.name t \
         && git add -A && git commit --quiet -m one \
-        && git clone --quiet "$local_repo" "$remote_home/src/h2s-shell" \
+        && git clone --quiet "$local_repo" "$default_repo" \
         && git clone --quiet "$local_repo" "$remote_home/src/h2s shell" \
-        && git -C "$remote_home/src/h2s-shell" worktree add --quiet --detach "$remote_home/owner-tree" \
+        && git -C "$default_repo" worktree add --quiet --detach "$remote_home/owner-tree" \
         && rm -rf "$remote_home/owner-tree" \
         && echo two > two && git add two && git commit --quiet -m two \
         && git checkout --quiet -b feature && echo three > three && git add three && git commit --quiet -m three
 ) || { echo "remote-run-selftest.sh: the test repositories could not be made" >&2; exit 2; }
-remote_head=$(git -C "$remote_home/src/h2s-shell" rev-parse HEAD)
+remote_head=$(git -C "$default_repo" rev-parse HEAD)
 feature=$(git -C "$local_repo" rev-parse feature)
 
 # run [<argument>…]: the script against the stand-in; OUTPUT, STATUS
@@ -111,11 +113,11 @@ has() { grep -qF -- "$1" <<< "$OUTPUT"; }
 run_id() { sed -n 's/^remote-run.sh: run \([^ ]*\) started.*/\1/p' <<< "$OUTPUT"; }
 # remote_clean [<repository>]: as it was, but for objects; the owner's stale worktree kept
 remote_clean() {
-    local repo=${1:-$remote_home/src/h2s-shell}
+    local repo=${1:-$default_repo}
     [ "$(git -C "$repo" rev-parse HEAD)" = "$remote_head" ] \
         && [ -z "$(git -C "$repo" status --porcelain)" ] \
         && ! git -C "$repo" worktree list | grep -q h2s-shell-tests \
-        && { [ "$repo" != "$remote_home/src/h2s-shell" ] || git -C "$repo" worktree list | grep -q owner-tree; } \
+        && { [ "$repo" != "$default_repo" ] || git -C "$repo" worktree list | grep -q owner-tree; } \
         && [ -z "$(git -C "$repo" for-each-ref refs/remote-run)" ] \
         && [ -z "$(ls -A "$remote_home/.cache/h2s-shell-tests/remote-run" 2> /dev/null)" ] \
         && [ -z "$(git -C "$local_repo" for-each-ref refs/remote-run)" ]
@@ -148,13 +150,13 @@ check "status 0" [ "$STATUS" = 0 ]
 check "no bundle sent" has "no bundle"
 
 echo "a remote that shares no history"
-mv "$remote_home/src/h2s-shell" "$remote_home/src/kept"
-git init --quiet "$remote_home/src/h2s-shell"
+mv "$default_repo" "$default_repo.kept"
+git init --quiet "$default_repo"
 run feature -- tests/fake.sh 0
 check "status 0" [ "$STATUS" = 0 ]
 check "a bundle of the whole history" has "full history"
-rm -rf "$remote_home/src/h2s-shell"
-mv "$remote_home/src/kept" "$remote_home/src/h2s-shell"
+rm -rf "$default_repo"
+mv "$default_repo.kept" "$default_repo"
 
 echo "a dropped connection, then --attach"
 touch "$work/control/drop-polls"
@@ -203,7 +205,7 @@ done
 check "the remote's run directory still there" [ -d "$remote_home/.cache/h2s-shell-tests" ]
 # The remote half checks the id itself, whoever calls it
 script_text=$(sed -n "/^remote_script='/,/^'$/p" "$local_repo/tests/remote-run.sh" | sed '1d;$d')
-printf 'set -- clean %q ..\n%s\n' "$remote_home/src/h2s-shell" "$script_text" | "$work/ssh" "$address" "bash -s" > /dev/null 2>&1
+printf 'set -- clean %q ..\n%s\n' "$default_repo" "$script_text" | "$work/ssh" "$address" "bash -s" > /dev/null 2>&1
 check "the remote half refuses a clean of '..'" bash -c '[ "$1" = 3 ] && [ -d "$2" ]' _ "$?" "$remote_home/.cache/h2s-shell-tests/remote-run"
 
 echo "an unreachable remote"
