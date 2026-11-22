@@ -128,9 +128,14 @@ QtObject {
                     root._cancel(job);
             }
         };
-        // Its timings, for the runner's own suite (_timingsOf): not enumerable, nothing a
-        // caller lists
-        Object.defineProperty(handle, "_timings", { value: job.timings });
+        // Its timings, for the runner's own suite (_timingsOf): a frozen copy made at each read
+        // (the runner's own numbers stay on the job, where no caller reaches them), not
+        // enumerable
+        Object.defineProperty(handle, "_timings", { get: () => Object.freeze({
+            armed: Object.freeze(Object.assign({}, job.timings.armed)),
+            armedAt: Object.freeze(Object.assign({}, job.timings.armedAt)),
+            fired: Object.freeze(Object.assign({}, job.timings.fired))
+        }) });
         if (_gone) {
             job.state.phase = "done";
             return handle;

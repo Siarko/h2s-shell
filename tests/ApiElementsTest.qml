@@ -769,6 +769,41 @@ TestCase {
         // --- the names ---
         assertEqual(JSON.stringify(_names(marked)), JSON.stringify(pinned.SmallButton), "SmallButton's public properties and signals are the pinned ones");
         assert(_names(_inside(plain)).includes("fontSize") && _names(_inside(plain)).includes("hovered"), "… the internal button's own are not among them (it has fontSize, hovered)");
+        // CommandRunner: what a module reaches through one — no internal runner (its `refuse`,
+        // its runs) behind any property, to any depth, and only a copy of a run's timings
+        const commands = Qt.createQmlObject("import qs.api\nCommandRunner {}", bare, "ReachedRunner.qml");
+        const reached = [];
+        const seen = new Set();
+        const scan = (value, path, depth) => {
+            if (value === null || typeof value !== "object" || seen.has(value) || depth > 3)
+                return;
+            seen.add(value);
+            if (value !== commands && ("refuse" in value || "_jobs" in value))
+                reached.push(path);
+            for (const name of Object.keys(value).concat(["children", "data", "resources", "parent"])) {
+                let inner;
+                try {
+                    inner = value[name];
+                } catch (error) {
+                    continue;
+                }
+                if (typeof inner !== "function")
+                    scan(inner, path + "." + name, depth + 1);
+            }
+        };
+        scan(commands, "runner", 0);
+        assertEqual(JSON.stringify(reached) + " " + (commands._runner === undefined), "[] true",
+                    "CommandRunner: no internal runner reachable through it (its refuse, its runs)");
+        assert(Object.isFrozen(commands._runs), "… what holds it is a frozen object of functions");
+        const run = commands.start(["sh", "-c", "sleep 5"], { timeoutMs: 3000 });
+        const timings = run._timings;
+        assert(Object.isFrozen(timings) && Object.isFrozen(timings.armed), "… a run's timings: a frozen copy");
+        try {
+            run._timings.armed.watchdog = 1e12;
+        } catch (error) {}
+        assertEqual(run._timings.armed.watchdog, timings.armed.watchdog, "… writing to it changes nothing the runner keeps");
+        commands.cancelAll();
+        commands.destroy();
         // (1.34) The side panel: its behaviour in tests/SidePanelTest.qml
         const sidePanel = Qt.createQmlObject("import qs.api\nSidePanel {}", bare, "PinnedSidePanel.qml");
         assertEqual(JSON.stringify(_names(sidePanel)), JSON.stringify(pinned.SidePanel), "SidePanel's public properties and signals are the pinned ones");
