@@ -264,8 +264,13 @@ shows its wallpaper at once. Rules: `singletons/WallpaperRules.qml`; state:
 
 ## Screensaver and lock screen
 
-Two stages, both driven by Wayland idle notifications and both counted from the last input
-("Screensaver after", "Lock after"):
+The shell does idle itself: from Wayland idle notifications (ext-idle-notify) it runs up
+to three stages, each counted from the last input and each with its own switch and time in
+Settings → Lockscreen — the screensaver ("Enable screensaver", `screensaverTimeout`), screens
+off ("Turn screens off", `screenOffTimeout`) and the lock ("Enable lock screen", `lockAfter`);
+on the lock screen, screens off again after `lockedScreenOffTimeout`. All but the lock
+screen's screen-off are off by default. No idle daemon is needed; one can still run beside it
+(below, "hypridle and other idle daemons").
 
 - **Screensaver** — after `screensaverTimeout` the screen is covered by a black surface
   that fades in, optionally showing the notification list. It takes the keyboard while it
@@ -292,6 +297,23 @@ Two stages, both driven by Wayland idle notifications and both counted from the 
   falls back to the screensaver, and on the lock screen the lock surface goes plain black
   instead. A screen-off of another program (hypridle's `dpms` listener) can run
   beside it: each acts on its own times.
+- **Keeping the screen on** — while the session is unlocked, three kinds of request hold the
+  next stage (what was reached stays; the count starts again when the last one ends): a
+  Wayland idle inhibitor (a fullscreen video, an app asking the compositor), an app's
+  `Inhibit` on `org.freedesktop.ScreenSaver` (browsers playing video, mpv, VLC), and a logind
+  `idle` block (`systemd-inhibit --what=idle`, read at each deadline that would start a
+  stage; a failed read counts as not held, logged once). While locked all three are ignored:
+  the lock screen's screen-off applies. The `org.freedesktop.ScreenSaver` service is the
+  shell's helper (`h2s-helper screensaver`, at `/org/freedesktop/ScreenSaver` and
+  `/ScreenSaver`): it answers `Inhibit`/`UnInhibit`, `GetActive`, `GetActiveTime`,
+  `GetSessionIdleTime`, `SetActive` (true starts the screensaver, not while locked) and
+  `SimulateUserActivity` (counts as input), signals `ActiveChanged` (active: a monitor not
+  on, or locked), and drops an app's requests when it leaves the bus. It never takes the
+  name from another owner: while another program holds it (hypridle does, unless told not
+  to), the shell waits in the bus's queue and takes the name when it frees; meanwhile only
+  that program hears apps' requests, and `h2s-shell ipc call idle state` names it
+  (`screenSaverService`). Without the helper (not built) the shell works without these
+  requests.
 - **Lock screen** — a real `WlSessionLock`, so the compositor enforces it. It can be
   reached on idle (`lockAfter`), and shows a password
   prompt and optionally the notification list — the app's name only by default, or the
@@ -410,6 +432,69 @@ Two stages, both driven by Wayland idle notifications and both counted from the 
   typed: what to read when unlocking fails on the real machine.
 - Design and tests: `docs/ARCHITECTURE.md` ("Lock screen"),
   `tests/LockRulesTest.qml`, and the end-to-end test bed `tests/lock/`.
+
+### hypridle and other idle daemons
+
+The shell needs no idle daemon, but one can run beside it. Both act on the same idle time,
+so for each job pick one side and turn it off on the other:
+
+| Job | In the shell (Settings → Lockscreen) | In hypridle (`hypridle.conf`) |
+|---|---|---|
+| Screensaver, dimming | "Enable screensaver", `screensaverTimeout`; the start and end commands (`screensaverCommands`, `screensaverStartCommand`, `screensaverEndCommand`) run at the first stage reached and when the user is back | a `listener` whose `on-timeout` dims (`brightnessctl`) and whose `on-resume` restores |
+| Screens off | "Turn screens off" and `screenOffTimeout` (every monitor), or "When the screensaver starts" → "Turn off" (`blanking`, per monitor with `perMonitor` and `monitorBlanking`) | a `listener` with `on-timeout = hyprctl dispatch dpms off` and `on-resume = hyprctl dispatch dpms on` |
+| Screens off on the lock screen | `lockedScreenOffTimeout` (60 s by default; 0 leaves it to the daemon) | a short `listener` that turns screens off only while locked |
+| Lock when idle | "Enable lock screen", `lockAfter` | a `listener` whose `on-timeout` is `loginctl lock-session` |
+| Lock before sleep | "Lock before the computer sleeps" (`lockOnSleep`) | `before_sleep_cmd = loginctl lock-session` |
+| Screens on after a wake | always: the monitors the shell turned off | `after_sleep_cmd = hyprctl dispatch dpms on` (needed while hypridle turns screens off) |
+| Apps keeping the screen on | always, while unlocked: Wayland inhibitors, logind `idle` blocks, and `org.freedesktop.ScreenSaver` when the shell holds the name | `ignore_wayland_inhibit`, `ignore_systemd_inhibit`, `ignore_dbus_inhibit` in `general` |
+| Suspend when idle | none | a `listener` with `on-timeout = systemctl suspend` |
+
+Whichever side locks, the lock is the shell's: it follows logind's Lock signal for its
+session, so `loginctl lock-session` (and a power key set to `lock` in logind.conf) locks it.
+hypridle's `lock_cmd` runs on that same signal, so it must not start another locker (two
+lockers race for the screen, and only one can hold it); leave `lock_cmd` out, or point it
+at the shell's IPC lock — a lock asked while locked changes nothing. Another locker that
+does lock is seen under Hyprland (above, "Lock screen").
+
+**The `org.freedesktop.ScreenSaver` name** has one owner: whichever of the two asks first
+(hypridle asks for it unless `ignore_dbus_inhibit = true`). The shell never takes it away
+and waits for it; hypridle, finding it taken, says "Another service is already providing the
+org.freedesktop.ScreenSaver interface" in its log. Apps' keep-awake requests reach only the
+owner, so give the name to the side whose stages they should hold: with the shell's stages
+in use, set `ignore_dbus_inhibit = true` in hypridle's `general`; with hypridle doing all of
+idle, let it start before the shell.
+
+**Keeping hypridle for everything idle** is a working choice: turn the shell's stages off
+(Settings → Lockscreen: "Enable screensaver", "Turn screens off" and "Enable lock screen"
+off, "Turn screens off on the lock screen after" 0), keep hypridle's listeners, and lock with
+`loginctl lock-session` or the IPC lock. The lock screen itself stays the shell's.
+
+**Moving over to the shell** takes the table from right to left: set the times in Settings →
+Lockscreen (each counted from the last input, as hypridle counts), then remove the listeners
+the shell now covers — or hypridle altogether, after which the shell takes the
+`org.freedesktop.ScreenSaver` name by itself (at once while it runs: it waits in the bus's
+queue). Only an idle suspend has no counterpart in the shell. The shell's IPC lock, for
+hypridle's `lock_cmd` or a key binding, and how to stop hypridle:
+
+#### NixOS
+
+- The IPC lock: `h2s-shell ipc call lockscreen lock`.
+- hypridle from Home Manager: `services.hypridle.enable = false;` (its listeners are in
+  `services.hypridle.settings`); started from the compositor's autostart instead: remove
+  that line. Then rebuild.
+
+#### Arch
+
+- The IPC lock: `$HOME/.config/quickshell/default/scripts/launch.sh ipc call lockscreen
+  lock` (the checkout `install.sh` made; no `h2s-shell` is on `PATH`).
+- hypridle as a user service (the package ships `hypridle.service`): `systemctl --user
+  disable --now hypridle`; started from `hyprland.lua`'s autostart instead: remove that line
+  and end the running one (`pkill hypridle`). Its listeners are in
+  `~/.config/hypr/hypridle.conf`.
+
+swayidle and other idle daemons are the same story: their timeouts map to the same settings,
+their lock command must call the shell (or nothing), and one that owns
+`org.freedesktop.ScreenSaver` keeps the shell waiting for it.
 
 ## Network settings
 
@@ -540,7 +625,7 @@ Behaviour pages:
 | **Media** | audio visualiser style, layout and frame rate; the cover's rounding and rotation |
 | **Bar** | the content of the three sections, including each widget's popup mode and preset |
 | **Notifications** | toasts: on or off, whether apps choose how long, the time, one at a time or a column, each queue's limit, moving by dragging, resident ones counting down, the screen and a fullscreen window there; code-extraction regex patterns |
-| **Lockscreen** | screensaver and lock timeouts, fade durations, lock before sleep (off by default), notification visibility, screensaver commands |
+| **Lockscreen** | screensaver, screen-off and lock times (each from the last input), how monitors go dark (screensaver or turned off, per monitor), the lock screen's screen-off, fade durations, lock before sleep (off by default), notification visibility, screensaver commands |
 | **Dictation** | transcript preview, pending counter, music pause, socket path and debug (always global), and the daemon's wake configuration (read-only) |
 | **Performance** | polling rates of hardware, temperatures, disk and network, GPU load sampling, graph heartbeat, the system power profile |
 
@@ -638,7 +723,7 @@ Beyond Quickshell and Qt 6, the shell shells out to:
 | `cava` | the music visualiser (optional — there is an ambient fallback) |
 | `vipsthumbnail` (libvips) | wallpapers resized to each screen once, kept in `~/.cache/h2s_shell/wallpapers` (optional — without it the images themselves load, slower) |
 | `python3` | the Google OAuth helper, `scripts/google_auth.py` |
-| `h2s-helper` (the shell's own, `helper/`) | what Quickshell cannot do from QML; nothing uses it yet. Built from source: on NixOS by the package; on Arch by `install.sh` and the launcher, with `cmake`, `base-devel` and `qt6-base` (optional — without it the shell runs, the launcher's log says so) |
+| `h2s-helper` (the shell's own, `helper/`) | what Quickshell cannot do from QML: the `org.freedesktop.ScreenSaver` service (apps keeping the screen on). Built from source: on NixOS by the package; on Arch by `install.sh` and the launcher, with `cmake`, `base-devel` and `qt6-base` (optional — without it the shell runs, the launcher's log says so) |
 | `pttd` / `ptt` | dictation (optional) |
 | sysfs | CPU, RAM, disk, temperatures, GPU, network throughput |
 

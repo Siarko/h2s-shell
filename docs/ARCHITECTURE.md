@@ -61,8 +61,8 @@ Two consequences worth knowing:
 ### The helper
 
 `helper/` is a CMake project: `h2s-helper`, C++17 on Qt 6 Core and DBus only, one program
-with subcommands, for what Quickshell cannot do from QML (the screensaver D-Bus interface
-is the first planned). It is I/O only — it reports and acts on request; what the shell
+with subcommands, for what Quickshell cannot do from QML (`h2s-helper screensaver`, the
+`org.freedesktop.ScreenSaver` service, is the first). It is I/O only — it reports and acts on request; what the shell
 does with a report is decided in `*Rules.qml`. The shell starts it as a child process and
 talks to it in JSON lines, one object per line each way, on its standard input and output
 (`Process` and `SplitParser`, as for any command); it ends when its standard input closes,
@@ -577,7 +577,13 @@ launcher agree on the contract described under "Recovery" below):
   Its two `IdleMonitor`s (`singletons/lock/IdleWatch.qml`: one ignoring Wayland idle
   inhibitors, one respecting them) are made once with a fixed 5 s, so a settings change
   never ends an idle period; every stage counts from the last input. One `Timer` runs to
-  the rules' next deadline. IPC: `idle state` (JSON, with the monitors' ids) and
+  the rules' next deadline. Apps keeping the screen on reach it three ways, all events
+  for the rules (which count them only while unlocked): the second `IdleMonitor` (Wayland
+  inhibitors), `singletons/helper/ScreenSaverClient.qml` (runs `h2s-helper screensaver`,
+  which owns `org.freedesktop.ScreenSaver` when the name is free and queues for it when
+  another program holds it, and reports the apps' requests and the name's owner —
+  `HelperRules.serviceStatus`), and a logind `idle` block read at the deadlines that would
+  start a stage (`singletons/lock/LogindIdleBlock.qml`, `ListInhibitors`). IPC: `idle state` (JSON, with the monitors' ids) and
   `idle setMonitorWay <id> <way>` (one monitor's entry in `lockscreen.monitorBlanking`,
   `IdleRules.withMonitorWay`).
 - **Adapters** — `singletons/lock/`, thin: I/O to events, effects to I/O, no decisions.
