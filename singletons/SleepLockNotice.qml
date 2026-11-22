@@ -83,7 +83,7 @@ Singleton {
         _handle = Notifier.send(summary, {
             body: body, format: "plain", urgency: "critical", handle: true,
             actions: [{ id: "default", label: "Settings", onTriggered: () => {
-                Shell.openSettings("lockscreen");
+                Shell.openSettingsAt("lockscreen", "lock");
                 closed();
             } }],
             onDismissed: closed

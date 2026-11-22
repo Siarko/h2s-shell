@@ -169,7 +169,10 @@ TestCase {
         "panels/settings/DraftActions.qml",
         "panels/settings/FontsSettings.qml",
         "panels/settings/GeneralSettings.qml",
-        "panels/settings/LockscreenSettings.qml",
+        "panels/settings/WhenAwaySettings.qml",
+        "panels/settings/AwayTimeline.qml",
+        "panels/settings/MonitorTimesCard.qml",
+        "components/Reveal.qml",
         "panels/settings/MediaSettings.qml",
         "panels/settings/NotificationsSettings.qml",
         "panels/settings/PerformanceSettings.qml",
@@ -204,6 +207,7 @@ TestCase {
         }
         _notificationsPage();
         _firstSections();
+        _whenAwayPage();
     }
 
     // Every page with sections (SectionTitle, SettingsSection — the one look of a section): a
@@ -212,7 +216,7 @@ TestCase {
     // document order, the visible ones with a title; [page, properties, the first's line]
     property Item _stage: Item { width: 720; height: 1500 }
     readonly property var _sectionPages: [
-        ["LockscreenSettings", { editIndex: 0 }, false], ["SttSettings", { editIndex: 0 }, false],
+        ["SttSettings", { editIndex: 0 }, false],
         ["CalendarSettings", { editIndex: 0 }, false], ["BarSettings", { editIndex: 0 }, false],
         ["PerformanceSettings", { editIndex: 0 }, false], ["FontsSettings", { themeName: "default" }, false],
         ["ColorsSettings", { themeName: "default" }, false], ["BarShapeSettings", { themeName: "default" }, false],
@@ -221,6 +225,8 @@ TestCase {
         ["OtherShapeSettings", { themeName: "default" }, false],
         // After the general settings' rows
         ["GeneralSettings", { editIndex: 0 }, true],
+        // After the top: "Set per monitor" and the timeline, without a title of their own
+        ["WhenAwaySettings", { editIndex: 0 }, true],
         // After the mode's row, or the image's
         ["WallpaperSettings", { editIndex: 0 }, true],
         // After the theme's own rows, the curve's editor
@@ -304,6 +310,106 @@ TestCase {
             assert(infoArea !== null && infoArea.lit !== undefined && tip.shown === infoArea.lit,
                    "the tip follows the icon's pointer area (lit: a tap shows it too)");
             assert(!infoOf(editorOf("notifications.movableToasts")).visible, "a row without info shows no icon");
+        } finally {
+            _globalsPin.restore();
+            page.destroy();
+        }
+    }
+
+    // "When away": the top above the sections, the sections in the order things happen, what
+    // is dimmed and what not, the timeline's height, the per-monitor cards writing the map
+    property Item _shortStage: Item { width: 720; height: 400 }
+    readonly property var _awayOff: ({
+        "lockscreen.screensaverEnabled": false, "lockscreen.screenOffEnabled": false, "lockscreen.lockscreenEnabled": false,
+        "lockscreen.perMonitor": false, "lockscreen.monitorIdle": {}, "lockscreen.screensaverCommands": false,
+        "lockscreen.notificationsOnScreensaver": true, "lockscreen.notificationsOnLock": true,
+        "lockscreen.screensaverTimeout": 300, "lockscreen.screenOffTimeout": 900, "lockscreen.lockAfter": 1200
+    })
+
+    function _away(change) {
+        _globalsPin.use(Object.assign({}, _awayOff, change));
+    }
+
+    function _whenAwayPage() {
+        const component = Qt.createComponent(Qt.resolvedUrl("../panels/settings/WhenAwaySettings.qml"));
+        const page = component.createObject(_shortStage, { editIndex: 0 });
+        if (page === null)
+            return fail("the When away page builds: " + component.errorString().trim());
+        const named = name => _find(page, item => item.objectName === name);
+        const editorIn = (item, key) => _find(item, child => child.key === key && child.entry !== undefined);
+        try {
+            _away({});
+            const titles = _sectionsOf(page).map(section => section.title);
+            assertEqual(titles.join(" | "), "Screensaver | Lock screen | Keeping the screen on | Commands",
+                        "When away: the sections in the order things happen, then the rest");
+            const timeline = named("awayTimeline");
+            const perMonitor = editorIn(page, "lockscreen.perMonitor");
+            const saverSection = named("screensaverSection");
+            assert(timeline !== null && perMonitor !== null, "the top: \"Set per monitor\" and the timeline");
+            const top = item => item.mapToItem(page.contentItem, 0, 0).y;
+            assert(top(perMonitor) < top(timeline) && top(timeline) < top(saverSection), "… above the first section, the switch first");
+            assert(editorIn(saverSection.frame, "lockscreen.screensaverEnabled") !== null, "the screensaver's switch on its section's title line");
+            const lockSwitch = editorIn(named("lockSection").frame, "lockscreen.lockscreenEnabled");
+            assert(lockSwitch !== null && lockSwitch.label === "Lock when idle", "the idle lock's on the lock screen's, \"Lock when idle\"");
+
+            // Everything off: the timeline drawn, empty, one line saying so
+            const offHeight = timeline.implicitHeight;
+            assertEqual(_find(timeline, item => item.objectName === "timelineCaption").text, "Nothing happens when you are away.",
+                        "everything off: the timeline says nothing happens");
+            assert(offHeight > 0, "… drawn all the same");
+            assert(!named("screensaverTimes").open && !named("screenOffTimes").open, "… the stages' times shut");
+            assert(!named("screensaverLook").enabled && named("screensaverLook").visible, "… the screensaver's look dimmed, not hidden");
+            assert(!named("lockTimes").enabled && named("lockTimes").visible, "lock when idle off: its time dimmed, not hidden");
+            const lockSection = named("lockSection");
+            for (const key of ["lockscreen.lockOnSleep", "lockscreen.lockedScreenOffTimeout", "lockscreen.notificationsOnLock"])
+                assert(editorIn(lockSection, key).enabled && editorIn(lockSection, key).opacity === 1, "… " + key + " stays active: it serves every lock");
+            assert(!named("commandsRow").enabled, "no screen goes dark: the commands dimmed");
+
+            // Set up: the screensaver, the screen-off, the lock
+            _away({ "lockscreen.screensaverEnabled": true, "lockscreen.screenOffEnabled": true, "lockscreen.lockscreenEnabled": true,
+                    "lockscreen.screensaverCommands": true });
+            assert(named("screensaverTimes").open && named("screenOffTimes").open, "set up: the stages' times open");
+            assert(named("screensaverLook").enabled && named("lockTimes").enabled, "… the look and the lock's time active");
+            assert(named("commandsRow").enabled && /^On, at 5 min/.test(named("commandsRow").hint), "… the commands at the first screen dark: " + named("commandsRow").hint);
+            assertEqual(timeline.implicitHeight, offHeight, "… the timeline as tall as with everything off");
+            const labels = () => timeline.labels.map(label => label.text + "@" + label.row).join(" ");
+            assertEqual(labels(), "5 min@0 Commands 5 min@1 15 min@0 Lock 20 min@0", "… its labels, a colliding one below");
+            assertEqual(_find(timeline, item => item.objectName === "timelineCaption").text.split(".")[0], "Locks at 20 min", "… the line under it: the lock");
+
+            // The screensaver off, screens turned off: its look dimmed where the screen-off is a real one
+            _away({ "lockscreen.screenOffEnabled": true });
+            assertEqual(named("screensaverLook").enabled, !Idle.powerControl,
+                        "screensaver off, screens off: the look dimmed with power control, used without it (" + Idle.powerControl + ")");
+
+            // Per monitor: the cards, writing the map of the profile (here the pinned global)
+            const kept = { screensaverEnabled: false, screensaverTimeout: 300, screenOffEnabled: true, screenOffTimeout: 300 };
+            _away({ "lockscreen.perMonitor": true, "lockscreen.monitorIdle": { "Dell|U2419H|S1": kept } });
+            assert(named("monitorCards").open, "per monitor on: the cards open");
+            assert(saverSection.title === "Screensaver (all monitors)", "… the section says it is the default");
+            const card = () => _find(page, item => item.objectName === "monitorCard" && item.name === "Dell U2419H");
+            assert(card() !== null && !card().connected && JSON.stringify(card().own) === JSON.stringify(kept),
+                   "a monitor not connected: its card, its own times");
+            card()._with("screensaverEnabled", true);
+            assertEqual(JSON.stringify(Profiles.effectiveGlobals["lockscreen.monitorIdle"]?.["Dell|U2419H|S1"]),
+                        JSON.stringify(Object.assign({}, kept, { screensaverEnabled: true })), "a card's switch writes its entry, whole");
+            assert(page.setMonitorTimes("Acer|XB1|7", { screensaverEnabled: true, screensaverTimeout: 120, screenOffEnabled: false, screenOffTimeout: 600 }),
+                   "a second monitor's times written");
+            assertEqual(Object.keys(Profiles.effectiveGlobals["lockscreen.monitorIdle"]).sort().join(","), "Acer|XB1|7,Dell|U2419H|S1",
+                        "… the other's kept");
+            _find(card(), item => item.objectName === "sameTimes").clicked();
+            assertEqual(Object.keys(Profiles.effectiveGlobals["lockscreen.monitorIdle"]).join(","), "Acer|XB1|7",
+                        "\"Same as all monitors\": the entry dropped");
+            assert(card() === null, "… and a monitor not connected without times has no card");
+            assert(!page.setMonitorTimes("Acer|XB1|7", { screensaverEnabled: true }), "times not understood: nothing written");
+            const cardsBefore = _find(page, item => item.objectName === "monitorCard" && item.name === "Acer XB1");
+            assert(cardsBefore !== null && cardsBefore.own.screensaverTimeout === 120, "… the entry as it was");
+
+            // The lock screen's section at the top on request
+            const sectionTop = () => lockSection.mapToItem(page.contentItem, 0, 0).y - Theme.settings.pageMargin;
+            assert(page.showSection("lock") && page.contentY > 0
+                   && (Math.abs(sectionTop() - page.contentY) < 1 || page.contentY === page.contentHeight - page.height),
+                   "a section shown at the top on request, below the page's margin (" + page.contentY + ", the section at " + sectionTop() + ")");
+            assert(!page.showSection("nothing"), "an unknown section: nothing moves");
         } finally {
             _globalsPin.restore();
             page.destroy();

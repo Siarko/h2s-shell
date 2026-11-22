@@ -5,9 +5,9 @@ import qs.components
 import qs.singletons
 
 // Editor for one SettingsSchema key as set in one profile — the one picked in the
-// settings window. The control follows the schema type: pills for intervals and enums,
-// a switch for bools, a text field for strings, a number field or a slider for numbers,
-// a list of fields for a list of texts. It says where the shown value comes from — set here, inherited from
+// settings window. The control follows the schema type: pills for intervals, enums and
+// numbers with presets, a switch for bools, a text field for strings, a number field or a
+// slider for numbers, a list of fields for a list of texts. It says where the shown value comes from — set here, inherited from
 // the profiles above, overridden right now by a later active profile, or global — and
 // offers to drop this profile's own value. The pin makes the setting global: the same in
 // every profile, whichever is being edited.
@@ -29,6 +29,13 @@ Item {
     // Replaces the plain write when an edit has to adjust other settings too, e.g. bar
     // height pushing the reserved space up; gets the new value
     property var editHook: null
+    // On one line: the label (for pills a short lead word, "after"), the control — pills or
+    // a switch —, then where the value comes from and the pin; no hint. As wide as it needs
+    // when not stretched: for a section's title line, and for a stage's times under its
+    // switch
+    property bool inline: false
+    // False leaves the label out (a switch on a section's title line, whose title says it)
+    property bool labelShown: true
 
     readonly property var _profile: Profiles.profiles[editIndex] ?? null
     // The value this profile sets, or undefined when it inherits
@@ -103,6 +110,17 @@ Item {
             values.sort((a, b) => a - b);
             return values.map(ms => ({ value: ms, label: _intervalLabel(ms) }));
         }
+        if (entry.type === "number" && Array.isArray(entry.presets)) {
+            const values = entry.presets.slice();
+            if (typeof shownValue === "number" && !values.includes(shownValue))
+                values.push(shownValue);
+            // 0 ("Never") last: it is the longest
+            values.sort((a, b) => (a === 0) - (b === 0) || a - b);
+            return values.map(value => ({
+                value: value,
+                label: entry.suffix === "s" ? Format.duration(value, entry.zeroLabel) : String(value) + (entry.suffix ?? "")
+            }));
+        }
         if (entry.type === "enum") {
             if (entry.optionsFrom === "iconThemes")
                 return _iconThemeOptions;
@@ -142,10 +160,39 @@ Item {
         return options;
     }
 
+    // Pills as the control, rather than a field or a list
+    readonly property bool _pills: _choices.length > 0 && entry?.presentation !== "dropdown" && entry?.presentation !== "cards"
+
     Layout.fillWidth: true
-    implicitHeight: _column.implicitHeight + 10
+    implicitWidth: inline ? _header.implicitWidth : 0
+    implicitHeight: _column.implicitHeight + (inline ? 4 : 10)
     opacity: available ? 1 : 0.35
     enabled: available
+    Behavior on opacity { NumberAnimation { duration: Theme.duration("fade") } }
+
+    // A choice per pill; an inherited value is shown dimmed
+    component ChoicePills: Flow {
+        id: _pillFlow
+        required property Item editor
+        spacing: 4
+
+        Repeater {
+            // ScriptModel, never the bare array — see "The Repeater crash"
+            model: ScriptModel {
+                values: _pillFlow.editor._choices
+            }
+
+            Pill {
+                required property var modelData
+                label: modelData.label
+                picked: modelData.value === _pillFlow.editor.shownValue
+                fontSize: Theme.fontSizeBody
+                size: "m"
+                opacity: picked && _pillFlow.editor._dimmed ? 0.5 : 1
+                onClicked: _pillFlow.editor.edited(modelData.value)
+            }
+        }
+    }
 
     Column {
         id: _column
@@ -153,23 +200,30 @@ Item {
         spacing: 6
 
         RowLayout {
+            id: _header
             width: parent.width
             spacing: 8
 
             Text {
+                visible: root.labelShown
                 text: root.label !== "" ? root.label : (root.entry?.label ?? root.key)
                 // A module's manifest names its settings: never read as markup
                 textFormat: Text.PlainText
                 maximumLineCount: 1
                 font.family: Theme.fontFamily
-                font.pixelSize: Theme.fontSizeBodyLarge
-                color: Theme.textPrimary
+                // On one line before pills, a lead word
+                font.pixelSize: root.inline && root._pills ? Theme.fontSizeSmall : Theme.fontSizeBodyLarge
+                color: root.inline && root._pills ? Theme.textMuted : Theme.textPrimary
+                Layout.alignment: root.inline && root._pills ? Qt.AlignTop : Qt.AlignVCenter
+                Layout.topMargin: root.inline && root._pills ? 6 : 0
                 // As wide as it needs, so the info icon stands right after it; elided when short of room
                 // Whole pixels: a fractional implicit width would cut the last letters
                 objectName: "settingLabel"
                 Layout.fillWidth: true
                 Layout.preferredWidth: Math.ceil(implicitWidth)
                 Layout.maximumWidth: Math.ceil(implicitWidth)
+                // On one line the control gives way, never the label
+                Layout.minimumWidth: root.inline ? Math.ceil(implicitWidth) : 0
                 elide: Text.ElideRight
             }
 
@@ -200,8 +254,42 @@ Item {
                 }
             }
 
-            // Keeps the controls at the row's end
+            // On one line: the pills, taking the room the row has
+            Loader {
+                active: root.inline && root._pills
+                visible: active
+                Layout.fillWidth: true
+                Layout.minimumWidth: 120
+                sourceComponent: ChoicePills {
+                    editor: root
+                    width: parent?.width ?? 0
+                }
+            }
+
+            // On one line: the slider, after the label
+            Loader {
+                active: root.inline && root.entry?.type === "slider"
+                visible: active
+                Layout.fillWidth: true
+                Layout.minimumWidth: 120
+                Layout.preferredWidth: 1000
+                sourceComponent: SettingSlider {
+                    width: parent?.width ?? 0
+                    label: ""
+                    sliderRatio: 1.0
+                    from: root.entry?.min ?? 0
+                    to: root.maximum ?? root.entry?.max ?? 100
+                    suffix: root.entry?.suffix ?? ""
+                    neutral: root.entry?.neutral
+                    value: root.shownValue ?? 0
+                    opacity: root._dimmed ? 0.5 : 1
+                    onValueEdited: newValue => root.edited(newValue)
+                }
+            }
+
+            // Keeps the controls at the row's end, where no control takes the room
             Item {
+                visible: !root.inline || !root._pills && root.entry?.type !== "slider"
                 Layout.fillWidth: true
             }
 
@@ -305,7 +393,7 @@ Item {
         }
 
         Text {
-            visible: text !== ""
+            visible: text !== "" && !root.inline
             width: parent.width
             wrapMode: Text.WordWrap
             text: root.hint !== "" ? root.hint : (root.entry?.hint ?? "")
@@ -315,9 +403,10 @@ Item {
             color: Theme.textMuted
         }
 
-        // Number: a whole number within the schema's range, with its unit
+        // Number: a whole number within the schema's range, with its unit (pills where the
+        // schema offers presets)
         Row {
-            visible: root.entry?.type === "number"
+            visible: root.entry?.type === "number" && !root._pills
             spacing: 6
 
             InputField {
@@ -349,7 +438,7 @@ Item {
 
         // Slider: a bounded whole number, dragged
         SettingSlider {
-            visible: root.entry?.type === "slider"
+            visible: root.entry?.type === "slider" && !root.inline
             width: parent.width
             label: ""
             sliderRatio: 1.0
@@ -701,28 +790,11 @@ Item {
             }
         }
 
-        // Intervals and enums: one pill per choice; an inherited value is shown dimmed
-        Flow {
-            visible: root._choices.length > 0 && root.entry?.presentation !== "dropdown" && root.entry?.presentation !== "cards"
+        // Intervals, enums and numbers with presets: one pill per choice, under the label
+        ChoicePills {
+            visible: root._pills && !root.inline
+            editor: root
             width: parent.width
-            spacing: 4
-
-            Repeater {
-                // ScriptModel, never the bare array — see "The Repeater crash"
-                model: ScriptModel {
-                    values: root._choices
-                }
-
-                Pill {
-                    required property var modelData
-                    label: modelData.label
-                    picked: modelData.value === root.shownValue
-                    fontSize: Theme.fontSizeBody
-                    size: "m"
-                    opacity: picked && root._dimmed ? 0.5 : 1
-                    onClicked: root.edited(modelData.value)
-                }
-            }
         }
     }
 }

@@ -2,7 +2,7 @@ pragma Singleton
 
 import QtQuick
 
-// Sizes, rates and moments as text, sizes in binary units (1 KB = 1024 B). Pure functions,
+// Sizes, rates, lengths of time and moments as text, sizes in binary units (1 KB = 1024 B). Pure functions,
 // used by the hardware sources (RAM, disk, VRAM), the network speeds and the saved networks'
 // "Last used"; modules reach them as Api.format.
 QtObject {
@@ -27,6 +27,28 @@ QtObject {
         while (unit < _units.length - 1 && Math.abs(value) >= Math.pow(1024, unit + 1))
             unit++;
         return (value / Math.pow(1024, unit)).toFixed(decimals[unit]) + " " + _units[unit] + suffix;
+    }
+
+    // A length of time in whole seconds, as a time setting's choice reads: "30 s", "5 min",
+    // "1 h", "1 h 30 min", "2 min 5 s"; 0 is `zeroLabel` ("0 s" when not given). Not a
+    // number, or below 0: ""
+    function duration(seconds, zeroLabel) {
+        const total = typeof seconds === "number" && Number.isFinite(seconds) ? Math.round(seconds) : -1;
+        if (total < 0)
+            return "";
+        if (total === 0)
+            return typeof zeroLabel === "string" && zeroLabel !== "" ? zeroLabel : "0 s";
+        const parts = [];
+        const hours = Math.floor(total / 3600);
+        const minutes = Math.floor(total % 3600 / 60);
+        const rest = total % 60;
+        if (hours > 0)
+            parts.push(hours + " h");
+        if (minutes > 0)
+            parts.push(minutes + " min");
+        if (rest > 0)
+            parts.push(rest + " s");
+        return parts.join(" ");
     }
 
     // How long ago a moment was, as a person says it: "just now", "5 min ago", "3 h ago",

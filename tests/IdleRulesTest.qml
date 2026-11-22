@@ -764,12 +764,18 @@ TestCase {
 
         // Wayland: an idle inhibitor (inputIdle without awayIdle)
         const wayland = _machine(values, ["lcd"], true);
+        assert(!IdleRules.waylandHeld(wayland.state), "a Wayland hold is not seen before the input is idle");
         wayland.at(5000, { type: "inputIdle", idle: true, since: 0 });
         assertEqual(wayland.next(), -1, "a Wayland inhibitor holds: no deadline");
+        assert(IdleRules.waylandHeld(wayland.state), "… seen as a Wayland hold (the page's unnamed app)");
         wayland.at(300000, { type: "deadline" });
         assertEqual(wayland.actions, "", "… no screensaver");
         wayland.at(605000, { type: "awayIdle", idle: true, since: 600000 });
         assertEqual(wayland.next(), 900000, "released at 600 s (away-idle comes the base time later): counted from there");
+        assert(!IdleRules.waylandHeld(wayland.state), "… no longer held");
+        wayland.at(610000, { type: "awayIdle", idle: false });
+        wayland.at(610000, { type: "locked" });
+        assert(!IdleRules.waylandHeld(wayland.state), "never a hold while locked");
 
         // logind: an idle block, read at deadlines
         const logind = _machine(values, ["lcd"], true);

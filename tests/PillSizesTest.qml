@@ -28,6 +28,7 @@ TestCase {
         "panels/settings/AnimationsSettings.qml": "-,m",
         "panels/settings/ConditionEditor.qml": "s,s,s,s,s,s,s,s",
         "panels/settings/CurvesSettings.qml": "-,-,-,-",
+        "panels/settings/MonitorTimesCard.qml": "m,m,m",
         "panels/settings/NetworkConnectionEditor.qml": "m,m,m",
         "panels/settings/NetworkVpnSettings.qml": "m",
         "panels/settings/SchemaSettingEditor.qml": "m",

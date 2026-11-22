@@ -19,11 +19,13 @@ A minor release, though it changes two things people rely on: toasts now follow 
 display time an app asks for, which changes how long some toasts show (apps that leave it to
 the shell, most, see no change, and Settings → Notifications → "Apps choose how long", off,
 keeps the old behaviour); and the screen no longer locks before the computer sleeps unless
-Settings → Lockscreen → "Lock before the computer sleeps" is on (below, under Changed).
+Settings → When away → "Lock before the computer sleeps" is on (below, under Changed).
 
 ### Module API
 The interface modules are written against (`qs.api`), versioned on its own
 (`Api.version`; its reference is `api/Api.qml`).
+- `ExpandingRow` slides open and shut (the theme's expand duration and curve; at once with
+  reduced motion); its child is destroyed once the row has slid shut.
 - CommandRunner's `_runner`, the internal runner it held, is removed: it was internal, and
   through it a module could change what the runner refuses and read its runs. A run's
   handle carries no state of the runner's either.
@@ -473,7 +475,7 @@ The interface modules are written against (`qs.api`), versioned on its own
   another program (an idle daemon such as hypridle doing idle instead).
 - Apps that keep the screen on through logind (`systemd-inhibit --what=idle`, video
   players) hold off the screensaver, screen-off and the idle lock while unlocked.
-- Screens off: Settings → Lockscreen → "Turn screens off" (after a time from your last
+- Screens off: Settings → When away → "Turn screens off" (after a time from your last
   input; with the screensaver off, straight from the desktop — an OLED's own protection
   mode starts even on black). On the lock screen the screens go off after a minute without
   input there ("Turn screens off on the lock screen after", 0 for never); input turns them
@@ -481,15 +483,26 @@ The interface modules are written against (`qs.api`), versioned on its own
   shows the black screensaver at its time, and the lock screen goes plain black instead.
 - Screens off beyond Hyprland: on another compositor with wlr-output-power-management
   (sway, labwc, river), monitors are turned off through `wlopm` when it is installed.
+- Settings → When away replaces the Lockscreen page: what happens while you are away, in
+  the order it happens. At the top "Set per monitor" and a timeline from your last input
+  (a lane per monitor, the lock one line across them, colliding times labelled on the other
+  side, "Paused: …" while an app keeps the screen on; drawn with everything off too). Then
+  the Screensaver (its switch on the title line, its time, "Turn screens off", the monitors'
+  cards, how it looks — dimmed while no monitor shows it), the Lock screen ("Lock when
+  idle" on the title line dims only its time; the rest serves every lock, and signing in
+  points to the Authentication page), the apps keeping the screen on, the commands. Times
+  are picked from pills (1 min to 1 h; on the lock screen 30 s to 5 min or Never); parts
+  that open on a switch slide open and shut, at once with reduced motion. The sleep notice
+  opens it at the lock screen's section; `settings openPage lockscreen` opens it.
 - Each monitor its own screensaver and screen-off times: with `lockscreen.perMonitor` on,
   `lockscreen.monitorIdle` gives a monitor (by make, model and serial, so it keeps its
   times on another port) its own switches and times for both, on the one clock from your
   last input — the laptop panel off at 2 min, an OLED off at 5 min without a screensaver,
   an LCD with the screensaver at 5 min; a monitor without an entry follows the default.
   The screensaver commands start once every monitor that goes dark has. A monitor plugged
-  in counts as input. Not on a settings
-  page yet; for now set over IPC: `idle state` lists the monitors,
-  `idle setMonitorTimes <id> <json|default>`.
+  in counts as input. Set on Settings → When away ("Set per monitor": a card per monitor,
+  a monitor not connected kept and forgettable), or over IPC: `idle state` lists the
+  monitors, `idle setMonitorTimes <id> <json|default>`.
 - Safe mode has a banner, under the bar and at the top of Settings → Modules: why the shell
   started without modules, the modules on when it crashed and one installed or updated in
   the last day, with "Open Modules" and "Load modules" (loads them again without a
@@ -568,7 +581,7 @@ The interface modules are written against (`qs.api`), versioned on its own
   sleep it looks whether the session is locked (its own lock, Hyprland's lock state, else
   logind's LockedHint; it holds the sleep back for about a second to look), and after an
   unlocked one shows a critical notification, "Not locked while asleep", once. Closing it
-  leaves a line on Settings → Lockscreen until a sleep locks; the next unlocked sleep after
+  leaves a line on Settings → When away until a sleep locks; the next unlocked sleep after
   that is told again. No program is named or guessed; a sleep whose lock state could not be
   read says nothing.
 - Toasts stack in three queues, top to bottom: critical, staying (until taken away) and
@@ -637,7 +650,7 @@ The interface modules are written against (`qs.api`), versioned on its own
   in the shipped and the NixOS module's configs), and a round that times out anyway is
   started again rather than counted against the reader. An account with an empty password
   cannot unlock by password.
-- Lock screen: locks before the computer sleeps (Settings → Lockscreen, on by default),
+- Lock screen: locks before the computer sleeps (Settings → When away, on by default),
   holding the sleep back until the compositor confirms the screen is covered (at most 4 s).
 - Lock screen: every authentication event goes to the shell's log — locks and unlocks and
   why, each PAM conversation started, answered, aborted or finished, the methods found,
@@ -920,7 +933,7 @@ The interface modules are written against (`qs.api`), versioned on its own
 - The shell's lock is reported to logind (the session's LockedHint: `loginctl show-session`
   says `LockedHint=yes` while locked), so programs that lock themselves when the session
   locks, such as password managers, see it.
-- Settings → Lockscreen → "Lock after" now counts from your last input, whether the
+- Settings → When away → "Lock after" now counts from your last input, whether the
   screensaver is on or not (it counted from the screensaver's start when the screensaver was
   on); its default is 10 minutes. A value set before is not carried over: set it again if
   you had changed it. An unlock without input (`loginctl unlock-session`) counts as you
@@ -952,7 +965,7 @@ The interface modules are written against (`qs.api`), versioned on its own
   a text console, where the launcher is started again (docs/FEATURES.md, "The limit while
   locked"). Once unlocked, the new shell says in one notification what happened and where
   the log is.
-- "Lock before the computer sleeps" (Settings → Lockscreen) is off by default: a change of
+- "Lock before the computer sleeps" (Settings → When away) is off by default: a change of
   behaviour people rely on. A configuration that holds no value for it — a new one, or one
   made before the setting came — no longer locks the screen before sleep; turn it on to keep
   that. A configuration that already holds a value keeps it. When the configuration file
@@ -1036,7 +1049,7 @@ The interface modules are written against (`qs.api`), versioned on its own
   (`pamu2fcfg -n >> …`), and warn against `auth include system-auth` for the password
   config (faillock: wrong passwords at the lock count toward an account lockout).
 - Lock screen: notifications show the app only by default ("Notifications on the lock
-  screen show", Settings → Lockscreen): a message's text, a one-time code in it, is not for
+  screen show", Settings → When away): a message's text, a one-time code in it, is not for
   whoever stands at the locked screen. A config still holding the old default ("In full",
   which every config seeded before had) moves to the new one once; another choice stays.
   The two notification settings are no longer greyed out when the idle lock is off: they

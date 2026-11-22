@@ -148,6 +148,10 @@ QtObject {
             settingsWindow.selectedPage = pageId;
             settingsWindow.visible = true;
         }
+        function onOpenSettingsAt(pageId, section) {
+            settingsWindow.openAt(pageId, section);
+            settingsWindow.visible = true;
+        }
         function onToggleSettings() {
             settingsWindow.visible = !settingsWindow.visible;
         }

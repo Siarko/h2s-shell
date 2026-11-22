@@ -37,7 +37,8 @@ FloatingWindow {
         { id: "media", label: "Media", tab: "behaviour", component: mediaComp },
         { id: "bar", label: "Bar", tab: "behaviour", component: barComp },
         { id: "notifications", label: "Notifications", tab: "behaviour", component: notificationsComp },
-        { id: "lockscreen", label: "Lockscreen", tab: "behaviour", component: lockscreenComp },
+        // Its id kept from the Lockscreen page it replaced (IPC openPage, links)
+        { id: "lockscreen", label: "When away", tab: "behaviour", component: awayComp },
         { id: "wallpaper", label: "Wallpaper", tab: "behaviour", component: wallpaperComp },
         { id: "dictation", label: "Dictation", tab: "behaviour", component: sttComp },
         { id: "performance", label: "Performance", tab: "behaviour", component: performanceComp },
@@ -115,6 +116,19 @@ FloatingWindow {
         return (pages ?? []).findIndex(page => page.id === id);
     }
 
+    // A section of a page to show at the top when it opens (WhenAwaySettings.section): set by
+    // openAt, cleared when another page is picked or the window closes
+    property string pageSection: ""
+    property bool _openingAt: false
+
+    function openAt(pageId, section) {
+        _openingAt = true;
+        pageSection = "";
+        selectedPage = pageId;
+        pageSection = section;
+        _openingAt = false;
+    }
+
     function _pageOf(id) {
         return pages[_pageIndex(id)] ?? pages[0];
     }
@@ -161,6 +175,8 @@ FloatingWindow {
     property string _lastSystemPage: "authentication"
     // From the page itself: _onAppearance may not have caught up yet when this runs
     onSelectedPageChanged: {
+        if (!_openingAt)
+            pageSection = "";
         // A group is a heading: its first page opens instead
         if (_pageOf(selectedPage).group) {
             const first = pages.find(page => page.parent === selectedPage);
@@ -189,7 +205,12 @@ FloatingWindow {
     // Previewing: the theme being edited is shown on the whole shell, saved nowhere. The
     // theme picker is locked meanwhile; leaving Appearance or closing the window ends it.
     property bool previewing: false
-    onVisibleChanged: if (!visible) previewing = false
+    onVisibleChanged: {
+        if (!visible) {
+            previewing = false;
+            pageSection = "";
+        }
+    }
     Binding {
         target: Theme
         property: "preview"
@@ -625,7 +646,7 @@ FloatingWindow {
     Component { id: mediaComp;         MediaSettings         { editIndex: root.editIndex } }
     Component { id: barComp;           BarSettings           { editIndex: root.editIndex } }
     Component { id: notificationsComp; NotificationsSettings { editIndex: root.editIndex } }
-    Component { id: lockscreenComp;    LockscreenSettings    { editIndex: root.editIndex } }
+    Component { id: awayComp;          WhenAwaySettings      { editIndex: root.editIndex; section: root.pageSection } }
     Component { id: wallpaperComp;     WallpaperSettings     { editIndex: root.editIndex } }
     Component { id: authenticationComp; AuthenticationSettings {} }
     Component { id: networkOverviewComp; NetworkOverviewSettings {} }

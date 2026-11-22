@@ -20,7 +20,9 @@ import QtQuick
 //   default  — value of the system profile
 //   min/max  — for interval, number and slider
 //   presets  — for interval: the values offered, in ms, instead of the polling ones;
-//              zeroLabel: what 0 is called there ("Paused" unset)
+//              zeroLabel: what 0 is called there ("Paused" unset). For number: the values
+//              offered as pills instead of a field (in its unit, seconds for a time: "5 min";
+//              zeroLabel what 0 is called), a value set otherwise shown among them
 //   suffix   — unit shown after a number or slider, e.g. "s"
 //   neutral  — for slider: the resting value inside the range, which its fill starts from
 //              (0 on a speed that can go either way); unset, the fill starts at min
@@ -86,6 +88,9 @@ Singleton {
         }, widget.module ? { module: widget.module } : {}));
     }
 
+    // The times offered for a stage of being away (seconds): 1 min to 1 h
+    readonly property var idlePresets: [60, 120, 300, 600, 900, 1800, 3600]
+
     // The core's settings; then the loaded modules' (Modules.settingEntries: keys mod.<id>.*,
     // each naming its `module`), which go with their module when it is turned off — a
     // profile's values for them are kept, unused, and apply again when it is back
@@ -142,7 +147,7 @@ Singleton {
         { key: "lockscreen.screensaverEnabled", label: "Enable screensaver", group: "lockscreen",
           type: "bool", default: false, legacy: ["lockscreen", "screensaverEnabled"] },
         { key: "lockscreen.screensaverTimeout", label: "Activate after", group: "lockscreen",
-          type: "number", min: 5, max: 86400, suffix: "s", default: 300,
+          type: "number", min: 5, max: 86400, suffix: "s", default: 300, presets: root.idlePresets,
           legacy: ["lockscreen", "screensaverTimeout"] },
         { key: "lockscreen.fadeInDuration", label: "Fade in", group: "lockscreen",
           type: "slider", min: 100, max: 2000, suffix: "ms", default: 800,
@@ -153,10 +158,10 @@ Singleton {
         { key: "lockscreen.notificationsOnScreensaver", label: "Show notifications on screensaver",
           group: "lockscreen", type: "bool", default: true,
           legacy: ["lockscreen", "notificationsOnScreensaver"] },
-        { key: "lockscreen.screensaverCommands", label: "Run commands when the screensaver starts and ends",
+        { key: "lockscreen.screensaverCommands", label: "Run commands when every screen has gone dark, and when you come back",
           group: "lockscreen", type: "bool", default: false, legacy: ["lockscreen", "screensaverExecCmd"],
           hint: "They follow your idle time, not the screensaver's visibility: locking the screen does not end it, coming back to the lock prompt does." },
-        { key: "lockscreen.screensaverStartCommand", label: "When the screensaver starts", group: "lockscreen",
+        { key: "lockscreen.screensaverStartCommand", label: "When every screen is dark", group: "lockscreen",
           type: "string", default: "", legacy: ["lockscreen", "screensaverExecSleep"],
           hint: "Run with sh -c, detached from the shell" },
         { key: "lockscreen.screensaverEndCommand", label: "When you come back", group: "lockscreen",
@@ -180,28 +185,27 @@ Singleton {
         { key: "lockscreen.monitorIdle", label: "Each monitor", group: "lockscreen",
           type: "monitorIdle", default: ({}) },
         { key: "lockscreen.screenOffEnabled", label: "Turn screens off", group: "lockscreen",
-          type: "bool", default: false, hint: "Needs Hyprland, or wlopm elsewhere; without either, the black screensaver instead." },
+          type: "bool", default: false },
         { key: "lockscreen.screenOffTimeout", label: "Turn screens off after", group: "lockscreen",
-          type: "number", min: 5, max: 86400, suffix: "s", default: 600,
+          type: "number", min: 5, max: 86400, suffix: "s", default: 600, presets: root.idlePresets,
           hint: "Counted from your last input." },
         { key: "lockscreen.lockscreenEnabled", label: "Enable lock screen", group: "lockscreen",
           type: "bool", default: false, legacy: ["lockscreen", "lockscreenEnabled"] },
         // From the last input, whether the screensaver is on or not (it replaced
         // `lockscreenTimeout`, which counted from the screensaver's start when it was on)
         { key: "lockscreen.lockAfter", label: "Lock after", group: "lockscreen",
-          type: "number", min: 5, max: 86400, suffix: "s", default: 600,
+          type: "number", min: 5, max: 86400, suffix: "s", default: 600, presets: root.idlePresets,
           hint: "Counted from your last input." },
         // The lock screen's own screen-off: on by default after a minute (0 = never); counted
         // from the lock or the last input at it. Without power control the lock screen goes
         // black instead
         { key: "lockscreen.lockedScreenOffTimeout", label: "Turn screens off on the lock screen after",
           group: "lockscreen", type: "number", min: 0, max: 86400, suffix: "s", default: 60,
-          hint: "0: never." },
+          presets: [30, 60, 120, 300, 0], zeroLabel: "Never" },
         { key: "lockscreen.lockOnSleep", label: "Lock before the computer sleeps",
           group: "lockscreen", type: "bool", default: false },
         { key: "lockscreen.notificationsOnLock", label: "Show notifications on lock screen",
           group: "lockscreen", type: "bool", default: true,
-          hint: "On every lock: idle, before sleep, a shortcut, another program locking the screen.",
           legacy: ["lockscreen", "notificationsOnLock"] },
         // App only by default: a message's text, a one-time code in it, is not for whoever
         // stands at the locked screen. Was "full": a Full seeded with that has it reset once

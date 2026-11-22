@@ -165,7 +165,9 @@ each `Bar` emits `popupOpened`, `shell.qml` records it in `activeScreen`, and ev
 other Bar closes its own popup when `activeScreen` stops matching its own screen.
 
 `SettingsWindow` is the exception: one instance for the whole shell, in `shell.qml`,
-opened with `Shell.openSettings(category)` and toggled with `Shell.toggleSettings()`, and
+opened with `Shell.openSettings(category)` (`Shell.openSettingsAt(category, section)` with
+a section of the page shown at the top, as the sleep notice opens the When away page's lock
+screen section) and toggled with `Shell.toggleSettings()`, and
 over IPC (`qs ipc call settings open | openPage <page id> | currentPage | itemRect <objectName> | toggle | close`, in `shell.qml`).
 
 ## Key patterns
@@ -259,6 +261,8 @@ Settings live in **shell profiles**.
 - Settings pages edit the profile picked in the settings sidebar through
   `panels/settings/SchemaSettingEditor.qml`, which shows where a value comes from
   (set here, inherited from a profile above, default, global) with a pin and a reset.
+  `inline` puts it on one line — a section title's switch, a stage's times as pills after
+  a lead word —; a number with `presets` in the schema is edited as pills.
   A new setting is a schema entry, a `Profiles.value()` reader, and usually one editor
   line on its page.
 
@@ -631,7 +635,8 @@ launcher agree on the contract described under "Recovery" below):
   inhibitor is let go. After the resume the outcome (locked, unlocked, unknown) goes to
   `SleepNoticeRules.step` (the cycle quiet → shown → waiting, tested in
   `tests/SleepNoticeRulesTest.qml`): a critical notification, closed means acknowledged, a
-  line on the Lockscreen page while it waits for a sleep that locks. The state is kept in
+  line in the When away page's lock screen section while it waits for a sleep that locks
+  (the notification's click opens it there: `Shell.openSettingsAt`). The state is kept in
   `Config.sleepLockNotice` (JSON). The reading runs against stand-ins in
   `tests/SleepLockStateReadingTest.qml`, the whole in the lock bed's `sleep-notice`. Not
   covered: off Hyprland, a locker that does not set LockedHint reads as unknown (nothing
@@ -1169,7 +1174,9 @@ and `PrivilegedMark`, whose `need` is polkit's answer (`auth`, `no`, `yes` or no
 does not know shows the lock); their names are `qs.components`' too, and the same holds
 for a file that imports both. Rows and texts: `SettingsRow` (a label, a hint under it, a
 value, and its children as the controls on the right), `ExpandingRow` (a line that opens;
-its child is held as a `Component`, so nothing of it exists while the row is closed) and
+its child is held as a `Component`, so nothing of it exists while the row is closed; it
+slides open and shut as `components/Reveal.qml` does every part of a settings page that opens
+on a switch) and
 `Notice` (a small line of kind `warning`, `danger` or `success`); inside the first two are
 `components/SettingsRow.qml` and `components/ExpandingRow.qml`. `ProgressBar` (API 1.31;
 `value` 0 to 1, below 0 a run of unknown length; `kind` `normal`, `success`, `warning` or

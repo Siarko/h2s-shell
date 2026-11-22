@@ -269,7 +269,13 @@ Singleton {
     function held(state) {
         if (state.locked || state.forced)
             return false;
-        return (state.inputIdle && !state.awayIdle) || state.busInhibitors > 0 || state.logindIdleBlock === true;
+        return waylandHeld(state) || state.busInhibitors > 0 || state.logindIdleBlock === true;
+    }
+
+    // A Wayland client holds idle off: no input for baseTime, yet not idle with inhibitors
+    // respected — seen only once the input has been idle that long; unlocked only
+    function waylandHeld(state) {
+        return !state.locked && state.inputIdle === true && state.awayIdle !== true;
     }
 
     // A monitor's times: its own, or the default's for one config does not list

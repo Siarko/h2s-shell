@@ -4,8 +4,9 @@ import qs.singletons
 
 // A line that opens: a label, a short line under it (`hint`) and the "▸" / "▾" of a card's
 // header; a click anywhere on the line opens or closes it. What it opens is its child,
-// held as a Component: built when the row opens, destroyed when it closes, laid out at
-// the row's width under the line.
+// held as a Component: built when the row opens, destroyed once it has slid shut, laid out
+// at the row's width under the line — sliding open and shut as every part that opens on a
+// settings page (Reveal).
 //
 //   ExpandingRow { label: "Exit node"; hint: "None"; ExitNodeList {} }
 ColumnLayout {
@@ -71,10 +72,16 @@ ColumnLayout {
         }
     }
 
-    Loader {
-        visible: root.open
-        Layout.fillWidth: true
-        active: root.open
-        sourceComponent: root.content
+    Reveal {
+        id: _reveal
+        open: root.open
+
+        Loader {
+            objectName: "expandingContent"
+            Layout.fillWidth: true
+            // Kept while it slides shut, so what it holds goes with the slide
+            active: root.open || _reveal.shown
+            sourceComponent: root.content
+        }
     }
 }

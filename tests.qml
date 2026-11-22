@@ -117,6 +117,7 @@ QtObject {
     property var _moduleWaitingNotice: ModuleWaitingNoticeTest {}
     property var _moduleBackup: ModuleBackupTest {}
     property var _idleRules: IdleRulesTest {}
+    property var _awayViewRules: AwayViewRulesTest {}
     property var _sleepNoticeRules: SleepNoticeRulesTest {}
     property var _monitorRules: MonitorRulesTest {}
     property var _screenPowerReading: ScreenPowerReadingTest {}

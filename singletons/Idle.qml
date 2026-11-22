@@ -49,6 +49,20 @@ Singleton {
     // The interface as the Screensaver page tells it: { state, line } (HelperRules.serviceStatus)
     readonly property var screenSaverService: HelperRules.serviceStatus(Helper.state, _screenSaver.state, _screenSaver.name)
 
+    // The connected monitors as idle counts them, [{ id, base, connector }] (MonitorRules'
+    // ids), and whether their power can be cut (else the screen-off shows the screensaver):
+    // what the settings page draws its lanes and cards from
+    readonly property var monitors: _monitorEntries
+    readonly property bool powerControl: _powerControl
+    // The apps keeping the screen on, as the settings page lists them: [{ who, why }] — the
+    // screensaver interface's holders, logind's idle blocks as last read, an unnamed Wayland
+    // one (AwayViewRules.holders)
+    readonly property var holders: AwayViewRules.holders(busHolders, _state.logindIdleBlock === true ? _logindHolders : [],
+                                                          IdleRules.waylandHeld(_state))
+    // logind's idle blocks at the last read that found them held, listed while the state
+    // counts the block held
+    property var _logindHolders: []
+
     // What the screen with this connector name shows unlocked: "on" (the desktop), "saver"
     // (the screensaver) or "off" (powered off, under a plain black surface that takes the
     // keys); "on" while locked, where the lock surface is what shows
@@ -409,6 +423,7 @@ Singleton {
                 _log("warning", "could not read logind's idle inhibitors: not counted as keeping the screen on");
             _logindTold = told;
         }
+        _logindHolders = block.held === true ? block.holders : [];
         _dispatch({ type: "logindIdleBlock", held: block.held });
         _deadlineAfterAnswer();
     }

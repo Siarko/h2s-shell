@@ -682,6 +682,18 @@ TestCase {
         return condition();
     }
 
+    // The first item under `item`, at any depth, with that objectName
+    function _named(item, name) {
+        for (const child of Array.from(item.children)) {
+            if (child.objectName === name)
+                return child;
+            const found = _named(child, name);
+            if (found !== null)
+                return found;
+        }
+        return null;
+    }
+
     function _child(item, typeName, nth = 0) {
         return Array.from(item.children).filter(child => child.toString().startsWith(typeName))[nth] ?? null;
     }
@@ -1136,11 +1148,12 @@ TestCase {
         const closedHeight = expandingRow.implicitHeight;
         driver.mouseClick(expandingRow, expandingRow.width / 2, 5);
         assertEqual(expandingRow.open + " " + expandingRow.built + " " + mark.text, "true 1 ▾", "a click on its line opens it: the child is built, the mark is the opened card's");
-        const loader = _child(opening, "QQuickLoader");
+        const loader = _named(opening, "expandingContent");
         assert(_until(() => loader.item && loader.item.width === expandingRow.width && expandingRow.implicitHeight === closedHeight + 6 + 20), "the child is as wide as the row, under the line");
         assertEqual(loader.item.objectName, "opened", "… the element written inside the row");
         driver.mouseClick(expandingRow, expandingRow.width / 2, 5);
-        assert(!expandingRow.open && loader.item === null && _until(() => expandingRow.implicitHeight === closedHeight), "a second click closes it: the child is gone, the row as tall as before");
+        assert(!expandingRow.open && loader.item !== null, "a second click closes it: the child stays while the row slides shut");
+        assert(_until(() => loader.item === null && expandingRow.implicitHeight === closedHeight), "… then the child is gone, the row as tall as before");
         expandingRow.open = true;
         assertEqual(expandingRow.built, 2, "the owner opens it too, and the child is built anew");
         expandingRow.open = false;

@@ -22,6 +22,16 @@ TestCase {
         assertEqual(Format.bytes(512), "512 B", "bytes");
         assertEqual(Format.bytes(0), "0 B", "nothing");
 
+        // --- lengths of time: a time setting's choices ---
+        assertEqual(Format.duration(30), "30 s", "duration: seconds");
+        assertEqual(Format.duration(300), "5 min", "duration: whole minutes");
+        assertEqual(Format.duration(3600), "1 h", "duration: an hour");
+        assertEqual(Format.duration(5400), "1 h 30 min", "duration: hours and minutes");
+        assertEqual(Format.duration(125), "2 min 5 s", "duration: minutes and seconds");
+        assertEqual(Format.duration(0, "Never"), "Never", "duration: 0 is the zero label");
+        assertEqual(Format.duration(0), "0 s", "… or 0 s without one");
+        assertEqual([Format.duration(-1), Format.duration("5"), Format.duration(NaN)].join("|"), "||", "duration: not a length, nothing");
+
         // --- rates: what the network speeds showed before ---
         assertEqual(Format.rate(3.44 * 1048576), "3.4 MB/s", "megabytes per second to one decimal");
         assertEqual(Format.rate(12.4 * 1024), "12 KB/s", "whole kilobytes per second");

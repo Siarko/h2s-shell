@@ -5,8 +5,8 @@ import qs.singletons
 
 // The public row that opens (module API 1.6): a `label`, a short line under it (`hint`)
 // and the mark of a card's header; a click anywhere on the line flips `open`. What it
-// opens is its one child, written inside it: built when the row opens, destroyed when it
-// closes — nothing of it exists while the row is closed — and as wide as the row.
+// opens is its one child, written inside it: built when the row opens, destroyed once it
+// has slid shut — nothing of it exists while the row is closed — and as wide as the row.
 //
 //   ExpandingRow { label: "Exit node"; hint: current; ColumnLayout { … } }
 //

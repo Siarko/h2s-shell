@@ -266,8 +266,8 @@ shows its wallpaper at once. Rules: `singletons/WallpaperRules.qml`; state:
 
 The shell does idle itself: from Wayland idle notifications (ext-idle-notify) it runs up
 to three stages, each counted from the last input and each with its own switch and time in
-Settings → Lockscreen — the screensaver ("Enable screensaver", `screensaverTimeout`), screens
-off ("Turn screens off", `screenOffTimeout`) and the lock ("Enable lock screen", `lockAfter`);
+Settings → When away — the screensaver (`screensaverEnabled`, `screensaverTimeout`), screens
+off ("Turn screens off", `screenOffTimeout`) and the lock ("Lock when idle", `lockAfter`);
 on the lock screen, screens off again after `lockedScreenOffTimeout`. All but the lock
 screen's screen-off are off by default. No idle daemon is needed; one can still run beside it
 (below, "hypridle and other idle daemons").
@@ -310,9 +310,10 @@ screen's screen-off are off by default. No idle daemon is needed; one can still 
   then comes as long after it as after its own screensaver. The screensaver commands start once every monitor that goes dark has (a monitor
   with both stages off is not waited for). Where monitors cannot be turned off, a monitor
   is known by the make, model and serial Qt reports, and its own times still apply (its
-  screen-off the black screensaver). The idle lock stays one for the session. Set
-  for now with the IPC `idle setMonitorTimes <id> <json|default>` (`idle state` lists the
-  monitors' ids).
+  screen-off the black screensaver). The idle lock stays one for the session. Set on
+  Settings → When away ("Set per monitor": a card per monitor, "Same as all monitors" or
+  "Own times"; a monitor not connected keeps its times and can be forgotten), or with the
+  IPC `idle setMonitorTimes <id> <json|default>` (`idle state` lists the monitors' ids).
 - **Keeping the screen on** — while the session is unlocked, three kinds of request hold the
   next stage (what was reached stays; the count starts again when the last one ends): a
   Wayland idle inhibitor (a fullscreen video, an app asking the compositor), an app's
@@ -336,7 +337,7 @@ screen's screen-off are off by default. No idle daemon is needed; one can still 
 - **Lock screen** — a real `WlSessionLock`, so the compositor enforces it. It can be
   reached on idle (`lockAfter`), and shows a password
   prompt and optionally the notification list — the app's name only by default, or the
-  title, or everything (Settings → Lockscreen; it applies to every lock), always as plain
+  title, or everything (Settings → When away; it applies to every lock), always as plain
   text with nothing to click. It also locks on request: logind's Lock
   signal for the shell's session (`loginctl lock-session`, or `HandlePowerKey=lock` in
   logind.conf) and `h2s-shell ipc call lockscreen lock`; a request while locked changes
@@ -428,7 +429,7 @@ screen's screen-off are off by default. No idle daemon is needed; one can still 
   unlock over IPC, and no key unlocks: Escape shows a hidden prompt (as any key) and hides a
   showing one, emptying the field (as the prompt's time-out does); a held Escape's repeats
   count for nothing.
-- **Sleep** — with Settings → Lockscreen → "Lock before the computer sleeps" on
+- **Sleep** — with Settings → When away → "Lock before the computer sleeps" on
   (`lockscreen.lockOnSleep`, off by default; on while the settings file cannot be read), the
   screen locks before the computer sleeps, the
   shell holding a logind delay inhibitor (`systemd-inhibit`) until the compositor confirms
@@ -442,8 +443,8 @@ screen's screen-off are off by default. No idle daemon is needed; one can still 
   lets go as soon as it has seen a lock, or a second after the sleep began when it has not
 (longer only while its own lock before sleep is still coming up). After a
   sleep that went down unlocked it shows a critical notification, "Not locked while asleep",
-  once; closing it acknowledges it, and Settings → Lockscreen keeps a line until a sleep
-  locks. The next unlocked sleep after that is told again. No program is named: off
+  once; clicking it opens Settings → When away at the lock screen's section, closing it
+  acknowledges it, and that section keeps a line until a sleep locks. The next unlocked sleep after that is told again. No program is named: off
   Hyprland, a locker that does not set LockedHint cannot be seen, and nothing is said then.
   The state is remembered in the config. The same on NixOS and Arch (systemd-logind on both).
 - **The log** — every authentication event leaves a `[Lockscreen]` line in the shell's
@@ -457,12 +458,12 @@ screen's screen-off are off by default. No idle daemon is needed; one can still 
 The shell needs no idle daemon, but one can run beside it. Both act on the same idle time,
 so for each job pick one side and turn it off on the other:
 
-| Job | In the shell (Settings → Lockscreen) | In hypridle (`hypridle.conf`) |
+| Job | In the shell (Settings → When away) | In hypridle (`hypridle.conf`) |
 |---|---|---|
-| Screensaver, dimming | "Enable screensaver", `screensaverTimeout`; the start and end commands (`screensaverCommands`, `screensaverStartCommand`, `screensaverEndCommand`) run once every monitor that goes dark has and when the user is back | a `listener` whose `on-timeout` dims (`brightnessctl`) and whose `on-resume` restores |
+| Screensaver, dimming | the Screensaver section's switch, `screensaverTimeout`; the start and end commands (`screensaverCommands`, `screensaverStartCommand`, `screensaverEndCommand`) run once every monitor that goes dark has and when the user is back | a `listener` whose `on-timeout` dims (`brightnessctl`) and whose `on-resume` restores |
 | Screens off | "Turn screens off" and `screenOffTimeout` (per monitor with `perMonitor` and `monitorIdle`) | a `listener` with `on-timeout = hyprctl dispatch dpms off` and `on-resume = hyprctl dispatch dpms on` |
 | Screens off on the lock screen | `lockedScreenOffTimeout` (60 s by default; 0 leaves it to the daemon) | a short `listener` that turns screens off only while locked |
-| Lock when idle | "Enable lock screen", `lockAfter` | a `listener` whose `on-timeout` is `loginctl lock-session` |
+| Lock when idle | "Lock when idle", `lockAfter` | a `listener` whose `on-timeout` is `loginctl lock-session` |
 | Lock before sleep | "Lock before the computer sleeps" (`lockOnSleep`) | `before_sleep_cmd = loginctl lock-session` |
 | Screens on after a wake | always: the monitors the shell turned off | `after_sleep_cmd = hyprctl dispatch dpms on` (needed while hypridle turns screens off) |
 | Apps keeping the screen on | always, while unlocked: Wayland inhibitors, logind `idle` blocks, and `org.freedesktop.ScreenSaver` when the shell holds the name | `ignore_wayland_inhibit`, `ignore_systemd_inhibit`, `ignore_dbus_inhibit` in `general` |
@@ -484,8 +485,8 @@ stages in use, set `ignore_dbus_inhibit = true` in hypridle's `general` (or the 
 reach whichever started first); with all of the shell's stages off, the name is hypridle's.
 
 **Keeping hypridle for everything idle** is a working choice: turn the shell's stages off
-(Settings → Lockscreen: "Enable screensaver", "Turn screens off" and "Enable lock screen"
-off, "Turn screens off on the lock screen after" 0), keep hypridle's listeners, and lock with
+(Settings → When away: the screensaver, "Turn screens off" and "Lock when idle" off, "Turn
+screens off on the lock screen" Never), keep hypridle's listeners, and lock with
 `loginctl lock-session` or the IPC lock. The shell then leaves `org.freedesktop.ScreenSaver`
 free. hypridle asks for the name only when it starts and does not wait for it, so if it was
 running while the shell held the name, restart it after turning the shell's stages off;
@@ -494,7 +495,7 @@ requests made before are lost until each app asks again (most ask at their next 
 lock screen itself stays the shell's.
 
 **Moving over to the shell** takes the table from right to left: set the times in Settings →
-Lockscreen (each counted from the last input, as hypridle counts), then remove the listeners
+When away (each counted from the last input, as hypridle counts), then remove the listeners
 the shell now covers — or hypridle altogether, after which the shell takes the
 `org.freedesktop.ScreenSaver` name by itself (at once while it runs and one of its stages is
 on: it waits in the bus's queue). Only an idle suspend has no counterpart in the shell. The shell's IPC lock, for
@@ -650,7 +651,7 @@ Behaviour pages:
 | **Media** | audio visualiser style, layout and frame rate; the cover's rounding and rotation |
 | **Bar** | the content of the three sections, including each widget's popup mode and preset |
 | **Notifications** | toasts: on or off, whether apps choose how long, the time, one at a time or a column, each queue's limit, moving by dragging, resident ones counting down, the screen and a fullscreen window there; code-extraction regex patterns |
-| **Lockscreen** | screensaver, screen-off and lock times (each from the last input), how monitors go dark (screensaver or turned off, per monitor), the lock screen's screen-off, fade durations, lock before sleep (off by default), notification visibility, screensaver commands |
+| **When away** | what happens while nobody uses the computer, in the order it happens. At the top, "Set per monitor" and a timeline from the last input: a lane per monitor (per monitor) with its screensaver and screen-off, the lock as one line across them, the commands' moment; times that would collide labelled on the other side of the line; always drawn, its line under it saying what the lock screen does, nothing at all, or which app keeps the screen on ("Paused: …"). **Screensaver** (its switch on the title line): its time, "Turn screens off" and its time, the per-monitor cards, how it looks (fades, notifications) — dimmed while no monitor shows it. **Lock screen** ("Lock when idle" on the title line, which dims only its time; the rest serves every lock): lock before sleep (off by default) and the sleep notice's line, screens off on the lock screen, its notifications, signing in (→ Authentication). **Keeping the screen on**: the apps holding it now. **Commands**: the start and end commands, dimmed while no screen goes dark. Parts that open on a switch slide open and shut (at once with reduced motion). Opened at the lock screen's section by the sleep notice; its id stays `lockscreen` (`settings openPage lockscreen`) |
 | **Dictation** | transcript preview, pending counter, music pause, socket path and debug (always global), and the daemon's wake configuration (read-only) |
 | **Performance** | polling rates of hardware, temperatures, disk and network, GPU load sampling, graph heartbeat, the system power profile |
 
