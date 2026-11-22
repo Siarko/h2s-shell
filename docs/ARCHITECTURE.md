@@ -617,7 +617,8 @@ launcher agree on the contract described under "Recovery" below):
   systemd/sleep.conf`), parsed by `HibernateRules`. The page's Apply of the delay is the one
   write: `singletons/io/HibernateDelayWriter.qml` hands `HibernateRules.applyArgv`'s fixed
   `/bin/sh` script to `PrivilegedRuns.startShell` (the shell's own runs as administrator, in
-  the one queue, polkit's prompt undressed), which writes the drop-in beside its place and
+  the one queue, announced in the prompt as the shell's — "Shell: h2s-shell" and its purpose,
+  `PolkitRules.announcement`'s `shell` —, refused when a module's code asks), which writes the drop-in beside its place and
   renames it in. IPC: `idle state` (JSON, with the monitors' ids) and
   `idle setMonitorTimes <id> <json|default>` (one monitor's entry in
   `lockscreen.monitorIdle`, `IdleRules.withMonitorTimes`).

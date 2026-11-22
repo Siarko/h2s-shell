@@ -125,16 +125,30 @@ TestCase {
         assert(rules.delayDiffers({ state: "set", seconds: 7200 }, 10800), "another time: Apply");
         assert(rules.delayDiffers({ state: "unset" }, 7200), "unset: Apply");
         assert(rules.delayDiffers({ state: "unknown" }, 7200), "unread: Apply");
-        assertEqual(rules.delayLine({ state: "set", seconds: 7200 }, false, duration),
-                    "The time after sleeping is a system setting (now 2 h). Changing it asks for your password.", "Arch: Apply");
-        assertEqual(rules.delayLine({ state: "set", seconds: 7200 }, null, duration), "The time after sleeping is a system setting (now 2 h).",
+        assertEqual(rules.delayLine({ state: "set", seconds: 7200 }, false, duration, "", 10800),
+                    "Picked 3 h; the system now hibernates after 2 h. Apply to change it.", "Arch: the picked time after Apply");
+        assertEqual(rules.delayLine({ state: "set", seconds: 7200 }, null, duration, "", 10800), "Picked 3 h; the system now hibernates after 2 h.",
                     "whether this is NixOS not read: neither Apply nor the option promised");
-        assertEqual(rules.delayLine({ state: "set", seconds: 7200 }, false, duration, "/run/systemd/sleep.conf.d/z.conf"),
-                    "The time after sleeping is a system setting (now 2 h). /run/systemd/sleep.conf.d/z.conf sets it after the shell's own file, so Apply cannot change it.",
+        assertEqual(rules.delayLine({ state: "set", seconds: 7200 }, false, duration, "/run/systemd/sleep.conf.d/z.conf", 10800),
+                    "Picked 3 h; the system now hibernates after 2 h. /run/systemd/sleep.conf.d/z.conf sets it after the shell's own file, so Apply cannot change it.",
                     "another file wins: named, no Apply promised");
-        assertEqual(rules.delayLine({ state: "set", seconds: 7200 }, true, duration),
-                    "The time after sleeping is a system setting (now 2 h). On NixOS it is the option programs.h2s-shell.idle.hibernateDelay.",
+        assertEqual(rules.delayLine({ state: "set", seconds: 7200 }, true, duration, "", 10800),
+                    "Picked 3 h; the system now hibernates after 2 h. On NixOS it is the option programs.h2s-shell.idle.hibernateDelay.",
                     "NixOS: the option");
+        assertEqual(rules.delayLine({ state: "unset" }, false, duration, "", 10800),
+                    "Picked 3 h; the system's delay is not set (systemd's default). Apply to change it.", "unset: said");
+        assertEqual(rules.delayLine({ state: "unknown" }, false, duration, "", 10800),
+                    "Picked 3 h; the system's delay could not be read. Apply to change it.", "unread: said");
+        // What will happen: the system's delay with sleep on, until Apply
+        const fromSleep = { on: true, from: "sleep", at: 1800, after: 10800 };
+        assertEqual(JSON.stringify(rules.inEffect(fromSleep, { state: "set", seconds: 7200, file: "x" })),
+                    JSON.stringify({ on: true, from: "sleep", at: 1800, after: 7200 }), "sleep on: the system's delay in effect");
+        assertEqual(fromSleep.after, 10800, "… the profile's left as it was");
+        assertEqual(rules.inEffect(fromSleep, { state: "unset" }), fromSleep, "the delay unset: the profile's (nothing better known)");
+        assertEqual(rules.inEffect(fromSleep, { state: "unknown" }), fromSleep, "… unread: the same");
+        const fromLock = { on: true, from: "lock", at: 1200, after: 7200 };
+        assertEqual(rules.inEffect(fromLock, { state: "set", seconds: 60, file: "x" }), fromLock, "sleep off: the shell's own time, the delay does not apply");
+        assertEqual(rules.inEffect(null, { state: "set", seconds: 60 }), null, "nothing given: nothing");
 
         // ---- a file that wins over the shell's drop-in ----
         const ours = "/etc/systemd/sleep.conf.d/h2s-shell.conf";

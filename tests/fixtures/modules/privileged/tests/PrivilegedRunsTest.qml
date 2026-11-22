@@ -811,19 +811,24 @@ TestCase {
     }
 
     // One of the shell's own fixed commands (PrivilegedRuns.startShell: the Hibernate
-    // section's Apply) goes through the same queue: in test mode refused at its launch, as no
-    // stand-in is allowed for it — the trusted pkexec never runs from a suite; not dressed
-    // as a module's (no "Module:" notice even with another agent); a word list without an
-    // absolute program refused before the queue; the queue goes on after it
+    // section's Apply): asked from a module's code, refused before the queue — no module is
+    // announced as the shell; asked from the shell's side, through the same queue, and in
+    // test mode refused at its launch, as no stand-in is allowed for it — the trusted pkexec
+    // never runs from a suite, and no notice goes out for it; a word list without an absolute
+    // program refused before the queue; the queue goes on after it
     function _shellRun() {
         _runs = {};
         ModuleTestKit.clearRecords();
         ModuleTestKit.setPolkitAgent("other");
         const answers = [];
-        PrivilegedLookupSeam.startShell("Not absolute", ["sh", "-c", "true"], reply => answers.push(["relative", reply]));
-        PrivilegedLookupSeam.startShell("A setting's Apply", [_path("talk"), "lines", "1", "0"], reply => answers.push(["shell", reply]));
+        PrivilegedLookupSeam.startShell("From a module", [_path("talk"), "lines", "1", "0"], reply => answers.push(["module", reply]));
+        PrivilegedLookupSeam.startShell("Not absolute", ["sh", "-c", "true"], reply => answers.push(["relative", reply]), true);
+        PrivilegedLookupSeam.startShell("A setting's Apply", [_path("talk"), "lines", "1", "0"], reply => answers.push(["shell", reply]), true);
         _start("behind the shell's", [_path("talk"), "lines", "1", "0"]);
-        _then("the shell's runs and the one behind are answered", () => answers.length === 2 && _done("behind the shell's") && _idle(), () => {
+        _then("the shell's runs and the one behind are answered", () => answers.length === 3 && _done("behind the shell's") && _idle(), () => {
+            const fromModule = answers.find(entry => entry[0] === "module")[1];
+            assert(!fromModule.ok && fromModule.blocked === "undeclared" && fromModule.error === "not from a module's code",
+                   "the shell's run asked from a module's code: refused before the queue: " + JSON.stringify(fromModule));
             const relative = answers.find(entry => entry[0] === "relative")[1];
             assert(!relative.ok && relative.error.includes("absolute"), "no absolute program: refused before the queue: " + JSON.stringify(relative));
             const shell = answers.find(entry => entry[0] === "shell")[1];
@@ -831,6 +836,8 @@ TestCase {
                    "the shell's command: refused at its launch, nothing run: " + JSON.stringify(shell));
             assertEqual(JSON.stringify(_notices().map(entry => entry.body)), JSON.stringify(["Authorization: behind the shell's"]),
                         "… never announced as a module's: only the module's run behind it");
+            assertEqual(ModuleTestKit.notified.filter(entry => entry.summary.startsWith("Shell: ")).length, 0,
+                        "… and nothing announced as the shell's: it never launched");
             assert(_runs["behind the shell's"].result.ok, "the run behind it has run");
         });
     }

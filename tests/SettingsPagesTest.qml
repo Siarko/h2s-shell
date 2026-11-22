@@ -526,36 +526,41 @@ TestCase {
         assertEqual(named("hibernateTimeout").label, "after sleeping for", "sleep on: \"after sleeping for\"");
         assertEqual(named("hibernateCaption").text,
                     "Saves the session to disk and powers off, after the computer has slept this long \u2014 it wakes briefly to do it.", "… the caption");
-        assertEqual(named("hibernateLine").text, "Hibernates 3 h after sleeping (3 h 30 min after your last input).", "… its line");
+        assertEqual(page._hibernate.after, 10800, "… the pills keep the 3 h picked");
+        assertEqual(named("hibernateLine").text, "Hibernates 2 h after sleeping (2 h 30 min after your last input).",
+                    "… the line under them: what will happen, the system's 2 h, until Apply");
         // (`visible` of what a Reveal holds follows its slide, which a synchronous suite never sees)
         assert(page._delayDiffers, "3 h picked, the system's 2 h: said");
-        assertEqual(named("hibernateDelayLine").text, "The time after sleeping is a system setting (now 2 h). Changing it asks for your password.",
-                    "… the system's delay named");
+        assertEqual(named("hibernateDelayLine").text, "Picked 3 h; the system now hibernates after 2 h. Apply to change it.",
+                    "… the picked time takes effect after Apply");
         const apply = named("hibernateApply");
         assert(page._hibernation.nixos === false && apply.label === "Apply" && apply.kind === "save" && apply.available, "… with Apply");
-        assertEqual(labels(), "Sleep 30 min | Hibernate 3 h 30 min", "the timeline: the sleep, then the hibernation");
-        assertEqual(caption(), "No lock when idle. Sleeps at 30 min, hibernates 3 h later.", "… its line");
+        assertEqual(labels(), "Sleep 30 min | Hibernate 2 h 30 min", "the timeline: the sleep, then the hibernation the system will make");
+        assertEqual(caption(), "No lock when idle. Sleeps at 30 min, hibernates 2 h later.", "… its line");
         page.sleepSupport = facts({}, { nixos: true });
         assertEqual(named("hibernateDelayLine").text,
-                    "The time after sleeping is a system setting (now 2 h). On NixOS it is the option programs.h2s-shell.idle.hibernateDelay.",
+                    "Picked 3 h; the system now hibernates after 2 h. On NixOS it is the option programs.h2s-shell.idle.hibernateDelay.",
                     "NixOS: the option named");
         assert(page._hibernation.nixos === true, "… no Apply (/etc is generated)");
         page.sleepSupport = facts({}, { nixos: null });
-        assertEqual(named("hibernateDelayLine").text, "The time after sleeping is a system setting (now 2 h).",
-                    "whether this is NixOS not read: no password promised, no Apply");
+        assertEqual(named("hibernateDelayLine").text, "Picked 3 h; the system now hibernates after 2 h.",
+                    "whether this is NixOS not read: no Apply promised");
         // The shell wrote 3 h; another drop-in sorting after its own still says 2 h
         page.sleepSupport = facts({}, { delay: { state: "set", seconds: 7200, file: "/etc/systemd/sleep.conf.d/zz-tlp.conf" } });
         page.delayWritten = 10800;
         assertEqual(named("hibernateDelayLine").text,
-                    "The time after sleeping is a system setting (now 2 h). /etc/systemd/sleep.conf.d/zz-tlp.conf sets it after the shell's own file, so Apply cannot change it.",
+                    "Picked 3 h; the system now hibernates after 2 h. /etc/systemd/sleep.conf.d/zz-tlp.conf sets it after the shell's own file, so Apply cannot change it.",
                     "a file winning over the shell's: named");
+        assertEqual(labels(), "Sleep 30 min | Hibernate 2 h 30 min", "… the timeline shows what that file makes happen");
         assertEqual(page._delayOverride, "/etc/systemd/sleep.conf.d/zz-tlp.conf", "… and no Apply while it does");
         page.delayWritten = -1;
         assertEqual(page._delayOverride, "", "nothing written in this run: Apply offered as before");
         page.delayWritten = Qt.binding(() => Idle.hibernateDelayWritten);
         page.sleepSupport = facts({}, { delay: { state: "unset" } });
-        assert(page._delayDiffers && /now not set: systemd's default/.test(named("hibernateDelayLine").text),
-               "the system's delay not set: said, Apply offered");
+        assertEqual(named("hibernateDelayLine").text, "Picked 3 h; the system's delay is not set (systemd's default). Apply to change it.",
+                    "the system's delay not set: said, Apply offered");
+        assert(page._delayDiffers, "… differs");
+        assertEqual(labels(), "Sleep 30 min | Hibernate 3 h 30 min", "… the timeline with the picked time (the default not known)");
         page.sleepSupport = facts({});
         _away({ "lockscreen.hibernateEnabled": true, "lockscreen.sleepEnabled": true, "lockscreen.hibernateTimeout": 7200 });
         assert(!page._delayDiffers, "the same time as the system's: nothing to apply");

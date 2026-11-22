@@ -456,8 +456,9 @@ sleep (`sleepEnabled`, `sleepTimeout`) and hibernation (`hibernateEnabled`,
   `hibernateTimeout`, 2 hours by default). With sleep on, the shell's sleep is logind's
   `SuspendThenHibernate`: the system wakes the computer after its own delay and hibernates it
   (sleep.conf's `HibernateDelaySec`, one setting for the machine — the shell cannot pass a
-  delay). The section shows that delay and, when the profile's time differs, says so: on Arch
-  with Apply, on NixOS with the module option to set (below). With sleep off, the shell
+  delay). When the profile's time differs from that delay, the timeline and the line under
+  the times show what will happen — the system's delay — and the section says the picked time
+  takes effect after Apply on Arch, or names the module option on NixOS (below). With sleep off, the shell
   hibernates the computer itself (`Hibernate`), counted from the last stage switched on before
   it — the screensaver (per monitor: the latest of the connected monitors') or the lock,
   whichever comes later; neither: the last input — and the row says from where ("after the
@@ -651,7 +652,9 @@ or another one cannot register beside the shell's.
 When a module runs something as administrator, the prompt also says who asks and what for:
 "Module" (the module's name, with its id in brackets) and "Authorization" (what the run
 does, in the module's few words) under the title, and "Command", which opens on a click to
-the command handed to pkexec, whole. These lines are attached when polkit's own message
+the command handed to pkexec, whole. A command of the shell's own (the Hibernate section's
+Apply) is announced the same way, on a "Shell" row reading "h2s-shell", which no module's name
+can take. These lines are attached when polkit's own message
 names the module's command; another program's request shows polkit's message alone. polkit
 names a command longer than 80 bytes by its first and last few words only, so another
 command that starts and ends the same way would get the same lines: they say what a module

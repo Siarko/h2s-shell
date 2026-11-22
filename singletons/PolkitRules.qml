@@ -158,29 +158,40 @@ Singleton {
         return quoted + "'";
     }
 
+    // Who asks when the shell runs a command of its own (PrivilegedRuns.startShell), on the
+    // row labelled shellLabel: a label no module's name can take, so a module named after
+    // the shell still reads as a module
+    readonly property string shellName: "h2s-shell"
+    readonly property string shellLabel: "Shell"
+
     // Every text of a run's announcement. `request`: { moduleName, moduleId, what,
     // pkexecArgv (the words handed to pkexec, after pkexec itself: the shell's `timeout`
     // first for a module's run), legacy (a run of the old PrivilegedAction: it names no
-    // module and no purpose) } → frozen { module (the line as one text), moduleName,
+    // module and no purpose), shell (a command of the shell's own: shellName on the
+    // shellLabel row, its `what`; module fields ignored) } → frozen { label (the row's:
+    // "Module", or shellLabel), module (the line as one text), moduleName,
     // moduleId (moduleParts: the view elides the name, never the id), authorization (""
     // for an old run: no line), command (every word, shell-quoted, nothing dropped or cut:
     // the text compared and copied), commandShown (the same for the screen: each word
     // isolated left to right, so right-to-left text in a word cannot reorder the words),
-    // summary, body (the notification's: "Module: …", "Authorization: …" or "") }
+    // summary, body (the notification's: "Module: …" or "Shell: …", "Authorization: …" or "") }
     function announcement(request) {
-        const legacy = request?.legacy === true;
-        const parts = legacy ? { name: unnamedModule, id: "" } : moduleParts(request?.moduleName, request?.moduleId);
+        const shell = request?.shell === true;
+        const legacy = !shell && request?.legacy === true;
+        const parts = shell ? { name: shellName, id: "" } : legacy ? { name: unnamedModule, id: "" } : moduleParts(request?.moduleName, request?.moduleId);
+        const label = shell ? shellLabel : "Module";
         const module = parts.id !== "" ? parts.name + " (" + parts.id + ")" : parts.name;
         const authorization = legacy ? "" : cleanValue(request?.what);
         const quoted = (Array.isArray(request?.pkexecArgv) ? Array.from(request.pkexecArgv) : []).map(word => shellQuote(word));
         return Object.freeze({
+            label: label,
             module: module,
             moduleName: parts.name,
             moduleId: parts.id,
             authorization: authorization,
             command: quoted.join(" "),
             commandShown: isolatedWords(quoted),
-            summary: "Module: " + module,
+            summary: label + ": " + module,
             body: authorization !== "" ? "Authorization: " + authorization : ""
         });
     }
@@ -191,7 +202,8 @@ Singleton {
     // "pick": the row with a choice, "none"), announced (the Module and Command rows),
     // polkitMessage ("command": polkit's message and action id under the collapsed
     // "Command", "top": as the description over the field) }. Only a module's prompt —
-    // a known module and a purpose — moves polkit's message away: there it repeats the
+    // a known module and a purpose — or the shell's own (shellName and its purpose) moves
+    // polkit's message away: there it repeats the
     // command the Command section already shows. Elsewhere (no announcement, an old run
     // naming no module or purpose) it is the only description.
     function promptLayout(announcement, identityCount) {

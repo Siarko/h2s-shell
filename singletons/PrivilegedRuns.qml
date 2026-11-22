@@ -192,11 +192,14 @@ Singleton {
     // its words, from the shell's code) }; `done(result)` once, never inside this call, with
     // PrivilegedRules' result (ok, code, stdout, stderr, dismissed, refused, notFound,
     // cancelled, blocked, error). It runs under the trusted, setuid pkexec found by the
-    // look-up (none: refused, not available), without a time limit; its prompt is polkit's
-    // own, not dressed as a module's. A refusal is told once, as for every run
-    // (reportDenied); another failure as "<what> failed". In module test mode it is refused
-    // at its launch: no stand-in is allowed for it, so nothing runs.
+    // look-up (none: refused, not available), without a time limit; its prompt says who asks
+    // ("Shell: h2s-shell", PolkitRules.announcement) and what, the command collapsed, as a
+    // module's run. Never from a module's code (the call's stack names a module directory:
+    // refused before the queue, so no module is announced as the shell). A refusal is told
+    // once, as for every run (reportDenied); another failure as "<what> failed". In module
+    // test mode it is refused at its launch: no stand-in is allowed for it, so nothing runs.
     function startShell(request, done) {
+        const fromModule = ModuleRules.stackDirectories(new Error().stack, Modules.host.directories).length > 0;
         const words = CommandRules.argvSnapshot(request?.argv, true).argv;
         const job = {
             id: ++_lastId, kind: "shell", owner: "shell", handle: null, moduleId: "shell",
@@ -205,6 +208,11 @@ Singleton {
             argv: [], systemPkexec: true, program: "", environment: {}, standIns: [], testMode: _testMode,
             answered: false, muted: false, runner: null, result: null, pkexecWords: [], announcement: null
         };
+        if (fromModule) {
+            console.warn("[Privileged] a run of the shell's own asked from a module's code: refused");
+            _refuse(job, PrivilegedRules.refusedResult({ blocked: "undeclared", error: "not from a module's code" }));
+            return;
+        }
         if (words === null || !words[0].startsWith("/")) {
             _refuse(job, PrivilegedRules.refusedResult({ blocked: "", error: "not a command with an absolute program" }));
             return;
@@ -437,9 +445,9 @@ Singleton {
         // What the prompt shows for it, and what its request is known by: the words after
         // pkexec, the program pkexec is given first (a module's run: the shell's `timeout`)
         job.pkexecWords = job.argv.slice(1);
-        // The shell's own command: polkit's prompt as it is, no module named
-        job.announcement = job.kind === "shell" ? null : PolkitRules.announcement({
-            legacy: job.kind === "legacy", moduleName: job.handle?.name ?? "", moduleId: job.moduleId,
+        // The shell's own command is announced as the shell's: "Shell: h2s-shell" and its `what`
+        job.announcement = PolkitRules.announcement({
+            shell: job.kind === "shell", legacy: job.kind === "legacy", moduleName: job.handle?.name ?? "", moduleId: job.moduleId,
             what: job.what, pkexecArgv: job.pkexecWords
         });
         console.log("[Privileged] " + job.moduleId + " runs " + JSON.stringify(job.what.slice(0, 100))

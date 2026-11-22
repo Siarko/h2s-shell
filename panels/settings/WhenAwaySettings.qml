@@ -50,6 +50,9 @@ Flickable {
     }, _hibernation))
     // { on, from, at, after } (IdleRules.config)
     readonly property var _hibernate: _config.hibernate
+    // … as it will happen: with sleep on the system's delay, until an Apply changes it — what
+    // the timeline and the line under the times show (the pills keep the profile's time)
+    readonly property var _hibernateInEffect: HibernateRules.inEffect(_hibernate, _hibernation.delay)
     // With sleep on, the profile's time after sleeping is not the system's delay: said, with
     // Apply (or, on NixOS, the module's option)
     readonly property bool _delayDiffers: _config.sleepAfter > 0 && HibernateRules.delayDiffers(_hibernation.delay, _hibernate.after)
@@ -189,7 +192,7 @@ Flickable {
             lockAfter: root._config.lockAfter
             commandsAt: root._commandsOn ? root._allDarkAt : -1
             sleepAfter: root._config.sleepAfter
-            hibernate: root._config.hibernate
+            hibernate: root._hibernateInEffect
             sleepBlockers: root.sleepBlockers
             lockedScreenOffAfter: root._config.lockedScreenOffAfter
             canPowerOff: root._canPowerOff
@@ -535,7 +538,7 @@ Flickable {
                 }
                 Hint {
                     objectName: "hibernateLine"
-                    text: AwayViewRules.hibernateLine(root._hibernate, seconds => Format.duration(seconds))
+                    text: AwayViewRules.hibernateLine(root._hibernateInEffect, seconds => Format.duration(seconds))
                     Layout.bottomMargin: 4
                 }
                 // With sleep on the delay is the system's, one per machine: a time that differs
@@ -549,7 +552,7 @@ Flickable {
                     Hint {
                         objectName: "hibernateDelayLine"
                         text: HibernateRules.delayLine(root._hibernation.delay, root._hibernation.nixos ?? null, seconds => Format.duration(seconds),
-                                                       root._delayOverride)
+                                                       root._delayOverride, root._hibernate.after)
                         Layout.fillWidth: true
                     }
                     SmallButton {

@@ -5,8 +5,8 @@ import qs.singletons
 
 // Who answers, who asks and what for, in the polkit prompt (polkit/AuthPrompt.qml): first
 // "As user" (the one account's name, or a choice when several can answer), then, for a
-// request that is a run of the shell's queue (PrivilegedRuns.announcementFor), "Module" and
-// "Authorization", one line each, and "Command", which opens on a click to the command
+// request that is a run of the shell's queue (PrivilegedRuns.announcementFor), "Module" (or
+// "Shell" for a command of the shell's own) and "Authorization", one line each, and "Command", which opens on a click to the command
 // handed to pkexec, whole, in a box that scrolls — for a module's prompt with polkit's own
 // message and action id over it. What goes where is PolkitRules.promptLayout's; the texts
 // are PolkitRules.announcement's; the labels and the frame are the shell's, every value
@@ -81,8 +81,10 @@ ColumnLayout {
         }
 
         Label {
+            objectName: "askerLabel"
             visible: root.layout.announced
-            text: "Module"
+            // "Module", or "Shell" for a command of the shell's own (PolkitRules.announcement)
+            text: root.announcement?.label ?? "Module"
         }
         // The id in brackets comes first: the name takes only the room it leaves (down to
         // none), so a long name cannot push the id out of view. Only an id too wide for the

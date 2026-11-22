@@ -5,6 +5,7 @@ TestCase {
     suiteName: "PolkitRules"
 
     function run() {
+        const layoutTextOf = layout => layout.identity + " | " + layout.announced + " | " + layout.polkitMessage;
         const rules = PolkitRules;
 
         // --- who asks and what for: the announcement ---
@@ -59,6 +60,22 @@ TestCase {
         const legacy = rules.announcement({ legacy: true, moduleId: "tailscale", what: "Connect", pkexecArgv: ["/usr/bin/tailscale", "up"] });
         assertEqual(legacy.module + " | " + legacy.authorization + " | " + legacy.command, "Not named |  | /usr/bin/tailscale up", "legacy: Not named, no Authorization");
         assertEqual(legacy.summary + " | " + legacy.body, "Module: Not named | ", "… and its notification");
+        // The shell's own command: who asks is the shell, on a row no module's name can take
+        const ownWords = ["/bin/sh", "-c", "set -eu; …", "sh", "10800", "/etc/systemd/sleep.conf.d"];
+        const own = rules.announcement({ shell: true, moduleName: "Evil", moduleId: "evil", what: "Change the time before hibernating",
+                                         pkexecArgv: ownWords });
+        assertEqual([own.label, own.module, own.moduleName, own.moduleId, own.authorization].join(" | "),
+                    "Shell | h2s-shell | h2s-shell |  | Change the time before hibernating", "the shell's run: Shell, h2s-shell, its purpose; module fields ignored");
+        assertEqual(own.summary + " | " + own.body, "Shell: h2s-shell | Authorization: Change the time before hibernating", "… its notification");
+        assertEqual(own.command, "/bin/sh -c 'set -eu; …' sh 10800 /etc/systemd/sleep.conf.d", "… the command, whole, for the collapsed section");
+        assertEqual(layoutTextOf(rules.promptLayout(own, 1)), "name | true | command",
+                    "… laid out as a module's: polkit's message under Command");
+        const impostor = rules.announcement({ moduleName: "h2s-shell", moduleId: "h2s-shell", what: "Change it", pkexecArgv: ["/bin/true"] });
+        assertEqual(impostor.label + ": " + impostor.module, "Module: h2s-shell (h2s-shell)", "a module named as the shell: still on the Module row, its id shown");
+        assertEqual(shown.label + " | " + legacy.label, "Module | Module", "modules' runs, old ones too: the Module row");
+        assertEqual(rules.announcement({ shell: true, legacy: true, what: "W", pkexecArgv: [] }).authorization, "W",
+                    "a shell run is never taken as an old one");
+
         // --- the prompt's layout: the identity first; polkit's message under Command for a module ---
         const layoutText = layout => layout.identity + " | " + layout.announced + " | " + layout.polkitMessage;
         assertEqual(layoutText(rules.promptLayout(shown, 1)), "name | true | command",

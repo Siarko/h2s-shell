@@ -212,6 +212,16 @@ TestCase {
         driver.wait(50);
         assert(lines.commandOpen, "open again");
 
+        // The shell's own command: the Shell row with h2s-shell, laid out as a module's
+        lines.announcement = PolkitRules.announcement({ shell: true, what: "Change the time before hibernating",
+                                                        pkexecArgv: ["/bin/sh", "-c", "set -eu; …", "sh", "10800", "/etc/systemd/sleep.conf.d"] });
+        driver.wait(50);
+        const ownTexts = _visibleTexts(lines);
+        assertEqual(ownTexts.slice(0, 4).join(" | "), "As user | h2s | Shell | h2s-shell", "the shell's run: who asks on the Shell row");
+        assertEqual(authorization.text, "Change the time before hibernating", "… what for");
+        assert(!lines.commandOpen && !box.visible && !polkitMessage.visible, "… the command and polkit's message collapsed, as for a module");
+        assert(!ownTexts.includes("Module"), "… no Module row");
+
         // A new request: closed again
         const second = PolkitRules.announcement({ moduleName: "System update", moduleId: "xmod", what: "Install updates", pkexecArgv: ["/usr/bin/timeout", "-k", "3", "60", "/usr/bin/pacman", "-Syu"] });
         lines.announcement = second;

@@ -17,10 +17,13 @@ import qs.singletons
 //                         test-mode check (ModuleRules.testRunProblem) refuses it at launch
 //                         and nothing runs: answer({ kind: "refused" }). → its owner key
 //   waitingCount()        how many runs wait in their check for the look-up
-//   startShell(what, argv, done)
-//                         queues one of the shell's own fixed commands (PrivilegedRuns
-//                         .startShell, a setting's Apply): no stand-in is allowed for it, so
-//                         in test mode it is refused at its launch and nothing runs
+//   startShell(what, argv, done, detached)
+//                         asks for one of the shell's own fixed commands (PrivilegedRuns
+//                         .startShell, a setting's Apply). Called straight from a suite's code
+//                         (a module's directory on the stack) it is refused before the queue;
+//                         `detached`, it is asked from the event loop, as the shell's own code
+//                         asks — then queued, and in test mode refused at its launch (no
+//                         stand-in is allowed for it), so nothing runs
 // All of them do nothing outside test mode.
 Singleton {
     function holdLookup(on) {
@@ -39,9 +42,14 @@ Singleton {
         return owner;
     }
 
-    function startShell(what, argv, done) {
-        if (Modules.host.testMode)
-            PrivilegedRuns.startShell({ what: String(what), argv: argv }, done);
+    function startShell(what, argv, done, detached) {
+        if (!Modules.host.testMode)
+            return;
+        const request = { what: String(what), argv: argv };
+        if (detached === true)
+            Qt.callLater(() => PrivilegedRuns.startShell(request, done));
+        else
+            PrivilegedRuns.startShell(request, done);
     }
 
     function waitingCount() {

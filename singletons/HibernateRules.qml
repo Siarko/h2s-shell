@@ -215,16 +215,32 @@ Singleton {
         return !(delay?.state === "set" && delay.seconds === seconds);
     }
 
-    // The line under the times while they differ, by system: Apply where /etc is the
-    // machine's own (`nixos` false), the option on NixOS (true), neither while that was not
-    // read (null); with `override` (delayOverride's file), the file that wins over Apply
-    function delayLine(delay, nixos, durationOf, override) {
-        const now = "The time after sleeping is a system setting (now " + delayWords(delay, durationOf) + ").";
+    // The line under the times while they differ: the time picked (`picked`, seconds) and
+    // what the system does now — the picked time takes effect only after Apply —, then by
+    // system: Apply where /etc is the machine's own (`nixos` false), the option on NixOS
+    // (true), neither while that was not read (null); with `override` (delayOverride's
+    // file), the file that wins over Apply
+    function delayLine(delay, nixos, durationOf, override, picked) {
+        const label = typeof durationOf === "function" ? durationOf : seconds => seconds + " s";
+        const now = "Picked " + label(picked) + "; "
+            + (delay?.state === "set" ? "the system now hibernates after " + label(delay.seconds) + "."
+               : delay?.state === "unset" ? "the system's delay is not set (systemd's default)."
+               : "the system's delay could not be read.");
         if (nixos === true)
             return now + " On NixOS it is the option " + nixosOption + ".";
         if (typeof override === "string" && override !== "")
             return now + " " + override + " sets it after the shell's own file, so Apply cannot change it.";
-        return nixos === false ? now + " Changing it asks for your password." : now;
+        return nixos === false ? now + " Apply to change it." : now;
+    }
+
+    // The hibernation as it will happen (`hibernate`: IdleRules.config's): with sleep on, the
+    // system's delay when it is set — the profile's time takes effect only after Apply —;
+    // otherwise as given (sleep off: the shell's own time; the delay unset or unread: the
+    // profile's, nothing better known)
+    function inEffect(hibernate, delay) {
+        if (hibernate?.from !== "sleep" || delay?.state !== "set")
+            return hibernate;
+        return Object.assign({}, hibernate, { after: delay.seconds });
     }
 
     // ---- The Apply ----
