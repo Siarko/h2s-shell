@@ -14,6 +14,9 @@
 # group of its own, its output kept in a log of its own and printed, in this order, once it
 # and the parts before it have ended. The lock bed runs last and alone, its output shown as
 # it goes: its scenarios time the shell, and it takes the machine-wide lock itself.
+# The parts share one memory budget (tests/memory-cap.sh, H2S_TEST_MEMORY_BUDGET), made here
+# and handed on in the environment: whatever they start side by side, together they never
+# take more than it; it ends with this runner.
 #
 #   tests/run-all-selftest.sh                           this runner's own verdict
 #   tests/run-system-selftest.sh                        the system runner's own verdict
@@ -115,7 +118,10 @@ if [ -n "${RUN_ALL_PARTS:-}" ]; then
 fi
 
 logs=$(mktemp -d "${TMPDIR:-/tmp}/run-all.XXXXXX") || { echo "run-all.sh: cannot create a temp dir" >&2; exit 2; }
-trap 'rm -rf "$logs"' EXIT
+# shellcheck source=memory-cap.sh
+source "$REPO/tests/memory-cap.sh"
+trap 'rm -rf "$logs"; memory_cap_finish' EXIT
+memory_cap_init
 
 count=${#parts[@]}
 names=() commands=()

@@ -17,8 +17,8 @@
 #                                       tests/mutate-selftest.sh)
 #   tests/mutate.sh -j <n> …            at most <n> mutants at once (default: as many as the
 #                                       unit runner would run shards: half the processors,
-#                                       at most 16, no more than the memory holds at about
-#                                       1.1 GB each)
+#                                       at most 16, no more than the run's memory budget
+#                                       holds at one memory cap each)
 #
 # The mutations, on code only (not in comments, strings, regular expressions, import and
 # pragma lines; inside `${…}` of a template string they are made): `===`↔`!==`, `==`↔`!=`,
@@ -42,8 +42,10 @@
 # Lock scenarios and module fixture parts are not run: only unit suites.
 #
 # Each mutant's Quickshell runs under the unit runner's memory cap (tests/memory-cap.sh,
-# H2S_TEST_MEMORY_MAX, 1536M by default): with -j mutants at once, at most that many times
-# the cap is taken. Tools are taken by tests/run-unit.sh, as always (the pinned ones where
+# H2S_TEST_MEMORY_MAX, 1536M by default), all of them within one memory budget for the run
+# (H2S_TEST_MEMORY_BUDGET: by default the memory available less a reserve), made here: a
+# mutant that runs away is stopped at its cap, and mutants that run away together at the
+# budget, either way counted as killed. Tools are taken by tests/run-unit.sh, as always (the pinned ones where
 # there is `nix`, else PATH; H2S_TEST_TOOLS says which). Each worker has its own copy of the tree, under this
 # run's temp dir, removed by its path when the run ends (an interrupt included).
 #
@@ -68,7 +70,7 @@ verdict() {
     esac
     if grep -E "caused by @${subject//./\\.}\[[1-9][0-9]*:[0-9]+\]" "$log" 2> /dev/null | grep -q -v -E "(Type|Reference|Range|Syntax|Eval|URI)Error: "; then
         echo not-compiled
-    elif grep -q -F "killed at the memory cap" "$log" 2> /dev/null; then
+    elif grep -q -E "killed at the (memory cap|run's memory budget)" "$log" 2> /dev/null; then
         echo capped
     else
         echo killed
@@ -244,6 +246,7 @@ stop() {
         kill -TERM "$current_run" 2> /dev/null
         wait "$current_run" 2> /dev/null
     fi
+    ! declare -F memory_cap_finish > /dev/null || memory_cap_finish
     rm -rf "$work"
 }
 trap stop EXIT
@@ -302,16 +305,17 @@ for suite in "${suites[@]}"; do
 done
 if [ ${#first[@]} = 0 ]; then first=("${rest[@]}"); rest=(); fi
 
+# The memory budget of the whole run, every mutant's runner inside it (they take it over
+# from the environment); said here, ended by stop
+# shellcheck source=memory-cap.sh
+source "$REPO/tests/memory-cap.sh"
+memory_cap_init
 if [ -z "$jobs" ]; then
     jobs=$(( $(nproc 2> /dev/null || echo 2) / 2 ))
     [ "$jobs" -ge 1 ] || jobs=1
     [ "$jobs" -le 16 ] || jobs=16
-    available_kb=$(awk '$1 == "MemAvailable:" { print $2 }' /proc/meminfo 2> /dev/null)
-    if [[ "$available_kb" =~ ^[0-9]+$ ]]; then
-        memory_jobs=$((available_kb / 1100000))
-        [ "$memory_jobs" -ge 1 ] || memory_jobs=1
-        [ "$memory_jobs" -ge "$jobs" ] || jobs=$memory_jobs
-    fi
+    memory_jobs=$(memory_cap_jobs 1100000)
+    [ "$memory_jobs" -ge "$jobs" ] || jobs=$memory_jobs
 fi
 [ "$jobs" -le ${#picked[@]} ] || jobs=${#picked[@]}
 
@@ -419,7 +423,7 @@ section() {
     done
 }
 section survived "Surviving mutants (no suite noticed them)"
-section capped "Killed at the memory cap (Quickshell ran away: counted as killed)"
+section capped "Killed at the memory cap or the run's budget (Quickshell ran away: counted as killed)"
 section not-compiled "Not compiled"
 section not-run "Not run (the runner could not be set up, or the text was not found)"
 echo

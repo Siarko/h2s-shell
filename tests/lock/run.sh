@@ -18,8 +18,10 @@
 #
 # Each process a test's stack starts (the compositors, the input client, the launcher with
 # its shells) runs under a memory cap of its own (H2S_TEST_MEMORY_MAX, 1536M by default, 0
-# for none; tests/memory-cap.sh, said in the first lines); one stopped there fails its test,
-# which says "<scenario>: the process logging to <log> killed at the memory cap (<cap>)".
+# for none; tests/memory-cap.sh, said in the first lines), all of them within the run's
+# memory budget (H2S_TEST_MEMORY_BUDGET); one stopped at either fails its test, which says
+# "<scenario>: the process logging to <log> killed at the memory cap (<cap>)" (or "at the
+# run's memory budget").
 #
 # One run at a time on a machine: a run holds /tmp/h2s-locktest.flock from its start to its
 # end and waits, saying so, while another run has it (see "One run at a time", below).
@@ -246,15 +248,16 @@ temp_base=${TMPDIR:-/tmp}
 LOCKTEST_NEED=lock
 source "$LOCKTEST_DIR/resolve.sh" {lock_fd}<&-
 
-# The memory cap on each process of the stack (tests/memory-cap.sh: H2S_TEST_MEMORY_MAX,
-# 1536M by default, 0 for none): chosen here, said once, handed to the tests with the
-# caller's runtime dir and bus, through which lib.sh reaches the user's service manager
-# from the test's private environment (lib.sh keeps them from the stack)
+# The memory cap on each process of the stack and the run's budget (tests/memory-cap.sh:
+# H2S_TEST_MEMORY_MAX, 1536M by default, H2S_TEST_MEMORY_BUDGET; 0 for none): chosen here
+# (or taken over from the runner that started this one: tests/run-all.sh), said once,
+# handed to the tests with the caller's runtime dir and bus, through which lib.sh reaches
+# the user's service manager from the test's private environment (lib.sh keeps them from
+# the stack). The budget ends with the run, when this run made it
 # shellcheck source=../memory-cap.sh
 source "$LOCKTEST_DIR/../memory-cap.sh"
 memory_cap_init {lock_fd}<&-
-test_memory_max=$MEMORY_CAP_LABEL
-[ "$MEMORY_CAP_MODE" != none ] || test_memory_max=0
+trap 'memory_cap_finish {lock_fd}<&-' EXIT
 
 # The launcher under test starts with SIGHUP reset (lib.sh: a run started with it ignored,
 # nohup, would hand that on, and bash cannot trap it): env's --default-signal, coreutils 8.31
@@ -474,7 +477,10 @@ start_test() {
         LOCKTEST_PAM_MODULES="$LOCKTEST_PAM_MODULES" LOCKTEST_LAUNCHER="$LOCKTEST_LAUNCHER" \
         LOCKTEST_QS="$LOCKTEST_QS" LOCKTEST_ARTIFACTS="$ARTIFACTS/$name" LOCKTEST_RUN_ID="$LOCKTEST_RUN_ID" \
         LOCKTEST_TEST_ID="$(test_id "$name")" LOCKTEST_RUNTIME="$runtime" \
-        H2S_TEST_MEMORY_MAX="$test_memory_max" ${MEMORY_CAP_USER_RUNTIME_DIR:+H2S_TEST_USER_RUNTIME_DIR="$MEMORY_CAP_USER_RUNTIME_DIR"} \
+        H2S_TEST_MEMORY_MAX="$H2S_TEST_MEMORY_MAX" H2S_TEST_MEMORY_MODE="$H2S_TEST_MEMORY_MODE" \
+        H2S_TEST_SLICE="$H2S_TEST_SLICE" H2S_TEST_MEMORY_BUDGET="$H2S_TEST_MEMORY_BUDGET" \
+        ${H2S_TEST_MEMORY_AS_FLOOR:+H2S_TEST_MEMORY_AS_FLOOR="$H2S_TEST_MEMORY_AS_FLOOR"} \
+        ${MEMORY_CAP_USER_RUNTIME_DIR:+H2S_TEST_USER_RUNTIME_DIR="$MEMORY_CAP_USER_RUNTIME_DIR"} \
         ${MEMORY_CAP_USER_BUS:+H2S_TEST_USER_BUS="$MEMORY_CAP_USER_BUS"} \
         "$SETPRIV" --no-new-privs timeout -k 10 "$PER_TEST_TIMEOUT" bash -c '
             source "$LOCKTEST_DIR/lib.sh"

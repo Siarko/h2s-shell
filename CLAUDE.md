@@ -110,14 +110,20 @@ in its first lines; a missing tool ends the run with status 2 and its name
 while they ran is run again alone before it is believed.
 
 Every Quickshell a runner starts (the unit shards, a module's suites, each mutant, each soak
-run) and each process of the lock bed's stack runs under a **memory cap**,
-`H2S_TEST_MEMORY_MAX` (systemd's notation, 1536M by default, `0` for none;
-`tests/memory-cap.sh`): a scope of the user's service manager (`systemd-run --user`), else an
-address-space limit of four times the cap (`prlimit`), else a warning and no cap. The runners
-say which in their first lines. A test that runs away is stopped there instead of filling the
-machine's memory, and its verdict says `<suite>: killed at the memory cap (1536M)` (the lock
-bed names the scenario and the process); `tests/mutate.sh` counts such a mutant as killed,
-shown as "killed (memory cap)". Memory taken at most is mutants (`-j`) times the cap.
+run), its compositor, and each process of the lock bed's stack runs under a **memory cap**,
+`H2S_TEST_MEMORY_MAX` (systemd's notation, 1536M by default, `0` for none), and all of a
+run's processes together within a **memory budget**, `H2S_TEST_MEMORY_BUDGET` (by default the
+memory available less 8 GB or a quarter of the machine's, whichever is larger; `0` for none),
+which the outermost runner makes and the runners it starts share (`tests/run-all.sh`,
+`tests/mutate.sh`). The way (`tests/memory-cap.sh`): scopes of the user's service manager in a
+slice of the run (`systemd-run --user`; over SSH only when the manager outlives the
+connection: lingering, or a local session); else an address-space limit of four times the cap,
+at least 8 GB, and no budget (`prlimit`; a low cap kills normal runs there); else a warning.
+The runners say which in their first lines, and size shards and mutants at once by the budget
+over the cap. A test that runs away is stopped instead of filling the machine's memory, and
+its verdict says `<suite>: killed at the memory cap (1536M)` or `… at the run's memory budget`
+(the lock bed names the scenario and the process); `tests/mutate.sh` counts such a mutant as
+killed, shown as "killed (memory cap)".
 
 A running shell reloads itself when a file changes only in development mode
 (`launch.sh --dev` or `H2S_SHELL_DEV=1`; `H2S_SHELL_DEV=0` wins over `--dev`), and a reload

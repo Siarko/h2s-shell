@@ -21,7 +21,7 @@ check "the shell's environment can be read" shell_has_variable XDG_RUNTIME_DIR
 # (and not the caller's runtime dir and bus run.sh hands lib.sh for the memory cap's scopes,
 # nor the INVOCATION_ID such a scope sets)
 for variable in SSH_AUTH_SOCK XDG_SEAT XDG_VTNR KITTY_LISTEN_ON QT_QPA_PLATFORMTHEME \
-    H2S_TEST_USER_RUNTIME_DIR H2S_TEST_USER_BUS INVOCATION_ID; do
+    H2S_TEST_USER_RUNTIME_DIR H2S_TEST_USER_BUS H2S_TEST_SLICE INVOCATION_ID; do
     if shell_has_variable "$variable"; then
         fail "the shell's environment has no $variable of the caller's"
     else

@@ -10,8 +10,9 @@
 #   tests/run-unit.sh --log <file> [<suite>…]    the suites' output also saved to <file>
 #   tests/run-unit.sh -j <n> [<suite>…]          at most <n> shards at once (default: half
 #                                                the processors, at most 16, and no more
-#                                                than the memory available holds, at about
-#                                                1.1 GB a shard; at least 1)
+#                                                than the run's memory budget holds at one
+#                                                memory cap a shard, or without a budget
+#                                                the memory available; at least 1)
 #
 # The shards are computed, never kept by hand (plan_shards, tests/count-suites.sh): a suite
 # whose file says `ownProcess: true` runs alone; the others are packed by the time each took
@@ -73,24 +74,6 @@ while [ $# -gt 0 ]; do
         *) break ;;
     esac
 done
-# What one shard takes, measured: Quickshell with every suite built about 0.8 GB resident,
-# its labwc about 0.3 GB
-shard_memory_kb=1100000
-jobs_note=""
-if [ -z "$jobs" ]; then
-    jobs=$(( $(nproc 2> /dev/null || echo 2) / 2 ))
-    [ "$jobs" -ge 1 ] || jobs=1
-    [ "$jobs" -le 16 ] || jobs=16
-    available_kb=$(awk '$1 == "MemAvailable:" { print $2 }' /proc/meminfo 2> /dev/null)
-    if [[ "$available_kb" =~ ^[0-9]+$ ]]; then
-        memory_jobs=$((available_kb / shard_memory_kb))
-        [ "$memory_jobs" -ge 1 ] || memory_jobs=1
-        if [ "$memory_jobs" -lt "$jobs" ]; then
-            jobs_note=" (fewer than the processors allow: $((available_kb / 1024)) MB of memory available, about $((shard_memory_kb / 1024)) MB a shard)"
-            jobs=$memory_jobs
-        fi
-    fi
-fi
 
 # The expected count and the selection both come from tests.qml's registration lines: when
 # the two ways of reading them disagree, neither can be trusted
@@ -177,6 +160,21 @@ if [ "${BASH_VERSINFO[0]}" -lt 5 ] || { [ "${BASH_VERSINFO[0]}" = 5 ] && [ "${BA
     setup_error "running shards side by side needs bash 5.1 or later (wait -n -p); this is bash $BASH_VERSION"
 fi
 headless_resolve
+# Shards at once: half the processors, at most 16, and no more than memory allows — the
+# run's budget over the cap, else the memory available over the cap (memory_cap_jobs; with
+# no cap at all, over what a shard was measured to take: Quickshell with every suite built
+# about 0.8 GB resident, its labwc about 0.3 GB)
+jobs_note=""
+if [ -z "$jobs" ]; then
+    jobs=$(( $(nproc 2> /dev/null || echo 2) / 2 ))
+    [ "$jobs" -ge 1 ] || jobs=1
+    [ "$jobs" -le 16 ] || jobs=16
+    memory_jobs=$(memory_cap_jobs 1100000)
+    if [ "$memory_jobs" -lt "$jobs" ]; then
+        jobs_note=" (fewer than the processors allow: memory for $memory_jobs at the cap of ${MEMORY_CAP_LABEL:-none} each${MEMORY_CAP_BUDGET_LABEL:+, in a budget of $MEMORY_CAP_BUDGET_LABEL})"
+        jobs=$memory_jobs
+    fi
+fi
 # Short, as headless_setup's: the shards' outputs, removed with the rest (headless_cleanup)
 work=$(mktemp -d /tmp/ut.XXXXXX) || setup_error "cannot create a temp dir"
 chmod 700 "$work"

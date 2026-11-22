@@ -15,10 +15,12 @@
 # h2s-shell launcher runs, else qs or quickshell on PATH. The run's first lines say what was
 # taken; a missing tool is a set-up error (exit 2) that names it.
 #
-# Each Quickshell runs under a memory cap (tests/memory-cap.sh: H2S_TEST_MEMORY_MAX, 1536M by
-# default, 0 for none), so that a suite that runs away is stopped there instead of filling
-# the machine's memory; the compositor, which runs no test code, has none. A Quickshell
-# stopped at the cap is said so by the verdict, with the suites that had not reported.
+# Quickshell and the compositor each run under a memory cap, inside the run's memory budget
+# (the compositor only where there is a budget: a scope of the user's service manager)
+# (tests/memory-cap.sh: H2S_TEST_MEMORY_MAX, 1536M by default, H2S_TEST_MEMORY_BUDGET; 0 for
+# none), so that a suite that runs away is stopped there instead of filling the machine's
+# memory. A Quickshell stopped at either is said so by the verdict, with the suites that had
+# not reported; one whose scope could not be started (the service manager not answering) too.
 #
 # Nothing here is shared with another run but the processor — every run has its own
 # compositor, runtime dir and home — so these runners take no lock and run side by side
@@ -97,7 +99,10 @@ headless_cleanup() {
             sleep 0.02
         done
         kill -KILL -- "-$labwc_pid" 2> /dev/null
+        memory_cap_hit "${headless_labwc_unit:-}" 1 > /dev/null 2>&1
     fi
+    # The run's budget, when this runner made it (a runner started alone)
+    memory_cap_finish 2> /dev/null
     [ -n "$probe" ] && rm -rf "$probe"
     [ -n "$work" ] && rm -rf "$work"
 }
@@ -148,7 +153,12 @@ headless_setup() {
         DBUS_SESSION_BUS_ADDRESS="unix:path=$work/run/no-session-bus"
         DBUS_SYSTEM_BUS_ADDRESS="unix:path=$work/run/no-system-bus" LIBSEAT_BACKEND=disabled-for-test)
 
-    "${isolated[@]}" WLR_BACKENDS=headless WLR_LIBINPUT_NO_DEVICES=1 WLR_HEADLESS_OUTPUTS=1 \
+    # In the run's budget, with a cap of its own; not under an address-space limit (prlimit,
+    # which has no budget to keep it in): what the compositor reserves is no test's doing
+    MEMORY_CAP_PREFIX=() MEMORY_CAP_UNIT=""
+    [ "${MEMORY_CAP_MODE:-none}" != systemd ] || memory_cap_wrap labwc
+    headless_labwc_unit=$MEMORY_CAP_UNIT
+    "${MEMORY_CAP_PREFIX[@]}" "${isolated[@]}" WLR_BACKENDS=headless WLR_LIBINPUT_NO_DEVICES=1 WLR_HEADLESS_OUTPUTS=1 \
         "$SETPRIV" --no-new-privs setsid timeout 540 "$LOCKTEST_LABWC" -C "$work/labwc" > "$work/labwc.log" 2>&1 < /dev/null &
     labwc_pid=$!
     for _ in $(seq 1 100); do [ -S "$work/run/wayland-0" ] && break; sleep 0.1; done
@@ -182,7 +192,7 @@ headless_run() {
 }
 
 headless_verdict() {
-    local title=$1 expected=$2 where=$3 status=$HEADLESS_STATUS failed=0 summary fails errors reported name empty passes counted
+    local title=$1 expected=$2 where=$3 status=$HEADLESS_STATUS failed=0 start_failure summary fails errors reported name empty passes counted
     shift 3
     summary=$(grep -E -- '^.*--- .*: [0-9]+/[0-9]+ passed' "$HEADLESS_LOG" | sed 's/^.*--- /--- /')
     fails=$(grep -c -E '  FAIL: ' "$HEADLESS_LOG")
@@ -203,6 +213,9 @@ headless_verdict() {
             [ -n "$running" ] || running="${*:2}"
         fi
         echo "  ${running:-quickshell}: $(memory_cap_note)"
+        failed=1
+    elif start_failure=$(memory_cap_start_failed "$HEADLESS_LOG"); then
+        echo "  quickshell could not be started under the memory cap: $start_failure"
         failed=1
     else
         [ "$status" = 124 ] && { echo "  quickshell timed out"; failed=1; }

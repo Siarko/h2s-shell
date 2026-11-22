@@ -15,7 +15,9 @@
 #                          side): what a test looks for among processes, and what run.sh
 #                          sweeps after it — never a sibling test's
 #   LOCKTEST_RUNTIME       this test's private, short runtime dir (run.sh removes it)
-#   H2S_TEST_MEMORY_MAX    the memory cap on each process spawn() starts (0: none), and
+#   H2S_TEST_MEMORY_MAX    the memory cap on each process spawn() starts (0: none);
+#   H2S_TEST_MEMORY_MODE, H2S_TEST_SLICE, H2S_TEST_MEMORY_BUDGET
+#                          the way run.sh chose and the run's budget its scopes go into;
 #   H2S_TEST_USER_RUNTIME_DIR, H2S_TEST_USER_BUS
 #                          the caller's runtime dir and bus, through which the cap's scopes
 #                          are asked of the user's service manager (tests/memory-cap.sh);
@@ -111,7 +113,8 @@ export LANG=en_US.UTF-8
 # shellcheck source=../memory-cap.sh
 source "$LOCKTEST_DIR/../memory-cap.sh"
 memory_cap_init quiet
-unset H2S_TEST_MEMORY_MAX H2S_TEST_USER_RUNTIME_DIR H2S_TEST_USER_BUS
+unset H2S_TEST_MEMORY_MAX H2S_TEST_MEMORY_MODE H2S_TEST_SLICE H2S_TEST_MEMORY_BUDGET \
+    H2S_TEST_USER_RUNTIME_DIR H2S_TEST_USER_BUS
 CAP_UNITS=() CAP_LOGS=()
 
 stack_stop() {
@@ -127,8 +130,14 @@ stack_stop() {
     PROCESS_GROUPS=()
     # A process stopped at the memory cap: said, and the test fails (its scope is cleared
     # from the service manager by the look)
-    local index capped=""
+    local index capped="" start_failure
     for index in "${!CAP_LOGS[@]}"; do
+        if start_failure=$(memory_cap_start_failed "${CAP_LOGS[$index]}"); then
+            printf '    FAIL %s: the process logging to %s could not be started under the memory cap: %s\n' \
+                "${LOCKTEST_TEST_ID##*/}" "${CAP_LOGS[$index]##*/}" "$start_failure"
+            capped=1
+            continue
+        fi
         memory_cap_hit "${CAP_UNITS[$index]}" 1 "${CAP_LOGS[$index]}" || continue
         printf '    FAIL %s: the process logging to %s %s\n' "${LOCKTEST_TEST_ID##*/}" "${CAP_LOGS[$index]##*/}" "$(memory_cap_note)"
         capped=1

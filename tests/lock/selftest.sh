@@ -55,7 +55,8 @@ spawn "$WORK/hog.log" bash -c 's=$(head -c 419430400 /dev/zero | tr "\0" x); ech
 hog=$SPAWNED_PID
 check_within 60 "the process that allocates past the cap has ended" eval '! kill -0 -- "-$hog" 2> /dev/null'
 EOF
-env H2S_TEST_MEMORY_MAX=200M LOCKTEST_KEEP=1 LOCKTEST_LOCK_FILE="$work/bed.flock" LOCKTEST_EXTRA_TESTS="$work/tests" XDG_CACHE_HOME="$work/cache" \
+# A run of its own: not the budget or way of a runner this one was started by
+env -u H2S_TEST_MEMORY_MODE -u H2S_TEST_SLICE -u H2S_TEST_MEMORY_BUDGET H2S_TEST_MEMORY_MAX=200M H2S_TEST_MEMORY_AS_FLOOR=0 LOCKTEST_KEEP=1 LOCKTEST_LOCK_FILE="$work/bed.flock" LOCKTEST_EXTRA_TESTS="$work/tests" XDG_CACHE_HOME="$work/cache" \
     TMPDIR="$work/temp" timeout 300 "$LOCKTEST_DIR/run.sh" -j 2 self-flaky self-failing self-passing self-capped \
     > "$work/run.out" 2>&1 < /dev/null
 status=$?

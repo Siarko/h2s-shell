@@ -14,7 +14,8 @@
 #   judged     --judge on canned runs: a load error naming the subject is "not compiled",
 #              after a time-out (124) or a kill (137) too; a TypeError or ReferenceError
 #              naming it is "killed"; a failed check "killed"; a Quickshell stopped at the
-#              memory cap "capped" (counted as killed); 0 "survived"; 2 "not run"
+#              memory cap or the run's budget "capped" (counted as killed); 0 "survived";
+#              2 "not run"
 #   unjudged   a suite that fails unmutated: status 2, no mutant run
 #   refused    a file outside the tree, a test file, a wrong option: status 2
 #
@@ -105,6 +106,7 @@ printf 'WARN qml: @%s[11:9]: TypeError: Cannot read property '"'"'x'"'"' of null
 printf 'WARN qml: @%s[11:9]: ReferenceError: age2 is not defined\n' "$subject" > "$work/reference.log"
 printf '  FAIL: 30 is adult\n  --- MutateFixtureRules: 2/3 passed, 1 FAILED ---\n' > "$work/failed.log"
 printf '  shard 1 (MutateFixtureRulesTest) failed (status 1):\n    MutateFixtureRules: killed at the memory cap (1536M)\n' > "$work/capped.log"
+printf '  shard 1 (MutateFixtureRulesTest) failed (status 1):\n    MutateFixtureRules: killed at the run'"'"'s memory budget (20G, all its processes together)\n' > "$work/budget.log"
 judged() { [ "$("$tree/tests/mutate.sh" --judge "$1" "$2" "$subject")" = "$3" ]; }
 check "a load error naming the subject: not compiled" judged "$work/load.log" 1 not-compiled
 check "… after a time-out too" judged "$work/load.log" 124 not-compiled
@@ -114,6 +116,7 @@ check "a ReferenceError naming it: killed" judged "$work/reference.log" 1 killed
 check "a failed check: killed" judged "$work/failed.log" 1 killed
 check "a time-out without a load error: killed" judged "$work/failed.log" 124 killed
 check "stopped at the memory cap: capped (counted as killed)" judged "$work/capped.log" 1 capped
+check "stopped at the run's memory budget: capped too" judged "$work/budget.log" 1 capped
 check "status 0: survived" judged "$work/failed.log" 0 survived
 check "status 2: not run" judged "$work/load.log" 2 not-run
 

@@ -20,6 +20,10 @@
 #   own-beside FormatTest and LockRulesTest in one shard, Format saying it
 #              needs a process of its own (OWN-PROCESS)                       → must fail
 #   inherited  H2S_UNIT_SHARD set from outside: a whole run still in shards   → must pass
+#   budget     a cap of 1G, a budget of 450M for the run (H2S_TEST_MEMORY_BUDGET): the
+#              shards of Format and SidePanel each hold 250 MB at once, under the cap,
+#              over the budget together: one is stopped, said to be killed at the run's
+#              memory budget                                                  → must fail
 #   capped     under a memory cap of 200M (H2S_TEST_MEMORY_MAX), Format's shard takes
 #              400 MB after its summary: stopped, said to be killed at the memory cap,
 #              naming the suite                                               → must fail
@@ -246,6 +250,8 @@ selecting_stand_in timeout '' '[ -n "$format" ] && exit 124; exit 0'
 selecting_stand_in partial '[ -n "$format" ] && names=("${names[@]/FormatTest/}") && names=(${names[@]})'
 selecting_stand_in empty '' '[ -n "$format" ] && echo "  INFO: --- Empty: 0/0 passed ---"; exit 0'
 selecting_stand_in late '' '[ -n "$format" ] && echo "  INFO:   PASS: a check after its suite reported"; exit 0'
+# Holds 250 MB for four seconds (tail keeps a stream with no line end whole)
+selecting_stand_in holding '' '{ [[ ":${H2S_TEST_SUITES:-}:" == *:FormatTest:* ]] || [[ ":${H2S_TEST_SUITES:-}:" == *:SidePanelTest:* ]]; } && { head -c 262144000 /dev/zero; sleep 4; } | tail > /dev/null; exit 0'
 selecting_stand_in capped '' '[ -n "$format" ] && s=$(head -c 419430400 /dev/zero | tr "\\0" x) && echo "allocated ${#s}"; exit 0'
 selecting_stand_in own-beside '' '[ -n "$format" ] && echo "  INFO: OWN-PROCESS: Format"; exit 0'
 # Crashes in SidePanel's shard, and makes itself no executable for the shards after it
@@ -340,7 +346,22 @@ check mixed "… and which could not be set up" grep -q "^  shard [0-9] (.*) cou
 verdict own-beside own-beside 1 FormatTest LockRulesTest
 check own-beside "said so" grep -q "^  Format needs a process of its own, and 2 suites reported in it" "$work/own-beside.log"
 H2S_UNIT_SHARD=1:1 verdict inherited obedient 0 "${three[@]}"
-H2S_TEST_MEMORY_MAX=200M verdict capped capped 1 "${three[@]}"
+# The memory cases run as runs of their own: not in the budget of a runner that started
+# this self-test (tests/run-all.sh), whose way and budget are put back after
+inherited_memory=$(declare -p H2S_TEST_MEMORY_MODE H2S_TEST_SLICE H2S_TEST_MEMORY_BUDGET H2S_TEST_MEMORY_MAX 2> /dev/null)
+unset H2S_TEST_MEMORY_MODE H2S_TEST_SLICE H2S_TEST_MEMORY_BUDGET H2S_TEST_MEMORY_MAX
+H2S_TEST_MEMORY_MAX=1G H2S_TEST_MEMORY_BUDGET=450M LOCKTEST_QS=$work/holding "$REPO/tests/run-unit.sh" -j 3 "${three[@]}" \
+    > "$work/budget.log" 2>&1
+budget_status=$?
+if ! grep -q '^memory cap: .* in scopes of the user' "$work/budget.log"; then
+    echo "SKIP budget: no budget without the user's service manager"
+else
+    check budget "run-unit.sh exited 1 (it exited $budget_status)" test "$budget_status" = 1
+    check budget "said the budget" grep -q "^memory cap: 1G per process, 450M for the whole run" "$work/budget.log"
+    check budget "said a shard was killed at the run's memory budget" \
+        grep -q -E "^    (Format|SidePanel): killed at the run's memory budget \(450M" "$work/budget.log"
+fi
+H2S_TEST_MEMORY_MAX=200M H2S_TEST_MEMORY_AS_FLOOR=0 verdict capped capped 1 "${three[@]}"
 if grep -q '^warning: no memory cap' "$work/capped.log"; then
     echo "SKIP capped: neither the user's service manager nor prlimit can be used here"
 else
@@ -349,6 +370,7 @@ else
         reason_under_shard_starts capped.log FormatTest "Format: killed at the memory cap (200M"
     check capped "… before it finished allocating" bash -c '! grep -q "^allocated" "$1"' _ "$work/capped.log"
 fi
+eval "$inherited_memory"
 check inherited "still three shards" grep -q "^run-unit.sh: 3 suites in 3 shards" "$work/inherited.log"
 
 verdict selected obedient 0 FormatTest LockRulesTest
