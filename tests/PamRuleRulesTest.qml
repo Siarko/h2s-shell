@@ -25,6 +25,8 @@ TestCase {
         assertEqual(rules.defaultControl, "sufficient", "a new row is sufficient");
         assertEqual(rules.explanation("requisite"), "Must pass. A failure ends it at once.", "a word's explanation");
         assertEqual(rules.explanation("include"), "", "no explanation for another word");
+        assertEqual(rules.explanation("sufficient"), "If it passes and no row above has failed, you are in; if not, the next row is tried.",
+                    "sufficient: a failure above still counts");
 
         // --- methods and details ---
         let made = rules.newRow("fingerprint", [row("r1", "password")]);
@@ -73,6 +75,12 @@ TestCase {
         assert(has([key("r1")], arch({ securityKey: "unknown" }), "R1"), "R1: an unknown method is not ready");
         assert(!has([key("r1")], arch(), "R1"), "R1 not: a ready key");
         assert(!has([password("r1")], arch({ fingerprint: "absent" }), "R1"), "R1 not: a password row");
+        assert(has([password("r1", "optional")], arch({ fingerprint: "absent" }), "R1"), "R1: an optional row alone decides nothing");
+        assert(has([fingerprint("r1", "optional")], arch(), "R1"), "R1: … an optional reader alone");
+        assert(!has([fingerprint("r1", "optional"), fixed], arch(), "R1"), "R1 not: optional beside the fixed row");
+        assert(has([raw("r1", "auth optional pam_unix.so")], arch(), "R1"), "R1: a raw optional line decides nothing");
+        assert(has([password("r1", "optional")], arch({ otherService: [password("p1", "optional")] }), "R5"),
+               "R5: optional passwords alone in both services");
         assert(!has([raw("r1", "auth sufficient pam_unix.so")], arch(), "R1"), "R1 not: a raw pam_unix line is a password");
         assert(has([raw("r1", "auth sufficient pam_ldap.so")], arch(), "R1"), "R1: an unknown module is no way in");
         assert(has([fingerprint("r1", "required"), fixed], arch({ fingerprint: "absent" }), "R2"), "R2: a required reader not ready");
@@ -115,9 +123,24 @@ TestCase {
         assert(has([raw("r1", "auth [success=done default=ignore] pam_permit.so"), fixed], arch(), "R9"), "R9: success=done");
         assert(has([raw("r1", "auth required pam_permit.so"), fingerprint("r2")], arch(), "R9"), "R9: nothing after it decides");
         assert(has([raw("r1", "auth sufficient pam_rootok.so"), fixed], arch({ service: "polkit-1" }), "R9"), "R9: pam_rootok for polkit");
-        assert(!has([raw("r1", "auth sufficient pam_rootok.so"), fixed], arch(), "R9"), "R9 not: pam_rootok for sudo");
+        assert(has([raw("r1", "auth sufficient pam_rootok.so"), fixed], arch(), "R9"), "R9: pam_rootok for sudo too: it asks for no credential");
         assert(!has([raw("r1", "auth required pam_permit.so"), fixed], arch(), "R9"), "R9 not: the fixed row decides after it");
-        assert(!has([raw("r1", "auth required pam_permit.so"), password("r2", "required")], arch(), "R9"), "R9 not: a required password after it");
+        assert(has([raw("r1", "auth required pam_permit.so"), password("r2", "required")], arch(), "R9"),
+               "R9: required without the fixed row, whatever follows (the closing line keeps its result)");
+        for (const lets of ["auth sufficient pam_succeed_if.so uid >= 0", "auth sufficient pam_localuser.so", "auth sufficient pam_shells.so",
+                            "auth [success=ok default=ignore] pam_usertype.so isregular", "auth sufficient pam_wheel.so trust",
+                            "auth sufficient pam_listfile.so sense=allow item=user file=/etc/x onerr=fail", "auth [default=done] pam_access.so"])
+            assert(has([raw("r1", lets), fixed], arch(), "R9"), "R9: a module that asks for no credential lets in: " + lets);
+        assert(!has([raw("r1", "auth sufficient pam_userdb.so db=/etc/x"), fixed], arch(), "R9"), "R9 not: pam_userdb asks for a credential");
+        assert(!has([raw("r1", "auth sufficient pam_ldap.so"), fixed], arch(), "R9"), "R9 not: an unknown module (W4)");
+        assert(!has([raw("r1", "auth optional pam_succeed_if.so uid >= 0"), fixed], arch(), "R9"), "R9 not: optional cannot let in");
+        // A trailing backslash would join the next line of the file (the system's include) to this one
+        for (const joined of ["auth optional pam_permit.so \\", "auth optional pam_permit.so \\  # why", "auth sufficient pam_unix.so a\\b"])
+            assert(has([raw("r1", joined), fixed], arch(), "R8"), "R8: a backslash outside brackets: " + JSON.stringify(joined));
+        assert(!has([raw("r1", "auth required pam_exec.so [a\\]b]"), fixed], arch(), "R8"), "R8 not: an escaped bracket inside a bracketed word");
+        for (const jump of ["auth [success=ok default=9] pam_unix.so", "auth [auth_err=3 default=ignore] pam_ldap.so",
+                            "auth [success=done default=reset] pam_unix.so"])
+            assert(has([raw("r1", jump), fixed], arch(), "R8"), "R8: a jump or reset: " + jump);
 
         // --- every warning ---
         assert(!has([fingerprint("r1"), fixed], arch(), "W1"), "W1 not: the fixed row is a password");

@@ -23,7 +23,7 @@ Singleton {
     // raw line keeps whatever it says
     readonly property string defaultControl: "sufficient"
     readonly property var controls: [
-        { word: "sufficient", explanation: "Enough on its own: if it passes, you are in; if not, the next row is tried." },
+        { word: "sufficient", explanation: "If it passes and no row above has failed, you are in; if not, the next row is tried." },
         { word: "required", explanation: "Must pass. The next rows still run; a failure is told at the end." },
         { word: "requisite", explanation: "Must pass. A failure ends it at once." },
         { word: "optional", explanation: "Counts only when no other row decides." }
@@ -296,6 +296,9 @@ Singleton {
         "pam_sepermit", "pam_setquota", "pam_shells", "pam_stress", "pam_succeed_if", "pam_time",
         "pam_timestamp", "pam_tty_audit", "pam_umask", "pam_unix", "pam_userdb", "pam_usertype",
         "pam_warn", "pam_wheel", "pam_xauth"].map(name => name + ".so")
+    // The modules that ask for a credential: the only ones a raw line that can let the user
+    // in may name (any other of libpam's lets in by a rule about the user, not a proof)
+    readonly property var credentialModules: ["pam_unix.so", "pam_fprintd.so", "pam_u2f.so", "pam_userdb.so"]
     readonly property var _rawMethods: ({ "pam_unix.so": "password", "pam_fprintd.so": "fingerprint", "pam_u2f.so": "securityKey" })
 
     // One raw line judged alone: { line (PamStackRules.parseLine's, or null), reads ("auth ·
@@ -312,13 +315,22 @@ Singleton {
             return result(null, "More than one line", "unknown", "R8", "One line only: it holds a line break.");
         if (text.length > maxRawLength)
             return result(null, "Too long", "unknown", "R8", "The line is too long.");
-        const line = PamStackRules.parseLine(text.replace(/#.*$/, ""));
+        // A backslash outside a bracketed word would join the next line of the file to this
+        // one (a line ending in one) or is not something a line of ours needs
+        const stripped = text.replace(/#.*$/, "").replace(/\s+$/, "");
+        const parts = PamStackRules.words(stripped);
+        if (parts !== null && parts.some(word => !word.startsWith("[") && word.includes("\\")))
+            return result(null, "Holds a backslash", "unknown", "R8", "No backslash outside brackets: it would join the next line.");
+        const line = PamStackRules.parseLine(stripped);
         if (line.error !== undefined)
             return result(null, line.error, "unknown", "R8", texts.R8 + " " + line.error + ".");
         if (line.directive !== undefined || line.target !== undefined)
             return result(null, "Not a module line", "unknown", "R8", "Only a module line: no include.");
         if (line.type !== "auth")
             return result(null, "Not an auth line", "unknown", "R8", "Only an auth line.");
+        // A jump or a reset makes the rows below this one not run as they stand
+        if (line.actions && Object.keys(line.actions).some(name => line.actions[name] === "reset" || /^\d+$/.test(line.actions[name])))
+            return result(null, "Jumps or resets", "unknown", "R8", "No jumps or reset in a raw line.");
         const reads = [line.optional ? "-auth" : "auth", line.control, line.moduleName].join(" · ");
         const method = _rawMethods[line.moduleName] ?? "unknown";
         const nixos = facts?.system === "nixos";
@@ -377,9 +389,10 @@ Singleton {
     // What a row is to the checks: { method ("password" / "fingerprint" / "securityKey" /
     // "system" / "unknown"), raw, lets (passing lets the user in at once: sufficient, a
     // bracketed success=done), fails (failing fails the stack: required, requisite, a
-    // bracketed bad/die), optional, permit (a raw line that always passes), refusal }
+    // bracketed bad/die), optional, nonCredential (a raw line naming one of libpam's modules
+    // that ask for no credential), refusals }
     function _role(row, service, facts) {
-        const role = { method: "unknown", raw: false, lets: false, fails: false, optional: false, permit: false, refusals: [] };
+        const role = { method: "unknown", raw: false, lets: false, fails: false, optional: false, nonCredential: false, refusals: [] };
         const method = row?.method;
         if (method === "system") {
             role.method = "system";
@@ -395,11 +408,12 @@ Singleton {
             const line = judged.line;
             if (line !== null) {
                 const actions = line.actions ?? {};
-                role.lets = line.control === "sufficient" || actions.success === "done" || actions.default === "done";
+                const onSuccess = actions.success ?? actions.default;
+                role.lets = line.control === "sufficient" || onSuccess === "done" || onSuccess === "ok";
                 role.fails = line.control === "required" || line.control === "requisite"
                     || Object.keys(actions).some(key => key !== "success" && (actions[key] === "bad" || actions[key] === "die"));
                 role.optional = line.control === "optional";
-                role.permit = line.moduleName === "pam_permit.so" || (service === "polkit-1" && line.moduleName === "pam_rootok.so");
+                role.nonCredential = libpamModules.includes(line.moduleName) && !credentialModules.includes(line.moduleName);
             }
             return role;
         }
@@ -423,10 +437,23 @@ Singleton {
         return role;
     }
 
+    // Whether a row can decide that the user is in: the fixed row always; an own row unless
+    // optional (optional only beside the fixed row); a raw line only as sufficient, a
+    // bracketed success=done/ok, required or requisite
+    function _canDecide(role, fixedPresent) {
+        if (role.method === "system")
+            return true;
+        if (role.lets || role.fails)
+            return true;
+        return !role.raw && role.optional && fixedPresent;
+    }
+
     function _hasPassword(rows, service, facts) {
-        return (Array.isArray(rows) ? rows : []).some(row => {
-            const method = _role(row, service, facts).method;
-            return method === "password" || method === "system";
+        const list = Array.isArray(rows) ? rows : [];
+        const fixedPresent = hasFixedRow(list);
+        return list.some(row => {
+            const role = _role(row, service, facts);
+            return (role.method === "password" || role.method === "system") && _canDecide(role, fixedPresent);
         });
     }
 
@@ -467,19 +494,22 @@ Singleton {
                 refuse("R4", i, texts.R4fixed);
         });
 
-        // R9: a raw line that always passes and lets the user in at once, or that nothing
-        // after it can overrule
+        // R9: a raw line that can let the user in (sufficient, a bracketed success=done/ok;
+        // required or requisite without the fixed row, where the closing line keeps its
+        // result) naming one of libpam's modules that asks for no credential. Jumps are
+        // refused (R8), so no row is skipped between.
+        const fixedPresent = fixedIndex >= 0;
         roles.forEach((role, i) => {
-            if (!role.permit || role.refusals.length > 0)
+            if (!role.nonCredential || role.refusals.length > 0)
                 return;
-            const overruled = roles.slice(i + 1).some(later => later.method === "system" || (later.fails && !later.permit));
-            if (role.lets || !overruled)
+            if (role.lets || (role.fails && !fixedPresent))
                 refuse("R9", i, texts.R9);
         });
 
         // R1: some row can let the user in with what the machine has now
-        const hasPassword = roles.some(role => role.method === "password" || role.method === "system");
-        const wayIn = hasPassword || roles.some(role => isReader(role) && ready(role.method));
+        const decides = role => _canDecide(role, fixedPresent);
+        const hasPassword = roles.some(role => (role.method === "password" || role.method === "system") && decides(role));
+        const wayIn = hasPassword || roles.some(role => isReader(role) && ready(role.method) && decides(role));
         if (!wayIn)
             refuse("R1", -1, texts.R1);
 
