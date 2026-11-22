@@ -256,11 +256,39 @@ TestCase {
                     "an @include that is not the system's run: a raw row");
         assert(codes(edit.build(included, edit.adopt(included, "sudo", facts()).rows, facts({ replace: edit.adopt(included, "sudo", facts()).hash }))).includes("R8"),
                "… which the checks refuse: nothing lost silently");
-        const debian = facts({ systemLines: ["@include common-auth"] });
+        const debian = facts({ systemLines: { "sudo": ["@include common-auth"] } });
         const debianRows = edit.adopt(included, "sudo", debian);
         assertEqual(debianRows.rows.map(item => item.method).join(" "), "password system", "an @include that is the system's run: the fixed row");
         built = edit.build(included, debianRows.rows, Object.assign({}, debian, { replace: debianRows.hash }));
         assert(built.ok && built.text.endsWith("# END h2s-shell\n@include common-auth\naccount required pam_unix.so\n"), "… kept below our block");
+        assertEqual(edit.adopt(included, "polkit-1", Object.assign({}, debian, { service: "polkit-1", vendorText: vendorPolkit })).fixed, false,
+                    "systemLines are per service: sudo's do not serve polkit-1");
+        // The file's own lines between our block and the system's stay, unless one lets in alone
+        const debianSudo = "#%PAM-1.0\nauth       required   pam_env.so readenv=1 user_readenv=0\n@include common-auth\n@include common-account\n"
+            + "@include common-session-noninteractive\n";
+        built = edit.build(debianSudo, [fingerprint("r1"), fixed], debian);
+        assert(built.ok && built.text.includes("# END h2s-shell\nauth       required   pam_env.so"), "an old Debian sudo with pam_env before the include: built");
+        assertEqual(edit.adopt(debianSudo, "sudo", debian).rows.map(item => item.method).join(" "), "raw system",
+                    "… taken in: pam_env a raw row, the include the fixed row, the other phases' @include kept");
+        const homeSudo = "-auth [success=2 default=ignore] pam_systemd_home.so\nauth include system-auth\naccount include system-auth\n";
+        assert(edit.build(homeSudo, [fingerprint("r1"), fixed], facts()).ok, "a systemd-home reader before the include: built");
+        const lettingIn = "auth sufficient pam_unix.so\nauth include system-auth\n";
+        assertEqual(codes(edit.build(lettingIn, [fingerprint("r1"), fixed], facts())).join(" "), "noSystem",
+                    "a line between that lets in alone: refused");
+        // polkit's system lines include the vendor file's @include
+        const debianPolkit = "#%PAM-1.0\n\n@include common-auth\n@include common-account\n@include common-password\n@include common-session-noninteractive\n";
+        built = edit.build(null, [fingerprint("r1"), fixed], polkit({ vendorText: debianPolkit }));
+        assert(built.ok && built.text.includes("# END h2s-shell\n@include common-auth"), "a Debian-layout vendor polkit-1: built over its @include");
+        assertEqual(edit.adopt((built.text ?? "").replace(/^# Written.*\n/, ""), "polkit-1", polkit({ vendorText: debianPolkit })).fixed, true,
+                    "… its @include lines are the fixed row");
+        // Our polkit-1 built from the vendor file: every line compared
+        assertEqual(edit.vendorChanged(polkitText, vendorPolkit.replace("session    include      system-auth", "session    include      system-login")), true,
+                    "built from the vendor file: a vendor session line changed is said");
+        assertEqual(edit.vendorChanged(replaced, vendorPolkit.replace("session    include      system-auth", "session    include      system-login")), false,
+                    "after a Replace: only the auth lines are compared");
+        assertEqual(replaced.split("\n")[1], edit.replacedMarker, "… marked under the first line");
+        assertEqual(edit.build(replaced, keptRows.rows, polkit({ replace: edit.adopt(replaced, "polkit-1", polkit()).hash })).text.split(edit.replacedMarker).length, 2,
+                    "… a second Replace marks it once");
         // No trailing run of the system's lines: no fixed row
         assertEqual(edit.adopt("auth sufficient pam_unix.so try_first_pass\n", "sudo", facts()).rows.map(item => item.method).join(" "), "password",
                     "no system's lines at the end: no fixed row");

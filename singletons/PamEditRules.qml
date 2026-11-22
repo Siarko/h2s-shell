@@ -21,6 +21,9 @@ Singleton {
     readonly property string beginMarker: "# BEGIN h2s-shell"
     readonly property string endMarker: "# END h2s-shell"
     readonly property string writtenMarker: "# Written by h2s-shell"
+    // The line under it in a polkit-1 made by Replace: its other phases' lines are the
+    // hand-made file's, so only its auth lines are compared with the vendor file's
+    readonly property string replacedMarker: "# h2s-shell: replaced a hand-made file"
     // The closing lines (§2.3), by PamRuleRules.closingOf's answer
     readonly property var closingLines: ({
         permit: "auth [default=done] pam_permit.so",
@@ -197,7 +200,8 @@ Singleton {
     }
 
     function _isMarker(line) {
-        return /^\s*#\s*(BEGIN|END) h2s-shell(\s.*)?$/.test(line) || /^\s*#\s*Written by h2s-shell(\s.*)?$/.test(line);
+        return /^\s*#\s*(BEGIN|END) h2s-shell(\s.*)?$/.test(line) || /^\s*#\s*Written by h2s-shell(\s.*)?$/.test(line)
+            || line.trim() === replacedMarker;
     }
 
     // Where a line goes after the physical lines: before a final newline's ""
@@ -327,16 +331,32 @@ Singleton {
         return read.closing !== "" ? read.rows : read.rows.concat([PamRuleRules.fixedRow()]);
     }
 
-    // The service's own auth lines, the run that stands for the fixed row in a file taken
-    // in: sudo's `auth include system-auth` (or `facts.systemLines`), polkit's the vendor
-    // file's auth lines
+    // The service's own auth lines, the run that stands for the fixed row: `facts.systemLines`
+    // for this service ({ "sudo": […], "polkit-1": […] }), else sudo's `auth include
+    // system-auth` (Arch) and polkit's the vendor file's lines that run auth lines (auth
+    // lines and @include)
     function _systemLines(service, facts) {
-        if (Array.isArray(facts?.systemLines))
-            return facts.systemLines.map(line => String(line));
+        const given = facts?.systemLines?.[service];
+        if (Array.isArray(given))
+            return given.map(line => String(line));
         if (service === "sudo")
             return sudoSystemLines;
-        return _spans(String(facts?.vendorText ?? "")).filter(span => PamStackRules.parseLine(span.text).type === "auth")
-            .map(span => span.text);
+        return _authSpans(String(facts?.vendorText ?? "")).map(span => span.text);
+    }
+
+    // Where the service's own lines stand among `spans` (lines that run auth lines): the
+    // index of their last run with nothing but @include lines after it (another phase's
+    // lines are brought in that way: Debian's `@include common-account`); -1 when none
+    function _systemRun(spans, system) {
+        if (system.length === 0)
+            return -1;
+        for (let i = spans.length - system.length; i >= 0; i--) {
+            if (!system.every((line, j) => _sameWords(spans[i + j].text, line)))
+                continue;
+            const after = spans.slice(i + system.length);
+            return after.every(span => PamStackRules.parseLine(span.text).directive !== undefined) ? i : -1;
+        }
+        return -1;
     }
 
     // How a file is taken in: { rows, own, raw (how many rows of each), fixed, remove (the
@@ -370,11 +390,10 @@ Singleton {
             }
             entries.push(span);
         }
-        const system = _systemLines(service, facts);
-        const tail = entries.slice(entries.length - system.length);
-        const fixed = system.length > 0 && entries.length >= system.length
-            && tail.every((span, i) => _sameWords(span.text, system[i]));
-        const taken = fixed ? entries.slice(0, entries.length - system.length) : entries;
+        // The service's own lines, and the @include lines after them, stay where they are
+        const run = _systemRun(entries, _systemLines(service, facts));
+        const fixed = run >= 0;
+        const taken = fixed ? entries.slice(0, run) : entries;
         // The block's lines and the taken lines, top to bottom
         const items = [];
         if (block !== null && block.complete)
@@ -470,26 +489,43 @@ Singleton {
         return newline < 0 ? "" : text.slice(newline + 1);
     }
 
-    // Whether polkit's own auth lines changed since ours was written ("Apply again to take
-    // it over"): the auth lines of our polkit-1 outside its block against the vendor file's.
-    // Only auth lines: after a Replace the other phases' lines are the hand-made file's.
+    // Whether polkit's own file changed since ours was written ("Apply again to take it
+    // over"): our polkit-1 without its block against the vendor file — every line when ours
+    // was built from it, only the auth lines after a Replace (replacedMarker)
     function vendorChanged(text, vendorText) {
         const rest = _ownRest(text);
         if (rest === null || typeof vendorText !== "string")
             return false;
         const block = PamStackRules.ownBlock(rest);
+        if (rest.split("\n")[0].trim() !== replacedMarker) {
+            const physical = rest.split("\n");
+            if (block !== null && block.complete)
+                physical.splice(block.beginLine - 1, block.endLine - block.beginLine + 1);
+            return physical.join("\n") !== vendorText;
+        }
         const outside = _authSpans(rest).filter(span => block === null || !block.complete
                                                 || span.start + 1 < block.beginLine || span.start + 1 > block.endLine);
         const vendor = _authSpans(vendorText);
         return outside.length !== vendor.length || outside.some((span, i) => !_sameWords(span.text, vendor[i].text));
     }
 
-    // Whether the service's own lines are the first lines running auth lines in `text`:
-    // what the fixed row stands for, below the shell's block
-    function _systemFollows(text, service, facts) {
-        const system = _systemLines(service, facts);
-        const auth = _authSpans(text);
-        return system.length > 0 && auth.length >= system.length && system.every((line, i) => _sameWords(auth[i].text, line));
+    // Whether the system's own lines (adopt's run) stand below the shell's block in `text`
+    // and are reached: "" when they are, else why not. The file's own lines between stay
+    // as they are, unless one can let the user in alone (sufficient, done on success) or
+    // cannot be judged (an include)
+    function _systemProblem(text, service, facts) {
+        const spans = _authSpans(text);
+        const run = _systemRun(spans, _systemLines(service, facts));
+        if (run < 0)
+            return "The system's own lines are not below the shell's: nothing would ask the system's password.";
+        for (const span of spans.slice(0, run)) {
+            const parsed = PamStackRules.parseLine(span.text);
+            const lets = parsed.module === undefined || parsed.control === "sufficient"
+                || (parsed.actions && (parsed.actions.success ?? parsed.actions.default) === "done");
+            if (lets)
+                return "A line of the file between the shell's lines and the system's can let you in on its own.";
+        }
+        return "";
     }
 
     // What the page shows for a service's file: { known, changed, reasons, rows (the rows
@@ -564,15 +600,17 @@ Singleton {
             }
         }
         // No lines of ours (the fixed row alone) leaves the file's auth lines as they are
-        if (lines.length > 0 && PamRuleRules.hasFixedRow(rows) && !_systemFollows(physical.slice(at).join("\n"), service, known))
-            return _refused("noSystem", "The system's own lines are not below the shell's: nothing would ask the system's password.",
-                            checked.warnings);
+        const problem = lines.length > 0 && PamRuleRules.hasFixedRow(rows) ? _systemProblem(physical.slice(at).join("\n"), service, known) : "";
+        if (problem !== "")
+            return _refused("noSystem", problem, checked.warnings);
         const without = physical.join("\n");
         physical.splice(at, 0, ...blockText(lines));
         let text = physical.join("\n");
         if (service === "polkit-1") {
             if (lines.length === 0 && !replace && without === known.vendorText)
                 return { ok: true, text: null, remove: true, refusals: [], warnings: checked.warnings };
+            if (replace)
+                text = replacedMarker + "\n" + text;
             text = writtenMarker + " " + sha256(text) + "\n" + text;
         }
         return { ok: true, text, remove: false, refusals: [], warnings: checked.warnings };
