@@ -153,7 +153,7 @@ Singleton {
     // A notification of the updater clicked: Settings → Modules opens (the page shows what it
     // asks for: the restart button or the changelogs)
     Connections {
-        target: root._updater
+        target: _updater
         function onOpenRequested(request) {
             Shell.openSettings("modules");
         }

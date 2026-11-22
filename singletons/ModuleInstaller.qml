@@ -1268,19 +1268,6 @@ Scope {
         const reasons = back.map(step => step.id + " " + step.dir + " did not start ("
                                  + ModuleInstallRules._plain(String((_statusAt(step)?.errors ?? [])[0] ?? "failed"), 160)
                                  + "): back to " + step.previousDir);
-        // Each one's configuration backed up first ("rollback"); one that cannot be taken is
-        // said, the way back goes on
-        const backUpAll = index => {
-            if (index >= back.length) {
-                relinkAll(0);
-                return;
-            }
-            _backUp(job, back[index].id, "rollback", job.records, backup => {
-                if (!backup.ok)
-                    reasons[index] += " — its configuration could not be backed up first (" + backup.problem + ")";
-                backUpAll(index + 1);
-            });
-        };
         const relinkAll = index => {
             if (index >= back.length) {
                 let modules = job.records.modules;
@@ -1299,6 +1286,19 @@ Scope {
                 if (!ok)
                     reasons[index] += " — the link could not be moved back";
                 relinkAll(index + 1);
+            });
+        };
+        // Each one's configuration backed up first ("rollback"); one that cannot be taken is
+        // said, the way back goes on
+        const backUpAll = index => {
+            if (index >= back.length) {
+                relinkAll(0);
+                return;
+            }
+            _backUp(job, back[index].id, "rollback", job.records, backup => {
+                if (!backup.ok)
+                    reasons[index] += " — its configuration could not be backed up first (" + backup.problem + ")";
+                backUpAll(index + 1);
             });
         };
         backUpAll(0);

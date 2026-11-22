@@ -13,7 +13,8 @@ import qs.singletons
 // Cancel); Disable through the button's own question, or through the modal listing the
 // running modules that need it (those disabled too); a question withdrawn when its module
 // changes. Opened, a card shows its dependencies and the copies it replaces. In safe mode,
-// the safe-mode banner at the top (why, Load modules; no Open Modules, no ×).
+// the safe-mode banner at the top (why, Load modules; no Open Modules, no ×). The real Modules
+// singleton: its updater's notification clicked opens Settings → Modules.
 //
 // Opens a window for a moment, an ordinary one (the modal takes the keyboard in it), in the
 // runner's headless compositor.
@@ -585,6 +586,21 @@ TestCase {
         _updates();
         _installing();
         _safeModeBanner();
+        _updaterNotification();
+    }
+
+    // The real Modules singleton's wiring: a notification of its updater clicked opens
+    // Settings → Modules through Shell.openSettings (what shell.qml listens to)
+    function _updaterNotification() {
+        const opened = [];
+        const onOpen = pageId => opened.push(pageId);
+        Shell.openSettings.connect(onOpen);
+        try {
+            Modules.updater.openRequested({ page: "modules", show: "restart", ids: [] });
+            assertEqual(opened.join(","), "modules", "an updater notification clicked: Settings → Modules");
+        } finally {
+            Shell.openSettings.disconnect(onOpen);
+        }
     }
 
     function _modalChecked(key) {

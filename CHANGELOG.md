@@ -1046,6 +1046,7 @@ The interface modules are written against (`qs.api`), versioned on its own
   action used to be an empty button.
 
 ### Fixed
+- Clicking a module update notification opens Settings → Modules.
 - Restarting the shell within a few seconds of a reload (a saved file, an update) no longer
   crashes it: Quickshell's reload popup is gone — a failed reload is written to the shell's
   log instead (`qs log`) — and the launcher's stop waits while the
