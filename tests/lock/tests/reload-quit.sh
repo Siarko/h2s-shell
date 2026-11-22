@@ -16,7 +16,7 @@
 # --restart stops every h2s-shell that `qs list --all` finds: checked first that it lists
 # only the shell under test (as restart-launcher does).
 
-stack_start
+stack_start --dev
 
 [ "$XDG_RUNTIME_DIR" = "$RUN" ] && [ -n "$RUN" ] || abort "not in the private runtime dir: not running --restart"
 crash_dir=$XDG_CACHE_HOME/quickshell/crashes

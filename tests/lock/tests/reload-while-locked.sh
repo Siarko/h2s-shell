@@ -5,7 +5,7 @@
 # the shell), and the reloaded shell still locks. Carrying a lock across a reload is the
 # other reload scenarios' (reload-hard, reload-explicit).
 
-stack_start
+stack_start --dev
 
 check "file watching is on while unlocked" state_is watch_files true
 lock_by_ipc

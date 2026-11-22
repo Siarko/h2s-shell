@@ -146,14 +146,16 @@ here may reach it.
   session.
 - **Private `HOME` and XDG directories** under the artifacts dir: the shell does not read
   or write the user's `~/.config/h2s_shell/config.json`, cache or state.
-- **The shell runs from a copy.** Quickshell reloads a shell on any file written in its
-  folder (and a reload while locked used to unlock); so `run.sh` copies the checkout once per run
+- **The shell runs from a copy.** In development mode (`stack_start --dev`) Quickshell
+  reloads a shell on any file written in its folder (and a reload while locked used to
+  unlock); so `run.sh` copies the checkout once per run
   into the artifacts dir (`shell/`: everything but `tests/lock`, `.git` and `result*`),
   and that again for each test (`shells/<test>`, a few MB, some 20 ms), which the test's shell
   runs from: tests that run side by side never see each other's edits. Edits to the checkout during a run cannot disturb it;
   `run.sh` notes them, as the results are for the copy taken at the start. (The shell itself
   no longer reloads while locked — file watching is off then — and `reload-while-locked.sh`
-  and `edit-while-locked.sh` check that; a reload asked for while locked keeps the lock,
+  and `edit-while-locked.sh` check that; out of development mode it never reloads on a file
+  change, `dev-mode-off.sh`; a reload asked for while locked keeps the lock,
   `reload-explicit.sh`; the copy guards the rest of a run. Tests that edit the copy on
   purpose — `edit-while-locked`, `reload-while-locked`, `reload-window`,
   `restart-locked-retry` — write only their own.) In the copy, `pam/` is replaced by
@@ -475,7 +477,9 @@ check_within 10 "the password unlocks" compositor_unlocked
 
 `stack_start` takes, beside the methods: `--no-lock-restore` (the nested Hyprland with
 `misc:allow_session_lock_restore` off, its default), `--no-hyprland-ipc` (the shell without
-`HYPRLAND_INSTANCE_SIGNATURE`: it cannot ask Hyprland about its lock), `--reload-seam` (the
+`HYPRLAND_INSTANCE_SIGNATURE`: it cannot ask Hyprland about its lock), `--dev` (the launcher
+is given `--dev`: development mode, a file written in the shell's copy reloads it; without
+it file watching is off, as on a user's machine), `--reload-seam` (the
 test tree's `locktest reload <hard>` IPC, in `seams/TestSeams.qml`: `shell_ipc locktest
 reload false` asks for `Quickshell.reload()`), `--hyprland-debug` (Hyprland's debug log in `hyprland.log`: what it
 did with the lock and its surfaces), `--keymap us|us-intl|us-compose` (the layout the

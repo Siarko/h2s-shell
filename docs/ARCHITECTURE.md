@@ -24,7 +24,15 @@ when it dies (see "Lock screen", "Recovery"). `launch.sh --restart` restarts the
 is what the setting's "Restart to apply" runs — a shell that does not answer is
 terminated by its process id; `--list` and `--resolve` print the installed themes and
 the one that would be used, `--preview <theme>` the files of a few sample icons, which
-the settings show as images (`singletons/IconThemes.qml` asks it). The script marks the
+the settings show as images (`singletons/IconThemes.qml` asks it). `--dev` (with a start or
+`--restart`) starts the shell in development mode, handed to it as `H2S_SHELL_DEV_FLAG=1`:
+only then does Quickshell reload the shell when one of its files changes
+(`Quickshell.watchFiles`). `H2S_SHELL_DEV` (`1` on, `0` off), when set to either, decides over
+the flag — `H2S_SHELL_DEV=0 launch.sh --dev` is off; `singletons/DevRules.qml` decides, and
+the lock screen's driver sets `watchFiles` from it (and off while locked). Out of development
+mode a file written in the shell's folder — an update, a module install, an editor — leaves
+the running shell as it is until a restart. The flag is inherited by what the shell starts,
+so the settings' restart keeps development mode. The script marks the
 shell it starts with `H2S_SHELL_LAUNCHER=1`; a shell started without it (plain `qs`)
 shows a banner under the bar (`hud/StartupWarning.qml`, stacked by `hud/StartupWarnings.qml`) explaining that the icon theme
 cannot apply — it does not restart itself, which would drop the arguments it was given.
@@ -547,7 +555,8 @@ launcher agree on the contract described under "Recovery" below):
   effects, and carries the effects out (`LockIoRules.runStep`: each part guarded, so a
   view that fails to publish cannot keep the lock from being set): the `WlSessionLock`,
   one single-shot `Timer` per timer name (tokens from the rules), `Profiles.screenLocked`
-  and `Quickshell.watchFiles` (off while locked: a reload while locked would unlock), the
+  and `Quickshell.watchFiles` (`DevRules.watchFiles`: on only in development mode, and off
+  while locked — a reload while locked would unlock), the
   adapters. It exposes only `view`, `locked`, `lock()`, the surface
   functions the views call (they take the `LockSurface` object and act only for a
   registered one), and the IPC (`lock`, `status`, `state` = `describe` plus a few driver
@@ -670,8 +679,10 @@ case per recovery scenario of the lock test bed in `tests/LockRecoveryRulesTest.
   realizes it — so it takes the old lock over instead of unlocking. The rules go on from
   their `restored` event (a fresh lock on the carried compositor lock: no new lock request,
   fresh adapters, methods asked again, nothing typed before survives). File changes still do
-  not reload while locked (`watchFiles` off); edits made meanwhile take effect at the next
-  file change after the unlock (no reload at unlock: it dropped lock requests). A reload that cannot carry the lock (a hard reload, `reload(true)`)
+  not reload while locked (`watchFiles` off: a new generation starts with Quickshell's
+  default, on, and the driver sets it as `_carried` loads — off while it says locked); in development
+  mode edits made meanwhile take effect at the next file change after the unlock (no reload
+  at unlock: it dropped lock requests). A reload that cannot carry the lock (a hard reload, `reload(true)`)
   leaves Quickshell's process-wide lock manager with a stale lock: the process quits
   (status 1) and the launcher starts a fresh one, which the marker locks.
 - *A shell that stops while locked* — crash, SIGKILL, `qs kill`, `--restart` — comes back
@@ -702,7 +713,7 @@ case per recovery scenario of the lock test bed in `tests/LockRecoveryRulesTest.
   in the same process (unless it crashed within 10 s of starting): no second shell, and the
   launcher sees nothing — so the restarted shell itself kills, once, the PAM helpers its
   process had forked before the crash (`_helperSweep`).
-- *A reload while unlocked* (a file saved — dozens of times a day here) blocks the event
+- *A reload while unlocked* (a file saved in development mode) blocks the event
   loop for about two seconds and tears the old generation down: IPC calls get "Not ready"
   and logind's PrepareForSleep reaches no monitor. The launcher's `ipc` retries such calls
   (3 s); the new logind monitor asks logind's `PreparingForSleep` once it listens; the old

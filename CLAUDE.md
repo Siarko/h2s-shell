@@ -109,9 +109,10 @@ in its first lines; a missing tool ends the run with status 2 and its name
 `/tmp/h2s-locktest.flock`); the other runners run side by side, and a lock-bed failure seen
 while they ran is run again alone before it is believed.
 
-A running shell reloads itself when a file changes, but keeps the old singletons (new
-functions show up as `TypeError: ... is not a function`): restart it fully after changing
-anything under `singletons/`.
+A running shell reloads itself when a file changes only in development mode
+(`launch.sh --dev` or `H2S_SHELL_DEV=1`; `H2S_SHELL_DEV=0` wins over `--dev`), and a reload
+keeps the old singletons (new functions show up as `TypeError: ... is not a function`):
+restart it fully after changing anything under `singletons/`.
 
 Beyond the test suites, verification is manual: check that the bar renders, the clock
 ticks, cells respond to clicks, and popups toggle.

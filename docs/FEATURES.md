@@ -377,8 +377,8 @@ screen's screen-off are off by default. No idle daemon is needed; one can still 
   ("Unlocking…"), since unlocking a lock the compositor has not confirmed is a protocol
   error. A confirmation late by more than 5 s is shown ("Waiting for the compositor…").
 - **Failure and recovery** — the screen stays locked whatever happens to the shell. A file
-  written in its folder while locked does not reload it (the edit takes effect at the next
-  file change after the unlock). A reload asked for while locked keeps the lock (a new
+  written in its folder while locked does not reload it, not even in development mode
+  (`--dev`, where the edit takes effect at the next file change after the unlock). A reload asked for while locked keeps the lock (a new
   authentication is needed); a lid closed while the shell reloads still locks before sleep
   (with lock before sleep on) as long as the lock is up within a few seconds.
   A shell that dies while locked — a crash, a kill, the OOM killer, `qs kill`,

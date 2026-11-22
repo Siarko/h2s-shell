@@ -317,8 +317,8 @@ if [ "$LOCKTEST_TOOL_SOURCE" = system ]; then
 fi
 
 # ---- The shell under test: a copy of the checkout, one per test -----------------------
-# Quickshell reloads the shell on any file written in its folder, and a reload while
-# locked unlocks. So the shell runs from a copy: whatever is written to the checkout
+# In development mode (stack_start --dev) Quickshell reloads the shell on any file written
+# in its folder, and a reload while locked unlocks. So the shell runs from a copy: whatever is written to the checkout
 # meanwhile (by you, by another tool) cannot disturb a test. The copy is the checkout as
 # it is at the start of the run, without the test bed itself (tests/lock), git data and
 # build results — a test tree (tests/test-tree.sh): the test seam files in the production

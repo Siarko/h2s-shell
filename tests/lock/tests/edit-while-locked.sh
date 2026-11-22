@@ -6,7 +6,7 @@
 # for its ~2 s lock requests by IPC were dropped and logind's PrepareForSleep missed —
 # reload-window.sh.)
 
-stack_start
+stack_start --dev
 
 lock_by_ipc
 check_within "$GUARD" "locked" compositor_locked

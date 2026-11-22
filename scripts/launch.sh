@@ -20,6 +20,8 @@
 #                        starter exits at once. --restart is the detached, supervised start)
 #   launch.sh --restart  stop the running shell (and its supervisor) and start it again,
 #                        detached (supervised)
+#   launch.sh --dev      (with a start or --restart) development mode: a file changed in the
+#                        shell's folder reloads the running shell (see "Development mode")
 #   launch.sh ipc ARGS   `qs ipc ARGS` to this shell, e.g. `ipc call tablet set true`; a
 #                        call made while the shell reloads or restarts is tried again for
 #                        up to 3 s, and fails (status 1) if never taken
@@ -976,6 +978,29 @@ ipc_with_retry() {
     [ -n "$ipc_errors" ] && printf '%s\n' "$ipc_errors" >&2
     return "$ipc_status"
 }
+
+# Development mode. Off, a file written in the shell's folder (an update, a module install, an
+# editor) leaves the running shell as it is; on, Quickshell reloads the shell when one of its
+# files changes (Quickshell.watchFiles, set by singletons/Lockscreen.qml). Two variables:
+#   H2S_SHELL_DEV       input, the developer's: "1" on, "0" off; when it says either it decides
+#                       over --dev (H2S_SHELL_DEV=0 launch.sh --dev is off). Read by the shell,
+#                       never here.
+#   H2S_SHELL_DEV_FLAG  output, the shell's: "1" when this launcher was given --dev. The shell
+#                       decides from both (singletons/DevRules.qml). Not unset without --dev:
+#                       the shell and all it starts inherit it, so a --restart run from the
+#                       shell (the settings' "Restart to apply") keeps development mode.
+# --dev is this script's, never an argument of qs; not looked for in `ipc`'s arguments.
+if [ "${1-}" != ipc ]; then
+    arguments=()
+    for argument in "$@"; do
+        if [ "$argument" = --dev ]; then
+            export H2S_SHELL_DEV_FLAG=1
+        else
+            arguments+=("$argument")
+        fi
+    done
+    set -- "${arguments[@]}"
+fi
 
 case "$1" in
     # Internal: the module search, run by discover_modules under its bound

@@ -89,7 +89,8 @@ again, and one that died while the screen was locked locks again at once. For th
 lock screen needs one line in `hyprland.lua`'s `misc` settings,
 `allow_session_lock_restore = true` (without it Hyprland refuses to let a restarted lock
 screen take the lock back).
-`h2s-shell --restart` stops the shell (and its supervisor) and starts it again, detached;
+`h2s-shell --restart` stops the shell (and its supervisor) and starts it again, detached
+(`--dev` for development mode, "Development" below);
 there is one supervisor per session (a second start waits briefly, then gives up). If the
 lock screen misbehaves, `h2s-shell --lock-log` (or `scripts/lock-log.sh`, also from a text
 console while the screen is locked) prints what happened: the shell's lock lines
@@ -180,7 +181,10 @@ the [privacy policy](https://siarko.github.io/h2s-shell/privacy.html).
 
 ## Development
 
-The shell runs from a git checkout and reloads itself when a file changes; only its small
+The shell runs from a git checkout; started with `--dev` (`h2s-shell --dev`, `launch.sh
+--dev`) or with `H2S_SHELL_DEV=1` it reloads itself when one of its files changes (development
+mode; `H2S_SHELL_DEV=0` turns it off even with `--dev`, and without either a file change
+never reloads it). Only its small
 helper program (`helper/`, C++/Qt) is compiled, by the package on NixOS and by `install.sh`
 (and the launcher, after an update) on Arch. `tests/run-all.sh` runs every test before a commit (`--quick` leaves out
 the lock screen's end-to-end tests); `tests/run-unit.sh` runs the unit suites. On NixOS,

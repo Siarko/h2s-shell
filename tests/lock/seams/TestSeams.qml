@@ -55,7 +55,8 @@ Singleton {
     }
 
     // A reload while locked, for the lock bed (tests/lock/tests/reload-*.sh): nothing in the
-    // shell calls Quickshell.reload(), and file changes do not reload while locked, so the
+    // shell calls Quickshell.reload(), and file changes do not reload while locked (nor at all
+    // out of development mode), so the
     // test asks for one here. Only with H2S_LOCK_TEST_RELOAD=1 (stack_start --reload-seam).
     // Built when the lock screen first reads a seam, which is at its start.
     IpcHandler {

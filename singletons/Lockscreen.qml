@@ -145,6 +145,15 @@ Singleton {
     // The operations of the driver, closures over its private state; null until built
     property var _api: null
 
+    // Development mode (DevRules.devMode: H2S_SHELL_DEV, else the launcher's --dev): only
+    // then does a file changed in the shell's folder reload it. Quickshell.watchFiles is this
+    // driver's, since it is also off while locked
+    readonly property bool devMode: DevRules.devMode(Quickshell.env("H2S_SHELL_DEV"), Quickshell.env("H2S_SHELL_DEV_FLAG"))
+
+    function _applyWatchFiles(locked) {
+        Quickshell.watchFiles = DevRules.watchFiles(devMode, locked === true);
+    }
+
     // The lock test bed's seams (tests/lock/README.md; read by TestSeams), like
     // H2S_LOCK_AUTH_METHODS, inert unless set. H2S_LOCK_TOOLS: a directory whose `gdbus` and `systemd-inhibit` stand in
     // for the real ones, since the test bed cuts the system bus off (and the launcher puts
@@ -211,14 +220,13 @@ Singleton {
         // What publish() saw change, to be logged at the end of the step
         let viewLog = [];
         // Surface objects ↔ ids; the timers by name; the per-lock adapters; the session of
-        // the last lockCompositor; Quickshell.watchFiles as it was before the lock
+        // the last lockCompositor
         const surfaceIds = new Map();
         const surfaceObjects = {};
         let nextSurfaceId = 1;
         const timers = {};
         let scope = null;
         let sessionInForce = 0;
-        let watchFilesBefore = true;
         let fallbackKnown = false;
         // Recovery (see the header): the marker, taking a lock back, asking again — decided
         // by LockRecoveryRules, whose one state this is. What a reload carries over is not in
@@ -416,18 +424,16 @@ Singleton {
                 // No reload while locked, from file changes: a reload carries the lock over
                 // now (`restored`), but that is the recovery path, not one to take at every
                 // file written while the owner is away. At the unlock file watching is
-                // simply switched back on: edits made meanwhile take effect at the next
-                // file change. (A reload right after the unlock was tried and removed: for
-                // its ~2 s a lock request by IPC was dropped and logind's PrepareForSleep
-                // missed — the lid closed right after an unlock slept unlocked.)
+                // simply switched back on in development mode (DevRules.watchFiles): edits
+                // made meanwhile take effect at the next file change. (A reload right after
+                // the unlock was tried and removed: for its ~2 s a lock request by IPC was
+                // dropped and logind's PrepareForSleep missed — the lid closed right after
+                // an unlock slept unlocked.)
+                root._applyWatchFiles(effect.locked);
                 if (effect.locked) {
                     // Nothing of an earlier lock's Caps Lock is shown: read at the wake
                     _capsLed.forget();
-                    watchFilesBefore = Quickshell.watchFiles;
-                    Quickshell.watchFiles = false;
                     probeFallback();
-                } else {
-                    Quickshell.watchFiles = watchFilesBefore;
                 }
                 break;
             case "reportLockedHint":
@@ -801,6 +807,7 @@ Singleton {
                     lockScope: scope !== null,
                     testSeams: TestSeams.inForce.slice(),
                     watchFiles: Quickshell.watchFiles,
+                    devMode: root.devMode,
                     passwordFallbackKnown: fallbackKnown,
                     capsLock: _capsLed.on,
                     // Recovery: the marker as last written ("locked" / "unlocked" / "" for
@@ -821,7 +828,8 @@ Singleton {
 
         const supervisor = Quickshell.env("H2S_SHELL_SUPERVISOR") ?? "";
         log("info", "driver started" + (supervisor !== "" ? ", supervised by the launcher (pid " + supervisor + ")"
-            : ", NOT supervised (started without scripts/launch.sh): a shell that dies while locked is not started again"));
+            : ", NOT supervised (started without scripts/launch.sh): a shell that dies while locked is not started again")
+            + (root.devMode ? "; development mode: a file changed in the shell's folder reloads it" : ""));
         publish();
         dispatch({ type: "started" });
         probeFallback();
@@ -848,6 +856,10 @@ Singleton {
             if (held)
                 root._api?.restoreAfterReload(secure);
         }
+        // File watching as this generation starts: each generation starts with Quickshell's
+        // default (on), so it is set here at once, and left off after a reload while locked —
+        // `held` already holds the carried value when `loaded` comes (before `reloaded`)
+        onLoaded: root._applyWatchFiles(held)
     }
 
     Component {

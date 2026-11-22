@@ -226,6 +226,9 @@ check_timed() {
 #                                    what it did with the lock and its surfaces
 # --no-hyprland-ipc                  the shell runs without HYPRLAND_INSTANCE_SIGNATURE: as under
 #                                    a compositor it cannot ask about its lock (the generic path)
+# --dev                              the launcher is given --dev: development mode, a file
+#                                    written in the shell's copy reloads it (DevRules); without
+#                                    it, as on a user's machine, file watching is off
 # --reload-seam                      the shell's `locktest reload` IPC is enabled
 #                                    (H2S_LOCK_TEST_RELOAD=1): a test asks for Quickshell.reload()
 # --timings <json>                   LockRules.timings overrides for the shell
@@ -249,6 +252,7 @@ stack_start() {
     local methods="password" methods_script="" logind=0 system_password=deny keymap=us settings="" session_bus=0
     local window=0 fprintd="" lock_restore=true reload_seam="" hyprland_logs=true hyprland_stdout=false
     local shell_env=() timings="" launcher_timings="" shell_path="" modules="" data_dirs="" extra_env=()
+    LAUNCHER_ARGS=()
     while [ $# -gt 0 ]; do
         case "$1" in
             --timings) timings=$2; shift 2 ;;
@@ -268,6 +272,7 @@ stack_start() {
             --window) window=1; shift ;;
             --no-lock-restore) lock_restore=false; shift ;;
             --reload-seam) reload_seam=1; shift ;;
+            --dev) LAUNCHER_ARGS=(--dev); shift ;;
             --no-hyprland-ipc) shell_env=(-u HYPRLAND_INSTANCE_SIGNATURE); shift ;;
             --hyprland-debug) hyprland_logs=false; hyprland_stdout=true; shift ;;
             *) abort "stack_start: unknown option $1" ;;
@@ -827,7 +832,7 @@ _quickshell_binary() {
 start_launcher() {
     # SIGHUP reset: a run started with it ignored (nohup, a detached ssh) would hand that on,
     # and bash cannot trap a signal ignored at its start (the supervisor scenario sends it)
-    spawn "$WORK/shell.log" env --default-signal=HUP "${LAUNCHER_ENV[@]}" "$LOCKTEST_LAUNCHER"
+    spawn "$WORK/shell.log" env --default-signal=HUP "${LAUNCHER_ENV[@]}" "$LOCKTEST_LAUNCHER" ${LAUNCHER_ARGS[@]+"${LAUNCHER_ARGS[@]}"}
     local timeout_pid=$SPAWNED_PID
     wait_until 10 pgrep -P "$timeout_pid" || abort "the launcher did not start"
     SUPERVISOR_PID=$(pgrep -P "$timeout_pid" | head -n 1)
@@ -1000,7 +1005,8 @@ launcher_ipc() {
 #   inhibitor_running    a systemd-inhibit process of the shell runs
 #   password_fallback    the rules' password fallback config, directory/name ("" for none)
 #   fallback_known       the driver has looked at the machine for it (until then: the shipped one)
-#   watch_files          Quickshell.watchFiles (off while locked: no reload)
+#   watch_files          Quickshell.watchFiles (on only in development mode, off while locked)
+#   dev_mode             the shell runs in development mode (stack_start --dev, H2S_SHELL_DEV)
 #   unlocking / pending  an unlock decided before the compositor confirmed, and by what
 #   notice               the prompt's notice line ("Waiting for the compositor…")
 #   timers               the names of the rules' timers running, comma-separated
@@ -1055,6 +1061,7 @@ facts = {
     "password_fallback": lambda s: config_path(s["settings"]["passwordFallback"]),
     "fallback_known": lambda s: s["driver"]["passwordFallbackKnown"],
     "watch_files": lambda s: s["driver"]["watchFiles"],
+    "dev_mode": lambda s: s["driver"]["devMode"],
     "unlocking": lambda s: s["view"]["unlocking"],
     "pending": lambda s: (s["phase"].get("pending") or {}).get("reason", ""),
     "notice": lambda s: s["view"]["notice"],

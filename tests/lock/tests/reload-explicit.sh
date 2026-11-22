@@ -9,7 +9,8 @@
 # Hyprland's debug log shows no new lock across it (it logs each lock, and no unlock), the
 # shell says locked, the same process, a prompt that wakes, the password unlocks, no
 # protocol error in either log; a later lock and unlock work (the process can lock again).
-# Then two reloads in a row while locked. (A reload while the compositor has not yet
+# Then two reloads in a row while locked. In development mode (--dev): file watching comes back
+# on at the unlock after a reload while locked. (A reload while the compositor has not yet
 # confirmed the lock cannot be reproduced here — it confirms in milliseconds; the rules'
 # `restored { secure: false }` covers it in tests/LockRulesTest.qml.)
 #
@@ -19,7 +20,7 @@
 # protocol error; the old WlSessionLock's destructor logs "destroyed without unlocking",
 # harmless since its lock manager was handed over.
 
-stack_start --reload-seam --hyprland-debug
+stack_start --dev --reload-seam --hyprland-debug
 
 # Hyprland logs every new session lock ("Session got locked by"), and no unlock at all: an
 # unlock and a lock again across a reload would show as one lock too many
@@ -57,6 +58,7 @@ type_text "$LOCKTEST_PASSWORD"
 press_key Return
 check_within 10 "the password unlocks after the reload" compositor_unlocked
 check "the shell says unlocked" shell_status_is unlocked
+check_within "$GUARD" "file watching is on again after the unlock: development mode, as before the lock" state_is watch_files true
 check_within "$GUARD" "the marker says unlocked" state_is marker unlocked
 
 lock_by_ipc

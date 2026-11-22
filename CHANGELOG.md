@@ -899,6 +899,11 @@ The interface modules are written against (`qs.api`), versioned on its own
   most), instead of one accent dot for the day.
 
 ### Changed
+- The shell no longer reloads itself when one of its files changes: a file written in its
+  folder (an update, a module install, an editor) leaves the running shell as it is until it
+  is restarted. Reloading on file changes is for development: start the shell with
+  `h2s-shell --dev` (Arch: `launch.sh --dev`) or with `H2S_SHELL_DEV=1`; `H2S_SHELL_DEV=0`
+  turns it off even with `--dev`. It stays off while the screen is locked, as before.
 - The shell's lock is reported to logind (the session's LockedHint: `loginctl show-session`
   says `LockedHint=yes` while locked), so programs that lock themselves when the session
   locks, such as password managers, see it.
