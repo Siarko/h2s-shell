@@ -299,6 +299,10 @@ TestCase {
                     "a way changed; a monitor not connected keeps its entry");
         assertEqual(keys(rules.withMonitorWay({ [oled]: "off", [gone]: "off" }, oled, "default")), keys({ [gone]: "off" }),
                     "default: the entry dropped, the others kept");
+        assertEqual(keys(rules.withMonitorWay({ "Samsung|C27JG5x|H4Z": "off" }, { id: "Samsung|C27JG5x|", base: "Samsung|C27JG5x|", connector: "DP-2" }, "screensaver")),
+                    keys({ "Samsung|C27JG5x|": "screensaver" }), "a connected monitor's way: the key it matched loosely replaced");
+        assertEqual(keys(rules.withMonitorWay({ "Samsung|C27JG5x|H4Z": "off" }, "Samsung|C27JG5x|", "screensaver")),
+                    keys({ "Samsung|C27JG5x|H4Z": "off", "Samsung|C27JG5x|": "screensaver" }), "… an id not connected: only its own key");
         assertEqual(keys(rules.withMonitorWay(null, oled, "off")), keys({ [oled]: "off" }), "no map yet: a new one");
         assertEqual(keys(rules.withMonitorWay(["junk"], oled, "off")), keys({ [oled]: "off" }), "a list is no map");
         assertEqual(rules.withMonitorWay({}, oled, "slideshow"), null, "slideshow, not built: refused");

@@ -287,7 +287,8 @@ Two stages, both driven by Wayland idle notifications and both counted from the 
   they go off after `lockedScreenOffTimeout` without input there (1 minute by default,
   0 never). It needs a compositor that can cut a monitor's power — Hyprland, or elsewhere
   one with wlr-output-power-management (sway, labwc, river) and `wlopm` installed, where a
-  monitor is known by the model and serial Qt reports (no make); without either "Turn off"
+  monitor is known by the make, model and serial Qt reports (a field it leaves empty matches
+  any, so a monitor keeps the way set on Hyprland); without either "Turn off"
   falls back to the screensaver, and on the lock screen the lock surface goes plain black
   instead. A screen-off of another program (hypridle's `dpms` listener) can run
   beside it: each acts on its own times.

@@ -21,12 +21,12 @@ TestCase {
     readonly property string _fixtures: Quickshell.shellDir + "/tests/fixtures/wlopm"
     readonly property string _scratch: (Quickshell.env("XDG_RUNTIME_DIR") || "/tmp") + "/h2s-wlopm-reading-test-" + Date.now()
     readonly property var _screens: [
-        { name: "DP-2", model: "C27JG5x", serialNumber: "" },
+        { name: "DP-2", manufacturer: "Samsung Electric Company", model: "C27JG5x", serialNumber: "" },
         { name: "eDP-1", model: "0x0BCA", serialNumber: "" },
         { name: "DP-1", model: "U2419H", serialNumber: "" },
         { name: "DP-3", model: "U2419H", serialNumber: "" }
     ]
-    readonly property string _samsung: "|C27JG5x|"
+    readonly property string _samsung: "Samsung Electric Company|C27JG5x|"
 
     property var _power: null
     property var _none: null
@@ -131,14 +131,16 @@ TestCase {
         });
         _then("the stand-in wlopm was found", () => _found.backend === "wlopm", () => {
             assert(_found.canPowerOff, "wlopm on hand: monitors can be turned off");
+            assert(_found._wlopm.screens.length > 0 && typeof _found._wlopm.screens[0].name === "string" && "manufacturer" in _found._wlopm.screens[0],
+                   "… the screens from Qt's own list, with their make: " + JSON.stringify(_found._wlopm.screens));
             assertEqual(_found.unavailable.reason, "", "… nothing to say on the page");
-            _power = _powerComponent.createObject(suite, { wlopm: _scratch + "/wlopm", screens: _screens, timeoutMs: 1500 });
+            _power = _powerComponent.createObject(suite, { wlopm: _scratch + "/wlopm", screens: _screens, timeoutMs: 1500, retryMs: 300 });
             _power.actionDone.connect((id, on, problem) => suite._actions = suite._actions.concat([id + ":" + on + ":" + problem]));
             _power.read();
         });
         _then("the first reading came", () => _power.monitorsRead, () => {
             assertEqual(_powers(), "DP-2=on eDP-1=on", "every output of wlopm's answer, with its power");
-            assertEqual(_power.monitors[0].id, _samsung, "… an id from the screen of that name: |model|serial");
+            assertEqual(_power.monitors[0].id, _samsung, "… an id from the screen of that name: make|model|serial, as Qt reports them");
             assert(_power.monitors[1].builtIn && !_power.monitors[0].builtIn, "… the laptop's panel recognised");
             assertEqual(_power.program, "found", "… the program found");
             _power.setPower(_samsung, false);
@@ -193,6 +195,45 @@ TestCase {
         _then("the twins were read", () => _power.monitorsRead, () => {
             assertEqual(_power.monitors.map(monitor => monitor.id).join(" "), "|U2419H||DP-1 |U2419H||DP-3", "two of one model without a serial: told apart by connector");
             assertEqual(_powers(), "DP-1=on DP-3=off", "… each with its power");
+            _inScratch("cp \"$2/two-on.json\" \"$1/outputs.json\"", () => suite._power.read());
+        });
+        _then("two on again", () => _powers() === "DP-2=on eDP-1=on", () => {
+            // A screen change while an action's reading runs: turning off is refused …
+            _power.setPower(_samsung, false);
+            _power.monitorEvent();
+        });
+        _then("the off under a screen change was answered", () => _actions.length === 6, () => {
+            assertEqual(_actions[5], _samsung + ":false:the monitors changed while it was asked", "off under a screen change: refused");
+            // … turning on is not: a wake is never lost
+            _power.setPower(_samsung, true);
+            _power.monitorEvent();
+        });
+        _then("the on under a screen change was answered", () => _actions.length === 7, () => {
+            assertEqual(_actions[6], _samsung + ":true:", "on under a screen change: done");
+            _commandList();
+        });
+        _then("the on's command recorded", () => !_commandsReading && _commandList().length === 4, () => {
+            assertEqual(_commands.split("\n")[3], "--on DP-2", "… its command ran");
+            // wlopm gone after it was found: a reading that failed, the backend kept
+            _inScratch("rm \"$1/wlopm\"; sed -i 's/\"on\"/\"off\"/' \"$1/outputs.json\"", () => suite._power.read());
+        });
+        _then("the reading without wlopm failed", () => _power.readProblem === "wlopm could not be started", () => {
+            assertEqual(_power.program, "found", "a failed start after the first reading: still found");
+            assertEqual(_powers(), "DP-2=unknown eDP-1=unknown", "… the monitors kept, their power unknown");
+            // wlopm back, its readings failing: turning on still runs, by the last connector
+            _inScratch(": > \"$1/read-fails\"; ln -s \"$2/wlopm\" \"$1/\"", () => suite._power.setPower(suite._samsung, true));
+        });
+        _then("the on after failed readings was answered", () => _actions.length === 8, () => {
+            assertEqual(_actions[7], _samsung + ":true:the monitors could not be read after it", "on with every reading failing: tried, the reading after it says why");
+            _commandList();
+        });
+        _then("the on's command ran anyway", () => !_commandsReading && _commandList().length === 5, () => {
+            assertEqual(_commands.split("\n")[4], "--on DP-2", "a wake by the connector last published");
+            _inScratch("rm \"$1/read-fails\"");
+        });
+        _then("read again by itself", () => _power.monitorsRead, () => {
+            assertEqual(_powers(), "DP-2=on eDP-1=off", "the failed reading tried again on its own, after a backoff: the wake shows");
+            assertEqual(_power.readProblem, "", "… no problem");
         });
         _clock.start();
         _sh("set -e; mkdir -p \"$1\"; ln -s \"$2/wlopm\" \"$1/\"; cp \"$2/two-on.json\" \"$1/outputs.json\"",

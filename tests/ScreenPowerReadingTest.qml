@@ -120,10 +120,6 @@ TestCase {
         // wlopm may be on this machine's PATH: WlopmScreenPowerReadingTest checks the choice
         // without it
         assert(ScreenPower.backend !== "hyprland", "the shell's ScreenPower under the suites' compositor: not Hyprland's");
-        if (ScreenPower.backend === "none") {
-            assert(!ScreenPower.canPowerOff, "… no backend: nothing can be turned off");
-            assertEqual(JSON.stringify(ScreenPower.monitors), "[]", "… and nothing is read");
-        }
 
         _then("the stand-in is in place", () => _written, () => {
             _power = _powerComponent.createObject(suite, { hyprctl: _scratch + "/hyprctl" });

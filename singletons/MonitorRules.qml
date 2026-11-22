@@ -14,7 +14,8 @@ import QtQuick
 // (`make|model|serial|connector`), and reported, so a view can say why. An identity once
 // seen as twins keeps the connector while the shell runs, so a twin left alone keeps its id;
 // an override is found under either form (overrideFor). Off Hyprland, wlopm names outputs
-// only: the model and serial are Qt's for that screen, the make empty (wlopmMonitors).
+// only: make, model and serial are Qt's for that screen (wlopmMonitors), and a field it
+// leaves empty matches any in a stored key (looseKey).
 Singleton {
     id: root
 
@@ -161,10 +162,11 @@ Singleton {
 
     // `wlopm --json` ([{ "output": "<connector>", "power-mode": "on" | "off" }], an entry
     // with "error" when its power could not be read) and the screens Qt knows
-    // ([{ name, model, serialNumber }]) → the same as hyprlandMonitors, or null when the text
-    // is not such an answer. wlopm gives connector names only: the model and serial come
-    // from the screen of that name (Qt has no make), so an id is `|model|serial`, and twins
-    // — two of one model without a serial, as Qt reports on Wayland — take their connector.
+    // ([{ name, manufacturer, model, serialNumber }]) → the same as hyprlandMonitors, or null
+    // when the text is not such an answer. wlopm gives connector names only: make, model and
+    // serial come from the screen of that name (a field Qt does not report is empty: an
+    // override set on another backend is then found by looseKey), and twins — two of one
+    // make and model without a serial — take their connector.
     // An entry without a usable connector is left out: nothing could be asked of it.
     function wlopmMonitors(text, screens, knownTwins) {
         let parsed;
@@ -190,7 +192,7 @@ Singleton {
             const screen = byName[entry.output] ?? null;
             kept.push({
                 connector: entry.output,
-                make: "",
+                make: _field(screen?.manufacturer),
                 model: _field(screen?.model),
                 serial: _field(screen?.serialNumber),
                 builtIn: isBuiltIn(entry.output),
@@ -313,12 +315,51 @@ Singleton {
         return keys;
     }
 
+    // A monitor whose id carries its connector: a twin (an id string with four fields, or
+    // one read with `id` other than `base`)
+    function _isTwin(monitor) {
+        if (typeof monitor === "string")
+            return monitor.split("|").length === 4;
+        return String(monitor?.id ?? "") !== String(monitor?.base ?? monitor?.id ?? "") || String(monitor?.id ?? "").split("|").length === 4;
+    }
+
+    // The stored key that names this monitor only loosely, or "": the backends do not report
+    // every field (wlopm's ids take Qt's make and serial, which may be empty; an override may
+    // have been set on another backend), so a field empty on either side matches any — the
+    // model equal and not empty, the key of three fields, the monitor not a twin, and taken
+    // only when exactly one stored key matches so, and none of its exact keys is stored.
+    function looseKey(monitorBlanking, monitor) {
+        if (!_isMap(monitorBlanking) || _isTwin(monitor))
+            return "";
+        const exact = overrideKeys(monitor);
+        if (exact.some(key => typeof monitorBlanking[key] === "string"))
+            return "";
+        const fields = String(typeof monitor === "string" ? monitor : monitor?.base ?? monitor?.id ?? "").split("|");
+        if (fields.length !== 3 || fields[1] === "")
+            return "";
+        const matches = Object.keys(monitorBlanking).filter(key => {
+            const stored = key.split("|");
+            return stored.length === 3 && stored[1] === fields[1]
+                && [0, 2].every(i => stored[i] === fields[i] || stored[i] === "" || fields[i] === "");
+        });
+        return matches.length === 1 ? matches[0] : "";
+    }
+
+    // Every stored key that names this monitor: its exact ones (overrideKeys) and the loose
+    // one (looseKey) when there is one
+    function overrideMatches(monitorBlanking, monitor) {
+        const keys = overrideKeys(monitor);
+        const loose = looseKey(monitorBlanking, monitor);
+        return loose !== "" && !keys.includes(loose) ? keys.concat([loose]) : keys;
+    }
+
     // The way a monitor's override names in `monitorBlanking`, or "" when it has none (or
-    // the map is not one). `monitor`: { id, base, connector } as read, or an id
+    // the map is not one). `monitor`: { id, base, connector } as read, or an id. Its exact
+    // keys first, then the loose one (looseKey)
     function overrideFor(monitorBlanking, monitor) {
         if (!_isMap(monitorBlanking))
             return "";
-        for (const key of overrideKeys(monitor)) {
+        for (const key of overrideMatches(monitorBlanking, monitor)) {
             const way = monitorBlanking[key];
             if (typeof way === "string")
                 return way;
@@ -333,7 +374,7 @@ Singleton {
             return [];
         const used = [];
         for (const monitor of monitors ?? [])
-            used.push(...overrideKeys(monitor));
+            used.push(...overrideMatches(monitorBlanking, monitor));
         return Object.keys(monitorBlanking).filter(key => !used.includes(key)).sort();
     }
 }

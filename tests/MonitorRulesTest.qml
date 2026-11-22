@@ -125,6 +125,8 @@ TestCase {
                     "… a twin left alone keeps its id");
         assertEqual(rules.wlopmMonitors("[{\"output\": \"constructor\", \"power-mode\": \"on\"}]", [{ name: "constructor", model: "M" }]).monitors[0].id, "|M|",
                     "… a connector that is an object key is looked up as a name only");
+        assertEqual(rules.wlopmMonitors("[{\"output\": \"DP-2\", \"power-mode\": \"on\"}]", [{ name: "DP-2", manufacturer: samsung.make, model: samsung.model, serialNumber: "" }]).monitors[0].id,
+                    samsung.make + "|" + samsung.model + "|", "… the make from Qt's screen too");
         assertEqual(rules.wlopmMonitors("[]", screens).monitors.length, 0, "no outputs: an empty list, read");
         assertEqual(rules.wlopmMonitors("[{ \"output\": ", screens), null, "not JSON: no answer");
         assertEqual(rules.wlopmMonitors("{}", screens), null, "… not a list: no answer");
@@ -215,5 +217,26 @@ TestCase {
         assertEqual(JSON.stringify(rules.notConnected({ "Dell Inc.|U2419H|": "off", "Gone|X|1": "off" }, [twinNow])), JSON.stringify(["Gone|X|1"]),
                     "an override a connected twin uses under its plain identity: not listed as not connected");
         assertEqual(JSON.stringify(rules.notConnected({ "Dell Inc.|U2419H||DP-1": "off" }, [plainNow])), "[]", "… nor one it uses under its twin form");
+
+        // A field one backend does not report: matched loosely, when only one key fits
+        const hyprlandKey = rules.identity(samsung);
+        const fromWlopm = { id: "Samsung Electric Company|C27JG5x|", base: "Samsung Electric Company|C27JG5x|", connector: "DP-2" };
+        const fromWlopmNoMake = { id: "|C27JG5x|", base: "|C27JG5x|", connector: "DP-2" };
+        assertEqual(rules.overrideFor({ [hyprlandKey]: "off" }, fromWlopm), "off", "set on Hyprland, read without a serial: its override");
+        assertEqual(rules.overrideFor({ [hyprlandKey]: "off" }, fromWlopmNoMake), "off", "… read without make and serial too");
+        assertEqual(JSON.stringify(rules.notConnected({ [hyprlandKey]: "off" }, [fromWlopm])), "[]", "… and not listed as not connected");
+        const fromHyprland = { id: hyprlandKey, base: hyprlandKey, connector: "DP-2" };
+        assertEqual(rules.overrideFor({ "Samsung Electric Company|C27JG5x|": "off" }, fromHyprland), "off", "set without a serial, read on Hyprland with one: its override");
+        assertEqual(JSON.stringify(rules.notConnected({ "|C27JG5x|": "off" }, [fromHyprland])), "[]", "… set with no make either: not listed as not connected");
+        assertEqual(rules.overrideFor({ [hyprlandKey]: "off", "Samsung Electric Company|C27JG5x|OTHER": "screensaver" }, fromWlopm), "",
+                    "two stored keys fit loosely: neither taken");
+        assertEqual(rules.overrideFor({ [hyprlandKey]: "off", "Samsung Electric Company|C27JG5x|": "screensaver" }, fromWlopm), "screensaver", "an exact key first");
+        assertEqual(rules.overrideFor({ "Samsung Electric Company|C27JG5x|OTHER": "off" }, fromHyprland), "", "a field both report, different: no match");
+        assertEqual(rules.overrideFor({ "Samsung Electric Company||H4ZMC00268": "off" }, fromWlopm), "", "… no model on either side: no match");
+        assertEqual(rules.overrideFor({ "Dell Inc.|U2419H|SER": "off" }, twinNow), "", "a twin: never loosely");
+        assertEqual(rules.overrideFor({ "Dell Inc.|U2419H||DP-1": "off" }, { id: "|U2419H|", base: "|U2419H|", connector: "DP-3" }), "", "… nor a twin's stored key");
+        assertEqual(rules.looseKey({ [hyprlandKey]: "off" }, "Samsung Electric Company|C27JG5x|"), hyprlandKey, "an id given as text: matched too");
+        assertEqual(JSON.stringify(rules.notConnected({ [hyprlandKey]: "off", "Samsung Electric Company|C27JG5x|X": "off" }, [fromWlopm]).length), "2",
+                    "two keys fit loosely: both listed, neither taken");
     }
 }
