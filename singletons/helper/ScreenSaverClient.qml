@@ -90,8 +90,12 @@ QtObject {
     }
 
     function _sendOwn() {
-        if (state === "running")
-            _send(HelperRules.ownMessage(own));
+        if (state !== "running")
+            return;
+        // Asked again: not known until the helper says (not "released" meanwhile)
+        if (own && name.released === true)
+            name = { owned: null, owner: "", released: false };
+        _send(HelperRules.ownMessage(own));
     }
 
     function _sendActive() {

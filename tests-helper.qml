@@ -12,8 +12,9 @@ QtObject {
     // First: the suites use the real Config singleton, whose file is the user's
     readonly property bool _configReadOnly: { Config.readOnly = true; return true; }
 
-    readonly property var _suites: [_screenSaverClient]
+    readonly property var _suites: [_screenSaverClient, _idleService]
     property var _screenSaverClient: ScreenSaverClientTest {}
+    property var _idleService: IdleServiceTest { after: root._screenSaverClient }
 
     readonly property int _limitMs: 60000
     property int _waited: 0

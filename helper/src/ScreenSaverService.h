@@ -5,7 +5,9 @@
 // taken → the shell is told who holds it (that process's name, capped) and the helper stays
 // queued, so it gets the name as soon as it is free. {"own":false} releases the name, or
 // leaves the queue, and drops the apps' cookies: another program (an idle daemon doing idle
-// instead of the shell) can own it. Until the first {"own":…} the name is not asked for.
+// instead of the shell) can own it. Until the first {"own":…} the name is not asked for;
+// while it is not, Inhibit is refused and {"adopt":…} ignored. An ask the bus refuses is
+// said ({"event":"error"}) and tried again, after a growing pause, while the shell wants it.
 // Both object paths apps call are served (/ScreenSaver, /org/freedesktop/ScreenSaver).
 //
 // Inhibit cookies are kept per caller (its unique bus name) and dropped when the caller
@@ -96,6 +98,9 @@ public:
     // For the interfaces: `caller` is the calling connection's unique name. 0 when the
     // caller (or its process, or everyone together) holds as many cookies as allowed
     uint inhibit(const QString &caller, const QString &application, const QString &reason);
+    // Asking for the name (owning it or queued): apps reaching this helper otherwise (by its
+    // unique name) are refused
+    bool owning() const { return m_owning; }
     void unInhibit(const QString &caller, uint cookie);
     void simulateActivity();
     bool active() const { return m_active; }
@@ -126,6 +131,7 @@ private:
     uint callerPid(const QString &caller) const;
     void ownerChanged(const QString &name, const QString &oldOwner, const QString &newOwner);
     void setOwning(bool owning);
+    void askForName();
     void reportName();
     void reportHolders();
     void sendHolders();
@@ -142,9 +148,15 @@ private:
     qint64 m_activeSince = 0;
     // Asking for the name (owning it or queued for it): the shell's last {"own":…}
     bool m_owning = false;
+    // The shell's word: asked for while true (a failed ask is tried again, retryMs doubling)
+    bool m_wanted = false;
+    int m_retryMs = 0;
+    static constexpr int firstRetryMs = 1000;
+    static constexpr int maxRetryMs = 30000;
     // The name's state as last told: "" not yet, "owned", "owner:<name>" or "released"
     QString m_nameTold;
     QMap<quint64, Ask> m_asks;
     quint64 m_nextAsk = 1;
     QTimer *m_reportTimer;
+    QTimer *m_retryTimer;
 };

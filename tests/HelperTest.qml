@@ -104,16 +104,20 @@ TestCase {
         assertEqual(HelperRules.adoptMessage(undefined), null, "… nor for no list");
 
         const wants = HelperRules.wantsScreenSaverName;
-        const none = { screensaverEnabled: false, screenOffEnabled: false, lockscreenEnabled: false };
-        assertEqual(wants(none), false, "name: every idle job off: left free (an idle daemon may own it)");
-        assertEqual(wants(Object.assign({}, none, { screensaverEnabled: true })), true, "name: the screensaver on: asked for");
-        assertEqual(wants(Object.assign({}, none, { screenOffEnabled: true })), true, "… screens off on: asked for");
-        assertEqual(wants(Object.assign({}, none, { lockscreenEnabled: true })), true, "… the idle lock on: asked for");
-        assertEqual(wants(Object.assign({}, none, { lockedScreenOffTimeout: 60, lockOnSleep: true })), false,
+        const values = changes => Object.assign({ screensaverEnabled: false, screensaverTimeout: 300, screenOffEnabled: false,
+                                                  screenOffTimeout: 600, lockscreenEnabled: false, lockAfter: 600,
+                                                  lockedScreenOffTimeout: 60 }, changes);
+        const resolved = (changes, power) => IdleRules.config(values(changes), [{ id: "m", base: "m", connector: "DP-1" }], power);
+        assertEqual(wants(resolved({}, true)), false, "name: every idle stage off: left free (an idle daemon may own it)");
+        assertEqual(wants(resolved({ screensaverEnabled: true }, true)), true, "name: the screensaver on: asked for");
+        assertEqual(wants(resolved({ screenOffEnabled: true }, true)), true, "… screens off on, with power control: asked for");
+        assertEqual(wants(resolved({ screenOffEnabled: true }, false)), false,
+                    "… screens off switched on without power control (no stage there): left free");
+        assertEqual(wants(resolved({ lockscreenEnabled: true }, false)), true, "… the idle lock on: asked for");
+        assertEqual(wants(resolved({ lockedScreenOffTimeout: 30, lockOnSleep: true }, true)), false,
                     "… the lock screen's screen-off and the lock before sleep do not count (requests are ignored while locked)");
-        assertEqual(wants(Object.assign({}, none, { screensaverEnabled: "true", lockscreenEnabled: 1 })), false,
-                    "… anything but true is off");
-        assertEqual(wants(null), false, "… no values: left free");
+        assertEqual(wants({ saverAfter: "300", lockAfter: -1 }), false, "… only a positive number of seconds is a stage");
+        assertEqual(wants(null), false, "… no config: left free");
         assertEqual(JSON.stringify(HelperRules.ownMessage(true)), JSON.stringify({ own: true }), "name: the word to the helper: own");
         assertEqual(JSON.stringify(HelperRules.ownMessage(undefined)), JSON.stringify({ own: false }), "… anything but true: release");
 

@@ -471,8 +471,11 @@ reach whichever started first); with all of the shell's stages off, the name is 
 (Settings → Lockscreen: "Enable screensaver", "Turn screens off" and "Enable lock screen"
 off, "Turn screens off on the lock screen after" 0), keep hypridle's listeners, and lock with
 `loginctl lock-session` or the IPC lock. The shell then leaves `org.freedesktop.ScreenSaver`
-to hypridle, whenever either starts, so apps' requests hold hypridle's listeners. The lock
-screen itself stays the shell's.
+free. hypridle asks for the name only when it starts and does not wait for it, so if it was
+running while the shell held the name, restart it after turning the shell's stages off;
+from then on apps' requests hold hypridle's listeners. Whenever the name changes owner, the
+requests made before are lost until each app asks again (most ask at their next video). The
+lock screen itself stays the shell's.
 
 **Moving over to the shell** takes the table from right to left: set the times in Settings →
 Lockscreen (each counted from the last input, as hypridle counts), then remove the listeners
@@ -490,9 +493,9 @@ hypridle's `lock_cmd` or a key binding, and how to stop hypridle:
 
 #### Arch
 
-- The IPC lock: `$HOME/.config/quickshell/default/scripts/launch.sh ipc call lockscreen
-  lock` — `launch.sh` in the checkout `install.sh` made, which is
-  `${XDG_CONFIG_HOME:-$HOME/.config}/quickshell/default` (no `h2s-shell` is on `PATH`).
+- The IPC lock, from the checkout `install.sh` made (no `h2s-shell` is on `PATH`):
+  `"${XDG_CONFIG_HOME:-$HOME/.config}/quickshell/default/scripts/launch.sh" ipc call
+  lockscreen lock`.
 - hypridle as a user service (the package ships `hypridle.service`): `systemctl --user
   disable --now hypridle`; started from `hyprland.lua`'s autostart instead: remove that line
   and end the running one (`pkill hypridle`). Its listeners are in

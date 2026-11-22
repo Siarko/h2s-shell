@@ -38,6 +38,11 @@ ScreenSaverInterface::ScreenSaverInterface(ScreenSaverService *service)
 
 uint ScreenSaverInterface::Inhibit(const QString &application, const QString &reason)
 {
+    // Not the name's owner, nor asking (the shell's idle is off): nothing would hold
+    if (!m_service->owning()) {
+        sendErrorReply(QDBusError::Failed, QStringLiteral("Not answering: the shell's idle is off"));
+        return 0;
+    }
     const uint cookie = m_service->inhibit(message().service(), application, reason);
     if (cookie == 0)
         sendErrorReply(QDBusError::LimitsExceeded, QStringLiteral("Too many inhibitors"));
@@ -93,7 +98,10 @@ ScreenSaverService::ScreenSaverService(const QDBusConnection &bus, LineChannel *
     // one handed out again (and UnInhibit takes only the caller's own anyway)
     , m_nextCookie(QRandomGenerator::global()->bounded(1u, 1u << 20))
     , m_reportTimer(new QTimer(this))
+    , m_retryTimer(new QTimer(this))
 {
+    m_retryTimer->setSingleShot(true);
+    connect(m_retryTimer, &QTimer::timeout, this, &ScreenSaverService::askForName);
     m_reportTimer->setSingleShot(true);
     m_reportTimer->setInterval(reportDelayMs);
     connect(m_reportTimer, &QTimer::timeout, this, &ScreenSaverService::sendHolders);
@@ -119,16 +127,16 @@ bool ScreenSaverService::start()
 // queue — with the apps' cookies: they asked the name's owner, which is no longer this
 void ScreenSaverService::setOwning(bool owning)
 {
-    if (owning && !m_owning) {
-        const QDBusReply<QDBusConnectionInterface::RegisterServiceReply> reply = m_bus.interface()->registerService(
-            QString::fromLatin1(serviceName), QDBusConnectionInterface::QueueService, QDBusConnectionInterface::DontAllowReplacement);
-        if (!reply.isValid()) {
-            sendError(QStringLiteral("could not ask for the name: ") + reply.error().message());
-            return;
+    if (owning) {
+        m_wanted = true;
+        if (!m_owning) {
+            m_retryTimer->stop();
+            m_retryMs = 0;
+            askForName();
         }
-        m_owning = true;
-        reportName();
-    } else if (!owning) {
+    } else {
+        m_wanted = false;
+        m_retryTimer->stop();
         if (m_owning) {
             const QDBusReply<bool> reply = m_bus.interface()->unregisterService(QString::fromLatin1(serviceName));
             if (!reply.isValid())
@@ -146,6 +154,25 @@ void ScreenSaverService::setOwning(bool owning)
             m_channel->send(message);
         }
     }
+}
+
+void ScreenSaverService::askForName()
+{
+    if (!m_wanted || m_owning)
+        return;
+    const QDBusReply<QDBusConnectionInterface::RegisterServiceReply> reply = m_bus.interface()->registerService(
+        QString::fromLatin1(serviceName), QDBusConnectionInterface::QueueService, QDBusConnectionInterface::DontAllowReplacement);
+    if (!reply.isValid()) {
+        // Said once per run of failures (the first), then tried again quietly
+        if (m_retryMs == 0)
+            sendError(QStringLiteral("could not ask for the name: ") + reply.error().message());
+        m_retryMs = m_retryMs == 0 ? firstRetryMs : qMin(m_retryMs * 2, maxRetryMs);
+        m_retryTimer->start(m_retryMs);
+        return;
+    }
+    m_retryMs = 0;
+    m_owning = true;
+    reportName();
 }
 
 // The process behind a connection (0 when the bus will not say)
@@ -296,6 +323,9 @@ void ScreenSaverService::shellMessage(const QJsonObject &message)
 // cookie, within the same limits as a new Inhibit
 void ScreenSaverService::adopt(const QJsonValue &list)
 {
+    // Not answering: nothing to hold them for
+    if (!m_owning)
+        return;
     bool changed = false;
     for (const QJsonValue &value : list.toArray()) {
         const QJsonObject entry = value.toObject();

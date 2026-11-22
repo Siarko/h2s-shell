@@ -19,13 +19,14 @@
 #      newer call), or an error when it does not answer; holders of a helper before taken
 #      over where their caller is on the bus; the name asked for only after the shell's
 #      {"own":true}, released with the apps' cookies at {"own":false} (another program can
-#      then own it; queued, it leaves the queue) and taken back at {"own":true};
+#      then own it; queued, it leaves the queue; an Inhibit reaching it is refused, an adopt
+#      ignored) and taken back at {"own":true};
 #      its standard input closed → it ends and the
 #      name is free; the
 #      name held by another connection → said with that program's name, and taken when it
 #      leaves; no bus → an error line, exit 1;
-#   2. the shell's side (singletons/helper/ScreenSaverClient.qml) against the same helper on
-#      that bus: tests-helper.qml in a headless compositor (tests/headless.sh), the suites
+#   2. the shell's side (singletons/helper/ScreenSaverClient.qml, and Idle's word on the
+#      name: IdleServiceTest) against the same helper on that bus: tests-helper.qml in a headless compositor (tests/headless.sh), the suites
 #      in tests/helper/.
 #
 # The tools, as every runner takes them (tests/lock/resolve.sh, through tests/headless.sh):
@@ -274,9 +275,23 @@ tell helper '{"own":false}'
 check "the shell's own: false → released" test "$(next helper)" = '{"event":"name","released":true}'
 check "… the apps' cookies dropped" test "$(next helper)" = "$(holders "")"
 check "… and the name is free" name_free
+# The helper's own connection, by its process (apps reach it so only by its unique name)
+helper_bus_name=""
+for bus_name in $(gdbus call --session --dest org.freedesktop.DBus --object-path /org/freedesktop/DBus \
+        --method org.freedesktop.DBus.ListNames | grep -o "':[0-9.]*'" | tr -d "'"); do
+    pid=$(gdbus call --session --dest org.freedesktop.DBus --object-path /org/freedesktop/DBus \
+        --method org.freedesktop.DBus.GetConnectionUnixProcessID "$bus_name" 2> /dev/null | sed -n 's/^(uint32 \([0-9]*\),)$/\1/p')
+    [ "$pid" = "${pid_of[helper]}" ] && helper_bus_name=$bus_name
+done
+refused=$(gdbus call --session --dest "$helper_bus_name" --object-path /ScreenSaver --method org.freedesktop.ScreenSaver.Inhibit late "by its unique name" 2>&1)
+check "… an Inhibit reaching it anyway (by its unique name $helper_bus_name): refused" \
+    grep -q "org.freedesktop.DBus.Error.Failed" <<< "$refused"
+tell app unique
+app_name=$(next app | sed -n 's/^unique //p')
+tell helper "{\"adopt\":[{\"caller\":\"$app_name\",\"app\":\"kept\",\"reason\":\"\",\"cookie\":4250}]}"
 tell helper '{"own":false}'
 tell helper '{"what":1}'
-check "… own: false again says nothing more" test "$(next helper)" = '{"event":"error","message":"unknown message"}'
+check "… adopt ignored, and own: false again says nothing more" test "$(next helper)" = '{"event":"error","message":"unknown message"}'
 start other "$client"
 next other > /dev/null
 tell other own
@@ -326,7 +341,7 @@ check "… after an error line saying so" grep -q '^{"event":"error","message":"
 echo
 echo "the shell's side, against the helper on that bus"
 headless_run "$REPO/tests-helper.qml" "" PATH="${LOCKTEST_TOOLS:+$LOCKTEST_TOOLS/bin:}$PATH" \
-    DBUS_SESSION_BUS_ADDRESS="$bus" H2S_TEST_HELPER="$helper" H2S_TEST_CLIENT="$client" > /dev/null
-headless_verdict "Helper suites" 1 "in tests-helper.qml" exactly ScreenSaverClient || failed=1
+    DBUS_SESSION_BUS_ADDRESS="$bus" H2S_TEST_HELPER="$helper" H2S_TEST_CLIENT="$client" H2S_SHELL_HELPER="$helper" > /dev/null
+headless_verdict "Helper suites" 2 "in tests-helper.qml" exactly ScreenSaverClient IdleService || failed=1
 [ "$failed" = 0 ] || grep -E "FAIL|the app said" "$HEADLESS_LOG" | head -n 20
 exit "$failed"

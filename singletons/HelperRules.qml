@@ -123,17 +123,18 @@ Singleton {
         }
     }
 
-    // Whether the shell asks for org.freedesktop.ScreenSaver: only while one of its idle jobs
-    // is on — the screensaver, screens off or the idle lock (the profile's
-    // `lockscreen.screensaverEnabled`, `screenOffEnabled`, `lockscreenEnabled`), since apps'
-    // requests hold only those. With all three off the name is left free, so an idle daemon
-    // doing idle instead (hypridle) can own it and hear the apps. The lock screen's own
-    // screen-off does not count: requests are ignored while locked. `values` maps those keys
-    // (without the group) to the profile's values; anything but true is off
-    function wantsScreenSaverName(values) {
-        if (values === null || typeof values !== "object")
+    // Whether the shell asks for org.freedesktop.ScreenSaver: only while one of its idle
+    // stages runs — the screensaver, screens off or the idle lock, as IdleRules.config
+    // resolves them (`saverAfter`, `screenOffAfter`, `lockAfter`: 0 off; a screen-off left
+    // switched on without power control is off there) — since apps' requests hold only
+    // those. With none the name is left free, so an idle daemon doing idle instead
+    // (hypridle) can own it and hear the apps. The lock screen's own screen-off does not
+    // count: requests are ignored while locked
+    function wantsScreenSaverName(config) {
+        if (config === null || typeof config !== "object")
             return false;
-        return values.screensaverEnabled === true || values.screenOffEnabled === true || values.lockscreenEnabled === true;
+        const on = seconds => typeof seconds === "number" && seconds > 0;
+        return on(config.saverAfter) || on(config.screenOffAfter) || on(config.lockAfter);
     }
 
     // The shell's word on the name, for the helper
