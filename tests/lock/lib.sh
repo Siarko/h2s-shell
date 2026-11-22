@@ -231,7 +231,7 @@ check_timed() {
 # --timings <json>                   LockRules.timings overrides for the shell
 #                                    (H2S_LOCK_TEST_TIMINGS): what takes minutes, in seconds
 # --launcher-timings "<k=s ...>"    the launcher's pauses (H2S_LAUNCHER_TEST_TIMINGS): first (1 s),
-#                                    lockwait (15 s), stopwait (8 s) — so restart tests run in seconds
+#                                    lockwait (15 s), stopwait (8 s), ipccall (10 s) — so restart tests run in seconds
 # --shell-path <dir>                 put <dir> first on the shell's PATH (a stand-in program, such
 #                                    as a hyprctl that hangs)
 # --modules <list>                   H2S_SHELL_MODULE_PATH for the launcher: colon-separated, each a module

@@ -220,23 +220,75 @@ recorded_supervisor() {
     echo "$pid"
 }
 
-# Closes the shell's settings window, waiting while Quickshell takes no requests. For a
-# moment after each reload (its reload popup, if the shell lets it show: an engine of its own,
-# some 2 s after a reload, 6 s after a failed one) it answers "Not ready to accept queries
-# yet.", and a `qs kill` then ends its event loop with the shell still standing: the shell is
-# destroyed after the application and crashes. Asked again every 0.2 s for $stop_wait_ms ms
-# at most; still not ready, it is let go anyway (said).
-ask_to_close_settings() {
-    local pid=$1 waited_ms=0
-    while qs ipc --pid "$pid" call settings close 2>&1 | grep -q "Not ready to accept queries"; do
-        if [ "$waited_ms" -ge "$stop_wait_ms" ]; then
-            say "the shell ($pid) still takes no requests after $(ms_to_seconds "$waited_ms") s: stopping it anyway"
-            return
+# bounded <seconds> <command…>: the command, ended after <seconds> (status 124). `qs ipc` and
+# `qs kill` wait for the shell's answer without a limit, and a stopped or hung shell takes
+# the connection and never answers. `timeout` where there is one; else the command in the
+# background and a watchdog that ends it.
+bounded() {
+    local seconds=$1 pid watchdog status fired
+    shift
+    if command -v timeout > /dev/null; then
+        timeout -k 1 "$seconds" "$@"
+        return
+    fi
+    fired=$(mktemp "${TMPDIR:-/tmp}/h2s-shell-bounded.XXXXXX") || { "$@"; return; }
+    "$@" &
+    pid=$!
+    ( sleep "$seconds"; echo fired > "$fired"; kill -TERM "$pid" 2> /dev/null; sleep 1; kill -KILL "$pid" 2> /dev/null ) &
+    watchdog=$!
+    wait "$pid"
+    status=$?
+    # (Its sleep, if it still runs, ends by itself)
+    kill "$watchdog" 2> /dev/null
+    wait "$watchdog" 2> /dev/null
+    [ -s "$fired" ] && status=124
+    rm -f "$fired"
+    return "$status"
+}
+
+# ipc_retrying <wait ms> <refusals> <qs arguments…>: a `qs ipc` call, made again every 0.1 s
+# while Quickshell's answer matches <refusals> (an extended regex), for <wait ms> at most.
+# Quickshell answers "Not ready to accept queries yet." — and exits 0 all the same — while
+# two engine generations are alive (src/io/ipccomm.cpp): during a reload, and for a moment
+# after it while its reload popup shows (some 2 s, 6 s after a failed reload, unless the
+# shell inhibits it). Each call is bounded ($ipc_call_seconds s). Sets ipc_output and
+# ipc_errors (the last answer's standard output and error: Quickshell prints a refusal on
+# either), ipc_waited_ms, and ipc_status: the last call's, 1 when still refused, 124 when
+# the shell did not answer.
+ipc_retrying() {
+    local wait_ms=$1 refusals=$2 errors
+    shift 2
+    ipc_output="" ipc_errors="" ipc_waited_ms=0 ipc_status=1
+    errors=$(mktemp "${TMPDIR:-/tmp}/h2s-shell-ipc.XXXXXX") || errors=/dev/null
+    while :; do
+        ipc_output=$(bounded "$ipc_call_seconds" qs "$@" 2> "$errors" < /dev/null)
+        ipc_status=$?
+        ipc_errors=$(cat "$errors" 2> /dev/null)
+        [ "$ipc_status" = 124 ] && break
+        printf '%s\n%s\n' "$ipc_output" "$ipc_errors" | grep -qE "$refusals" || break
+        if [ "$ipc_waited_ms" -ge "$wait_ms" ]; then
+            ipc_status=1
+            break
         fi
-        sleep 0.2
-        waited_ms=$((waited_ms + 200))
+        sleep 0.1
+        ipc_waited_ms=$((ipc_waited_ms + 100))
     done
-    [ "$waited_ms" = 0 ] || say "the shell ($pid) took no requests for $(ms_to_seconds "$waited_ms") s (a reload): stopping it now"
+    [ "$errors" = /dev/null ] || rm -f "$errors"
+    return "$ipc_status"
+}
+
+# Closes the shell's settings window, waiting while Quickshell takes no requests: a `qs kill`
+# then (Quickshell's reload popup still up) ends its event loop with the shell still
+# standing, and the shell is destroyed after the application and crashes. Waited for
+# $stop_wait_ms ms at most; still not ready, or not answering, it is let go anyway (said).
+ask_to_close_settings() {
+    local pid=$1
+    ipc_retrying "$stop_wait_ms" 'Not ready to accept queries yet' ipc --pid "$pid" call settings close
+    case "$ipc_status" in
+        124) say "the shell ($pid) did not answer within $ipc_call_seconds s: stopping it anyway" ;;
+        1) say "the shell ($pid) still takes no requests after $(ms_to_seconds "$ipc_waited_ms") s: stopping it anyway" ;;
+        *) [ "$ipc_waited_ms" = 0 ] || say "the shell ($pid) took no requests for $(ms_to_seconds "$ipc_waited_ms") s (a reload): stopping it now" ;;
+    esac
 }
 
 # Asks the running shell to quit; one that does not answer (a hung instance cannot take
@@ -259,7 +311,7 @@ stop_shell() {
         ask_to_close_settings "$pid"
     done
     for pid in $pids; do
-        qs kill --pid "$pid" > /dev/null 2>&1
+        bounded "$ipc_call_seconds" qs kill --pid "$pid" > /dev/null 2>&1 < /dev/null
     done
     for signal in "" TERM KILL; do
         [ -n "$signal" ] && kill -s "$signal" $pids 2> /dev/null
@@ -607,8 +659,9 @@ clean_up_after() {
 
 # The pauses, in milliseconds: the first after a quick death (doubling while the shell
 # keeps dying within 30 s of starting); and how long a new launcher waits for an old one to
-# end; and how long stop_shell waits for a shell that takes no requests. In a test tree the
-# lock test bed shortens them ("first=0.1 lockwait=3 stopwait=1", seconds:
+# end; how long stop_shell waits for a shell that takes no requests; and how long a `qs ipc`
+# or `qs kill` waits for the shell's answer (ipccall, seconds). In a test tree the lock test
+# bed shortens them ("first=0.1 lockwait=3 stopwait=1 ipccall=1", seconds:
 # seam_launcher_timings, from scripts/seams.sh — empty, a constant, in the shell itself),
 # and "discoveryhang=S" makes module discovery take S seconds, as on a hung mount
 # (find_modules). A seams.sh that cannot be read leaves the launcher's own pauses: the
@@ -617,8 +670,10 @@ source "$(dirname "$(readlink -f "$0")")/seams.sh" || echo "launch.sh: cannot re
 pause_first_ms=1000
 lock_wait=15
 stop_wait_ms=8000
+ipc_call_seconds=10
 discovery_hang_ms=""
 seconds_to_ms() { awk -v seconds="$1" 'BEGIN { if (seconds + 0 > 0) printf "%d", seconds * 1000 }'; }
+ms_to_seconds() { awk -v ms="$1" 'BEGIN { printf "%.3f", ms / 1000 }' | sed 's/\.\?0*$//'; }
 for timing in ${seam_launcher_timings:-}; do
     value=$(seconds_to_ms "${timing#*=}")
     [ -n "$value" ] || continue
@@ -627,9 +682,9 @@ for timing in ${seam_launcher_timings:-}; do
         lockwait=*) lock_wait=$(( (value + 999) / 1000 )) ;;
         discoveryhang=*) discovery_hang_ms=$value ;;
         stopwait=*) stop_wait_ms=$value ;;
+        ipccall=*) ipc_call_seconds=$(ms_to_seconds "$value") ;;
     esac
 done
-ms_to_seconds() { awk -v ms="$1" 'BEGIN { printf "%.3f", ms / 1000 }' | sed 's/\.\?0*$//'; }
 
 # Becomes the session's one supervisor: takes the lock, waiting (bounded) for a launcher
 # that is ending — `--restart` starts this one while the old one lets its shell go — and
@@ -906,30 +961,20 @@ supervise() {
     say "supervisor ends"
 }
 
-# `qs ipc` to this shell, with one thing added: Quickshell answers "Not ready to accept
-# queries yet." while it reloads (two generations alive for a moment, src/io/ipccomm.cpp)
-# and exits 0 all the same — the owner's Super+L was silently lost. Such a request, and one
-# made while no shell runs (the supervisor restarting it), is tried again for up to 3 s;
-# still not taken, it fails (status 1).
+# `qs ipc` to this shell, with one thing added: a request Quickshell does not take — "Not
+# ready to accept queries yet." while it reloads (exit status 0 all the same: the owner's
+# Super+L was silently lost), or no running shell (the supervisor restarting it) — is tried
+# again for up to 3 s (ipc_retrying); still not taken, it fails (status 1), and a shell that
+# does not answer within $ipc_call_seconds s fails it with 124.
 ipc_with_retry() {
     case "$1" in
         call | prop) ;;
         *) exec qs -p "$shell_dir" ipc "$@" ;;
     esac
-    local errors output status attempt
-    errors=$(mktemp "${TMPDIR:-/tmp}/h2s-shell-ipc.XXXXXX") || exec qs -p "$shell_dir" ipc "$@"
-    for attempt in $(seq 1 30); do
-        output=$(qs -p "$shell_dir" ipc "$@" 2> "$errors")
-        status=$?
-        # (Quickshell prints these on its standard output or error, depending on the case)
-        { printf '%s\n' "$output"; cat "$errors"; } | grep -qE 'Not ready to accept queries yet|No running instances' || break
-        [ "$attempt" = 30 ] && { status=1; break; }
-        sleep 0.1
-    done
-    [ -n "$output" ] && printf '%s\n' "$output"
-    cat "$errors" >&2
-    rm -f "$errors"
-    return "$status"
+    ipc_retrying 3000 'Not ready to accept queries yet|No running instances' -p "$shell_dir" ipc "$@"
+    [ -n "$ipc_output" ] && printf '%s\n' "$ipc_output"
+    [ -n "$ipc_errors" ] && printf '%s\n' "$ipc_errors" >&2
+    return "$ipc_status"
 }
 
 case "$1" in

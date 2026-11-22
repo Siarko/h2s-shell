@@ -69,7 +69,7 @@ within() { local seconds=$1 description=$2; shift 2; if wait_until "$seconds" "$
 
 # ---- The fabricated PATH: the utilities launch.sh calls, the real ones, and the stand-in ---
 mkdir -p "$work/bin" "$work/home" "$work/data"
-for name in bash env dirname readlink id date stat mv flock awk sed timeout sleep tr grep head basename cat rm find cksum sort; do
+for name in bash env dirname readlink id date stat mv flock awk sed timeout sleep tr grep head basename cat rm find cksum sort mktemp; do
     real=$(type -P "$name") || { echo "launcher-selftest.sh: $name not found on PATH (launch.sh calls it)" >&2; exit 2; }
     ln -s "$real" "$work/bin/$name"
 done
@@ -83,11 +83,16 @@ done
 # `qs list`, `qs ipc` and `qs kill` (stop_shell, case 9) answer for the "running shell" whose
 # pid is in the file `victim` there: listed while it lives, its IPC answering "Not ready to
 # accept queries yet." as many times as the file `not-ready` says, then taken; each call
-# noted in `calls`.
+# noted in `calls`. While the file `hang` is there, `ipc` and `kill` never answer (a stopped
+# or hung shell takes the connection and says nothing).
 {
     echo "#!$bash_path"
     echo 'if [ "$1" = list ] || [ "$1" = ipc ] || [ "$1" = kill ]; then'
     echo '    victim=$(cat "$LAUNCHER_SELFTEST_DIR/victim" 2> /dev/null)'
+    echo '    if [ "$1" != list ] && [ -e "$LAUNCHER_SELFTEST_DIR/hang" ]; then'
+    echo '        echo "$1 hung" >> "$LAUNCHER_SELFTEST_DIR/calls"'
+    echo "        exec '$work/bin/sleep' 60"
+    echo '    fi'
     echo '    case "$1" in'
     echo '        list) [ -n "$victim" ] && [ -e "/proc/$victim" ] && printf "Instance selftest:\n  Process ID: %s\n  Config path: %s\n" "$victim" "$LAUNCHER_SELFTEST_CONFIG" ;;'
     echo '        ipc)'
@@ -115,6 +120,11 @@ done
     echo "exec '$work/bin/sleep' 60"
 } > "$work/bin/qs"
 chmod +x "$work/bin/qs"
+# The same PATH but for `timeout`: launch.sh's own bound in its place (case 9)
+mkdir -p "$work/bin-without-timeout"
+for entry in "$work/bin"/*; do
+    [ "$(basename "$entry")" = timeout ] || ln -s "$entry" "$work/bin-without-timeout/"
+done
 
 # The "compositor": a socket file (the launcher only looks at it)
 socket=$work/wayland-selftest
@@ -411,7 +421,9 @@ within 5 "stopped" gone "$running"
 # ---- (9) Stopping a shell that takes no requests yet ---
 # For a moment after a reload Quickshell answers no IPC ("Not ready to accept queries yet."),
 # and a `qs kill` then crashes it on its way out: `launch.sh --restart` asks again until the
-# shell takes the request, and kills it only then — or after stopwait (here 1 s) anyway.
+# shell takes the request, and kills it only then — or after stopwait (here 1 s) anyway; a
+# shell that does not answer at all is waited for ipccall (here 0.5 s) per call, then
+# terminated — with `timeout`, and without it.
 # A "running shell" of the stand-in's (a sleep, not a child of this script: reaped when
 # killed), then --restart, whose new supervisor's shell quits at once.
 echo "== stopping a shell that takes no requests yet"
@@ -423,12 +435,16 @@ restart_with() {
     : > "$at/calls"
     echo "exit 0" > "$at/mode"
     echo "$2" > "$at/not-ready"
+    rm -f "$at/hang"
+    [ "${3:-}" = hang ] && : > "$at/hang"
     ( env "LAUNCHER_SELFTEST=$work" "$work/bin/sleep" 60 > /dev/null 2>&1 < /dev/null & echo $! > "$at/victim" )
-    env --default-signal=HUP -i "PATH=$work/bin" "HOME=$work/home" "XDG_RUNTIME_DIR=$at/run" "XDG_CONFIG_HOME=$work/home/config" \
+    # (Bounded only to guard a hang: a --restart that waits for a shell without end)
+    "$work/bin/timeout" -k 1 30 env --default-signal=HUP -i "PATH=${restart_path:-$work/bin}" "HOME=$work/home" "XDG_RUNTIME_DIR=$at/run" "XDG_CONFIG_HOME=$work/home/config" \
         "XDG_DATA_HOME=$work/data" "XDG_DATA_DIRS=$work/data" "H2S_SHELL_MODULE_DATA_DIRS=" \
-        "WAYLAND_DISPLAY=$socket" "H2S_LAUNCHER_TEST_TIMINGS=first=$first_pause stopwait=1" "LAUNCHER_SELFTEST=$work" \
+        "WAYLAND_DISPLAY=$socket" "H2S_LAUNCHER_TEST_TIMINGS=first=$first_pause stopwait=1 ipccall=0.5" "LAUNCHER_SELFTEST=$work" \
         "LAUNCHER_SELFTEST_DIR=$at" "LAUNCHER_SELFTEST_CONFIG=$work/tree/shell.qml" \
         "$bash_path" "$launch_script" --restart > "$at/output" 2>&1 < /dev/null
+    echo $? > "$at/restart-status"
 }
 calls_are() { [ "$(paste -sd, "$at/calls")" = "$1" ]; }
 restart_with notready 3
@@ -436,13 +452,13 @@ victim=$(cat "$at/victim")
 within 5 "a shell not ready for three requests is stopped" gone "$victim"
 is "… killed only once its IPC took the request ($(paste -sd, "$at/calls"))" \
     calls_are "ipc not-ready,ipc not-ready,ipc not-ready,ipc taken,kill"
-is "… and the launcher said it waited" said "took no requests for 0.6 s (a reload): stopping it now"
+is "… and the launcher said it waited" said "took no requests for 0.3 s (a reload): stopping it now"
 within 5 "… then the new supervisor started a shell" started 1
 restart_with neverready 1000
 victim=$(cat "$at/victim")
 within 5 "a shell that never takes the request is stopped all the same" gone "$victim"
-is "… after asking for stopwait, every 0.2 s ($(grep -c 'not-ready' "$at/calls") requests)" \
-    calls_are "ipc not-ready,ipc not-ready,ipc not-ready,ipc not-ready,ipc not-ready,ipc not-ready,kill"
+is "… after asking for stopwait, every 0.1 s ($(grep -c 'not-ready' "$at/calls") requests)" \
+    calls_are "$(printf 'ipc not-ready,%.0s' $(seq 1 11))kill"
 is "… and the launcher said so" said "still takes no requests after 1 s: stopping it anyway"
 within 5 "… then the new supervisor started a shell" started 1
 restart_with ready 0
@@ -450,6 +466,18 @@ victim=$(cat "$at/victim")
 within 5 "a shell that takes the request at once is stopped" gone "$victim"
 is "… asked once, then killed" calls_are "ipc taken,kill"
 is "… and the launcher said nothing of waiting" eval '! said "took no requests"'
+# The stand-in hangs in `qs ipc` and `qs kill`: each ended after ipccall, then SIGTERM
+for restart_path in "$work/bin" "$work/bin-without-timeout"; do
+    label=$([ "$restart_path" = "$work/bin" ] && echo "with timeout" || echo "without timeout")
+    restart_with "hung-${label// /-}" 0 hang
+    victim=$(cat "$at/victim")
+    is "[$label] --restart does not wait for ever on a shell that does not answer" test "$(cat "$at/restart-status")" = 0
+    within 10 "… the shell is stopped all the same" gone "$victim"
+    is "… its IPC asked once and its kill sent, each given up ($(paste -sd, "$at/calls"))" calls_are "ipc hung,kill hung"
+    is "… and the launcher said so" said "did not answer within 0.5 s: stopping it anyway"
+    within 5 "… then the new supervisor started a shell" started 1
+done
+restart_path=""
 
 # ---- (8) The built-in root of the module search ---
 # Unset, it is the data home's h2s-shell/builtin (where install.sh puts it on Arch); one that

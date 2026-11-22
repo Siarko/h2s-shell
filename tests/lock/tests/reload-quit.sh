@@ -8,7 +8,8 @@
 # requests.
 #
 # (1) A file saved: an IPC call right after the reload is answered.
-# (2) A file broken: the same, and the shell said the reload failed, once.
+# (2) A file broken: the same, and the shell said the reload failed, once; saved again
+#     unchanged, said once more.
 # (3) Fixed again and, right after that reload, the launcher's --restart: the old shell
 #     ends without a crash, and a new one starts.
 #
@@ -44,6 +45,12 @@ check "an IPC call right after a failed reload is answered${refusal:+ (it said: 
 check_within "$GUARD" "the shell said the reload failed" lines_more_than 0 "Reload failed, the shell runs on as it was" "$WORK/shell.log"
 check "… once" test "$(shell_log_count "Reload failed, the shell runs on as it was")" = 1
 check "… naming what failed" grep -aq "Reload failed, the shell runs on as it was: Failed to load configuration" "$WORK/shell.log"
+# The same broken file saved again: the same error, a reload of its own, said again
+before=$(failures)
+cp "$edited" "$WORK/Bar.qml.broken" && cat "$WORK/Bar.qml.broken" > "$edited"
+wait_until 15 lines_more_than "$before" "Failed to load configuration" "$WORK/shell.log" || abort "saving the broken file again did not fail a reload"
+check_within "$GUARD" "the same failure saved again is said again" lines_more_than 1 "Reload failed, the shell runs on as it was" "$WORK/shell.log"
+check "… once more" test "$(shell_log_count "Reload failed, the shell runs on as it was")" = 2
 
 # ---- (3) Quit right after a reload ----
 listed=$("$LOCKTEST_QS" list --all 2> /dev/null | awk '/^ *Process ID:/ { print $3 }')

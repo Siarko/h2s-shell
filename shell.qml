@@ -117,19 +117,20 @@ QtObject {
     // takes no IPC and `qs kill` ends the event loop with the shell still standing: the shell
     // is destroyed after the application and crashes (scripts/launch.sh waits that out too).
     // A failure's errors stay in the log: Quickshell writes them, and this line says the
-    // shell runs on unchanged. Quickshell sends one failure twice: said once per failure.
-    property string _lastReloadError: ""
+    // shell runs on unchanged. Quickshell 0.3.2 sends one failed reload twice in a row
+    // (rootwrapper.cpp): said once per reload, the guard dropped once that reload is done.
+    property bool _reloadFailureSaid: false
     property var _reloadPopup: Connections {
         target: Quickshell
         function onReloadCompleted() {
             Quickshell.inhibitReloadPopup();
-            root._lastReloadError = "";
         }
         function onReloadFailed(errorString) {
             Quickshell.inhibitReloadPopup();
-            if (errorString === root._lastReloadError)
+            if (root._reloadFailureSaid)
                 return;
-            root._lastReloadError = errorString;
+            root._reloadFailureSaid = true;
+            Qt.callLater(() => root._reloadFailureSaid = false);
             console.warn("Reload failed, the shell runs on as it was: " + errorString);
         }
     }
