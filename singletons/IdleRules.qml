@@ -93,7 +93,7 @@ Singleton {
             ? given.monitorBlanking : {};
         const resolved = {};
         for (const id of ids) {
-            const own = MonitorRules.overrideFor(overrides, byId[id]);
+            const own = MonitorRules.overrideFor(overrides, byId[id], monitors);
             const way = ways.includes(own) ? own : defaultWay;
             resolved[id] = way === "off" && power ? "off" : "screensaver";
         }
@@ -125,15 +125,16 @@ Singleton {
     // `monitor` a connected monitor as read ({ id, base, connector }: its entry is written
     // under its id, and the other form of its key — the plain `base` of a twin, or a twin's
     // `base|connector` of one alone — dropped, and the one it matches loosely,
-    // MonitorRules.looseKey) or a MonitorRules id (a monitor not connected: that key only); `way` one of `monitorWays` — "default" drops the entry. The other monitors'
-    // entries are kept as they are. → the new map, or null when the id or the way is not
+    // MonitorRules.looseKey, never another `connected` monitor's key) or a MonitorRules id
+    // (a monitor not connected: that key only); `way` one of `monitorWays` — "default"
+    // drops the entry. The other monitors' entries are kept as they are. → the new map, or null when the id or the way is not
     // understood, or a new entry would pass `maxMonitorWays` (nothing written).
-    function withMonitorWay(map, monitor, way) {
+    function withMonitorWay(map, monitor, way, connected) {
         const id = typeof monitor === "string" ? monitor : monitor?.id;
         if (!MonitorRules.validId(id) || !monitorWays.includes(way))
             return null;
         const given = map !== null && typeof map === "object" && !Array.isArray(map) ? map : {};
-        const keys = typeof monitor === "string" ? [id] : MonitorRules.overrideMatches(given, monitor);
+        const keys = typeof monitor === "string" ? [id] : MonitorRules.overrideMatches(given, monitor, connected);
         const result = {};
         for (const key of Object.keys(given)) {
             if (!keys.includes(key))

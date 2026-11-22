@@ -480,8 +480,9 @@ Singleton {
         function setMonitorWay(id: string, way: string): string {
             if (!root._powerControl)
                 return "not understood: the monitors are not read (no power control)";
-            const connected = root._monitorEntries.find(monitor => MonitorRules.overrideMatches({ [id]: way }, monitor).includes(id));
-            const map = IdleRules.withMonitorWay(Profiles.value("lockscreen.monitorBlanking"), connected ?? id, way);
+            const entries = root._monitorEntries;
+            const connected = MonitorRules.connectedFor(id, entries);
+            const map = IdleRules.withMonitorWay(Profiles.value("lockscreen.monitorBlanking"), connected ?? id, way, entries);
             if (map === null)
                 return "not understood: a monitor id (make|model|serial), one of " + IdleRules.monitorWays.join(", ")
                     + ", at most " + IdleRules.maxMonitorWays + " monitors";

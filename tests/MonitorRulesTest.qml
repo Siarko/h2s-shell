@@ -238,5 +238,17 @@ TestCase {
         assertEqual(rules.looseKey({ [hyprlandKey]: "off" }, "Samsung Electric Company|C27JG5x|"), hyprlandKey, "an id given as text: matched too");
         assertEqual(JSON.stringify(rules.notConnected({ [hyprlandKey]: "off", "Samsung Electric Company|C27JG5x|X": "off" }, [fromWlopm]).length), "2",
                     "two keys fit loosely: both listed, neither taken");
+
+        // Another connected monitor's exact key is never taken loosely
+        const dellA = { id: "Dell|U2419H|S1", base: "Dell|U2419H|S1", connector: "DP-1" };
+        const dellB = { id: "Dell|U2419H|", base: "Dell|U2419H|", connector: "DP-3" };
+        const onlyA = { "Dell|U2419H|S1": "off" };
+        assertEqual(rules.overrideFor(onlyA, dellB, [dellA, dellB]), "", "A and B connected, only A stored: B gets nothing");
+        assertEqual(rules.overrideFor(onlyA, dellA, [dellA, dellB]), "off", "… A its own");
+        assertEqual(rules.overrideFor(onlyA, dellB, [dellB]), "off", "… B alone: A's key loosely");
+        assertEqual(JSON.stringify(rules.notConnected(onlyA, [dellB, dellA])), "[]", "… A's key used by A: not listed");
+        assertEqual(rules.connectedFor("Dell|U2419H|S1", [dellB, dellA]), dellA, "an id given: the monitor it names exactly, though another fits loosely first");
+        assertEqual(rules.connectedFor("Dell|U2419H|S1", [dellB]), dellB, "… loosely when none names it exactly");
+        assertEqual(rules.connectedFor("Gone|X|1", [dellB, dellA]), null, "… none: null");
     }
 }

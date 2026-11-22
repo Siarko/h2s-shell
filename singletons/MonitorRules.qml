@@ -328,38 +328,55 @@ Singleton {
     // have been set on another backend), so a field empty on either side matches any — the
     // model equal and not empty, the key of three fields, the monitor not a twin, and taken
     // only when exactly one stored key matches so, and none of its exact keys is stored.
-    function looseKey(monitorBlanking, monitor) {
+    // `connected`: the connected monitors (as read, or ids) — a key that is an exact key of
+    // another of them is that monitor's, never taken loosely.
+    function looseKey(monitorBlanking, monitor, connected) {
         if (!_isMap(monitorBlanking) || _isTwin(monitor))
             return "";
         const exact = overrideKeys(monitor);
         if (exact.some(key => typeof monitorBlanking[key] === "string"))
             return "";
+        const others = [];
+        for (const other of Array.isArray(connected) ? connected : []) {
+            const keys = overrideKeys(other);
+            if (keys[0] !== exact[0])
+                others.push(...keys);
+        }
         const fields = String(typeof monitor === "string" ? monitor : monitor?.base ?? monitor?.id ?? "").split("|");
         if (fields.length !== 3 || fields[1] === "")
             return "";
         const matches = Object.keys(monitorBlanking).filter(key => {
             const stored = key.split("|");
-            return stored.length === 3 && stored[1] === fields[1]
+            return stored.length === 3 && stored[1] === fields[1] && !others.includes(key)
                 && [0, 2].every(i => stored[i] === fields[i] || stored[i] === "" || fields[i] === "");
         });
         return matches.length === 1 ? matches[0] : "";
     }
 
     // Every stored key that names this monitor: its exact ones (overrideKeys) and the loose
-    // one (looseKey) when there is one
-    function overrideMatches(monitorBlanking, monitor) {
+    // one (looseKey, among the `connected` monitors) when there is one
+    function overrideMatches(monitorBlanking, monitor, connected) {
         const keys = overrideKeys(monitor);
-        const loose = looseKey(monitorBlanking, monitor);
+        const loose = looseKey(monitorBlanking, monitor, connected);
         return loose !== "" && !keys.includes(loose) ? keys.concat([loose]) : keys;
+    }
+
+    // The connected monitor (of `monitors`, as read) an id given from outside names, or null:
+    // one it names exactly (overrideKeys) first, loosely (looseKey) only when none does
+    function connectedFor(id, monitors) {
+        const list = Array.isArray(monitors) ? monitors : [];
+        return list.find(monitor => overrideKeys(monitor).includes(id))
+            ?? list.find(monitor => looseKey({ [id]: "" }, monitor, list) === id)
+            ?? null;
     }
 
     // The way a monitor's override names in `monitorBlanking`, or "" when it has none (or
     // the map is not one). `monitor`: { id, base, connector } as read, or an id. Its exact
-    // keys first, then the loose one (looseKey)
-    function overrideFor(monitorBlanking, monitor) {
+    // keys first, then the loose one (looseKey, among the `connected` monitors)
+    function overrideFor(monitorBlanking, monitor, connected) {
         if (!_isMap(monitorBlanking))
             return "";
-        for (const key of overrideMatches(monitorBlanking, monitor)) {
+        for (const key of overrideMatches(monitorBlanking, monitor, connected)) {
             const way = monitorBlanking[key];
             if (typeof way === "string")
                 return way;
@@ -374,7 +391,7 @@ Singleton {
             return [];
         const used = [];
         for (const monitor of monitors ?? [])
-            used.push(...overrideMatches(monitorBlanking, monitor));
+            used.push(...overrideMatches(monitorBlanking, monitor, monitors));
         return Object.keys(monitorBlanking).filter(key => !used.includes(key)).sort();
     }
 }

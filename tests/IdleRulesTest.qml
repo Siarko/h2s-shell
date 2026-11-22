@@ -303,6 +303,12 @@ TestCase {
                     keys({ "Samsung|C27JG5x|": "screensaver" }), "a connected monitor's way: the key it matched loosely replaced");
         assertEqual(keys(rules.withMonitorWay({ "Samsung|C27JG5x|H4Z": "off" }, "Samsung|C27JG5x|", "screensaver")),
                     keys({ "Samsung|C27JG5x|H4Z": "off", "Samsung|C27JG5x|": "screensaver" }), "… an id not connected: only its own key");
+        const dellA = { id: "Dell|U2419H|S1", base: "Dell|U2419H|S1", connector: "DP-1" };
+        const dellB = { id: "Dell|U2419H|", base: "Dell|U2419H|", connector: "DP-3" };
+        assertEqual(keys(rules.withMonitorWay({ "Dell|U2419H|S1": "off" }, dellB, "screensaver", [dellA, dellB])),
+                    keys({ "Dell|U2419H|S1": "off", "Dell|U2419H|": "screensaver" }), "B's way with A connected and stored: B's own key added, A's kept");
+        assertEqual(rules.config({ perMonitor: true, blanking: "screensaver", monitorBlanking: { "Dell|U2419H|S1": "off" } }, [dellB, dellA], true).ways["Dell|U2419H|"],
+                    "screensaver", "… and B does not take A's way");
         assertEqual(keys(rules.withMonitorWay(null, oled, "off")), keys({ [oled]: "off" }), "no map yet: a new one");
         assertEqual(keys(rules.withMonitorWay(["junk"], oled, "off")), keys({ [oled]: "off" }), "a list is no map");
         assertEqual(rules.withMonitorWay({}, oled, "slideshow"), null, "slideshow, not built: refused");
