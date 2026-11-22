@@ -288,8 +288,11 @@ sleep (`sleepEnabled`, `sleepTimeout`) and hibernation (`hibernateEnabled`,
   the end: the unlock, not input at the lock screen), before sleep (any sleep, the shell's
   or another program's; the end: the resume). The second command that runs is the one of
   the first: a profile switched while you are away (a stage switched off, another list)
-  still runs it when you come back. The default is one "every screen dark" entry without
-  commands.
+  still runs it when you come back. The commands that ran are kept across a restart of the
+  shell (a file in `$XDG_RUNTIME_DIR`, of this compositor session only): a shell restarted
+  while locked does not run the lock's first command again, and the second commands still
+  due run at their moment's end. In the editor the last monitor an entry waits for cannot be
+  unticked. The default is one "every screen dark" entry without commands.
 - **Screens off** — the shell turns monitors off itself at "Turn screens off after"
   (`screenOffTimeout`, off by default); with the screensaver off, straight from the
   desktop (an OLED's own protection mode starts even on a black picture). Input, an unlock and waking from sleep turn them on again, and so does a shell

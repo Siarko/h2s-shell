@@ -481,11 +481,19 @@ TestCase {
             const chips = _children(first, item => item.objectName === "commandChip");
             assertEqual(chips.length, Idle.monitors.length, "editing a dark entry: a chip per connected monitor");
             assert(chips.every(chip => chip.picked), "… every screen dark: each one that goes dark ticked");
-            chips[0].clicked();
-            assertEqual(JSON.stringify(kept()[0].monitors), JSON.stringify(Idle.monitors.slice(1).map(monitor => monitor.id)),
-                        "a chip unticked: the entry names the others");
-            if (Idle.monitors.length === 1)
-                assert(cards()[0].moment.greyed, "… none left: its moment greyed");
+            if (Idle.monitors.length > 1) {
+                chips[0].clicked();
+                assertEqual(JSON.stringify(kept()[0].monitors), JSON.stringify(Idle.monitors.slice(1).map(monitor => monitor.id)),
+                            "a chip unticked: the entry names the others");
+                for (const chip of chips.slice(1))
+                    chip.clicked();
+                assertEqual(JSON.stringify(kept()[0].monitors), JSON.stringify([Idle.monitors[Idle.monitors.length - 1].id]),
+                            "every chip unticked in turn: the last one stays ticked");
+            } else {
+                chips[0].clicked();
+                assertEqual(kept()[0].monitors, null, "the only monitor's chip: not unticked, the entry keeps its moment");
+            }
+            assert(!cards()[0].moment.greyed, "… never waiting for nothing");
         } else {
             console.warn("no monitors in this run: the chips not checked");
         }

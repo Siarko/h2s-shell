@@ -17,8 +17,9 @@ import qs.singletons.io as Io
 // lock (Lockscreen.lock("idle")), the sleep (logind's Suspend, LogindSleep — only where
 // logind answers CanSuspend "yes", read at the start and when the settings page opens) and
 // the hibernation (SuspendThenHibernate in its place with sleep on, Hibernate with it off —
-// on logind's "yes" to that one), the start and end commands. The Hibernate section's Apply
-// of the system's delay goes through here too (HibernateDelayWriter). The screensaver interface
+// on logind's "yes" to that one), the command entries' commands (those whose "go" ran kept
+// across a restart, in a file of the runtime directory). The Hibernate section's Apply of
+// the system's delay goes through here too (HibernateDelayWriter). The screensaver interface
 // (org.freedesktop.ScreenSaver, the helper's: ScreenSaverClient) brings the apps keeping the
 // screen on and their activity, and is told the screensaver's state. One Timer runs to the
 // rules' next deadline; nothing here decides when.
@@ -145,7 +146,18 @@ Singleton {
     on_ValuesChanged: Qt.callLater(root._settingsChanged)
 
     property ElapsedTimer _clock: ElapsedTimer {}
-    property var _state: IdleRules.initial(0)
+    // The command entries whose "go" ran, kept across a restart of the shell: in
+    // $XDG_RUNTIME_DIR, the user's own 0700 directory on a tmpfs (gone at reboot), with the
+    // compositor session's key (the lock marker's), so a file of an earlier session is not
+    // taken. A restarted shell reads it before any entry's "go" runs: the lock it was
+    // locked under is not a new one, and the "back"s still due run at their moment's end
+    readonly property string _runtimeDirectory: Quickshell.env("XDG_RUNTIME_DIR") ?? ""
+    readonly property string _commandsPath: _runtimeDirectory !== "" ? _runtimeDirectory + "/h2s-shell-idle-commands" : ""
+    // The session's key once read ("" until then), and the file usable (a private directory)
+    property string _commandsKey: ""
+    property bool _commandsUsable: false
+    property string _commandsWritten: ""
+    property var _state: IdleRules.initial(0, _commandsPath !== "")
     property var _events: []
     property bool _dispatching: false
 
@@ -206,6 +218,7 @@ Singleton {
         } finally {
             _dispatching = false;
         }
+        _saveCommands();
         _arm();
     }
 
@@ -275,6 +288,41 @@ Singleton {
     // A sleep method (LogindSleep.methods) as the log says it
     function _methodWords(method) {
         return ({ Suspend: "suspend", SuspendThenHibernate: "suspend, then hibernate", Hibernate: "hibernate" })[method] ?? "sleep";
+    }
+
+    // The commands' record written when it changed (an empty file: none due)
+    function _saveCommands() {
+        if (!_commandsUsable || _state.commandsReady === false)
+            return;
+        const text = IdleRules.commandsFile(_state.commandsRun, _commandsKey);
+        if (text === _commandsWritten)
+            return;
+        _commandsWritten = text;
+        _commandsFile.setText(text === "" ? "" : text + "\n");
+    }
+
+    // The start probe's answer: the record of a predecessor, taken when it is this session's
+    function _commandsRead(lines) {
+        const facts = LockIoRules.markerFacts(lines);
+        let run = [];
+        if (!facts.private) {
+            _log("warning", "XDG_RUNTIME_DIR (" + _runtimeDirectory + ") is not a private directory of this user: "
+                + "the commands that ran are not kept across a restart");
+        } else {
+            _commandsKey = facts.key;
+            _commandsUsable = facts.key !== "";
+            const read = IdleRules.commandsFromFile(facts.marker, facts.key);
+            if (read.problem === "corrupt")
+                _log("warning", "the record of the commands that ran (" + _commandsPath + ") could not be read: ignored");
+            else if (read.problem === "stale")
+                _log("info", "the record of the commands that ran is from another session: ignored");
+            else if (read.run.length > 0)
+                _log("info", "commands that ran before the restart: " + read.run.map(record => record.id + " (" + record.moment + ")").join(", "));
+            run = read.run;
+            // What is on disk now: rewritten at once when it is not what this session keeps
+            _commandsWritten = read.problem === "" ? facts.marker : "?";
+        }
+        _dispatch({ type: "commandsRestored", run: run });
     }
 
     function _arm() {
@@ -349,6 +397,8 @@ Singleton {
 
     Component.onCompleted: {
         _tellOldKey();
+        if (_commandsPath !== "")
+            _commandsProbe.request();
         _logindSleep.refresh();
         _restoreScreens();
         if (Lockscreen.attended)
@@ -658,5 +708,34 @@ Singleton {
                     + IdleRules.monitorTimeRange.maximum + "); at most " + IdleRules.maxMonitorEntries + " monitors";
             return Profiles.writeInEffect("lockscreen.monitorIdle", map) === false ? "not written" : "ok";
         }
+    }
+
+    FileView {
+        id: _commandsFile
+        path: root._commandsUsable ? root._commandsPath : ""
+        blockWrites: true
+        atomicWrites: true
+        printErrors: false
+        onSaveFailed: error => root._log("warning", "could not write the record of the commands that ran " + root._commandsPath + ": "
+            + FileViewError.toString(error))
+    }
+
+    // As the lock marker's probe (Lockscreen): `private yes|no`, `key <this compositor
+    // session>`, and `marker <the record's line>` when there is one
+    property Io.CommandQuery _commandsProbe: Io.CommandQuery {
+        command: ["sh", "-c",
+            "dir=$1; record=$2\n"
+            + "mode=$(stat -c %A \"$dir\" 2> /dev/null)\n"
+            + "case $mode in d????w* | d???????w*) mode= ;; esac\n"
+            + "if [ -n \"$mode\" ] && [ -d \"$dir\" ] && [ -O \"$dir\" ] && [ ! -L \"$dir\" ]; then echo 'private yes'; else echo 'private no'; fi\n"
+            + "display=${WAYLAND_DISPLAY:-wayland-0}\n"
+            + "case $display in /*) socket=$display ;; *) socket=$dir/$display ;; esac\n"
+            + "boot=$(cat /proc/sys/kernel/random/boot_id 2> /dev/null)\n"
+            + "where=$(stat -L -c '%d:%i:%Z' \"$socket\" 2> /dev/null)\n"
+            + "[ -n \"$where\" ] && echo \"key $boot:$display:$where\"\n"
+            + "[ -f \"$record\" ] && [ ! -L \"$record\" ] && [ -O \"$record\" ] && IFS= read -r line < \"$record\" && echo \"marker $line\"\n"
+            + "exit 0",
+            "sh", root._runtimeDirectory, root._commandsPath]
+        onDone: lines => root._commandsRead(lines)
     }
 }

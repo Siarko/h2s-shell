@@ -399,8 +399,57 @@ Singleton {
         return keys;
     }
 
+    // The command entries whose "go" ran, as kept across a restart of the shell (a file in
+    // the user's runtime directory): one line, { key, run } — `key` the compositor session
+    // it was written in (a file of another session or boot is stale), `run` commandsRun.
+    // `run` empty → "" (nothing to keep)
+    function commandsFile(run, key) {
+        const records = _records(run);
+        if (records.length === 0)
+            return "";
+        return JSON.stringify({ key: String(key ?? ""), run: records });
+    }
+
+    // The file's line as read → { run, problem }: "" none (no file, or an empty one),
+    // "stale" written in another session (another key, or no key to compare), "corrupt"
+    // not understood — `run` empty for both
+    function commandsFromFile(line, key) {
+        const text = typeof line === "string" ? line.trim() : "";
+        if (text === "")
+            return { run: [], problem: "" };
+        let parsed = null;
+        try {
+            parsed = JSON.parse(text);
+        } catch (error) {
+            parsed = null;
+        }
+        if (!_isMap(parsed) || typeof parsed.key !== "string" || !Array.isArray(parsed.run))
+            return { run: [], problem: "corrupt" };
+        const records = _records(parsed.run);
+        if (records.length !== parsed.run.length)
+            return { run: [], problem: "corrupt" };
+        if (typeof key !== "string" || key === "" || parsed.key !== key)
+            return { run: [], problem: "stale" };
+        return { run: records, problem: "" };
+    }
+
+    // commandsRun's records understood: { id, moment, back } each, at most maxCommandEntries
+    function _records(run) {
+        const records = [];
+        for (const record of Array.isArray(run) ? run : []) {
+            if (!_isMap(record) || typeof record.id !== "string" || record.id === "" || record.id.length > 64
+                    || !commandMoments.includes(record.moment) || typeof record.back !== "string"
+                    || record.back.length > maxCommandLength || records.length >= maxCommandEntries)
+                continue;
+            records.push({ id: record.id, moment: record.moment, back: record.back });
+        }
+        return records;
+    }
+
     // The facts at the start: somebody is here, nothing is shown. `now`: monotonic ms.
-    function initial(now) {
+    // `commandsPending`: the commands that ran before a restart are still being read — no
+    // entry's "go" runs until they are (the `commandsRestored` event)
+    function initial(now, commandsPending) {
         return {
             inputIdle: false,        // no input for baseTime (inhibitors ignored)
             awayIdle: false,         // the same, Wayland idle inhibitors respected
@@ -432,6 +481,7 @@ Singleton {
             // The command entries whose "go" ran and whose "back" is due at their moment's
             // end: [{ id, moment, back }] — the "back" as it was when the "go" ran
             commandsRun: [],
+            commandsReady: commandsPending !== true, // the commands run before a restart are known
             active: false,           // reported as ActiveChanged
             lockBlack: false,        // the lock surface drawn plain black
             lockAttended: false,     // somebody at the lock screen (the prompt awake, a check under way)
@@ -884,6 +934,8 @@ Singleton {
     // The entries of a moment that come with an event (locked, sleep): each whose "go" has
     // not run
     function _commandsGo(next, config, moment, actions) {
+        if (next.commandsReady === false)
+            return;
         for (const entry of config.commands ?? []) {
             if (entry.moment === moment && !_commandRan(next, entry))
                 _commandGo(next, entry, actions);
@@ -936,7 +988,8 @@ Singleton {
     // forced screensaver's surface: before baseTime has passed no inputIdle(true) came, so
     // no inputIdle(false) will — the surface sends `activity`; ignored while locked, where
     // video players send it every ~30 s), lockAttended { attended } (somebody at the lock
-    // screen: the prompt awake, a check under way — its screen-off waits), restore { ids }
+    // screen: the prompt awake, a check under way — its screen-off waits), commandsRestored
+    // { run } (the commands whose "go" ran before a restart, commandsFromFile), restore { ids }
     // (monitors a previous run turned off: turned on, pending like any power-on). `config`: from config() — passed at every
     // step, so a changed profile or monitor list is the "config"/"monitors" event with the
     // new one. → { state, actions, ignored }. Actions, in this order: powerOn { ids },
@@ -1047,6 +1100,23 @@ Singleton {
                 next.pendingPower[id] = { on: true, at: now, tries: 1, read: null, gaveUp: false };
             if (ids.length > 0)
                 restored = ids;
+            break;
+        }
+        case "commandsRestored": {
+            // The commands that ran before a restart (their "back"s still due), joined to any
+            // that ran since; then the entries of a moment under way that has not run its "go"
+            // (a lock or a sleep that came while the file was read — not the one before the
+            // restart, whose go is among those restored)
+            const known = next.commandsRun ?? [];
+            const restored = _records(event.run).filter(record => !known.some(kept => kept.id === record.id && kept.moment === record.moment));
+            next.commandsRun = known.concat(restored);
+            if (next.commandsReady === false) {
+                next.commandsReady = true;
+                if (next.locked)
+                    _commandsGo(next, config, "lock", actions);
+                if (next.sleeping)
+                    _commandsGo(next, config, "sleep", actions);
+            }
             break;
         }
         case "deadline":
@@ -1302,7 +1372,7 @@ Singleton {
                  && !config.monitors.some(id => _goesDark(_timesOf(config, id), next)))
             next.dark = false;
         const dark = next.dark;
-        for (const entry of config.commands ?? []) {
+        for (const entry of next.commandsReady === false ? [] : config.commands ?? []) {
             if (entry.moment === "dark" && !_commandRan(next, entry) && _commandDark(next, config, entry))
                 _commandGo(next, entry, actions);
         }

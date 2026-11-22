@@ -271,6 +271,49 @@ TestCase {
         assertEqual(rules.newCommandId([], 35), "cz", "a new id from the seed");
         assertEqual(rules.newCommandId([{ id: "cz", moment: "lock" }], 35), "c10", "… the next free one when taken");
 
+        // A restart of the shell: the commands that ran are kept, with the session's key
+        const record = [{ id: "away", moment: "lock", back: "away-back" }, { id: "d", moment: "dark", back: "end" }];
+        const line = rules.commandsFile(record, "boot:wayland-1:9:42:7");
+        assertEqual(JSON.stringify(rules.commandsFromFile(line, "boot:wayland-1:9:42:7")), JSON.stringify({ run: record, problem: "" }),
+                    "the record read back in the same session");
+        assertEqual(rules.commandsFile([], "k"), "", "none ran: nothing to keep");
+        assertEqual(JSON.stringify(rules.commandsFromFile("", "k")), JSON.stringify({ run: [], problem: "" }), "no record: none");
+        assertEqual(rules.commandsFromFile(line, "boot:wayland-1:9:43:7").problem, "stale", "another compositor session's record: stale");
+        assertEqual(rules.commandsFromFile(line, "").problem, "stale", "… and one with no key to compare");
+        for (const [bad, why] of [["{", "not JSON"], ["[]", "not a record"], ['{"key": "k", "run": [{"id": "x"}]}', "a record not understood"],
+                                  ['{"key": "k"}', "no run"]])
+            assertEqual(JSON.stringify(rules.commandsFromFile(bad, "k")), JSON.stringify({ run: [], problem: "corrupt" }), why + ": corrupt, ignored");
+
+        // Restarted while locked: the lock it finds is the one whose go ran
+        const restarted = { screensaverEnabled: true, screensaverTimeout: 300, lockedScreenOffTimeout: 0,
+                            commandEntries: [darkCommands, entry("away", "lock", null)] };
+        const again = _machine(restarted, ["lcd"], true);
+        again.state = rules.initial(0, true);
+        again.at(100, { type: "locked" });
+        assertEqual(again.actions, "active:true", "restarted, locked at the start, the record not read yet: no go");
+        again.at(200, { type: "commandsRestored", run: record });
+        assertEqual(again.actions, "", "the record read: the lock entry had run, no go again");
+        again.idle(5000, 0).deadline();
+        assertEqual(again.actions, "showSaver:lcd", "the dark entry had run before the restart: no go again");
+        again.input(400000);
+        assertEqual(again.actions, "hideSaver:lcd,back:d", "input at the lock screen: the kept dark back");
+        again.at(410000, { type: "unlocked" });
+        assertEqual(again.actions, "back:away,active:false", "the unlock: the kept lock back, once");
+        const fresh = _machine(restarted, ["lcd"], true);
+        fresh.state = rules.initial(0, true);
+        fresh.at(100, { type: "locked" });
+        fresh.at(200, { type: "commandsRestored", run: [] });
+        assertEqual(fresh.actions, "go:away", "no record (or a stale one): the lock found is a new one, its go once read");
+        fresh.at(300, { type: "commandsRestored", run: [] });
+        assertEqual(fresh.actions, "", "… read once");
+        const waiting = _machine(saver, ["lcd"], true);
+        waiting.state = rules.initial(0, true);
+        waiting.idle(5000, 0).deadline();
+        assertEqual(waiting.actions, "showSaver:lcd,active:true", "the screens dark before the record is read: no go yet");
+        waiting.at(310000, { type: "commandsRestored", run: [] });
+        assertEqual(waiting.actions, "go:d", "… its go once read");
+        assert(rules.initial(0).commandsReady, "no record to read: ready from the start");
+
         // Retired keys still set: told, never carried over
         assertEqual(rules.retiredKeys({ "lockscreen.screensaverCommands": false, "lockscreen.screensaverStartCommand": "",
                                         "lockscreen.screensaverEndCommand": " " }).join(" "), "",

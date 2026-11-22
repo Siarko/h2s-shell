@@ -448,13 +448,34 @@ QtObject {
         });
     }
 
-    // The monitors an entry names after a chip's click: `id` ticked or unticked, the list
-    // starting from the ones it waits for now when it named none (every one that goes dark)
+    // The monitors an entry names after a chip's click: `id` ticked (its own id added) or
+    // unticked — the list starting from the ones it waits for now when it named none (every
+    // one that goes dark). Unticking drops the monitor's own id, and a key that names it
+    // and others too (a twin's plain make|model|serial) gives way to those others' own ids,
+    // so the others stay waited for. The last monitor waited for is not unticked: an entry
+    // that waits for nothing has no moment. → the new list, or null when nothing changes
     function commandMonitorsToggled(entry, facts, id) {
-        const waited = IdleRules.commandWaits(entry, facts?.config ?? {}, false);
-        const named = Array.isArray(entry?.monitors) ? entry.monitors.slice() : waited;
-        const keys = (facts?.config?.keys?.[id] ?? [id]);
-        return waited.includes(id) ? named.filter(key => !keys.includes(key)) : named.concat([id]);
+        const config = facts?.config ?? {};
+        const waited = IdleRules.commandWaits(entry, config, false);
+        if (!waited.includes(id))
+            return (Array.isArray(entry?.monitors) ? entry.monitors : waited).concat([id]);
+        if (waited.length <= 1)
+            return null;
+        const named = Array.isArray(entry?.monitors) ? entry.monitors : waited;
+        const keysOf = monitor => config.keys?.[monitor] ?? [monitor];
+        const result = [];
+        for (const key of named) {
+            if (!keysOf(id).includes(key)) {
+                result.push(key);
+                continue;
+            }
+            // A key of the clicked monitor: the other waited monitors it covered keep theirs
+            for (const other of waited) {
+                if (other !== id && keysOf(other).includes(key) && !result.includes(other))
+                    result.push(other);
+            }
+        }
+        return result;
     }
 
     // A monitor's name on its card and its lane, from its id (make|model|serial, a twin's

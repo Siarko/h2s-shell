@@ -679,9 +679,11 @@ Flickable {
                     onEdited: changed => root.setCommandEntry(modelData, changed)
                     onRemoved: root.setCommandEntry(modelData, null)
                     onEditToggled: root.editingCommand = editing ? "" : modelData
-                    onChipClicked: id => root.setCommandEntry(modelData, Object.assign({}, entry, {
-                        monitors: AwayViewRules.commandMonitorsToggled(entry, root._commandFacts, id)
-                    }))
+                    onChipClicked: id => {
+                        const monitors = AwayViewRules.commandMonitorsToggled(entry, root._commandFacts, id);
+                        if (monitors !== null)
+                            root.setCommandEntry(modelData, Object.assign({}, entry, { monitors: monitors }));
+                    }
                 }
             }
             SmallButton {

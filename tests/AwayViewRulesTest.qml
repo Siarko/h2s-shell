@@ -51,6 +51,7 @@ TestCase {
         const chips = rules.commandChips(entry("dark", ["lcd"]), facts, [{ id: "oled" }, { id: "lcd" }, { id: "clock" }]);
         assertEqual(chips.map(chip => chip.id + (chip.ticked ? "+" : "-") + chip.at).join(" "), "oled-300 lcd+300 clock-3600",
                     "the chips: each monitor, ticked where waited for, its dark time");
+        const darklessFacts = () => ({ config: darkless });
         const darkless = IdleRules.config({ perMonitor: true, screensaverEnabled: true, monitorIdle: { clock: own(0, 0) } }, ["lcd", "clock"], true);
         const always = rules.commandChips(entry("dark", null), { config: darkless }, ["lcd", "clock"]);
         assertEqual(always.map(chip => chip.id + (chip.ticked ? "+" : "-") + (chip.dark ? "dark" : "never")).join(" "), "lcd+dark clock-never",
@@ -59,7 +60,19 @@ TestCase {
                     "every screen, one unticked: the others named");
         assertEqual(JSON.stringify(rules.commandMonitorsToggled(entry("dark", ["lcd"]), facts, "oled")), JSON.stringify(["lcd", "oled"]),
                     "a monitor ticked: added");
-        assertEqual(JSON.stringify(rules.commandMonitorsToggled(entry("dark", ["lcd"]), facts, "lcd")), "[]", "the last unticked: none named");
+        assertEqual(rules.commandMonitorsToggled(entry("dark", ["lcd"]), facts, "lcd"), null, "the last one waited for: not unticked");
+        assertEqual(rules.commandMonitorsToggled(entry("dark", ["lcd", "clock"]), darklessFacts(), "lcd"), null,
+                    "… nor the last that goes dark (the other named never does)");
+        // Twins: two identical monitors, told apart by their connectors, named by their shared key
+        const twins = [{ id: "A|B||DP-1", base: "A|B|", connector: "DP-1" }, { id: "A|B||DP-2", base: "A|B|", connector: "DP-2" },
+                       { id: "C|D|1", base: "C|D|1", connector: "HDMI-A-1" }];
+        const twinFacts = { config: IdleRules.config({ screensaverEnabled: true }, twins, true) };
+        assertEqual(JSON.stringify(rules.commandMonitorsToggled(entry("dark", ["A|B|", "C|D|1"]), twinFacts, "A|B||DP-1")),
+                    JSON.stringify(["A|B||DP-2", "C|D|1"]), "one twin unticked: the other stays, under its own id");
+        assertEqual(rules.commandChips(entry("dark", ["A|B||DP-2", "C|D|1"]), twinFacts, twins).map(chip => chip.ticked ? "+" : "-").join(""), "-++",
+                    "… its chip alone unticked");
+        assertEqual(JSON.stringify(rules.commandMonitorsToggled(entry("dark", null), twinFacts, "A|B||DP-2")),
+                    JSON.stringify(["A|B||DP-1", "C|D|1"]), "every screen, a twin unticked: the others named");
     }
 
     function _placed(list) {
