@@ -32,7 +32,9 @@ the flag — `H2S_SHELL_DEV=0 launch.sh --dev` is off; `singletons/DevRules.qml`
 the lock screen's driver sets `watchFiles` from it (and off while locked). Out of development
 mode a file written in the shell's folder — an update, a module install, an editor — leaves
 the running shell as it is until a restart. The flag is inherited by what the shell starts,
-so the settings' restart keeps development mode. The script marks the
+so the settings' restart keeps development mode; it is left by a restart with
+`H2S_SHELL_DEV=0`, or by one from outside the shell's environment (a terminal, the
+compositor's autostart). The script marks the
 shell it starts with `H2S_SHELL_LAUNCHER=1`; a shell started without it (plain `qs`)
 shows a banner under the bar (`hud/StartupWarning.qml`, stacked by `hud/StartupWarnings.qml`) explaining that the icon theme
 cannot apply — it does not restart itself, which would drop the arguments it was given.

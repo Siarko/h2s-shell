@@ -184,7 +184,10 @@ the [privacy policy](https://siarko.github.io/h2s-shell/privacy.html).
 The shell runs from a git checkout; started with `--dev` (`h2s-shell --dev`, `launch.sh
 --dev`) or with `H2S_SHELL_DEV=1` it reloads itself when one of its files changes (development
 mode; `H2S_SHELL_DEV=0` turns it off even with `--dev`, and without either a file change
-never reloads it). Only its small
+never reloads it). Development mode is inherited by the programs the shell starts, so a
+restart from inside the shell (Settings' "Restart to apply") keeps it; to leave it, restart
+with `H2S_SHELL_DEV=0` or from outside the shell's environment (a terminal, the compositor's
+autostart). Only its small
 helper program (`helper/`, C++/Qt) is compiled, by the package on NixOS and by `install.sh`
 (and the launcher, after an update) on Arch. `tests/run-all.sh` runs every test before a commit (`--quick` leaves out
 the lock screen's end-to-end tests); `tests/run-unit.sh` runs the unit suites. On NixOS,

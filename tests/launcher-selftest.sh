@@ -21,7 +21,8 @@
 #
 # Then the stop of a shell that takes no requests yet (`launch.sh --restart` after a reload),
 # and last, the module search's built-in root (H2S_SHELL_BUILTIN_MODULES, and its default when
-# unset), through `launch.sh --discover-modules`.
+# unset), through `launch.sh --discover-modules`; and --dev: handed to the shell as
+# H2S_SHELL_DEV_FLAG, never in qs's arguments, and left alone in `ipc`'s.
 #
 #   tests/launcher-selftest.sh
 #
@@ -532,6 +533,64 @@ mv "$discovery/data/h2s-shell/builtin" "$discovery/builtin-away"
 discover > /dev/null
 is "the copy missing: said" copy_said "is missing"
 rm -r "$work/tree/builtin-modules"
+
+echo "== --dev: the launcher's, handed to the shell as H2S_SHELL_DEV_FLAG, never to qs"
+# A qs that notes each call — its arguments, "|"-separated, and H2S_SHELL_DEV_FLAG — and exits
+# 0: `list` finds no shell, `ipc` is taken, a started shell quits at once (its supervisor
+# ends). PATH as the cases above, with setsid for the detached start of --restart.
+dev=$work/dev
+mkdir -p "$dev/bin" "$dev/run"
+for entry in "$work/bin"/*; do
+    [ "$(basename "$entry")" = qs ] || ln -s "$entry" "$dev/bin/"
+done
+setsid_path=$(type -P setsid) && ln -s "$setsid_path" "$dev/bin/setsid"
+{
+    echo "#!$bash_path"
+    echo 'printf "flag=%s args=|" "${H2S_SHELL_DEV_FLAG-unset}" >> "$LAUNCHER_SELFTEST_DIR/calls"'
+    echo 'printf "%s|" "$@" >> "$LAUNCHER_SELFTEST_DIR/calls"'
+    echo 'echo >> "$LAUNCHER_SELFTEST_DIR/calls"'
+    echo 'exit 0'
+} > "$dev/bin/qs"
+chmod +x "$dev/bin/qs"
+dev_launch() {
+    : > "$dev/calls"
+    env -i "PATH=$dev/bin" "HOME=$work/home" "XDG_RUNTIME_DIR=$dev/run" "XDG_CONFIG_HOME=$work/home/config" \
+        "XDG_DATA_HOME=$work/data" "XDG_DATA_DIRS=$work/data" "H2S_SHELL_MODULE_DATA_DIRS=" \
+        "WAYLAND_DISPLAY=$socket" "H2S_LAUNCHER_TEST_TIMINGS=first=$first_pause" "LAUNCHER_SELFTEST=$work" \
+        "LAUNCHER_SELFTEST_DIR=$dev" "$work/bin/timeout" 20 "$bash_path" "$launch_script" "$@" > "$dev/output" 2>&1 < /dev/null
+}
+# The call that started the shell (qs -p <dir> …, not list/ipc/kill), and one of a kind
+shell_call() { grep -F "|-p|$work/tree|" "$dev/calls" | grep -v -e '|list|' -e '|ipc|' -e '|kill|' | tail -n 1; }
+ipc_call() { grep -F '|ipc|' "$dev/calls" | tail -n 1; }
+has_shell_call() { [ -n "$(shell_call)" ]; }
+
+dev_launch --dev -d
+is "--dev -d: the shell is started (daemon mode)" has_shell_call
+is "… with H2S_SHELL_DEV_FLAG=1" test "$(shell_call | sed 's/ args=.*//')" = "flag=1"
+is "… and -d, without --dev, in qs's arguments" test "$(shell_call | sed 's/^flag=[^ ]* args=//')" = "|-p|$work/tree|-d|"
+
+dev_launch -d
+is "-d alone: no H2S_SHELL_DEV_FLAG" test "$(shell_call | sed 's/ args=.*//')" = "flag=unset"
+
+dev_launch ipc call x --dev
+is "ipc call x --dev: --dev passed to qs ipc untouched" test "$(ipc_call | sed 's/^flag=[^ ]* args=//')" = "|-p|$work/tree|ipc|call|x|--dev|"
+is "… and no H2S_SHELL_DEV_FLAG set by it" test "$(ipc_call | sed 's/ args=.*//')" = "flag=unset"
+
+dev_launch --restart --dev
+within 10 "--restart --dev: the detached launcher starts the shell" has_shell_call
+is "… with H2S_SHELL_DEV_FLAG=1" test "$(shell_call | sed 's/ args=.*//')" = "flag=1"
+is "… and no --dev in qs's arguments" test "$(shell_call | sed 's/^flag=[^ ]* args=//')" = "|--log-times|-p|$work/tree|"
+# The detached supervisor ends once its shell quit (status 0); one left is killed at the end
+dev_processes() {
+    local environ pid
+    for environ in /proc/[0-9]*/environ; do
+        pid=${environ#/proc/}; pid=${pid%/environ}
+        [ -r "$environ" ] && { tr '\0' '\n' < "$environ"; } 2> /dev/null | grep -qxF "LAUNCHER_SELFTEST_DIR=$dev" && echo "$pid"
+    done
+}
+dev_gone() { [ -z "$(dev_processes)" ]; }
+within 10 "… and its supervisor ends when the shell quits" dev_gone
+dev_processes >> "$work/launchers"
 
 echo
 if [ "$failures" = 0 ]; then
