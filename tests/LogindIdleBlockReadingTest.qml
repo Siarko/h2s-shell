@@ -8,8 +8,9 @@ import qs.singletons.lock
 // for real against a stand-in for gdbus (tests/fixtures/logind-idle, linked into a scratch
 // directory whose `inhibitors` it prints as logind's ListInhibitors): an idle block of this
 // user's held (other users' and sleep delays left out), none, and a gdbus that fails, is not
-// there or answers something malformed — unknown, never "free". Never the real gdbus or
-// system bus: the reader is given the scratch directory as its tool directory. Asynchronous.
+// there, answers something malformed or never ends (its watchdog) — unknown, never "free",
+// each after a free read on the same reader. Never the real gdbus or system bus: the reader
+// is given the scratch directory as its tool directory. Asynchronous.
 TestCase {
     id: suite
     suiteName: "LogindIdleBlockReading"
@@ -21,6 +22,7 @@ TestCase {
     property var _reader: null
     property bool _ready: false
     property int _readsBefore: 0
+    property real _hangStarted: 0
 
     property Component _readerComponent: Component {
         LogindIdleBlock {}
@@ -89,8 +91,9 @@ TestCase {
 
     function runAsync() {
         const unknown = JSON.stringify({ held: "unknown", holders: [] });
+        const free = JSON.stringify({ held: false, holders: [] });
         _then("the stand-in is in place", () => _ready, () => {
-            _reader = _readerComponent.createObject(suite, { toolDirectory: _scratch });
+            _reader = _readerComponent.createObject(suite, { toolDirectory: _scratch, watchdog: 500 });
             assertEqual(_reader.block.held, "unknown", "before a read: unknown");
             _readWith("mpv");
         });
@@ -100,21 +103,46 @@ TestCase {
             _readWith("none");
         });
         _then("the second read answered", () => _answered(), () => {
-            assertEqual(_block(), JSON.stringify({ held: false, holders: [] }), "no idle block of this user's: free");
+            assertEqual(_block(), free, "no idle block of this user's: free");
             _readWith("malformed");
         });
         _then("the malformed read answered", () => _answered(), () => {
             assertEqual(_block(), unknown, "a malformed answer: unknown, never free");
+            _readWith("none");
+        });
+        _then("free before the failing gdbus", () => _answered(), () => {
+            assertEqual(_block(), free, "free again");
             _readWith("");
         });
         _then("the read against a failing gdbus answered", () => _answered(), () => {
-            assertEqual(_block(), unknown, "gdbus fails (no logind): unknown, never free");
-            _reader.destroy();
-            _reader = _readerComponent.createObject(suite, { toolDirectory: _scratch + "/missing" });
+            assertEqual(_block(), unknown, "gdbus fails (no logind): from free to unknown, never free");
+            _readWith("none");
+        });
+        _then("free before gdbus goes missing", () => _answered(), () => {
+            assertEqual(_block(), free, "free again");
+            _reader.toolDirectory = _scratch + "/missing";
             _readWith("none");
         });
         _then("the read without a gdbus answered", () => _answered(), () => {
-            assertEqual(_block(), unknown, "no gdbus at all: unknown");
+            assertEqual(_block(), unknown, "no gdbus at all: from free to unknown");
+            _reader.toolDirectory = _scratch;
+            _readWith("none");
+        });
+        _then("free before a hanging gdbus", () => _answered(), () => {
+            assertEqual(_block(), free, "free again");
+            _ready = false;
+            _sh("touch \"$1/hang\"", [_scratch], () => {
+                suite._readsBefore = suite._reader.reads;
+                suite._hangStarted = Date.now();
+                suite._reader.start();
+                suite._ready = true;
+            });
+        });
+        _then("the hanging read answered", () => _answered(), () => {
+            assertEqual(_block(), unknown, "a gdbus that never ends: unknown, its partial list discarded");
+            const took = Date.now() - _hangStarted;
+            assert(took >= 400 && took < 3000, "… ended by the watchdog (500 ms here), took " + took + " ms");
+            assert(!_reader.running, "… the process ended");
         });
         _clock.start();
         _sh("set -e; mkdir -p \"$1\"; ln -s \"$2/gdbus\" \"$1/\"", [_scratch, _fixtures], code => {

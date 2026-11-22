@@ -525,7 +525,8 @@ notification_server_up() {
 #                    logind/signals after it started (logind_signal writes them), and
 #                    notes each start in logind/log ("monitor <pid>")
 #                    `gdbus call … ListInhibitors` answers logind/inhibitors (none
-#                    without it; logind_inhibitors writes it)
+#                    without it; logind_inhibitors writes it), and never ends while
+#                    logind/hang exists (a bus that does not answer)
 #                    `gdbus call … SetLockedHint <bool>` notes "call SetLockedHint <path>
 #                    <bool>" in logind/log
 #   systemd-inhibit  notes "hold <pid> <time>" in logind/log, runs the command it was given
@@ -578,6 +579,7 @@ case "\$1" in
                 # logind's inhibitors (SleepLockNotice reads them): logind/inhibitors as
                 # gdbus prints the list (logind_inhibitors writes it), none without it
                 echo "call ListInhibitors" >> "\$log"
+                [ -f "$WORK/logind/hang" ] && exec $coreutils/sleep 60
                 cat "$WORK/logind/inhibitors" 2> /dev/null || echo "(@a(ssssuu) [],)"
                 exit 0
                 ;;

@@ -320,7 +320,9 @@ Singleton {
     }
 
     // A stage or the idle lock due, or a held block's re-read: logind's idle block is read
-    // first, and the deadline stepped after its answer (a read takes at most gdbus's 5 s)
+    // first, and the deadline stepped after its answer. The reader answers within its
+    // watchdog; should no answer come even so, the deadline is stepped a second after it
+    // with what was known — a read never holds a stage for good
     property bool _deadlineAfterRead: false
 
     function _deadlineReached() {
@@ -328,10 +330,29 @@ Singleton {
             return;
         if (IdleRules.logindReadDue(_state, _config(), _now())) {
             _deadlineAfterRead = true;
+            _readGuard.restart();
             _logindIdle.start();
             return;
         }
         _dispatch({ type: "deadline" });
+    }
+
+    function _deadlineAfterAnswer() {
+        if (!_deadlineAfterRead)
+            return;
+        _deadlineAfterRead = false;
+        _readGuard.stop();
+        _dispatch({ type: "deadline" });
+    }
+
+    Timer {
+        id: _readGuard
+        interval: _logindIdle.watchdog + 1000
+        repeat: false
+        onTriggered: {
+            root._log("warning", "logind's idle inhibitors not answered: the deadline taken without them");
+            root._deadlineAfterAnswer();
+        }
     }
 
     // The outcome logged when it changes: held (by whom), free again, unreadable
@@ -350,15 +371,17 @@ Singleton {
             _logindTold = told;
         }
         _dispatch({ type: "logindIdleBlock", held: block.held });
-        if (_deadlineAfterRead) {
-            _deadlineAfterRead = false;
-            _dispatch({ type: "deadline" });
-        }
+        _deadlineAfterAnswer();
     }
 
     LogindIdleBlock {
         id: _logindIdle
         toolDirectory: TestSeams.lockTools
+        // The lock test bed's `logindIdleWatchdog` timing (H2S_LOCK_TEST_TIMINGS, ms)
+        watchdog: {
+            const given = TestSeams.timings.logindIdleWatchdog;
+            return typeof given === "number" && isFinite(given) && given >= 100 ? given : 7000;
+        }
         onRead: block => root._logindRead(block)
     }
 
