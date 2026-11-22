@@ -9,7 +9,7 @@ import qs.singletons.io
 // them, pointed at stand-in directories — Arch-, NixOS- and Debian-shaped — and a stand-in
 // methods script (the methods script's own seam). A file that cannot be read (mode 000) and
 // an include that is not there leave the stack unknown; the methods script failing leaves
-// the fingerprint unknown. The hint Settings shows follows the stack read (on Arch through
+// the fingerprint unknown; a refresh overtaken by another publishes nothing. The hint Settings shows follows the stack read (on Arch through
 // `include system-auth`). Never the real /etc/pam.d, /usr/lib/pam.d, faillock.conf or
 // fprintd. Asynchronous.
 TestCase {
@@ -74,20 +74,25 @@ TestCase {
     // methods stand-in answering `methods` (lines) and exiting with `code`
     function _readAs(system, nixos, withMethods, methods, code) {
         _ready = false;
-        const base = _scratch + "/" + system;
         _sh("printf '%s' \"$2\" > \"$1/methods-out\"; printf '%s' \"$3\" > \"$1/methods-code\"",
             [_scratch, methods.map(line => line + "\n").join(""), String(code)], () => {
-            suite._reader.environment = {
-                H2S_LOCK_SYSTEM_PAM_DIR: base + "/etc",
-                H2S_LOCK_VENDOR_PAM_DIR: base + "/usr",
-                H2S_LOCK_FAILLOCK_CONF: base + "/faillock.conf",
-                H2S_LOCK_SYSTEM: nixos ? "nixos" : "other",
-                H2S_LOCK_AUTH_METHODS: suite._scratch + "/methods"
-            };
+            suite._reader.environment = suite._environment(system, nixos);
             suite._readingsBefore = suite._reader.readings;
             suite._reader.refresh(withMethods);
             suite._ready = true;
         });
+    }
+
+    // The seams for the system named (a directory under the scratch one)
+    function _environment(system, nixos) {
+        const base = _scratch + "/" + system;
+        return {
+            H2S_LOCK_SYSTEM_PAM_DIR: base + "/etc",
+            H2S_LOCK_VENDOR_PAM_DIR: base + "/usr",
+            H2S_LOCK_FAILLOCK_CONF: base + "/faillock.conf",
+            H2S_LOCK_SYSTEM: nixos ? "nixos" : "other",
+            H2S_LOCK_AUTH_METHODS: _scratch + "/methods"
+        };
     }
 
     function _answered() {
@@ -180,13 +185,35 @@ TestCase {
             assertEqual(reading.faillock.sudo, null, "… pam_faillock in it, its settings unreadable: not known");
             assertEqual(reading.facts.fingerprint + " " + reading.facts.securityKey, "unknown unknown", "the methods script failed: unknown");
             assertEqual(Object.keys(reading.lock).length, 0, "… no lock configs from a failed answer");
+            // Late answers lose: a refresh with the methods script on Arch, held, overtaken at
+            // once by one without it on Debian; then both are let go
+            _ready = false;
+            _sh("touch \"$1/hold\"; printf 'fingerprint\\t/x\\tfingerprint\\n' > \"$1/methods-out\"; printf 0 > \"$1/methods-code\"", [_scratch], () => {
+                suite._reader.filesCommand = [suite._scratch + "/held-files"];
+                suite._readingsBefore = suite._reader.readings;
+                suite._reader.environment = suite._environment("arch", false);
+                suite._reader.refresh(true);
+                suite._reader.environment = suite._environment("debian", false);
+                suite._reader.refresh(false);
+                suite.assert(suite._reader.running, "two refreshes overlapping: reading");
+                suite._sh("rm -f \"$1/hold\"", [suite._scratch], () => suite._ready = true);
+            });
+        });
+        _then("the overtaken refresh settled", () => _answered(), () => {
+            const reading = _reader.reading;
+            assertEqual(_reader.readings, _readingsBefore + 1, "one reading published, not two");
+            assertEqual(reading.services["polkit-1"].file, _scratch + "/debian/etc/polkit-1", "… the newer refresh's (Debian), never the overtaken Arch one");
+            assertEqual(reading.facts.fingerprint, "unknown", "… the overtaken methods answer dropped: the earlier one kept");
+            assert(!_reader.running, "… nothing reading any more");
         });
         _clock.start();
         _sh([
             "set -e; s=$1; repo=$2; mkdir -p \"$s/tree/scripts\"",
             "cp \"$repo/scripts/pam-files.sh\" \"$repo/scripts/lock-auth-methods.sh\" \"$s/tree/scripts/\"",
             "cp \"$repo/tests/lock/seams/seams.sh\" \"$s/tree/scripts/seams.sh\"",
-            "printf '#!/bin/sh\\ncat \"$(dirname \"$0\")/methods-out\"\\nexit \"$(cat \"$(dirname \"$0\")/methods-code\")\"\\n' > \"$s/methods\"; chmod +x \"$s/methods\"",
+            // The methods stand-in, and pam-files.sh behind a wait: both hold while "hold" exists
+            "printf '#!/bin/sh\\nwhile [ -e \"$(dirname \"$0\")/hold\" ]; do sleep 0.05; done\\ncat \"$(dirname \"$0\")/methods-out\"\\nexit \"$(cat \"$(dirname \"$0\")/methods-code\")\"\\n' > \"$s/methods\"; chmod +x \"$s/methods\"",
+            "printf '#!/bin/sh\\nwhile [ -e \"%s/hold\" ]; do sleep 0.05; done\\nexec \"%s/tree/scripts/pam-files.sh\" \"$@\"\\n' \"$s\" \"$s\" > \"$s/held-files\"; chmod +x \"$s/held-files\"",
             // Arch: polkit-1 only in the vendor directory, system-auth in both (/etc wins)
             "mkdir -p \"$s/arch/etc\" \"$s/arch/usr\"",
             "printf '#%%PAM-1.0\\nauth include system-auth\\naccount include system-auth\\npassword include system-auth\\nsession include system-auth\\n' > \"$s/arch/usr/polkit-1\"",

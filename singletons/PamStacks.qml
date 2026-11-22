@@ -9,9 +9,10 @@ import qs.singletons.io
 // pam_faillock's settings, and what the machine offers (NixOS or not, a fingerprint and a
 // security key ready — the methods script's answers). Read by the shell's one
 // PamStackReader, decided by PamStackRules; nothing is written, nothing asks for root.
-// Read at each refresh() only — Authentication refreshes when a prompt opens, Settings when
-// its page is shown; the methods script (it asks fprintd) only when refresh(true) asks for
-// it. Until the first reading every stack is unknown (null).
+// Read once when first used (so that the first prompt words itself by the stack) and again
+// at each refresh() — Authentication refreshes when a prompt opens, Settings when its page
+// is shown; the methods script (it asks fprintd) only when refresh(true) asks for it. Until
+// the first reading every stack is unknown (null).
 Singleton {
     id: root
 
@@ -32,4 +33,6 @@ Singleton {
     PamStackReader {
         id: _reader
     }
+
+    Component.onCompleted: _reader.refresh(false)
 }
