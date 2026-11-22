@@ -39,34 +39,50 @@ Singleton {
 
     // ── One file ──
 
-    // The file's logical lines: a line ending in a backslash (white space after it allowed)
-    // goes on in the next, joined with a space; blank and comment-only lines between are
-    // skipped while it goes on. A `#` starts a comment to the end of the line. Each item
-    // `{ number, text }`, `number` the first physical line (from 1), `text` trimmed and
-    // without the comment; empty lines are left out.
+    // The file's logical lines, assembled as libpam does (_pam_str_prepare): a line ending
+    // in a backslash (white space after it allowed) goes on in the next, joined with a
+    // space; a `#` starts a comment to the end of the line, and a line with a comment, or a
+    // blank line, ends the line being assembled — a backslash before a `#` is not a
+    // continuation. Each item `{ number, text }`, `number` the first physical line (from 1),
+    // `text` trimmed and without the comment; empty lines are left out. A continuation
+    // still open at the end of the file (libpam gives up on the file) is a last item with
+    // `unfinished: true`.
     function logicalLines(text) {
-        const physical = String(text ?? "").split("\n");
+        const value = String(text ?? "");
+        const physical = value.split("\n");
+        // The "" after a final newline is the end of the file, not a blank line
+        if (value.endsWith("\n"))
+            physical.pop();
         const result = [];
         let pending = "", start = 0, continuing = false;
+        const flush = () => {
+            const trimmed = pending.trim();
+            if (trimmed !== "")
+                result.push({ number: start, text: trimmed });
+            pending = "";
+            continuing = false;
+        };
         for (let i = 0; i < physical.length; i++) {
             let line = physical[i].replace(/\r$/, "");
             const comment = line.indexOf("#");
             if (comment >= 0)
                 line = line.slice(0, comment);
-            if (continuing && line.trim() === "")
+            const continues = comment < 0 && /\\[ \t]*$/.test(line);
+            if (continues)
+                line = line.replace(/\\[ \t]*$/, "");
+            if (!continues && line.trim() === "") {
+                flush();
                 continue;
+            }
             if (!continuing)
                 start = i + 1;
-            continuing = /\\[ \t]*$/.test(line);
-            if (continuing)
-                line = line.replace(/\\[ \t]*$/, "");
-            pending += (pending === "" ? "" : " ") + line;
-            if (continuing && i < physical.length - 1)
-                continue;
-            continuing = false;
-            const trimmed = pending.trim();
-            if (trimmed !== "")
-                result.push({ number: start, text: trimmed });
+            pending += (continuing ? " " : "") + line;
+            continuing = continues;
+            if (!continuing)
+                flush();
+        }
+        if (continuing) {
+            result.push({ number: start, text: pending.trim(), unfinished: true });
             pending = "";
         }
         return result;
@@ -102,7 +118,8 @@ Singleton {
     // value not among its return codes or `default`, an action not ignore/ok/done/bad/die/
     // reset or a jump count. Compared with case (`Default`, `sucess` are refused).
     function controlActions(control) {
-        const inner = String(control ?? "").replace(/^\[/, "").replace(/\]$/, "").trim();
+        // libpam takes white space around `=` (`[success = ok]`)
+        const inner = String(control ?? "").replace(/^\[/, "").replace(/\]$/, "").replace(/\s*=\s*/g, "=").trim();
         const actions = {};
         for (const pair of inner.split(/\s+/).filter(part => part !== "")) {
             const equals = pair.indexOf("=");
@@ -233,9 +250,12 @@ Singleton {
     }
 
     // The service's auth stack. `read` is a function path → answer or a map { path: answer }:
-    // a string is the file's text, undefined (or a path not in the map) is "no such file" —
-    // libpam goes on to the next directory — and null (or a throw) is "there but not
-    // readable": the lookup stops there, the stack not known. `directoryList` the
+    // a string is the file's text, undefined (or a path not in the map) is "no such file"
+    // and the next directory is tried, null (or a throw) is "there but not readable by us":
+    // the lookup stops there and the stack is not known. libpam itself goes on past any file
+    // it cannot open, but it runs as root and reads what the shell cannot, so what it would
+    // run is not known. A reader doing real I/O answers undefined only for ENOENT and
+    // ENOTDIR, null for every other failure (EACCES, EIO, …). `directoryList` the
     // directories in order (default `directories`). Result:
     //   service, file (the service's path, "" when not found), known (every file read,
     //   every line parsed, within the limits), problems [{ reason, file, line, target }]
@@ -289,7 +309,7 @@ Singleton {
                         problem("too long", path, logical.number, "");
                     return;
                 }
-                const parsed = parseLine(logical.text);
+                const parsed = logical.unfinished ? { error: "The file ends inside a continued line" } : parseLine(logical.text);
                 if (parsed.error !== undefined) {
                     problem("unparsable", path, logical.number, parsed.error);
                     continue;

@@ -22,11 +22,29 @@ TestCase {
         assertEqual(line.type + " " + line.control, "auth required", "type and control word without case, as libpam");
         line = rules.parseLine("auth [ success=done   default=ignore ] pam_fprintd.so");
         assertEqual(JSON.stringify(line.actions), "{\"success\":\"done\",\"default\":\"ignore\"}", "spaces inside the brackets");
-        assertEqual(JSON.stringify(rules.logicalLines("auth required \\  \t\n\n# a comment between\n   \n  pam_unix.so\nauth required pam_env.so")),
-                    JSON.stringify([{ number: 1, text: "auth required    pam_unix.so" }, { number: 6, text: "auth required pam_env.so" }]),
-                    "a backslash with white space after it goes on; blank and comment lines between are skipped");
-        assertEqual(JSON.stringify(rules.logicalLines("auth required \\ # why\n pam_unix.so")), JSON.stringify([{ number: 1, text: "auth required   pam_unix.so" }]),
-                    "a comment after the backslash: the comment goes first, the line still goes on");
+        assertEqual(JSON.stringify(rules.logicalLines("auth required \\  \t\n  pam_unix.so\nauth required pam_env.so")),
+                    JSON.stringify([{ number: 1, text: "auth required    pam_unix.so" }, { number: 3, text: "auth required pam_env.so" }]),
+                    "a backslash with white space after it goes on");
+        assertEqual(JSON.stringify(rules.logicalLines("auth required \\  \t\n\n  pam_unix.so\n")),
+                    JSON.stringify([{ number: 1, text: "auth required" }, { number: 3, text: "pam_unix.so" }]),
+                    "a blank line ends the line being continued, as in libpam");
+        assertEqual(JSON.stringify(rules.logicalLines("auth required \\\n# a comment\n  pam_unix.so")),
+                    JSON.stringify([{ number: 1, text: "auth required" }, { number: 3, text: "pam_unix.so" }]),
+                    "… a comment line too");
+        assertEqual(JSON.stringify(rules.logicalLines("auth required \\ # why\n pam_unix.so")),
+                    JSON.stringify([{ number: 1, text: "auth required \\" }, { number: 2, text: "pam_unix.so" }]),
+                    "a backslash before a comment is no continuation: two lines");
+        assert(rules.parseLine(rules.logicalLines("auth required \\ # why\n pam_unix.so")[1].text).error !== undefined, "… the second a bad line");
+        for (const ending of ["auth required \\", "auth required \\\n", "auth required pam_env.so\nauth required \\  \n"]) {
+            const items = rules.logicalLines(ending);
+            assertEqual(items[items.length - 1].unfinished, true, "a continuation open at the end of the file: unfinished (" + JSON.stringify(ending) + ")");
+        }
+        assertEqual(rules.logicalLines("auth required pam_env.so\n").length, 1, "a final newline is the end of the file, not a blank line");
+        let unfinished = rules.stack("sudo", { "/etc/pam.d/sudo": "auth required pam_env.so\nauth required \\\n" });
+        assertEqual(unfinished.known + " " + unfinished.problems[0].reason + " " + unfinished.problems[0].line, "false unparsable 2",
+                    "… and makes the file unparsable: the stack not known");
+        assertEqual(JSON.stringify(rules.parseLine("auth [success = ok default = ignore] pam_unix.so").actions),
+                    "{\"success\":\"ok\",\"default\":\"ignore\"}", "spaces around = inside brackets, as libpam takes them");
         line = rules.parseLine("auth required pam_exec.so [query=select x from y] quiet");
         assertEqual(JSON.stringify(line.args), "[\"query=select x from y\",\"quiet\"]", "a bracketed argument kept as one, without its brackets, as libpam hands it");
         assertEqual(rules.parseLine("auth required pam_exec.so [a\\]b]").args[0], "a]b", "… an escaped bracket inside it unescaped");
@@ -184,12 +202,12 @@ TestCase {
         stack = rules.stack("sudo", path => path === "/usr/lib/pam.d/sudo" ? "auth required pam_unix.so\n" : undefined);
         assertEqual(stack.file + " " + names(stack), "/usr/lib/pam.d/sudo pam_unix.so", "a reader function: asked in the directories' order");
         stack = rules.stack("sudo", path => { throw new Error("denied"); });
-        assertEqual(stack.known + " " + stack.problems[0].reason, "false unreadable", "a reader that throws: unreadable, not known");
+        assertEqual(stack.known + " " + stack.problems[0].reason, "false unreadable", "a reader that throws: unreadable by us, not known");
 
-        // --- unreadable is not absent: libpam does not go on to the vendor directory ---
+        // --- unreadable by us is not absent: root-run libpam may read it, so the vendor file is not taken ---
         stack = rules.stack("sudo", { "/etc/pam.d/sudo": null, "/usr/lib/pam.d/sudo": "auth sufficient pam_permit.so\n" });
         assertEqual([stack.known, stack.problems[0].reason, stack.problems[0].target, stack.lines.length].join(" "),
-                    "false unreadable /etc/pam.d/sudo 0", "an unreadable /etc/pam.d/sudo: not known, the vendor file never taken");
+                    "false unreadable /etc/pam.d/sudo 0", "an /etc/pam.d/sudo we cannot read: not known (libpam, as root, may run it), the vendor file not taken");
         stack = rules.stack("sudo", { "/etc/pam.d/sudo": undefined, "/usr/lib/pam.d/sudo": "auth required pam_unix.so\n" });
         assertEqual(stack.known + " " + stack.file, "true /usr/lib/pam.d/sudo", "undefined: no such file, the next directory");
         stack = rules.stack("polkit-1", { "/usr/lib/pam.d/polkit-1": archPolkit, "/etc/pam.d/system-auth": null, "/usr/lib/pam.d/system-auth": archSystemAuth });
