@@ -17,6 +17,10 @@ import qs.singletons
 //                         test-mode check (ModuleRules.testRunProblem) refuses it at launch
 //                         and nothing runs: answer({ kind: "refused" }). → its owner key
 //   waitingCount()        how many runs wait in their check for the look-up
+//   startShell(what, argv, done)
+//                         queues one of the shell's own fixed commands (PrivilegedRuns
+//                         .startShell, a setting's Apply): no stand-in is allowed for it, so
+//                         in test mode it is refused at its launch and nothing runs
 // All of them do nothing outside test mode.
 Singleton {
     function holdLookup(on) {
@@ -33,6 +37,11 @@ Singleton {
             environment: {}, standIns: [], testMode: true, moduleId: "privileged", what: String(what)
         }, answer);
         return owner;
+    }
+
+    function startShell(what, argv, done) {
+        if (Modules.host.testMode)
+            PrivilegedRuns.startShell({ what: String(what), argv: argv }, done);
     }
 
     function waitingCount() {

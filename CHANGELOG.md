@@ -514,6 +514,19 @@ The interface modules are written against (`qs.api`), versioned on its own
   itself after idle (its IdleAction), the section says so: whichever comes first acts. The
   timeline marks the sleep across all monitors; a sleep long after the rest sits after a
   break, so the minutes keep their room.
+- Hibernate when idle: Settings → When away → Hibernate (off by default; 30 min to 6 h, in
+  profiles as `lockscreen.hibernateEnabled` and `lockscreen.hibernateTimeout`). With sleep on,
+  the sleep becomes a sleep that turns into hibernation after the system's delay (sleep.conf's
+  `HibernateDelaySec`, one for the machine): the section shows it and, when another time is
+  picked, offers Apply, which writes `/etc/systemd/sleep.conf.d/h2s-shell.conf` after asking
+  for the password; on NixOS it names the new module option
+  `programs.h2s-shell.idle.hibernateDelay` instead. With sleep off, the shell hibernates the
+  computer itself, counted from the screensaver or the lock, whichever comes later (neither:
+  from your last input) — "after the lock", "Hibernates 2 h after the lock (2 h 20 min after
+  your last input)". Never with a password: where hibernation is not possible the section says
+  why (the system asks for a password, no swap or only zram, Secure Boot lockdown, no resume
+  device). The same rules as sleep: apps keeping the screen on hold it while unlocked, a
+  program blocking sleep pauses it. The timeline marks it across all monitors, after a break.
 - Safe mode has a banner, under the bar and at the top of Settings → Modules: why the shell
   started without modules, the modules on when it crashed and one installed or updated in
   the last day, with "Open Modules" and "Load modules" (loads them again without a

@@ -5,9 +5,10 @@ import qs.components
 import qs.singletons
 
 // What happens when you are away, as a line from your last input: one lane, or one per
-// monitor, each with its stretches (the desktop, the screensaver, off, asleep); the lock one
-// line across every lane, the sleep another (the whole computer), the commands' moment a
-// grey one; a sleep long after the rest on a compressed tail after a break "≈"
+// monitor, each with its stretches (the desktop, the screensaver, off, asleep, hibernated);
+// the lock one line across every lane, the sleep and the hibernation others (the whole
+// computer), the commands' moment a grey one; the last of the sleep and the hibernation,
+// long after the rest, on a compressed tail after a break "≈"
 // (AwayViewRules.axis); the times as labels above the lanes,
 // or below where they would touch (AwayViewRules.placeLabels); one line under it. Always
 // drawn at its full height: with nothing on it is empty and dimmed, and an app keeping
@@ -25,6 +26,10 @@ ColumnLayout {
     property int commandsAt: -1
     // Seconds; 0 = no sleep after idle
     property int sleepAfter: 0
+    // The hibernation as IdleRules.config gives it ({ on, from, at, after }), or null
+    property var hibernate: null
+    // When it comes, from the last input (seconds; 0 none)
+    readonly property int hibernateAt: AwayViewRules.hibernateAt(hibernate)
     // logind's sleep blocks as last read, [{ who, why }] (Idle.sleepBlockers)
     property var sleepBlockers: []
     property int lockedScreenOffAfter: 0
@@ -33,14 +38,14 @@ ColumnLayout {
     property var holders: []
 
     readonly property var _times: lanes.map(lane => lane.times)
-    readonly property bool anything: AwayViewRules.anything(_times, lockAfter, sleepAfter)
+    readonly property bool anything: AwayViewRules.anything(_times, lockAfter, sleepAfter, hibernateAt)
     readonly property real laneLabelWidth: perMonitor ? 150 : 0
     readonly property real trackWidth: Math.max(1, width - laneLabelWidth)
-    // { end, breakAt, sleepAt } (seconds)
-    readonly property var axis: AwayViewRules.axis(_times, lockAfter, commandsAt, sleepAfter)
+    // { end, breakAt, tailAt } (seconds)
+    readonly property var axis: AwayViewRules.axis(_times, lockAfter, commandsAt, sleepAfter, hibernateAt)
     readonly property int axisEnd: axis.end
     readonly property string caption: AwayViewRules.caption({
-        holders: holders, sleepBlockers: sleepBlockers, anything: anything, lockAfter: lockAfter, sleepAfter: sleepAfter,
+        holders: holders, sleepBlockers: sleepBlockers, anything: anything, lockAfter: lockAfter, sleepAfter: sleepAfter, hibernate: hibernate,
         perMonitor: perMonitor, lockedScreenOffAfter: lockedScreenOffAfter, canPowerOff: canPowerOff
     }, seconds => Format.duration(seconds))
 
@@ -48,12 +53,13 @@ ColumnLayout {
         return trackWidth * AwayViewRules.place(t, axis);
     }
 
-    readonly property var marks: AwayViewRules.marks(_times, lockAfter, commandsAt, seconds => Format.duration(seconds), canPowerOff, sleepAfter)
+    readonly property var marks: AwayViewRules.marks(_times, lockAfter, commandsAt, seconds => Format.duration(seconds), canPowerOff, sleepAfter,
+                                                     hibernateAt)
     // Each mark's label where it goes: [{ text, kind, left, row }]
     readonly property var labels: {
         const placed = AwayViewRules.placeLabels(marks.map(mark => ({
             x: xOf(mark.t),
-            width: (mark.kind === "lock" || mark.kind === "sleep" ? _boldMetrics : _metrics).advanceWidth(mark.text)
+            width: (mark.kind === "lock" || mark.kind === "sleep" || mark.kind === "hibernate" ? _boldMetrics : _metrics).advanceWidth(mark.text)
         })), trackWidth);
         return marks.map((mark, index) => Object.assign({}, mark, placed[index]));
     }
@@ -61,7 +67,7 @@ ColumnLayout {
     readonly property real labelHeight: _metrics.height
 
     function _kindWord(kind) {
-        return ({ on: "Desktop", saver: "Screensaver", off: "Off", asleep: "Asleep" })[kind] ?? "";
+        return ({ on: "Desktop", saver: "Screensaver", off: "Off", asleep: "Asleep", hibernated: "Hibernated" })[kind] ?? "";
     }
 
     spacing: 2
@@ -101,8 +107,9 @@ ColumnLayout {
                 textFormat: Text.PlainText
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeSmall
-                font.bold: label.kind === "lock" || label.kind === "sleep"
-                color: label.kind === "lock" ? Theme.accent : label.kind === "sleep" ? Theme.textPrimary : Theme.textSecondary
+                font.bold: label.kind === "lock" || label.kind === "sleep" || label.kind === "hibernate"
+                color: label.kind === "lock" ? Theme.accent : label.kind === "sleep" || label.kind === "hibernate" ? Theme.textPrimary
+                     : Theme.textSecondary
             }
         }
     }
@@ -137,7 +144,7 @@ ColumnLayout {
                     required property string modelData
                     readonly property var lane: root.lanes.find(entry => entry.key === modelData) ?? { name: "", times: {} }
                     readonly property var stretches: AwayViewRules.segments(lane.times, root.axisEnd, root.canPowerOff,
-                                                                            root.sleepAfter, root.axis.breakAt)
+                                                                            root.sleepAfter, root.axis.breakAt, root.hibernateAt)
                     objectName: "timelineLane"
                     width: _lanesColumn.width
                     height: 26
@@ -170,7 +177,7 @@ ColumnLayout {
                                 height: parent.height
                                 radius: Theme.settings.cardRadius
                                 color: stretch.kind === "on" ? Theme.fillSubtle : stretch.kind === "saver" ? Theme.accentTint
-                                     : stretch.kind === "asleep" ? Theme.surfaceSunken : Theme.overlayOpaque
+                                     : stretch.kind === "asleep" || stretch.kind === "hibernated" ? Theme.surfaceSunken : Theme.overlayOpaque
                                 border.width: Theme.border.width
                                 border.color: Theme.outline
 
@@ -205,6 +212,16 @@ ColumnLayout {
             objectName: "timelineSleep"
             visible: root.sleepAfter > 0
             x: root.laneLabelWidth + root.xOf(root.sleepAfter) - 1
+            width: 2
+            height: parent.height
+            color: Theme.textPrimary
+        }
+
+        // The hibernation: the whole computer, a line across every lane
+        Rectangle {
+            objectName: "timelineHibernate"
+            visible: root.hibernateAt > 0
+            x: root.laneLabelWidth + root.xOf(root.hibernateAt) - 1
             width: 2
             height: parent.height
             color: Theme.textPrimary
@@ -247,6 +264,7 @@ ColumnLayout {
         maximumLineCount: 1
         font.family: Theme.fontFamily
         font.pixelSize: Theme.fontSizeSmall
-        color: root.holders.length > 0 || root.sleepAfter > 0 && root.sleepBlockers.length > 0 ? Theme.warning : Theme.textMuted
+        color: root.holders.length > 0 || (root.sleepAfter > 0 || root.hibernateAt > 0) && root.sleepBlockers.length > 0 ? Theme.warning
+             : Theme.textMuted
     }
 }

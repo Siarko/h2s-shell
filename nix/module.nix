@@ -2,7 +2,7 @@
 # from the system — its font, and the services its widgets read (battery, Bluetooth,
 # network). Hyprland's autostart is still yours to add: see the README.
 self:
-{ config, lib, pkgs, ... }:
+{ config, options, lib, pkgs, ... }:
 
 let
   cfg = config.programs.h2s-shell;
@@ -19,6 +19,14 @@ let
     if lib.hasInfix " " argument
     then "[${lib.replaceStrings [ "]" ] [ "\\]" ] argument}]"
     else argument;
+
+  # The system's delay before a sleep the shell starts turns into hibernation: sleep.conf's
+  # HibernateDelaySec, through whichever option this NixOS has for it
+  hibernateDelay = toString cfg.idle.hibernateDelay;
+  sleepConfig =
+    if options.systemd.sleep ? settings
+    then { systemd.sleep.settings.Sleep.HibernateDelaySec = hibernateDelay; }
+    else { systemd.sleep.extraConfig = "HibernateDelaySec=${hibernateDelay}\n"; };
 in
 {
   options.programs.h2s-shell = {
@@ -44,9 +52,22 @@ in
         itself. Only the order changes: the modules and their arguments stay NixOS's.
       '';
     };
+    idle.hibernateDelay = lib.mkOption {
+      type = lib.types.nullOr (lib.types.either lib.types.ints.positive lib.types.str);
+      default = null;
+      example = "3h";
+      description = ''
+        How long the computer sleeps before it hibernates, when the shell puts it to sleep
+        with hibernation on (Settings, When away, Hibernate): systemd's HibernateDelaySec in
+        sleep.conf — seconds, or a systemd time span such as "3h". It is one setting for the
+        whole machine, and /etc is generated here, so the shell shows it and names this
+        option instead of writing it. null leaves systemd's default (estimated from the
+        battery; 2 h without one).
+      '';
+    };
   };
 
-  config = lib.mkIf cfg.enable {
+  config = lib.mkIf cfg.enable (lib.mkMerge [ {
     environment.systemPackages = [ cfg.package ];
     fonts.packages = [ pkgs.nerd-fonts.jetbrains-mono ];
     # The battery widget reads UPower; profiles, power-profiles-daemon; the Bluetooth
@@ -125,5 +146,7 @@ in
         '';
       };
     };
-  };
+  }
+  (lib.mkIf (cfg.idle.hibernateDelay != null) sleepConfig)
+  ]);
 }

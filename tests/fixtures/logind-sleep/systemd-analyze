@@ -1,0 +1,11 @@
+#!/bin/sh
+# A stand-in for systemd-analyze (tests/LogindSleepReadingTest.qml), started through a link
+# in the suite's scratch directory: `cat-config systemd/sleep.conf` prints that directory's
+# `sleep-conf` (failing without it, as with no such file); anything else fails.
+here=$(dirname "$0")
+case " $* " in
+    *" cat-config systemd/sleep.conf "*) ;;
+    *) echo "the stand-in only knows cat-config systemd/sleep.conf" >&2; exit 2 ;;
+esac
+[ -f "$here/sleep-conf" ] || { echo "No files found for systemd/sleep.conf." >&2; exit 1; }
+cat "$here/sleep-conf"

@@ -92,6 +92,8 @@ Singleton {
     readonly property var idlePresets: [60, 120, 300, 600, 900, 1800, 3600]
     // Sleep after idle: from ten minutes to two hours
     readonly property var sleepPresets: [600, 900, 1800, 3600, 7200]
+    // Hibernation after idle: from half an hour to six hours
+    readonly property var hibernatePresets: [1800, 3600, 7200, 10800, 21600]
 
     // The core's settings; then the loaded modules' (Modules.settingEntries: keys mod.<id>.*,
     // each naming its `module`), which go with their module when it is turned off — a
@@ -213,6 +215,14 @@ Singleton {
         { key: "lockscreen.sleepTimeout", label: "Sleep after", group: "lockscreen",
           type: "number", min: 60, max: 86400, suffix: "s", default: 1800, presets: root.sleepPresets,
           hint: "Counted from your last input." },
+        // Hibernation after idle: with sleep on, the sleep asks for it (logind's
+        // SuspendThenHibernate, after the system's own delay — the page compares this time
+        // with it); with sleep off, counted from the last stage switched on before it
+        // (IdleRules.hibernateBase); only where logind allows it without a password
+        { key: "lockscreen.hibernateEnabled", label: "Hibernate when idle", group: "lockscreen",
+          type: "bool", default: false },
+        { key: "lockscreen.hibernateTimeout", label: "Hibernate after", group: "lockscreen",
+          type: "number", min: 60, max: 86400, suffix: "s", default: 7200, presets: root.hibernatePresets },
         { key: "lockscreen.notificationsOnLock", label: "Show notifications on lock screen",
           group: "lockscreen", type: "bool", default: true,
           legacy: ["lockscreen", "notificationsOnLock"] },

@@ -6,6 +6,7 @@ import Quickshell.Io
 import qs.singletons
 import qs.singletons.helper
 import qs.singletons.lock
+import qs.singletons.io as Io
 
 // Idleness, the screensaver and the idle lock: the I/O around IdleRules. It feeds the rules
 // the facts — input idle from two IdleMonitors, the lock from Lockscreen, sleep from
@@ -14,8 +15,10 @@ import qs.singletons.lock
 // screensaver's picture per monitor (`shownFor`, which the screensaver's windows follow), the
 // monitors' power (ScreenPower), the lock surface's black fallback (`lockBlack`), the idle
 // lock (Lockscreen.lock("idle")), the sleep (logind's Suspend, LogindSleep — only where
-// logind answers CanSuspend "yes", read at the start and when the settings page opens), the
-// start and end commands. The screensaver interface
+// logind answers CanSuspend "yes", read at the start and when the settings page opens) and
+// the hibernation (SuspendThenHibernate in its place with sleep on, Hibernate with it off —
+// on logind's "yes" to that one), the start and end commands. The Hibernate section's Apply
+// of the system's delay goes through here too (HibernateDelayWriter). The screensaver interface
 // (org.freedesktop.ScreenSaver, the helper's: ScreenSaverClient) brings the apps keeping the
 // screen on and their activity, and is told the screensaver's state. One Timer runs to the
 // rules' next deadline; nothing here decides when.
@@ -68,9 +71,23 @@ Singleton {
     // they pause the sleep, locked or not
     readonly property var sleepBlockers: _state.logindSleepBlock === true ? _logindSleepHolders : []
     property var _logindSleepHolders: []
-    // What logind allows and does about sleep: { canSuspend: "yes" | "no" | "challenge" |
-    // "na" | "unknown", idleAction: { action, after } | null } (LockParseRules.sleepSupport)
+    // What logind allows and does about sleep, and what explains hibernation: { canSuspend,
+    // canHibernate, canSuspendThenHibernate: "yes" | "no" | "challenge" | "na" | "unknown",
+    // idleAction: { action, after } | null, hibernation: { swaps, memoryInUse, lockdown,
+    // resume, delay, nixos } } (LockParseRules.sleepSupport)
     readonly property var sleepSupport: _logindSleep.support
+    // The Apply of the system's delay before hibernating is under way
+    readonly property bool hibernateDelayApplying: _delayWriter.busy
+
+    // The Hibernate section's Apply (the user's click): the system's delay before a sleep
+    // turns into hibernation set to `seconds`, through a run as administrator (polkit asks
+    // for the password). Not on NixOS, where /etc is generated (the module's option instead).
+    // → false when not started
+    function applyHibernateDelay(seconds) {
+        if (_logindSleep.support.hibernation?.nixos !== false)
+            return false;
+        return _delayWriter.apply(seconds);
+    }
     // The sleep the shell asked for is under way and the settings leave it unlocked (no lock
     // before sleep, no idle lock before it): the sleep notice does not count it
     readonly property bool sleepLeftUnlocked: _state.sleepAsked === true && _state.sleepLeftUnlocked === true
@@ -116,7 +133,9 @@ Singleton {
         screensaverCommands: Profiles.value("lockscreen.screensaverCommands"),
         sleepEnabled: Profiles.value("lockscreen.sleepEnabled"),
         sleepTimeout: Profiles.value("lockscreen.sleepTimeout"),
-        lockOnSleep: Profiles.value("lockscreen.lockOnSleep")
+        lockOnSleep: Profiles.value("lockscreen.lockOnSleep"),
+        hibernateEnabled: Profiles.value("lockscreen.hibernateEnabled"),
+        hibernateTimeout: Profiles.value("lockscreen.hibernateTimeout")
     })
     // A profile switch changes several values in one pass: one config event after it
     on_ValuesChanged: Qt.callLater(root._settingsChanged)
@@ -131,7 +150,9 @@ Singleton {
     }
 
     function _config() {
-        return IdleRules.config(_values, _monitorEntries, _powerControl, _logindSleep.support.canSuspend);
+        const support = _logindSleep.support;
+        return IdleRules.config(_values, _monitorEntries, _powerControl, support.canSuspend, support.canHibernate,
+                                support.canSuspendThenHibernate);
     }
 
     function _monitorListChanged() {
@@ -208,10 +229,15 @@ Singleton {
             Lockscreen.lock("idle");
             break;
         case "sleep":
-            _log("info", "idle: asking logind to suspend" + (action.leftUnlocked ? " (unlocked, as the settings say)" : ""));
-            if (!_logindSleep.suspend())
+        case "hibernate": {
+            const method = action.type === "hibernate" ? "Hibernate" : action.thenHibernate === true ? "SuspendThenHibernate" : "Suspend";
+            _log("info", "idle: asking logind to " + ({ Suspend: "suspend", SuspendThenHibernate: "suspend, then hibernate",
+                                                       Hibernate: "hibernate" })[method]
+                 + (action.leftUnlocked ? " (unlocked, as the settings say)" : ""));
+            if (!_logindSleep.suspend(method))
                 _dispatch({ type: "sleepFailed" });
             break;
+        }
         case "powerOff":
         case "powerOn":
             // The first ask, the first ask again (a reading showed it did not take), and each off
@@ -279,7 +305,8 @@ Singleton {
         // The name only while an idle job of the shell's is on: left free for an idle daemon
         // otherwise
         own: HelperRules.wantsScreenSaverName(IdleRules.config(root._values, root._monitorEntries, root._powerControl,
-                                                                _logindSleep?.support?.canSuspend))
+                                                                _logindSleep?.support?.canSuspend, _logindSleep?.support?.canHibernate,
+                                                                _logindSleep?.support?.canSuspendThenHibernate))
         active: root._busActive
         activeSinceMs: root._busActiveSinceMs
         idleSeconds: () => root._state.inputIdle ? (root._now() - root._state.idleSince) / 1000 : 0
@@ -470,11 +497,15 @@ Singleton {
     property string _sleepSupportTold: ""
 
     function _sleepSupportRead(support) {
-        const told = support.canSuspend + " " + JSON.stringify(support.idleAction);
+        const delay = support.hibernation?.delay ?? { state: "unknown" };
+        const told = [support.canSuspend, support.canHibernate, support.canSuspendThenHibernate, JSON.stringify(support.idleAction),
+                      JSON.stringify(delay)].join(" ");
         if (told !== _sleepSupportTold) {
             _log(support.canSuspend === "unknown" ? "warning" : "info", "logind: CanSuspend " + support.canSuspend
+                 + ", CanHibernate " + support.canHibernate + ", CanSuspendThenHibernate " + support.canSuspendThenHibernate
                  + (support.idleAction === null ? ", IdleAction not read"
-                    : ", IdleAction " + support.idleAction.action + " after " + support.idleAction.after + " s"));
+                    : ", IdleAction " + support.idleAction.action + " after " + support.idleAction.after + " s")
+                 + "; HibernateDelaySec " + (delay.state === "set" ? delay.seconds + " s" : delay.state));
             _sleepSupportTold = told;
         }
         // Not read: read again after a growing pause, so a slow start does not leave the sleep
@@ -507,6 +538,18 @@ Singleton {
                 return;
             root._log("warning", "logind did not suspend: " + error);
             root._dispatch({ type: "sleepFailed" });
+        }
+    }
+
+    Io.HibernateDelayWriter {
+        id: _delayWriter
+        onApplied: (seconds, ok, quiet, error) => {
+            if (ok)
+                root._log("info", "the system's delay before hibernating set to " + seconds + " s");
+            else if (!quiet)
+                root._log("warning", "the system's delay before hibernating not set: " + error);
+            // What is in force now, whichever way it went
+            _logindSleep.refresh();
         }
     }
 

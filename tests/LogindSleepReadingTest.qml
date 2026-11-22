@@ -8,10 +8,13 @@ import qs.singletons.lock
 // run for real against a stand-in for gdbus (tests/fixtures/logind-sleep, linked into a
 // scratch directory whose files say what it answers): CanSuspend yes, na and challenge,
 // logind's IdleAction, a gdbus that fails, is not there or never ends (unknown, never "yes");
-// the Suspend call made once, non-interactive (`false`), taken, refused, and one that never
-// answers (ended by its watchdog). Never the real
-// gdbus or system bus: the reader is given the scratch directory as its tool directory, and
-// the stand-in only notes the call. Asynchronous.
+// CanHibernate and CanSuspendThenHibernate, the swap table, memory, lockdown, resume device,
+// NixOS and sleep.conf with a drop-in (a stand-in systemd-analyze, files under a scratch
+// root); the Suspend call made once, non-interactive (`false`), taken, refused, and one that
+// never answers (ended by its watchdog); Hibernate and SuspendThenHibernate the same way, and
+// no other method. Never the real gdbus, system bus or system files: the reader is given the
+// scratch directory as its tool directory and file root, and the stand-in only notes the
+// call. Asynchronous.
 TestCase {
     id: suite
     suiteName: "LogindSleepReading"
@@ -77,7 +80,7 @@ TestCase {
     // The next read, after `script` (run with the scratch directory as $1) set the answers
     function _readAfter(script) {
         _ready = false;
-        _sh(script, [_scratch], () => {
+        _sh(script, [_scratch, _fixtures], () => {
             suite._readsBefore = suite._reader.reads;
             suite._reader.refresh();
             suite._ready = true;
@@ -88,17 +91,24 @@ TestCase {
         return _ready && _reader.reads > _readsBefore && !_reader.running;
     }
 
+    // The sleep half of the support (the hibernation half: _hibernation)
     function _support() {
-        return JSON.stringify(_reader.support);
+        return JSON.stringify({ canSuspend: _reader.support.canSuspend, idleAction: _reader.support.idleAction });
+    }
+
+    function _hibernation() {
+        const support = _reader.support;
+        return JSON.stringify({ canHibernate: support.canHibernate, canSuspendThenHibernate: support.canSuspendThenHibernate,
+                                hibernation: support.hibernation });
     }
 
     // The Suspend call, after `script`; its calls file read once it answered
-    function _suspendAfter(script) {
+    function _suspendAfter(script, method) {
         _ready = false;
         _suspended = null;
         _calls = "";
         _sh(script, [_scratch], () => {
-            suite.assert(suite._reader.suspend(), "the call starts");
+            suite.assert(suite._reader.suspend(method), "the call starts" + (method ? " (" + method + ")" : ""));
             suite.assert(!suite._reader.suspend(), "… a second while it runs does not");
             suite._ready = true;
         });
@@ -111,7 +121,8 @@ TestCase {
 
     function runAsync() {
         _then("the stand-in is in place", () => _ready, () => {
-            _reader = _readerComponent.createObject(suite, { toolDirectory: _scratch, watchdog: 500, suspendWatchdog: 500 });
+            _reader = _readerComponent.createObject(suite, { toolDirectory: _scratch, fileRoot: _scratch + "/root", watchdog: 500,
+                                                             suspendWatchdog: 500 });
             _reader.suspended.connect((ok, error) => suite._suspended = { ok: ok, error: error });
             assertEqual(_support(), JSON.stringify({ canSuspend: "unknown", idleAction: null }), "before a read: unknown");
             _readAfter("echo yes > \"$1/can-suspend\"; echo 'ignore 1800000000' > \"$1/idle-action\"");
@@ -119,6 +130,34 @@ TestCase {
         _then("the first read answered", () => _answered(), () => {
             assertEqual(_support(), JSON.stringify({ canSuspend: "yes", idleAction: { action: "ignore", after: 1800 } }),
                         "CanSuspend yes; IdleAction ignore after 30 min");
+            assertEqual(_hibernation(), JSON.stringify({ canHibernate: "unknown", canSuspendThenHibernate: "unknown", hibernation: {
+                swaps: null, memoryInUse: -1, lockdown: "unknown", resume: "unknown", delay: { state: "unknown" }, nixos: false } }),
+                "nothing about hibernation answered or there: unknown, never yes; no /etc/NIXOS under the root: not NixOS");
+            _readAfter("set -e; r=\"$1/root\"; mkdir -p \"$r/proc\" \"$r/sys/kernel/security\" \"$r/sys/power\" \"$r/etc\"; "
+                + "echo na > \"$1/can-hibernate\"; echo yes > \"$1/can-suspend-then-hibernate\"; "
+                + "printf 'Filename\\t\\tType\\tSize\\tUsed\\tPriority\\n/dev/zram0 partition\\t4194300\\t0\\t100\\n' > \"$r/proc/swaps\"; "
+                + "printf 'MemTotal: 32000000 kB\\nMemAvailable: 30000000 kB\\n' > \"$r/proc/meminfo\"; "
+                + "echo '[none] integrity confidentiality' > \"$r/sys/kernel/security/lockdown\"; echo 0:0 > \"$r/sys/power/resume\"; "
+                + "echo 'root=UUID=x rw quiet' > \"$r/proc/cmdline\"; "
+                + "printf '# /etc/systemd/sleep.conf\\n[Sleep]\\n#HibernateDelaySec=\\n\\n# /etc/systemd/sleep.conf.d/h2s-shell.conf\\n[Sleep]\\nHibernateDelaySec=10800\\n' > \"$1/sleep-conf\"; "
+                + "ln -sf \"$2/systemd-analyze\" \"$1/\"");
+        });
+        _then("the hibernation read answered", () => _answered(), () => {
+            assertEqual(_hibernation(), JSON.stringify({ canHibernate: "na", canSuspendThenHibernate: "yes", hibernation: {
+                swaps: [{ name: "/dev/zram0", type: "partition", kib: 4194300, zram: true }], memoryInUse: 2000000, lockdown: "none",
+                resume: false, delay: { state: "set", seconds: 10800 }, nixos: false } }),
+                "CanHibernate na, CanSuspendThenHibernate yes; zram only, lockdown none, no resume device; the drop-in's delay 3 h");
+            assertEqual(HibernateRules.unavailable(Object.assign({ answer: _reader.support.canHibernate }, _reader.support.hibernation)),
+                        "Not available here: no swap space to save the session to (only zram, which is lost at power-off).",
+                        "… said as the page says it");
+            _readAfter("set -e; r=\"$1/root\"; touch \"$r/etc/NIXOS\"; echo 'none [integrity] confidentiality' > \"$r/sys/kernel/security/lockdown\"; "
+                + "rm \"$1/sleep-conf\" \"$1/can-hibernate\"");
+        });
+        _then("the second hibernation read answered", () => _answered(), () => {
+            const read = _reader.support;
+            assertEqual(read.canHibernate + " " + read.hibernation.lockdown + " " + read.hibernation.nixos + " " + JSON.stringify(read.hibernation.delay),
+                        "unknown integrity true {\"state\":\"unknown\"}",
+                        "CanHibernate failing: unknown; lockdown integrity; NixOS; sleep.conf not printed: the delay unknown");
             _readAfter("echo na > \"$1/can-suspend\"; echo 'suspend 900000000' > \"$1/idle-action\"");
         });
         _then("the na read answered", () => _answered(), () => {
@@ -185,8 +224,31 @@ TestCase {
             const took = Date.now() - _hangStarted;
             assert(took >= 400 && took < 3000, "… ended by its watchdog (500 ms here), took " + took + " ms");
             assert(!_reader.suspending, "… no longer running: a later sleep can be asked");
-            assertEqual(_readerComponent.createObject(suite).watchdog >= 15000, true,
-                        "the reads' watchdog by default outlasts three calls of 5 s each");
+            assert(!_reader.suspend("PowerOff"), "no call but the three sleeps");
+            _suspendAfter("rm -f \"$1/hang\" \"$1/calls\"", "Hibernate");
+        });
+        _then("the hibernate call answered", () => _ready && _suspended !== null, () => {
+            assertEqual(JSON.stringify(_suspended), JSON.stringify({ ok: true, error: "" }), "Hibernate: taken");
+            _callsRead();
+        });
+        _then("the hibernate call read", () => _calls !== "", () => {
+            assertEqual(_calls.trim(), "Hibernate false", "… asked once, non-interactive");
+            _suspendAfter("rm -f \"$1/calls\"", "SuspendThenHibernate");
+        });
+        _then("the suspend-then-hibernate call answered", () => _ready && _suspended !== null, () => {
+            assertEqual(_suspended.ok, true, "SuspendThenHibernate: taken");
+            _callsRead();
+        });
+        _then("the suspend-then-hibernate call read", () => _calls !== "", () => {
+            assertEqual(_calls.trim(), "SuspendThenHibernate false", "… asked once, non-interactive");
+            assertEqual(_readerComponent.createObject(suite).watchdog >= 25000, true,
+                        "the reads' watchdog by default outlasts five calls of 5 s each");
+            _readsBefore = _reader.reads;
+            _reader.refresh();
+            _reader.refresh();
+        });
+        _then("a read asked while one ran followed it", () => _reader.reads >= _readsBefore + 2 && !_reader.running, () => {
+            assertEqual(_reader.reads, _readsBefore + 2, "asked during a read: read once more after it, not dropped");
         });
         _clock.start();
         _sh("set -e; mkdir -p \"$1\"; ln -s \"$2/gdbus\" \"$1/\"", [_scratch, _fixtures], code => {

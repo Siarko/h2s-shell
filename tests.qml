@@ -119,11 +119,13 @@ QtObject {
     property var _idleRules: IdleRulesTest {}
     property var _awayViewRules: AwayViewRulesTest {}
     property var _sleepNoticeRules: SleepNoticeRulesTest {}
+    property var _hibernateRules: HibernateRulesTest {}
     property var _monitorRules: MonitorRulesTest {}
     property var _screenPowerReading: ScreenPowerReadingTest {}
     property var _wlopmScreenPowerReading: WlopmScreenPowerReadingTest {}
     property var _logindIdleBlockReading: LogindIdleBlockReadingTest {}
     property var _logindSleepReading: LogindSleepReadingTest {}
+    property var _hibernateDelayWriter: HibernateDelayWriterTest {}
     property var _pamStackRules: PamStackRulesTest {}
     property var _pamStacksReading: PamStacksReadingTest {}
     property var _helper: HelperTest {}

@@ -6,7 +6,8 @@ import qs.singletons
 
 // "When away": what happens while nobody uses the computer, edited in the profile picked in
 // the settings window. Its sections in the order things happen — the screensaver (and the
-// screens turned off), the lock screen, sleep —, then what keeps the screen on and the commands;
+// screens turned off), the lock screen, sleep, hibernation —, then what keeps the screen on
+// and the commands;
 // each stage's switch on its section's title line. At the top, under the page's heading
 // and without a title of its own: "Set per monitor" and the timeline of it all.
 Flickable {
@@ -39,6 +40,19 @@ Flickable {
     // The shell sleeps the computer only on "yes"
     readonly property string _canSuspend: sleepSupport?.canSuspend ?? "unknown"
     readonly property string _sleepUnavailable: AwayViewRules.sleepUnavailable(_canSuspend)
+    readonly property bool _hibernateOn: _edited("lockscreen.hibernateEnabled") === true
+    // What explains hibernation here and the system's delay (Idle.sleepSupport's hibernation)
+    readonly property var _hibernation: sleepSupport?.hibernation ?? ({})
+    // logind's answer for the call the shell would make: SuspendThenHibernate with sleep on,
+    // Hibernate with it off
+    readonly property string _hibernateUnavailable: HibernateRules.unavailable(Object.assign({
+        answer: _config.sleepAfter > 0 ? sleepSupport?.canSuspendThenHibernate : sleepSupport?.canHibernate
+    }, _hibernation))
+    // { on, from, at, after } (IdleRules.config)
+    readonly property var _hibernate: _config.hibernate
+    // With sleep on, the profile's time after sleeping is not the system's delay: said, with
+    // Apply (or, on NixOS, the module's option)
+    readonly property bool _delayDiffers: _config.sleepAfter > 0 && HibernateRules.delayDiffers(_hibernation.delay, _hibernate.after)
     readonly property var _monitorMap: _edited("lockscreen.monitorIdle")
     // The map comes from a profile above, or the default: its cards' choices dimmed
     readonly property bool _mapInherited: !("lockscreen.monitorIdle" in Profiles.effectiveGlobals)
@@ -60,8 +74,10 @@ Flickable {
         screensaverCommands: _commandsOn,
         sleepEnabled: _sleepOn,
         sleepTimeout: _edited("lockscreen.sleepTimeout"),
-        lockOnSleep: _lockOnSleep
-    }, Idle.monitors, _canPowerOff, _canSuspend)
+        lockOnSleep: _lockOnSleep,
+        hibernateEnabled: _hibernateOn,
+        hibernateTimeout: _edited("lockscreen.hibernateTimeout")
+    }, Idle.monitors, _canPowerOff, _canSuspend, sleepSupport?.canHibernate, sleepSupport?.canSuspendThenHibernate)
     // The timeline's lanes: one per connected monitor while per monitor, else one for all
     // The connected monitors' names, twins told apart by their connectors
     readonly property var _monitorNames: AwayViewRules.monitorNames(Idle.monitors)
@@ -111,8 +127,8 @@ Flickable {
            ScreenPower.unavailable?.hint ?? ""].filter(part => part !== "").join(". ")
 
     // The sections by name, for `section`
-    readonly property var sections: ({ screensaver: _saverSection, lock: _lockSection, sleep: _sleepSection, awake: _awakeSection,
-                                       commands: _commandsSection })
+    readonly property var sections: ({ screensaver: _saverSection, lock: _lockSection, sleep: _sleepSection,
+                                       hibernate: _hibernateSection, awake: _awakeSection, commands: _commandsSection })
 
     function showSection(name) {
         const target = sections[name];
@@ -156,7 +172,7 @@ Flickable {
         SchemaSettingEditor {
             key: "lockscreen.perMonitor"
             editIndex: root.editIndex
-            hint: root._perMonitor ? "Each monitor its own screensaver and screen-off times. The lock and sleep are one for all."
+            hint: root._perMonitor ? "Each monitor its own screensaver and screen-off times. Lock, sleep and hibernation are one for all."
                                    : "One set of times for every monitor."
         }
 
@@ -169,6 +185,7 @@ Flickable {
             lockAfter: root._config.lockAfter
             commandsAt: root._commandsOn ? root._allDarkAt : -1
             sleepAfter: root._config.sleepAfter
+            hibernate: root._config.hibernate
             sleepBlockers: root.sleepBlockers
             lockedScreenOffAfter: root._config.lockedScreenOffAfter
             canPowerOff: root._canPowerOff
@@ -478,6 +495,71 @@ Flickable {
             }
         }
 
+        // ── Hibernate: the whole computer, its switch on the title line ──────
+
+        SettingsSection {
+            id: _hibernateSection
+            objectName: "hibernateSection"
+            title: "Hibernate"
+            Layout.fillWidth: true
+            spacing: 2
+            buttons: SchemaSettingEditor {
+                objectName: "hibernateSwitch"
+                key: "lockscreen.hibernateEnabled"
+                editIndex: root.editIndex
+                inline: true
+                labelShown: false
+                available: root._hibernateUnavailable === ""
+                Layout.fillWidth: false
+            }
+
+            Hint {
+                objectName: "hibernateCaption"
+                text: AwayViewRules.hibernateCaption(root._hibernateUnavailable, root._hibernate.from)
+                Layout.bottomMargin: 4
+            }
+
+            Reveal {
+                objectName: "hibernateTimes"
+                open: root._hibernateOn && root._hibernateUnavailable === ""
+                SchemaSettingEditor {
+                    objectName: "hibernateTimeout"
+                    key: "lockscreen.hibernateTimeout"
+                    editIndex: root.editIndex
+                    inline: true
+                    label: AwayViewRules.hibernatePillsLabel(root._hibernate.from)
+                }
+                Hint {
+                    objectName: "hibernateLine"
+                    text: AwayViewRules.hibernateLine(root._hibernate, seconds => Format.duration(seconds))
+                    Layout.bottomMargin: 4
+                }
+                // With sleep on the delay is the system's, one per machine: a time that differs
+                // is said, with Apply where the shell may write it (the password asked on the
+                // click), or the NixOS option's name
+                RowLayout {
+                    objectName: "hibernateDelay"
+                    visible: root._delayDiffers
+                    Layout.fillWidth: true
+                    spacing: 8
+                    Hint {
+                        objectName: "hibernateDelayLine"
+                        text: HibernateRules.delayLine(root._hibernation.delay, root._hibernation.nixos === true, seconds => Format.duration(seconds))
+                        Layout.fillWidth: true
+                    }
+                    SmallButton {
+                        objectName: "hibernateApply"
+                        visible: root._hibernation.nixos === false
+                        label: Idle.hibernateDelayApplying ? "Applying…" : "Apply"
+                        kind: "save"
+                        available: !Idle.hibernateDelayApplying
+                        fontSize: Theme.fontSizeSmall
+                        onClicked: Idle.applyHibernateDelay(root._hibernate.after)
+                    }
+                }
+            }
+        }
+
         // ── Keeping the screen on: who holds it now ──────────────────────────
 
         SettingsSection {
@@ -510,7 +592,7 @@ Flickable {
             }
             Hint {
                 Layout.topMargin: 4
-                text: "Apps that ask to keep the screen on delay the screensaver, the screens turned off, the lock and sleep, on every monitor. Not on the lock screen."
+                text: "Apps that ask to keep the screen on delay the screensaver, the screens turned off, the lock, sleep and hibernation, on every monitor. Not on the lock screen."
             }
         }
 

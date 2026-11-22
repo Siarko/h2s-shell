@@ -147,28 +147,52 @@ Singleton {
         return { action: action[1], after: Math.round(Number(usec[1]) / 1000000) };
     }
 
-    // The sleep reader's whole output: sections headed `[CanSuspend]`, `[IdleAction]`,
-    // `[IdleActionUSec]`, each with gdbus's answer (nothing where the call failed) →
-    // { canSuspend: canAnswer(), idleAction: idleAction() }
+    // The sleep reader's sections, in the order it prints them; the last, sleep.conf as
+    // systemd-analyze prints it, has `[Sleep]` lines of its own: past its header nothing more
+    // is taken as a header
+    readonly property var sleepSections: ["CanSuspend", "CanHibernate", "CanSuspendThenHibernate", "IdleAction", "IdleActionUSec",
+                                          "Swaps", "Meminfo", "Lockdown", "Resume", "Cmdline", "NixOS", "SleepConf"]
+
+    // The sleep reader's whole output: sections headed `[CanSuspend]`, `[IdleAction]`, … (each
+    // with gdbus's answer or the file's text, nothing where the call or the read failed) →
+    // { canSuspend, canHibernate, canSuspendThenHibernate: canAnswer(), idleAction:
+    // idleAction(), hibernation: { swaps, memoryInUse, lockdown, resume, delay, nixos }
+    // (HibernateRules' reads; `nixos`: true, false, or null not read) }
     function sleepSupport(output) {
         const sections = {};
         let current = "";
         for (const line of String(output ?? "").split("\n")) {
-            const header = /^\[([A-Za-z]+)\]$/.exec(line.trim());
-            if (header !== null) {
+            const header = current === "SleepConf" ? null : /^\[([A-Za-z]+)\]$/.exec(line.trim());
+            if (header !== null && sleepSections.includes(header[1])) {
                 current = header[1];
                 sections[current] = "";
             } else if (current !== "") {
                 sections[current] += line + "\n";
             }
         }
+        const nixos = String(sections.NixOS ?? "").trim();
         return {
             canSuspend: canAnswer(sections.CanSuspend),
-            idleAction: idleAction(sections.IdleAction, sections.IdleActionUSec)
+            canHibernate: canAnswer(sections.CanHibernate),
+            canSuspendThenHibernate: canAnswer(sections.CanSuspendThenHibernate),
+            idleAction: idleAction(sections.IdleAction, sections.IdleActionUSec),
+            hibernation: {
+                swaps: HibernateRules.swaps(sections.Swaps),
+                memoryInUse: HibernateRules.memoryInUse(sections.Meminfo),
+                lockdown: HibernateRules.lockdown(sections.Lockdown),
+                resume: HibernateRules.resumeKnown(sections.Resume, sections.Cmdline),
+                delay: HibernateRules.hibernateDelay(sections.SleepConf),
+                nixos: nixos === "yes" ? true : nixos === "no" ? false : null
+            }
         };
     }
 
-    // The sleep call's output — gdbus's answer or error, then `[exit <status>]` — → { ok,
+    // The sleep reader's outcome before any read, or for one that failed as a whole
+    function sleepSupportUnread() {
+        return sleepSupport("");
+    }
+
+    // A sleep call's output (Suspend, SuspendThenHibernate, Hibernate) — gdbus's answer or error, then `[exit <status>]` — → { ok,
     // error }: ok only for status 0 with logind's empty answer `()`; `error` gdbus's words on
     // one line, capped, for the log
     function suspendOutcome(output) {

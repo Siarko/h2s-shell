@@ -806,6 +806,32 @@ TestCase {
                         "the trusted run went on and was refused at its launch (test mode: no stand-in)");
             assert(_runs["behind the held"].result.ok, "the run behind has run: " + JSON.stringify(_runs["behind the held"].result));
             assert(_runs["behind the held"].firstLineAt >= heldAt + 3000, "… only after the first was answered");
+            _shellRun();
+        });
+    }
+
+    // One of the shell's own fixed commands (PrivilegedRuns.startShell: the Hibernate
+    // section's Apply) goes through the same queue: in test mode refused at its launch, as no
+    // stand-in is allowed for it — the trusted pkexec never runs from a suite; not dressed
+    // as a module's (no "Module:" notice even with another agent); a word list without an
+    // absolute program refused before the queue; the queue goes on after it
+    function _shellRun() {
+        _runs = {};
+        ModuleTestKit.clearRecords();
+        ModuleTestKit.setPolkitAgent("other");
+        const answers = [];
+        PrivilegedLookupSeam.startShell("Not absolute", ["sh", "-c", "true"], reply => answers.push(["relative", reply]));
+        PrivilegedLookupSeam.startShell("A setting's Apply", [_path("talk"), "lines", "1", "0"], reply => answers.push(["shell", reply]));
+        _start("behind the shell's", [_path("talk"), "lines", "1", "0"]);
+        _then("the shell's runs and the one behind are answered", () => answers.length === 2 && _done("behind the shell's") && _idle(), () => {
+            const relative = answers.find(entry => entry[0] === "relative")[1];
+            assert(!relative.ok && relative.error.includes("absolute"), "no absolute program: refused before the queue: " + JSON.stringify(relative));
+            const shell = answers.find(entry => entry[0] === "shell")[1];
+            assert(!shell.ok && !shell.dismissed && !shell.refused && shell.code === -1 && shell.error !== "",
+                   "the shell's command: refused at its launch, nothing run: " + JSON.stringify(shell));
+            assertEqual(JSON.stringify(_notices().map(entry => entry.body)), JSON.stringify(["Authorization: behind the shell's"]),
+                        "… never announced as a module's: only the module's run behind it");
+            assert(_runs["behind the shell's"].result.ok, "the run behind it has run");
         });
     }
 }

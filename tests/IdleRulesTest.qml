@@ -21,15 +21,15 @@ TestCase {
             if (action.black !== undefined)
                 return action.type + ":" + action.black;
             if (action.leftUnlocked !== undefined)
-                return action.type + ":" + (action.leftUnlocked ? "unlocked" : "locked");
+                return action.type + (action.thenHibernate === true ? "+hibernate" : "") + ":" + (action.leftUnlocked ? "unlocked" : "locked");
             return action.type;
         }).join(",");
     }
 
-    function _machine(values, monitors, canPowerOff, canSuspend) {
+    function _machine(values, monitors, canPowerOff, canSuspend, canHibernate, canSuspendThenHibernate) {
         const rules = IdleRules;
         const self = {
-            config: rules.config(values, monitors, canPowerOff, canSuspend),
+            config: rules.config(values, monitors, canPowerOff, canSuspend, canHibernate, canSuspendThenHibernate),
             state: rules.initial(0),
             now: 0,
             actions: "",
@@ -44,7 +44,8 @@ TestCase {
             return self;
         };
         self.reconfigure = (ms, newValues, newMonitors, newCanPowerOff) => {
-            self.config = rules.config(newValues, newMonitors ?? monitors, newCanPowerOff ?? canPowerOff, canSuspend);
+            self.config = rules.config(newValues, newMonitors ?? monitors, newCanPowerOff ?? canPowerOff, canSuspend, canHibernate,
+                                       canSuspendThenHibernate);
             return self.at(ms, { type: "config" });
         };
         self.next = () => rules.nextDeadline(self.state, self.config, self.now);
@@ -104,6 +105,7 @@ TestCase {
         _monitors();
         _sleep();
         _sleepStage();
+        _hibernate();
         _forced();
         _unknowns();
         _powerReadBack();
@@ -1356,6 +1358,156 @@ TestCase {
         answered.at(3600000, { type: "config" });
         assertEqual(answered.actions, "", "logind's yes coming late: no sleep at once");
         assertEqual(answered.next(), 3600000 + 1800000, "… counted from then");
+    }
+
+    // Hibernation: with sleep on, the sleep's call becomes SuspendThenHibernate (the system's
+    // delay); with sleep off, a stage of its own counted from the last stage switched on
+    // before it — the screensaver, the lock, or neither (the last input) — and logind's
+    // Hibernate, under the sleep's rules (holders, blocks, a fresh read, logind's "yes")
+    function _hibernate() {
+        const rules = IdleRules;
+        const hours = { hibernateEnabled: true, hibernateTimeout: 7200, lockedScreenOffTimeout: 0 };
+        const lockAt20 = _with(hours, { lockscreenEnabled: true, lockAfter: 1200, screensaverEnabled: true, screensaverTimeout: 300 });
+        const fromLock = rules.config(lockAt20, ["lcd"], true, "yes", "yes", "yes");
+        assertEqual(JSON.stringify(fromLock.hibernate), JSON.stringify({ on: true, from: "lock", at: 1200, after: 7200 }),
+                    "sleep off, the lock at 20 min after the screensaver at 5: counted from the lock");
+        assertEqual(fromLock.hibernateAfter, 8400, "… hibernation at 2 h 20 min from the last input");
+        assertEqual(fromLock.sleepThenHibernate, false, "… no sleep to hibernate from");
+        const fromSaver = rules.config(_with(lockAt20, { screensaverTimeout: 1800 }), ["lcd"], true, "yes", "yes", "yes");
+        assertEqual(fromSaver.hibernate.from + " " + fromSaver.hibernateAfter, "saver 9000",
+                    "the screensaver at 30 min after the lock at 20: counted from the screensaver");
+        const tie = rules.config(_with(lockAt20, { screensaverTimeout: 1200 }), ["lcd"], true, "yes", "yes", "yes");
+        assertEqual(tie.hibernate.from, "lock", "the screensaver and the lock at one time: from the lock");
+        const neither = rules.config(hours, ["lcd"], true, "yes", "yes", "yes");
+        assertEqual(neither.hibernate.from + " " + neither.hibernateAfter, "input 7200", "neither on: from the last input");
+        const offOnly = rules.config(_with(hours, { screenOffEnabled: true, screenOffTimeout: 600 }), ["lcd"], true, "yes", "yes", "yes");
+        assertEqual(offOnly.hibernate.from, "input", "a screen-off is not the screensaver: still from the last input");
+        const perMonitor = rules.config(_own(_with(hours, { screensaverEnabled: true, screensaverTimeout: 300 }),
+                                             { oled: _entry(900, 0), panel: _entry(0, 300) }),
+                                        ["lcd", "oled", "panel"], true, "yes", "yes", "yes");
+        assertEqual(perMonitor.hibernate.from + " " + perMonitor.hibernate.at, "saver 900",
+                    "per monitor: from the latest screensaver of the connected monitors");
+        const unplugged = rules.config(_own(_with(hours, { screensaverEnabled: true, screensaverTimeout: 300 }), { oled: _entry(900, 0) }),
+                                       ["lcd"], true, "yes", "yes", "yes");
+        assertEqual(unplugged.hibernate.at, 300, "… a monitor not connected does not count");
+        for (const answer of ["challenge", "no", "na", "unknown", undefined]) {
+            const config = rules.config(lockAt20, ["lcd"], true, "yes", answer, "yes");
+            assertEqual(config.hibernate.on + " " + config.hibernateAfter, "false 0",
+                        "sleep off, CanHibernate " + answer + ": no hibernation (never called; challenge would ask for a password)");
+        }
+        assertEqual(rules.config(_with(lockAt20, { hibernateEnabled: false }), ["lcd"], true, "yes", "yes", "yes").hibernateAfter, 0,
+                    "switched off: none");
+        assertEqual(rules.config({ hibernateEnabled: true }, ["lcd"], true, "yes", "yes", "yes").hibernateAfter, 7200,
+                    "its time unset: 2 h");
+        assertEqual(rules.config(hours, ["lcd"], true, "yes").hibernateAfter, 0, "logind's answers not given: none");
+        const withSleep = _with(hours, { sleepEnabled: true, sleepTimeout: 1800 });
+        const thenHibernate = rules.config(withSleep, ["lcd"], true, "yes", "na", "yes");
+        assertEqual(JSON.stringify(thenHibernate.hibernate), JSON.stringify({ on: true, from: "sleep", at: 1800, after: 7200 }),
+                    "sleep on: counted from the sleep (the system's delay)");
+        assertEqual(thenHibernate.sleepThenHibernate + " " + thenHibernate.hibernateAfter, "true 0",
+                    "… the sleep asks SuspendThenHibernate, no stage of its own (CanHibernate does not matter then)");
+        for (const answer of ["challenge", "no", "na", "unknown"]) {
+            const config = rules.config(withSleep, ["lcd"], true, "yes", "yes", answer);
+            assertEqual(config.sleepThenHibernate + " " + config.hibernateAfter + " " + config.sleepAfter, "false 0 1800",
+                        "sleep on, CanSuspendThenHibernate " + answer + ": a plain sleep, no hibernation");
+        }
+        const noSleepHere = rules.config(_with(withSleep, { lockscreenEnabled: true, lockAfter: 1200 }), ["lcd"], true, "na", "yes", "yes");
+        assertEqual(noSleepHere.hibernate.from + " " + noSleepHere.hibernateAfter, "lock 8400",
+                    "sleep switched on where the computer cannot sleep: hibernation counted as with sleep off");
+        assertEqual(JSON.stringify(rules.hibernateBase(0, 0, 0)), JSON.stringify({ from: "input", at: 0 }), "the base: nothing on, the input");
+        assertEqual(rules.machineAfter({ sleepAfter: 0, hibernateAfter: 8400 }), 8400, "the whole computer's stage: the hibernation with sleep off");
+        assertEqual(rules.machineAfter({ sleepAfter: 1800, hibernateAfter: 8400 }), 1800, "… the sleep when it is on");
+        assertEqual(rules.machineAfter({ hibernateAfter: 8400 }), 8400, "… a config without a sleep: the hibernation");
+        assertEqual(JSON.stringify(rules.hibernateBase(0, 0, 1)), JSON.stringify({ from: "lock", at: 1 }), "a lock after one second is a stage");
+        const noMonitors = rules.config(_with(hours, { screensaverEnabled: true, screensaverTimeout: 600 }), [], true, "yes", "yes", "yes");
+        assertEqual(noMonitors.hibernate.from + " " + noMonitors.hibernate.at, "saver 600", "no monitor connected: the default's screensaver");
+        const oneOwn = rules.config(_own(_with(hours, { screensaverEnabled: true, screensaverTimeout: 300 }), { oled: _entry(900, 0) }),
+                                    ["oled"], true, "yes", "yes", "yes");
+        assertEqual(oneOwn.hibernate.at, 900, "one monitor with its own screensaver: its time, not the default's");
+        assertEqual(rules.config({ hibernateTimeout: 7200 }, ["lcd"], true, "yes", "yes", "yes").hibernate.on, false, "not switched on: off");
+        assertEqual(rules.config(_with(hours, { hibernateTimeout: 0 }), ["lcd"], true, "yes", "yes", "yes").hibernate.on, false, "a time of 0: none");
+        assertEqual(rules.config(_with(hours, { hibernateTimeout: 1 }), ["lcd"], true, "yes", "yes", "yes").hibernateAfter, 1, "a time of one second: on");
+        const quickSleep = rules.config(_with(hours, { sleepEnabled: true, sleepTimeout: 1 }), ["lcd"], true, "yes", "na", "yes");
+        assertEqual(quickSleep.sleepThenHibernate + " " + quickSleep.hibernateAfter, "true 0",
+                    "a sleep after one second: still the sleep's hibernation (CanSuspendThenHibernate)");
+
+        // The stage on the clock: from the lock at 20 min, 2 h later; once; locked first
+        const machine = _machine(lockAt20, ["lcd"], true, "yes", "yes", "yes").idle(5000, 0);
+        machine.at(1200000, { type: "deadline" });
+        assertEqual(machine.actions, "showSaver:lcd,lock,active:true", "the lock at 20 min (the screensaver's deadline taken late)");
+        machine.at(1201000, { type: "locked" });
+        assertEqual(machine.next(), 8400000, "… hibernation due 2 h after the lock");
+        machine.sleepDeadline();
+        assertEqual(machine.actions, "hibernate:locked", "… asked after a read found no sleep block, from the locked session");
+        assertEqual(machine.state.sleepAsked, true, "… once in this period");
+        assertEqual(machine.next(), -1, "… not again");
+        machine.at(8401000, { type: "sleep" }).at(9000000, { type: "resumed" });
+        assertEqual(machine.state.sleepAsked, false, "the resume: a new period");
+        const fromInput = _machine(hours, ["lcd"], true, "yes", "yes", "yes").idle(5000, 0);
+        assertEqual(fromInput.next(), 7200000, "neither stage on: 2 h after the last input");
+        fromInput.sleepDeadline();
+        assertEqual(fromInput.actions, "hibernate:unlocked", "… asked, unlocked as the settings say (no lock, no lock before sleep)");
+        const saverBase = _machine(_with(hours, { screensaverEnabled: true, screensaverTimeout: 600 }), ["lcd"], true, "yes", "yes", "yes").idle(5000, 0);
+        saverBase.deadline();
+        assertEqual(saverBase.actions, "showSaver:lcd,active:true", "the screensaver at 10 min");
+        assertEqual(saverBase.next(), 7800000, "… hibernation 2 h after it");
+        const onSleep = _machine(_with(hours, { lockOnSleep: true }), ["lcd"], true, "yes", "yes", "yes").idle(5000, 0);
+        onSleep.sleepDeadline();
+        assertEqual(onSleep.actions, "hibernate:locked", "Lock before the computer sleeps: it locks at the PrepareForSleep");
+
+        // Never on logind's no: nothing is ever asked
+        for (const answer of ["challenge", "no", "na", "unknown"]) {
+            const never = _machine(lockAt20, ["lcd"], true, "yes", answer, answer).idle(5000, 0);
+            never.at(1200000, { type: "deadline" }).at(1201000, { type: "locked" });
+            assertEqual(never.next(), -1, "CanHibernate " + answer + ": nothing due after the lock");
+            never.at(9000000, { type: "logindIdleBlock", held: false, sleepHeld: false });
+            assertEqual(never.actions, "", "… nor asked later");
+        }
+
+        // Holders, blocks, a fresh read: the sleep's rules
+        const held = _machine(hours, ["lcd"], true, "yes", "yes", "yes").idle(5000, 0).at(6000, { type: "busInhibitors", count: 1 });
+        assertEqual(held.next(), -1, "an app keeping the screen on holds the hibernation while unlocked");
+        const lockedHeld = _machine(hours, ["lcd"], true, "yes", "yes", "yes").idle(5000, 0)
+            .at(6000, { type: "busInhibitors", count: 1 }).at(7000, { type: "locked" });
+        assertEqual(lockedHeld.next(), 7200000, "locked (by hand): the apps are ignored, it comes at its time");
+        const blocked = _machine(hours, ["lcd"], true, "yes", "yes", "yes").idle(5000, 0);
+        blocked.sleepDeadline(true);
+        assertEqual(blocked.actions, "", "a sleep block held (a backup): no call");
+        assertEqual(blocked.next(), 7200000 + IdleRules.logindRecheck, "… read again later");
+        blocked.sleepDeadline(false);
+        assertEqual(blocked.actions, "hibernate:unlocked", "free again: asked");
+        const blind = _machine(hours, ["lcd"], true, "yes", "yes", "yes").idle(5000, 0);
+        blind.at(7200000, { type: "deadline" });
+        assertEqual(blind.actions, "", "due, but no read since: never asked blind");
+        blind.at(7200000, { type: "logindIdleBlock", held: false, sleepHeld: "unknown" });
+        assertEqual(blind.actions, "", "a read that could not tell: not asked");
+        const stale = _machine(hours, ["lcd"], true, "yes", "yes", "yes").idle(5000, 0).at(7000000, { type: "logindSleepBlock", held: false });
+        stale.at(7200000, { type: "deadline" });
+        assertEqual(stale.actions, "", "a read before its time does not count for it");
+
+        // A force: as long after it as after the screensaver's own time
+        const forced = _machine(_with(hours, { screensaverEnabled: true, screensaverTimeout: 300 }), ["lcd"], true, "yes", "yes", "yes")
+            .at(1000, { type: "force" });
+        assert(!forced.actions.includes("hibernate"), "a force never hibernates at once: " + forced.actions);
+        assertEqual(forced.next(), 1000 + 7200000, "… 2 h after the force (2 h after the screensaver it stands for)");
+
+        // With sleep on: the sleep asks SuspendThenHibernate, the stage is the sleep's
+        const sleepFirst = _machine(_with(withSleep, { lockOnSleep: true }), ["lcd"], true, "yes", "yes", "yes").idle(5000, 0);
+        assertEqual(sleepFirst.next(), 1800000, "sleep and hibernation: the sleep's time");
+        sleepFirst.sleepDeadline();
+        assertEqual(sleepFirst.actions, "sleep+hibernate:locked", "… SuspendThenHibernate asked");
+        const plainSleep = _machine(_with(withSleep, { lockOnSleep: true }), ["lcd"], true, "yes", "yes", "na").idle(5000, 0);
+        plainSleep.sleepDeadline();
+        assertEqual(plainSleep.actions, "sleep:locked", "SuspendThenHibernate not possible: a plain Suspend");
+
+        // A lock due no later is waited for, as for the sleep
+        const lockFirst = _machine(_with(hours, { lockscreenEnabled: true, lockAfter: 7200 }), ["lcd"], true, "yes", "yes", "yes").idle(5000, 0);
+        assertEqual(lockFirst.config.hibernateAfter, 14400, "lock at 2 h: hibernation 2 h after it");
+        // A switch that makes it due counts from the switch, never at once
+        const switched = _machine(_with(hours, { hibernateEnabled: false }), ["lcd"], true, "yes", "yes", "yes").idle(5000, 0);
+        switched.reconfigure(8000000, hours);
+        assertEqual(switched.actions, "", "hibernation switched on past its time: not at once");
+        assertEqual(switched.next(), 8000000 + 7200000, "… counted from the switch");
     }
 
     function _forced() {

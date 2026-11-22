@@ -607,7 +607,18 @@ launcher agree on the contract described under "Recovery" below):
   prompt), when the rules return `sleep`; the same `ListInhibitors` read gives logind's
   `sleep` blocks, which the rules take in the same step, locked or not. A sleep the settings
   leave unlocked is flagged (`Idle.sleepLeftUnlocked`) for the sleep notice, which then
-  does not count it. IPC: `idle state` (JSON, with the monitors' ids) and
+  does not count it. Hibernation is the same stage's: with sleep on the call becomes
+  `SuspendThenHibernate(false)` (the delay after it is sleep.conf's `HibernateDelaySec`, the
+  system's), with sleep off a stage of its own (`hibernateAfter`, counted from the later of
+  the screensaver and the idle lock, `IdleRules.hibernateBase`) and `Hibernate(false)`;
+  `LogindSleep` also reads `CanHibernate`, `CanSuspendThenHibernate`, and what explains a
+  "na" or tells the delay without root (`/proc/swaps`, `/proc/meminfo`, the kernel's lockdown,
+  `/sys/power/resume`, `/proc/cmdline`, `/etc/NIXOS`, `systemd-analyze cat-config
+  systemd/sleep.conf`), parsed by `HibernateRules`. The page's Apply of the delay is the one
+  write: `singletons/io/HibernateDelayWriter.qml` hands `HibernateRules.applyArgv`'s fixed
+  `/bin/sh` script to `PrivilegedRuns.startShell` (the shell's own runs as administrator, in
+  the one queue, polkit's prompt undressed), which writes the drop-in beside its place and
+  renames it in. IPC: `idle state` (JSON, with the monitors' ids) and
   `idle setMonitorTimes <id> <json|default>` (one monitor's entry in
   `lockscreen.monitorIdle`, `IdleRules.withMonitorTimes`).
 - **Adapters** — `singletons/lock/`, thin: I/O to events, effects to I/O, no decisions.

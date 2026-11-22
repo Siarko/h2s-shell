@@ -5,8 +5,8 @@ import Quickshell
 import qs.singletons.io as Io
 
 // The shell's one queue of commands run as administrator through pkexec: one password
-// question at a time, for every module (`module.privileged.start`, api/ModuleHandle.qml)
-// and the old api/PrivilegedAction.qml. The decisions are PrivilegedRules' (queueStep: when
+// question at a time, for every module (`module.privileged.start`, api/ModuleHandle.qml),
+// the old api/PrivilegedAction.qml and the shell's own fixed commands (startShell). The decisions are PrivilegedRules' (queueStep: when
 // a run may start, when the next one may, what a cancel, a lock and a module turned off do);
 // this only starts processes, keeps one timer and hands the answers over.
 //
@@ -183,6 +183,38 @@ Singleton {
             _refuse(job, { kind: "locked", error: "the session is locked" });
             return;
         }
+        _jobs.set(job.id, job);
+        _dispatch({ type: "add", id: job.id, owner: job.owner });
+    }
+
+    // A fixed command of the shell's own, started by the user's click (a setting's Apply):
+    // `request` { what (for the log and a failure's notice), argv (an absolute program and
+    // its words, from the shell's code) }; `done(result)` once, never inside this call, with
+    // PrivilegedRules' result (ok, code, stdout, stderr, dismissed, refused, notFound,
+    // cancelled, blocked, error). It runs under the trusted, setuid pkexec found by the
+    // look-up (none: refused, not available), without a time limit; its prompt is polkit's
+    // own, not dressed as a module's. A refusal is told once, as for every run
+    // (reportDenied); another failure as "<what> failed". In module test mode it is refused
+    // at its launch: no stand-in is allowed for it, so nothing runs.
+    function startShell(request, done) {
+        const words = CommandRules.argvSnapshot(request?.argv, true).argv;
+        const job = {
+            id: ++_lastId, kind: "shell", owner: "shell", handle: null, moduleId: "shell",
+            what: PrivilegedRules.cleanWhat(String(request?.what ?? "")), timeoutMs: 0, notifyFailures: true,
+            onStdout: null, onStderr: null, onLine: null, done: typeof done === "function" ? done : null,
+            argv: [], systemPkexec: true, program: "", environment: {}, standIns: [], testMode: _testMode,
+            answered: false, muted: false, runner: null, result: null, pkexecWords: [], announcement: null
+        };
+        if (words === null || !words[0].startsWith("/")) {
+            _refuse(job, PrivilegedRules.refusedResult({ blocked: "", error: "not a command with an absolute program" }));
+            return;
+        }
+        if (locked) {
+            _refuse(job, PrivilegedRules.lockedResult());
+            return;
+        }
+        job.argv = ["pkexec"].concat(words);
+        job.program = String(words[0]);
         _jobs.set(job.id, job);
         _dispatch({ type: "add", id: job.id, owner: job.owner });
     }
@@ -405,7 +437,8 @@ Singleton {
         // What the prompt shows for it, and what its request is known by: the words after
         // pkexec, the program pkexec is given first (a module's run: the shell's `timeout`)
         job.pkexecWords = job.argv.slice(1);
-        job.announcement = PolkitRules.announcement({
+        // The shell's own command: polkit's prompt as it is, no module named
+        job.announcement = job.kind === "shell" ? null : PolkitRules.announcement({
             legacy: job.kind === "legacy", moduleName: job.handle?.name ?? "", moduleId: job.moduleId,
             what: job.what, pkexecArgv: job.pkexecWords
         });
@@ -496,6 +529,15 @@ Singleton {
         for (const entry of outbox) {
             const job = entry.job;
             const reply = entry.reply;
+            if (job.kind === "shell") {
+                if (reply.refused)
+                    reportDenied(job.what);
+                else {
+                    const notice = PrivilegedRules.failureNotice(reply, job.what, 0, true);
+                    if (notice)
+                        Notifier.send(notice.summary, { body: notice.body });
+                }
+            }
             if (job.kind === "module") {
                 // The module turned off meanwhile: nothing of its is called
                 if (job.handle && job.handle.active !== true && job.owner !== "")

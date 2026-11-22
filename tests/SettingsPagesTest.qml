@@ -324,7 +324,8 @@ TestCase {
         "lockscreen.perMonitor": false, "lockscreen.monitorIdle": {}, "lockscreen.screensaverCommands": false,
         "lockscreen.notificationsOnScreensaver": true, "lockscreen.notificationsOnLock": true,
         "lockscreen.screensaverTimeout": 300, "lockscreen.screenOffTimeout": 900, "lockscreen.lockAfter": 1200,
-        "lockscreen.sleepEnabled": false, "lockscreen.sleepTimeout": 1800, "lockscreen.lockOnSleep": false
+        "lockscreen.sleepEnabled": false, "lockscreen.sleepTimeout": 1800, "lockscreen.lockOnSleep": false,
+        "lockscreen.hibernateEnabled": false, "lockscreen.hibernateTimeout": 7200
     })
 
     function _away(change) {
@@ -341,7 +342,7 @@ TestCase {
         try {
             _away({});
             const titles = _sectionsOf(page).map(section => section.title);
-            assertEqual(titles.join(" | "), "Screensaver | Lock screen | Sleep | Keeping the screen on | Commands",
+            assertEqual(titles.join(" | "), "Screensaver | Lock screen | Sleep | Hibernate | Keeping the screen on | Commands",
                         "When away: the sections in the order things happen, then the rest");
             const timeline = named("awayTimeline");
             const perMonitor = editorIn(page, "lockscreen.perMonitor");
@@ -417,6 +418,7 @@ TestCase {
                         "… a click writes the whole entry");
 
             _whenAwaySleep(page, named, editorIn, timeline);
+            _whenAwayHibernate(page, named, editorIn, timeline);
 
             // The lock screen's section at the top on request
             const sectionTop = () => lockSection.mapToItem(page.contentItem, 0, 0).y - Theme.settings.pageMargin;
@@ -471,8 +473,88 @@ TestCase {
         assertEqual(caption(), "Paused: borg blocks sleep (Backup).", "logind's sleep block: the timeline's line says who");
         page.sleepBlockers = [];
         _away({ "lockscreen.perMonitor": true });
-        assert(/The lock and sleep are one for all\./.test(editorIn(page, "lockscreen.perMonitor").hint), "per monitor: the lock and sleep one for all");
+        assert(/Lock, sleep and hibernation are one for all\./.test(editorIn(page, "lockscreen.perMonitor").hint),
+               "per monitor: the lock, sleep and hibernation one for all");
         assert(page.showSection("sleep"), "the sleep's section shown on request");
+        page.sleepSupport = Qt.binding(() => Idle.sleepSupport);
+        page.sleepBlockers = Qt.binding(() => Idle.sleepBlockers);
+    }
+
+    // The Hibernate section and the hibernation on the timeline, with logind's answers and
+    // what was read handed to the page. The Apply is never clicked here (it would ask for the
+    // password for real): HibernateDelayWriterTest runs it on a stand-in
+    function _whenAwayHibernate(page, named, editorIn, timeline) {
+        const caption = () => _find(timeline, item => item.objectName === "timelineCaption").text;
+        const labels = () => timeline.labels.map(label => label.text).join(" | ");
+        const hibernateSwitch = editorIn(named("hibernateSection").frame, "lockscreen.hibernateEnabled");
+        assert(hibernateSwitch !== null, "the hibernation's switch on its section's title line");
+        const header = "Filename Type Size Used Priority\n";
+        const facts = (extra, hibernation) => Object.assign({
+            canSuspend: "yes", canHibernate: "yes", canSuspendThenHibernate: "yes", idleAction: { action: "ignore", after: 0 },
+            hibernation: Object.assign({ swaps: HibernateRules.swaps(header + "/swapfile file 33554428 0 -2\n"), memoryInUse: 8000000,
+                                         lockdown: "none", resume: true, delay: { state: "set", seconds: 7200 }, nixos: false }, hibernation ?? {})
+        }, extra);
+        page.sleepSupport = facts({ canHibernate: "na" }, { swaps: HibernateRules.swaps(header + "/dev/zram0 partition 4194300 0 100\n") });
+        _away({ "lockscreen.hibernateEnabled": true, "lockscreen.lockscreenEnabled": true });
+        assert(!hibernateSwitch.enabled, "CanHibernate na: the switch greyed");
+        assertEqual(named("hibernateCaption").text,
+                    "Not available here: no swap space to save the session to (only zram, which is lost at power-off).", "… and why: only zram");
+        assert(!named("hibernateTimes").open && !named("timelineHibernate").visible, "… switched on all the same: no time, nothing on the timeline");
+
+        page.sleepSupport = facts({});
+        _away({ "lockscreen.lockscreenEnabled": true, "lockscreen.screensaverEnabled": true });
+        assert(hibernateSwitch.enabled && !named("hibernateTimes").open, "CanHibernate yes, off: the switch active, its time shut");
+        assertEqual(named("hibernateCaption").text, "Saves the session to disk and powers off, this long after the lock.", "… what it would do");
+        _away({ "lockscreen.hibernateEnabled": true, "lockscreen.lockscreenEnabled": true, "lockscreen.screensaverEnabled": true });
+        assert(named("hibernateTimes").open, "on: its time open");
+        assertEqual(named("hibernateTimeout").label, "after the lock", "sleep off, the lock at 20 min after the screensaver at 5: \"after the lock\"");
+        assertEqual(named("hibernateLine").text, "Hibernates 2 h after the lock (2 h 20 min after your last input).", "… the line under the times");
+        assert(!page._delayDiffers, "… no system delay to compare with (sleep off: the shell counts)");
+        assertEqual(labels(), "5 min | Lock 20 min | Hibernate 2 h 20 min", "the timeline: the hibernation's mark");
+        assert(named("timelineHibernate").visible && named("timelineBreak").visible, "… its line across the lanes, after a break");
+        assertEqual(caption(), "Locks at 20 min. Hibernates 2 h after the lock.", "… the line under it");
+        _away({ "lockscreen.hibernateEnabled": true, "lockscreen.lockscreenEnabled": true, "lockscreen.screensaverEnabled": true,
+                "lockscreen.screensaverTimeout": 1800 });
+        assertEqual(named("hibernateTimeout").label, "after the screensaver", "the screensaver at 30 min, later than the lock: \"after the screensaver\"");
+        assertEqual(named("hibernateLine").text, "Hibernates 2 h after the screensaver (2 h 30 min after your last input).", "… its line");
+        _away({ "lockscreen.hibernateEnabled": true });
+        assertEqual(named("hibernateTimeout").label, "after your last input", "neither: \"after your last input\"");
+        assertEqual(named("hibernateLine").text, "Hibernates 2 h after your last input.", "… said once");
+
+        // Sleep on: the system's delay, compared; Apply, or the NixOS option
+        _away({ "lockscreen.hibernateEnabled": true, "lockscreen.sleepEnabled": true, "lockscreen.hibernateTimeout": 10800 });
+        assertEqual(named("hibernateTimeout").label, "after sleeping for", "sleep on: \"after sleeping for\"");
+        assertEqual(named("hibernateCaption").text,
+                    "Saves the session to disk and powers off, after the computer has slept this long \u2014 it wakes briefly to do it.", "… the caption");
+        assertEqual(named("hibernateLine").text, "Hibernates 3 h after sleeping (3 h 30 min after your last input).", "… its line");
+        // (`visible` of what a Reveal holds follows its slide, which a synchronous suite never sees)
+        assert(page._delayDiffers, "3 h picked, the system's 2 h: said");
+        assertEqual(named("hibernateDelayLine").text, "The time after sleeping is a system setting (now 2 h). Changing it asks for your password.",
+                    "… the system's delay named");
+        const apply = named("hibernateApply");
+        assert(page._hibernation.nixos === false && apply.label === "Apply" && apply.kind === "save" && apply.available, "… with Apply");
+        assertEqual(labels(), "Sleep 30 min | Hibernate 3 h 30 min", "the timeline: the sleep, then the hibernation");
+        assertEqual(caption(), "No lock when idle. Sleeps at 30 min, hibernates 3 h later.", "… its line");
+        page.sleepSupport = facts({}, { nixos: true });
+        assertEqual(named("hibernateDelayLine").text,
+                    "The time after sleeping is a system setting (now 2 h). On NixOS it is the option programs.h2s-shell.idle.hibernateDelay.",
+                    "NixOS: the option named");
+        assert(page._hibernation.nixos === true, "… no Apply (/etc is generated)");
+        page.sleepSupport = facts({}, { delay: { state: "unset" } });
+        assert(page._delayDiffers && /now not set: systemd's default/.test(named("hibernateDelayLine").text),
+               "the system's delay not set: said, Apply offered");
+        page.sleepSupport = facts({});
+        _away({ "lockscreen.hibernateEnabled": true, "lockscreen.sleepEnabled": true, "lockscreen.hibernateTimeout": 7200 });
+        assert(!page._delayDiffers, "the same time as the system's: nothing to apply");
+        page.sleepSupport = facts({ canSuspendThenHibernate: "challenge" });
+        assertEqual(named("hibernateCaption").text, "Not available here: the system asks for a password to hibernate.",
+                    "sleep on, CanSuspendThenHibernate challenge: not available, why");
+        page.sleepSupport = facts({}, {});
+        page.sleepBlockers = [{ who: "borg", why: "Backup" }];
+        _away({ "lockscreen.hibernateEnabled": true });
+        assertEqual(caption(), "Paused: borg blocks sleep (Backup).", "a sleep block pauses the hibernation: the timeline's line says who");
+        page.sleepBlockers = [];
+        assert(page.showSection("hibernate"), "the hibernation's section shown on request");
         page.sleepSupport = Qt.binding(() => Idle.sleepSupport);
         page.sleepBlockers = Qt.binding(() => Idle.sleepBlockers);
     }

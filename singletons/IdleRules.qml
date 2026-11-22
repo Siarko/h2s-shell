@@ -21,6 +21,17 @@ import QtQuick
 //                 each monitor its own times, or the default's ("Set per monitor")
 //   locked ── lockedScreenOffAfter, from the lock or the last input at the lock screen
 //
+// Hibernation is the whole computer's too. With sleep on it is the sleep's: logind's
+// SuspendThenHibernate in place of Suspend, the system waking it to hibernate after its own
+// delay (sleep.conf's HibernateDelaySec, one per machine — the shell cannot pass one). With
+// sleep off it is a stage of its own on the clock (`hibernateAfter`): logind's Hibernate, as
+// long after the last stage switched on before it — the latest screensaver of the connected
+// monitors or the idle lock, whichever comes later; neither: the last input — as its time
+// says (hibernateBase). Only one of the two whole-computer stages is ever on the clock, so
+// they share the sleep's rules: asked once per period, held by the apps keeping the screen
+// on while unlocked, after a fresh read of logind's inhibitors found no sleep block, an idle
+// lock due no later waited for, only on logind's "yes".
+//
 // Sleep is the whole computer's: logind's Suspend, asked once per idle period, only where
 // logind answers CanSuspend "yes" (never on "challenge": no password from a timer). The
 // apps keeping the screen on hold it while unlocked, as every stage (after a forced
@@ -82,19 +93,25 @@ Singleton {
     // `values`: { screensaverEnabled, screensaverTimeout, screenOffEnabled, screenOffTimeout,
     // lockscreenEnabled, lockAfter, lockedScreenOffTimeout, perMonitor, monitorIdle
     // ({ monitorId: { screensaverEnabled, screensaverTimeout, screenOffEnabled,
-    // screenOffTimeout } }), screensaverCommands, sleepEnabled, sleepTimeout, lockOnSleep } —
-    // times in seconds; `monitors`: the
+    // screenOffTimeout } }), screensaverCommands, sleepEnabled, sleepTimeout, lockOnSleep,
+    // hibernateEnabled, hibernateTimeout } — times in seconds; `monitors`: the
     // connected monitors' ids (make|model|serial, MonitorRules) or objects with an `id` — as
     // read ({ id, base, connector }), a monitor's entry is found under either form of its key
     // (MonitorRules.overrideFor); `canPowerOff`: a backend can cut a monitor's power;
     // `canSuspend`: logind's CanSuspend answer ("yes", "no", "challenge", "na", anything else
-    // unknown) — sleep is a stage only on "yes". → the
+    // unknown) — sleep is a stage only on "yes"; `canHibernate`, `canSuspendThenHibernate`:
+    // logind's answers to those — hibernation only on "yes" to the one it needs
+    // (SuspendThenHibernate with sleep on, Hibernate with it off). → the
     // config every other function takes: times in seconds, 0 = never; `saverAfter` and
     // `screenOffAfter` the default's, `times` per connected monitor ({ saverAfter,
     // screenOffAfter }: its entry in `monitorIdle` while `perMonitor` is on, else the
     // default's). A screen-off without power control stays a stage: the screensaver at its
-    // time (wanted).
-    function config(values, monitors, canPowerOff, canSuspend) {
+    // time (wanted). `hibernate`: { on (switched on and possible here), from ("sleep",
+    // "lock", "saver" or "input": where it counts from), at (that moment, seconds from the
+    // last input), after (the profile's time) } — hibernateBase; `hibernateAfter`: the stage
+    // on the clock with sleep off (at + after, 0 = none); `sleepThenHibernate`: the sleep
+    // asks SuspendThenHibernate.
+    function config(values, monitors, canPowerOff, canSuspend, canHibernate, canSuspendThenHibernate) {
         const given = values ?? {};
         const power = canPowerOff === true;
         const flag = (value, fallback) => typeof value === "boolean" ? value : fallback;
@@ -150,12 +167,23 @@ Singleton {
             const entry = MonitorRules.overrideFor(entries, byId[id], monitors);
             times[id] = _isMap(entry) ? stages(entry, own) : Object.assign({}, defaults);
         }
+        const lockAfter = flag(given.lockscreenEnabled, false) ? seconds(given.lockAfter, 600) : 0;
+        const sleepAfter = flag(given.sleepEnabled, false) && canSuspend === "yes" ? seconds(given.sleepTimeout, 1800) : 0;
+        const saverTimes = ids.length > 0 ? ids.map(id => times[id].saverAfter) : [defaults.saverAfter];
+        const base = hibernateBase(sleepAfter, Math.max(...saverTimes), lockAfter);
+        const hibernateOn = flag(given.hibernateEnabled, false)
+            && (sleepAfter > 0 ? canSuspendThenHibernate === "yes" : canHibernate === "yes");
+        const hibernateTime = seconds(given.hibernateTimeout, 7200);
+        const hibernate = { on: hibernateOn && hibernateTime > 0, from: base.from, at: base.at, after: hibernateTime };
         return {
             saverAfter: defaults.saverAfter,
             screenOffAfter: defaults.screenOffAfter,
-            lockAfter: flag(given.lockscreenEnabled, false) ? seconds(given.lockAfter, 600) : 0,
+            lockAfter: lockAfter,
             lockedScreenOffAfter: seconds(given.lockedScreenOffTimeout, 60),
-            sleepAfter: flag(given.sleepEnabled, false) && canSuspend === "yes" ? seconds(given.sleepTimeout, 1800) : 0,
+            sleepAfter: sleepAfter,
+            hibernate: hibernate,
+            hibernateAfter: hibernate.on && sleepAfter <= 0 ? base.at + hibernateTime : 0,
+            sleepThenHibernate: hibernate.on && sleepAfter > 0,
             lockOnSleep: flag(given.lockOnSleep, false),
             perMonitor: perMonitor,
             times: times,
@@ -170,6 +198,29 @@ Singleton {
 
     function _isMap(value) {
         return value !== null && typeof value === "object" && !Array.isArray(value);
+    }
+
+    // Where hibernation counts from (seconds from the last input): with sleep on, the sleep
+    // (`sleepAfter` > 0; the system's delay follows it); else the last stage switched on
+    // before it — the screensaver (`saverAfter`: the latest of the connected monitors') or
+    // the idle lock (`lockAfter`), the lock at a tie; neither: the last input.
+    // → { from: "sleep" | "lock" | "saver" | "input", at }
+    function hibernateBase(sleepAfter, saverAfter, lockAfter) {
+        const on = value => typeof value === "number" && value > 0;
+        if (on(sleepAfter))
+            return { from: "sleep", at: sleepAfter };
+        if (on(lockAfter) && (!on(saverAfter) || lockAfter >= saverAfter))
+            return { from: "lock", at: lockAfter };
+        if (on(saverAfter))
+            return { from: "saver", at: saverAfter };
+        return { from: "input", at: 0 };
+    }
+
+    // The whole computer's stage on the clock (seconds from the last input; 0 none): the
+    // sleep, or with sleep off the hibernation
+    function machineAfter(config) {
+        const sleepAfter = config?.sleepAfter ?? 0;
+        return sleepAfter > 0 ? sleepAfter : (config?.hibernateAfter ?? 0);
     }
 
     // A monitor's own times as `monitorIdle` keeps them: its two switches and their times
@@ -261,7 +312,7 @@ Singleton {
             sleepAsked: false,       // the sleep asked in this period: not asked again
             sleepLeftUnlocked: false, // … and the settings leave it unlocked (no notice then)
             sleepSince: null,        // a profile switch made the sleep due: it counts from then (ms)
-            sleepAfterSeen: null,    // the config's sleepAfter at the last step
+            sleepAfterSeen: null,    // the whole computer's stage at the last step (machineAfter)
             stage: ({}),             // monitor id → 0 none, 1 screensaver, 2 screens off: reached in this period
             commandStarted: false,   // the start command ran in this period
             active: false,           // reported as ActiveChanged
@@ -504,7 +555,7 @@ Singleton {
     // sleepLockWait. Without `ignoreBlock`, only once a read of logind's inhibitors taken at or
     // after that time found no sleep block (a failed read lets nothing go)
     function _sleepAt(state, config, ignoreBlock) {
-        const sleepAfter = config.sleepAfter ?? 0;
+        const sleepAfter = machineAfter(config);
         if (state.sleeping || state.sleepAsked || sleepAfter <= 0)
             return -1;
         if (_sleepHeld(state) || !_counting(state))
@@ -576,7 +627,7 @@ Singleton {
     // idle lock at or before the sleep — the sleep notice does not count such a sleep
     function sleepLeftUnlocked(state, config) {
         return state.locked !== true && config.lockOnSleep !== true
-            && !(config.lockAfter > 0 && config.lockAfter <= config.sleepAfter);
+            && !(config.lockAfter > 0 && config.lockAfter <= machineAfter(config));
     }
 
     // logind's idle block is read before it matters, not on a clock (logind sends no signal
@@ -737,8 +788,10 @@ Singleton {
     // one going off: it takes the keys), powerOff { ids }, endCommand, startCommand, power
     // actions asked again { ids: [id], attempt } (a reading since the last ask showed the
     // monitor otherwise; a `restore`'s first with `restore: true`, first of all), powerGaveUp
-    // { ids, on } (asked powerRetry.tries times: not asked again), lock, sleep { leftUnlocked }
-    // (logind's Suspend; after the lock; `leftUnlocked`: sleepLeftUnlocked), active { active },
+    // { ids, on } (asked powerRetry.tries times: not asked again), lock, sleep { leftUnlocked,
+    // thenHibernate } (logind's Suspend, or SuspendThenHibernate; after the lock;
+    // `leftUnlocked`: sleepLeftUnlocked) or hibernate { leftUnlocked } (logind's Hibernate,
+    // sleep being off), active { active },
     // lockBlack { black }. The start command comes, and `active` turns true unlocked, once
     // every monitor that goes dark has (allDark).
     function step(state, event, config, now) {
@@ -968,8 +1021,9 @@ Singleton {
                 next.lockSince = now;
         }
         next.lockAfterSeen = config.lockAfter;
-        // The same for the sleep: a switch that makes it due counts from the switch
-        const sleepAfter = config.sleepAfter ?? 0;
+        // The same for the sleep (or the hibernation in its place): a switch that makes it due
+        // counts from the switch
+        const sleepAfter = machineAfter(config);
         if (next.sleepAfterSeen !== null && next.sleepAfterSeen !== sleepAfter) {
             const before = _sleepAt(next, { sleepAfter: next.sleepAfterSeen, lockAfter: config.lockAfter }, true);
             const after = _sleepAt(next, config, true);
@@ -1091,7 +1145,10 @@ Singleton {
         if (sleepDue(next, config, now)) {
             next.sleepAsked = true;
             next.sleepLeftUnlocked = sleepLeftUnlocked(next, config);
-            actions.push({ type: "sleep", leftUnlocked: next.sleepLeftUnlocked });
+            if ((config.sleepAfter ?? 0) > 0)
+                actions.push({ type: "sleep", leftUnlocked: next.sleepLeftUnlocked, thenHibernate: config.sleepThenHibernate === true });
+            else
+                actions.push({ type: "hibernate", leftUnlocked: next.sleepLeftUnlocked });
         }
         const active = next.locked || dark;
         if (active !== next.active) {

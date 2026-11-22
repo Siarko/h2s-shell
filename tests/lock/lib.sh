@@ -539,7 +539,10 @@ notification_server_up() {
 #                    <bool>" in logind/log; `… Properties.Get … LockedHint` answers false;
 #                    `… CanSuspend` answers logind/can-suspend ("yes" without it), the
 #                    Manager's IdleAction and IdleActionUSec logind/idle-action ("<action>
-#                    <µs>", "ignore 0" without it); `… Suspend <bool>` notes "call Suspend
+#                    <µs>", "ignore 0" without it); `… CanHibernate` and
+#                    `… CanSuspendThenHibernate` logind/can-hibernate and
+#                    logind/can-suspend-then-hibernate ("na" without them); `… Suspend
+#                    <bool>` (and SuspendThenHibernate, Hibernate) notes "call <method>
 #                    <bool>" and, as logind does, sends PrepareForSleep(true) (refused with
 #                    logind/refuse-suspend) — the wake is the test's (logind_signal wake)
 #                    ("call LockedHint")
@@ -605,6 +608,18 @@ case "\$1" in
                 echo "('\$(cat "$WORK/logind/can-suspend" 2> /dev/null || echo yes)',)"
                 exit 0
                 ;;
+            *".CanHibernate "*)
+                # … and hibernation: logind/can-hibernate ("na" without it: no scenario
+                # hibernates unless it says so)
+                echo "call CanHibernate" >> "\$log"
+                echo "('\$(cat "$WORK/logind/can-hibernate" 2> /dev/null || echo na)',)"
+                exit 0
+                ;;
+            *".CanSuspendThenHibernate "*)
+                echo "call CanSuspendThenHibernate" >> "\$log"
+                echo "('\$(cat "$WORK/logind/can-suspend-then-hibernate" 2> /dev/null || echo na)',)"
+                exit 0
+                ;;
             *" IdleAction "*|*" IdleActionUSec "*)
                 # logind's own idle action (Idle reads it): logind/idle-action
                 read -r action usec < "$WORK/logind/idle-action" 2> /dev/null || { action=ignore; usec=0; }
@@ -614,11 +629,15 @@ case "\$1" in
                 esac
                 exit 0
                 ;;
-            *".Suspend "*)
-                # The sleep the shell asks for after idle: noted with its argument; then, as
-                # logind does, PrepareForSleep(true) to every listener — the wake is the test's
-                for argument in "\$@"; do last=\$argument; done
-                echo "call Suspend \$last" >> "\$log"
+            *".Suspend "*|*".SuspendThenHibernate "*|*".Hibernate "*)
+                # The sleep the shell asks for after idle (or the hibernation): noted with its
+                # name and argument; then, as logind does, PrepareForSleep(true) to every
+                # listener — the wake is the test's
+                for argument in "\$@"; do
+                    case \$argument in org.freedesktop.login1.Manager.*) method=\${argument#org.freedesktop.login1.Manager.} ;; esac
+                    last=\$argument
+                done
+                echo "call \$method \$last" >> "\$log"
                 if [ -f "$WORK/logind/refuse-suspend" ]; then
                     echo "Error: GDBus.Error:org.freedesktop.login1.OperationInProgress: There's already a shutdown or sleep operation in progress" >&2
                     exit 1

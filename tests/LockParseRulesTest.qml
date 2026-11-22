@@ -139,13 +139,31 @@ TestCase {
         assertEqual(LockParseRules.idleAction("", "(<uint64 1800000000>,)"), null, "idleAction: the action not read: null");
         assertEqual(LockParseRules.idleAction("(<'suspend'>,)", "Error"), null, "idleAction: the time not read: null");
         assertEqual(LockParseRules.idleAction("(<'Suspend!'>,)", "(<uint64 1>,)"), null, "idleAction: not a word logind uses: null");
+        const pick = value => ({ canSuspend: value.canSuspend, idleAction: value.idleAction });
         const support = LockParseRules.sleepSupport("[CanSuspend]\n('yes',)\n[IdleAction]\n(<'suspend'>,)\n[IdleActionUSec]\n(<uint64 600000000>,)\n");
-        assertEqual(JSON.stringify(support), JSON.stringify({ canSuspend: "yes", idleAction: { action: "suspend", after: 600 } }),
+        assertEqual(JSON.stringify(pick(support)), JSON.stringify({ canSuspend: "yes", idleAction: { action: "suspend", after: 600 } }),
                     "sleepSupport: the three answers under their headers");
-        assertEqual(JSON.stringify(LockParseRules.sleepSupport("[CanSuspend]\n[IdleAction]\n(<'ignore'>,)\n[IdleActionUSec]\n(<uint64 1>,)\n")),
+        assertEqual(JSON.stringify(pick(LockParseRules.sleepSupport("[CanSuspend]\n[IdleAction]\n(<'ignore'>,)\n[IdleActionUSec]\n(<uint64 1>,)\n"))),
                     JSON.stringify({ canSuspend: "unknown", idleAction: { action: "ignore", after: 0 } }), "sleepSupport: a failed CanSuspend: unknown");
-        assertEqual(JSON.stringify(LockParseRules.sleepSupport("")), JSON.stringify({ canSuspend: "unknown", idleAction: null }),
-                    "sleepSupport: nothing: unknown, not read");
+        assertEqual(JSON.stringify(LockParseRules.sleepSupport("")), JSON.stringify({
+            canSuspend: "unknown", canHibernate: "unknown", canSuspendThenHibernate: "unknown", idleAction: null,
+            hibernation: { swaps: null, memoryInUse: -1, lockdown: "unknown", resume: "unknown", delay: { state: "unknown" }, nixos: null }
+        }), "sleepSupport: nothing: unknown, not read");
+        assertEqual(JSON.stringify(LockParseRules.sleepSupportUnread()), JSON.stringify(LockParseRules.sleepSupport("")), "… the same before a read");
+        const whole = LockParseRules.sleepSupport("[CanSuspend]\n('yes',)\n[CanHibernate]\n('na',)\n[CanSuspendThenHibernate]\n('challenge',)\n"
+            + "[IdleAction]\n[IdleActionUSec]\n"
+            + "[Swaps]\nFilename Type Size Used Priority\n/dev/zram0 partition 4194300 0 100\n"
+            + "[Meminfo]\nMemTotal: 1000 kB\nMemAvailable: 400 kB\n"
+            + "[Lockdown]\nnone [integrity] confidentiality\n[Resume]\n0:0\n[Cmdline]\nroot=x resume=/dev/sda2\n[NixOS]\nno\n"
+            + "[SleepConf]\n# /etc/systemd/sleep.conf\n[Swaps]\n[NixOS]\n[Sleep]\nHibernateDelaySec=3h\n");
+        assertEqual(JSON.stringify(whole), JSON.stringify({
+            canSuspend: "yes", canHibernate: "na", canSuspendThenHibernate: "challenge", idleAction: null,
+            hibernation: { swaps: [{ name: "/dev/zram0", type: "partition", kib: 4194300, zram: true }], memoryInUse: 600, lockdown: "integrity",
+                           resume: true, delay: { state: "set", seconds: 10800 }, nixos: false }
+        }), "sleepSupport: every section; sleep.conf's own [Sleep] and look-alike headers stay in it, past its header");
+        assertEqual(LockParseRules.sleepSupport("[NixOS]\nyes\n").hibernation.nixos, true, "sleepSupport: NixOS");
+        assertEqual(LockParseRules.sleepSupport("[Bogus]\n[NixOS]\nyes\n[Other]\nno\n").hibernation.nixos, null,
+                    "sleepSupport: an unknown header is a line of the section before (NixOS: not one word)");
         assertEqual(LockParseRules.sleepSupport("('yes',)\n").canSuspend, "unknown", "sleepSupport: an answer without its header: unknown");
 
         // The sleep call's outcome

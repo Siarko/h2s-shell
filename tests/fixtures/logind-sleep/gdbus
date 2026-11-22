@@ -1,11 +1,12 @@
 #!/bin/sh
 # A stand-in for gdbus (tests/LogindSleepReadingTest.qml), started through a link in the
-# suite's scratch directory; no bus is reached. It answers logind's CanSuspend with that
-# directory's `can-suspend` (failing as gdbus does without it), the Manager's IdleAction and
-# IdleActionUSec properties from `idle-action` ("<action> <microseconds>"; failing without
-# it), and takes Suspend: each call noted in `calls` with its argument, answered "()" — or
-# refused, status 1, while a `refuse` file is there. With a `hang` file it never ends. Anything
-# else it is asked fails.
+# suite's scratch directory; no bus is reached. It answers logind's CanSuspend, CanHibernate
+# and CanSuspendThenHibernate with that directory's `can-suspend`, `can-hibernate` and
+# `can-suspend-then-hibernate` (failing as gdbus does without one), the Manager's IdleAction
+# and IdleActionUSec properties from `idle-action` ("<action> <microseconds>"; failing
+# without it), and takes Suspend, SuspendThenHibernate and Hibernate: each call noted in
+# `calls` with its name and argument, answered "()" — or refused, status 1, while a `refuse`
+# file is there. With a `hang` file it never ends. Anything else it is asked fails.
 here=$(dirname "$0")
 case " $* " in
     *" call --system --dest org.freedesktop.login1 --object-path /org/freedesktop/login1 "*) ;;
@@ -18,6 +19,14 @@ case " $* " in
         [ -f "$here/can-suspend" ] || { echo "Error: GDBus.Error:org.freedesktop.DBus.Error.ServiceUnknown: no logind" >&2; exit 1; }
         echo "('$(cat "$here/can-suspend")',)"
         ;;
+    *" --method org.freedesktop.login1.Manager.CanHibernate "*)
+        [ -f "$here/can-hibernate" ] || { echo "Error: GDBus.Error:org.freedesktop.DBus.Error.ServiceUnknown: no logind" >&2; exit 1; }
+        echo "('$(cat "$here/can-hibernate")',)"
+        ;;
+    *" --method org.freedesktop.login1.Manager.CanSuspendThenHibernate "*)
+        [ -f "$here/can-suspend-then-hibernate" ] || { echo "Error: GDBus.Error:org.freedesktop.DBus.Error.ServiceUnknown: no logind" >&2; exit 1; }
+        echo "('$(cat "$here/can-suspend-then-hibernate")',)"
+        ;;
     *" --method org.freedesktop.DBus.Properties.Get org.freedesktop.login1.Manager IdleAction "*)
         [ -f "$here/idle-action" ] || { echo "Error: GDBus.Error:org.freedesktop.DBus.Error.ServiceUnknown: no logind" >&2; exit 1; }
         read -r action usec < "$here/idle-action"
@@ -28,8 +37,11 @@ case " $* " in
         read -r action usec < "$here/idle-action"
         echo "(<uint64 $usec>,)"
         ;;
-    *" --method org.freedesktop.login1.Manager.Suspend "*)
-        echo "Suspend $last" >> "$here/calls"
+    *" --method org.freedesktop.login1.Manager.Suspend "*|*" --method org.freedesktop.login1.Manager.SuspendThenHibernate "*|*" --method org.freedesktop.login1.Manager.Hibernate "*)
+        for argument in "$@"; do
+            case $argument in org.freedesktop.login1.Manager.*) method=${argument#org.freedesktop.login1.Manager.} ;; esac
+        done
+        echo "$method $last" >> "$here/calls"
         if [ -f "$here/refuse" ]; then
             echo "Error: GDBus.Error:org.freedesktop.login1.OperationInProgress: There's already a shutdown or sleep operation in progress" >&2
             exit 1

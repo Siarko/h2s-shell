@@ -121,6 +121,10 @@ TestCase {
         assertEqual(wants(IdleRules.config(values({ sleepEnabled: true }), [], true, "yes")), true, "… the sleep on: asked for");
         assertEqual(wants(IdleRules.config(values({ sleepEnabled: true }), [], true, "challenge")), false,
                     "… the sleep switched on where logind will not let the shell sleep: not a stage, left free");
+        assertEqual(wants(IdleRules.config(values({ hibernateEnabled: true }), [], true, "na", "yes", "na")), true,
+                    "… the hibernation on, sleep off: asked for");
+        assertEqual(wants(IdleRules.config(values({ hibernateEnabled: true }), [], true, "na", "challenge", "na")), false,
+                    "… the hibernation switched on where logind will not let the shell hibernate: left free");
         assertEqual(wants(resolved({ lockedScreenOffTimeout: 30, lockOnSleep: true }, true)), false,
                     "… the lock screen's screen-off and the lock before sleep do not count (requests are ignored while locked)");
         assertEqual(wants({ saverAfter: "300", lockAfter: -1 }), false, "… only a positive number of seconds is a stage");

@@ -112,11 +112,11 @@ TestCase {
         assert(rules.anything([{ saverAfter: 0, screenOffAfter: 0 }], 0, 1800), "the sleep alone is something");
         assertEqual(rules.axisEnd([{ saverAfter: 300, screenOffAfter: 0 }], 600, -1, 1800), Math.round(1800 * 1.18), "the axis past the sleep");
         const linear = rules.axis([{ saverAfter: 300, screenOffAfter: 600 }], 900, -1, 1800);
-        assertEqual(JSON.stringify(linear), JSON.stringify({ end: Math.round(1800 * 1.18), breakAt: -1, sleepAt: 1800 }),
+        assertEqual(JSON.stringify(linear), JSON.stringify({ end: Math.round(1800 * 1.18), breakAt: -1, tailAt: 1800 }),
                     "sleep at 30 min after a lock at 15: one linear axis");
         assertEqual(rules.axis([{ saverAfter: 300, screenOffAfter: 0 }], 1200, -1, 3600).breakAt, -1, "an hour, three times the rest: still linear");
         const broken = rules.axis([{ saverAfter: 300, screenOffAfter: 600 }], 900, -1, 7200);
-        assertEqual(JSON.stringify(broken), JSON.stringify({ end: Math.round(7200 * 1.1), breakAt: Math.round(900 * 1.18), sleepAt: 7200 }),
+        assertEqual(JSON.stringify(broken), JSON.stringify({ end: Math.round(7200 * 1.1), breakAt: Math.round(900 * 1.18), tailAt: 7200 }),
                     "sleep at 2 h after a lock at 15 min: after a break, the minutes up to it");
         assertEqual(rules.axis([{ saverAfter: 0, screenOffAfter: 0 }], 0, -1, 7200).breakAt, -1, "nothing before the sleep: no break");
         assertEqual(rules.axis([{ saverAfter: 0, screenOffAfter: 0 }], 600, -1, 3600).breakAt, -1, "a sleep at an hour exactly: no break (past an hour only)");
@@ -137,6 +137,72 @@ TestCase {
         assertEqual(marks(rules.marks([{ saverAfter: 300, screenOffAfter: 0 }], 1800, -1, minutes, true, 1800)),
                     "time:5 min | lock:Lock 30 min | sleep:Sleep 30 min", "the sleep's mark: at one time after the lock");
         assertEqual(marks(rules.marks([{ saverAfter: 0, screenOffAfter: 0 }], 0, -1, minutes, true, 0)), "", "no sleep: no mark");
+
+        // --- the hibernation on the timeline ---
+        assert(rules.anything([{ saverAfter: 0, screenOffAfter: 0 }], 0, 0, 7200), "the hibernation alone is something");
+        assertEqual(rules.axisEnd([{ saverAfter: 0, screenOffAfter: 0 }], 0, -1, 0, 1800), Math.round(1800 * 1.18), "the axis past the hibernation");
+        const afterLock = rules.axis([{ saverAfter: 300, screenOffAfter: 900 }], 1200, -1, 0, 8400);
+        assertEqual(JSON.stringify(afterLock), JSON.stringify({ end: Math.round(8400 * 1.1), breakAt: Math.round(1200 * 1.18), tailAt: 8400 }),
+                    "hibernation 2 h after the lock at 20 min: after a break, the minutes up to it");
+        const afterSleep = rules.axis([{ saverAfter: 300, screenOffAfter: 600 }], 900, -1, 1800, 12600);
+        assertEqual(JSON.stringify(afterSleep), JSON.stringify({ end: Math.round(12600 * 1.1), breakAt: Math.round(1800 * 1.18), tailAt: 12600 }),
+                    "sleep at 30 min, hibernation 3 h later: the break after the sleep, before the hibernation");
+        assertEqual(JSON.stringify(rules.axis([{ saverAfter: 300, screenOffAfter: 0 }], 600, -1, 3000, 4000)),
+                    JSON.stringify({ end: Math.round(4000 * 1.18), breakAt: -1, tailAt: 4000 }), "hibernation soon after a late sleep: linear");
+        assertEqual(rules.axis([{ saverAfter: 0, screenOffAfter: 0 }], 0, -1, 0, 7200).breakAt, -1, "nothing before the hibernation: no break");
+        assertEqual(rules.axis([{ saverAfter: 0, screenOffAfter: 0 }], 0, -1, 900, 9000).breakAt, Math.round(900 * 1.18),
+                    "the sleep alone before it: the break after the sleep");
+        assertEqual([afterSleep.breakAt, 12600].map(t => at(t, afterSleep)).join(" "), "700 850", "the break and the hibernation placed as for a sleep");
+        assertEqual(stretches(rules.segments({ saverAfter: 300, screenOffAfter: 900 }, 9240, true, 0, 1416, 8400)),
+                    "on:0-300 saver:300-900 off:900-1416 off:1416-8400 hibernated:8400-9240", "hibernated after the screens off, the break a gap");
+        assertEqual(stretches(rules.segments({ saverAfter: 300, screenOffAfter: 0 }, 13860, true, 1800, 2124, 12600)),
+                    "on:0-300 saver:300-1800 asleep:1800-2124 asleep:2124-12600 hibernated:12600-13860", "asleep, then hibernated");
+        assertEqual(marks(rules.marks([{ saverAfter: 300, screenOffAfter: 0 }], 1200, -1, minutes, true, 0, 8400)),
+                    "time:5 min | lock:Lock 20 min | hibernate:Hibernate 2 h 20 min", "the hibernation's mark");
+        assertEqual(marks(rules.marks([{ saverAfter: 0, screenOffAfter: 0 }], 0, -1, minutes, true, 1800, 1800)),
+                    "sleep:Sleep 30 min | hibernate:Hibernate 30 min", "at one time: the sleep, then the hibernation");
+        assertEqual(caption({ holders: [], anything: true, lockAfter: 1200, sleepAfter: 0, hibernate: { on: true, from: "lock", at: 1200, after: 7200 } }),
+                    "Locks at 20 min. Hibernates 2 h after the lock.", "the caption: hibernation after the lock");
+        assertEqual(caption({ holders: [], anything: true, lockAfter: 900, sleepAfter: 1800, hibernate: { on: true, from: "sleep", at: 1800, after: 10800 } }),
+                    "Locks at 15 min. Sleeps at 30 min, hibernates 3 h later.", "… after the sleep");
+        assertEqual(caption({ holders: [], anything: true, lockAfter: 0, sleepAfter: 0, hibernate: { on: true, from: "input", at: 0, after: 7200 } }),
+                    "No lock when idle. Hibernates 2 h after your last input.", "… after the last input");
+        assertEqual(caption({ holders: [], anything: true, lockAfter: 0, sleepAfter: 0, lockedScreenOffAfter: 0,
+                              hibernate: { on: false, from: "input", at: 0, after: 7200 } }),
+                    "No lock when idle. Locked: screens stay on.", "… not on: not said");
+        assertEqual(caption({ holders: [], sleepBlockers: [{ who: "borg", why: "" }], anything: true, sleepAfter: 0,
+                              hibernate: { on: true, from: "input", at: 0, after: 7200 } }),
+                    "Paused: borg blocks sleep.", "a sleep block pauses the hibernation too");
+
+        // One second is a time like any other
+        const none = [{ saverAfter: 0, screenOffAfter: 0 }];
+        assert(rules.anything(none, 1, 0, 0) && rules.anything(none, 0, 1, 0) && rules.anything(none, 0, 0, 1),
+               "a lock, a sleep or a hibernation after one second is something");
+        assertEqual(rules.axis(none, 0, -1, 0, 1).tailAt, 1, "a hibernation after one second is the tail");
+        assertEqual(stretches(rules.segments(none, 3, true, 0, 0, 1)), "on:0-1 hibernated:1-3", "hibernated from one second");
+        assertEqual(stretches(rules.segments(none, 3, true, 1, 0, 0)), "on:0-1 asleep:1-3", "asleep from one second");
+        assertEqual(marks(rules.marks(none, 0, -1, minutes, true, 0, 1)), "hibernate:Hibernate 1 s", "the mark of a hibernation after one second");
+        assertEqual(caption({ holders: [], sleepBlockers: [{ who: "borg", why: "" }], anything: true, sleepAfter: 1 }), "Paused: borg blocks sleep.",
+                    "a sleep after one second is paused by a block too");
+        assertEqual(caption({ holders: [], anything: true, lockAfter: 0, sleepAfter: 1 }), "No lock when idle. Sleeps at 1 s.", "… and said");
+
+        // --- the Hibernate section ---
+        assertEqual(rules.hibernateAt({ on: true, from: "lock", at: 1200, after: 7200 }), 8400, "hibernation at 2 h 20 min from the last input");
+        assertEqual(rules.hibernateAt({ on: false, from: "lock", at: 1200, after: 7200 }), 0, "… none when not on");
+        assertEqual(rules.hibernateAt(null), 0, "… none when not given");
+        assertEqual(["sleep", "lock", "saver", "input", undefined].map(rules.hibernatePillsLabel).join(" | "),
+                    "after sleeping for | after the lock | after the screensaver | after your last input | after your last input", "the pills' words");
+        assertEqual(rules.hibernateCaption("Not available here: no swap space to save the session to.", "lock"),
+                    "Not available here: no swap space to save the session to.", "not possible: the reason");
+        assertEqual(rules.hibernateCaption("", "sleep"),
+                    "Saves the session to disk and powers off, after the computer has slept this long \u2014 it wakes briefly to do it.", "with sleep on");
+        assertEqual(rules.hibernateCaption("", "saver"), "Saves the session to disk and powers off, this long after the screensaver.", "with sleep off");
+        assertEqual(rules.hibernateLine({ from: "lock", at: 1200, after: 7200 }, minutes), "Hibernates 2 h after the lock (2 h 20 min after your last input).",
+                    "the line: after the lock");
+        assertEqual(rules.hibernateLine({ from: "sleep", at: 1800, after: 10800 }, minutes),
+                    "Hibernates 3 h after sleeping (3 h 30 min after your last input).", "… after sleeping");
+        assertEqual(rules.hibernateLine({ from: "input", at: 0, after: 7200 }, minutes), "Hibernates 2 h after your last input.",
+                    "… from the last input: said once");
 
         // --- the Sleep section ---
         assertEqual(rules.sleepUnavailable("yes"), "", "CanSuspend yes: available");
