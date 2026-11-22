@@ -4,6 +4,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import qs.singletons
+import qs.singletons.helper
 import qs.singletons.lock
 
 // Idleness, the screensaver and the idle lock: the I/O around IdleRules
@@ -13,7 +14,9 @@ import qs.singletons.lock
 // event at a time, and carries out the actions they return: the
 // screensaver's picture per monitor (`shownFor`, which the screensaver's windows follow),
 // the monitors' power (ScreenPower), the lock surface's black fallback (`lockBlack`), the
-// idle lock (Lockscreen.lock("idle")), the start and end commands. One Timer runs to the
+// idle lock (Lockscreen.lock("idle")), the start and end commands. The screensaver
+// interface (org.freedesktop.ScreenSaver, the helper's: ScreenSaverClient) brings the apps
+// keeping the screen on and their activity, and is told the screensaver's state. One Timer runs to the
 // rules' next deadline; nothing here decides when.
 //
 // Monitors are ScreenPower's (by MonitorRules' ids) where it can cut their power; elsewhere
@@ -40,6 +43,12 @@ Singleton {
     // The lock surface drawn plain black: the lock screen's screen-off reached while some
     // monitor is not read as off (no power control, a cut that failed)
     readonly property bool lockBlack: _state.lockBlack === true
+
+    // The apps keeping the screen on through org.freedesktop.ScreenSaver: [{ app, reason,
+    // cookie }], plain and capped (counted by the rules only while unlocked)
+    readonly property var busHolders: _screenSaver.holders
+    // The interface as the Screensaver page tells it: { state, line } (HelperRules.serviceStatus)
+    readonly property var screenSaverService: HelperRules.serviceStatus(Helper.state, _screenSaver.state, _screenSaver.name)
 
     // What the screen with this connector name shows unlocked: "on" (the desktop), "saver"
     // (the screensaver) or "off" (powered off, under a plain black surface that takes the
@@ -185,8 +194,11 @@ Singleton {
         case "lockBlack":
             _log("info", action.black ? "the lock screen goes black (a monitor not read as off)" : "the lock screen shows again");
             break;
+        case "active":
+            _busActiveSinceMs = action.active ? Date.now() : 0;
+            _busActive = action.active;
+            break;
         default:
-            // active (no screensaver interface yet): nothing to carry out
             break;
         }
     }
@@ -214,6 +226,21 @@ Singleton {
             console.warn(line);
         else
             console.info(line);
+    }
+
+    // ---- org.freedesktop.ScreenSaver (the helper's) ----
+    property bool _busActive: false
+    property real _busActiveSinceMs: 0
+
+    property ScreenSaverClient _screenSaver: ScreenSaverClient {
+        path: Helper.available ? Helper.path : ""
+        active: root._busActive
+        activeSinceMs: root._busActiveSinceMs
+        idleSeconds: () => root._state.inputIdle ? (root._now() - root._state.idleSince) / 1000 : 0
+        onHoldersChanged: root._dispatch({ type: "busInhibitors", count: holders.length })
+        onActivity: root._dispatch({ type: "activity" })
+        // SetActive(true) starts the screensaver; SetActive(false) is activity
+        onSetActiveAsked: active => root._dispatch({ type: active ? "force" : "activity" })
     }
 
     // "Lock after" replaced `lockscreenTimeout` (counted from the screensaver's start when it
@@ -437,6 +464,8 @@ Singleton {
                 saverShown: root.saverShown,
                 saverOnScreen: root.saverOnScreen,
                 idleFor: now - root._state.idleSince,
+                busHolders: root.busHolders,
+                screenSaverService: root.screenSaverService,
                 nextDeadlineIn: deadline < 0 ? -1 : deadline - now
             });
         }

@@ -17,14 +17,18 @@
 #      checkout's build current, stale (handed over at once, rebuilt in the background,
 #      never waited for), missing, failed, the installation's helper (H2S_SHELL_LIBEXEC),
 #      a session locked by a dead shell — and the launcher's log line, once per outcome;
-#   4. nothing runs the helper or its build through pkexec, sudo or the like.
+#   4. nothing runs the helper or its build through pkexec, sudo or the like;
+#   5. `h2s-helper screensaver` on a private bus, and the shell's side against it
+#      (tests/helper/screensaver.sh, with the test client helper/tests/client.cpp built
+#      beside the helper: as the flake's h2s-helper-tests with nix, with cmake otherwise).
 #
 #   tests/run-helper.sh
 #
 # The tools, as every runner takes them: H2S_TEST_TOOLS=nix the flake's package (nix
 # builds it, with its own cmake, compiler and Qt), =system cmake, a C++ compiler and Qt 6's
-# development files from the system; unset, nix where there is a `nix` command. Nothing is
-# written outside its temporary directory; no D-Bus, no shell, no compositor.
+# development files from the system; unset, nix where there is a `nix` command. Part 5 takes
+# dbus-daemon, gdbus, labwc and Quickshell as tests/headless.sh does. Nothing is written
+# outside its temporary directories; the only bus is the run's own.
 #
 # Exit status: 0 when every check passed, 1 when one failed, 2 when it could not be set up
 # (a missing tool is named with its use).
@@ -324,6 +328,26 @@ near=$(cd "$REPO" && grep -rnE "$escalation.*$helper_names|$helper_names.*$escal
 [ -z "$near" ] || printf '%s\n' "$near"
 check "nothing runs the helper or its build through pkexec, sudo, doas, run0 or su" test -z "$near"
 check "build-helper.sh refuses to run as root" grep -q 'id -u)" != 0 ] ||' "$REPO/scripts/build-helper.sh"
+
+# ---- 5. The screensaver service on a private bus ---------------------------------------
+if [ "$source" = nix ]; then
+    client_out=$(cd "$REPO" && nix --extra-experimental-features "nix-command flakes" build --no-link \
+        --no-write-lock-file --print-out-paths "path:$REPO#h2s-helper-tests" 2> "$work/client.log" | tail -n 1)
+    client=${client_out:+$client_out/libexec/h2s-shell/h2s-helper-test-client}
+else
+    { cmake -S "$REPO/helper" -B "$work/client" -DCMAKE_BUILD_TYPE=Release -DH2S_HELPER_TESTS=ON -DH2S_VERSION="$version" \
+        && cmake --build "$work/client" --parallel --target h2s-helper-test-client; } > "$work/client.log" 2>&1
+    client=$work/client/h2s-helper-test-client
+fi
+if [ ! -x "$client" ]; then
+    tail -n 20 "$work/client.log"
+    check "the test client builds" false
+else
+    "$REPO/tests/helper/screensaver.sh" "$helper" "$client"
+    status=$?
+    [ "$status" = 2 ] && setup_error "the screensaver service's part could not be set up (above)"
+    check "the screensaver service on a private bus (tests/helper/screensaver.sh)" test "$status" = 0
+fi
 
 echo
 if [ "$failed" = 0 ]; then echo "run-helper.sh: passed"; else echo "run-helper.sh: FAILED"; fi

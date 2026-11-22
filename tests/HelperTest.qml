@@ -47,6 +47,62 @@ TestCase {
         assertEqual(HelperRules.logLine("/x/h2s-helper", { state: "ready" }), "", "ready: nothing to say");
         assert(HelperRules.logLine("/x/h2s-helper", old).indexOf("out of date") >= 0, "out of date: said");
         assert(HelperRules.logLine("/x/h2s-helper", read(null)).indexOf("/x/h2s-helper") >= 0, "failed: said, with its path");
+
+        _serviceRules();
+    }
+
+    // `h2s-helper screensaver`'s lines, and what the page says of the interface
+    function _serviceRules() {
+        const line = HelperRules.readServiceLine;
+        assertEqual(JSON.stringify(line("{\"event\":\"ready\",\"protocol\":2}")), JSON.stringify({ event: "ready", protocol: 2 }),
+                    "service: ready, with its protocol");
+        assertEqual(JSON.stringify(line("{\"event\":\"name\",\"owned\":true}")), JSON.stringify({ event: "name", owned: true, owner: "" }),
+                    "service: the name owned");
+        const taken = line("{\"event\":\"name\",\"owned\":false,\"owner\":\"<b>kde</b>\\n" + "x".repeat(80) + "\"}");
+        assertEqual(taken.owned, false, "service: the name held by another");
+        assertEqual(taken.owner.length, HelperRules.maxOwnerLength, "… its owner's name capped");
+        assert(taken.owner.startsWith("<b>kde</b> x"), "… on one line, markup kept as text");
+        const holders = line(JSON.stringify({ event: "inhibitors", list: [
+            { app: "mpv", reason: "r".repeat(500), cookie: 9 },
+            { app: "<i>firefox</i>\tbrowser\nnext", reason: "video", cookie: 3 },
+            { app: "no cookie", reason: "" }, { app: "zero", reason: "", cookie: 0 }, "junk", null] }));
+        assertEqual(holders.list.map(holder => holder.cookie).join(","), "3,9", "service: the holders, by cookie, the unreadable ones left out");
+        assertEqual(holders.list[0].app, "<i>firefox</i> browser next", "… an app's name on one line, as text");
+        assertEqual(holders.list[1].reason.length, HelperRules.maxReasonLength, "… a reason capped");
+        assertEqual(line(JSON.stringify({ event: "inhibitors", list: Array.from({ length: 100 }, (unused, i) => ({ app: "a", reason: "", cookie: i + 1 })) })).list.length,
+                    HelperRules.maxHolders, "… at most maxHolders kept");
+        assertEqual(line("{\"event\":\"activity\"}").event, "activity", "service: activity");
+        assertEqual(line("{\"event\":\"askIdle\"}").event, "askIdle", "service: the idle time asked");
+        assertEqual(line("{\"event\":\"setActive\",\"active\":true}").active, true, "service: SetActive");
+        assertEqual(line("{\"event\":\"error\",\"message\":\"no bus\"}").message, "no bus", "service: an error, with its message");
+        for (const odd of ["", "junk", "[]", "null", "{\"event\":\"what\"}", "{\"event\":\"ready\"}", "{\"event\":\"name\"}",
+                           "{\"event\":\"inhibitors\",\"list\":{}}", "{\"event\":\"setActive\",\"active\":\"yes\"}"])
+            assertEqual(line(odd), null, "service: not a line of the protocol (" + odd + "): null");
+
+        assertEqual(JSON.stringify(HelperRules.activeMessage(true, 1700000000500)), JSON.stringify({ active: true, since: 1700000000 }),
+                    "service: active, since in whole seconds");
+        assertEqual(JSON.stringify(HelperRules.activeMessage(false, 1700000000500)), JSON.stringify({ active: false, since: 0 }),
+                    "… inactive: no time");
+        assertEqual(HelperRules.idleMessage(12.7).idleSeconds, 12, "service: the idle time in whole seconds");
+        assertEqual(HelperRules.idleMessage(-3).idleSeconds, 0, "… never negative");
+        assertEqual(HelperRules.idleMessage("junk").idleSeconds, 0, "… 0 when not a number");
+
+        const status = HelperRules.serviceStatus;
+        assertEqual(JSON.stringify(status("missing", "off", { owned: null })), JSON.stringify({ state: "notBuilt", line: "Not built" }),
+                    "status: no helper: not built");
+        assertEqual(status("outdated", "off", { owned: null }).state, "outdated", "status: an old helper: out of date");
+        assertEqual(status("ready", "outdated", { owned: null }).state, "outdated", "… also when it says so itself");
+        assertEqual(status("ready", "failed", { owned: null }).state, "failed", "status: a helper that ended: failed");
+        assertEqual(status("checking", "off", { owned: null }).state, "starting", "status: the helper being checked: starting");
+        assertEqual(status("ready", "running", { owned: null }).state, "starting", "status: running, the name not known yet: starting");
+        assertEqual(JSON.stringify(status("ready", "running", { owned: true, owner: "" })), JSON.stringify({ state: "answering", line: "" }),
+                    "status: the name owned: answering");
+        const held = status("ready", "running", { owned: false, owner: "ksmserver" });
+        assertEqual(held.state, "taken", "status: held by another: taken");
+        assertEqual(held.line, "ksmserver answers apps that ask to keep the screen on. Stop it to let the shell do it.",
+                    "… the line names it");
+        assert(status("ready", "running", { owned: false, owner: "" }).line.startsWith("Another program answers"),
+               "… or says another program when its name is not known");
     }
 
     // ---- The readings, one after another --------------------------------------------------

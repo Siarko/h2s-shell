@@ -28,6 +28,15 @@
         };
         # The helper alone (tests/run-helper.sh builds it with nix)
         h2s-helper = h2s-shell.helper;
+        # … and with the test client of tests/run-helper.sh beside it (never installed by
+        # the package)
+        h2s-helper-tests = h2s-shell.helper.overrideAttrs (old: {
+          pname = "h2s-helper-tests";
+          cmakeFlags = old.cmakeFlags ++ [ "-DH2S_HELPER_TESTS=ON" ];
+          postInstall = (old.postInstall or "") + ''
+            install -Dm755 h2s-helper-test-client $out/libexec/h2s-shell/h2s-helper-test-client
+          '';
+        });
         default = h2s-shell;
       });
 

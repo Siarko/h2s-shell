@@ -99,6 +99,11 @@ install.sh self:tests/install-test.sh
 helper/* self:tests/run-helper.sh
 scripts/build-helper.sh self:tests/run-helper.sh
 tests/run-helper.sh self:tests/run-helper.sh
+# The screensaver service's part: its bus, its runner root and suites, the shell's client
+tests/helper/* self:tests/run-helper.sh
+tests-helper.qml self:tests/run-helper.sh
+singletons/helper/ScreenSaverClient.qml self:tests/run-helper.sh
++singletons/HelperRules.qml self:tests/run-helper.sh
 tests/fixtures/helper/* unit:HelperTest
 flake.nix self:tests/run-system.sh
 flake.lock self:tests/run-system.sh unit:QuickshellPinTest

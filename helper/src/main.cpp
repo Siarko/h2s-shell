@@ -6,12 +6,16 @@
 //   h2s-helper --version   {"version":"<the shell's version>","protocol":<n>} and exits
 //   h2s-helper ping        {"event":"ready","protocol":<n>}, then answers each
 //                          {"ping":<anything>} with {"event":"pong","ping":<the same>}
+//   h2s-helper screensaver org.freedesktop.ScreenSaver on the session bus
+//                          (ScreenSaverService.h: its lines each way)
 //
 // The protocol number changes whenever a message changes meaning or goes; the shell
 // checks it (HelperRules) and treats a helper with another number as out of date.
 #include "LineChannel.h"
+#include "ScreenSaverService.h"
 
 #include <QCoreApplication>
+#include <QDBusConnection>
 #include <QJsonDocument>
 #include <QJsonObject>
 
@@ -21,11 +25,11 @@
 
 namespace {
 
-constexpr int protocol = 1;
+constexpr int protocol = 2;
 
 int usage()
 {
-    std::fputs("usage: h2s-helper --version | ping\n", stderr);
+    std::fputs("usage: h2s-helper --version | ping | screensaver\n", stderr);
     return 2;
 }
 
@@ -63,6 +67,26 @@ int runPing(int argc, char **argv)
     return application.exec();
 }
 
+int runScreenSaver(int argc, char **argv)
+{
+    QCoreApplication application(argc, argv);
+    LineChannel channel;
+    QObject::connect(&channel, &LineChannel::closed, &application, &QCoreApplication::quit);
+    if (!channel.send({{QStringLiteral("event"), QStringLiteral("ready")},
+                       {QStringLiteral("protocol"), protocol}}))
+        return 1;
+    QDBusConnection bus = QDBusConnection::sessionBus();
+    if (!bus.isConnected()) {
+        channel.send({{QStringLiteral("event"), QStringLiteral("error")},
+                      {QStringLiteral("message"), QStringLiteral("no session bus: ") + bus.lastError().message()}});
+        return 1;
+    }
+    ScreenSaverService service(bus, &channel);
+    if (!service.start())
+        return 1;
+    return application.exec();
+}
+
 } // namespace
 
 int main(int argc, char **argv)
@@ -76,5 +100,7 @@ int main(int argc, char **argv)
         return printVersion();
     if (std::strcmp(argv[1], "ping") == 0)
         return runPing(argc, argv);
+    if (std::strcmp(argv[1], "screensaver") == 0)
+        return runScreenSaver(argc, argv);
     return usage();
 }

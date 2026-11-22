@@ -459,6 +459,10 @@ The interface modules are written against (`qs.api`), versioned on its own
 
 ### Added
 - A compiled helper (`helper/`, C++/Qt), built by the package or `install.sh` (now `cmake base-devel qt6-base`).
+- The shell answers apps that ask to keep the screen on (`org.freedesktop.ScreenSaver`, through
+  the helper): video players and browsers hold off the screensaver while unlocked, and see it
+  start and end. When another program already answers them, the shell says which and takes
+  over once it stops.
 - Apps that keep the screen on through logind (`systemd-inhibit --what=idle`, video
   players) hold off the screensaver, screen-off and the idle lock while unlocked.
 - Screens off: Settings → Lockscreen → "Turn screens off" (after a time from your last

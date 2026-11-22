@@ -24,6 +24,8 @@ add_executable(h2s-helper
     src/main.cpp
     src/LineChannel.cpp
     src/LineChannel.h
+    src/ScreenSaverService.cpp
+    src/ScreenSaverService.h
 )
 target_compile_definitions(h2s-helper PRIVATE
     H2S_VERSION="${H2S_VERSION}"
@@ -34,3 +36,13 @@ target_compile_options(h2s-helper PRIVATE -Wall -Wextra)
 target_link_libraries(h2s-helper PRIVATE Qt6::Core Qt6::DBus)
 
 install(TARGETS h2s-helper RUNTIME DESTINATION ${CMAKE_INSTALL_LIBEXECDIR}/h2s-shell)
+
+# The test client of tests/run-helper.sh (an app on the private bus: holds inhibitors, calls,
+# watches ActiveChanged); never installed, built only when asked for
+option(H2S_HELPER_TESTS "Build the test client" OFF)
+if(H2S_HELPER_TESTS)
+    add_executable(h2s-helper-test-client tests/client.cpp)
+    target_compile_definitions(h2s-helper-test-client PRIVATE QT_NO_CAST_FROM_ASCII QT_NO_KEYWORDS)
+    target_compile_options(h2s-helper-test-client PRIVATE -Wall -Wextra)
+    target_link_libraries(h2s-helper-test-client PRIVATE Qt6::Core Qt6::DBus)
+endif()
