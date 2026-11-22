@@ -42,7 +42,12 @@ Singleton {
     // tries again after unlocking.
     readonly property bool _locked: Profiles.screenLocked
     on_LockedChanged: Qt.callLater(root._closeForLock)
-    onFlowChanged: Qt.callLater(root._closeForLock)
+    onFlowChanged: {
+        Qt.callLater(root._closeForLock);
+        // Read again when a request opens: a system update may have changed the stack
+        if (flow !== null)
+            PamStacks.refresh();
+    }
 
     function _closeForLock() {
         if (!PolkitRules.closesForLock(_locked, flow !== null))
@@ -51,18 +56,11 @@ Singleton {
         flow.cancelAuthenticationRequest();
     }
 
-    // What polkit's PAM stack asks first (PolkitRules.pamStackOrder): the prompt words its
-    // hints by it, Settings says it. Only read — the file is world-readable; nothing is
-    // asked of PAM, polkit or the reader.
-    readonly property string pamStack: PolkitRules.pamStackOrder(_pamFile.loaded ? _pamFile.text() : "")
-    FileView {
-        id: _pamFile
-        path: "/etc/pam.d/polkit-1"
-        printErrors: false
-        // A system rebuild replaces it
-        watchChanges: true
-        onFileChanged: reload()
-    }
+    // What polkit's PAM stack asks first (PolkitRules.pamStackOrderOf the stack PamStacks
+    // read, its includes followed across /etc/pam.d and the vendor directory): the prompt
+    // words its hints by it, Settings says it. Only read; nothing is asked of PAM, polkit
+    // or the reader.
+    readonly property string pamStack: PolkitRules.pamStackOrderOf(PamStacks.polkit)
 
     // Kept from a successful first-start try until the setting says "on": destroyed and
     // made again at once, the new agent's registration came before polkit had let the old

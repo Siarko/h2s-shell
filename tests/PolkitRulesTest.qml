@@ -202,6 +202,11 @@ TestCase {
         assertEqual(rules.pamStackOrder("#%PAM-1.0\nauth include system-auth\naccount include system-auth\n"), "", "an include (Arch): not known");
         assertEqual(rules.pamStackOrder(""), "", "no file: not known");
         assertEqual(rules.pamStackOrder("# auth sufficient pam_fprintd.so\nauth sufficient pam_unix.so\n"), "password", "a commented-out line ignored");
+        assert(rules.pamStackHint("fingerprint-first", true).includes("programs.h2s-shell.polkit.passwordFirst"), "the hint, reader first, NixOS: the module's option");
+        assert(!rules.pamStackHint("fingerprint-first", false).includes("NixOS"), "… elsewhere (Arch) no NixOS option");
+        assert(!rules.pamStackHint("fingerprint-first", null).includes("NixOS"), "… nor when the system is not known");
+        assert(rules.pamStackHint("password-first", false).startsWith("This computer asks for the password first"), "password first: said");
+        assertEqual(rules.pamStackHint("password", true) + rules.pamStackHint("", false), "", "no reader, or not known: no hint");
 
         // --- the prompt's conversation ---
         function replay(stack, events) {

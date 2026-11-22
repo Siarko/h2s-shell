@@ -113,6 +113,7 @@ QtObject {
     property var _screenPowerReading: ScreenPowerReadingTest {}
     property var _logindIdleBlockReading: LogindIdleBlockReadingTest {}
     property var _pamStackRules: PamStackRulesTest {}
+    property var _pamStacksReading: PamStacksReadingTest {}
     // A new suite: its one line above this comment
 
     // Every suite registered above, read from this object's own properties, and those of them

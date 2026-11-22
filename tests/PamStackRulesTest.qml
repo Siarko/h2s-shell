@@ -283,5 +283,78 @@ TestCase {
         stack = rules.stack("polkit-1", arch);
         assertEqual(settings(rules.faillockConfig("deny = 5\n", stack.lines[stack.faillock.at[0].index].args)), "5 900 600 600 false false",
                     "Arch's preauth line has no settings of its own: the file's");
+
+        _reading(rules);
+    }
+
+    // The reading through scripts/pam-files.sh: its answer, the rounds, the methods script's
+    // answers (PamStacksReadingTest runs the scripts themselves)
+    function _reading(rules) {
+        const names = stack => stack.lines.map(line => line.moduleName).join(" ");
+        const ok = { ok: true, truncated: false };
+        let answer = rules.filesAnswer(["directory\t/etc/pam.d", "directory\t/usr/lib/pam.d", "faillock\t/etc/security/faillock.conf",
+                                        "file\t/etc/pam.d/sudo\ttext", "|auth include system-auth", "|", "end\t/etc/pam.d/sudo",
+                                        "file\t/usr/lib/pam.d/sudo\tabsent", "file\t/etc/x\tunreadable",
+                                        "file\t/etc/not-asked\ttext", "|auth required pam_deny.so", "end\t/etc/not-asked"],
+                                       ok, ["/etc/pam.d/sudo", "/usr/lib/pam.d/sudo", "/etc/x", "/etc/never-answered"]);
+        assertEqual(JSON.stringify(answer.places), JSON.stringify({ directories: ["/etc/pam.d", "/usr/lib/pam.d"], faillockPath: "/etc/security/faillock.conf" }),
+                    "pam-files.sh's answer: the directories in order and faillock.conf");
+        assertEqual(JSON.stringify(answer.answers["/etc/pam.d/sudo"]), JSON.stringify({ text: "auth include system-auth\n\n" }), "… a file's text, its blank line kept");
+        assertEqual(JSON.stringify(answer.answers["/usr/lib/pam.d/sudo"]) + JSON.stringify(answer.answers["/etc/x"]),
+                    "{\"absent\":true}{\"unreadable\":true}", "… absent and unreadable told apart");
+        assertEqual(JSON.stringify(answer.answers["/etc/never-answered"]), "{\"unreadable\":true}", "… a path asked without a record: unreadable, never absent");
+        assert(!("/etc/not-asked" in answer.answers), "… a record not asked for: ignored");
+        answer = rules.filesAnswer(["file\t/etc/pam.d/sudo\ttext", "|auth required pam_unix.so"], ok, ["/etc/pam.d/sudo"]);
+        assertEqual(JSON.stringify(answer.answers["/etc/pam.d/sudo"]), "{\"unreadable\":true}", "a text record without its end (cut off): unreadable");
+        assertEqual(answer.places, null, "… no places in it: null");
+        answer = rules.filesAnswer(["file\t/etc/pam.d/sudo\ttext", "|auth required pam_unix.so", "end\t/etc/pam.d/sudo"],
+                                   { ok: false, code: 1 }, ["/etc/pam.d/sudo"]);
+        assertEqual(JSON.stringify(answer.answers["/etc/pam.d/sudo"]), "{\"unreadable\":true}", "a run that failed: everything asked unreadable");
+        answer = rules.filesAnswer(["directory\t/etc/pam.d"], { ok: true, truncated: true }, []);
+        assertEqual(answer.places, null, "a run cut at its output limit: nothing taken");
+
+        // The rounds: Arch's sudo needs system-auth, then faillock.conf
+        const request = { services: ["sudo"], lock: {}, directories: ["/e", "/v"], faillockPath: "/f.conf" };
+        const answers = {};
+        let step = rules.readingStep(request, answers, false);
+        assertEqual(step.pending.join(" "), "/e/sudo", "nothing read: the service's first place asked");
+        answers["/e/sudo"] = { absent: true };
+        step = rules.readingStep(request, answers, false);
+        assertEqual(step.pending.join(" "), "/v/sudo", "absent there: the vendor directory next");
+        answers["/v/sudo"] = { text: "auth include system-auth\n" };
+        step = rules.readingStep(request, answers, false);
+        assertEqual(step.pending.join(" "), "/e/system-auth", "then the include");
+        answers["/e/system-auth"] = { text: "auth required pam_faillock.so preauth\nauth [success=1 default=bad] pam_unix.so\n" };
+        step = rules.readingStep(request, answers, false);
+        assertEqual(step.pending.join(" "), "/f.conf", "then faillock.conf, where pam-files.sh says it is");
+        answers["/f.conf"] = { text: "deny = 4\n" };
+        step = rules.readingStep(request, answers, false);
+        assertEqual(step.pending.length, 0, "nothing more to read");
+        assertEqual(step.services.sudo.known + " " + names(step.services.sudo), "true pam_faillock.so pam_unix.so", "… the stack known, from the vendor file");
+        assertEqual(step.faillock.sudo.deny, 4, "… pam_faillock's settings read");
+        answers["/f.conf"] = { absent: true };
+        assertEqual(rules.readingStep(request, answers, false).faillock.sudo.deny, 3, "no faillock.conf: libpam's defaults");
+        answers["/f.conf"] = { unreadable: true };
+        assertEqual(rules.readingStep(request, answers, false).faillock.sudo, null, "an unreadable faillock.conf: not known");
+        step = rules.readingStep(request, { "/e/sudo": { absent: true } }, true);
+        assertEqual(step.pending.length + " " + step.services.sudo.known + " " + step.services.sudo.problems[0].reason, "0 false unreadable",
+                    "rounds run out: what is not read is unreadable, the stack unknown");
+        step = rules.readingStep({ services: [], lock: { password: "/shell/pam/password", bad: "relative" }, directories: ["/e"] }, {}, false);
+        assertEqual(step.pending.join(" ") + " " + Object.keys(step.lock).join(","), "/shell/pam/password password", "a lock config read at its own path; a relative one left out");
+
+        // The methods script
+        const exited = code => ({ ok: code === 0, code: code });
+        let methods = rules.methodsAnswer(["password\t/etc/pam.d\tlogin", "fingerprint\t/etc/pam.d\th2s-shell-fingerprint"], exited(0));
+        assertEqual([methods.known, methods.fingerprint, methods.securityKey].join(" "), "true ready absent", "a fingerprint line: ready; no u2f line: absent");
+        assertEqual(JSON.stringify(methods.lock), JSON.stringify({ password: "/etc/pam.d/login", fingerprint: "/etc/pam.d/h2s-shell-fingerprint" }), "… the lock's configs");
+        methods = rules.methodsAnswer(["password\t/s/pam\tpassword", "u2f\t/s/pam\tu2f"], exited(0));
+        assertEqual(methods.securityKey + " " + methods.fingerprint, "ready absent", "a u2f line: the security key ready");
+        methods = rules.methodsAnswer(["password\t/s/pam\tpassword", "fingerprint\t/s/pam\tfingerprint"], exited(1));
+        assertEqual([methods.known, methods.fingerprint, methods.securityKey, Object.keys(methods.lock).length].join(" "), "false unknown unknown 0",
+                    "the script failed (fprintd timed out): unknown, its lines not used");
+        assertEqual(rules.methodsAnswer([], { failedToStart: true, code: -1 }).fingerprint, "unknown", "not started: unknown");
+        assertEqual(rules.nixosAnswer(["nixos", "answered"], exited(0)), true, "--fallback-facts: NixOS");
+        assertEqual(rules.nixosAnswer(["readable", "answered"], exited(0)), false, "… not NixOS");
+        assertEqual(rules.nixosAnswer(["nixos"], exited(0)), null, "… an answer without its end: not known");
     }
 }

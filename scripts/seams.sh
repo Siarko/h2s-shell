@@ -1,8 +1,8 @@
 # shellcheck shell=bash
 # The test seams of the shell's scripts, as the shell has them: none. Sourced by
-# scripts/lock-auth-methods.sh and scripts/launch.sh; every value is a constant, so the
-# lock's PAM directory, its methods and its gdbus, and the launcher's pauses, are the real
-# ones whatever the environment holds.
+# scripts/lock-auth-methods.sh, scripts/pam-files.sh and scripts/launch.sh; every value is
+# a constant, so the PAM directories, the lock's methods and its gdbus, and the launcher's
+# pauses, are the real ones whatever the environment holds.
 #
 # A test tree — the lock bed's copy of the checkout (tests/lock/run.sh) — has
 # tests/lock/seams/seams.sh in this file's place, which sets the same names from the
@@ -12,6 +12,11 @@
 
 # Where the system-wide h2s-shell-* PAM configs are looked for (lock-auth-methods.sh)
 seam_system_pam_dir=/etc/pam.d
+# libpam's vendor directory, read for a service /etc/pam.d does not have (pam-files.sh);
+# empty: none
+seam_vendor_pam_dir=/usr/lib/pam.d
+# pam_faillock's default settings file (pam-files.sh); empty: not read
+seam_faillock_conf=/etc/security/faillock.conf
 # The system the methods script takes itself to be on, nixos or other; empty: it asks the
 # machine (lock-auth-methods.sh)
 seam_system=

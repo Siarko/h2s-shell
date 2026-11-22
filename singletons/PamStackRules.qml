@@ -382,6 +382,142 @@ Singleton {
         return result;
     }
 
+    // ── Reading through scripts/pam-files.sh ──
+    // PamStacks reads the files with that script (it tells a file not there from one it
+    // cannot read) in rounds: the places first, then the paths the stacks ask for, until no
+    // stack asks for one it does not have. These are its decisions; the I/O is
+    // singletons/io/PamStackReader.qml's.
+
+    // How many rounds of reading one refresh takes at most (an include chain is at most
+    // maxDepth deep; faillock.conf one more)
+    readonly property int maxRounds: maxDepth + 3
+
+    // One run of the script → { places: { directories, faillockPath } or null (not in this
+    // run's answer), answers: { path: { text } | { absent: true } | { unreadable: true } } }.
+    // `asked`: the paths the run was asked for; each gets an answer, `unreadable` when the
+    // run has no complete record of it (a run that failed, was cut short or timed out has
+    // none: every path is unknown, never "not there"). `result` is CommandRunner's.
+    function filesAnswer(lines, result, asked) {
+        const answers = {};
+        const wanted = Array.isArray(asked) ? asked.map(path => String(path)) : [];
+        const usable = result !== null && typeof result === "object" && result.ok === true && result.truncated !== true;
+        const list = usable && Array.isArray(lines) ? lines : [];
+        const directories = [];
+        let faillockPath = "", placed = false, open = null, body = [];
+        for (const raw of list) {
+            const line = String(raw).replace(/\r$/, "");
+            if (open !== null) {
+                if (line.startsWith("|")) {
+                    body.push(line.slice(1));
+                    continue;
+                }
+                if (line === "end\t" + open && wanted.includes(open) && !(open in answers))
+                    answers[open] = { text: body.join("\n") + (body.length > 0 ? "\n" : "") };
+                open = null;
+                body = [];
+                if (line.startsWith("end\t"))
+                    continue;
+            }
+            const fields = line.split("\t");
+            if (fields[0] === "directory" && fields.length === 2 && fields[1].startsWith("/")) {
+                directories.push(fields[1]);
+                placed = true;
+            } else if (fields[0] === "faillock" && fields.length === 2 && fields[1].startsWith("/")) {
+                faillockPath = fields[1];
+                placed = true;
+            } else if (fields[0] === "file" && fields.length === 3 && wanted.includes(fields[1])) {
+                if (fields[2] === "text")
+                    open = fields[1];
+                else if ((fields[2] === "absent" || fields[2] === "unreadable") && !(fields[1] in answers))
+                    answers[fields[1]] = fields[2] === "absent" ? { absent: true } : { unreadable: true };
+            }
+        }
+        for (const path of wanted) {
+            if (!(path in answers))
+                answers[path] = { unreadable: true };
+        }
+        return { places: usable && placed ? { directories, faillockPath } : null, answers };
+    }
+
+    // What the files read so far give: the stacks of `request.services` (names) and of the
+    // lock's configs (`request.lock`: { method: absolute path }), each service's pam_faillock
+    // settings, and the paths still to be read. `request.directories` the directories in
+    // order, `request.faillockPath` where faillock.conf is (pam-files.sh's places; "" none).
+    // `answers` as filesAnswer gives them, merged. A path not answered yet is `pending`
+    // (and counts as unreadable meanwhile). `final`: every pending path is taken as
+    // unreadable instead (the rounds ran out). → { services: { name: stack },
+    // lock: { method: stack }, faillock: { name: faillockConfig or null }, pending: [paths] }
+    function readingStep(request, answers, final) {
+        const known = answers ?? {};
+        const pending = [];
+        const reader = path => {
+            const answer = Object.prototype.hasOwnProperty.call(known, path) ? known[path] : null;
+            if (answer === null) {
+                if (final !== true && pending.indexOf(path) < 0)
+                    pending.push(path);
+                return null;
+            }
+            if (typeof answer.text === "string")
+                return answer.text;
+            return answer.absent === true ? undefined : null;
+        };
+        const directoryList = Array.isArray(request?.directories) && request.directories.length > 0
+            ? request.directories : directories;
+        const result = { services: {}, lock: {}, faillock: {}, pending };
+        for (const name of (Array.isArray(request?.services) ? request.services : [])) {
+            const read = stack(name, reader, directoryList);
+            result.services[name] = read;
+            result.faillock[name] = _faillockOf(read, reader, String(request?.faillockPath ?? ""));
+        }
+        const lock = request?.lock ?? {};
+        for (const method of Object.keys(lock)) {
+            if (typeof lock[method] === "string" && lock[method].startsWith("/"))
+                result.lock[method] = stack(lock[method], reader, directoryList);
+        }
+        return result;
+    }
+
+    // The settings of a stack's pam_faillock (its preauth line's, else its first): null when
+    // it has none, it is not known, or its settings file cannot be read
+    function _faillockOf(read, reader, faillockPath) {
+        if (read.faillock.present !== true)
+            return null;
+        const line = read.faillock.at.find(item => item.phase === "preauth") ?? read.faillock.at[0];
+        const confPath = faillockConfPath(line.args);
+        // The default file is read where pam-files.sh says it is (a test's own in a test tree)
+        const file = confPath === faillockConfDefault ? faillockPath : confPath;
+        if (file === "")
+            return null;
+        const text = reader(file);
+        return faillockConfig(text === undefined ? "" : text, line.args, confPath);
+    }
+
+    // The methods script's answer (scripts/lock-auth-methods.sh, a run as LatestQuery hands
+    // it: its lines and CommandRunner's result) → { known, fingerprint, securityKey ("ready" /
+    // "absent" / "unknown"), lock: { method: absolute path of the config it uses } }. A run
+    // that failed knows nothing: both "unknown", no configs.
+    function methodsAnswer(lines, result) {
+        const event = LockIoRules.detectionEvent(0, LockIoRules.probeRun(lines, result));
+        if (event.type !== "methodsDetected")
+            return { known: false, fingerprint: "unknown", securityKey: "unknown", lock: {} };
+        const found = LockParseRules.parseMethods(event.lines);
+        const lock = {};
+        for (const method of Object.keys(found))
+            lock[method] = found[method].directory.replace(/\/+$/, "") + "/" + found[method].config;
+        return {
+            known: true,
+            fingerprint: "fingerprint" in found ? "ready" : "absent",
+            securityKey: "u2f" in found ? "ready" : "absent",
+            lock
+        };
+    }
+
+    // The methods script's `--fallback-facts` answer → true (NixOS), false, or null (no answer)
+    function nixosAnswer(lines, result) {
+        const facts = LockIoRules.fallbackFacts(LockIoRules.probeRun(lines, result));
+        return facts.known ? facts.nixos : null;
+    }
+
     // ── faillock.conf ──
 
     readonly property string faillockConfDefault: "/etc/security/faillock.conf"

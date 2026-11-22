@@ -382,6 +382,18 @@ Singleton {
         return fingerprint < password ? "fingerprint-first" : "password-first";
     }
 
+    // The Settings hint for what polkit's stack asks first (pamStackOrderOf): "" where there
+    // is nothing to say (no reader, not known); the NixOS module's option only on NixOS
+    // (`nixos` true), the one place it can be changed today
+    function pamStackHint(order, nixos) {
+        if (order === "fingerprint-first")
+            return "This computer asks the fingerprint reader first: the password is asked only after the reader gives up (30 s, or three fingers that do not match); the prompt keeps a password typed meanwhile."
+                + (nixos === true ? " To be asked for the password at once: programs.h2s-shell.polkit.passwordFirst in the shell's NixOS module (on by default with a fingerprint reader), then a system rebuild." : "");
+        if (order === "password-first")
+            return "This computer asks for the password first; an empty password goes on to the fingerprint reader.";
+        return "";
+    }
+
     // One attempt's conversation as far as it went: `asked` (a question waits for an
     // answer, `echo` whether it is shown), `answered` ("" / "empty" / "text": what the
     // last answer was), `messages` (messages since the start or the last answer),

@@ -1030,6 +1030,9 @@ The interface modules are written against (`qs.api`), versioned on its own
   action used to be an empty button.
 
 ### Fixed
+- On Arch, Settings → Authentication now says what the administrator prompt asks first:
+  polkit's PAM stack is read where Arch keeps it (`/usr/lib/pam.d`), its `include
+  system-auth` followed.
 - The key that wakes the screen from the screensaver no longer reaches the window under it
   (an Enter into a terminal ran the line): the screensaver takes the keyboard while it shows.
 - A profile switch while the screensaver showed (unplugging the charger, a battery level)

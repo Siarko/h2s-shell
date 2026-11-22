@@ -2,12 +2,20 @@
 # The test tree's seams.sh: copied over scripts/seams.sh (whose values are constants) when a
 # test tree is assembled (tests/lock/run.sh). It sets the same names, from the environment
 # the tests give the shell; a variable that is not set leaves the production value. Sourced
-# by scripts/lock-auth-methods.sh and scripts/launch.sh (tests/lock/README.md, "The test
+# by scripts/lock-auth-methods.sh, scripts/pam-files.sh and scripts/launch.sh (tests/lock/README.md, "The test
 # tree"; TestSeamsShapeTest checks both files set the same names).
 
 # H2S_LOCK_SYSTEM_PAM_DIR: the test's own "system-wide" configs, so that the password
 # fallback is never the system's real PAM stack
 seam_system_pam_dir=${H2S_LOCK_SYSTEM_PAM_DIR:-/etc/pam.d}
+# H2S_LOCK_VENDOR_PAM_DIR: the test's own vendor directory (pam-files.sh). With only
+# H2S_LOCK_SYSTEM_PAM_DIR set there is none, so that no PAM file of the machine is read
+seam_vendor_pam_dir=${H2S_LOCK_VENDOR_PAM_DIR:-/usr/lib/pam.d}
+[ -z "${H2S_LOCK_SYSTEM_PAM_DIR:-}" ] || [ -n "${H2S_LOCK_VENDOR_PAM_DIR:-}" ] || seam_vendor_pam_dir=
+# H2S_LOCK_FAILLOCK_CONF: the test's own faillock.conf (pam-files.sh); with only
+# H2S_LOCK_SYSTEM_PAM_DIR set, none is read
+seam_faillock_conf=${H2S_LOCK_FAILLOCK_CONF:-/etc/security/faillock.conf}
+[ -z "${H2S_LOCK_SYSTEM_PAM_DIR:-}" ] || [ -n "${H2S_LOCK_FAILLOCK_CONF:-}" ] || seam_faillock_conf=
 # H2S_LOCK_SYSTEM=nixos|other, counted only together with H2S_LOCK_SYSTEM_PAM_DIR (as the
 # shell counts it, LockIoRules.systemSeam): both systems' answers are tested on every machine
 seam_system=${H2S_LOCK_SYSTEM_PAM_DIR:+${H2S_LOCK_SYSTEM:-}}

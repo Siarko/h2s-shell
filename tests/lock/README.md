@@ -332,7 +332,7 @@ has in its place:
 | Production (constants) | In a test tree | Read by |
 |---|---|---|
 | `singletons/TestSeams.qml` | `seams/TestSeams.qml` (and `seams/TestSeamRules.qml`, copied beside it) | `Lockscreen`, `CapsLockLed`, `Modules`, `VpnManager` |
-| `scripts/seams.sh` | `seams/seams.sh` | `scripts/lock-auth-methods.sh`, `scripts/launch.sh` (they source it) |
+| `scripts/seams.sh` | `seams/seams.sh` | `scripts/lock-auth-methods.sh`, `scripts/pam-files.sh`, `scripts/launch.sh` (they source it) |
 
 The two versions have the same names: a consumer reads `TestSeams.lockTools` or
 `$seam_gdbus` and gets the real value or the test's, depending on the tree. The production
@@ -364,6 +364,8 @@ value, one set to a value that cannot be used is ignored (and named in the log).
 |---|---|---|
 | `H2S_LOCK_TOOLS` | `TestSeams`, `seams.sh` | a directory whose `gdbus` and `systemd-inhibit` stand in (logind, the inhibitor, fprintd) |
 | `H2S_LOCK_SYSTEM_PAM_DIR` | `TestSeams`, `seams.sh` | where the system-wide `h2s-shell-*` PAM configs are looked for, instead of `/etc/pam.d` |
+| `H2S_LOCK_VENDOR_PAM_DIR` | `seams.sh` | libpam's vendor directory for `pam-files.sh`, instead of `/usr/lib/pam.d`; none when only `H2S_LOCK_SYSTEM_PAM_DIR` is set |
+| `H2S_LOCK_FAILLOCK_CONF` | `seams.sh` | faillock.conf for `pam-files.sh`, instead of `/etc/security/faillock.conf`; none when only `H2S_LOCK_SYSTEM_PAM_DIR` is set |
 | `H2S_LOCK_SYSTEM` | `TestSeams`, `seams.sh` | `nixos` or `other`: the system the lock takes itself to be on (only with `H2S_LOCK_SYSTEM_PAM_DIR`) |
 | `H2S_LOCK_AUTH_METHODS` | `seams.sh` | an executable that answers for the methods script (the test PAM stacks) |
 | `H2S_LOCK_LEDS_DIR` | `TestSeams` | where the Caps Lock LEDs are read, instead of `/sys/class/leds` |
