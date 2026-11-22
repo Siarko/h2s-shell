@@ -381,6 +381,7 @@ Item {
 
         ModuleInstallSection {
             id: _install
+            divider: false
             Layout.fillWidth: true
             visible: !(root.host?.safeMode ?? false)
             installer: root.installer
@@ -392,6 +393,7 @@ Item {
 
         ModuleUpdateQueue {
             id: _queueView
+            divider: _install.visible
             Layout.fillWidth: true
             updater: root.updater
             onRestartRequested: Modules.restartShell()
@@ -401,7 +403,7 @@ Item {
         SettingsSection {
             anchor: "installed"
             title: "Installed"
-            topMargin: _install.visible || _queueView.visible ? 16 : 0
+            divider: _install.visible || _queueView.visible
             spacing: 6
             Layout.fillWidth: true
 

@@ -30,12 +30,8 @@ Flickable {
         width: root.width - 2 * Theme.settings.pageMargin
         spacing: 4
 
-        Text {
+        Heading {
             text: "Performance"
-            font.family: Theme.fontFamily
-            font.pixelSize: Theme.fontSizeHeading
-            font.bold: true
-            color: Theme.textSecondary
             Layout.bottomMargin: 4
         }
 
@@ -68,17 +64,13 @@ Flickable {
             ColumnLayout {
                 id: _section
                 required property var modelData
+                required property int index
                 Layout.fillWidth: true
                 spacing: 2
 
-                Text {
+                SectionTitle {
                     text: _section.modelData.title
-                    font.family: Theme.fontFamily
-                    font.pixelSize: Theme.fontSizeMedium
-                    font.bold: true
-                    color: Theme.textSecondary
-                    Layout.topMargin: 10
-                    Layout.bottomMargin: 2
+                    divider: _section.index > 0
                 }
 
                 Repeater {

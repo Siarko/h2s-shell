@@ -157,7 +157,6 @@ Item {
             SettingsSection {
                 anchor: "saved"
                 title: "Saved networks"
-                topMargin: 14
                 Layout.fillWidth: true
                 buttons: SmallButton {
                     label: "Find networks"
@@ -293,7 +292,6 @@ Item {
             SettingsSection {
                 anchor: "hotspots"
                 title: "Hotspots"
-                topMargin: 14
                 Layout.fillWidth: true
                 buttons: SmallButton {
                     label: "New hotspot"

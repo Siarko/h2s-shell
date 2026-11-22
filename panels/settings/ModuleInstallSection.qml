@@ -38,7 +38,6 @@ SettingsSection {
 
     anchor: "add"
     title: "Add a module"
-    topMargin: 0
     spacing: 6
 
     function start() {

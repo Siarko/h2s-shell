@@ -29,7 +29,6 @@ SettingsSection {
     anchor: "queue"
     visible: listShown || updater?.restartOffer
     title: listShown ? summary.title + " · " + summary.count : "Restart needed"
-    topMargin: 16
     spacing: 4
 
     buttons: SmallButton {

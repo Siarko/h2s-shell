@@ -26,13 +26,7 @@ Flickable {
         width: root.width - 2 * Theme.settings.pageMargin
         spacing: 6
 
-        Text {
-            text: "Profiles"
-            font.family: Theme.fontFamily
-            font.pixelSize: Theme.fontSizeHeading
-            font.bold: true
-            color: Theme.textSecondary
-        }
+        Heading { text: "Profiles" }
 
         Text {
             Layout.fillWidth: true

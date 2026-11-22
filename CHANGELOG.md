@@ -27,6 +27,12 @@ The interface modules are written against (`qs.api`), versioned on its own
 - CommandRunner's `_runner`, the internal runner it held, is removed: it was internal, and
   through it a module could change what the runner refuses and read its runs. A run's
   handle carries no state of the runner's either.
+- 1.38: `SectionTitle` takes the look of the core's sections: a size larger
+  (`fontSizeMedium`) in the primary text colour, with room and a line above it across the
+  column it stands in; `divider` (default true) — false leaves the line out, for the first
+  section under a page's heading. `Api.theme.settings` has the three gaps it uses:
+  `sectionGap` (above the line), `sectionLineGap` (line to title) and `sectionTitleGap`
+  (under the title).
 - 1.37: module.json's `backup`, a list of paths inside the module's data directory
   (`["notes.db", "accounts"]`: relative, no `..`, at most 32) that belong in its
   configuration backups; the data directory itself never goes in one. A path that is not
@@ -899,6 +905,9 @@ The interface modules are written against (`qs.api`), versioned on its own
   most), instead of one accent dot for the day.
 
 ### Changed
+- Settings: every page's sections stand apart the same way — a line and room above each
+  section, its title a size larger than the rows. A theme can change the spacing (Appearance
+  → Other → Settings window: "Section spacing", "Line to title", "Under a title").
 - The shell no longer reloads itself when one of its files changes: a file written in its
   folder (an update, a module install, an editor) leaves the running shell as it is until it
   is restarted. Reloading on file changes is for development: start the shell with

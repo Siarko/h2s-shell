@@ -30,14 +30,7 @@ Flickable {
             text: "The bar's size, margins and corners are part of the theme: Appearance → Bar shape."
         }
 
-        Text {
-            text: "Position"
-            font.family: Theme.fontFamily
-            font.pixelSize: Theme.fontSizeHeading
-            font.bold: true
-            color: Theme.textSecondary
-            Layout.topMargin: 4
-        }
+        SectionTitle { text: "Position"; divider: false }
 
         SchemaSettingEditor {
             key: "bar.edge"
@@ -50,14 +43,7 @@ Flickable {
             editIndex: root.editIndex
         }
 
-        Text {
-            text: "Content"
-            font.family: Theme.fontFamily
-            font.pixelSize: Theme.fontSizeHeading
-            font.bold: true
-            color: Theme.textSecondary
-            Layout.topMargin: 4
-        }
+        SectionTitle { text: "Content" }
 
         // One section: its status, pin and reset come from the schema editor; the list
         // below edits its value, and editing an inherited section copies it in

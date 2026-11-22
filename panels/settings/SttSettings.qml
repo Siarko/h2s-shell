@@ -29,34 +29,14 @@ Flickable {
         }
         spacing: 0
 
-        Text {
+        Heading {
             text: "Dictation"
-            font.family: Theme.fontFamily
-            font.pixelSize: Theme.fontSizeHeading
-            font.bold: true
-            color: Theme.textSecondary
             Layout.bottomMargin: 8
         }
 
         // ── Widget ────────────────────────────────────────────────────────
 
-        Rectangle {
-            Layout.fillWidth: true
-            Layout.preferredHeight: 1
-            Layout.topMargin: 4
-            color: Theme.textDisabled
-            opacity: 0.3
-        }
-
-        Text {
-            text: "Widget"
-            font.family: Theme.fontFamily
-            font.pixelSize: Theme.fontSizeHeading
-            font.bold: true
-            color: Theme.textSecondary
-            Layout.topMargin: 10
-            Layout.bottomMargin: 4
-        }
+        SectionTitle { text: "Widget"; divider: false }
 
         SchemaSettingEditor { key: "stt.previewEnabled"; editIndex: root.editIndex }
         SchemaSettingEditor { key: "stt.previewWidth"; editIndex: root.editIndex; available: root._previewOn }
@@ -65,45 +45,13 @@ Flickable {
 
         // ── Music ─────────────────────────────────────────────────────────
 
-        Rectangle {
-            Layout.fillWidth: true
-            Layout.preferredHeight: 1
-            Layout.topMargin: 10
-            color: Theme.textDisabled
-            opacity: 0.3
-        }
-
-        Text {
-            text: "Music"
-            font.family: Theme.fontFamily
-            font.pixelSize: Theme.fontSizeHeading
-            font.bold: true
-            color: Theme.textSecondary
-            Layout.topMargin: 10
-            Layout.bottomMargin: 4
-        }
+        SectionTitle { text: "Music" }
 
         SchemaSettingEditor { key: "stt.pauseMusicWhileDictating"; editIndex: root.editIndex }
 
         // ── Connection ────────────────────────────────────────────────────
 
-        Rectangle {
-            Layout.fillWidth: true
-            Layout.preferredHeight: 1
-            Layout.topMargin: 10
-            color: Theme.textDisabled
-            opacity: 0.3
-        }
-
-        Text {
-            text: "Connection"
-            font.family: Theme.fontFamily
-            font.pixelSize: Theme.fontSizeHeading
-            font.bold: true
-            color: Theme.textSecondary
-            Layout.topMargin: 10
-            Layout.bottomMargin: 4
-        }
+        SectionTitle { text: "Connection" }
 
         SchemaSettingEditor { key: "stt.socketPath"; editIndex: root.editIndex }
         SchemaSettingEditor { key: "stt.debug"; editIndex: root.editIndex }
@@ -112,23 +60,7 @@ Flickable {
         // Owned by the daemon (~/.config/ptt/config.toml) and editable from the CLI,
         // so this is a live view of the last wake_config event, not shell config.
 
-        Rectangle {
-            Layout.fillWidth: true
-            Layout.preferredHeight: 1
-            Layout.topMargin: 10
-            color: Theme.textDisabled
-            opacity: 0.3
-        }
-
-        Text {
-            text: "Wake mode"
-            font.family: Theme.fontFamily
-            font.pixelSize: Theme.fontSizeHeading
-            font.bold: true
-            color: Theme.textSecondary
-            Layout.topMargin: 10
-            Layout.bottomMargin: 4
-        }
+        SectionTitle { text: "Wake mode" }
 
         SettingInfoRow {
             label: "Daemon"

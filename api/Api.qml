@@ -9,7 +9,7 @@ import qs.singletons.network
 // The module API: everything a
 // module may use of the shell. A module imports `qs.api` and reaches:
 //
-//   Api.version            "1.37" — this shell's module API, "major.minor". A module's manifest
+//   Api.version            "1.38" — this shell's module API, "major.minor". A module's manifest
 //                          asks for one ("api"); it loads when the major is the same, this
 //                          minor is at least the one asked for, and the one asked for is not
 //                          below the shell's floor (ModuleRules.apiFloor: the oldest version
@@ -491,7 +491,9 @@ import qs.singletons.network
 //                          SectionTitle, Heading (1.34): the children written inside are
 //                          controls at the right end of the title's line (a switch for the
 //                          section, its buttons); the title then fills the width a layout
-//                          gives it. Without children, as before
+//                          gives it. Without children, as before. SectionTitle (1.38): a
+//                          line above it across the column, the look of the core's sections;
+//                          `divider: false` leaves it out (the first section under a heading)
 //   CommandRunner (1.8) — running commands: any number at once, each with a time limit,
 //                          its output as it comes, one answer (below)
 //   CommandAction, CommandQuery, PrivilegedAction — running commands the shell's way

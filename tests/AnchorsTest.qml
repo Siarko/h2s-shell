@@ -789,7 +789,8 @@ TestCase {
         const general = SettingsSchema.keysInGroup("general");
         const appearance = SettingsSchema.keysInGroup("appearance");
         const expected = [["text General", 0]].concat(general.map((key, index) => ["setting " + key, index === 0 ? 8 : 0]),
-                                                      [["text Theme and motion", 16], ["text Which theme this", 2]],
+                                                      [["text Theme and motion", Theme.settings.sectionGap + Theme.border.width + Theme.settings.sectionLineGap],
+                                                       ["text Which theme this", Theme.settings.sectionTitleGap]],
                                                       appearance.map((key, index) => ["setting " + key, index === 0 ? 8 : 0]));
         const problems = [];
         if (rows.map(row => row.name).join("|") !== expected.map(entry => entry[0]).join("|"))
@@ -1889,17 +1890,22 @@ TestCase {
     }
 
     // The Wi-Fi page with every card closed: the heading's line across the page (the Wi-Fi
-    // switch on its right), the saved networks' title 22 lower (the heading's 8 and the
-    // title's 14), each saved network's card 6 apart (the one in use, the one in range, the one
-    // out of range), the hotspots' title 20 under the last, the hotspot's card, the form for a
+    // switch on its right), the saved networks' line across the page a section's gap lower
+    // (and the heading's 8), its title under the line, each saved network's card under it, 6 apart (the
+    // one in use, the one in range, the one out of range), the hotspots' line and title a
+    // section's gap (and the page's 6) under the last, the hotspot's card, the form for a
     // hidden network 20 lower
-    readonly property var _wifiPageExpected: [["text Wi-Fi", 0, true], ["text Saved networks", 22, true],
-        ["card Home", 6, true], ["card Office", 6, true], ["card Cafe", 6, true], ["text Hotspots", 20, true], ["card Spot", 6, true],
+    readonly property var _wifiPageExpected: [["text Wi-Fi", 0, true], ["QQuickRectangle", 8 + Theme.settings.sectionGap, true],
+        ["text Saved networks", Theme.settings.sectionLineGap, true],
+        ["card Home", Theme.settings.sectionTitleGap, true], ["card Office", 6, true], ["card Cafe", 6, true], ["QQuickRectangle", 6 + Theme.settings.sectionGap, true],
+        ["text Hotspots", Theme.settings.sectionLineGap, true], ["card Spot", Theme.settings.sectionTitleGap, true],
         ["HiddenNetworkRow", 20, true]]
     // The Ethernet page: the heading, the wired device's card 8 under it, the wired profiles'
-    // title 26 lower, each profile's card 6 apart (the one in use first)
-    readonly property var _ethernetPageExpected: [["text Ethernet", 0, false], ["NetworkDeviceCard", 8, true], ["text Wired profiles", 26, false],
-        ["card Wired", 6, true], ["card Lab", 6, true]]
+    // line a section's gap (and the page's 10) lower, its title under it, each profile's card
+    // under it, 6 apart (the one in use first)
+    readonly property var _ethernetPageExpected: [["text Ethernet", 0, false], ["NetworkDeviceCard", 8, true],
+        ["QQuickRectangle", 10 + Theme.settings.sectionGap, true], ["text Wired profiles", Theme.settings.sectionLineGap, false],
+        ["card Wired", Theme.settings.sectionTitleGap, true], ["card Lab", 6, true]]
 
     // Where both pages' parts stand still (a layout places its children in its polish pass,
     // after they are built)

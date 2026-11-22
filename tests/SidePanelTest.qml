@@ -68,6 +68,7 @@ TestCase {
             }
             Public.Heading { id: plainHeading; text: "Plain" }
             Public.SectionTitle { id: plainTitle; text: "Plain" }
+            Public.SectionTitle { id: firstTitle; text: "First"; divider: false }
         }
 
         WindowDriver {
@@ -406,6 +407,16 @@ TestCase {
                     "a heading without children: as it was (its text's width, no padding)");
         assertEqual((Math.abs(plainTitle.width - plainTitle.contentWidth) < 1) + " " + plainTitle.rightPadding + " " + plainTitle.Layout.fillWidth, "true 0 false",
                     "a section title without children: as it was");
+        const line = title => title.children.find(child => child.objectName === "sectionDivider");
+        const plainLine = line(plainTitle);
+        const lineTop = plainLine.mapToItem(headings, 0, 0);
+        assertEqual([plainLine.visible, lineTop.x, plainLine.width, plainLine.height].join(" "), "true 0 300 " + Theme.border.width,
+                    "a section title's line: across the column, a border thick");
+        assertEqual(plainTitle.y - (lineTop.y + plainLine.height), Theme.settings.sectionLineGap, "… the title its gap under it");
+        assertEqual(plainTitle.Layout.topMargin, Theme.settings.sectionGap + Theme.border.width + Theme.settings.sectionLineGap,
+                    "… the section's room above the line");
+        assertEqual(line(firstTitle).visible + " " + firstTitle.Layout.topMargin, "false " + Theme.settings.sectionLineGap,
+                    "divider: false, the first section under a heading: no line, nor its room");
         headings.visible = false;
     }
 }

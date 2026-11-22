@@ -969,8 +969,12 @@ close this section.
   the popup section, `components/PopupSection.qml` (a group in a popup panel: its header
   line, its content in a column, its closing divider; a panel's root is one too), and the
   popup row, `components/PopupRow.qml` (one line of a popup, with what goes under it), the
-  settings section, `components/SettingsSection.qml` (a titled group on a page: its title's
-  line with its buttons, then its content), and the settings card,
+  settings section, `components/SettingsSection.qml` (a titled group on a page: a line
+  above it, its title's line with its buttons, then its content; the line, the room around
+  it and the title's size are those of `panels/settings/SectionTitle.qml`, which a page of
+  plain rows uses for its titles, and the gaps are the theme's `settings` tokens
+  `sectionGap`, `sectionLineGap`, `sectionTitleGap`; the first section under a page's
+  heading has no line), and the settings card,
   `components/SettingsCard.qml` (a framed item that opens: its header and notice line, then,
   opened, its own rows; the network pages' card for a saved profile, a hotspot or a VPN,
   `panels/settings/NetworkProfileCard.qml`, is built on it); the settings row follows. A card takes no element inside itself:
@@ -1186,7 +1190,8 @@ The element finds that layer by walking up its parents to a frame `ApiElements` 
 identity, so nothing a module names makes a place a frame; elsewhere it does not open.
 Which reason a close gives, and the width, are `ApiElementRules`' (`sidePanelEvent`,
 `sidePanelWidth`). The settings blocks `SectionTitle` and `Heading` take controls as their
-children, at the right end of the line (1.34). `StatusPill` (API 1.35) sums up a state:
+children, at the right end of the line (1.34); a `SectionTitle` has a line above it, as the
+core's sections do, `divider: false` without (1.38). `StatusPill` (API 1.35) sums up a state:
 `icon`, `label`, `kind` (`normal`, `muted`, `success`, `warning`, `danger`: the colours in
 `ApiElementRules.statusKinds`), `parts` (`[{ icon, text, kind, tip, line }]`, each with its
 tooltip; made plain and capped at 12 by `ApiElementRules.statusParts`), `expanded` (a click

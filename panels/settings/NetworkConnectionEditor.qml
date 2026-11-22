@@ -524,6 +524,7 @@ Item {
 
             // ── The medium's own: the profile's name, then what only a Wi-Fi or a cable has ──
             SectionTitle {
+                divider: false
                 text: root._hotspot ? "Hotspot" : root._wireguard ? "WireGuard" : root._edited.wifi !== null ? "Wi-Fi"
                     : root._edited.ethernet !== null ? "Ethernet" : "Profile"
             }
@@ -763,13 +764,7 @@ Item {
                 Problem { field: "802-3-ethernet.mtu" }
             }
 
-            // ── Then what every kind of connection has, below a line ──
-            Rectangle {
-                Layout.fillWidth: true
-                Layout.topMargin: 16
-                implicitHeight: Theme.border.width
-                color: Theme.outline
-            }
+            // ── Then what every kind of connection has, below the title's line ──
             SectionTitle { text: "General" }
             SwitchRow {
                 Layout.topMargin: 6

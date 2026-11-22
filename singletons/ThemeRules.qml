@@ -361,6 +361,9 @@ Singleton {
                 { token: "battery", label: "Battery", hint: "", from: 50, to: 200, suffix: "%", base: 320 }],
             settings: [
                 { token: "pageMargin", label: "Page margin", hint: "Around a settings page", from: 0, to: 40, suffix: px },
+                { token: "sectionGap", label: "Section spacing", hint: "Above a section's line, from what comes before it", from: 0, to: 60, suffix: px },
+                { token: "sectionLineGap", label: "Line to title", hint: "Between a section's line and its title", from: 0, to: 40, suffix: px },
+                { token: "sectionTitleGap", label: "Under a title", hint: "Between a section's title and its first row", from: 0, to: 30, suffix: px },
                 { token: "sidebarItemRadius", label: "Sidebar radius", hint: "The sidebar's pages and the selection mark", from: 0, to: 20, suffix: px },
                 { token: "tabRadius", label: "Tab radius", hint: "The Behaviour and Appearance tabs", from: 0, to: 20, suffix: px },
                 { token: "tabHorizontalPadding", label: "Tab padding", hint: "Between a tab's edge and its label", from: 0, to: 40, suffix: px },

@@ -15,12 +15,8 @@ ColumnLayout {
     }
     spacing: 4
 
-    Text {
+    Heading {
         text: "Media"
-        font.family: Theme.fontFamily
-        font.pixelSize: Theme.fontSizeHeading
-        font.bold: true
-        color: Theme.textSecondary
         Layout.bottomMargin: 4
     }
 

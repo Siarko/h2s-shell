@@ -19,12 +19,8 @@ ColumnLayout {
     }
     spacing: 0
 
-    Text {
+    Heading {
         text: "Notifications"
-        font.family: Theme.fontFamily
-        font.pixelSize: Theme.fontSizeHeading
-        font.bold: true
-        color: Theme.textSecondary
         Layout.bottomMargin: 8
     }
 

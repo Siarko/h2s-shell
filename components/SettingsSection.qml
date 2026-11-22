@@ -20,8 +20,11 @@ AnchorBlock {
     id: root
 
     property string title: ""
-    // Room above the block, from what stands before it on the page
-    property real topMargin: 16
+    // The line above the title, standing the section apart from what comes before it; off
+    // for the first section under a page's heading
+    property bool divider: true
+    // Room above the block, from what stands before it on the page (above the line)
+    property real topMargin: divider ? Theme.settings.sectionGap : Theme.settings.sectionLineGap
     property real spacing: 0
     property real hostGap: 6
     default property alias content: _content.data
@@ -33,6 +36,7 @@ AnchorBlock {
     readonly property alias appendHost: _append
     readonly property alias afterHost: _after
     readonly property alias frame: _frame
+    readonly property alias dividerLine: _divider
 
     kind: "section"
     placements: ["before", "after", "prepend", "append"]
@@ -53,12 +57,23 @@ AnchorBlock {
             Layout.bottomMargin: count > 0 ? root.hostGap : 0
         }
 
-        // The frame: never content, so a prepended element comes under it
+        // Above a title: the line, then the room to it (Theme.settings.sectionLineGap)
+        Rectangle {
+            id: _divider
+            visible: root.title !== "" && root.divider
+            Layout.fillWidth: true
+            Layout.bottomMargin: Theme.settings.sectionLineGap
+            implicitHeight: Theme.border.width
+            color: Theme.divider
+        }
+
+        // The frame: never content, so a prepended element comes under it. Its title a step
+        // larger than the rows' labels, so a section stands apart
         RowLayout {
             id: _frame
             visible: root.title !== "" || _buttons.children.length > 0
             Layout.fillWidth: true
-            Layout.bottomMargin: 6
+            Layout.bottomMargin: Theme.settings.sectionTitleGap
             spacing: 8
 
             Text {
@@ -67,7 +82,7 @@ AnchorBlock {
                 textFormat: Text.PlainText
                 elide: Text.ElideRight
                 font.family: Theme.fontFamily
-                font.pixelSize: Theme.fontSizeBody
+                font.pixelSize: Theme.fontSizeMedium
                 font.bold: true
                 color: Theme.textPrimary
             }

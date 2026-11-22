@@ -20,34 +20,14 @@ ColumnLayout {
     }
     spacing: 0
 
-    Text {
+    Heading {
         text: "Calendar"
-        font.family: Theme.fontFamily
-        font.pixelSize: Theme.fontSizeHeading
-        font.bold: true
-        color: Theme.textSecondary
         Layout.bottomMargin: 8
     }
 
     // ── Google Calendar subsection ────────────────────────────────────
 
-    Rectangle {
-        Layout.fillWidth: true
-        Layout.preferredHeight: 1
-        Layout.topMargin: 10
-        color: Theme.textDisabled
-        opacity: 0.3
-    }
-
-    Text {
-        text: "Google Calendar"
-        font.family: Theme.fontFamily
-        font.pixelSize: Theme.fontSizeHeading
-        font.bold: true
-        color: Theme.textSecondary
-        Layout.topMargin: 10
-        Layout.bottomMargin: 4
-    }
+    SectionTitle { text: "Google Calendar"; divider: false }
 
     SchemaSettingEditor {
         key: "gcal.enabled"
@@ -163,15 +143,9 @@ ColumnLayout {
 
     // ── My Calendars section ──────────────────────────────────────────
 
-    Text {
+    SectionTitle {
         visible: GoogleCalendarAuth.isAuthorized
-        text: "My Calendars "
-        font.family: Theme.fontFamily
-        font.pixelSize: Theme.fontSizeHeading
-        font.bold: true
-        color: Theme.textSecondary
-        Layout.topMargin: 6
-        Layout.bottomMargin: 4
+        text: "My Calendars"
     }
 
     Rectangle {

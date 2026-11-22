@@ -116,7 +116,10 @@ Singleton {
         "tooltip": { "radius": 4, "horizontalPadding": 8, "verticalPadding": 6 },
         // Progress bars: how thick, and their ends' radius (never more than half the thickness)
         "progress": { "thickness": 4, "radius": 2 },
-        "settings": { "pageMargin": 14, "sidebarItemRadius": 6, "tabRadius": 6, "tabHorizontalPadding": 12, "cardRadius": 6 },
+        // The settings window; a section's room above its line, from the line to its title,
+        // and under its title (SettingsSection, SectionTitle)
+        "settings": { "pageMargin": 14, "sidebarItemRadius": 6, "tabRadius": 6, "tabHorizontalPadding": 12, "cardRadius": 6,
+                      "sectionGap": 28, "sectionLineGap": 12, "sectionTitleGap": 8 },
         "calendar": { "dayRadius": 4 },
         "checkbox": { "radius": 3 },
         // The Settings modal (SettingsModal): its panel's corners, padding, border (in its
