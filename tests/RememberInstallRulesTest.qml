@@ -39,7 +39,7 @@ TestCase {
         assertEqual(install.applyScript({ rules: "/x'y", conf: "/c", backups: "/b", systemctl: "/s", owner: 0 }), "", "no script for places that are not plain");
         assert(install.applyScript(live).includes("rules='/usr/share/polkit-1/rules.d'; conf='/etc/polkit-1'; backups='/var/lib/h2s-shell/polkit-backup'; systemctl='/usr/bin/systemctl'; owner=0\n"),
                "the places and the owner written into the script");
-        assert(install.applyScript(live).includes("rule_name='40-h2s-shell.rules'; conf_name='polkitd.conf'\n"), "… the files' names too");
+        assert(install.applyScript(live).includes("rule_name='40-h2s-shell.rules'; conf_name='polkitd.conf'; max_seconds=3600\n"), "… the files' names too");
         assert(install.applyScript(live).startsWith("set -eu; umask 077;"), "… private files unless chmod says otherwise");
 
         // ── Install where nothing is ──
@@ -47,40 +47,42 @@ TestCase {
         assertEqual(code(plan), "", "Install: the run's words");
         assertEqual(plan.argv.slice(0, 2).concat([plan.argv[3]]).join(" "), "/bin/sh -c sh", "the system's shell and the script");
         assertEqual(plan.argv[2], install.applyScript(live), "… the fixed script for the system's places");
-        assertEqual(JSON.stringify(words(plan)), JSON.stringify(["apply", "write", "absent", sha(rule), rule, "keep", "absent", "-", ""]),
-                    "the rule written where there was none, no conf for the system's own length");
+        assertEqual(JSON.stringify(words(plan)), JSON.stringify(["apply", "write", "absent", sha(rule), "keep", "absent", "-",
+                                                                 "alex", "/usr/bin/timeout", "/usr/bin/timeout", "-"]),
+                    "the rule written where there was none from its facts (never its text), no conf for the system's own length");
         assertEqual(JSON.stringify(plan.expected), JSON.stringify({ mode: "apply", before: { rule: "absent", conf: "absent" },
                                                                     after: { rule: sha(rule), conf: "absent" }, reload: false }), "… what the reply must say");
-        assert(!words(plan).some(word => word.startsWith("/") && word !== rule), "no path among the arguments");
+        assert(!words(plan).some(word => word.includes("\n")), "no text among the arguments");
 
         // A longer setting: the conf too
         const conf15 = RememberRules.confText(900);
         plan = install.installArgv("/bin/sh", request({ minutes: 15 }), live, true);
-        assertEqual(JSON.stringify(words(plan).slice(5)), JSON.stringify(["write", "absent", sha(conf15), conf15]), "15 min: the conf for 900 s");
+        assertEqual(JSON.stringify(words(plan).slice(4)), JSON.stringify(["write", "absent", sha(conf15), "alex", "/usr/bin/timeout", "/usr/bin/timeout", "900"]),
+                    "15 min: the conf for 900 s");
         assertEqual(plan.expected.reload, true, "… polkitd told");
-        assertEqual(words(install.installArgv("/bin/sh", request({ minutes: 4 }), live, true))[5], "keep", "4 min: shorter, no conf (the shell revokes)");
-        assertEqual(words(install.installArgv("/bin/sh", request({ minutes: 5 }), live, true))[5], "keep", "5 min: the system's own, no conf");
+        assertEqual(words(install.installArgv("/bin/sh", request({ minutes: 4 }), live, true))[4], "keep", "4 min: shorter, no conf (the shell revokes)");
+        assertEqual(words(install.installArgv("/bin/sh", request({ minutes: 5 }), live, true))[4], "keep", "5 min: the system's own, no conf");
         // The vendor length decides
         const vendor10 = { [vendorPath]: "[Polkitd]\nExpirationSeconds=600\n" };
-        assertEqual(words(install.installArgv("/bin/sh", request({ minutes: 10, confs: vendor10 }), live, true))[5], "keep",
+        assertEqual(words(install.installArgv("/bin/sh", request({ minutes: 10, confs: vendor10 }), live, true))[4], "keep",
                     "the vendor file says 10 min: 10 is no longer");
-        assertEqual(words(install.installArgv("/bin/sh", request({ minutes: 11, confs: vendor10 }), live, true))[5], "write", "… 11 is");
-        assertEqual(words(install.installArgv("/bin/sh", request({ minutes: 5, confs: { [vendorPath]: "[Polkitd]\nExpirationSeconds=x\n" } }), live, true))[5], "write",
+        assertEqual(words(install.installArgv("/bin/sh", request({ minutes: 11, confs: vendor10 }), live, true))[4], "write", "… 11 is");
+        assertEqual(words(install.installArgv("/bin/sh", request({ minutes: 5, confs: { [vendorPath]: "[Polkitd]\nExpirationSeconds=x\n" } }), live, true))[4], "write",
                     "the vendor length unknown: the shell's conf decides");
-        assertEqual(words(install.installArgv("/bin/sh", request({ minutes: 1, confs: { "/run/polkit-1/polkitd.conf": "[Polkitd]\nExpirationSeconds=60\n" } }), live, true))[5],
+        assertEqual(words(install.installArgv("/bin/sh", request({ minutes: 1, confs: { "/run/polkit-1/polkitd.conf": "[Polkitd]\nExpirationSeconds=60\n" } }), live, true))[4],
                     "keep", "a /run conf of 60 s: 1 min is not longer…");
-        assertEqual(words(install.installArgv("/bin/sh", request({ minutes: 2, confs: { "/run/polkit-1/polkitd.conf": "[Polkitd]\nExpirationSeconds=60\n" } }), live, true))[5],
+        assertEqual(words(install.installArgv("/bin/sh", request({ minutes: 2, confs: { "/run/polkit-1/polkitd.conf": "[Polkitd]\nExpirationSeconds=60\n" } }), live, true))[4],
                     "write", "… and 2 min too: written");
 
         // ── Install again ──
         plan = install.installArgv("/bin/sh", request({ minutes: 15, rule: rule }), live, true);
-        assertEqual(JSON.stringify(words(plan).slice(1, 6)), JSON.stringify(["keep", sha(rule), "-", "", "write"]),
+        assertEqual(JSON.stringify(words(plan)), JSON.stringify(["apply", "keep", sha(rule), "-", "write", "absent", sha(conf15), "-", "-", "-", "900"]),
                     "the rule in place, the setting grew: only the conf");
         plan = install.installArgv("/bin/sh", request({ minutes: 20, rule: rule, confs: confs({ [etc]: conf15 }) }), live, true);
-        assertEqual(JSON.stringify(words(plan).slice(5, 8)), JSON.stringify(["write", sha(conf15), sha(RememberRules.confText(1200))]),
+        assertEqual(JSON.stringify(words(plan).slice(4, 7).concat(words(plan).slice(10))), JSON.stringify(["write", sha(conf15), sha(RememberRules.confText(1200)), "1200"]),
                     "grew again: our conf replaced");
         plan = install.installArgv("/bin/sh", request({ minutes: 5, rule: rule, confs: confs({ [etc]: conf15 }) }), live, true);
-        assertEqual(JSON.stringify(words(plan).slice(5)), JSON.stringify(["remove", sha(conf15), "-", ""]), "back to 5 min: our conf removed");
+        assertEqual(JSON.stringify(words(plan).slice(4)), JSON.stringify(["remove", sha(conf15), "-", "-", "-", "-", "-"]), "back to 5 min: our conf removed");
         assertEqual(plan.expected.after.conf + " " + plan.expected.reload, "absent true", "… none left, polkitd told");
         assertEqual(code(install.installArgv("/bin/sh", request({ minutes: 15, rule: rule, confs: confs({ [etc]: conf15 }) }), live, true)), "unchanged",
                     "all in place: nothing to do");
@@ -97,13 +99,13 @@ TestCase {
                     "another file under our name: not replaced");
         const foreign = "[Polkitd]\nExpirationSeconds=60\n";
         plan = install.installArgv("/bin/sh", request({ minutes: 15, confs: confs({ [etc]: foreign }) }), live, true);
-        assertEqual(JSON.stringify(words(plan).slice(1, 2).concat(words(plan).slice(5))), JSON.stringify(["write", "keep", sha(foreign), "-", ""]),
+        assertEqual(JSON.stringify(words(plan).slice(1, 2).concat(words(plan).slice(4, 7), words(plan).slice(10))), JSON.stringify(["write", "keep", sha(foreign), "-", "-"]),
                     "a conf not ours: the rule installed, the conf left as it is");
         assertEqual(code(install.installArgv("/bin/sh", request({ minutes: 15, rule: rule, confs: confs({ [etc]: foreign }) }), live, true)), "changed",
                     "… and with the rule in place: changed, not \"nothing to do\"");
-        assertEqual(words(install.installArgv("/bin/sh", request({ minutes: 15, rule: rule, confs: confs({ [etc]: foreign }), replace: true }), live, true))[5],
+        assertEqual(words(install.installArgv("/bin/sh", request({ minutes: 15, rule: rule, confs: confs({ [etc]: foreign }), replace: true }), live, true))[4],
                     "write", "… replace: ours written");
-        assertEqual(words(install.installArgv("/bin/sh", request({ minutes: 5, rule: rule, confs: confs({ [etc]: foreign }), replace: true }), live, true))[5],
+        assertEqual(words(install.installArgv("/bin/sh", request({ minutes: 5, rule: rule, confs: confs({ [etc]: foreign }), replace: true }), live, true))[4],
                     "remove", "… replace at the system's length: it goes");
 
         // ── Refused before the run ──
@@ -112,9 +114,15 @@ TestCase {
         assertEqual(code(install.installArgv("/bin/sh", request({ facts: Object.assign({}, facts, { user: "a b" }) }), live, true)), "facts", "no rule for these facts");
         for (const minutes of [0, -1, 1.5, "5", undefined, 1e12])
             assertEqual(code(install.installArgv("/bin/sh", request({ minutes }), live, true)), "setting", "minutes " + JSON.stringify(minutes) + ": refused");
-        assertEqual(words(install.installArgv("/bin/sh", request({ minutes: 71582788 }), live, true))[8], RememberRules.confText(4294967280),
-                    "the longest length polkitd takes: written");
-        assertEqual(code(install.installArgv("/bin/sh", request({ minutes: 71582789 }), live, true)), "setting", "… a minute more: refused");
+        assertEqual(install.maxMinutes, 60, "the longest setting: the schema's");
+        assertEqual(words(install.installArgv("/bin/sh", request({ minutes: 60 }), live, true))[10], "3600", "60 min: written");
+        assertEqual(code(install.installArgv("/bin/sh", request({ minutes: 61 }), live, true)), "setting", "… a minute more: refused");
+        assert(install.applyScript(live).includes("; max_seconds=3600\n"), "… the root step's own bound");
+        assertEqual(code(install.installArgv("/bin/sh", request({ facts: Object.assign({}, facts, { program: "/usr/bin/" + "x".repeat(4087) }) }), live, true)), "",
+                    "a path of 4096 characters: the longest the root step takes");
+        for (const bad of [{ timeout: "/opt/tools/time\u00e9out" }, { program: "/usr/bin/time:out" }, { program: "/usr/bin/" + "x".repeat(4090) }])
+            assertEqual(code(install.installArgv("/bin/sh", request({ facts: Object.assign({}, facts, bad) }), live, true)), "facts",
+                        "a path the root step would not take: refused before " + JSON.stringify(bad).slice(0, 40));
         assertEqual(code(install.installArgv("sh", request(), live, true)), "arguments", "a shell that is not an absolute path");
         assertEqual(code(install.installArgv("/bin/sh", request(), scratch, true)), "paths", "scratch places through the system's pkexec");
         assertEqual(code(install.installArgv("/bin/sh", request(), live, false)), "paths", "the system's places through a stand-in");
@@ -123,16 +131,16 @@ TestCase {
 
         // ── Remove ──
         plan = install.removeArgv("/bin/sh", request({ rule: rule, confs: confs({ [etc]: conf15 }) }), live, true);
-        assertEqual(JSON.stringify(words(plan)), JSON.stringify(["apply", "remove", sha(rule), "-", "", "remove", sha(conf15), "-", ""]), "Remove: both ours go");
+        assertEqual(JSON.stringify(words(plan)), JSON.stringify(["apply", "remove", sha(rule), "-", "remove", sha(conf15), "-", "-", "-", "-", "-"]), "Remove: both ours go");
         assertEqual(JSON.stringify(plan.expected.after) + plan.expected.reload, JSON.stringify({ rule: "absent", conf: "absent" }) + "true", "… none left");
         plan = install.removeArgv("/bin/sh", request({ rule: rule, confs: confs({ [etc]: foreign }) }), live, true);
-        assertEqual(words(plan)[5] + " " + plan.expected.reload, "keep false", "a conf not ours stays");
+        assertEqual(words(plan)[4] + " " + plan.expected.reload, "keep false", "a conf not ours stays");
         assertEqual(words(install.removeArgv("/bin/sh", request({ rule: outdated }), live, true))[1], "remove", "our outdated rule goes");
         assertEqual(code(install.removeArgv("/bin/sh", request({ rule: byHand }), live, true)), "changed", "a rule changed by hand: not removed");
         assertEqual(words(install.removeArgv("/bin/sh", request({ rule: byHand, replace: true }), live, true))[1], "remove", "… unless replace");
         assertEqual(code(install.removeArgv("/bin/sh", request(), live, true)), "unchanged", "nothing installed: nothing to remove");
         assertEqual(code(install.removeArgv("/bin/sh", request({ confs: confs({ [etc]: foreign }) }), live, true)), "unchanged", "… a conf not ours is not ours to remove");
-        assertEqual(words(install.removeArgv("/bin/sh", request({ confs: confs({ [etc]: conf15 }) }), live, true)).slice(1, 2).concat([words(install.removeArgv("/bin/sh", request({ confs: confs({ [etc]: conf15 }) }), live, true))[5]]).join(" "),
+        assertEqual(words(install.removeArgv("/bin/sh", request({ confs: confs({ [etc]: conf15 }) }), live, true)).slice(1, 2).concat([words(install.removeArgv("/bin/sh", request({ confs: confs({ [etc]: conf15 }) }), live, true))[4]]).join(" "),
                     "keep remove", "our conf left alone: it goes");
         assertEqual(code(install.removeArgv("/bin/sh", request({ rule: null }), live, true)), "unread", "not read: not removed");
 

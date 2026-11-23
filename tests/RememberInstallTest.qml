@@ -14,8 +14,10 @@ import qs.singletons.io
 // temp file), Install again when the setting grows (the conf, polkitd told), its Undo, Remove
 // and its Undo, polkitd not told (a failing systemctl), refused when a file changed by hand,
 // is a link, the folders are not the owner's or others may write in them, another run holds
-// the lock, the bytes are not the ones made, the arguments are not valid, a backup is not
-// there, an Undo after the files changed; a prompt dismissed; one run at a time. Asynchronous.
+// the lock, the file built has not the sha256 the shell computed, the arguments (facts,
+// seconds) are not valid, a backup is not there, an Undo after the files changed or of a run
+// whose record says other files; the script's templates against RememberRules' texts byte for
+// byte; a prompt dismissed; a queue that throws; one run at a time. Asynchronous.
 TestCase {
     id: suite
     suiteName: "RememberInstall"
@@ -26,6 +28,8 @@ TestCase {
     readonly property var _paths: ({ rules: _scratch + "/rules.d", conf: _scratch + "/polkit-1", backups: _scratch + "/lib/polkit-backup",
                                      systemctl: _scratch + "/bin/systemctl", owner: _owner })
     readonly property var _facts: ({ user: "alex", timeout: "/usr/bin/timeout", program: "/usr/bin/timeout" })
+    readonly property var _nixFacts: ({ user: "bob.smith-2$", timeout: "/run/current-system/sw/bin/timeout",
+                                        program: "/nix/store/0abc-coreutils-full-9.11/bin/coreutils" })
     readonly property string _rule: RememberRules.ruleText(_facts)
     readonly property string _conf15: RememberRules.confText(900)
     readonly property string _vendorConf: "[Polkitd]\n# ExpirationSeconds=300\n"
@@ -162,6 +166,12 @@ TestCase {
         _exec(["cat", "--", _paths.backups + "/" + name], (code, stdout) => done(code === 0 ? stdout : null));
     }
 
+    // The root step's apply words: each file's op, current and sha256, the facts (null: none), the seconds
+    function _apply(ruleOp, ruleCurrent, ruleWant, confOp, confCurrent, confWant, facts, seconds) {
+        return ["apply", ruleOp, ruleCurrent, ruleWant, confOp, confCurrent, confWant,
+                facts?.user ?? "-", facts?.timeout ?? "-", facts?.program ?? "-", seconds];
+    }
+
     function _runDirect(words, paths) {
         _direct = null;
         _exec(["sh", "-c", RememberInstallRules.applyScript(paths ?? _paths), "sh"].concat(words),
@@ -192,6 +202,9 @@ TestCase {
             assertEqual(standIn.install(_request(5)).refusal?.code, "paths", "a stand-in with the system's places: refused");
             standIn.destroy();
             assertEqual(_runs.length, 0, "… nothing run");
+            const throwing = _installComponent.createObject(suite, { start: () => { throw new Error("no queue"); }, paths: _paths });
+            assertEqual(throwing.install(_request(5)).refusal?.code + " " + throwing.busy, "start false", "a queue that throws: not started, not left busy");
+            throwing.destroy();
 
             _install = _installComponent.createObject(suite, { start: suite._start, paths: _paths });
             _install.finished.connect(outcome => suite._outcome = outcome);
@@ -210,9 +223,9 @@ TestCase {
             assertEqual(_read.rule, _rule, "the rule's bytes in the rules folder");
             assertEqual(_read.modes.join(" "), "rules.d/40-h2s-shell.rules 644 lib/polkit-backup 700", "under umask 000: the rule 644, the backups 700");
             assertEqual(_read.listing.join(" "), "40-h2s-shell.rules", "no temporary file left in either folder");
-            assertEqual(_read.backups.sort().join(" "), "40-h2s-shell.rules." + _installed.stamp + ".absent polkitd.conf." + _installed.stamp + ".absent",
-                        "both files recorded as absent, under one stamp");
-            assertEqual(_read.backupModes.join(" "), "600 600", "… 600 each");
+            assertEqual(_read.backups.sort().join(" "), "40-h2s-shell.rules." + _installed.stamp + ".absent polkitd.conf." + _installed.stamp + ".absent run." + _installed.stamp,
+                        "both files recorded as absent, and what the run left, under one stamp");
+            assertEqual(_read.backupModes.join(" "), "600 600 600", "… 600 each");
             assertEqual(_read.systemctl.length, 0, "systemctl not run");
             _outcome = null;
             assert(_install.install(_request(15)).started, "Install again, 15 min: started");
@@ -229,13 +242,15 @@ TestCase {
             assert(_read.modes.includes("polkit-1/polkitd.conf 644"), "… 644");
             assertEqual(_read.systemctl.join("|"), "kill -s HUP --kill-whom=main polkit.service", "polkitd's main process sent SIGHUP");
             assertEqual(_read.backups.filter(name => name.includes(_grown.stamp)).sort().join(" "),
-                        "40-h2s-shell.rules." + _grown.stamp + " polkitd.conf." + _grown.stamp + ".absent", "the rule kept as it was, the conf recorded as absent");
-            assertEqual(_read.backups.length, 4, "every backup kept");
+                        "40-h2s-shell.rules." + _grown.stamp + " polkitd.conf." + _grown.stamp + ".absent run." + _grown.stamp,
+                        "the rule kept as it was, the conf recorded as absent");
+            assertEqual(_read.backups.length, 6, "every backup kept");
             _read = null;
-            _backupText("40-h2s-shell.rules." + _grown.stamp, text => suite._read = { backup: text });
+            _backupText("40-h2s-shell.rules." + _grown.stamp, text => _backupText("run." + _grown.stamp, record => suite._read = { backup: text, record: record }));
         });
         _then("the rule's backup read", () => _read !== null, () => {
             assertEqual(_read.backup, _rule, "the backup: the rule as it was");
+            assertEqual(_read.record, sha(_rule) + " " + sha(_conf15), "the record: what the run left");
             _outcome = null;
             assert(_install.undo({ stamp: _grown.stamp, rule: _grown.rule, conf: _grown.conf }).started, "Undo of Install again: started");
             assertEqual(_runs[_runs.length - 1].what, "Undo the change to the remembered administrator password", "… the run's purpose");
@@ -247,7 +262,7 @@ TestCase {
         });
         _then("read after Undo", () => _read !== null, () => {
             assertEqual(_read.rule + "|" + _read.conf, _rule + "|null", "the rule there, the conf gone");
-            assertEqual(_read.backups.length + " " + _read.listing.join(" "), "6 40-h2s-shell.rules", "two more backups, no temporary file");
+            assertEqual(_read.backups.length + " " + _read.listing.join(" "), "9 40-h2s-shell.rules", "two more backups and a record, no temporary file");
             _outcome = null;
             assert(_install.remove(_request(5)).started, "Remove: started");
             assertEqual(_runs[_runs.length - 1].what, "Stop remembering the administrator password", "… the run's purpose");
@@ -341,26 +356,51 @@ TestCase {
         });
         // The root step's own checks
         _then("read before the direct runs", () => _read !== null, () => {
-            _runDirect(["apply", "write", sha(_read.rule), sha("something else"), _rule + "#\n", "keep", sha(_read.conf), "-", ""]);
+            _runDirect(_apply("write", sha(_read.rule), sha("something else"), "keep", sha(_read.conf), "-", _facts, "-"));
         });
         _then("the wrong hash answered", () => _direct !== null, () => {
-            assertEqual(_direct.code + " " + _direct.stderr, "3 refused hash", "bytes that are not the ones made: refused");
-            _runDirect(["apply", "keep", sha(_read.rule), "-", "", "keep", sha(_read.conf), "-", ""]);
+            assertEqual(_direct.code + " " + _direct.stderr, "3 refused hash", "a rule built that has not the sha256 the shell computed: refused");
+            // The files are as given, but not what that run recorded it left
+            _runDirect(["undo", _removed.stamp, sha(_read.rule), sha(_read.conf)]);
+        });
+        _then("an Undo of a run that left other files", () => _direct !== null, () => {
+            assertEqual(_direct.stderr, "refused changed", "the files not what the stamp's run left: refused");
+            _runDirect(_apply("keep", sha(_read.rule), "-", "keep", sha(_read.conf), "-", null, "-"));
         });
         _then("nothing to do", () => _direct !== null, () => {
             assertEqual(_direct.stderr, "refused arguments", "both kept: refused");
-            _runDirect(["apply", "move", sha(_read.rule), "-", "", "keep", sha(_read.conf), "-", ""]);
+            _runDirect(_apply("move", sha(_read.rule), "-", "keep", sha(_read.conf), "-", null, "-"));
         });
         _then("an unknown op", () => _direct !== null, () => {
             assertEqual(_direct.stderr, "refused arguments", "an operation not on the list: refused");
-            _runDirect(["apply", "remove", "absent", "-", "", "keep", sha(_read.conf), "-", ""]);
+            _runDirect(_apply("remove", "absent", "-", "keep", sha(_read.conf), "-", null, "-"));
         });
         _then("removing nothing", () => _direct !== null, () => {
             assertEqual(_direct.stderr, "refused arguments", "a removal of no file: refused");
-            _runDirect(["apply", "keep", sha(_read.rule), "-", "text", "remove", sha(_read.conf), "-", ""]);
+            _runDirect(["apply", "keep", sha(_read.rule), "-", "remove", sha(_read.conf), "-", "alex", "-", "-", "-"]);
         });
-        _then("a kept file with a text", () => _direct !== null, () => {
-            assertEqual(_direct.stderr, "refused arguments", "a text for a file kept: refused");
+        _then("a kept rule with a user", () => _direct !== null, () => {
+            assertEqual(_direct.stderr, "refused arguments", "facts for a rule kept: refused");
+            _runDirect(_apply("keep", sha(_read.rule), "-", "write", sha(_read.conf), sha(RememberRules.confText(3601)), null, "3601"));
+        });
+        _then("seconds past the bound", () => _direct !== null, () => {
+            assertEqual(_direct.stderr, "refused arguments", "a length past the setting's longest: refused");
+            _runDirect(_apply("keep", sha(_read.rule), "-", "write", sha(_read.conf), sha(RememberRules.confText(60)), null, "060"));
+        });
+        _then("seconds with a leading zero", () => _direct !== null, () => {
+            assertEqual(_direct.stderr, "refused arguments", "seconds not as the shell writes them: refused");
+            _runDirect(_apply("write", sha(_read.rule), sha(_rule), "keep", sha(_read.conf), "-", Object.assign({}, _facts, { user: "al\"ex" }), "-"));
+        });
+        _then("a user with a quote", () => _direct !== null, () => {
+            assertEqual(_direct.stderr, "refused arguments", "a user name the rule cannot carry: refused");
+            _runDirect(_apply("write", sha(_read.rule), sha(_rule), "keep", sha(_read.conf), "-", Object.assign({}, _facts, { program: "/usr/bin/x\");polkit.addRule(" }), "-"));
+        });
+        _then("a program that would break out of the rule", () => _direct !== null, () => {
+            assertEqual(_direct.stderr, "refused arguments", "a path with a quote: refused");
+            _runDirect(_apply("write", sha(_read.rule), sha(_rule), "keep", sha(_read.conf), "-", Object.assign({}, _facts, { timeout: "/usr/bin/time out" }), "-"));
+        });
+        _then("a path with a space", () => _direct !== null, () => {
+            assertEqual(_direct.stderr, "refused arguments", "a path with a space: refused");
             _runDirect(["undo", "20261123T101500Z/../../x", "absent", "absent"]);
         });
         _then("a stamp that is a path", () => _direct !== null, () => {
@@ -371,8 +411,18 @@ TestCase {
             assertEqual(_direct.stderr, "refused nobackup", "a stamp with no backups: refused");
             _runDirect(["reinstall"]);
         });
+        // The script's templates against RememberRules' texts, for a multi-call binary
         _then("an unknown mode", () => _direct !== null, () => {
             assertEqual(_direct.stderr, "refused arguments", "a mode not on the list: refused");
+            _runDirect(_apply("write", sha(_read.rule), sha(RememberRules.ruleText(_nixFacts)), "write", sha(_read.conf), sha(RememberRules.confText(120)), _nixFacts, "120"));
+        });
+        _then("the multi-call rule written", () => _direct !== null, () => {
+            assertEqual(_direct.code + " " + _direct.stdout.trim().split(" ")[0], "0 applied", "a NixOS-like program and 120 s: written");
+            _look();
+        });
+        _then("read after the multi-call rule", () => _read !== null, () => {
+            assertEqual(_read.rule, RememberRules.ruleText(_nixFacts), "the script's rule: RememberRules.ruleText byte for byte");
+            assertEqual(_read.conf, RememberRules.confText(120), "the script's conf: RememberRules.confText byte for byte");
             _look();
         });
         _then("read after the direct runs", () => _read !== null, () => {

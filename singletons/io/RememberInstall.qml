@@ -52,15 +52,22 @@ QtObject {
             return { started: false, refusal: plan.refusal };
         _busy = true;
         const queue = start ?? ((request, done) => PrivilegedRuns.startShell(request, done));
-        queue({ what: what, argv: plan.argv }, result => {
-            const outcome = RememberInstallRules.reply(result, plan.expected);
-            if (outcome.ok) {
-                root._busy = false;
-                root.finished(outcome);
-                return;
-            }
-            root._readAgain(plan.expected, outcome);
-        });
+        try {
+            queue({ what: what, argv: plan.argv }, result => {
+                const outcome = RememberInstallRules.reply(result, plan.expected);
+                if (outcome.ok) {
+                    root._busy = false;
+                    root.finished(outcome);
+                    return;
+                }
+                root._readAgain(plan.expected, outcome);
+            });
+        } catch (error) {
+            // Nothing will answer: not left busy for good
+            console.warn("[RememberInstall] the run could not be started: " + error);
+            _busy = false;
+            return { started: false, refusal: RememberInstallRules.refusal("start") };
+        }
         return { started: true, refusal: null };
     }
 
