@@ -448,7 +448,7 @@ Singleton {
         W9: "nullok: an account with an empty password gets in.",
         W10: "Nothing above asks for the password, so this line never lets you in.",
         W6: "Asked twice: the same method is in another row.",
-        W7: "A wrong password is asked again by the last row.",
+        W7: "If you type it wrong here, the system's password row asks for it again.",
         W8: "Not saved for both: Apply again to make the lists the same.",
         W11: "A path in the Nix store changes with an update or a garbage collection.",
         W12: "Not in the system's module folders: if your user can write this file, any of your programs can replace it without a password, and it runs as root at the next sudo or administrator prompt.",
