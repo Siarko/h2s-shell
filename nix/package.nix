@@ -127,7 +127,9 @@ stdenvNoCC.mkDerivation {
     runHook postInstall
   '';
 
-  passthru = { inherit helper; };
+  # coreutils: the one whose timeout the shell's runs start with (first on the command's
+  # PATH); the module's remembered-authorization rule names it
+  passthru = { inherit helper coreutils; };
 
   meta = {
     description = "A desktop shell for Hyprland, built with Quickshell";

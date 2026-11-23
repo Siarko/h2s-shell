@@ -122,6 +122,9 @@ nix/* self:tests/run-system.sh
 # both the suite and the NixOS evaluation read
 +nix/pam.nix unit:PamNixosModuleTest
 tests/fixtures/pam-nixos/* unit:PamNixosModuleTest self:tests/run-system.sh
+# The remembered authorization's ranges against the setting's, and its case set, as for PAM
++nix/remember.nix unit:RememberNixosModuleTest
+tests/fixtures/remember-nixos/* unit:RememberNixosModuleTest self:tests/run-system.sh
 
 # ---- Started only by shell.qml ---------------------------------------------------------
 singletons/SleepLockNotice.qml unit:SleepNoticeRulesTest lock:sleep-notice

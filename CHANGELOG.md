@@ -44,6 +44,11 @@ section to the new version and date.
   not know without the `system` row (it lets in a user the module says it does not apply
   to), and a fingerprint with no time limit above a password (the password waits for the
   finger) are warnings. null (the default) leaves the service as NixOS makes it.
+- NixOS: the module's `programs.h2s-shell.polkit.rememberAdmin = { enable; users; minutes; }`
+  remembers the administrator password for the shell's own root runs, for the listed users:
+  a polkit rule keeps a typed password for the shell's process; `minutes` (1–60, default 5)
+  above polkit's 5 sets polkitd's `ExpirationSeconds` for the whole system, and polkit
+  reloads when it changes.
 
 ### Changed
 - NixOS: `programs.h2s-shell.polkit.passwordFirst` is deprecated (a warning when set): a

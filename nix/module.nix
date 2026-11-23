@@ -19,8 +19,9 @@ let
     else { systemd.sleep.extraConfig = "HibernateDelaySec=${hibernateDelay}\n"; };
 in
 {
-  # sudo's and polkit's auth rules (programs.h2s-shell.pam, polkit.passwordFirst)
-  imports = [ ./pam.nix ];
+  # sudo's and polkit's auth rules (programs.h2s-shell.pam, polkit.passwordFirst); the
+  # remembered administrator authorization (polkit.rememberAdmin)
+  imports = [ ./pam.nix ./remember.nix ];
 
   options.programs.h2s-shell = {
     enable = lib.mkEnableOption "h2s-shell, a desktop shell for Hyprland";

@@ -136,6 +136,7 @@ QtObject {
     property var _pamNixosModule: PamNixosModuleTest {}
     property var _pamApplyRules: PamApplyRulesTest {}
     property var _rememberRules: RememberRulesTest {}
+    property var _rememberNixosModule: RememberNixosModuleTest {}
     property var _rememberedAdminReading: RememberedAdminReadingTest {}
     property var _pamApply: PamApplyTest {}
     property var _pamRuleList: PamRuleListTest {}

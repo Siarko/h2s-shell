@@ -1,0 +1,86 @@
+{
+  "coreutils": "/nix/store/0123456789abcdfghijklmnpqrsvwxyz-coreutils-9.12",
+  "cases": [
+    {
+      "name": "one user, polkit's own length",
+      "users": [
+        "alex"
+      ],
+      "minutes": 5,
+      "rules": [
+        "// Written by h2s-shell 262a2fc884caf23bb3bec24b6bdfb9b9ff6cfffc956a6aa74e472f3a6ac8cb28\npolkit.addRule(function(action, subject) {\n    if (action.id == \"org.freedesktop.policykit.exec\" && subject.user == \"alex\" &&\n        action.lookup(\"program\") == \"/nix/store/0123456789abcdfghijklmnpqrsvwxyz-coreutils-9.12/bin/coreutils\" &&\n        action.lookup(\"command_line\").indexOf(\"/nix/store/0123456789abcdfghijklmnpqrsvwxyz-coreutils-9.12/bin/timeout \") == 0)\n        return \"auth_admin_keep\";\n});\n"
+      ],
+      "conf": ""
+    },
+    {
+      "name": "one user, one minute: no conf (the shell forgets earlier)",
+      "users": [
+        "alex"
+      ],
+      "minutes": 1,
+      "rules": [
+        "// Written by h2s-shell 262a2fc884caf23bb3bec24b6bdfb9b9ff6cfffc956a6aa74e472f3a6ac8cb28\npolkit.addRule(function(action, subject) {\n    if (action.id == \"org.freedesktop.policykit.exec\" && subject.user == \"alex\" &&\n        action.lookup(\"program\") == \"/nix/store/0123456789abcdfghijklmnpqrsvwxyz-coreutils-9.12/bin/coreutils\" &&\n        action.lookup(\"command_line\").indexOf(\"/nix/store/0123456789abcdfghijklmnpqrsvwxyz-coreutils-9.12/bin/timeout \") == 0)\n        return \"auth_admin_keep\";\n});\n"
+      ],
+      "conf": ""
+    },
+    {
+      "name": "one user, six minutes: the conf",
+      "users": [
+        "alex"
+      ],
+      "minutes": 6,
+      "rules": [
+        "// Written by h2s-shell 262a2fc884caf23bb3bec24b6bdfb9b9ff6cfffc956a6aa74e472f3a6ac8cb28\npolkit.addRule(function(action, subject) {\n    if (action.id == \"org.freedesktop.policykit.exec\" && subject.user == \"alex\" &&\n        action.lookup(\"program\") == \"/nix/store/0123456789abcdfghijklmnpqrsvwxyz-coreutils-9.12/bin/coreutils\" &&\n        action.lookup(\"command_line\").indexOf(\"/nix/store/0123456789abcdfghijklmnpqrsvwxyz-coreutils-9.12/bin/timeout \") == 0)\n        return \"auth_admin_keep\";\n});\n"
+      ],
+      "conf": "# Written by h2s-shell ac5f28a8ab8d0bd32f31c57d63454888630c11068563666868e49d9505414a45\n[Polkitd]\nExpirationSeconds=360\n"
+    },
+    {
+      "name": "two users, a quarter of an hour",
+      "users": [
+        "alex",
+        "b.o-b_2"
+      ],
+      "minutes": 15,
+      "rules": [
+        "// Written by h2s-shell 262a2fc884caf23bb3bec24b6bdfb9b9ff6cfffc956a6aa74e472f3a6ac8cb28\npolkit.addRule(function(action, subject) {\n    if (action.id == \"org.freedesktop.policykit.exec\" && subject.user == \"alex\" &&\n        action.lookup(\"program\") == \"/nix/store/0123456789abcdfghijklmnpqrsvwxyz-coreutils-9.12/bin/coreutils\" &&\n        action.lookup(\"command_line\").indexOf(\"/nix/store/0123456789abcdfghijklmnpqrsvwxyz-coreutils-9.12/bin/timeout \") == 0)\n        return \"auth_admin_keep\";\n});\n",
+        "// Written by h2s-shell a619c9b9fda2b4e1f0fc87aae3ffd7995001a2ed745cffe2edf803cd9800c5b6\npolkit.addRule(function(action, subject) {\n    if (action.id == \"org.freedesktop.policykit.exec\" && subject.user == \"b.o-b_2\" &&\n        action.lookup(\"program\") == \"/nix/store/0123456789abcdfghijklmnpqrsvwxyz-coreutils-9.12/bin/coreutils\" &&\n        action.lookup(\"command_line\").indexOf(\"/nix/store/0123456789abcdfghijklmnpqrsvwxyz-coreutils-9.12/bin/timeout \") == 0)\n        return \"auth_admin_keep\";\n});\n"
+      ],
+      "conf": "# Written by h2s-shell 0ac8bccb6ee68d61e21f29908fbcb37284225ab5e4f77160a44264f126b02e2c\n[Polkitd]\nExpirationSeconds=900\n"
+    },
+    {
+      "name": "a machine account's name, the longest length",
+      "users": [
+        "host$"
+      ],
+      "minutes": 60,
+      "rules": [
+        "// Written by h2s-shell 3fb1965e622d4c7c0d944313d56f05adf5a54628eb051282ea9d0c391da4ff15\npolkit.addRule(function(action, subject) {\n    if (action.id == \"org.freedesktop.policykit.exec\" && subject.user == \"host$\" &&\n        action.lookup(\"program\") == \"/nix/store/0123456789abcdfghijklmnpqrsvwxyz-coreutils-9.12/bin/coreutils\" &&\n        action.lookup(\"command_line\").indexOf(\"/nix/store/0123456789abcdfghijklmnpqrsvwxyz-coreutils-9.12/bin/timeout \") == 0)\n        return \"auth_admin_keep\";\n});\n"
+      ],
+      "conf": "# Written by h2s-shell f7b4082123e98692a42fd2dbece879be584a92ae2881b25686275492e856fc36\n[Polkitd]\nExpirationSeconds=3600\n"
+    },
+    {
+      "name": "a user named twice: one rule",
+      "users": [
+        "alex",
+        "alex"
+      ],
+      "minutes": 5,
+      "rules": [
+        "// Written by h2s-shell 262a2fc884caf23bb3bec24b6bdfb9b9ff6cfffc956a6aa74e472f3a6ac8cb28\npolkit.addRule(function(action, subject) {\n    if (action.id == \"org.freedesktop.policykit.exec\" && subject.user == \"alex\" &&\n        action.lookup(\"program\") == \"/nix/store/0123456789abcdfghijklmnpqrsvwxyz-coreutils-9.12/bin/coreutils\" &&\n        action.lookup(\"command_line\").indexOf(\"/nix/store/0123456789abcdfghijklmnpqrsvwxyz-coreutils-9.12/bin/timeout \") == 0)\n        return \"auth_admin_keep\";\n});\n"
+      ],
+      "conf": ""
+    }
+  ],
+  "invalidUsers": [
+    "",
+    "-alex",
+    ".alex",
+    "al ex",
+    "al\"ex",
+    "al$ex",
+    "alex$$",
+    "al\\ex",
+    "alex\n",
+    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  ]
+}
