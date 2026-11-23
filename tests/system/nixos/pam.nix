@@ -264,6 +264,28 @@ let
       { notWarnings = [ "h2s-shell" ]; })
   ];
 
+  # The machine's settings that would let a key row pass without a key or a touch
+  keySafety =
+    let
+      keyRules = { programs.h2s-shell.pam.rules = [ { method = "securityKey"; } system ]; };
+      keyLine = settings:
+        let config = configOf (keyRules // { security.pam.u2f = { enable = true; inherit settings; }; });
+        in lib.findFirst ours "" (authLines config "sudo");
+      passing = keyLine { nouserok = true; alwaysok = true; authfile = "/etc/u2f-keys"; };
+    in [
+      (result (passing != "" && !(lib.hasInfix "nouserok" passing) && !(lib.hasInfix "alwaysok" passing) && lib.hasInfix "authfile=/etc/u2f-keys" passing)
+        "the machine's nouserok and alwaysok never reach a key row (its other settings do)" passing)
+      (expect "the machine's userpresence = 0 beside a key row: refused"
+        (keyRules // { security.pam.u2f = { enable = true; settings.userpresence = 0; }; })
+        { refusals = [ "row 1 (securityKey): the machine's security.pam.u2f.settings turn off the touch (userpresence = 0)" ]; })
+      (expect "… userpresence = 1: allowed"
+        (keyRules // { security.pam.u2f = { enable = true; settings.userpresence = 1; }; })
+        { })
+      (expect "a u2f setting with a line break: refused"
+        (keyRules // { security.pam.u2f = { enable = true; settings.authfile = "/etc/keys\nauth sufficient pam_permit.so"; }; })
+        { refusals = [ "security.pam.u2f.settings: authfile holds a line break" ]; })
+    ];
+
   # The machine's pam_u2f settings on a key row, as the lock screen takes them: authfile and
   # appid there, `cue` always, never `interactive`; with them left out, the editor's line
   u2fSettings =
@@ -297,4 +319,4 @@ let
         "nothing set, with fprintd: polkit asks the password before the reader" (builtins.toJSON polkit))
     ];
 in
-lib.concatStringsSep "\n" (lib.concatMap caseResults cases ++ checks ++ u2fSettings ++ untouched) + "\n"
+lib.concatStringsSep "\n" (lib.concatMap caseResults cases ++ checks ++ u2fSettings ++ keySafety ++ untouched) + "\n"

@@ -478,8 +478,9 @@ Singleton {
     // permit closing keeps the result), fails (failing fails the stack: required, requisite, a
     // bracketed bad/die), credential (raw: credentialOf's), denies (a raw pam_deny
     // that fails), firstPass (a raw pam_unix use_first_pass: only checks a password asked
-    // above), nullok, unknownMust (a raw required/requisite line of a module the shell
-    // does not know), refusals }
+    // above), nullok, unknownMust (a raw line of a module the shell does not know that
+    // fails the stack but lets PAM_IGNORE pass as no answer: plain required/requisite, or a
+    // bracketed control whose ignore — or default — is neither bad nor die), refusals }
     function _role(row, service, facts) {
         const role = { method: "unknown", raw: false, atOnce: false, okOnSuccess: false, fails: false,
                        credential: "unknown", denies: false, firstPass: false, nullok: false, unknownMust: false,
@@ -515,7 +516,8 @@ Singleton {
                 role.firstPass = named === "pam_unix.so" && line.args.includes("use_first_pass");
                 role.nullok = named === "pam_unix.so" && line.args.includes("nullok");
                 role.moduleName = line.moduleName;
-                role.unknownMust = (line.control === "required" || line.control === "requisite") && judged.credential === "unknown";
+                const onIgnore = line.controlKind === "simple" ? "ignore" : (actions.ignore ?? actions.default ?? "");
+                role.unknownMust = role.fails && onIgnore !== "bad" && onIgnore !== "die" && judged.credential === "unknown";
             }
             return role;
         }
@@ -695,8 +697,8 @@ Singleton {
                 warn("W10", i, texts.W10);
         });
 
-        // W13: a raw required/requisite line of a module the shell does not know, without
-        // the fixed row: a module that answers PAM_IGNORE for a user it does not know leaves
+        // W13: a raw line of a module the shell does not know that fails the stack but lets
+        // PAM_IGNORE pass (_role's unknownMust), without the fixed row: a module that answers PAM_IGNORE for a user it does not know leaves
         // no result, and the permit closing then lets the user in
         roles.forEach((role, i) => {
             if (role.unknownMust && !fixedPresent && role.refusals.length === 0)

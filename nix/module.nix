@@ -8,7 +8,7 @@ let
   cfg = config.programs.h2s-shell;
 
   # security.pam.u2f.settings as module arguments, with the two the lock needs forced
-  u2fArguments = import ./u2f.nix lib config.security.pam.u2f.settings { cue = true; interactive = false; };
+  u2fArguments = (import ./u2f.nix lib config.security.pam.u2f.settings).arguments { cue = true; interactive = false; };
 
   # The system's delay before a sleep the shell starts turns into hibernation: sleep.conf's
   # HibernateDelaySec, through whichever option this NixOS has for it

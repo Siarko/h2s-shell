@@ -18,6 +18,12 @@ let
   # The methods whose rows never take `optional` (a raw row may): PAM ignores an optional
   # row's result whenever another row decides, so for a way in it only misleads
   ownMethods = [ "fingerprint" "securityKey" "password" ];
+  u2f = import ./u2f.nix lib config.security.pam.u2f.settings;
+  # The machine's `userpresence`, when it is written as anything but 1: pam_u2f reads it
+  # through sscanf, so any other value may turn the touch off (true and false write no
+  # `userpresence=` and leave pam_u2f's default)
+  userpresence = config.security.pam.u2f.settings.userpresence or null;
+  touchOff = userpresence != null && !(lib.isBool userpresence) && toString userpresence != "1";
   # libpam's own modules: NixOS's libpam finds these, and only these, by bare name
   libpamModules = map (name: name + ".so") [ "pam_access" "pam_canonicalize_user" "pam_debug"
     "pam_deny" "pam_echo" "pam_env" "pam_exec" "pam_faildelay" "pam_faillock" "pam_filter"
@@ -268,6 +274,8 @@ let
             "${at index row}: counted is a password row's."
           ++ lib.optional (row.method != "raw" && (row.module != null || row.args != [ ]))
             "${at index row}: module and args are a raw row's."
+          ++ lib.optional (row.method == "securityKey" && touchOff)
+            "${at index row}: the machine's security.pam.u2f.settings turn off the touch (userpresence = ${toString userpresence}), so a plugged-in key would let any program use ${name}: set userpresence = 1 or drop the key row."
           ++ lib.optional (lib.elem row.method ownMethods && row.control == "optional")
             "${at index row}: optional is only for a raw row: this row's result would be ignored."
           ++ lib.optional (row.method == "password" && row.counted && !config.security.pam.services.${name}.logFailures)
@@ -380,9 +388,11 @@ let
       (line (lib.elemAt middle 1) (pamModule "pam_faillock.so") [ "authfail" ])
     ];
   # A key row's arguments: the machine's pam_u2f settings with `cue`, without `interactive`
-  # (it would wait for Enter), the PIN as the row says
-  u2fArguments = row: import ./u2f.nix lib config.security.pam.u2f.settings
-    { cue = true; interactive = false; pinverification = if row.pin then 1 else null; };
+  # (it would wait for Enter), the PIN as the row says, and never `nouserok` or `alwaysok`
+  # (they let a user without a key, or anyone, in through a row that lets in at once; a
+  # user without a key falls through to the next row anyway)
+  u2fArguments = row: u2f.arguments
+    { cue = true; interactive = false; nouserok = false; alwaysok = false; pinverification = if row.pin then 1 else null; };
   # The lines of one row. The modules come from their packages, so a fingerprint or key row
   # never needs Arch's `-auth` (skip the line when the module is gone).
   rowLines = row:
@@ -475,6 +485,9 @@ in
       lib.concatMap (found: found.refusals) allProblems
       ++ lib.optional (ruled != { } && !(keepsPassword services.sudo || keepsPassword services.polkit-1))
         "programs.h2s-shell.pam: keep a password in sudo's or polkit's rules: one is the way to repair the other."
+      ++ lib.optional (u2f.broken != [ ] && (config.security.pam.u2f.enable
+          || lib.any (service: lib.any (row: row.method == "securityKey") service.rows) (lib.attrValues ruled)))
+        "security.pam.u2f.settings: ${lib.concatStringsSep ", " u2f.broken} holds a line break: written into a PAM file it would end the line there and start another."
       ++ lib.optional (polkitRuled && passwordFirstSet && cfg.polkit.passwordFirst)
         "polkit's rules come from programs.h2s-shell.pam: remove programs.h2s-shell.polkit.passwordFirst."
     ));

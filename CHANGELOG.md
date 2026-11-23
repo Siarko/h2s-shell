@@ -959,7 +959,8 @@ The interface modules are written against (`qs.api`), versioned on its own
   `auth` rules as an ordered list of rows: fingerprint (`timeout` 1–600 s and `tries`
   1–20, each -1 for no limit), security key (`pin`; the machine's
   `security.pam.u2f.settings` apply, as on the lock screen, always with `cue` and never
-  `interactive`), password (`counted`), a raw line (`module`, `args`), and
+  `interactive`, `nouserok` or `alwaysok`; a `userpresence` other than 1, or a setting
+  with a line break, stops the build), password (`counted`), a raw line (`module`, `args`), and
   `{ method = "system"; }` for NixOS's own rules below them; without that row the list ends
   with closing lines that keep NixOS's own rules from being reached.
   `control` is PAM's word (`sufficient` by default; `optional` only on a raw row — a
