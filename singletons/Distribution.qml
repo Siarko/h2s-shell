@@ -21,5 +21,6 @@ Singleton {
 
     property DistributionReader _reader: DistributionReader {
         override: TestSeams.distribution
+        holdWhile: TestSeams.distributionHold
     }
 }

@@ -40,6 +40,7 @@ Singleton {
     readonly property bool moduleNotify: _read.moduleNotify
     readonly property bool fakeVpnProvider: _read.fakeVpnProvider
     readonly property string distribution: _read.distribution
+    readonly property string distributionHold: _read.distributionHold
     // Module test mode (ModuleHost.testMode): on in every test tree, whatever the
     // environment holds — it is the tree, not a variable, that makes a run a test
     readonly property bool moduleTestMode: true

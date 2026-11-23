@@ -26,22 +26,23 @@ TestCase {
                            H2S_LOCK_LEDS_DIR: "/w/leds", H2S_LOCK_TEST_TIMINGS: "{\"roundMs\":4000}", H2S_LOCK_TEST_RELOAD: "1",
                            H2S_SHELL_TEST_MODULE_GUARD_MS: "3000", H2S_SHELL_TEST_MODULE_CHECK_PATH: "/w/hung",
                            H2S_SHELL_TEST_MODULE_CHECK_MS: "800", H2S_SHELL_TEST_MODULE_NOTIFY: "1", H2S_FAKE_VPN_PROVIDER: "1",
-                           H2S_DISTRIBUTION: "nixos" });
+                           H2S_DISTRIBUTION: "nixos", H2S_DISTRIBUTION_HOLD: "/w/hold" });
         assertEqual(bed.inForce.join(","), TestSeamRules.names.join(","), "all set: all in force, in the list's order");
         assertEqual([bed.lockTools, bed.systemPamDirectory, bed.ledsDirectory, bed.moduleCheckPath].join("|"),
                     "/w/tools|/w/pam|/w/leds|/w/hung", "the directories as given");
         assertEqual(JSON.stringify(bed.timings), "{\"roundMs\":4000}", "the timings as given");
         assert(bed.reloadIpc && bed.moduleNotify && bed.fakeVpnProvider && bed.moduleGuardMs === 3000 && bed.moduleCheckMs === 800, "the switches and numbers");
-        assertEqual(bed.distribution, "nixos", "the distribution as given");
+        assertEqual(bed.distribution + " " + bed.distributionHold, "nixos /w/hold", "the distribution and its hold as given");
+        assertEqual(read({ H2S_DISTRIBUTION: "nixos" }).distribution, "", "a distribution without the PAM directory: none (as the scripts count it)");
 
         // Values the shell cannot use: not in force, named as ignored
         const bad = read({ H2S_LOCK_TEST_TIMINGS: "{oops", H2S_LOCK_TEST_RELOAD: "yes",
                            H2S_SHELL_TEST_MODULE_GUARD_MS: "-5", H2S_SHELL_TEST_MODULE_CHECK_PATH: "relative/dir",
                            H2S_SHELL_TEST_MODULE_CHECK_MS: "Infinity", H2S_SHELL_TEST_MODULE_NOTIFY: "yes", H2S_FAKE_VPN_PROVIDER: "true",
-                           H2S_DISTRIBUTION: "Arch Linux" });
+                           H2S_DISTRIBUTION: "Arch Linux", H2S_DISTRIBUTION_HOLD: "relative/hold" });
         assertEqual(bad.inForce.length, 0, "unusable values: none in force");
         assertEqual(bad.ignored.join(","), "H2S_LOCK_TEST_TIMINGS,H2S_LOCK_TEST_RELOAD,H2S_SHELL_TEST_MODULE_GUARD_MS,"
-                    + "H2S_SHELL_TEST_MODULE_CHECK_PATH,H2S_SHELL_TEST_MODULE_CHECK_MS,H2S_SHELL_TEST_MODULE_NOTIFY,H2S_FAKE_VPN_PROVIDER,H2S_DISTRIBUTION", "… each named as ignored");
+                    + "H2S_SHELL_TEST_MODULE_CHECK_PATH,H2S_SHELL_TEST_MODULE_CHECK_MS,H2S_SHELL_TEST_MODULE_NOTIFY,H2S_FAKE_VPN_PROVIDER,H2S_DISTRIBUTION,H2S_DISTRIBUTION_HOLD", "… each named as ignored");
         assertEqual(bad.timingsProblem, "not JSON", "timings that are not JSON: said so");
         assertEqual(JSON.stringify(bad.timings), "{}", "… and none taken");
         assertEqual(read({ H2S_LOCK_TEST_TIMINGS: "[1]" }).timingsProblem, "not a JSON object", "timings that are a list: not an object");

@@ -136,7 +136,7 @@ distribution_known() {
 }
 
 distribution_detect() {
-    local shell_dir=$1 override=${2-} root=${3-} id marker word found="" markers=()
+    local shell_dir=$1 override=${2-} root=${3-} id marker word found="" markers=() like=()
     distribution_id=""
     distribution_how=""
     distribution_problem=""
@@ -170,7 +170,9 @@ distribution_detect() {
     fi
     found=$(distribution_matching "$distribution_os_id")
     [ -n "$found" ] && { distribution_known "$found" id; return 0; }
-    for word in $distribution_os_like; do
+    # Split into words without pathname expansion: os-release is text, not patterns
+    read -r -a like <<< "$distribution_os_like"
+    for word in "${like[@]}"; do
         found=$(distribution_matching "$word")
         [ -n "$found" ] && { distribution_known "$found" like; return 0; }
     done

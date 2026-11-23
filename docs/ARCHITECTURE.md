@@ -788,8 +788,9 @@ and the methods script's),
 `H2S_LOCK_SYSTEM_PAM_DIR` (where the system-wide `h2s-shell-*` PAM configs are looked for,
 `/etc/pam.d` otherwise — so a test shell's password fallback is never the real PAM stack),
 `H2S_DISTRIBUTION=nixos|arch|generic` (which distribution the shell's `Distribution` and the
-methods script take themselves to be on — the script counts it only together with
+methods script take themselves to be on, counted only together with
 `H2S_LOCK_SYSTEM_PAM_DIR` — so both systems' answers are tested on every machine),
+`H2S_DISTRIBUTION_HOLD` (a file while which `Distribution` does not answer),
 `H2S_LOCK_TEST_RELOAD=1` (an IPC target `locktest` whose `reload(hard)` asks for
 `Quickshell.reload()`, which nothing in the shell calls), `H2S_LOCK_LEDS_DIR` (where the
 Caps Lock LEDs are read, `/sys/class/leds` otherwise), `H2S_LOCK_TEST_TIMINGS` (JSON

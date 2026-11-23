@@ -37,8 +37,8 @@ QtObject {
     property string timeout: ""
     // Countdown views showing now: the list is read once a second while above 0
     property int viewers: 0
-    // Whether this is NixOS: true, false, null when the distribution cannot be told (nothing
-    // is judged then), or undefined until Distribution has answered
+    // Whether this is NixOS: true, false, null when the distribution cannot be told (then
+    // everything installed reads as unknown), or undefined until Distribution has answered
     property var nixos: Distribution.ready ? (Distribution.id === "" ? null : Distribution.id === "nixos") : undefined
 
     // ---- Commands (seams) ----
@@ -61,7 +61,7 @@ QtObject {
     // ---- Outputs ----
     // RememberRules.state's answer, or null before the first reading
     property var installed: null
-    // "arch" | "nixos" | "" before the first reading
+    // "arch" | "nixos" | "" before the first reading, or when the distribution cannot be told
     property string system: ""
     // The program pkexec reports for the timeout (its path resolved), "" when not known
     property string program: ""
@@ -113,10 +113,25 @@ QtObject {
         const settle = () => {
             if (generation !== _filesGeneration || answers.files === null || answers.program === undefined)
                 return;
-            // Judged only for a known system: until then the reading waits (onNixosChanged)
-            _waitsForDistribution = typeof root.nixos !== "boolean";
+            // Judged only once the distribution has answered: until then the reading waits
+            // (onNixosChanged)
+            _waitsForDistribution = root.nixos === undefined;
             if (_waitsForDistribution)
                 return;
+            // One that cannot tell the system: which rule file counts is not known, so nothing
+            // read counts — every part "unknown", and nothing to install from
+            if (root.nixos === null) {
+                const unread = {};
+                for (const path of RememberRules.confPaths)
+                    unread[path] = null;
+                system = "";
+                program = answers.program;
+                root.facts = null;
+                root.files = null;
+                installed = RememberRules.state({ rule: null, confs: unread }, { system: "", user: readUser, timeout: readTimeout, program: answers.program });
+                readings += 1;
+                return;
+            }
             const files = answers.files;
             const text = path => files[path]?.text ?? (files[path]?.absent ? undefined : null);
             const nixos = root.nixos;

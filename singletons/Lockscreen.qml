@@ -557,16 +557,10 @@ Singleton {
             // and the question asked again (below)
             if (_fallbackDirectProbe.running)
                 return;
-            // Until the distribution is known nothing is answered — not "not NixOS": the
-            // question is asked when Distribution answers (below). One that cannot be told
-            // leaves the fallback as it is
+            // Until the distribution has answered nothing is asked — its silence is not "not
+            // NixOS": the question is asked when it answers (below)
             if (!Distribution.ready)
                 return;
-            if (Distribution.id === "") {
-                fallbackDirectFor = 0;
-                fallbackAnsweredBy("none", "which distribution this is cannot be told: " + Distribution.detection.problem);
-                return;
-            }
             _fallbackDirectProbe.generation = fallbackDirectFor;
             _fallbackDirectProbe.request();
         }
@@ -1007,12 +1001,14 @@ Singleton {
     // here but `sh` and `test`, and which distribution this is from the shell's own
     // detection (Distribution; in a test tree H2S_DISTRIBUTION names it, so that a test of
     // this path gets the same answer on every machine). Asked only once Distribution has
-    // answered (probeFallbackDirectly). `generation`: the request it was started for
+    // answered (probeFallbackDirectly); when it could not tell the system ($2 empty), a
+    // readable system-wide config is still an answer — it wins on every system — and
+    // anything else none (status 3). `generation`: the request it was started for
     LatestQuery {
         id: _fallbackDirectProbe
         property int generation: 0
         command: ["sh", "-c",
-            "test -r \"$1/h2s-shell-password\" && echo readable\n"
+            "if test -r \"$1/h2s-shell-password\"; then echo readable; elif [ -z \"$2\" ]; then exit 3; fi\n"
             + "[ \"$2\" = nixos ] && echo nixos\n"
             + "echo answered",
             "sh", root._systemPamDirectory, Distribution.id]

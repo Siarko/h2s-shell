@@ -60,8 +60,12 @@ Scope {
             _query._again = true;
             return;
         }
-        // Not before the distribution is known: asked again when it is (onNixosChanged)
+        // Not before the distribution is known: asked again when it is (onNixosChanged). The
+        // watchdog bounds the wait: past it the read is answered unknown (and still made
+        // once the distribution answers)
         if (nixos === undefined) {
+            if (!_waitsForDistribution)
+                _watchdog.restart();
             _waitsForDistribution = true;
             return;
         }
@@ -111,8 +115,15 @@ Scope {
         interval: root.watchdog
         repeat: false
         onTriggered: {
-            if (!_query.running)
+            if (!_query.running) {
+                if (root._waitsForDistribution) {
+                    const outcome = LockParseRules.sleepSupportUnread();
+                    root.support = outcome;
+                    root.reads++;
+                    root.read(outcome);
+                }
                 return;
+            }
             _query._timedOut = true;
             _query.running = false;
         }

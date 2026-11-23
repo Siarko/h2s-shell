@@ -132,7 +132,12 @@ TestCase {
         });
         _then("the read asked for", () => _ready, () => {
             assert(!_reader.running && _reader.reads === _readsBefore, "the distribution not known: no read started");
-            // … and made once it is (the next step waits for it): not NixOS
+        });
+        _then("the wait for the distribution timed out", () => _reader.reads > _readsBefore, () => {
+            assert(!_reader.running && _reader.support.canSuspend === "unknown" && _reader.support.hibernation.nixos === null,
+                   "no distribution within the watchdog: answered, everything unknown");
+            // … and made once it answers (the next step waits for it): not NixOS
+            _readsBefore = _reader.reads;
             _reader.nixos = false;
         });
         _then("the first read answered", () => _answered(), () => {

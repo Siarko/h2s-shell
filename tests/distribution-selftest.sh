@@ -76,7 +76,7 @@ check "… a key that is no plain word" refused '{"id": "x", "a=b": "c"}'
 # ---- Detection --------------------------------------------------------------------------
 fixtures=$REPO/tests/fixtures/distribution
 roots=$work/roots
-mkdir -p "$roots"/{arch/etc,arch/usr/lib,nixos/etc,endeavouros/etc,usronly/usr/lib,mint/etc,unreadable/etc,none,lockedmark/etc,dirmark/etc/NIXOS,long/etc,empty/etc}
+mkdir -p "$roots"/{glob/etc,arch/etc,arch/usr/lib,nixos/etc,endeavouros/etc,usronly/usr/lib,mint/etc,unreadable/etc,none,lockedmark/etc,dirmark/etc/NIXOS,long/etc,empty/etc}
 cp "$fixtures/arch.os-release" "$roots/arch/usr/lib/os-release"
 ln -s ../usr/lib/os-release "$roots/arch/etc/os-release"
 cp "$fixtures/nixos.os-release" "$roots/nixos/etc/os-release"
@@ -92,6 +92,8 @@ chmod 000 "$roots/lockedmark/etc/NIXOS"
 cp "$fixtures/arch.os-release" "$roots/dirmark/etc/os-release"
 for _ in $(seq 9000); do echo "ID=arch"; done > "$roots/long/etc/os-release"
 echo "<html>not os-release</html>" > "$roots/empty/etc/os-release"
+printf 'ID=other\nID_LIKE=*\n' > "$roots/glob/etc/os-release"
+mkdir -p "$work/cwd" && : > "$work/cwd/nixos"
 
 detect() {
     OUTPUT=$("$REPO/scripts/distribution.sh" --root "$roots/$1" "${@:2}" 2>&1)
@@ -113,6 +115,11 @@ check "Linux Mint (ID_LIKE=\"ubuntu debian\"): generic" expect mint generic fall
 check "no os-release, no marker: generic" expect none generic fallback
 check "/etc/NIXOS of mode 000 beside Arch's os-release: nixos (it exists)" expect lockedmark nixos marker
 check "/etc/NIXOS a directory: nixos (it exists)" expect dirmark nixos marker
+globbed() {
+    OUTPUT=$(cd "$work/cwd" && "$REPO/scripts/distribution.sh" --root "$roots/glob" 2>&1)
+    [ "$OUTPUT" = $'id=generic\nhow=fallback' ]
+}
+check "ID_LIKE=* beside a file named nixos: generic (no pathname expansion)" globbed
 check "an os-release that cannot be read, no marker: unknown" unknown unreadable
 check "an os-release too long: unknown" unknown long
 check "an os-release without one assignment: unknown" unknown empty

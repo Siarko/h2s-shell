@@ -182,6 +182,19 @@ run_script
 check "… the methods list fails" status_nonzero
 check "… saying why" says "which distribution this is cannot be told: H2S_DISTRIBUTION names no distribution: neither"
 check "… the password line printed all the same" has_line "password$tab$LOCKTEST_SHELL/pam${tab}password"
+# … but a readable system-wide password config wins on every system: answered with it
+mv "$sys/h2s-shell-password.off" "$sys/h2s-shell-password"
+facts
+check "no distribution, a readable system-wide password config: the fallback facts say readable" facts_are "readable answered "
+run_script
+check "… the methods list names it" has_line "$password_line"
+not_told() { ! says "cannot be told"; }
+check "… and does not fail for the distribution" not_told
+mv "$sys/h2s-shell-fingerprint" "$sys/h2s-shell-fingerprint.off"
+run_script
+check "… the shipped fingerprint config not offered (it cannot work on NixOS)" lacks_method fingerprint
+mv "$sys/h2s-shell-fingerprint.off" "$sys/h2s-shell-fingerprint"
+mv "$sys/h2s-shell-password" "$sys/h2s-shell-password.off"
 # The seam is the test bed's: without the test's own PAM directory it does not count, and
 # the machine itself is asked. (This reads the real /etc/pam.d — whether one file is
 # readable — and nothing else.)

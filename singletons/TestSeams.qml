@@ -29,6 +29,8 @@ Singleton {
     readonly property bool fakeVpnProvider: false
     // The distribution the shell takes itself to be on (Distribution): "" — it detects it
     readonly property string distribution: ""
+    // A file while which Distribution does not answer (DistributionReader): "" — none
+    readonly property string distributionHold: ""
     // Module test mode (ModuleHost.testMode): off
     readonly property bool moduleTestMode: false
     // The names of the seams in force, and whether there is any

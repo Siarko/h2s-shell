@@ -21,6 +21,9 @@ QtObject {
     property string distributionsDirectory: Quickshell.shellDir + "/distributions"
     // Put before every system path read (os-release, the markers): a suite's scratch tree
     property string fileRoot: ""
+    // TestSeams.distributionHold: while this file is there (looked at every 100 ms),
+    // nothing is read — a test of what waits for the answer; "" for none
+    property string holdWhile: ""
 
     // DistributionRules.detect's answer: { ready, id, facts, how, problem }
     readonly property var detection: DistributionRules.detect(_readings)
@@ -28,6 +31,28 @@ QtObject {
     function refresh() {
         const generation = ++_generation;
         _readings = { override: override, manifests: {}, markers: {}, osRelease: DistributionRules.osReleasePaths.map(() => null) };
+        if (holdWhile !== "") {
+            _hold.generation = generation;
+            _hold.restart();
+            return;
+        }
+        _readAll(generation);
+    }
+
+    // The hold: once its file is gone, the reading goes on
+    property Timer _hold: Timer {
+        property int generation: 0
+        interval: 100
+        repeat: true
+        onTriggered: root._load(generation, root.holdWhile, reading => {
+            if (reading.state === "absent" && root._hold.running) {
+                root._hold.stop();
+                root._readAll(root._hold.generation);
+            }
+        })
+    }
+
+    function _readAll(generation) {
         for (const id of DistributionRules.ids) {
             _load(generation, distributionsDirectory + "/" + id + "/distribution.json", reading => {
                 const manifests = Object.assign({}, root._readings.manifests);

@@ -238,8 +238,8 @@ two lines);
 `methods-script.sh` runs the script alone against the same stand-in (no stack), and as
 both kinds of system on every machine: `H2S_DISTRIBUTION=nixos|arch|generic` is the
 scripts' seam for which distribution they are on, honoured only together with
-`H2S_LOCK_SYSTEM_PAM_DIR`; the shell's `Distribution` takes it too (the bed always sets the
-PAM directory), so the driver's own question, below, gets the same answer.
+`H2S_LOCK_SYSTEM_PAM_DIR`, and so does the shell's `Distribution`: the driver's own
+question, below, gets the same answer.
 
 **The password fallback** (used when the methods script fails or names no password, and for
 the next attempt after a password config that cannot be used) is chosen by the shell from
@@ -381,7 +381,7 @@ value, one set to a value that cannot be used is ignored (and named in the log).
 | `H2S_LOCK_SYSTEM_PAM_DIR` | `TestSeams`, `seams.sh` | where the system-wide `h2s-shell-*` PAM configs are looked for, instead of `/etc/pam.d` |
 | `H2S_LOCK_VENDOR_PAM_DIR` | `seams.sh` | libpam's vendor directory for `pam-files.sh`, instead of `/usr/lib/pam.d`; none when only `H2S_LOCK_SYSTEM_PAM_DIR` is set |
 | `H2S_LOCK_FAILLOCK_CONF` | `seams.sh` | faillock.conf for `pam-files.sh`, instead of `/etc/security/faillock.conf`; none when only `H2S_LOCK_SYSTEM_PAM_DIR` is set |
-| `H2S_DISTRIBUTION` | `TestSeams`, `seams.sh` | `nixos`, `arch` or `generic`: the distribution the shell (`Distribution`) and its scripts (`scripts/distribution.sh`; there only with `H2S_LOCK_SYSTEM_PAM_DIR`) take themselves to be on |
+| `H2S_DISTRIBUTION` | `TestSeams`, `seams.sh` | `nixos`, `arch` or `generic` (`distributions/`): the distribution the shell (`Distribution`) and its scripts (`scripts/distribution.sh`) take themselves to be on instead of detecting it, only with `H2S_LOCK_SYSTEM_PAM_DIR`; an id it does not know leaves it unknown |
 | `H2S_LOCK_AUTH_METHODS` | `seams.sh` | an executable that answers for the methods script (the test PAM stacks) |
 | `H2S_LOCK_LEDS_DIR` | `TestSeams` | where the Caps Lock LEDs are read, instead of `/sys/class/leds` |
 | `H2S_LOCK_TEST_TIMINGS` | `TestSeams` | JSON overrides of `LockRules.timings` |
@@ -391,7 +391,7 @@ value, one set to a value that cannot be used is ignored (and named in the log).
 | `H2S_SHELL_TEST_MODULE_CHECK_MS` | `TestSeams` | the module checks' deadline, ms |
 | `H2S_SHELL_TEST_MODULE_NOTIFY` | `TestSeams` | `1`: in module test mode notifications are sent all the same (to the bed's private bus), not only recorded |
 | `H2S_FAKE_VPN_PROVIDER` | `TestSeams` | `1`: the stand-in VPN provider (`tests/FakeVpnProvider.qml`, IPC target `fakevpn`) |
-| `H2S_DISTRIBUTION` | `TestSeams` | the distribution the shell takes itself to be on, by its id (`nixos`, `arch`, `generic`; `distributions/`), instead of detecting it; an id it does not know leaves it unknown |
+| `H2S_DISTRIBUTION_HOLD` | `TestSeams` | an absolute path: while a file is there, `Distribution` does not answer (`fallback-wait.sh`) |
 | `H2S_LAUNCHER_TEST_TIMINGS` | `seams.sh` | the launcher's pauses, `first=S lockwait=S`, and `discoveryhang=S` |
 
 When any of the QML ones is in force the shell logs `[TestSeams] test bed: <names>`, and

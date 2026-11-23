@@ -27,7 +27,8 @@ Singleton {
         { name: "H2S_SHELL_TEST_MODULE_CHECK_MS", what: "the module host's checks' deadline in ms (Modules)" },
         { name: "H2S_SHELL_TEST_MODULE_NOTIFY", what: "1: in module test mode the shell's notifications are sent all the same, not only recorded (Modules)" },
         { name: "H2S_FAKE_VPN_PROVIDER", what: "1: the stand-in VPN provider of tests/FakeVpnProvider.qml (VpnManager)" },
-        { name: "H2S_DISTRIBUTION", what: "the distribution the shell takes itself to be on, by its id: nixos, arch, generic (Distribution)" }
+        { name: "H2S_DISTRIBUTION", what: "the distribution the shell takes itself to be on, by its id: nixos, arch, generic, with H2S_LOCK_SYSTEM_PAM_DIR (Distribution)" },
+        { name: "H2S_DISTRIBUTION_HOLD", what: "an absolute path: while a file is there, Distribution does not answer (DistributionReader)" }
     ]
     readonly property var names: seams.map(seam => seam.name)
 
@@ -48,7 +49,10 @@ Singleton {
     //   moduleGuardMs, moduleCheckMs   > 0, or 0 for none
     //   moduleCheckPath  an absolute directory, or ""
     //   distribution     a distribution's id as given (an identifier; Distribution tells
-    //                    one it does not know), or ""
+    //                    one it does not know), only with systemPamDirectory — as the
+    //                    scripts count it (seams.sh), so that a faked system never chooses
+    //                    among the machine's real PAM configs —, or ""
+    //   distributionHold an absolute path, or ""
     //   inForce          the names that change something, in `names`' order
     //   ignored          the names set to something unusable
     // }
@@ -81,7 +85,8 @@ Singleton {
             moduleCheckMs: _positive(text("H2S_SHELL_TEST_MODULE_CHECK_MS")),
             moduleNotify: text("H2S_SHELL_TEST_MODULE_NOTIFY") === "1",
             fakeVpnProvider: text("H2S_FAKE_VPN_PROVIDER") === "1",
-            distribution: /^[a-z0-9._-]{1,64}$/.test(text("H2S_DISTRIBUTION")) ? text("H2S_DISTRIBUTION") : ""
+            distribution: systemPamDirectory !== "" && /^[a-z0-9._-]{1,64}$/.test(text("H2S_DISTRIBUTION")) ? text("H2S_DISTRIBUTION") : "",
+            distributionHold: text("H2S_DISTRIBUTION_HOLD").startsWith("/") ? text("H2S_DISTRIBUTION_HOLD") : ""
         };
         const taken = {
             H2S_LOCK_TOOLS: values.lockTools !== "",
@@ -94,7 +99,8 @@ Singleton {
             H2S_SHELL_TEST_MODULE_CHECK_MS: values.moduleCheckMs > 0,
             H2S_SHELL_TEST_MODULE_NOTIFY: values.moduleNotify,
             H2S_FAKE_VPN_PROVIDER: values.fakeVpnProvider,
-            H2S_DISTRIBUTION: values.distribution !== ""
+            H2S_DISTRIBUTION: values.distribution !== "",
+            H2S_DISTRIBUTION_HOLD: values.distributionHold !== ""
         };
         values.inForce = Object.freeze(names.filter(name => taken[name]));
         values.ignored = Object.freeze(names.filter(name => !taken[name] && text(name) !== ""));

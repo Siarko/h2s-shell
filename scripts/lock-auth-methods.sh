@@ -45,8 +45,10 @@ shell_dir=$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)
 # from the distributions' facts) — or, in a test tree, the distribution the test names (so
 # that both answers are tested on every machine). The shell's password fallback decides
 # the same way where it asks without this script (singletons/Lockscreen.qml, Distribution).
-# When it cannot be told, neither answer is given: `--fallback-facts` gives none at all,
-# the methods list fails (below).
+# When it cannot be told, only what does not depend on it is answered: a readable
+# system-wide h2s-shell-password wins on every system; without one `--fallback-facts` gives
+# no answer at all and the methods list fails (below), and the shipped passive configs,
+# which cannot load their modules on NixOS, are not offered.
 source "$shell_dir/scripts/distribution.sh" || { echo "lock-auth-methods: cannot read distribution.sh" >&2; exit 1; }
 nixos=0
 distribution_problem=""
@@ -55,11 +57,12 @@ if distribution_detect "$shell_dir" "$seam_distribution" ""; then
 fi
 
 if [ "${1:-}" = --fallback-facts ]; then
-    if [ -n "$distribution_problem" ]; then
+    if [ -r "$system_dir/h2s-shell-password" ]; then
+        echo readable
+    elif [ -n "$distribution_problem" ]; then
         echo "lock-auth-methods: which distribution this is cannot be told: $distribution_problem" >&2
         exit 1
     fi
-    [ -r "$system_dir/h2s-shell-password" ] && echo readable
     [ "$nixos" = 1 ] && echo nixos
     echo answered
     exit 0
@@ -95,12 +98,15 @@ cannot_tell() {
 config() {
     if [ -r "$system_dir/h2s-shell-$1" ]; then
         printf '%s\t%s' "$system_dir" "h2s-shell-$1"
-    elif [ "$1" = password ] || [ "$nixos" = 0 ]; then
+    elif [ "$1" = password ] || { [ "$nixos" = 0 ] && [ -z "$distribution_problem" ]; }; then
         printf '%s\t%s' "$shell_dir/pam" "$1"
     fi
 }
 
-[ -z "$distribution_problem" ] || cannot_tell "which distribution this is cannot be told: $distribution_problem"
+# Without a readable system-wide password config, the password depends on the system
+if [ -n "$distribution_problem" ] && [ ! -r "$system_dir/h2s-shell-password" ]; then
+    cannot_tell "which distribution this is cannot be told: $distribution_problem"
+fi
 
 # ---- password -------------------------------------------------------------------------
 # NixOS without the module's h2s-shell-password: "login", as the shell's own password

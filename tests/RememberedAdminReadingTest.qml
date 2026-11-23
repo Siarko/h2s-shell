@@ -450,7 +450,14 @@ TestCase {
         _then("NixOS files written", () => _ready, () => read());
         _then("the reading waits for the distribution", () => _reader._waitsForDistribution, () => {
             assertEqual(_reader.readings, readings, "the distribution not known: nothing judged");
+            _reader.nixos = null;
+        });
+        _then("the distribution answered without a system", () => _reader.readings > readings, () => {
+            assertEqual([_reader.system, _reader.installed.rule, _reader.installed.conf, _reader.installed.seconds].join(" "), " unknown unknown -1",
+                        "the distribution cannot be told: the reading ends, everything unknown");
+            assertEqual(_reader.files, null, "… nothing to install from");
             _reader.nixos = true;
+            read();
         });
         _then("NixOS read", () => _reader.readings > readings, () => {
             assertEqual(_reader.system + " " + _reader.installed.rule + " " + _reader.installed.conf, "nixos ours system",
