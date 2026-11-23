@@ -32,6 +32,8 @@ Singleton {
     // The control words an opened row offers for its method. `optional` only for a raw line:
     // for the editor's own methods its result is ignored, so offering it only misleads.
     // PamRuleRules decides this once it has its own `controlsFor(method)`; this follows it.
+    // The list shows no words for a raw line (its word is in its text); the raw answer is
+    // kept to match PamRuleRules' rule.
     function controlsFor(method) {
         const words = PamRuleRules.controls.map(control => control.word);
         return method === "raw" ? words : words.filter(word => word !== "optional");

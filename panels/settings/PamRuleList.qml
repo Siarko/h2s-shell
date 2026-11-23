@@ -49,7 +49,7 @@ Item {
 
     // A row's handle is held: the page must not scroll (its Flickable is made non-interactive
     // meanwhile, and the handle keeps the drag from it)
-    readonly property bool dragging: _dragIndex >= 0
+    readonly property bool dragging: _dragId !== ""
     // The rows opened, { id: true }
     property var openIds: ({})
     readonly property alias addOpen: _picker.open
@@ -61,6 +61,17 @@ Item {
         id: _keyed
         values: root._rows
         keyProp: "id"
+    }
+
+    // An opened row that left the list is forgotten: a row added later with its id starts closed
+    on_RowsChanged: {
+        const kept = {};
+        for (const row of _rows) {
+            if (openIds[row?.id] === true)
+                kept[row.id] = true;
+        }
+        if (Object.keys(kept).length !== Object.keys(openIds).length)
+            openIds = kept;
     }
 
     function toggle(id) {
@@ -98,21 +109,27 @@ Item {
 
     // ── Dragging by the handle ──
 
-    property int _dragIndex: -1
+    // The dragged row by id: the rows may change under a held handle, and its index with them
+    property string _dragId: ""
+    readonly property int _dragIndex: _dragId === "" ? -1 : _rows.findIndex(row => String(row?.id) === _dragId)
     property int _dropSlot: -1
+    // The page's Flickable while a drag holds it, and what it was before
     property var _flickable: null
     property bool _flickableWasInteractive: true
 
-    function _beginDrag(index) {
-        _dragIndex = index;
-        _dropSlot = index;
-        _flickable = null;
-        for (let item = root.parent; item; item = item.parent) {
-            if (item.contentY !== undefined && item.flick !== undefined) {
-                _flickable = item;
-                _flickableWasInteractive = item.interactive;
-                item.interactive = false;
-                break;
+    function _beginDrag(id) {
+        if (_dragId !== "")
+            _endDrag(false);
+        _dragId = String(id);
+        _dropSlot = _dragIndex;
+        if (_flickable === null) {
+            for (let item = root.parent; item; item = item.parent) {
+                if (item.contentY !== undefined && item.flick !== undefined) {
+                    _flickable = item;
+                    _flickableWasInteractive = item.interactive;
+                    item.interactive = false;
+                    break;
+                }
             }
         }
         _autoScroll.begin();
@@ -128,15 +145,16 @@ Item {
         _dropSlot = PamRuleViewRules.dropSlot(_rows, middles, _rowColumn.mapFromItem(null, 0, sceneY).y);
     }
 
+    // Ends a drag; `dropping` moves the row where it was dropped, if it is still in the list
     function _endDrag(dropping) {
         const from = _dragIndex, slot = _dropSlot;
         _autoScroll.end();
-        _dragIndex = -1;
+        _dragId = "";
         _dropSlot = -1;
         if (_flickable)
             _flickable.interactive = _flickableWasInteractive;
         _flickable = null;
-        const next = dropping ? PamRuleViewRules.dropped(_rows, from, slot) : null;
+        const next = dropping && !readOnly && from >= 0 ? PamRuleViewRules.dropped(_rows, from, slot) : null;
         if (next)
             edited(next);
     }
@@ -261,6 +279,10 @@ Item {
         border.color: checkState === "refused" ? Theme.error : checkState === "warned" ? Theme.warning : Theme.divider
         opacity: root._dragIndex === index ? 0.35 : 1
 
+        // A row removed while its handle is held: its area goes without a release or a
+        // cancel, so the drag ends here, or the page would stay unscrollable
+        Component.onDestruction: if (root._dragId === modelData) root._endDrag(false)
+
         // Where the dragged row would drop: above this row, or below it as the last
         Rectangle {
             objectName: "dropLine:" + _row.index
@@ -309,7 +331,7 @@ Item {
                         cursorShape: Qt.SizeVerCursor
                         // Keeps the drag from the settings page's Flickable
                         preventStealing: true
-                        onPressed: root._beginDrag(_row.index)
+                        onPressed: root._beginDrag(_row.modelData)
                         onPositionChanged: {
                             if (root._dragIndex < 0)
                                 return;
@@ -394,7 +416,7 @@ Item {
 
             // Opened: the control words its method takes, the picked one explained, its details
             ColumnLayout {
-                visible: _row.opened && _row.opens === "rule"
+                visible: _row.opened && _row.opens === "rule" && !root.readOnly
                 Layout.fillWidth: true
                 Layout.leftMargin: 24
                 Layout.bottomMargin: 4
@@ -473,20 +495,29 @@ Item {
 
             // A raw line opened: its text, and how it reads
             ColumnLayout {
-                visible: _row.opened && _row.opens === "raw"
+                visible: _row.opened && _row.opens === "raw" && !root.readOnly
                 Layout.fillWidth: true
                 Layout.leftMargin: 24
                 Layout.bottomMargin: 4
                 spacing: 4
+                // No length cap on the field: it would cut a longer line as it shows it; the
+                // reading says "too long". Only a typed change is committed, not a focus lost.
                 InputField {
+                    property bool typed: false
                     objectName: "line:" + _row.modelData
                     Layout.fillWidth: true
                     text: String(_row.row.details?.text ?? "")
                     fontSize: Theme.fontSizeSmall
                     outlined: true
                     fieldColor: Theme.surfaceSunken
-                    input.maximumLength: PamRuleRules.maxRawLength
-                    onEditingFinished: if (text !== (_row.row.details?.text ?? "")) root._change(_row.modelData, { details: { text: text } })
+                    onTextEdited: typed = true
+                    onEditingFinished: {
+                        if (!typed)
+                            return;
+                        typed = false;
+                        if (text !== (_row.row.details?.text ?? ""))
+                            root._change(_row.modelData, { details: { text: text } });
+                    }
                 }
                 Caption {
                     readonly property var reading: PamRuleViewRules.rawReading(_row.row.details?.text ?? "", root.facts)
@@ -499,7 +530,7 @@ Item {
 
             // The fixed row opened: what it is
             ColumnLayout {
-                visible: _row.opened && _row.opens === "fixed"
+                visible: _row.opened && _row.opens === "fixed" && !root.readOnly
                 Layout.fillWidth: true
                 Layout.leftMargin: 24
                 Layout.bottomMargin: 4

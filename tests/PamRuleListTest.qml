@@ -47,7 +47,8 @@ TestCase {
                 PamRuleList {
                     id: list
                     x: 20
-                    y: 20
+                    // Low enough in the page that it can scroll either way under a drag
+                    y: 200
                     width: 700
                     title: "sudo and administrator prompts"
                     rows: suite.rows
@@ -346,13 +347,20 @@ TestCase {
         assertEqual(_ids(), "r1,r2,system", "… kept");
         assert(_click("remove:system"), "asked again");
         assert(_until(() => host.open && host.modal.visible && _find(host.modal, "modalButton:0")?.width > 0), "… open");
+        // The owner reorders the rows while the question is open: the answer acts on the fixed
+        // row by its id, on the list as it is now
+        const moved = rows.slice();
+        rows = [moved[1], moved[0], moved[2]];
+        assert(_until(() => _ids() === "r2,r1,system"), "(the rows reordered meanwhile)");
         assert(_click("modalButton:0"), "… Remove");
-        assert(_until(() => _ids() === "r1,r2"), "… the fixed row gone");
-        rows = rows.concat([PamRuleRules.fixedRow()]);
-        assert(_until(() => _item("row:system") !== null), "(put back)");
+        assert(_until(() => _ids() === "r2,r1"), "… the fixed row gone, the new order kept");
+        rows = [rows[1], rows[0], PamRuleRules.fixedRow()];
+        assert(_until(() => _item("row:system") !== null && _ids() === "r1,r2,system"), "(put back)");
 
         // --- dragging ---
-        page.contentY = 0;
+        // The page scrolled part way: a drag that the page took would move it either way
+        page.contentY = 100;
+        _settle(_item("row:r1"));
         const firstTop = _item("row:r1").mapToItem(area, 0, 0).y;
         let heldInteractive = null, heldDragging = null, heldLine = null;
         _drag("r2", firstTop + 4, () => {
@@ -362,12 +370,63 @@ TestCase {
         });
         assertEqual(heldInteractive + " " + heldDragging + " " + heldLine, "false true true", "held: the page does not scroll, the line shows where it drops");
         assert(_until(() => _ids() === "r2,r1,system"), "the password dragged above the fingerprint");
-        assertEqual(page.contentY + " " + page.interactive + " " + list.dragging, "0 true false", "… the page did not scroll and scrolls again");
+        assertEqual(page.contentY + " " + page.interactive + " " + list.dragging, "100 true false", "… the page did not scroll and scrolls again");
+        _settle(_item("row:system"));
         const fixedBottom = _item("row:system").mapToItem(area, 0, _item("row:system").height).y;
         _drag("r2", fixedBottom + 40);
         assert(_until(() => _ids() === "r1,r2,system"), "dragged below the fixed row: it stays above it");
+        assertEqual(page.contentY, 100, "… the page did not scroll");
         _drag("system", firstTop - 10);
         driver.wait(30);
         assertEqual(_ids(), "r1,r2,system", "the fixed row's lock does not drag it");
+
+        // A row removed while its handle is held: the drag ends, the page scrolls again, the
+        // release drops nothing
+        page.contentY = 100;
+        const handle = _item("handle:r2");
+        _settle(handle);
+        const at = handle.mapToItem(area, handle.width / 2, handle.height / 2);
+        driver.mousePress(area, at.x, at.y);
+        driver.mouseMove(area, at.x, at.y - 20);
+        assert(_until(() => list.dragging && !page.interactive), "(held)");
+        const editsHeld = edits;
+        rows = [rows[0], rows[2]];
+        assert(_until(() => !list.dragging && page.interactive), "the held row removed: the drag ends, the page scrolls again");
+        driver.mouseRelease(area, at.x, at.y - 40);
+        driver.wait(30);
+        assertEqual(_ids() + " " + edits, "r1,system " + editsHeld, "… the release changes nothing");
+
+        // --- the key's PIN, the counted password, a raw line ---
+        const long = "auth sufficient pam_ldap.so " + "x".repeat(600);
+        rows = [{ id: "k1", method: "securityKey", control: "sufficient", details: { pin: false, cue: true } },
+                { id: "p1", method: "password", control: "sufficient", details: { counted: false } },
+                { id: "x1", method: "raw", control: "", details: { text: long } },
+                PamRuleRules.fixedRow()];
+        assert(_until(() => _item("row:x1") !== null), "(rows with a key, a password and a raw line)");
+        assert(list.openIds.r1 === undefined && list.openIds.r3 === undefined, "rows gone from the list: no longer remembered open");
+        assert(_click("arrow:k1") && _until(() => _item("pin:k1")?.visible === true), "the key opened: its PIN box");
+        assert(_click("pin:k1", 5), "… clicked");
+        assert(_until(() => rows[0].details.pin === true && _chips("k1") === "PIN,Not counted"), "… the PIN asked, its chip");
+        assert(_click("arrow:p1") && _until(() => _item("counted:p1")?.visible === true), "the password opened: its switch");
+        assert(_click("counted:p1"), "… clicked");
+        assert(_until(() => rows[1].details.counted === true && _chips("p1") === "Counted"), "… failures count, its chip");
+        assert(_click("arrow:x1") && _until(() => _item("line:x1")?.visible === true), "the raw line opened: its field");
+        const line = _item("line:x1");
+        assertEqual(line.text.length, long.length, "… the whole line, not cut");
+        assert(_item("reading:x1").text.length > 0 && Qt.colorEqual(_item("reading:x1").color, Theme.error), "… read as a problem (too long)");
+        const editsBefore = edits;
+        _settle(line);
+        driver.mouseClick(line, line.width / 2, line.height / 2);
+        assert(_until(() => line.editing), "… focused");
+        driver.keyClick(Qt.Key_Tab);
+        assert(_until(() => !line.editing), "… left");
+        driver.wait(30);
+        assertEqual(edits + " " + rows[2].details.text.length, editsBefore + " " + long.length, "… focus in and out: nothing written");
+        driver.mouseClick(line, line.width / 2, line.height / 2);
+        assert(_until(() => line.editing), "… focused again");
+        driver.keyClick(Qt.Key_A, Qt.ControlModifier);
+        driver.keyClick(Qt.Key_X);
+        driver.keyClick(Qt.Key_Return);
+        assert(_until(() => rows[2].details.text === "x"), "… a line typed: the row's text");
     }
 }
