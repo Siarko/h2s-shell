@@ -45,6 +45,8 @@ TestCase {
                     "… and makes the file unparsable: the stack not known");
         assertEqual(JSON.stringify(rules.parseLine("auth [success = ok default = ignore] pam_unix.so").actions),
                     "{\"success\":\"ok\",\"default\":\"ignore\"}", "spaces around = inside brackets, as libpam takes them");
+        assertEqual(JSON.stringify(rules.controlActions("[default=done default=bad success=ok success=bad]")),
+                    "{\"default\":\"done\",\"success\":\"bad\"}", "as libpam: the first default counts, a value named again takes its last action");
         line = rules.parseLine("auth required pam_exec.so [query=select x from y] quiet");
         assertEqual(JSON.stringify(line.args), "[\"query=select x from y\",\"quiet\"]", "a bracketed argument kept as one, without its brackets, as libpam hands it");
         assertEqual(rules.parseLine("auth required pam_exec.so [a\\]b]").args[0], "a]b", "… an escaped bracket inside it unescaped");

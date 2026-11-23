@@ -153,7 +153,7 @@ Singleton {
     })
 
     function writtenControl(control) {
-        return writtenControls[control] ?? String(control ?? "");
+        return Object.prototype.hasOwnProperty.call(writtenControls, control) ? writtenControls[control] : String(control ?? "");
     }
 
     // The editor's word for a line's control: the word itself, or the word whose written
@@ -469,7 +469,8 @@ Singleton {
     // own forms (the block's lines, a reader or key line as the editor writes it, the
     // counted pattern) as rows, everything else as a raw row in its place; the trailing run
     // of the service's own lines as the fixed row. → { rows, own, raw, fixed, hash (the
-    // text's sha256: build's `facts.replace`, so a Replace acts only on the text taken in) }
+    // text's sha256: build's `facts.replace`, so a Replace acts only on the text taken in) }.
+    // A raw row typed in the editor's own form is read back as that row the same way.
     function adopt(text, service, facts) {
         const plan = _adoptPlan(text, service, facts);
         return { rows: plan.rows, own: plan.own, raw: plan.raw, fixed: plan.fixed, hash: sha256(String(text ?? "")) };

@@ -116,7 +116,9 @@ Singleton {
     // A bracketed control's `value=action` pairs as a map (`[success=1 default=ignore]` →
     // { success: "1", default: "ignore" }); null when a pair is not one libpam takes: a
     // value not among its return codes or `default`, an action not ignore/ok/done/bad/die/
-    // reset or a jump count. Compared with case (`Default`, `sucess` are refused).
+    // reset or a jump count. Compared with case (`Default`, `sucess` are refused). As libpam
+    // reads them (pam_misc.c): a value named twice takes its last action, but `default` only
+    // fills the values still unset, so its first action is the one that counts.
     function controlActions(control) {
         // libpam takes white space around `=` (`[success = ok]`)
         const inner = String(control ?? "").replace(/^\[/, "").replace(/\]$/, "").replace(/\s*=\s*/g, "=").trim();
@@ -130,6 +132,8 @@ Singleton {
                 return null;
             if (!_actionWords.includes(action) && !/^[1-9]\d*$/.test(action))
                 return null;
+            if (key === "default" && Object.prototype.hasOwnProperty.call(actions, "default"))
+                continue;
             actions[key] = action;
         }
         return Object.keys(actions).length > 0 ? actions : null;

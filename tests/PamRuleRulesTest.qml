@@ -157,6 +157,7 @@ TestCase {
         assert(!has([raw("r1", "auth required pam_env.so"), fixed], arch({ system: "nixos" }), "R8"), "R8 not: libpam's own module by name on NixOS");
         assert(!has([raw("r1", "-auth [success=done default=ignore] pam_ldap.so use_first_pass"), fixed], arch(), "R8"), "R8 not: a bracketed auth line");
         assert(has([raw("r1", "auth [success=done default=ignore] pam_permit.so"), fixed], arch(), "R9"), "R9: success=done");
+        assert(has([raw("r1", "auth [default=done default=bad] pam_permit.so"), fixed], arch(), "R9"), "R9: the first default is libpam's (done)");
         assert(has([raw("r1", "auth required pam_permit.so"), fingerprint("r2")], arch(), "R9"), "R9: nothing after it decides");
         assert(has([raw("r1", "auth sufficient pam_rootok.so"), fixed], arch({ service: "polkit-1" }), "R9"), "R9: pam_rootok for polkit");
         assert(has([raw("r1", "auth sufficient pam_rootok.so"), fixed], arch(), "R9"), "R9: pam_rootok for sudo too: it asks for no credential");

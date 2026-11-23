@@ -95,6 +95,8 @@ TestCase {
         assertEqual(edit.controlWord(parse("auth [default=bad ignore=bad new_authtok_reqd=ok success=ok] pam_x.so")), "required",
                     "the written form read back as its word, in any order");
         assertEqual(edit.controlWord(parse("auth [success=ok default=bad] pam_x.so")), "", "another bracketed control: no word");
+        assertEqual(edit.controlWord(parse("auth [success=ok new_authtok_reqd=ok ignore=bad default=ignore default=bad] pam_x.so")), "",
+                    "a second default does not count: not the required form");
         assertEqual(edit.controlWord(parse("auth requisite pam_x.so")), "requisite", "a plain word: itself");
         const plainWords = edit.adopt("auth required pam_fprintd.so\nauth requisite pam_unix.so try_first_pass\nauth include system-auth\n", "sudo", {});
         assertEqual(plainWords.rows.map(row => row.method + ":" + row.control).join(" "), "fingerprint:required password:requisite system:",
