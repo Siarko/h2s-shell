@@ -76,8 +76,11 @@ TestCase {
         for (const word of ["required", "requisite"])
             assert(text.includes(word + " = \"" + PamEditRules.writtenControls[word] + "\";"), "an own " + word + " row is written as the editor writes it");
         for (const kind of ["permit", "deny"]) {
-            const words = normalized(PamEditRules.closingLines[kind]).split(" ");
-            assert(text.includes(kind + " = line \"" + words[1] + "\" (pamModule \"" + words[2] + "\") [ ];"), "the " + kind + " closing line is the editor's");
+            const lines = PamEditRules.closingLines[kind].map(closing => {
+                const words = normalized(closing).split(" ");
+                return "(line \"" + words[1] + "\" (pamModule \"" + words[2] + "\") [ ])";
+            });
+            assert(text.includes(kind + " = [ " + lines.join(" ") + " ];"), "the " + kind + " closing lines are the editor's");
         }
 
         // --- the case set ---

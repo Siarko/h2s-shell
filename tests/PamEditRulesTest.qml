@@ -89,7 +89,7 @@ TestCase {
         assertEqual(edit.rowLines(raw("r1", "auth required pam_ldap.so")).join("|"), "auth required pam_ldap.so", "a raw line stays as typed");
         // A required row that answers PAM_IGNORE fails instead of reaching the permit closing as no answer
         let permitted = edit.blockLines([key("r1", "required", false), password("r2")], facts());
-        assert(permitted[0].includes("ignore=bad") && permitted[permitted.length - 1] === "auth [default=done] pam_permit.so",
+        assert(permitted[0].includes("ignore=bad") && permitted.slice(-2).join("|") === "auth [default=done] pam_permit.so|auth requisite pam_deny.so",
                "with the permit closing, the required row's ignore is a failure: " + JSON.stringify(permitted));
         const parse = text => PamStackRules.parseLine(text);
         assertEqual(edit.controlWord(parse("auth [default=bad ignore=bad new_authtok_reqd=ok success=ok] pam_x.so")), "required",
@@ -113,10 +113,27 @@ TestCase {
         assertEqual(edit.rowLines(raw("r1", "auth  sufficient pam_ldap.so # mine")).join("|"), "auth  sufficient pam_ldap.so # mine", "a raw line verbatim");
         assertEqual(edit.rowLines(fixed).length, 0, "the fixed row writes nothing");
         assertEqual(edit.blockLines([fingerprint("r1")], facts()).slice(-1)[0], "auth requisite pam_deny.so", "readers only, no fixed row: the deny closes");
-        assertEqual(edit.blockLines([fingerprint("r1", "required"), password("r2")], facts()).slice(-1)[0], "auth [default=done] pam_permit.so",
-                    "a required row, no fixed row: the permit keeps the result");
-        assertEqual(edit.blockLines([raw("r1", "auth [success=ok default=bad] pam_unix.so"), fingerprint("r2")], facts()).slice(-1)[0],
-                    "auth [default=done] pam_permit.so", "… a raw bad action too");
+        assertEqual(edit.blockLines([fingerprint("r1", "required"), password("r2")], facts()).slice(-2).join("|"),
+                    "auth [default=done] pam_permit.so|auth requisite pam_deny.so",
+                    "a required row, no fixed row: the permit keeps a pass, the deny after it a failure");
+        assertEqual(edit.blockLines([raw("r1", "auth [success=ok default=bad] pam_unix.so"), fingerprint("r2")], facts()).slice(-2).join("|"),
+                    "auth [default=done] pam_permit.so|auth requisite pam_deny.so", "… a raw bad action too");
+        // Read back: both lines, or the permit line alone, are the closing; built again, both lines
+        const permitRows = [fingerprint("r1", "required"), password("r2")];
+        const permitBlock = lines => "#%PAM-1.0\n" + edit.blockText(lines).join("\n") + "\nauth include system-auth\n";
+        const permitLines = edit.blockLines(permitRows, facts());
+        const readIds = list => (list ?? []).map(item => item.method + ":" + item.control).join(" ");
+        assertEqual(readIds(edit.rows(permitBlock(permitLines), "sudo", facts())), "fingerprint:required password:sufficient",
+                    "a block ending in the permit and deny lines reads as the rows, no fixed row");
+        const onePermit = permitBlock(permitLines.slice(0, -1));
+        assertEqual(readIds(edit.rows(onePermit, "sudo", facts())), "fingerprint:required password:sufficient",
+                    "… ending in the permit line alone: the same rows");
+        assertEqual(edit.changes(onePermit, "sudo").changed, false, "… not changed by hand");
+        assertEqual(readIds(edit.adopt(onePermit, "sudo", facts()).rows), "fingerprint:required password:sufficient", "… taken in: the same rows");
+        assertEqual(edit.build(onePermit, permitRows, facts()).text, permitBlock(permitLines), "… built again: both lines");
+        const denyAlone = permitBlock(permitLines.slice(0, -2).concat(["auth requisite pam_deny.so"]));
+        assertEqual(readIds(edit.rows(denyAlone, "sudo", facts())), "fingerprint:required password:sufficient raw: system:",
+                    "the deny line alone after rows that need the permit: a raw row, not a closing");
 
         // --- Arch sudo, system-auth with pam_faillock ---
         let lines = ["-auth sufficient pam_fprintd.so timeout=10 max-tries=3"];

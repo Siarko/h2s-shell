@@ -516,9 +516,9 @@ Singleton {
     }
 
     // How the shell's block ends: "system" (the fixed row), "permit" (`[default=done]
-    // pam_permit.so`, keeping the result: a row that fails the stack on failure — required,
-    // requisite, a raw bracketed bad/die — is in the list), "deny" (`requisite pam_deny.so`:
-    // only a row that lets in at once lets in)
+    // pam_permit.so` then `requisite pam_deny.so`, keeping the result: a row that fails the
+    // stack on failure — required, requisite, a raw bracketed bad/die — is in the list),
+    // "deny" (`requisite pam_deny.so`: only a row that lets in at once lets in)
     function _closing(roles) {
         if (roles.some(role => role.method === "system"))
             return "system";

@@ -24,10 +24,20 @@ Singleton {
     // The line under it in a polkit-1 made by Replace: its other phases' lines are the
     // hand-made file's, so only its auth lines are compared with the vendor file's
     readonly property string replacedMarker: "# h2s-shell: replaced a hand-made file"
-    // The closing lines, by PamRuleRules.closingOf's answer
+    // The closing lines, by PamRuleRules.closingOf's answer. The permit closing keeps the
+    // result the rows set: libpam's `done` ends the stack only on a pass so far, so a stack
+    // that already failed goes on to the pam_deny line, whose `requisite` ends it with that
+    // failure — the service's own lines below the block are never reached either way.
     readonly property var closingLines: ({
-        permit: "auth [default=done] pam_permit.so",
-        deny: "auth requisite pam_deny.so"
+        permit: ["auth [default=done] pam_permit.so", "auth requisite pam_deny.so"],
+        deny: ["auth requisite pam_deny.so"]
+    })
+    // What is read back as a closing, by kind, longest first: the lines above, and the permit
+    // line alone (a block that ends so still reads as the permit closing; built again it
+    // gets both lines)
+    readonly property var closingForms: ({
+        permit: [closingLines.permit, closingLines.permit.slice(0, 1)],
+        deny: [closingLines.deny]
     })
     // sudo's own auth lines on Arch: what "Password (as the system)" stands for in a file
     // taken in, unless the caller names others (`facts.systemLines`)
@@ -196,12 +206,12 @@ Singleton {
         return [];
     }
 
-    // The line that ends the shell's lines when the fixed row is gone ("" with it)
-    function closingLine(rows, facts) {
-        return closingLines[PamRuleRules.closingOf(rows, facts)] ?? "";
+    // The lines that end the shell's lines when the fixed row is gone ([] with it)
+    function closingLinesOf(rows, facts) {
+        return closingLines[PamRuleRules.closingOf(rows, facts)] ?? [];
     }
 
-    // The shell's lines for the rows, in order, the closing line last where there is one
+    // The shell's lines for the rows, in order, the closing lines last where there are any
     function blockLines(rows, facts) {
         const list = Array.isArray(rows) ? rows : [];
         const lines = [];
@@ -209,9 +219,7 @@ Singleton {
             if (!PamRuleRules.isFixed(row))
                 lines.push(...rowLines(row));
         }
-        const closing = closingLine(list, facts);
-        if (closing !== "")
-            lines.push(closing);
+        lines.push(...closingLinesOf(list, facts));
         return lines;
     }
 
@@ -328,8 +336,8 @@ Singleton {
     }
 
     // Items ({ text: what a raw row keeps, words }) → { rows (ids r1…, no fixed row),
-    // closing ("permit" / "deny" when the last item is the closing line the rows before it
-    // would get, else "") }
+    // closing ("permit" / "deny" when the last items are a closing form the rows before
+    // them would get, else "") }
     function _readItems(items, facts) {
         const rows = [];
         const kinds = [];
@@ -343,13 +351,15 @@ Singleton {
             rows.push(_ownRow(items[i].words) ?? { method: "raw", control: "", details: { text: items[i].text } });
         }
         let closing = "";
-        const last = rows[rows.length - 1];
-        if (last?.method === "raw") {
-            const before = rows.slice(0, -1);
-            const expected = PamRuleRules.closingOf(before, facts);
-            if (closingLines[expected] !== undefined && _sameWords(closingLines[expected], last.details.text)) {
-                rows.pop();
-                closing = expected;
+        for (const kind of Object.keys(closingForms)) {
+            for (const form of closingForms[kind]) {
+                const tail = rows.slice(rows.length - form.length);
+                if (closing !== "" || rows.length < form.length
+                        || !tail.every((row, i) => row.method === "raw" && _sameWords(form[i], row.details.text))
+                        || PamRuleRules.closingOf(rows.slice(0, rows.length - form.length), facts) !== kind)
+                    continue;
+                rows.splice(rows.length - form.length, form.length);
+                closing = kind;
             }
         }
         rows.forEach((row, i) => { row.id = "r" + (i + 1); });

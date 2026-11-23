@@ -305,14 +305,18 @@ TestCase {
         });
 
         // The closing lines (no fixed row)
-        let deny = "", permit = "", ignoreRequired = "", ignoreRequisite = "", plainRequired = "";
+        let deny = "", permit = "", ignoreRequired = "", ignoreRequisite = "", plainRequired = "", countedAlone = "";
         _then("candidates without the fixed row", () => _ready, () => {
             deny = _candidate("sudo", [fingerprint("sufficient"), password("sufficient")], "exec");
             permit = _candidate("sudo", [password("required"), fingerprint("required")], "exec");
+            countedAlone = _candidate("sudo", [password("sufficient", true)]);
             ignoreRequired = _candidate("sudo", [password("required"), fingerprint("required")], "ignore");
             ignoreRequisite = _candidate("sudo", [password("required"), fingerprint("requisite")], "ignore");
             assert(deny.includes("auth requisite " + _modules + "/pam_deny.so"), "sufficient rows only: closed by requisite pam_deny");
-            assert(permit.includes("auth [default=done] " + _modules + "/pam_permit.so"), "required rows: closed by [default=done] pam_permit");
+            assert(permit.includes("auth [default=done] " + _modules + "/pam_permit.so\nauth requisite " + _modules + "/pam_deny.so\n"),
+                   "required rows: closed by [default=done] pam_permit, then requisite pam_deny");
+            assert(countedAlone.includes("pam_faillock") === false && countedAlone.includes("counter.sh authfail\nauth requisite " + _modules + "/pam_deny.so\n"),
+                   "a counted sufficient row alone: closed by requisite pam_deny");
             assert(ignoreRequired.includes("auth [success=ok new_authtok_reqd=ok ignore=bad default=bad] " + _modules + "/pam_debug.so auth=ignore"),
                    "a required reader written in the bracket form");
             assert(ignoreRequisite.includes("[success=ok new_authtok_reqd=ok ignore=die default=die] " + _modules + "/pam_debug.so"), "… a requisite one too");
@@ -340,13 +344,25 @@ TestCase {
         });
         _scenario({
             label: "permit closing, reader fails", text: () => permit, finger: "no", answer: _password,
-            check: state => outcome(state, "… the required reader failing: failed, the closing permit keeps the failure", "failed")
+            check: (state, after) => {
+                outcome(state, "… the required reader failing: failed, the closing keeps the failure", "failed");
+                assertEqual(after.log, "right,finger no", "… ended at the closing pam_deny: the system's lines below never reached");
+            }
         });
         _scenario({
             label: "permit closing, wrong password", text: () => permit, finger: "ok", answer: "wrong",
             check: (state, after) => {
                 outcome(state, "… a wrong password with the reader passing: failed", "failed");
-                assert(after.log.startsWith("wrong,finger ok"), "… required: the next row still runs");
+                assertEqual(after.log, "wrong,finger ok", "… required: the next row still runs; the system's lines below never reached");
+                assertEqual(after.count, 0, "… the system's pam_faillock untouched");
+            }
+        });
+        _scenario({
+            label: "counted alone, locked out", text: () => countedAlone, count: 3, answer: _password,
+            check: (state, after) => {
+                outcome(state, "a counted sufficient row alone while locked out, the right password: failed", "failed");
+                assertEqual(after.log, "preauth locked 3,right,authfail locked 3", "… ended at the closing pam_deny: the system's lines below never reached");
+                assertEqual(after.count, 3, "… still locked out");
             }
         });
         _scenario({

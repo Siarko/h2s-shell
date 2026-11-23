@@ -35,7 +35,7 @@ let
           What the row asks for: `fingerprint` (pam_fprintd), `securityKey` (pam_u2f),
           `password` (pam_unix), `raw` (any module, as `module` and `args` say), or `system`:
           NixOS's own auth rules for the service, kept below the rows. Without a `system`
-          row the rows end with a closing line and NixOS's own rules are never reached.
+          row the rows end with closing lines and NixOS's own rules are never reached.
         '';
       };
       control = mkOption {
@@ -184,9 +184,9 @@ let
   firstPass = row: methodOf row == "password" && row.method == "raw" && lib.elem "use_first_pass" row.args;
 
   # The rows' roles and how the rows end: "system" (NixOS's own rules below), "permit" (a
-  # row that fails the stack on failure is in the list: `[default=done] pam_permit.so`
-  # keeps the result), "deny" (`requisite pam_deny.so`: only a row that lets in at once lets
-  # in)
+  # row that fails the stack on failure is in the list: `[default=done] pam_permit.so` then
+  # `requisite pam_deny.so` keep the result), "deny" (`requisite pam_deny.so`: only a row
+  # that lets in at once lets in)
   analyse = rows:
     let
       closing =
@@ -376,13 +376,15 @@ let
       (if row.counted then countedLines row.control else [ (line (writtenControl row.control) (pamModule "pam_unix.so") [ "try_first_pass" ]) ])
     else if row.method == "raw" then [ (line row.control (toString row.module) row.args) ]
     else [ ];
+  # `done` ends the stack only on a pass so far: a stack that already failed goes on to the
+  # pam_deny line, whose `requisite` ends it with that failure, before NixOS's own rules
   closingLines = {
-    permit = line "[default=done]" (pamModule "pam_permit.so") [ ];
-    deny = line "requisite" (pamModule "pam_deny.so") [ ];
+    permit = [ (line "[default=done]" (pamModule "pam_permit.so") [ ]) (line "requisite" (pamModule "pam_deny.so") [ ]) ];
+    deny = [ (line "requisite" (pamModule "pam_deny.so") [ ]) ];
   };
   serviceLines = rows:
     let closing = (analyse rows).closing;
-    in lib.concatMap rowLines rows ++ lib.optional (closing != "system") closingLines.${closing};
+    in lib.concatMap rowLines rows ++ lib.optionals (closing != "system") closingLines.${closing};
 
   # The rows go above the first of NixOS's own auth rules, in their order, as h2s-1, h2s-2…
   serviceConfig = name: service:

@@ -89,7 +89,8 @@
       "sudo": [
         "auth sufficient pam_u2f.so cue pinverification=1",
         "auth [success=ok new_authtok_reqd=ok ignore=bad default=bad] pam_unix.so try_first_pass",
-        "auth [default=done] pam_permit.so"
+        "auth [default=done] pam_permit.so",
+        "auth requisite pam_deny.so"
       ],
       "polkit-1": [
         "auth sufficient pam_unix.so try_first_pass",
@@ -154,7 +155,8 @@
         "auth required pam_faillock.so preauth",
         "auth [success=1 default=bad] pam_unix.so try_first_pass",
         "auth [default=bad] pam_faillock.so authfail",
-        "auth [default=done] pam_permit.so"
+        "auth [default=done] pam_permit.so",
+        "auth requisite pam_deny.so"
       ]
     }
   },
@@ -203,7 +205,8 @@
         "auth required pam_faillock.so preauth",
         "auth [success=1 default=bad] pam_unix.so try_first_pass",
         "auth [default=die] pam_faillock.so authfail",
-        "auth [default=done] pam_permit.so"
+        "auth [default=done] pam_permit.so",
+        "auth requisite pam_deny.so"
       ]
     }
   },
@@ -316,7 +319,8 @@
         "auth [success=ok new_authtok_reqd=ok ignore=bad default=bad] pam_fprintd.so timeout=20",
         "auth [success=ok new_authtok_reqd=ok ignore=die default=die] pam_u2f.so cue",
         "auth sufficient pam_unix.so try_first_pass",
-        "auth [default=done] pam_permit.so"
+        "auth [default=done] pam_permit.so",
+        "auth requisite pam_deny.so"
       ],
       "polkit-1": [
         "auth [success=ok new_authtok_reqd=ok ignore=bad default=bad] pam_u2f.so cue pinverification=1"
