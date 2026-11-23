@@ -17,7 +17,8 @@ let
     modules = [ flake.nixosModules.default {
       programs.h2s-shell.enable = true;
       boot.loader.grub.enable = false;
-      fileSystems."/".device = "/dev/null";
+      # The least a system evaluates with: modules read the type of the root filesystem
+      fileSystems."/" = { device = "none"; fsType = "tmpfs"; };
       system.stateVersion = "26.05";
     } extra ];
   }).config.environment.etc."systemd/sleep.conf".text;
@@ -25,9 +26,13 @@ in
   sleepConf { programs.h2s-shell.idle.hibernateDelay = "3h"; } + "\n----\n" + sleepConf { }'
 text=$(nix --extra-experimental-features "nix-command flakes" eval --raw --impure --no-write-lock-file \
     --expr "$expression" 2> "$work/nix.log")
-[ -n "$text" ] || tail -n 20 "$work/nix.log"
-with_delay=${text%%----*}
-without=${text#*----}
-check "the module evaluates" test -n "$text"
+evaluated=0
+[[ $text == *$'\n----\n'* ]] && evaluated=1
+[ "$evaluated" = 1 ] || tail -n 20 "$work/nix.log"
+with_delay=${text%%$'\n----\n'*}
+without=${text#*$'\n----\n'}
+# Both cases need the evaluation: without it, "says nothing of it" would hold vacuously
+says_nothing_of_delay() { [ "$evaluated" = 1 ] && ! grep -q 'HibernateDelaySec' <<< "$without"; }
+check "the module evaluates" test "$evaluated" = 1
 check "idle.hibernateDelay = \"3h\": HibernateDelaySec=3h in sleep.conf" grep -qx 'HibernateDelaySec=3h' <<< "$with_delay"
-check "… unset: sleep.conf says nothing of it" test "$(grep -c 'HibernateDelaySec' <<< "$without")" = 0
+check "… unset: sleep.conf says nothing of it" says_nothing_of_delay
