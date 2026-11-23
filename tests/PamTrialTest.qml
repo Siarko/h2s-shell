@@ -397,6 +397,8 @@ TestCase {
             }
         });
 
+        // The last scenario's checks come from a command: wait for them before the end
+        _then("the last scenario checked", () => _ready, () => {});
         _clock.start();
         const bash = "$(command -v bash)";
         _sh([
