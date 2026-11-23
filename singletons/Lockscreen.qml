@@ -237,6 +237,9 @@ Singleton {
         let scope = null;
         let sessionInForce = 0;
         let fallbackKnown = false;
+        // The switches last handed to the rules: an event raised during a step is queued, so
+        // the state may not show them yet
+        let offeredSent = state.settings.offered;
         // Recovery (see the header): the marker, taking a lock back, asking again — decided
         // by LockRecoveryRules, whose one state this is. What a reload carries over is not in
         // it but in `_carried`, read in before each of its steps
@@ -795,11 +798,13 @@ Singleton {
             },
             lockOnSleepChanged: () => dispatch({ type: "settings", values: { lockOnSleep: root.lockOnSleep } }),
             // The binding gives a new object at any change of the profiles: only a switch
-            // that changed is the rules' event
+            // that changed since the last one sent is the rules' event
             offeredChanged: () => {
-                const current = state.settings.offered;
-                if (Object.keys(root.offered).some(name => root.offered[name] !== current[name]))
-                    dispatch({ type: "settings", values: { offered: root.offered } });
+                const offered = root.offered;
+                if (Object.keys(offered).some(name => offered[name] !== offeredSent[name])) {
+                    offeredSent = offered;
+                    dispatch({ type: "settings", values: { offered: offered } });
+                }
             },
             // A reload while locked (`_carried` said so): the rules go on with the lock this
             // process holds — called before Quickshell realizes the new WlSessionLock
