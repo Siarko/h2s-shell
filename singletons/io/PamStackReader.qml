@@ -8,8 +8,9 @@ import qs.singletons
 //
 // - the methods script (scripts/lock-auth-methods.sh) for whether a fingerprint and a
 //   security key are ready and which configs the lock uses;
-// - Distribution for whether this is NixOS (where libpam reads /etc/pam.d only): a reading
-//   is published only once it has answered;
+// - Distribution for its facts — whether this is NixOS, how many PAM directories libpam
+//   reads there (NixOS: /etc/pam.d only), where its modules are: a reading is published
+//   only once it has answered;
 // - scripts/pam-files.sh in rounds: first for the places (the PAM directories and
 //   faillock.conf, its seams), then for the paths the stacks ask for, until none is
 //   missing (PamStackRules.readingStep). It tells a file not there from one it cannot
@@ -24,9 +25,14 @@ QtObject {
 
     property var filesCommand: [Quickshell.shellDir + "/scripts/pam-files.sh"]
     property var methodsCommand: [Quickshell.shellDir + "/scripts/lock-auth-methods.sh"]
+    // The distribution's facts (DistributionRules.manifest: id, pamDirectories,
+    // pamModuleDirectories), null when it cannot be told, or undefined until Distribution
+    // has answered
+    // (From the one answer object: its ready and facts change together)
+    property var distribution: Distribution.detection.ready ? Distribution.detection.facts : undefined
     // Whether this is NixOS: true, false, null when the distribution cannot be told, or
     // undefined until Distribution has answered
-    property var nixos: Distribution.ready ? (Distribution.id === "" ? null : Distribution.id === "nixos") : undefined
+    readonly property var nixos: distribution === undefined ? undefined : distribution === null ? null : distribution.id === "nixos"
     // Added to every run's environment (a suite's seams)
     property var environment: ({})
     // The methods script finishes within about four seconds whatever fprintd does
@@ -35,7 +41,8 @@ QtObject {
 
     // The last complete reading, or null before the first: { services: { name: stack },
     // lock: { method: stack }, faillock: { name: settings or null }, facts: { nixos (true /
-    // false / null), fingerprint, securityKey ("ready" / "absent" / "unknown") },
+    // false / null), moduleDirectories (the distribution's PAM module directories; [] when
+    // not known), fingerprint, securityKey ("ready" / "absent" / "unknown") },
     // directories, files: { path: { text } | { absent: true } | { unreadable: true } } (every
     // file read: the editor builds from the texts) }
     property var reading: null
@@ -55,7 +62,7 @@ QtObject {
             run.cancel();
         _runs = [];
         _state = {
-            places: null, answers: {}, rounds: 0, nixos: nixos, reading: false,
+            places: null, answers: {}, rounds: 0, distribution: distribution, reading: false,
             methods: methods ? null
                 : _methods ?? { known: false, fingerprint: "unknown", securityKey: "unknown", lock: {} }
         };
@@ -70,9 +77,9 @@ QtObject {
     }
 
     // A refresh made before Distribution answered takes its answer when it comes
-    onNixosChanged: {
-        if (running && _state.nixos === undefined && nixos !== undefined) {
-            _state.nixos = nixos;
+    onDistributionChanged: {
+        if (running && _state.distribution === undefined && distribution !== undefined) {
+            _state.distribution = distribution;
             _advance(_generation);
         }
     }
@@ -120,10 +127,11 @@ QtObject {
 
     function _request() {
         const places = _state.places;
-        const nixos = _state.nixos === true;
-        // NixOS has no vendor directory: only the first counts there
-        const directories = places.directories.length === 0 ? []
-            : nixos ? places.directories.slice(0, 1) : places.directories;
+        // The places pam-files.sh names stand for the distribution's PAM directories, in
+        // order: as many count as it has (NixOS has no vendor directory: only the first). Not
+        // known: none, every stack unknown
+        const count = Array.isArray(_state.distribution?.pamDirectories) ? _state.distribution.pamDirectories.length : 0;
+        const directories = places.directories.slice(0, count);
         return {
             services: services,
             lock: _state.methods?.lock ?? {},
@@ -144,13 +152,16 @@ QtObject {
             _read(step.pending, generation);
             return;
         }
-        if (_state.methods === null || _state.nixos === undefined)
+        if (_state.methods === null || _state.distribution === undefined)
             return;
+        const distribution = _state.distribution;
         reading = {
             services: step.services,
             lock: step.lock,
             faillock: step.faillock,
-            facts: { nixos: _state.nixos, fingerprint: _state.methods.fingerprint, securityKey: _state.methods.securityKey },
+            facts: { nixos: distribution === null ? null : distribution.id === "nixos",
+                     moduleDirectories: Array.isArray(distribution?.pamModuleDirectories) ? distribution.pamModuleDirectories.slice() : [],
+                     fingerprint: _state.methods.fingerprint, securityKey: _state.methods.securityKey },
             directories: request.directories,
             files: Object.assign({}, _state.answers)
         };

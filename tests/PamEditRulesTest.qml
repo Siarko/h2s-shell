@@ -57,9 +57,9 @@ TestCase {
             if (service === "sudo")
                 before[pathOf(service)] = original;
             const after = Object.assign({}, files(systemAuth), { [pathOf(service)]: built.text });
-            const read = PamStackRules.stack(service, after);
+            const read = PamStackRules.stack(service, after, ["/etc/pam.d", "/usr/lib/pam.d"]);
             const expected = edit.blockLines(list, known).map(text => fields(PamStackRules.parseLine(text.replace(/#.*$/, ""))))
-                .concat(PamStackRules.stack(service, before).lines.map(fields));
+                .concat(PamStackRules.stack(service, before, ["/etc/pam.d", "/usr/lib/pam.d"]).lines.map(fields));
             that.assert(read.known, label + ": the text parses");
             that.assertEqual(read.lines.map(fields).join("\n"), expected.join("\n"), label + ": parses back to the same auth lines");
             that.assert(rules.sameRows(edit.rows(built.text, service, known), list), label + ": rows → text → rows");
@@ -248,8 +248,8 @@ TestCase {
         built = edit.build(handMade, adopted.rows, facts({ replace: adopted.hash }));
         assert(built.ok, "replaced: built");
         const readBack = files(archSystemAuth);
-        assertEqual(PamStackRules.stack("sudo", Object.assign({}, readBack, { "/etc/pam.d/sudo": built.text })).lines.map(fields).join("\n"),
-                    PamStackRules.stack("sudo", Object.assign({}, readBack, { "/etc/pam.d/sudo": handMade })).lines.map(fields).join("\n"),
+        assertEqual(PamStackRules.stack("sudo", Object.assign({}, readBack, { "/etc/pam.d/sudo": built.text }), ["/etc/pam.d", "/usr/lib/pam.d"]).lines.map(fields).join("\n"),
+                    PamStackRules.stack("sudo", Object.assign({}, readBack, { "/etc/pam.d/sudo": handMade }), ["/etc/pam.d", "/usr/lib/pam.d"]).lines.map(fields).join("\n"),
                     "adopt then build: the same auth lines in the same order");
         assert(built.text.includes("account\t\tinclude\t\tsystem-auth\nsession\t\tinclude\t\tsystem-auth\n"), "… the other phases' lines kept verbatim");
         assertEqual(PamStackRules.ownBlock(built.text).body.split("\n").length, 6, "… the hand lines moved into our block");

@@ -1452,8 +1452,10 @@ holding each link met and the real file must be root's and writable by no one el
 Nix store counts as root's as a whole only when `/nix/store` is root's and the user cannot
 write to it. A read that fails, two answers for one path, or a name holding a line break
 or a tab is untrusted. The probe is `ModuleRules.programProbeScript`, run by `/bin/sh` with
-the system's directories as its own `PATH` (`ModuleRules.probeToolPath`), never the `PATH`
-it judges; the verdict is `ModuleRules.programVerdict`. Each change of a verdict is one
+the distribution's program directories as its own `PATH` (`ModuleRules.probeToolPath`, from
+`distributions/<id>/distribution.json`), never the `PATH` it judges; it runs once
+`Distribution` has answered, and not at all while the distribution cannot be told (nothing
+is found then). The verdict is `ModuleRules.programVerdict`. Each change of a verdict is one
 line in the shell's log, with the path, the real file, its owner and mode.
 - NixOS: `/run/current-system/sw/bin` leads into the store, which the daemon owns as root;
   the setuid wrappers (`/run/wrappers/bin`) are root's files. A program under
@@ -1751,7 +1753,8 @@ fixture modules under `tests/fixtures/` do.
 `nix/package.nix` installs them to `$out/share/h2s-shell-builtin`, beside the shell's tree
 (`$out/share/h2s-shell`, which leaves `builtin-modules/` out), and the `h2s-shell` command
 sets `H2S_SHELL_BUILTIN_MODULES` to it — also when `H2S_SHELL_DIR` runs a checkout, and
-whatever the caller had set.
+whatever the caller had set. A checkout started by its own `scripts/launch.sh`, without the
+command, has no built-in modules (the launcher's log says so).
 
 ##### Arch
 
@@ -1762,8 +1765,10 @@ nothing else. A link or a file in that place is left alone (status 1). The direc
 written only there, never by Settings or by the module installer; it is still a directory the
 user owns, so a program running as the user can put a module there, and it loads as built in
 without a question (see "Modules and trust"). `scripts/launch.sh`, when
-`H2S_SHELL_BUILTIN_MODULES` is unset, sets it to that directory; set (empty included), it
-takes what is given, and only an absolute path counts. When the root is that directory and the
+`H2S_SHELL_BUILTIN_MODULES` is unset, sets it to that directory — the distribution's facts
+say so (`builtinModules`: `dataHome`); on NixOS (`package`), or where the distribution cannot
+be told, it sets none and says so in its log; set (empty included), it takes what is given,
+and only an absolute path counts. When the root is that directory and the
 checkout has `builtin-modules/`, the launcher's module search compares the two and says in its
 log when the copy differs or is missing ("install.sh --update copies it again"), once per change
 of that outcome.

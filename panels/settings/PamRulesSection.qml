@@ -46,7 +46,8 @@ ColumnLayout {
     readonly property var _base: stacks?.facts ?? ({})
     readonly property bool nixos: _base.nixos === true
     readonly property var _files: PamRuleViewRules.filesOf(stacks?.files, stacks?.directories)
-    readonly property var _machine: ({ system: nixos ? "nixos" : "arch", fingerprint: _base.fingerprint, securityKey: _base.securityKey })
+    readonly property var _machine: ({ system: nixos ? "nixos" : "arch", moduleDirectories: _base.moduleDirectories ?? [],
+                                       fingerprint: _base.fingerprint, securityKey: _base.securityKey })
     readonly property var _inForce: ({
         "sudo": PamRuleViewRules.inForceOf(_files.sudo, "sudo", _files.vendorPolkit, _machine),
         "polkit-1": PamRuleViewRules.inForceOf(_files.polkit, "polkit-1", _files.vendorPolkit, _machine)

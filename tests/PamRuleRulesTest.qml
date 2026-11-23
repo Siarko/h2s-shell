@@ -14,9 +14,18 @@ TestCase {
         const password = (id, control, counted) => row(id, "password", control, { counted: counted === true });
         const raw = (id, text) => ({ id, method: "raw", control: "", details: { text } });
         const fixed = rules.fixedRow();
-        const arch = (more) => Object.assign({ system: "arch", service: "sudo", fingerprint: "ready", securityKey: "ready",
-                                               faillockPresent: true, faillock: { deny: 3, failInterval: 900, unlockTime: 600 },
-                                               otherService: [rules.fixedRow()] }, more ?? {});
+        // The module directories as the distributions' facts have them (handed in by the
+        // page): Arch's, or NixOS's with `system: "nixos"`, unless the case names its own
+        const archModules = ["/usr/lib/security/", "/lib/security/", "/usr/lib64/security/", "/lib64/security/"];
+        const nixosModules = ["/run/current-system/sw/lib/security/"];
+        const arch = (more) => {
+            const facts = Object.assign({ system: "arch", service: "sudo", fingerprint: "ready", securityKey: "ready",
+                                          faillockPresent: true, faillock: { deny: 3, failInterval: 900, unlockTime: 600 },
+                                          otherService: [rules.fixedRow()] }, more ?? {});
+            if (!("moduleDirectories" in (more ?? {})))
+                facts.moduleDirectories = facts.system === "nixos" ? nixosModules : archModules;
+            return facts;
+        };
         const codes = (rows, facts) => rules.codes(rules.check(rows, facts));
         const has = (rows, facts, code) => codes(rows, facts).includes(code);
 
@@ -138,6 +147,13 @@ TestCase {
                "W12 not: the system profile on NixOS");
         assert(has([raw("r1", "auth sufficient /usr/lib/security/pam_ldap.so"), fixed], arch({ system: "nixos" }), "W12"),
                "W12: Arch's folder on NixOS");
+        assert(has([raw("r1", "auth sufficient /usr/lib/security/pam_ldap.so"), fixed], arch({ moduleDirectories: [] }), "W12")
+               && has([raw("r1", "auth sufficient /usr/lib/security/pam_ldap.so"), fixed], arch({ moduleDirectories: undefined }), "W12"),
+               "W12: the distribution's module folders not known — every path warns, none taken for the system's");
+        assert(!has([raw("r1", "auth sufficient /opt/pam/pam_ldap.so"), fixed], arch({ moduleDirectories: ["/opt/pam/"] }), "W12"),
+               "W12 not: a folder the facts name, whatever it is");
+        assert(has([raw("r1", "auth sufficient /opt/pamx/pam_ldap.so"), fixed], arch({ moduleDirectories: ["/opt/pam"] }), "W12"),
+               "W12: a folder named without its \"/\" is no place (it would take /opt/pamx for /opt/pam)");
         assert(has([raw("r1", "auth sufficient /nix/store/abc-evil/lib/security/pam_unix.so"), fixed], arch({ system: "nixos" }), "W11"),
                "W11: any other store path on NixOS, whatever its file is called");
         assert(has([raw("r1", "auth sufficient /nix/store/abc-evil/lib/security/pam_unix.so")], arch({ system: "nixos", otherService: [] }), "R1"),

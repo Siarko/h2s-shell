@@ -20,6 +20,10 @@ TestCase {
         path: Qt.resolvedUrl("fixtures/pam-nixos/cases.json")
         blockLoading: true
     }
+    property var _nixosFacts: FileView {
+        path: Qt.resolvedUrl("../distributions/nixos/distribution.json")
+        blockLoading: true
+    }
 
     // A Nix list of strings in the module's text: the first after what `prefix` (a regular
     // expression) matches, up to its `]`
@@ -71,8 +75,10 @@ TestCase {
         const libpam = _nixList(text, "\\blibpamModules = ");
         assertEqual(JSON.stringify((libpam ?? []).map(name => name + ".so")), JSON.stringify(PamRuleRules.libpamModules),
                     "libpam's own modules are the editor's");
-        assert(text.includes("systemModules = \"" + PamRuleRules.nixosModuleDirectories[0] + "\";"),
-               "the system profile's module folder is the editor's");
+        const nixosFacts = DistributionRules.manifest(_nixosFacts.text(), "nixos");
+        assert(nixosFacts !== null && nixosFacts.pamModuleDirectories.length === 1
+               && text.includes("systemModules = \"" + nixosFacts.pamModuleDirectories[0] + "\";"),
+               "the system profile's module folder is NixOS's (distributions/nixos/distribution.json)");
         for (const control of PamRuleRules.controlsFor("password")) {
             const lines = PamEditRules.countedLines(control);
             assert(text.includes(control + " = [ \"" + PamStackRules.words(lines[1])[1] + "\" \"" + PamStackRules.words(lines[2])[1] + "\" ];"),

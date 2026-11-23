@@ -284,11 +284,12 @@ Singleton {
     }
 
     // A service's facts for PamRuleRules.check and PamEditRules.build: the machine's (`base`:
-    // { nixos, fingerprint, securityKey }), its faillock (`faillock`: PamStacks' settings or
+    // { nixos, moduleDirectories, fingerprint, securityKey }), its faillock (`faillock`: PamStacks' settings or
     // null; present: the stack counts), the other service's rows, polkit's vendor text
     function serviceFacts(base, service, stack, faillock, otherRows, vendorText, changedByHand) {
         return {
             system: base?.nixos === true ? "nixos" : "arch",
+            moduleDirectories: Array.isArray(base?.moduleDirectories) ? base.moduleDirectories : [],
             service,
             fingerprint: base?.fingerprint ?? "unknown",
             securityKey: base?.securityKey ?? "unknown",

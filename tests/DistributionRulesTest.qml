@@ -173,6 +173,32 @@ TestCase {
         unknown(rules.detect({ manifests: failed, markers: {}, osRelease: _osRelease("arch") }), true, "a distribution.json unreadable");
         unknown(rules.detect(null), false, "nothing read");
         assert(Object.isFrozen(_detect(_osRelease("arch"))), "the answer is frozen");
+
+        // Every shipped distribution's facts, whichever this one is
+        const shippedOf = answer => answer.shipped === null ? "null" : rules.ids.map(id => answer.shipped[id]?.id ?? "?").join(",");
+        assertEqual(shippedOf(_detect(_osRelease("fedora"))), "nixos,arch,generic", "shipped: every distribution's facts, also on generic");
+        assert(Object.isFrozen(_detect(_osRelease("arch")).shipped), "… frozen");
+        assertEqual(shippedOf(_detect([{ state: "failed" }, { state: "absent" }])), "nixos,arch,generic",
+                    "… also when this system cannot be told (os-release unreadable)");
+        assertEqual(shippedOf(rules.detect({ manifests: _shipped(), markers: {}, osRelease: _osRelease("arch") })), "nixos,arch,generic",
+                    "… once the manifests are read, before the markers have answered");
+        assertEqual(shippedOf(rules.detect({ manifests: broken, markers: { "/etc/NIXOS": "absent" }, osRelease: _osRelease("arch") })), "null",
+                    "… none when one cannot be used");
+        assertEqual(shippedOf(rules.detect({ manifests: partial, markers: {}, osRelease: _osRelease("arch") })), "null",
+                    "… none before every one has answered");
+        _unions();
+    }
+
+    function _unions() {
+        const shipped = {
+            nixos: { list: ["/n/one", "/both"] },
+            arch: { list: ["/a/one", "/both", "/a/three"] },
+            generic: { list: ["/a/one"] }
+        };
+        assertEqual(rules.unionOf(shipped, "list").join(" "), "/n/one /a/one /both /a/three",
+                    "a union: each one's first entries, then the second ones…, each once, each distribution's order kept");
+        assertEqual(rules.unionOf({ arch: { list: ["/x"] }, nixos: { list: "/y" } }, "list").join(" "), "/x", "… what is no list left out");
+        assertEqual(rules.unionOf(null, "list").length + rules.unionOf({}, "list").length, 0, "… none without facts");
     }
 
     // The facts against what the code holds in its rules today
@@ -185,13 +211,35 @@ TestCase {
             return;
         const same = (actual, expected, message) => assertEqual(JSON.stringify(actual), JSON.stringify(expected), message);
         same(facts.nixos.pamDirectories, PamStackRules.nixosDirectories, "NixOS's PAM directories: PamStackRules.nixosDirectories");
-        same(facts.arch.pamDirectories, PamStackRules.directories, "Arch's PAM directories: PamStackRules.directories");
-        same(facts.nixos.pamModuleDirectories, PamRuleRules.nixosModuleDirectories, "NixOS's PAM modules: PamRuleRules.nixosModuleDirectories");
-        same(facts.arch.pamModuleDirectories, PamRuleRules.moduleDirectories, "Arch's PAM modules: PamRuleRules.moduleDirectories");
-        same(facts.nixos.programDirectories.concat(facts.arch.programDirectories), ModuleRules.probeToolPath.split(":"),
-             "NixOS's then Arch's program directories: ModuleRules.probeToolPath");
-        same([facts.nixos.setuidWrapperDirectory].concat(facts.nixos.programDirectories, facts.arch.programDirectories),
-             PrivilegedRules.pkexecSearchPath.split(":"), "NixOS's setuid wrappers, then the program directories: PrivilegedRules.pkexecSearchPath");
+        same(facts.arch.pamDirectories, [PamApplyRules.livePaths.system, PamApplyRules.livePaths.vendor],
+             "Arch's PAM directories: the ones the Arch editor writes and checks (PamApplyRules.livePaths)");
+        // The values the code held before they came from the facts: each system gets its own
+        // part of what every system was given, and nothing else
+        const before = {
+            pamModules: ["/usr/lib/security/", "/lib/security/", "/usr/lib64/security/", "/lib64/security/",
+                "/usr/lib/x86_64-linux-gnu/security/", "/lib/x86_64-linux-gnu/security/",
+                "/usr/lib/aarch64-linux-gnu/security/", "/lib/aarch64-linux-gnu/security/"],
+            nixosPamModules: ["/run/current-system/sw/lib/security/"],
+            probeToolPath: "/run/current-system/sw/bin:/usr/bin:/bin",
+            pkexecSearchPath: "/run/wrappers/bin:/run/current-system/sw/bin:/usr/bin:/bin",
+            vpnDirectories: ["/usr/lib/NetworkManager/VPN", "/etc/NetworkManager/VPN", "/run/current-system/sw/lib/NetworkManager/VPN"]
+        };
+        same(facts.arch.pamModuleDirectories, before.pamModules, "Arch's PAM module directories: the editor's list before");
+        same(facts.nixos.pamModuleDirectories, before.nixosPamModules, "NixOS's: the system profile's alone, as before");
+        assertEqual(ModuleRules.probeToolPath(facts.nixos), "/run/current-system/sw/bin", "NixOS's probe tools: the system profile");
+        assertEqual(ModuleRules.probeToolPath(facts.arch), "/usr/bin:/bin", "Arch's: /usr/bin, /bin");
+        assertEqual(ModuleRules.probeToolPath(facts.nixos) + ":" + ModuleRules.probeToolPath(facts.arch), before.probeToolPath,
+                    "… together the PATH every system had before, in its order");
+        assertEqual(PrivilegedRules.pkexecSearchPath(facts.nixos), "/run/wrappers/bin:/run/current-system/sw/bin",
+                    "NixOS's pkexec search path: the setuid wrappers, then the system profile");
+        assertEqual(PrivilegedRules.pkexecSearchPath(facts.arch), "/usr/bin:/bin", "Arch's: /usr/bin, /bin");
+        assertEqual(PrivilegedRules.pkexecSearchPath(facts.nixos) + ":" + PrivilegedRules.pkexecSearchPath(facts.arch), before.pkexecSearchPath,
+                    "… together the search path every system had before, in its order");
+        assertEqual(PrivilegedRules.pkexecSearchPath(null), "", "the distribution not known: no search path, never another system's");
+        const vpn = rules.unionOf(facts, "networkManagerVpnDirectories");
+        assert(vpn.length === before.vpnDirectories.length && before.vpnDirectories.every(dir => vpn.includes(dir))
+               && vpn.indexOf("/usr/lib/NetworkManager/VPN") < vpn.indexOf("/etc/NetworkManager/VPN"),
+               "VPN plugins: every system still reads every shipped distribution's directories, Arch's before /etc as before: " + vpn.join(" "));
         assertEqual(facts.arch.polkitRulesDirectory + "/40-h2s-shell.rules", RememberRules.rulePath,
                     "Arch's polkit rules directory: where RememberRules installs its rule");
         assert(facts.arch.polkitRulesInstallable && !facts.nixos.polkitRulesInstallable, "polkit rules installed on Arch, not on NixOS");

@@ -11,6 +11,7 @@ import QtQuick
 // once, on PATH, and only a trusted match is taken (ModuleRules.programVerdict: only root
 // can change it) — the first, in PATH order, that also runs its probe with exit 0: no
 // shell, and a file that cannot run, or a `setpriv` without --pdeathsig, is not taken.
+// The look-up waits for Distribution (its program directories are the probe's tools).
 // Until `known`, runs that take them wait (singletons/io/CommandRunner.qml); with
 // `timeout` missing, a limit is kept by the runner's own watchdog alone, and with
 // `setpriv` missing every run is started bare.
@@ -50,7 +51,16 @@ Singleton {
     }
 
     function _lookUp() {
+        // The probe's own tools come from the distribution's program directories: not
+        // known, nothing is looked up (an empty PATH would search the working directory)
+        const toolPath = ModuleRules.probeToolPath(Distribution.facts);
+        if (toolPath === "") {
+            console.warn("[Commands] the distribution is not known (" + Distribution.detection.problem + "): `timeout` and `setpriv` are not looked for");
+            _finish();
+            return;
+        }
         _lookup.lines = [];
+        _lookup.environment = { PATH: toolPath };
         _lookup.question = _ask();
         // The shell's PATH is searched; the probe's own tools come from the system's
         // directories (ModuleRules.probeToolPath), never from the PATH it judges
@@ -110,7 +120,8 @@ Singleton {
     }
 
     property Process _lookup: Process {
-        environment: ({ PATH: ModuleRules.probeToolPath })
+        // The probe's own PATH, set by _lookUp: the distribution's program directories
+        environment: ({})
         property int question: 0
         property var lines: []
         stdout: SplitParser {
@@ -149,5 +160,7 @@ Singleton {
         }
     }
 
-    Component.onCompleted: _lookUp()
+    // Looked up once the distribution has answered: until then runs that take the tools
+    // wait, as they wait for the look-up
+    Component.onCompleted: Distribution.whenReady(() => root._lookUp())
 }

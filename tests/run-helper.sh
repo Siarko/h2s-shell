@@ -323,6 +323,29 @@ check "… not rebuilt" no_build_since "$before"
 rm "$work/runtime/h2s-shell-lock"
 wait_for 10 settled
 
+# The distribution's facts (helper): so far the tree had none (its distribution not known:
+# the installation's helper decides). With them, and the test seams to name the distribution,
+# a distribution whose helper is built from the tree (Arch) asks the checkout even where an
+# installation's helper is handed over; the package's (NixOS) does not while none is built
+cp "$REPO/tests/lock/seams/seams.sh" "$shell/scripts/seams.sh"
+cp "$REPO/scripts/distribution.sh" "$shell/scripts/"
+for env in "$REPO"/distributions/*/distribution.env; do
+    id=$(basename "$(dirname "$env")")
+    mkdir -p "$shell/distributions/$id" && cp "$env" "$shell/distributions/$id/"
+done
+rm -f "$work/own/h2s-helper"
+echo current > "$control/status"
+: > "$control/launcher-log"
+check "launch.sh on NixOS, the installation has one, this checkout none: the installation's" \
+    test "$(helper_for H2S_SHELL_LIBEXEC="$work/libexec" H2S_LOCK_SYSTEM_PAM_DIR="$work/no-pam" H2S_DISTRIBUTION=nixos)" = "$work/libexec/h2s-helper"
+check "… the checkout not asked" eval '! asked_status'
+echo missing > "$control/status"
+before=$(started)
+check "launch.sh on Arch, the installation has one, this checkout none yet: the installation's this start" \
+    test "$(helper_for H2S_SHELL_LIBEXEC="$work/libexec" H2S_LOCK_SYSTEM_PAM_DIR="$work/no-pam" H2S_DISTRIBUTION=arch)" = "$work/libexec/h2s-helper"
+check "… the checkout asked, and its build started for the next start" eval 'asked_status && wait_for 5 more_builds_than "$before"'
+wait_for 10 settled
+
 # ---- 4. Never as root ------------------------------------------------------------------
 # The helper is the user's program: nothing that names it, its build or its path runs it
 # through a way to become root (a privileged action goes through the root-helper path, from

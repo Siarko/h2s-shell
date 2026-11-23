@@ -598,9 +598,9 @@ Singleton {
     // real file at the end must be owned by root and writable by no one else. The Nix store
     // counts as root's as a whole only where /nix/store itself is root's and the user cannot
     // write to it (a multi-user install, run by the daemon); a store the user owns (a
-    // single-user install) is judged like any other path. NixOS: /run/current-system/sw/bin
-    // leads into the store, the setuid wrappers are root's files under /run/wrappers; Arch:
-    // root's /usr/bin. Anything not read — a stat missing, a link that does not resolve, a
+    // single-user install) is judged like any other path. NixOS: the system profile's
+    // directory leads into the store, the setuid wrappers are root's files; Arch: root's
+    // /usr/bin (each distribution's facts name its directories). Anything not read — a stat missing, a link that does not resolve, a
     // name holding a line break or a tab, two answers for one path — is untrusted.
     // A guard against mistakes (a program in a directory the user owns, handed on to run as
     // root), not against a process that can already write where it likes.
@@ -610,9 +610,13 @@ Singleton {
     // How often a module may ask for its programs to be looked up again (recheckDelay)
     readonly property int recheckMinMs: 2000
     // The probe's own PATH, for `stat`, `readlink` and `id` (and /bin/sh runs it): the
-    // system's directories, never the PATH being judged — a `stat` the user put there could
-    // say anything. NixOS: /run/current-system/sw/bin; Arch: /usr/bin
-    readonly property string probeToolPath: "/run/current-system/sw/bin:/usr/bin:/bin"
+    // system's directories (the distribution's facts, programDirectories), never the PATH
+    // being judged — a `stat` the user put there could say anything. `facts` null (the
+    // distribution not known): "", nothing found — never another system's directories
+    function probeToolPath(facts) {
+        const directories = facts?.programDirectories;
+        return Array.isArray(directories) ? directories.filter(directory => typeof directory === "string" && directory.startsWith("/")).join(":") : "";
+    }
     readonly property string probeShell: "/bin/sh"
 
     // `/bin/sh -c programProbeScript sh <"first" | "all"> <the PATH to search> <name>…`, run
@@ -1013,13 +1017,25 @@ Singleton {
         return "test mode: a privileged run needs the module's stand-in pkexec (<testPrograms>/pkexec) as its elevating program";
     }
 
-    // Where the system's pkexec is (NixOS: the setuid wrapper and the system profile's; Arch:
-    // /usr/bin); the elevate probe also takes what `command -v pkexec` finds on
-    // testPkexecLookupPath
-    readonly property var systemPkexecPaths: ["/run/wrappers/bin/pkexec", "/run/current-system/sw/bin/pkexec", "/usr/bin/pkexec",
-        "/usr/sbin/pkexec", "/usr/local/bin/pkexec", "/bin/pkexec", "/sbin/pkexec"]
-    readonly property string testPkexecLookupPath: "/run/wrappers/bin:" + probeToolPath
-
+    // Where a system's pkexec may be, so that test mode never takes it for a stand-in: in
+    // every shipped distribution's setuid wrappers and program directories (detect's
+    // `shipped`: whichever this system is, a list to refuse is better long), then the usual
+    // other places; the elevate probe also takes what `command -v pkexec` finds where the
+    // shell looks for it (PrivilegedRules.pkexecSearchPath)
+    readonly property var otherPkexecPaths: ["/usr/bin/pkexec", "/usr/sbin/pkexec", "/usr/local/bin/pkexec", "/bin/pkexec", "/sbin/pkexec"]
+    function systemPkexecPaths(shipped) {
+        const directories = [];
+        for (const id of DistributionRules.ids) {
+            const facts = shipped?.[id];
+            if (typeof facts?.setuidWrapperDirectory === "string" && facts.setuidWrapperDirectory !== "")
+                directories.push(facts.setuidWrapperDirectory);
+            if (Array.isArray(facts?.programDirectories))
+                directories.push(...facts.programDirectories);
+        }
+        const paths = directories.filter(directory => typeof directory === "string" && directory.startsWith("/"))
+            .map(directory => directory + "/pkexec").concat(otherPkexecPaths);
+        return paths.filter((path, index) => paths.indexOf(path) === index);
+    }
     // `/bin/sh -c testElevateProbeScript sh <program> <lookup PATH> <system pkexec path>…`, run
     // with PATH=probeToolPath: one line — "stand-in" when the program's real path is an
     // executable regular file that is neither setuid nor setgid nor the same file as any

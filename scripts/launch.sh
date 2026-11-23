@@ -353,9 +353,11 @@ stop_shell() {
 #                           input, the shell's installation's: the directory of its built-in
 #                           modules (an absolute path; set to anything else, empty included:
 #                           none). The NixOS package's command sets it to the package's own;
-#                           unset, it is $XDG_DATA_HOME/h2s-shell/builtin (~/.local/share), where
-#                           install.sh puts them on Arch. Exported so that the shell and a
-#                           --restart from it read the same.
+#                           unset, it comes from the distribution's facts (builtinModules):
+#                           "dataHome" (Arch, generic) is $XDG_DATA_HOME/h2s-shell/builtin
+#                           (~/.local/share), where install.sh puts them; "package" (NixOS),
+#                           or a distribution that cannot be told, none — said in the log.
+#                           Exported so that the shell and a --restart from it read the same.
 #   H2S_SHELL_MODULE_DATA_DIRS
 #                           the data directories searched instead of $XDG_DATA_DIRS (which the
 #                           shell needs as it is: icons, fonts, mime data); set and empty: none.
@@ -369,9 +371,6 @@ stop_shell() {
 # logged. At most $max_modules modules and $max_modules_length bytes (a longer environment
 # string fails the shell's execve with E2BIG: no shell at all); the rest is dropped, logged.
 # H2S_SHELL_SAFE_MODE is the supervisor's, set per start (supervise): never inherited.
-if [ -z "${H2S_SHELL_BUILTIN_MODULES+set}" ]; then
-    export H2S_SHELL_BUILTIN_MODULES="${XDG_DATA_HOME:-$HOME/.local/share}/h2s-shell/builtin"
-fi
 launcher_script=$(readlink -f "$0")
 discovery_seconds=3
 max_modules=200
@@ -493,8 +492,9 @@ discover_modules() {
 # sudo. Looked for in this order:
 #   1. H2S_HELPER (input): a path to that program; set and empty, no helper at all (the
 #      lock test bed);
-#   2. this checkout's own build — where the installation has no helper of its own (Arch),
-#      or where this checkout has built one already;
+#   2. this checkout's own build — where the distribution's facts say the helper is built
+#      from the tree (helper "build": Arch, generic), where the installation has no helper
+#      of its own, or where this checkout has built one already;
 #   3. the installation's: $H2S_SHELL_LIBEXEC/h2s-helper (the NixOS package's command sets
 #      it to the package's).
 # The start never waits for a build: when the checkout's source changed since its build
@@ -519,7 +519,7 @@ find_helper() {
     else
         if [ -f "$shell_dir/helper/CMakeLists.txt" ] && [ -f "$build" ]; then
             own=$("$BASH" "$build" --print-path 2> /dev/null < /dev/null) || own=""
-            if [ -n "$own" ] && { [ -z "${H2S_SHELL_LIBEXEC:-}" ] || [ -x "$own" ]; }; then
+            if [ -n "$own" ] && { [ "$launcher_helper" = build ] || [ -z "${H2S_SHELL_LIBEXEC:-}" ] || [ -x "$own" ]; }; then
                 status=$("$BASH" "$build" --status 2> /dev/null < /dev/null) || status=""
                 [ -x "$own" ] && found=$own
                 case "$status" in
@@ -690,16 +690,34 @@ done
 
 # Which distribution this is, as the shell and the lock's methods script tell it
 # (scripts/distribution.sh: the distributions' facts, distributions/<id>/distribution.env;
-# in a test tree seam_distribution may name it), said once per start in the log. Never in
-# the way of a start: a distribution.sh that cannot be read, or a distribution that cannot
-# be told, is said and the shell starts all the same.
+# in a test tree seam_distribution may name it), told once per run of this script and said
+# once per start in the log. Its facts say where the built-in modules come from
+# (builtinModules: the default of H2S_SHELL_BUILTIN_MODULES) and the helper (helper,
+# find_helper). Never in the way of a start: a distribution.sh that cannot be read, or a
+# distribution that cannot be told, is said, and the shell starts without a default for
+# either — never another system's.
+launcher_distribution_said=""
+launcher_builtin_modules=""
+launcher_helper=""
+if ! source "$shell_dir/scripts/distribution.sh" 2> /dev/null; then
+    launcher_distribution_said="not known (scripts/distribution.sh cannot be read)"
+elif distribution_detect "$shell_dir" "${seam_distribution:-}" ""; then
+    launcher_distribution_said="$distribution_id (by $distribution_how)"
+    launcher_builtin_modules=${distribution_facts[builtinModules]-}
+    launcher_helper=${distribution_facts[helper]-}
+else
+    launcher_distribution_said="not known ($distribution_problem)"
+fi
+if [ -z "${H2S_SHELL_BUILTIN_MODULES+set}" ] && [ "$launcher_builtin_modules" = dataHome ]; then
+    export H2S_SHELL_BUILTIN_MODULES="${XDG_DATA_HOME:-$HOME/.local/share}/h2s-shell/builtin"
+fi
 report_distribution() {
-    if ! source "$shell_dir/scripts/distribution.sh" 2> /dev/null; then
-        say "distribution: not known (scripts/distribution.sh cannot be read)"
-    elif distribution_detect "$shell_dir" "${seam_distribution:-}" ""; then
-        say "distribution: $distribution_id (by $distribution_how)"
-    else
-        say "distribution: not known ($distribution_problem)"
+    say "distribution: $launcher_distribution_said"
+    if [ -z "${H2S_SHELL_BUILTIN_MODULES+set}" ]; then
+        case "$launcher_builtin_modules" in
+            package) say "built-in modules: none (on this distribution the package's command hands them over, H2S_SHELL_BUILTIN_MODULES)" ;;
+            *) say "built-in modules: none (the distribution is not known)" ;;
+        esac
     fi
 }
 

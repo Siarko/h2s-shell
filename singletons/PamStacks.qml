@@ -4,10 +4,10 @@ import Quickshell
 import QtQuick
 import qs.singletons.io
 
-// The PAM stacks as this machine has them, read only: polkit-1 and sudo (from /etc/pam.d,
-// then libpam's vendor directory /usr/lib/pam.d; NixOS the first only), the lock's configs,
-// pam_faillock's settings, and what the machine offers (NixOS or not, a fingerprint and a
-// security key ready — the methods script's answers). Read by the shell's one
+// The PAM stacks as this machine has them, read only: polkit-1 and sudo (from the
+// distribution's PAM directories: /etc/pam.d, then libpam's vendor directory where it has
+// one), the lock's configs, pam_faillock's settings, and what the machine offers (NixOS or
+// not, a fingerprint and a security key ready — the methods script's answers). Read by the shell's one
 // PamStackReader, decided by PamStackRules; nothing is written, nothing asks for root.
 // Read once when first used (so that the first prompt words itself by the stack) and again
 // at each refresh() — Authentication refreshes when a prompt opens, Settings when its page
@@ -23,8 +23,9 @@ Singleton {
     readonly property var sudo: reading?.services?.sudo ?? null
     // { method: stack } of the configs the lock uses
     readonly property var lock: reading?.lock ?? ({})
-    // { nixos (true / false / null), fingerprint, securityKey ("ready" / "absent" / "unknown") }
-    readonly property var facts: reading?.facts ?? ({ nixos: null, fingerprint: "unknown", securityKey: "unknown" })
+    // { nixos (true / false / null), moduleDirectories (the distribution's PAM module
+    // directories), fingerprint, securityKey ("ready" / "absent" / "unknown") }
+    readonly property var facts: reading?.facts ?? ({ nixos: null, moduleDirectories: [], fingerprint: "unknown", securityKey: "unknown" })
     // { service: pam_faillock's settings or null }, the PAM folders read in order, and every
     // file read ({ path: { text } | { absent } | { unreadable } })
     readonly property var faillock: reading?.faillock ?? ({})

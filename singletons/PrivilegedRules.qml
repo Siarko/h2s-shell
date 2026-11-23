@@ -30,9 +30,18 @@ Singleton {
     readonly property int whatMaxLength: 200
     readonly property var blockedReasons: ["locked", "no-purpose", "unprintable", "undeclared"]
 
-    // Where the shell looks for pkexec: NixOS's setuid wrappers first (the store's copy is
-    // not setuid and cannot work), then the system's directories (Arch: /usr/bin)
-    readonly property string pkexecSearchPath: "/run/wrappers/bin:" + ModuleRules.probeToolPath
+    // Where the shell looks for pkexec, from the distribution's facts: its setuid wrappers
+    // first where it has them (NixOS: the store's copy is not setuid and cannot work), then
+    // its program directories (Arch: /usr/bin). `facts` null (the distribution not known):
+    // "", nothing is found — never another system's directories
+    function pkexecSearchPath(facts) {
+        if (facts === null || typeof facts !== "object")
+            return "";
+        const wrappers = typeof facts.setuidWrapperDirectory === "string" && facts.setuidWrapperDirectory.startsWith("/")
+            ? [facts.setuidWrapperDirectory] : [];
+        const programs = ModuleRules.probeToolPath(facts);
+        return wrappers.concat(programs === "" ? [] : [programs]).join(":");
+    }
 
     readonly property var _callbackNames: ["onStdout", "onStderr", "onLine", "done"]
 

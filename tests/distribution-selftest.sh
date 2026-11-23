@@ -7,7 +7,9 @@
 # - scripts/distribution.sh tells the distribution as the shell does
 #   (singletons/DistributionRules.qml): made-up system trees from the os-release fixtures of
 #   tests/fixtures/distribution/, laid out as tests/DistributionReadingTest.qml lays them
-#   out, with the same answers; the override; and what leaves it unknown.
+#   out, with the same answers; the override; and what leaves it unknown;
+# - scripts/pam-files.sh names the distribution's PAM directories (none when it cannot be
+#   told), or the stand-ins a test tree gives.
 #
 # It needs bash, coreutils and a python3 (tests/lock/resolve.sh: the pinned one where there
 # is nix, else the one on PATH). Nothing outside a temp directory is read but the checkout.
@@ -144,6 +146,33 @@ check "a distribution.env with a line that is no key=value: unknown" status_is 1
 OUTPUT=$(source "$REPO/scripts/distribution.sh" && distribution_detect "$REPO" "" "$roots/nixos" \
     && printf '%s\n' "${distribution_facts[setuidWrapperDirectory]}" "${distribution_facts[pamModuleDirectories]}")
 check "sourced: NixOS's facts from its distribution.env" test "$OUTPUT" = $'/run/wrappers/bin\n/run/current-system/sw/lib/security/'
+
+# ---- pam-files.sh: the PAM directories are the distribution's -----------------------------
+# A scratch tree with a seams.sh of its own: the distribution named, no stand-in directories
+pamtree=$work/pamtree
+mkdir -p "$pamtree/scripts"
+cp "$REPO/scripts/pam-files.sh" "$REPO/scripts/distribution.sh" "$pamtree/scripts/"
+cp -r "$REPO/distributions" "$pamtree/"
+pam_dirs_for() {
+    printf 'seam_pam_dirs=%s\nseam_distribution=%s\nseam_faillock_conf=\n' "$2" "$1" > "$pamtree/scripts/seams.sh"
+    OUTPUT=$("$pamtree/scripts/pam-files.sh" 2> "$work/pam-files.err")
+    STATUS=$?
+    OUTPUT=$(sed -n 's/^directory\t//p' <<< "$OUTPUT" | tr '\n' ' ')
+}
+pam_dirs_for arch ""
+check "pam-files.sh on Arch: Arch's PAM directories, in order" test "$STATUS:$OUTPUT" = "0:/etc/pam.d /usr/lib/pam.d "
+pam_dirs_for nixos ""
+check "pam-files.sh on NixOS: /etc/pam.d alone" test "$STATUS:$OUTPUT" = "0:/etc/pam.d "
+pam_dirs_for generic ""
+check "pam-files.sh on the generic distribution: its directories" test "$STATUS:$OUTPUT" = "0:/etc/pam.d /usr/lib/pam.d "
+pam_dirs_for plan9 ""
+check "pam-files.sh, the distribution not known: no directory, never another system's" test "$STATUS:$OUTPUT" = "0:"
+check "… said on stderr" grep -q "the distribution is not known" "$work/pam-files.err"
+pam_dirs_for nixos "/w/etc:/w/usr"
+check "pam-files.sh with stand-ins: those, as given" test "$STATUS:$OUTPUT" = "0:/w/etc /w/usr "
+rm "$pamtree/scripts/distribution.sh"
+pam_dirs_for arch ""
+check "pam-files.sh without distribution.sh: no directory" test "$STATUS:$OUTPUT" = "0:"
 
 echo
 if [ "$failed" = 0 ]; then echo "distribution self-test: passed"; else echo "distribution self-test: FAILED"; fi

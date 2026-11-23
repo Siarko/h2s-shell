@@ -85,10 +85,19 @@ Singleton {
 
     function _lookUp() {
         const lines = [];
+        // The probe's own tools come from the distribution's program directories (asked once
+        // it has answered, see start()); not known: nothing is trusted
+        const toolPath = ModuleRules.probeToolPath(Distribution.facts);
+        if (toolPath === "") {
+            console.warn("[RememberedAdmin] the distribution is not known: no trusted gdbus or readlink looked for;"
+                         + " what is remembered is not read, and not forgotten at lock");
+            root.refresh();
+            return;
+        }
         _lookup.start([ModuleRules.probeShell, "-c", ModuleRules.programProbeScript, "sh", "all", Quickshell.env("PATH") ?? "", "gdbus", "readlink"], {
             timeoutMs: 5000,
             keepOutput: false,
-            environment: { PATH: ModuleRules.probeToolPath },
+            environment: { PATH: toolPath },
             onLine: (line, stream) => {
                 if (stream === "stdout")
                     lines.push(line);
@@ -124,7 +133,7 @@ Singleton {
         if (_started)
             return;
         _started = true;
-        _lookUp();
+        Distribution.whenReady(() => root._lookUp());
     }
     property bool _started: false
 }

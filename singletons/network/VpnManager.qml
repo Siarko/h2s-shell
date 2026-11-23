@@ -443,20 +443,22 @@ Singleton {
     }
 
     // ── Plugins ── the VPN plugins NetworkManager has ([{ name, service }]), from their
-    // `.name` files: where Arch, NixOS and others put them. Read once a page asks.
+    // `.name` files: in every shipped distribution's directories for them (their facts'
+    // networkManagerVpnDirectories, as one list: DistributionRules.unionOf), whichever system
+    // this is. Read once a page asks, and once Distribution has read the facts.
     property var plugins: []
     property bool pluginsRead: false
 
     function readPlugins(): void {
-        _plugins.request();
+        Distribution.whenReady(() => _plugins.request());
     }
 
     CommandQuery {
         id: _plugins
         // Each file with a line end after it: one without would glue the next file's
-        // "[VPN Connection]" to its last line
-        command: ["sh", "-c", "for file in /usr/lib/NetworkManager/VPN/*.name /etc/NetworkManager/VPN/*.name "
-            + "/run/current-system/sw/lib/NetworkManager/VPN/*.name; do [ -f \"$file\" ] && cat \"$file\" && echo; done; true"]
+        // "[VPN Connection]" to its last line. The directories are arguments, never code
+        command: ["sh", "-c", "for dir; do for file in \"$dir\"/*.name; do [ -f \"$file\" ] && cat \"$file\" && echo; done; done; true", "sh"]
+            .concat(DistributionRules.unionOf(Distribution.shipped, "networkManagerVpnDirectories"))
         onDone: lines => {
             root.plugins = NetworkRules.vpnPlugins(lines.join("\n"));
             root.pluginsRead = true;

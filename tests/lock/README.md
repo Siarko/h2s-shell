@@ -379,7 +379,7 @@ value, one set to a value that cannot be used is ignored (and named in the log).
 |---|---|---|
 | `H2S_LOCK_TOOLS` | `TestSeams`, `seams.sh` | a directory whose `gdbus` and `systemd-inhibit` stand in (logind, the inhibitor, fprintd) |
 | `H2S_LOCK_SYSTEM_PAM_DIR` | `TestSeams`, `seams.sh` | where the system-wide `h2s-shell-*` PAM configs are looked for, instead of `/etc/pam.d` |
-| `H2S_LOCK_VENDOR_PAM_DIR` | `seams.sh` | libpam's vendor directory for `pam-files.sh`, instead of `/usr/lib/pam.d`; none when only `H2S_LOCK_SYSTEM_PAM_DIR` is set |
+| `H2S_LOCK_VENDOR_PAM_DIR` | `seams.sh` | libpam's vendor directory for `pam-files.sh`, after `H2S_LOCK_SYSTEM_PAM_DIR`, the two in place of the distribution's PAM directories; only with `H2S_LOCK_SYSTEM_PAM_DIR` (alone that one is the only PAM directory) |
 | `H2S_LOCK_FAILLOCK_CONF` | `seams.sh` | faillock.conf for `pam-files.sh`, instead of `/etc/security/faillock.conf`; none when only `H2S_LOCK_SYSTEM_PAM_DIR` is set |
 | `H2S_DISTRIBUTION` | `TestSeams`, `seams.sh` | `nixos`, `arch` or `generic` (`distributions/`): the distribution the shell (`Distribution`) and its scripts (`scripts/distribution.sh`) take themselves to be on instead of detecting it, only with `H2S_LOCK_SYSTEM_PAM_DIR`; an id it does not know leaves it unknown |
 | `H2S_LOCK_AUTH_METHODS` | `seams.sh` | an executable that answers for the methods script (the test PAM stacks) |

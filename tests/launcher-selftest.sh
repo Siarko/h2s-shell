@@ -495,19 +495,25 @@ done
 restart_path=""
 
 # ---- (8) The built-in root of the module search ---
-# Unset, it is the data home's h2s-shell/builtin (where install.sh puts it on Arch); one that
-# holds only builtin.json — what the package and install.sh bring while no module ships —
-# finds what no built-in root finds; set, the one given; set and empty, none.
+# Unset, it comes from the distribution's facts (builtinModules): on Arch (pinned here
+# through the test seams) the data home's h2s-shell/builtin, where install.sh puts it; on
+# NixOS, whose package's command always sets it, and where the distribution cannot be told,
+# none. One that holds only builtin.json — what the package and install.sh bring while no
+# module ships — finds what no built-in root finds; set, the one given; set and empty, none.
 echo "== the built-in root of the module search"
 discovery=$work/discovery
 mkdir -p "$discovery/run" "$discovery/data/h2s-shell/modules/alpha" "$discovery/data/h2s-shell/builtin" "$discovery/package/gamma"
 echo '{ "id": "alpha" }' > "$discovery/data/h2s-shell/modules/alpha/module.json"
 echo '{ "off": [] }' > "$discovery/data/h2s-shell/builtin/builtin.json"
 echo '{ "id": "gamma" }' > "$discovery/package/gamma/module.json"
-discover() {
+discover_as() {
+    local system=$1
+    shift
     env -i "PATH=$work/bin" "HOME=$work/home" "XDG_RUNTIME_DIR=$discovery/run" "XDG_DATA_HOME=$discovery/data" \
+        "H2S_LOCK_SYSTEM_PAM_DIR=$discovery/no-pam" "H2S_DISTRIBUTION=$system" \
         "H2S_SHELL_MODULE_DATA_DIRS=" "$@" "$bash_path" "$launch_script" --discover-modules 2> /dev/null
 }
+discover() { discover_as arch "$@"; }
 canonical() { (cd -P "$1" && pwd); }
 alpha=$(canonical "$discovery/data/h2s-shell/modules/alpha")
 is "unset, with only builtin.json there: the user's module alone" test "$(discover)" = "$alpha"
@@ -520,6 +526,11 @@ is "set and empty: none" test "$(discover H2S_SHELL_BUILTIN_MODULES=)" = "$alpha
 is "set: the one given, not the data home's" \
     test "$(discover "H2S_SHELL_BUILTIN_MODULES=$discovery/package")" = "$alpha:$(canonical "$discovery/package/gamma")"
 is "set to a relative path: none" test "$(discover H2S_SHELL_BUILTIN_MODULES=package)" = "$alpha"
+is "unset on NixOS (the package's command sets it): none, not the data home's" test "$(discover_as nixos)" = "$alpha"
+is "… set there: the one given" \
+    test "$(discover_as nixos "H2S_SHELL_BUILTIN_MODULES=$discovery/package")" = "$alpha:$(canonical "$discovery/package/gamma")"
+is "unset on the generic distribution: the data home's" test "$(discover_as generic)" = "$alpha:$beta"
+is "unset, the distribution not known: none, never another system's" test "$(discover_as no-such-system)" = "$alpha"
 
 echo "== the built-in copy against the checkout's builtin-modules/"
 # Said once per change of the outcome, in the launcher's log; only for the data home's copy

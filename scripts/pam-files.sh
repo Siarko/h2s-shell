@@ -6,8 +6,9 @@
 #
 # First the places, then one record per path asked:
 #
-#   directory TAB <path>            where libpam looks for a service, in order (the vendor
-#                                   directory only where there is one)
+#   directory TAB <path>            where libpam looks for a service, in order: the
+#                                   distribution's pamDirectories (scripts/distribution.sh);
+#                                   none when the distribution cannot be told
 #   faillock TAB <path>             pam_faillock's default faillock.conf
 #   file TAB <path> TAB text        the file's lines follow, each after a "|", then
 #   end TAB <path>
@@ -24,15 +25,27 @@
 # shell takes a path without one as unreadable). Nothing is written, nothing run as root.
 #
 # The test seams (scripts/seams.sh: constants; a test tree has the test bed's in its place):
-# the two PAM directories and faillock.conf's place.
-source "$(dirname "$(readlink -f "$0")")/seams.sh" || { echo "pam-files: cannot read seams.sh" >&2; exit 1; }
+# the PAM directories' stand-ins, the distribution, and faillock.conf's place.
+script_dir=$(dirname "$(readlink -f "$0")")
+source "$script_dir/seams.sh" || { echo "pam-files: cannot read seams.sh" >&2; exit 1; }
 set -u
 export LC_ALL=C
 
 max_bytes=65536
 
-[ -z "$seam_system_pam_dir" ] || printf 'directory\t%s\n' "$seam_system_pam_dir"
-[ -z "$seam_vendor_pam_dir" ] || printf 'directory\t%s\n' "$seam_vendor_pam_dir"
+pam_dirs=()
+if [ -n "$seam_pam_dirs" ]; then
+    IFS=: read -r -a pam_dirs <<< "$seam_pam_dirs"
+elif ! source "$script_dir/distribution.sh"; then
+    echo "pam-files: cannot read distribution.sh: no PAM directory" >&2
+elif distribution_detect "$script_dir/.." "$seam_distribution" ""; then
+    distribution_list "$distribution_id" pamDirectories pam_dirs
+else
+    echo "pam-files: the distribution is not known ($distribution_problem): no PAM directory" >&2
+fi
+for dir in "${pam_dirs[@]}"; do
+    [ -z "$dir" ] || printf 'directory\t%s\n' "$dir"
+done
 [ -z "$seam_faillock_conf" ] || printf 'faillock\t%s\n' "$seam_faillock_conf"
 
 # absent <path>: the path is known not to be there

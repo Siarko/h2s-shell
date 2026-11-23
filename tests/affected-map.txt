@@ -94,7 +94,7 @@ singletons/TestSeams.qml lock:all
 scripts/seams.sh lock:all self:tests/launcher-selftest.sh
 +scripts/seams.sh unit:PamStacksReadingTest unit:TestSeamsShapeTest
 +tests/lock/seams/seams.sh unit:PamStacksReadingTest unit:TestSeamsShapeTest unit:PamTrialTest
-scripts/pam-files.sh unit:PamStacksReadingTest unit:PamTrialTest
+scripts/pam-files.sh unit:PamStacksReadingTest unit:PamTrialTest self:tests/distribution-selftest.sh
 scripts/pam-trial-stage.sh unit:PamTrialTest
 tests/test-tree.sh unit:TestTreeTest lock:all
 tests/lock-closure.sh unit:ModuleRegistriesTest
@@ -131,7 +131,7 @@ tests/fixtures/distribution/* unit:DistributionRulesTest unit:DistributionReadin
 # The scripts' detection, from the generated distribution.env files: the methods script,
 # the launcher and the system runner read it
 +distributions/* lock:methods-* self:tests/run-system-selftest.sh self:tests/launcher-selftest.sh
-scripts/distribution.sh self:tests/distribution-selftest.sh self:tests/run-system-selftest.sh self:tests/launcher-selftest.sh lock:methods-* unit:PamStacksReadingTest
+scripts/distribution.sh self:tests/distribution-selftest.sh self:tests/run-system-selftest.sh self:tests/launcher-selftest.sh self:tests/run-helper.sh lock:methods-* unit:PamStacksReadingTest
 scripts/distribution-env.py self:tests/distribution-selftest.sh
 tests/distribution-selftest.sh self:tests/distribution-selftest.sh
 

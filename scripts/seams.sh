@@ -12,9 +12,9 @@
 
 # Where the system-wide h2s-shell-* PAM configs are looked for (lock-auth-methods.sh)
 seam_system_pam_dir=/etc/pam.d
-# libpam's vendor directory, read for a service /etc/pam.d does not have (pam-files.sh);
-# empty: none
-seam_vendor_pam_dir=/usr/lib/pam.d
+# Where libpam looks for a service, in order, joined with ":" (pam-files.sh); empty: the
+# distribution's own (its facts' pamDirectories, scripts/distribution.sh)
+seam_pam_dirs=
 # pam_faillock's default settings file (pam-files.sh); empty: not read
 seam_faillock_conf=/etc/security/faillock.conf
 # The distribution the scripts take themselves to be on, by its id (nixos, arch, generic);

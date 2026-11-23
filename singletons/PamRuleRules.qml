@@ -296,17 +296,15 @@ Singleton {
 
     // ── Raw lines ──
 
-    // The places root loads modules from: a module named by a path elsewhere is allowed with
-    // a warning — W11 for a path in the Nix store (it changes with an update or a garbage
-    // collection), W12 for any other place (a file the user can write is a way to root) —
-    // and is no known method to the checks, whatever its file is called
-    readonly property var moduleDirectories: ["/usr/lib/security/", "/lib/security/", "/usr/lib64/security/",
-        "/lib64/security/", "/usr/lib/x86_64-linux-gnu/security/", "/lib/x86_64-linux-gnu/security/",
-        "/usr/lib/aarch64-linux-gnu/security/", "/lib/aarch64-linux-gnu/security/"]
-    // On NixOS only the system profile: any user can add a module to the store, so a store
-    // path's file name says nothing about what the module does
+    // The places root loads modules from are the distribution's (its facts'
+    // pamModuleDirectories, handed in as `facts.moduleDirectories`): a module named by a path
+    // elsewhere is allowed with a warning — W11 for a path in the Nix store (it changes with
+    // an update or a garbage collection), W12 for any other place (a file the user can write
+    // is a way to root) — and is no known method to the checks, whatever its file is called.
+    // On NixOS only the system profile is such a place: any user can add a module to the
+    // store, so a store path's file name says nothing about what the module does. Not known
+    // (no list): no place is the system's, every path warns
     readonly property string storeDirectory: "/nix/store/"
-    readonly property var nixosModuleDirectories: ["/run/current-system/sw/lib/security/"]
     // libpam's own modules: NixOS's libpam finds these, and only these, by bare name
     readonly property var libpamModules: ["pam_access", "pam_canonicalize_user", "pam_debug", "pam_deny", "pam_echo",
         "pam_env", "pam_exec", "pam_faildelay", "pam_faillock", "pam_filter", "pam_ftp", "pam_group",
@@ -360,11 +358,10 @@ Singleton {
 
     // The warning for a module named by a path outside the system's module folders:
     // { code, text } or null
-    function _placeWarning(module, nixos) {
-        const places = nixos ? nixosModuleDirectories : moduleDirectories;
+    function _placeWarning(module, places) {
         const segments = module.split("/");
         const inPlace = module.startsWith("/") && !segments.includes("..") && !segments.includes(".")
-            && places.some(place => module.startsWith(place));
+            && places.some(place => typeof place === "string" && place.startsWith("/") && place.endsWith("/") && module.startsWith(place));
         if (inPlace)
             return null;
         if (module.startsWith(storeDirectory) && !segments.includes("..")) {
@@ -416,7 +413,7 @@ Singleton {
         const nixos = facts?.system === "nixos";
         const module = line.module;
         if (module.includes("/")) {
-            const warning = _placeWarning(module, nixos);
+            const warning = _placeWarning(module, Array.isArray(facts?.moduleDirectories) ? facts.moduleDirectories : []);
             if (warning)
                 return result(line, reads, method, null, "", warning);
         } else if (nixos && !libpamModules.includes(module)) {
@@ -586,7 +583,7 @@ Singleton {
     }
 
     // Every refusal and warning for one service's rows. `facts`: { system ("nixos" / …),
-    // service ("sudo" / "polkit-1"), fingerprint, securityKey ("ready" / "absent" /
+    // moduleDirectories (the distribution's PAM module directories; none: not known), service ("sudo" / "polkit-1"), fingerprint, securityKey ("ready" / "absent" /
     // "unknown"), faillockPresent (the system's rules count with pam_faillock), faillock
     // (PamStackRules.faillockConfig's numbers, or null), otherService (the other service's
     // rows, in force or pending: the same rows for a shared list; not a list = not known),

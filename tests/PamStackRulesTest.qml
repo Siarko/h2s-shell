@@ -6,7 +6,11 @@ TestCase {
     suiteName: "PamStackRules"
 
     function run() {
-        const rules = PamStackRules;
+        // The directories are always handed in (the distribution's): these cases read as on
+        // Arch where they name none
+        const archDirectories = ["/etc/pam.d", "/usr/lib/pam.d"];
+        const stackAsArch = (service, read, directoryList) => PamStackRules.stack(service, read, directoryList ?? archDirectories);
+        const rules = new Proxy(PamStackRules, { get: (target, key) => key === "stack" ? stackAsArch : target[key] });
         const names = stack => stack.lines.map(line => line.moduleName).join(" ");
         const controls = stack => stack.lines.map(line => line.control).join(" | ");
 
@@ -341,6 +345,12 @@ TestCase {
         step = rules.readingStep(request, { "/e/sudo": { absent: true } }, true);
         assertEqual(step.pending.length + " " + step.services.sudo.known + " " + step.services.sudo.problems[0].reason, "0 false unreadable",
                     "rounds run out: what is not read is unreadable, the stack unknown");
+        step = rules.readingStep({ services: ["sudo"], lock: {}, directories: [], faillockPath: "" }, {}, false);
+        assertEqual(step.pending.length + " " + step.services.sudo.known + " " + step.services.sudo.file, "0 false ",
+                    "no directories (the distribution not known): nothing asked, nothing found, the stack unknown — no default system's");
+        assertEqual(PamStackRules.stack("sudo", { "/etc/pam.d/sudo": "auth required pam_unix.so\n" }).known, false,
+                    "a stack read without directories: not found");
+        assertEqual(PamStackRules.candidates("sudo").length, 0, "… no candidates either");
         step = rules.readingStep({ services: [], lock: { password: "/shell/pam/password", bad: "relative" }, directories: ["/e"] }, {}, false);
         assertEqual(step.pending.join(" ") + " " + Object.keys(step.lock).join(","), "/shell/pam/password password", "a lock config read at its own path; a relative one left out");
 

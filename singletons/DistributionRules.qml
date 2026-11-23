@@ -167,12 +167,15 @@ Singleton {
         return Object.freeze(facts);
     }
 
-    // What was read → frozen { ready, id, facts, how, problem }:
+    // What was read → frozen { ready, id, facts, how, problem, shipped }:
     //   ready     every reading the answer needs has answered (a failed one too)
     //   id        one of `ids`, or "" while unknown
     //   facts     that distribution's manifest() answer, or null while unknown
     //   how       "override" | "marker" | "id" | "like" | "fallback" | "" (unknown)
     //   problem   why it is unknown once ready: "" when known
+    //   shipped   every shipped distribution's facts, frozen { <id>: facts }, once every
+    //             manifest has answered and each can be used (whether or not this system
+    //             can be told); null before, or when one cannot be used
     // `readings`: {
     //   override    TestSeams.distribution: "" for none
     //   manifests   { <id>: text | { failed: true } | undefined (not answered) } for each of `ids`
@@ -181,8 +184,9 @@ Singleton {
     //   osRelease   osReleaseOf's input
     // }
     function detect(readings) {
-        const unknown = (ready, problem) => Object.freeze({ ready: ready, id: "", facts: null, how: "", problem: ready ? problem : "" });
-        const known = (id, facts, how) => Object.freeze({ ready: true, id: id, facts: facts, how: how, problem: "" });
+        let shipped = null;
+        const unknown = (ready, problem) => Object.freeze({ ready: ready, id: "", facts: null, how: "", problem: ready ? problem : "", shipped: shipped });
+        const known = (id, facts, how) => Object.freeze({ ready: true, id: id, facts: facts, how: how, problem: "", shipped: shipped });
         const given = readings !== null && typeof readings === "object" ? readings : {};
         const texts = given.manifests !== null && typeof given.manifests === "object" ? given.manifests : {};
         if (ids.some(id => texts[id] === undefined))
@@ -193,6 +197,7 @@ Singleton {
             if (manifests[id] === null)
                 return unknown(true, "distributions/" + id + "/distribution.json cannot be used");
         }
+        shipped = Object.freeze(manifests);
         const override = typeof given.override === "string" ? given.override : "";
         if (override !== "") {
             if (!ids.includes(override))
@@ -225,5 +230,24 @@ Singleton {
                 return known(byLike, manifests[byLike], "like");
         }
         return known(fallbackId, manifests[fallbackId], "fallback");
+    }
+
+    // A directory list of every shipped distribution (detect's `shipped`) as one list: each
+    // distribution's own order kept — their first entries (in `ids` order), then their
+    // second ones, and so on —, each directory once. For a reading that looks in every
+    // system's places whichever this one is. `shipped` null or not a list there: []
+    function unionOf(shipped, key) {
+        if (shipped === null || typeof shipped !== "object")
+            return [];
+        const lists = ids.map(id => shipped[id]?.[key]).filter(list => Array.isArray(list));
+        const result = [];
+        const longest = Math.max(0, ...lists.map(list => list.length));
+        for (let i = 0; i < longest; ++i) {
+            for (const list of lists) {
+                if (i < list.length && typeof list[i] === "string" && !result.includes(list[i]))
+                    result.push(list[i]);
+            }
+        }
+        return result;
     }
 }

@@ -39,7 +39,8 @@ Singleton {
 
     // The look-up of pkexec is done (`pkexec` holds what it found)
     readonly property bool known: _known
-    // The system's pkexec: the first on PrivilegedRules.pkexecSearchPath that only root can
+    // The system's pkexec: the first on PrivilegedRules.pkexecSearchPath (the distribution's
+    // places, looked at once Distribution has answered) that only root can
     // change and that is setuid root; "" when none (`pkexecReason` says why)
     readonly property string pkexec: _pkexec
     readonly property string pkexecReason: _pkexecReason
@@ -405,7 +406,8 @@ Singleton {
         _probe.start([ModuleRules.probeShell, "-c", "[ -f \"$1\" ] && [ -x \"$1\" ]", "sh", job.program], {
             timeoutMs: 5000,
             keepOutput: false,
-            environment: { PATH: ModuleRules.probeToolPath },
+            // Only the shell's builtin `[` runs: nothing is looked up on this PATH
+            environment: { PATH: ModuleRules.probeToolPath(Distribution.facts) },
             done: result => {
                 if (!root._stillChecking(job))
                     return;
@@ -615,11 +617,26 @@ Singleton {
     Component.onCompleted: {
         // Locked already when this is made (a shell restarted under its lock)
         _dispatch({ type: "lock", locked: locked });
+        // Looked for once the distribution has answered: its setuid wrappers and program
+        // directories are where pkexec is, and its program directories the probe's tools
+        Distribution.whenReady(() => root._lookUpPkexec());
+    }
+
+    function _lookUpPkexec() {
+        const searched = PrivilegedRules.pkexecSearchPath(Distribution.facts);
+        const toolPath = ModuleRules.probeToolPath(Distribution.facts);
+        if (searched === "" || toolPath === "") {
+            _pkexec = "";
+            _pkexecReason = "the distribution is not known, so neither is where pkexec is";
+            _known = true;
+            console.warn("[Privileged] running as administrator is not available: " + _pkexecReason);
+            return;
+        }
         const lines = [];
-        _lookup.start([ModuleRules.probeShell, "-c", ModuleRules.programProbeScript, "sh", "all", PrivilegedRules.pkexecSearchPath, "pkexec"], {
+        _lookup.start([ModuleRules.probeShell, "-c", ModuleRules.programProbeScript, "sh", "all", searched, "pkexec"], {
             timeoutMs: 5000,
             keepOutput: false,
-            environment: { PATH: ModuleRules.probeToolPath },
+            environment: { PATH: toolPath },
             onLine: (line, stream) => {
                 if (stream === "stdout")
                     lines.push(line);

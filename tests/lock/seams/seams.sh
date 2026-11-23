@@ -8,10 +8,12 @@
 # H2S_LOCK_SYSTEM_PAM_DIR: the test's own "system-wide" configs, so that the password
 # fallback is never the system's real PAM stack
 seam_system_pam_dir=${H2S_LOCK_SYSTEM_PAM_DIR:-/etc/pam.d}
-# H2S_LOCK_VENDOR_PAM_DIR: the test's own vendor directory (pam-files.sh). With only
-# H2S_LOCK_SYSTEM_PAM_DIR set there is none, so that no PAM file of the machine is read
-seam_vendor_pam_dir=${H2S_LOCK_VENDOR_PAM_DIR:-/usr/lib/pam.d}
-[ -z "${H2S_LOCK_SYSTEM_PAM_DIR:-}" ] || [ -n "${H2S_LOCK_VENDOR_PAM_DIR:-}" ] || seam_vendor_pam_dir=
+# H2S_LOCK_SYSTEM_PAM_DIR, then H2S_LOCK_VENDOR_PAM_DIR (the test's own vendor directory):
+# the PAM directories pam-files.sh names, in place of the distribution's. With only
+# H2S_LOCK_SYSTEM_PAM_DIR set there is no vendor one, so that no PAM file of the machine is
+# read; H2S_LOCK_VENDOR_PAM_DIR counts only with it
+seam_pam_dirs=
+[ -z "${H2S_LOCK_SYSTEM_PAM_DIR:-}" ] || seam_pam_dirs=$H2S_LOCK_SYSTEM_PAM_DIR${H2S_LOCK_VENDOR_PAM_DIR:+:$H2S_LOCK_VENDOR_PAM_DIR}
 # H2S_LOCK_FAILLOCK_CONF: the test's own faillock.conf (pam-files.sh); with only
 # H2S_LOCK_SYSTEM_PAM_DIR set, none is read
 seam_faillock_conf=${H2S_LOCK_FAILLOCK_CONF:-/etc/security/faillock.conf}

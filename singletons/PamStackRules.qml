@@ -8,16 +8,17 @@ import QtQuick
 // directories, down to the `auth` lines in the order PAM runs them; the shell's own block
 // in a file, pam_faillock's place, and faillock.conf. Pure: the files come from a reader
 // function or a map of path → text handed in, never read here. Distribution-neutral: Arch
-// (`/usr/lib/pam.d` behind `/etc/pam.d`), NixOS (generated, absolute store paths), Debian
+// (a vendor directory behind `/etc/pam.d`), NixOS (generated, absolute store paths), Debian
 // (`@include common-auth`), Fedora (authselect) all parse the same way. A file that cannot
 // be read leaves the stack unknown, never "without such lines".
 Singleton {
     id: root
 
-    // Where libpam looks for a service, in order: the administrator's directory, then the
-    // vendor directory (a file in the first shadows one of the same name in the second).
-    // NixOS generates everything into the first and has no vendor directory.
-    readonly property var directories: ["/etc/pam.d", "/usr/lib/pam.d"]
+    // Where libpam looks for a service is the distribution's (its facts' pamDirectories, in
+    // order: the administrator's directory, then a vendor directory where there is one — a
+    // file in the first shadows one of the same name in the second), always handed in: with
+    // none, nothing is found. NixOS generates everything into the first and has no vendor
+    // directory; polkit's text alone is read as in that one directory
     readonly property var nixosDirectories: ["/etc/pam.d"]
     // How deep includes nest (libpam refuses a file at PAM_SUBSTACK_MAX_LEVEL, 16: fifteen
     // includes below the service) and how many lines a whole stack may hold before it is
@@ -250,7 +251,7 @@ Singleton {
             return [value];
         if (value === "" || value.includes("/"))
             return [];
-        return (directoryList ?? directories).map(directory => directory.replace(/\/+$/, "") + "/" + value);
+        return (Array.isArray(directoryList) ? directoryList : []).map(directory => directory.replace(/\/+$/, "") + "/" + value);
     }
 
     // The service's auth stack. `read` is a function path → answer or a map { path: answer }:
@@ -260,7 +261,7 @@ Singleton {
     // it cannot open, but it runs as root and reads what the shell cannot, so what it would
     // run is not known. A reader doing real I/O answers undefined only for ENOENT and
     // ENOTDIR, null for every other failure (EACCES, EIO, …). `directoryList` the
-    // directories in order (default `directories`). Result:
+    // directories in order (none: no file is found). Result:
     //   service, file (the service's path, "" when not found), known (every file read,
     //   every line parsed, within the limits), problems [{ reason, file, line, target }]
     //   (reason "missing" / "unreadable" / "cycle" / "depth" / "unparsable" / "too long"),
@@ -274,7 +275,7 @@ Singleton {
     function stack(service, read, directoryList) {
         const reader = typeof read === "function" ? read
             : (path => (read && Object.prototype.hasOwnProperty.call(read, path)) ? read[path] : undefined);
-        const dirs = Array.isArray(directoryList) && directoryList.length > 0 ? directoryList : directories;
+        const dirs = Array.isArray(directoryList) ? directoryList : [];
         const result = {
             service: String(service ?? ""), file: "", known: true, problems: [], unknownAt: -1,
             lines: [], files: [], block: null, writtenBy: null,
@@ -465,8 +466,7 @@ Singleton {
                 return answer.text;
             return answer.absent === true ? undefined : null;
         };
-        const directoryList = Array.isArray(request?.directories) && request.directories.length > 0
-            ? request.directories : directories;
+        const directoryList = Array.isArray(request?.directories) ? request.directories : [];
         const result = { services: {}, lock: {}, faillock: {}, pending };
         for (const name of (Array.isArray(request?.services) ? request.services : [])) {
             const read = stack(name, reader, directoryList);

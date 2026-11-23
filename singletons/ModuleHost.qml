@@ -2105,11 +2105,29 @@ Scope {
             return;
         const lines = [];
         _checkingPrograms = true;
+        // The probe's own tools come from the distribution's program directories: asked
+        // once it has answered; not known, nothing is looked up (each name unanswered)
+        if (!Distribution.ready) {
+            Distribution.whenReady(() => {
+                root._checkingPrograms = false;
+                root._checkPrograms(names);
+            });
+            return;
+        }
+        const toolPath = ModuleRules.probeToolPath(Distribution.facts);
+        if (toolPath === "") {
+            Qt.callLater(() => {
+                root._checkingPrograms = false;
+                root._programsAnswered(names, [], false);
+                root._applyGuarded();
+            });
+            return;
+        }
         // The PATH searched is the shell's (or the suites' seam); the probe's own tools come
         // from the system's directories, never from the PATH it judges
         const searched = programEnvironment?.PATH ?? Quickshell.env("PATH") ?? "";
         _check([ModuleRules.probeShell, "-c", ModuleRules.programProbeScript, "sh", "first", String(searched)].concat(names), {
-            environment: { PATH: ModuleRules.probeToolPath },
+            environment: { PATH: toolPath },
             onLine: (line, stream) => {
                 if (stream === "stdout")
                     lines.push(line);
@@ -2188,8 +2206,28 @@ Scope {
         const lines = [];
         _checkingTestPrograms = true;
         _testProgramsLooking = record;
+        // The probe's own tools: as for _checkPrograms (not known: no stand-in found)
+        if (!Distribution.ready) {
+            Distribution.whenReady(() => {
+                root._checkingTestPrograms = false;
+                root._testProgramsLooking = null;
+                root._checkTestPrograms([record]);
+            });
+            return;
+        }
+        const toolPath = ModuleRules.probeToolPath(Distribution.facts);
+        if (toolPath === "") {
+            Qt.callLater(() => {
+                root._checkingTestPrograms = false;
+                root._testProgramsLooking = null;
+                root._testProgramsAnswered(record, names, directory, []);
+                root._applyGuarded();
+                root._checkTestPrograms([]);
+            });
+            return;
+        }
         _check([ModuleRules.probeShell, "-c", ModuleRules.testProgramProbeScript, "sh", record.directory, directory].concat(names), {
-            environment: { PATH: ModuleRules.probeToolPath },
+            environment: { PATH: toolPath },
             onLine: (line, stream) => {
                 if (stream === "stdout")
                     lines.push(line);

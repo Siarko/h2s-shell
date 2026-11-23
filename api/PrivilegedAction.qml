@@ -7,7 +7,7 @@ import qs.singletons.io as Io
 // whichever agent runs:
 //
 //   PrivilegedAction { id: admin }
-//   admin.run(["/run/current-system/sw/bin/tailscale", "up"], "Connecting Tailscale", result => { … })
+//   admin.run([tailscalePath, "up"], "Connecting Tailscale", result => { … })
 //
 // run(command, what, done, environment) queues `pkexec <command…>` (one at a time per object,
 // and in the shell's one queue of runs as administrator: singletons/PrivilegedRuns.qml, one
@@ -131,17 +131,29 @@ QtObject {
         }
         // The gate (removed by slice Z): the elevating program checked first, never the real
         // pkexec; only then may this object's runs start it
-        _probe.run([ModuleRules.probeShell, "-c", ModuleRules.testElevateProbeScript, "sh", elevating[0], ModuleRules.testPkexecLookupPath]
-                   .concat(ModuleRules.systemPkexecPaths), probe => {
-            const problem = ModuleRules.testElevateVerdict(probe.ok, probe.lines);
-            if (problem !== "") {
-                refuseRun(problem);
+        // The probe's own tools and where a system's pkexec is come from the distribution's
+        // facts: looked at once it has answered; not known, the probe is not run (no answer:
+        // taken for the real pkexec)
+        Distribution.whenReady(() => {
+            const toolPath = ModuleRules.probeToolPath(Distribution.facts);
+            const verdict = probe => {
+                const problem = ModuleRules.testElevateVerdict(probe.ok, probe.lines);
+                if (problem !== "") {
+                    refuseRun(problem);
+                    return;
+                }
+                if (!root._checkedElevate.includes(elevating[0]))
+                    root._checkedElevate = root._checkedElevate.concat([elevating[0]]);
+                root._enqueue(request);
+            };
+            if (toolPath === "") {
+                verdict({ ok: false, lines: [] });
                 return;
             }
-            if (!root._checkedElevate.includes(elevating[0]))
-                root._checkedElevate = root._checkedElevate.concat([elevating[0]]);
-            root._enqueue(request);
-        }, { PATH: ModuleRules.probeToolPath });
+            _probe.run([ModuleRules.probeShell, "-c", ModuleRules.testElevateProbeScript, "sh", elevating[0],
+                        PrivilegedRules.pkexecSearchPath(Distribution.facts)].concat(ModuleRules.systemPkexecPaths(Distribution.shipped)),
+                       verdict, { PATH: toolPath });
+        });
     }
 
     // Test mode, the gate: the elevating programs the probe found to be stand-ins (REMOVED IN

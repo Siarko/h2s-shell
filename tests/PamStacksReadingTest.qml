@@ -78,11 +78,20 @@ TestCase {
         _sh("printf '%s' \"$2\" > \"$1/methods-out\"; printf '%s' \"$3\" > \"$1/methods-code\"",
             [_scratch, methods.map(line => line + "\n").join(""), String(code)], () => {
             suite._reader.environment = suite._environment(system);
-            suite._reader.nixos = nixos;
+            suite._reader.distribution = suite._facts(nixos);
             suite._readingsBefore = suite._reader.readings;
             suite._reader.refresh(withMethods);
             suite._ready = true;
         });
+    }
+
+    // The distribution's facts the reader takes (Distribution's, as far as it reads them):
+    // NixOS's (true), Arch's (false), unknown (null), not answered (undefined)
+    function _facts(nixos) {
+        if (nixos === undefined || nixos === null)
+            return nixos;
+        return nixos ? { id: "nixos", pamDirectories: ["/etc/pam.d"], pamModuleDirectories: ["/run/current-system/sw/lib/security/"] }
+            : { id: "arch", pamDirectories: ["/etc/pam.d", "/usr/lib/pam.d"], pamModuleDirectories: ["/usr/lib/security/", "/lib/security/"] };
     }
 
     // The seams for the system named (a directory under the scratch one)
@@ -122,7 +131,7 @@ TestCase {
         _then("the Arch reading waits for the distribution", () => _ready && _reader._state.methods !== null
               && _reader._state.places !== null && !_reader._state.reading, () => {
             assert(_reader.reading === null && _reader.running, "everything read, the distribution not known: nothing published yet");
-            _reader.nixos = false;
+            _reader.distribution = _facts(false);
         });
         _then("Arch read", () => _answered(), () => {
             const reading = _reader.reading;
@@ -135,8 +144,9 @@ TestCase {
             assertEqual(reading.services.sudo.file + " " + reading.services.sudo.known, arch + "/etc/sudo true", "sudo from /etc/pam.d, known");
             assertEqual(reading.faillock["polkit-1"].deny + " " + reading.faillock["polkit-1"].unlockTime, "5 120",
                         "pam_faillock's settings from faillock.conf (the seam's)");
-            assertEqual(JSON.stringify(reading.facts), JSON.stringify({ nixos: false, fingerprint: "ready", securityKey: "absent" }),
-                        "facts: not NixOS (as the distribution answered), a fingerprint ready, no security key");
+            assertEqual(JSON.stringify(reading.facts), JSON.stringify({ nixos: false, moduleDirectories: ["/usr/lib/security/", "/lib/security/"],
+                                                                         fingerprint: "ready", securityKey: "absent" }),
+                        "facts: not NixOS (as the distribution answered), its PAM module directories, a fingerprint ready, no security key");
             assertEqual(reading.directories.length, 2, "… both directories read");
             assertEqual(reading.lock.fingerprint.known + " " + _names(reading.lock.fingerprint), "true pam_fprintd.so",
                         "the lock's fingerprint config, at the path the methods script gave");
@@ -213,6 +223,13 @@ TestCase {
             // it again rather than leave it unanswered
             assertEqual(reading.facts.fingerprint, "ready", "… the methods script asked again by the newer refresh: its answer");
             assert(!_reader.running, "… nothing reading any more");
+            _readAs("arch", null, false, [], 0);
+        });
+        _then("the system read, the distribution not known", () => _answered(), () => {
+            const reading = _reader.reading;
+            assertEqual(reading.directories.length, 0, "the distribution not known: no PAM directory counts, never a default system's");
+            assertEqual(reading.services["polkit-1"].known + " " + reading.services["polkit-1"].file, "false ", "… polkit-1 not found: unknown");
+            assertEqual(JSON.stringify([reading.facts.nixos, reading.facts.moduleDirectories]), "[null,[]]", "… not known whether NixOS, no module directories");
         });
         _clock.start();
         _sh([

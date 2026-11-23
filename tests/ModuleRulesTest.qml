@@ -60,9 +60,12 @@ TestCase {
                     "walk: \"..\" and a relative link resolved as the kernel does, every physical directory passed");
 
         // The probe's own tools never come from the PATH it judges
-        const toolDirs = rules.probeToolPath.split(":");
-        assert(toolDirs.includes("/run/current-system/sw/bin") && toolDirs.includes("/usr/bin") && toolDirs.every(dir => dir.startsWith("/") && !dir.startsWith("/home")),
-               "the probe's PATH: the system's directories, NixOS's and Arch's: " + rules.probeToolPath);
+        assertEqual(rules.probeToolPath({ programDirectories: ["/usr/bin", "/bin"] }), "/usr/bin:/bin",
+                    "the probe's PATH: the distribution's program directories, in order");
+        assertEqual(rules.probeToolPath({ programDirectories: ["/run/current-system/sw/bin"] }), "/run/current-system/sw/bin", "… NixOS's");
+        assertEqual(rules.probeToolPath({ programDirectories: ["bin", "/usr/bin", 7] }), "/usr/bin", "… only absolute directories");
+        for (const facts of [null, undefined, {}, { programDirectories: "/usr/bin" }])
+            assertEqual(rules.probeToolPath(facts), "", "… the distribution not known (" + JSON.stringify(facts) + "): none, never another system's");
         assertEqual(rules.probeShell, "/bin/sh", "… and its shell by absolute path");
         assert(rules.programProbeScript.includes("searched=$2") && rules.programProbeScript.includes("for d in $searched"),
                "… the PATH searched is an argument, not the probe's own");
@@ -258,8 +261,17 @@ TestCase {
         assert(rules.testElevateVerdict(true, ["real"]).includes("real pkexec"), "… \"real\": refused");
         for (const [ok, lines] of [[true, ["unknown"]], [false, ["stand-in"]], [true, []], [true, ["stand-in", "stand-in"]], [true, ["stand-in "]], [true, null]])
             assert(rules.testElevateVerdict(ok, lines).startsWith("test mode:"), "… anything else (" + ok + ", " + JSON.stringify(lines) + ") counts as real: refused");
-        assert(rules.systemPkexecPaths.includes("/run/wrappers/bin/pkexec") && rules.systemPkexecPaths.includes("/usr/bin/pkexec"),
-               "the system's pkexec: NixOS's wrapper and Arch's");
+        const shipped = {
+            nixos: { setuidWrapperDirectory: "/run/wrappers/bin", programDirectories: ["/run/current-system/sw/bin"] },
+            arch: { setuidWrapperDirectory: "", programDirectories: ["/usr/bin", "/bin"] },
+            generic: { setuidWrapperDirectory: "", programDirectories: ["/usr/bin", "/bin"] }
+        };
+        assertEqual(JSON.stringify(rules.systemPkexecPaths(shipped)),
+                    JSON.stringify(["/run/wrappers/bin/pkexec", "/run/current-system/sw/bin/pkexec", "/usr/bin/pkexec", "/bin/pkexec",
+                                    "/usr/sbin/pkexec", "/usr/local/bin/pkexec", "/sbin/pkexec"]),
+                    "a system's pkexec: every shipped distribution's setuid wrapper and program directories, then the usual places, each once");
+        assertEqual(JSON.stringify(rules.systemPkexecPaths(null)), JSON.stringify(rules.otherPkexecPaths),
+                    "… the distributions not read: the usual places still");
         assertEqual(rules.testGateDeprecations(true, "1.9").length, 1, "the gate in a 1.9 module's deprecations, in test mode");
         assert(rules.testGateDeprecations(true, "1.3")[0].includes("will be removed"), "… saying it will be removed");
         assertEqual(rules.testGateDeprecations(false, "1.9").length + rules.testGateDeprecations(true, "1.10").length, 0, "… not off test mode, not for 1.10");
