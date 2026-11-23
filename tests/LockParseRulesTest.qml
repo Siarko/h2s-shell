@@ -123,6 +123,8 @@ TestCase {
         assertEqual(JSON.stringify(LockParseRules.sleepBlockFromOutput("1000\n([('sleep', 'borg', 'Backup', 'block', uint32 0, uint32 7)],)")),
                     JSON.stringify({ held: true, holders: [{ who: "borg", why: "Backup" }] }), "sleepBlockFromOutput: the idle reader's output");
         assertEqual(LockParseRules.sleepBlockFromOutput("1000\n").held, "unknown", "sleepBlockFromOutput: gdbus said nothing: unknown");
+        assertEqual(LockParseRules.sleepBlockFromOutput("\n([('sleep', 'borg', 'Backup', 'block', uint32 0, uint32 7)],)").held, true,
+                    "sleepBlockFromOutput: id -u printed nothing: the list still counts (no uid needed)");
         assertEqual(LockParseRules.sleepBlockFromOutput("x\n(@a(ssssuu) [],)").held, false, "sleepBlockFromOutput: no uid needed");
 
         // What logind says of sleep

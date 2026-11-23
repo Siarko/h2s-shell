@@ -75,12 +75,91 @@ TestCase {
                     JSON.stringify(["A|B||DP-1", "C|D|1"]), "every screen, a twin unticked: the others named");
     }
 
+    // Edges: one second, a time off, wrong values, the defaults — each where it changes what
+    // the page shows
+    function _edges() {
+        const none = [{ saverAfter: 0, screenOffAfter: 0 }];
+        const stretches = list => list.map(part => part.kind + ":" + part.from + "-" + part.to).join(" ");
+        const marks = list => list.map(mark => mark.kind + ":" + mark.text).join(" | ");
+        assertEqual(rules.firstDark({ saverAfter: 1, screenOffAfter: 0 }), 1, "a screensaver after one second goes dark");
+        assert(rules.anySaver([{ saverAfter: 1, screenOffAfter: 0 }], true), "a screensaver after one second shows");
+        assert(rules.anySaver([{ saverAfter: 0, screenOffAfter: 1 }], false), "… a screen-off after one second stands in for it");
+        assertEqual(stretches(rules.segments({ saverAfter: 1, screenOffAfter: 0 }, 3, true)), "on:0-1 saver:1-3", "the screensaver from one second");
+        assertEqual(stretches(rules.segments({ saverAfter: 0, screenOffAfter: 1 }, 3, true)), "on:0-1 off:1-3", "off from one second");
+        assertEqual(marks(rules.marks([{ saverAfter: 0, screenOffAfter: 1 }], 1, [{ t: 1, number: 1 }], null, true, 1)),
+                    "time:1 s | lock:Lock 1 s | sleep:Sleep 1 s | commands:▸1 1 s", "the marks of a stage, a lock, a sleep and an entry after one second");
+        assertEqual(marks(rules.marks(none, 0, [{ t: 1800, number: 1 }], minutes, true, 0, 1800)), "hibernate:Hibernate 30 min | commands:▸1 30 min",
+                    "at one time: the hibernation, then a command entry");
+        assertEqual(stretches(rules.segments({ saverAfter: 1062, screenOffAfter: 0 }, 7920, true, 7200, 1062)),
+                    "on:0-1062 saver:1062-7200 asleep:7200-7920", "a stage at the break: no empty stretch");
+        assertEqual(rules.hibernateAt({ on: true, at: -100, after: 7200 }), 7200, "a negative time counts as none");
+        assertEqual(rules.hibernateAt({ on: true, at: Infinity, after: 60 }), 60, "… so does an endless one");
+        // Command entries before the tail stay with the minutes, one at the tail goes after the break
+        assertEqual(rules.axis(none, 600, [{ t: 1500, number: 1 }, { t: 7200, number: 2 }], 7200).breakAt, Math.round(1500 * 1.18),
+                    "the break past the entries before the sleep, not the one at it");
+        assertEqual(rules.place(1, { end: 1, breakAt: -1 }), 1, "an axis of one second: its end at the right");
+        assertEqual(rules.place(1, null), 1, "… no axis: one second long");
+
+        // --- the labels ---
+        assertEqual(_placed(rules.placeLabels([{ x: 300, width: 40 }, { x: 348, width: 40 }], 700)), "0@280 0@328", "the default gap: 8 px");
+        assertEqual(_placed(rules.placeLabels([{ x: 50, width: 0 }], 0, 8)), "0@0", "no track width yet: at the left");
+        assertEqual(_placed(rules.placeLabels([{ x: 100, width: 0 }, { x: 108, width: 0 }], 700, 8)), "0@100 0@108", "labels without a width");
+        assertEqual(_placed(rules.placeLabels([{ width: 0 }], 700, 8)), "0@0", "… without a place: at the left");
+
+        // --- the lines ---
+        assertEqual(rules.caption({ holders: [], anything: true, lockAfter: 0, lockedScreenOffAfter: 1, canPowerOff: true }, minutes),
+                    "No lock when idle. Locked: screens off after 1 s without input.", "the lock screen's screen-off after one second");
+        assertEqual(rules.caption({ holders: [], anything: true, lockAfter: 1, lockedScreenOffAfter: 0 }, minutes),
+                    "Locks at 1 s. Locked: screens stay on.", "an idle lock after one second: said");
+        assertEqual(rules.caption({ holders: [{ who: "mpv", why: "" }, { who: "vlc", why: "" }], anything: true }, minutes),
+                    "Paused: mpv keeps the screen on, and 1 more.", "two holders: the second counted");
+        assertEqual(rules.sleepLockLine({ lockOnSleep: false, lockAfter: 1, sleepAfter: 1800 }, minutes), "Already locked by then (lock at 1 s).",
+                    "an idle lock after one second");
+        assert(rules.systemSleeps({ action: "suspend", after: 1 }, minutes).startsWith("The system already puts the computer to sleep after 1 s "),
+               "logind's IdleAction after one second");
+        assertEqual(rules.holders([{ app: "a".repeat(50), reason: "" }], null, false)[0].who, "a".repeat(40), "an app's name: 40 characters");
+        assertEqual(rules.monitorName("|" + "m".repeat(100) + "|", "DP-1"), "m".repeat(80), "a model: 80 characters");
+        assertEqual(rules.monitorName("||", "X".repeat(50)), "X".repeat(40), "a connector: 40 characters");
+
+        // --- a card's times ---
+        const range = { minimum: 5, maximum: 3600 };
+        const defaults = { screensaverEnabled: true, screensaverTimeout: 300, screenOffEnabled: false, screenOffTimeout: 900 };
+        assertEqual(rules.cardTimes({ screenOffTimeout: 99999 }, defaults, range).screenOffTimeout, 3600, "clamped to the range's maximum");
+        assertEqual(rules.cardTimes({ screensaverTimeout: NaN }, defaults, range).screensaverTimeout, 300, "a time not a number: the default's");
+        assertEqual(rules.cardTimes({ screensaverTimeout: 1 }, defaults, null).screensaverTimeout, 1, "no range: from one second");
+
+        // --- command entries' moments ---
+        const entry = (moment, monitors, go) => ({ id: "e", moment: moment, monitors: monitors, go: go ?? "", back: "" });
+        const config = IdleRules.config({ screensaverEnabled: true }, ["lcd"], true);
+        assertEqual(rules.commandAt(entry("lock", null), { config: config, lockAfter: 0 }), -1, "locked with the idle lock off: no time");
+        assertEqual(rules.commandAt(entry("lock", null), { config: config, lockAfter: 1 }), 1, "… an idle lock after one second: its time");
+        assertEqual(rules.commandAt(entry("sleep", null), { config: config, sleepAt: 0 }), -1, "before sleep with sleep off: no time");
+        assertEqual(rules.commandAt(entry("sleep", null), { config: config, sleepAt: 1 }), 1, "… a sleep after one second: its time");
+        assertEqual(rules.commandAt(entry("dark", ["gone|monitor|1"]), { config: config }), -1, "dark, waiting for no connected monitor: no time");
+        assertEqual(rules.commandMarks([entry("lock", null, "x")], { config: config, lockAfter: 1 }).map(mark => mark.t).join(), "1",
+                    "the mark of an entry whose moment comes after one second");
+        assertEqual(rules.commandMoment(entry("lock", null), { config: config, lockAfter: 1 }, {}, minutes).text, "Locked (1 s, or by hand)",
+                    "locked after one second: said");
+        assertEqual(rules.commandMoment(entry("sleep", null), { config: config, sleepAt: 1 }, {}, minutes).text, "Before sleep (1 s, or any sleep)",
+                    "before a sleep after one second: said");
+        const quick = { config: { monitors: ["a"], times: { a: { saverAfter: 1, screenOffAfter: 0 } } } };
+        assert(rules.commandChips(entry("dark", null), quick, ["a"])[0].dark, "a chip's monitor dark after one second goes dark");
+        assertEqual(rules.commandLine({ go: "c".repeat(40), back: "" }).split("   /")[0], "c".repeat(40), "a command of 40 characters kept whole");
+        const pair = IdleRules.config({ screensaverEnabled: true }, ["oled", "lcd"], true);
+        assertEqual(JSON.stringify(rules.commandMonitorsToggled(entry("dark", ["oled", "lcd"]), { config: pair }, "lcd")), JSON.stringify(["oled"]),
+                    "two waited for, one unticked: the other stays");
+        assertEqual(rules.monitorName("M".repeat(100) + "|X|", "DP-1"), "M".repeat(80) + " X", "a make: 80 characters");
+        assertEqual(rules.monitorNames([{ id: "A|B||1", connector: "C".repeat(50) }, { id: "A|B||2", connector: "D".repeat(50) }])[0],
+                    "A B (" + "C".repeat(40) + ")", "a twin's connector: 40 characters");
+    }
+
     function _placed(list) {
         return list.map(label => label.row + "@" + Math.round(label.left)).join(" ");
     }
 
     function run() {
         _commands();
+        _edges();
         // --- dark moments ---
         assertEqual(rules.firstDark({ saverAfter: 300, screenOffAfter: 900 }), 300, "a monitor goes dark at its first stage");
         assertEqual(rules.firstDark({ saverAfter: 0, screenOffAfter: 120 }), 120, "… its screen-off when it has no screensaver");

@@ -252,6 +252,14 @@ TestCase {
                                   [{ id: "a\nb", moment: "dark" }, "an id with a line break"], [[], "a list"], [null, "nothing"]])
             assertEqual(rules.commandEntry(bad), null, why + ": not understood");
         assert(rules.commandEntry({ id: "x", moment: "dark", go: "a".repeat(rules.maxCommandLength) }) !== null, "a command of the longest length: taken");
+        assert(rules.commandEntry({ id: "i".repeat(64), moment: "lock" }) !== null, "an id of 64 characters: taken");
+        assertEqual(rules.commandEntry({ id: "i".repeat(65), moment: "lock" }), null, "… of 65: not understood");
+        const keys = [];
+        for (let i = 0; i < rules.maxMonitorEntries; i++)
+            keys.push("m" + i);
+        assert(rules.commandEntry({ id: "x", moment: "dark", monitors: keys }) !== null, "as many monitors as kept for a monitor's times: taken");
+        assert(rules.commandEntry({ id: "x", moment: "dark", monitors: ["m", "k".repeat(400)] }) !== null, "monitor keys of 1 and 400 characters: taken");
+        assertEqual(rules.commandEntry({ id: "x", moment: "dark", monitors: ["k".repeat(401)] }), null, "… of 401: not understood");
         assertEqual(rules.commandEntries([{ id: "a", moment: "lock" }, { id: "a", moment: "sleep" }, { id: "b", moment: "nope" }, { id: "c", moment: "sleep" }])
                     .map(kept => kept.id + ":" + kept.moment).join(" "), "a:lock c:sleep", "a list: a taken id and one not understood left out");
         assertEqual(rules.commandEntries("junk").length, 0, "not a list: no entries");
@@ -270,6 +278,7 @@ TestCase {
         assertEqual(rules.withCommandEntry(list, "a", { id: "b", moment: "lock" }), null, "an entry under another id: nothing written");
         assertEqual(rules.newCommandId([], 35), "cz", "a new id from the seed");
         assertEqual(rules.newCommandId([{ id: "cz", moment: "lock" }], 35), "c10", "… the next free one when taken");
+        assertEqual(rules.newCommandId([], undefined), "c0", "… no seed: from 0");
 
         // A restart of the shell: the commands that ran are kept, with the session's key
         const record = [{ id: "away", moment: "lock", back: "away-back" }, { id: "d", moment: "dark", back: "end" }];
@@ -283,6 +292,18 @@ TestCase {
         for (const [bad, why] of [["{", "not JSON"], ["[]", "not a record"], ['{"key": "k", "run": [{"id": "x"}]}', "a record not understood"],
                                   ['{"key": "k"}', "no run"]])
             assertEqual(JSON.stringify(rules.commandsFromFile(bad, "k")), JSON.stringify({ run: [], problem: "corrupt" }), why + ": corrupt, ignored");
+        assertEqual(JSON.parse(rules.commandsFile([{ id: "i".repeat(64), moment: "lock", back: "" }], "k")).run.length, 1, "a record's id of 64 characters: kept");
+        for (const [bad, why] of [[{ id: "i".repeat(65), moment: "lock", back: "" }, "an id of 65 characters"], [{ id: 5, moment: "lock", back: "" }, "an id not a string"],
+                                  [{ id: "x", moment: "nope", back: "" }, "an unknown moment"]])
+            assertEqual(rules.commandsFile([bad], "k"), "", "a record with " + why + ": not kept");
+        assertEqual(rules.commandsFromFile(rules.commandsFile(record, ""), "").problem, "stale", "a record without a key, read without one: stale");
+        const runs = [];
+        for (let i = 0; i < rules.maxCommandEntries + 2; i++)
+            runs.push({ id: "r" + i, moment: "lock", back: i === 0 ? "b".repeat(rules.maxCommandLength) : "" });
+        assertEqual(JSON.parse(rules.commandsFile(runs, "k")).run.map(kept => kept.id).join(" "), runs.slice(0, rules.maxCommandEntries).map(run => run.id).join(" "),
+                    "at most maxCommandEntries records kept, a back of the longest length among them");
+        assertEqual(rules.commandsFile([{ id: "x", moment: "lock", back: "b".repeat(rules.maxCommandLength + 1) }], "k"), "",
+                    "a record with a back too long: not kept");
 
         // Restarted while locked: the lock it finds is the one whose go ran
         const restarted = { screensaverEnabled: true, screensaverTimeout: 300, lockedScreenOffTimeout: 0,
@@ -299,6 +320,10 @@ TestCase {
         assertEqual(again.actions, "hideSaver:lcd,back:d", "input at the lock screen: the kept dark back");
         again.at(410000, { type: "unlocked" });
         assertEqual(again.actions, "back:away,active:false", "the unlock: the kept lock back, once");
+        const twice = _machine(restarted, ["lcd"], true);
+        twice.state = rules.initial(0, true);
+        twice.at(100, { type: "locked" }).at(200, { type: "commandsRestored", run: record }).at(300, { type: "commandsRestored", run: record });
+        assertEqual(JSON.stringify(twice.state.commandsRun), JSON.stringify(record), "the record read twice: each command that ran kept once");
         const fresh = _machine(restarted, ["lcd"], true);
         fresh.state = rules.initial(0, true);
         fresh.at(100, { type: "locked" });
@@ -306,6 +331,9 @@ TestCase {
         assertEqual(fresh.actions, "go:away", "no record (or a stale one): the lock found is a new one, its go once read");
         fresh.at(300, { type: "commandsRestored", run: [] });
         assertEqual(fresh.actions, "", "… read once");
+        fresh.at(400, { type: "commandsRestored", run: [{ id: "other", moment: "lock", back: "x" }] });
+        assertEqual(fresh.state.commandsRun.map(kept => kept.id).join(" "), "away other",
+                    "… a record of another entry at the same moment joined to the one that ran since");
         const waiting = _machine(saver, ["lcd"], true);
         waiting.state = rules.initial(0, true);
         waiting.idle(5000, 0).deadline();
@@ -1434,6 +1462,9 @@ TestCase {
             .at(1000, { type: "force" });
         assertEqual(forcedLong.actions.includes("sleep"), false, "the screensaver at 60 min, sleep at 30: a force does not sleep at once");
         assertEqual(forcedLong.next(), 1000 + 1800000, "… the sleep its whole time after the force");
+        const forcedClose = _machine(_with(values, { screensaverEnabled: true, screensaverTimeout: 1799 }), ["lcd"], true, "yes")
+            .at(1000, { type: "force" });
+        assertEqual(forcedClose.next(), 1000 + 1000, "the screensaver a second before the sleep: the sleep a second after the force");
         forcedLong.at(500000, { type: "busInhibitors", count: 1 });
         assertEqual(forcedLong.next(), -1, "… an app keeping the screen on after the force holds it");
 
@@ -1495,6 +1526,9 @@ TestCase {
         assertEqual(both.next(), 1800000 + IdleRules.sleepLockWait, "… at most a moment");
         both.at(1801000, { type: "locked" });
         assertEqual(both.actions, "sleep:locked,active:true", "locked: the sleep now");
+        const quickBoth = _machine(_with(values, { sleepTimeout: 1, lockscreenEnabled: true, lockAfter: 1 }), ["lcd"], true, "yes").idle(500, 0);
+        quickBoth.sleepDeadline();
+        assertEqual(quickBoth.actions, "lock", "lock and sleep both after one second: the lock first, the sleep waits for it");
         const refused = _machine(_with(values, { lockscreenEnabled: true, lockAfter: 1800 }), ["lcd"], true, "yes").idle(5000, 0);
         refused.sleepDeadline();
         refused.sleepDeadline();
