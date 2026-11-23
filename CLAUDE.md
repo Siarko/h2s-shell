@@ -277,7 +277,9 @@ new kind.
 - **Tests never touch the real session, polkit, PAM, the network or a real daemon:** stand-ins
   only, and stand-ins never meet the real `pkexec`. — A test must not change the machine.
 - **Root helpers and scripts run as root are never loaded from a place the user can
-  write.** — Otherwise any user process can become root at the next prompt.
+  write.** The one exception: the shell's own fixed script texts, written in its code and
+  run through `PrivilegedRuns.startShell`, each run authorized by polkit and announced as
+  the shell's. — Otherwise any user process can become root at the next prompt.
 - **The module API is ours.** If it lacks something, stop and extend it (minor version, a
   `### Module API` line in `CHANGELOG.md`, the reference in `api/Api.qml`) — never build a
   substitute in a module. It covers capabilities (running things, system state,

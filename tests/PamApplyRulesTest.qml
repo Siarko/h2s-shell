@@ -49,7 +49,8 @@ TestCase {
             "system-auth", edit.sha256(systemAuth)]),
                     "the system's shell, the script, then: write, the service, the candidate's hash, the file's hash, the text, each included name and its hash");
         assertEqual(plan.argv[2], apply.applyScript(live), "… the fixed script for the system's places");
-        assertEqual(JSON.stringify(plan.expected), JSON.stringify({ mode: "write", service: "sudo", sha256: edit.sha256(sudoBuilt.text) }),
+        assertEqual(JSON.stringify(plan.expected), JSON.stringify({ mode: "write", service: "sudo", sha256: edit.sha256(sudoBuilt.text),
+                                                                    before: edit.sha256(archSudo), after: edit.sha256(sudoBuilt.text) }),
                     "… what the reply must say");
         assert(!plan.argv.slice(4).some(word => word.startsWith("/")), "no path among the arguments");
 
@@ -97,7 +98,7 @@ TestCase {
                     "a name found in the vendor folder: by name, the root step looks it up the same way");
 
         // ── The places ──
-        const scratch = { system: "/run/user/1000/t/pam.d", vendor: "/run/user/1000/t/vendor", backups: "/run/user/1000/t/backups" };
+        const scratch = { system: "/run/user/1000/t/pam.d", vendor: "/run/user/1000/t/vendor", backups: "/run/user/1000/t/backups", owner: 1000 };
         assertEqual(apply.pathsRefusal(live, true), "", "the system's places, for the system's pkexec");
         assertEqual(apply.pathsRefusal(scratch, true), "paths", "… nothing else for it");
         assertEqual(apply.pathsRefusal(scratch, false), "", "a stand-in's run: scratch places");
@@ -110,9 +111,14 @@ TestCase {
         assertEqual(apply.pathsRefusal(Object.assign({}, scratch, { system: "relative" }), false), "paths", "… nor a relative path");
         assertEqual(apply.pathsRefusal(Object.assign({}, scratch, { vendor: undefined }), false), "paths", "… each place given");
         assertEqual(apply.pathsRefusal(null, false), "paths", "… places given");
+        assertEqual(apply.pathsRefusal(Object.assign({}, live, { owner: 1000 }), true), "paths", "the system's places owned by root only");
+        assertEqual(apply.pathsRefusal(Object.assign({}, scratch, { owner: undefined }), false), "paths", "an owner given");
+        assertEqual(apply.pathsRefusal(Object.assign({}, scratch, { owner: -1 }), false) + apply.pathsRefusal(Object.assign({}, scratch, { owner: 1.5 }), false),
+                    "pathspaths", "… a uid");
+        assert(apply.applyScript(scratch).includes("; owner=1000\n"), "the owner written into the script");
         assertEqual(code(apply.applyArgv("/bin/sh", sudoRequest(), scratch, true)), "paths", "Apply to scratch places through the system's pkexec: refused");
         assertEqual(apply.applyScript({ system: "/x'y", vendor: "/v", backups: "/b" }), "", "no script for places that are not plain paths");
-        assert(apply.applyScript(live).includes("system='/etc/pam.d'; vendor='/usr/lib/pam.d'; backups='/var/lib/h2s-shell/pam-backup'"),
+        assert(apply.applyScript(live).includes("system='/etc/pam.d'; vendor='/usr/lib/pam.d'; backups='/var/lib/h2s-shell/pam-backup'; owner=0\n"),
                "the system's places written into the script");
 
         // ── polkit: our file written, then removed ──
@@ -190,14 +196,20 @@ TestCase {
         const ran = (stdout, more) => Object.assign({ ok: true, code: 0, stdout, stderr: "", dismissed: false, refused: false, cancelled: false, blocked: "", error: "" }, more ?? {});
         let outcome = apply.applyReply(ran("written sudo " + hash + " sudo.20261123T101500Z\n"), expected);
         assertEqual(JSON.stringify(outcome), JSON.stringify({ ok: true, quiet: false, kind: "written", service: "sudo", sha256: hash,
-                                                              backup: "sudo.20261123T101500Z", refused: "", error: "" }), "written: the hash in force and the backup");
+                                                              backup: "sudo.20261123T101500Z", refused: "", error: "", file: "done" }), "written: the hash in force and the backup");
         assertEqual(apply.applyReply(ran("written sudo " + edit.sha256("x") + " sudo.20261123T101500Z\n"), expected).ok, false, "another hash: not ok");
         assertEqual(apply.applyReply(ran("written polkit-1 " + hash + " polkit-1.20261123T101500Z\n"), expected).ok, false, "another service: not ok");
         assertEqual(apply.applyReply(ran("restored sudo " + hash + " sudo.20261123T101500Z\n"), expected).ok, false, "another kind: not ok");
         assertEqual(apply.applyReply(ran("written sudo " + hash + " ../x\n"), expected).ok, false, "a backup name that is none: not ok");
         assertEqual(apply.applyReply(ran(""), expected).error, "an answer that is not the one asked for", "ran, said nothing: not ok, said so");
-        assertEqual(apply.applyReply(ran("written sudo " + hash + " sudo.20261123T101500Z\n", { ok: false, code: 1 }), expected).ok, false,
-                    "the right words but a failed run: not ok");
+        assertEqual(apply.applyReply(ran("written sudo " + hash + " sudo.20261123T101500Z\n", { ok: false, code: 141 }), expected).ok, true,
+                    "the line, then a failed exit: done (said only after the change)");
+        outcome = apply.applyReply(ran("", { ok: false, code: 141, stderr: "written sudo " + hash + " sudo.20261123T101500Z\n" }), expected);
+        assertEqual(outcome.ok + " " + outcome.backup, "true sudo.20261123T101500Z", "stdout lost, the line on stderr: done");
+        assertEqual(apply.applyReply(ran("", { ok: false, code: 1, stderr: "written sudo " + hash + " sudo.20261123T101500Z\nmore\n" }), expected).ok, false,
+                    "… only as stderr's last line");
+        assertEqual(apply.applyReply(ran("x\n", { stderr: "written sudo " + edit.sha256("x") + " sudo.20261123T101500Z\n" }), expected).ok, false,
+                    "… with the hash asked for");
         outcome = apply.applyReply(ran("", { ok: false, code: 3, stderr: "refused included\n" }), expected);
         assertEqual(outcome.ok + " " + outcome.refused + " " + outcome.error, "false included " + apply.texts.included, "a refusal: its code and text");
         outcome = apply.applyReply(ran("", { ok: false, code: 1, stderr: "mv: cannot move\n" }), expected);
@@ -215,6 +227,24 @@ TestCase {
         assertEqual(outcome.ok + " " + outcome.sha256 + " " + outcome.backup, "true absent polkit-1.20261123T101500Z", "restored a backup of no file");
         assertEqual(apply.applyReply(ran("written sudo absent sudo.20261123T101500Z\n"), { mode: "write", service: "sudo", sha256: "" }).ok, false,
                     "a write that leaves no file: not ok");
+
+        // ── After a run that did not say it was done ──
+        const writeExpected = { mode: "write", service: "sudo", sha256: hash, before: edit.sha256(archSudo), after: hash };
+        assertEqual(apply.afterFailure({ text: archSudo }, writeExpected), "unchanged", "the file read again as before");
+        assertEqual(apply.afterFailure({ text: sudoBuilt.text }, writeExpected), "done", "… the file asked for");
+        assertEqual(apply.afterFailure({ text: "x" }, writeExpected), "other", "… another one");
+        assertEqual(apply.afterFailure({ absent: true }, writeExpected), "other", "… none");
+        assertEqual(apply.afterFailure({ unreadable: true }, writeExpected) + " " + apply.afterFailure(undefined, writeExpected), "unknown unknown",
+                    "not read: unknown");
+        const removeExpected = { mode: "remove", service: "polkit-1", sha256: edit.sha256(vendorPolkit), before: hash, after: "absent" };
+        assertEqual(apply.afterFailure({ absent: true }, removeExpected), "done", "a removal: no file is what was asked for");
+        const undoExpected = { mode: "undo", service: "sudo", sha256: "", before: hash, after: "" };
+        assertEqual(apply.afterFailure({ text: archSudo }, undoExpected) + " " + apply.afterFailure({ text: sudoBuilt.text }, undoExpected), "other unchanged",
+                    "an Undo: the backup's hash is not known, so anything new is other");
+        assertEqual(apply.undoArgv("/bin/sh", { service: "sudo", backup: "sudo.20261123T101500Z", currentSha256: hash }, live, true).expected.before, hash,
+                    "Undo's expected: what is in force before");
+        plan = apply.applyArgv("/bin/sh", polkitRequest({ built: removal, currentText: polkitBuilt.text, trial: passed("polkit-1", vendorPolkit) }), live, true);
+        assertEqual(plan.expected.before + " " + plan.expected.after, edit.sha256(polkitBuilt.text) + " absent", "a removal's expected: ours, then none");
 
         // ── In force ──
         assertEqual(apply.inForce(sudoBuilt.text, { ok: true, sha256: hash }), true, "the file read again is the one written");

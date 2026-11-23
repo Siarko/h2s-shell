@@ -1,11 +1,14 @@
 import QtQuick
+import Quickshell
 import qs.singletons
 
 // Apply and Undo of the PAM rules on Arch: one run as administrator per service, the fixed
 // script PamApplyRules.applyScript run by the system's /bin/sh — nothing is loaded from a
 // file. Apply follows a passed trial (the user's click on Apply started both); Undo is a
 // click of its own. What may run and what the answer means are PamApplyRules'; this only
-// queues the run and hands the answer over. One run at a time.
+// queues the run, reads the service's file again (as the user, scripts/pam-files.sh) when the
+// run did not say it was done — a run cut short may still have changed it — and hands the
+// outcome over. One run at a time.
 //
 // `start` is what queues the run: null for the shell's runs as administrator
 // (PrivilegedRuns.startShell, which says who asks and what for), and then only the system's
@@ -14,13 +17,15 @@ import qs.singletons
 QtObject {
     id: root
 
-    // After each started run: PamApplyRules.applyReply's outcome
+    // After each started run: PamApplyRules.applyReply's outcome; when not ok, its `file`
+    // is PamApplyRules.afterFailure's answer for the file read again
     signal finished(var outcome)
 
     // (request { what, argv }, done(result)) → nothing; done once with PrivilegedRules' result
     property var start: null
     property var paths: PamApplyRules.livePaths
     property string shell: "/bin/sh"
+    property var filesCommand: [Quickshell.shellDir + "/scripts/pam-files.sh"]
     readonly property bool busy: _busy
 
     property bool _busy: false
@@ -44,9 +49,37 @@ QtObject {
         _busy = true;
         const queue = start ?? ((request, done) => PrivilegedRuns.startShell(request, done));
         queue({ what: what, argv: plan.argv }, result => {
-            root._busy = false;
-            root.finished(PamApplyRules.applyReply(result, plan.expected));
+            const outcome = PamApplyRules.applyReply(result, plan.expected);
+            if (outcome.ok) {
+                root._busy = false;
+                root.finished(outcome);
+                return;
+            }
+            root._readAgain(plan.expected, outcome);
         });
         return { started: true, refusal: null };
     }
+
+    function _readAgain(expected, outcome) {
+        const path = paths.system + "/" + expected.service;
+        const lines = [];
+        _runner.start(Array.from(filesCommand).concat([path]), {
+            timeoutMs: 6000,
+            killAfterMs: 1000,
+            maxOutputBytes: 1048576,
+            keepOutput: false,
+            onLine: (line, stream) => {
+                if (stream === "stdout")
+                    lines.push(line);
+            },
+            done: result => {
+                const answer = PamStackRules.filesAnswer(lines, result, [path]).answers[path];
+                outcome.file = PamApplyRules.afterFailure(answer, expected);
+                root._busy = false;
+                root.finished(outcome);
+            }
+        });
+    }
+
+    property CommandRunner _runner: CommandRunner {}
 }

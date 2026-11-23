@@ -19,10 +19,14 @@ import QtQuick
 // - a file the rules include changed since the trial (each name looked up as libpam would:
 //   the PAM folder, then the vendor folder; its sha256 against the trial's copy);
 // - for a removal, the vendor file is not the text the trial passed;
-// - the service's file is a link, or a folder is.
+// - the service's file is a link, or a folder is; a folder it writes in (the PAM folder,
+//   the backups and the folder holding them) is not root's or others may write in it;
+// - another run holds the backups' lock (flock, never waited for).
 // It writes the new file beside the old one in the PAM folder (mode 0644) and checks it,
 // copies the current file to the backups (`<service>.<UTC time>`, `.absent` when there was
-// none; every backup kept), renames the new file into place, and prints what is in force.
+// none; every backup kept), renames the new file into place, and prints what is in force —
+// on stderr as well, which the shell still gets when stdout is gone. Each file is flushed to
+// disk before it is renamed or linked, and the folder after.
 //
 // What is left to the user: a file the rules include by absolute path outside the PAM
 // folders cannot be looked up by name as root, so rules that include one are not written.
@@ -34,7 +38,9 @@ Singleton {
     readonly property var livePaths: ({
         system: "/etc/pam.d",
         vendor: "/usr/lib/pam.d",
-        backups: "/var/lib/h2s-shell/pam-backup"
+        backups: "/var/lib/h2s-shell/pam-backup",
+        // Who must own the folders written in (root; a suite's stand-in: the user)
+        owner: 0
     })
 
     // Why a run was not started, or what the root step refused, by code
@@ -53,6 +59,8 @@ Singleton {
         // By the root step
         arguments: "The request was not valid.",
         system: "The PAM folder is not there.",
+        owner: "A folder written in is not root's alone: nothing changed.",
+        lock: "The change could not be kept to one at a time: nothing changed.",
         link: "The file is a link: not changed.",
         changed: "The file changed since it was read: read it again.",
         unreadable: "The file could not be read.",
@@ -104,8 +112,10 @@ Singleton {
         const names = ["system", "vendor", "backups"];
         if (paths === null || typeof paths !== "object" || names.some(name => !_plainPath(paths[name])))
             return "paths";
+        if (!Number.isInteger(paths.owner) || paths.owner < 0)
+            return "paths";
         if (live === true)
-            return names.every(name => paths[name] === livePaths[name]) ? "" : "paths";
+            return names.every(name => paths[name] === livePaths[name]) && paths.owner === livePaths.owner ? "" : "paths";
         const system = ["/etc", "/usr", "/var"];
         return names.some(name => system.some(top => paths[name] === top || paths[name].startsWith(top + "/"))) ? "paths" : "";
     }
@@ -119,16 +129,26 @@ Singleton {
     //   write  <service> <candidate sha256> <current sha256 | absent> <text> [<name> <sha256>]…
     //   remove polkit-1  <vendor sha256>    <current sha256>          [<name> <sha256>]…
     //   undo   <service> <backup name>      <current sha256 | absent>
-    // Its last line on success: `written|removed|restored <service> <sha256 in force |
-    // absent> <backup made>`; a refusal: `refused <code>` on stderr, exit 3.
+    // Its last line on success, on stdout and stderr: `written|removed|restored <service>
+    // <sha256 in force | absent> <backup made>`; a refusal: `refused <code>` on stderr, exit 3.
     function applyScript(paths) {
         if (pathsRefusal(paths, false) !== "" && pathsRefusal(paths, true) !== "")
             return "";
         return "set -eu; umask 077; export LC_ALL=C\n"
-            + "system=" + _quoted(paths.system) + "; vendor=" + _quoted(paths.vendor) + "; backups=" + _quoted(paths.backups) + "\n"
+            + "system=" + _quoted(paths.system) + "; vendor=" + _quoted(paths.vendor) + "; backups=" + _quoted(paths.backups)
+            + "; owner=" + paths.owner + "\n"
             + "pam_temporary=; backup_temporary=\n"
             + "trap 'for leftover in \"$pam_temporary\" \"$backup_temporary\"; do [ -z \"$leftover\" ] || rm -f -- \"$leftover\"; done' EXIT\n"
             + "refuse() { echo \"refused $1\" >&2; exit 3; }\n"
+            // What was done, on stderr first: it reaches the shell even when stdout is gone
+            + "say() { printf '%s\\n' \"$1\" >&2; printf '%s\\n' \"$1\" || :; }\n"
+            // A folder the step writes in: no link, the owner's, nobody else may write in it
+            + "safe_dir() {\n"
+            + "  if [ -L \"$1\" ] || [ ! -d \"$1\" ]; then refuse owner; fi\n"
+            + "  facts=$(stat -c '%u %a' -- \"$1\") || refuse owner\n"
+            + "  [ \"${facts%% *}\" = \"$owner\" ] || refuse owner\n"
+            + "  [ $((0${facts#* } & 022)) -eq 0 ] || refuse owner\n"
+            + "}\n"
             + "hash_of() { sum=$(sha256sum < \"$1\") || return 1; printf '%s\\n' \"${sum%% *}\"; }\n"
             + "is_hash() { case \"$1\" in ''|*[!0-9a-f]*) return 1;; esac; [ ${#1} -eq 64 ]; }\n"
             + "is_name() { case \"$1\" in ''|[!A-Za-z0-9_]*|*[!A-Za-z0-9._@+-]*) return 1;; esac; [ ${#1} -le 255 ]; }\n"
@@ -160,19 +180,20 @@ Singleton {
             + "prepare_backups() {\n"
             + "  if [ -L \"${backups%/*}\" ] || [ -L \"$backups\" ]; then refuse backup; fi\n"
             + "  mkdir -p -- \"$backups\" || refuse backup\n"
-            + "  if [ -L \"$backups\" ] || [ ! -d \"$backups\" ]; then refuse backup; fi\n"
+            + "  safe_dir \"${backups%/*}\"\n"
+            + "  safe_dir \"$backups\"\n"
             + "  chmod 0700 -- \"$backups\" || refuse backup\n"
             + "}\n"
             // The current file (checked) into the backups; a name never taken twice (ln
             // fails on a name that is there)
             + "make_backup() {\n"
-            + "  prepare_backups\n"
             + "  stamp=$(date -u +%Y%m%dT%H%M%SZ)\n"
             + "  suffix=\n"
             + "  if [ \"$1\" = absent ]; then suffix=.absent; fi\n"
             + "  backup_temporary=$(mktemp -- \"$backups/.new.XXXXXX\") || refuse backup\n"
             + "  if [ \"$1\" != absent ]; then cat -- \"$target\" > \"$backup_temporary\" || refuse backup; fi\n"
             + "  chmod 0600 -- \"$backup_temporary\" || refuse backup\n"
+            + "  sync -- \"$backup_temporary\" || refuse backup\n"
             + "  count=0; extra=\n"
             + "  while :; do\n"
             + "    backup_name=\"$service.$stamp$extra$suffix\"\n"
@@ -181,6 +202,7 @@ Singleton {
             + "    extra=\"-$count\"\n"
             + "  done\n"
             + "  rm -f -- \"$backup_temporary\"; backup_temporary=\n"
+            + "  sync -- \"$backups\" || refuse backup\n"
             + "}\n"
             // A new file beside the target, checked, renamed into place (never half a file;
             // a rename replaces a link, never follows it)
@@ -189,13 +211,21 @@ Singleton {
             + "  chmod 0644 -- \"$pam_temporary\" || refuse write\n"
             + "  got=$(hash_of \"$pam_temporary\") || refuse write\n"
             + "  if [ -n \"$1\" ] && [ \"$got\" != \"$1\" ]; then refuse hash; fi\n"
+            + "  sync -- \"$pam_temporary\" || refuse write\n"
             + "}\n"
-            + "put_in_place() { mv -fT -- \"$pam_temporary\" \"$target\" || refuse write; pam_temporary=; }\n"
+            + "settle() { sync -- \"$system\" 2> /dev/null || :; }\n"
+            + "put_in_place() { mv -fT -- \"$pam_temporary\" \"$target\" || refuse write; pam_temporary=; settle; }\n"
             + "[ $# -ge 2 ] || refuse arguments\n"
             + "mode=$1; service=$2; shift 2\n"
             + "case \"$service\" in sudo|polkit-1) ;; *) refuse arguments;; esac\n"
             + "if [ -L \"$system\" ] || [ ! -d \"$system\" ]; then refuse system; fi\n"
+            + "safe_dir \"$system\"\n"
             + "target=$system/$service\n"
+            + "prepare_backups\n"
+            // One run at a time, from the first check to the last write; a second is refused
+            + "exec 9>> \"$backups/.lock\" || refuse backup\n"
+            // flock says 1 for a lock held; anything else (no flock) is not "busy"
+            + "flock -n 9 || { held=$?; [ \"$held\" -ne 1 ] || refuse busy; refuse lock; }\n"
             + "case \"$mode\" in\n"
             + "write)\n"
             + "  [ $# -ge 3 ] || refuse arguments\n"
@@ -209,7 +239,7 @@ Singleton {
             + "  seal \"$want\"\n"
             + "  make_backup \"$current\"\n"
             + "  put_in_place\n"
-            + "  echo \"written $service $got $backup_name\";;\n"
+            + "  say \"written $service $got $backup_name\";;\n"
             + "remove)\n"
             + "  [ \"$service\" = polkit-1 ] && [ $# -ge 2 ] || refuse arguments\n"
             + "  want=$1; current=$2; shift 2\n"
@@ -221,8 +251,8 @@ Singleton {
             + "  check_current \"$current\"\n"
             + "  check_includes \"$@\"\n"
             + "  make_backup \"$current\"\n"
-            + "  rm -f -- \"$target\"\n"
-            + "  echo \"removed $service $want $backup_name\";;\n"
+            + "  rm -f -- \"$target\"; settle\n"
+            + "  say \"removed $service $want $backup_name\";;\n"
             + "undo)\n"
             + "  [ $# -eq 2 ] || refuse arguments\n"
             + "  name=$1; current=$2\n"
@@ -230,22 +260,21 @@ Singleton {
             + "  case \"$name\" in \"$service\".*) ;; *) refuse arguments;; esac\n"
             + "  case \"${name#\"$service\".}\" in $stamp_pattern|$stamp_pattern-[1-9]|$stamp_pattern.absent|$stamp_pattern-[1-9].absent) ;; *) refuse arguments;; esac\n"
             + "  [ \"$current\" = absent ] || is_hash \"$current\" || refuse arguments\n"
-            + "  prepare_backups\n"
             + "  source=$backups/$name\n"
             + "  if [ -L \"$source\" ] || [ ! -f \"$source\" ]; then refuse nobackup; fi\n"
             + "  check_current \"$current\"\n"
             + "  case \"$name\" in\n"
             + "  *.absent)\n"
             + "    make_backup \"$current\"\n"
-            + "    rm -f -- \"$target\"\n"
-            + "    echo \"restored $service absent $backup_name\";;\n"
+            + "    rm -f -- \"$target\"; settle\n"
+            + "    say \"restored $service absent $backup_name\";;\n"
             + "  *)\n"
             + "    new_file\n"
             + "    cat -- \"$source\" > \"$pam_temporary\" || refuse write\n"
             + "    seal ''\n"
             + "    make_backup \"$current\"\n"
             + "    put_in_place\n"
-            + "    echo \"restored $service $got $backup_name\";;\n"
+            + "    say \"restored $service $got $backup_name\";;\n"
             + "  esac;;\n"
             + "*) refuse arguments;;\n"
             + "esac\n";
@@ -329,7 +358,7 @@ Singleton {
             : ["write", service, want, current, chosen.text].concat(includes);
         return {
             argv: [shell, "-c", applyScript(paths), "sh"].concat(words),
-            expected: { mode: chosen.remove ? "remove" : "write", service, sha256: want },
+            expected: { mode: chosen.remove ? "remove" : "write", service, sha256: want, before: current, after: chosen.remove ? "absent" : want },
             refusal: null
         };
     }
@@ -353,7 +382,7 @@ Singleton {
             return _refused("unread");
         return {
             argv: [shell, "-c", applyScript(paths), "sh", "undo", service, request.backup, current],
-            expected: { mode: "undo", service, sha256: "" },
+            expected: { mode: "undo", service, sha256: "", before: current, after: "" },
             refusal: null
         };
     }
@@ -363,19 +392,26 @@ Singleton {
     // quiet (a prompt dismissed, a run refused or cancelled: said elsewhere, or the user's
     // choice), kind (written / removed / restored), service, sha256 (what is in force in the
     // PAM folder now; "absent" for no file there), backup (the backup made), refused (the
-    // root step's code), error (for the log and the page) }. ok only when its last line
-    // says it did what was asked, for that service, with the expected hash.
+    // root step's code), error (for the log and the page), file ("done" when ok; otherwise
+    // "" here — PamApply reads the file again and sets afterFailure's answer) }. ok only when
+    // its last line, on stdout or stderr, says it did what was asked, for that service, with
+    // the expected hash.
     function applyReply(result, expected) {
-        const outcome = { ok: false, quiet: false, kind: "", service: String(expected?.service ?? ""), sha256: "", backup: "", refused: "", error: "" };
+        const outcome = { ok: false, quiet: false, kind: "", service: String(expected?.service ?? ""), sha256: "", backup: "", refused: "", error: "", file: "" };
         const words = { write: "written", remove: "removed", undo: "restored" };
         const kind = words[expected?.mode] ?? "";
-        const last = String(result?.stdout ?? "").trim().split("\n").pop().trim();
-        const said = /^(written|removed|restored) (sudo|polkit-1) ([0-9a-f]{64}|absent) (\S+)$/.exec(last);
-        if (result?.ok === true && said !== null && kind !== "" && said[1] === kind && said[2] === outcome.service
-                && validBackup(said[2], said[4]) && (expected.sha256 === "" || said[3] === expected.sha256)
-                && (kind !== "written" || said[3] !== "absent")) {
+        const lastOf = text => String(text ?? "").trim().split("\n").pop().trim();
+        const done = line => {
+            const said = /^(written|removed|restored) (sudo|polkit-1) ([0-9a-f]{64}|absent) (\S+)$/.exec(line);
+            return said !== null && kind !== "" && said[1] === kind && said[2] === outcome.service && validBackup(said[2], said[4])
+                && (expected.sha256 === "" || said[3] === expected.sha256) && (kind !== "written" || said[3] !== "absent") ? said : null;
+        };
+        // The line comes after the change only, so it counts whatever the exit: a stdout
+        // closed under it ends the run with an error after the change was made
+        const said = done(lastOf(result?.stdout)) ?? done(lastOf(result?.stderr));
+        if (said !== null) {
             return Object.assign(outcome, {
-                ok: true, kind, sha256: kind === "removed" ? "absent" : said[3], backup: said[4]
+                ok: true, kind, sha256: kind === "removed" ? "absent" : said[3], backup: said[4], file: "done"
             });
         }
         if (result?.dismissed === true || result?.refused === true || result?.cancelled === true || (result?.blocked ?? "") !== "")
@@ -389,6 +425,26 @@ Singleton {
         const reason = String(result?.error || stderr.pop() || (result?.ok === true ? "an answer that is not the one asked for" : ""))
             .replace(/[\u0000-\u001f\u007f]+/g, " ").trim();
         return Object.assign(outcome, { error: reason !== "" ? reason.slice(0, 200) : "exit code " + (result?.code ?? -1) });
+    }
+
+    // What a run that did not say it was done left in the PAM folder, the service's file read
+    // again afterwards (`answer`: PamStackRules.filesAnswer's for its path: { text },
+    // { absent }, { unreadable }, or nothing) against what applyArgv / undoArgv expected →
+    // "unchanged" (as before the run), "done" (what the run was to leave), "other" (neither:
+    // read it again and show it) or "unknown" (not read)
+    function afterFailure(answer, expected) {
+        let found;
+        if (typeof answer?.text === "string")
+            found = PamEditRules.sha256(answer.text);
+        else if (answer?.absent === true)
+            found = "absent";
+        else
+            return "unknown";
+        if (found === expected?.before)
+            return "unchanged";
+        if ((expected?.after ?? "") !== "" && found === expected.after)
+            return "done";
+        return "other";
     }
 
     // Whether the service's file in the PAM folder, read again (`text`: null / undefined

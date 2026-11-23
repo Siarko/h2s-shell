@@ -21,7 +21,9 @@ TestCase {
     asynchronous: true
 
     readonly property string _scratch: (Quickshell.env("XDG_RUNTIME_DIR") || "/tmp") + "/h2s-pam-apply-test-" + Date.now()
-    readonly property var _paths: ({ system: _scratch + "/pam.d", vendor: _scratch + "/vendor", backups: _scratch + "/lib/pam-backup" })
+    // The folders must be their owner's: the user's here (the script's owner seam)
+    property int _owner: -1
+    readonly property var _paths: ({ system: _scratch + "/pam.d", vendor: _scratch + "/vendor", backups: _scratch + "/lib/pam-backup", owner: _owner })
 
     readonly property string _systemAuth: "auth required pam_faillock.so preauth\nauth [success=1 default=bad] pam_unix.so try_first_pass\n"
         + "auth [default=die] pam_faillock.so authfail\nauth optional pam_permit.so\naccount required pam_unix.so\n"
@@ -32,7 +34,8 @@ TestCase {
     property var _apply: null
     property var _runs: []
     // How the stand-in answers the next run: "run" (runs it), "dismissed", "hold" (runs it
-    // once released)
+    // once released), "lost" (runs it, its output and exit lost), "noStdout" (runs it, its
+    // stdout lost: as a closed stdout, the run ends with an error)
     property string _answer: "run"
     property var _held: null
     property var _outcome: null
@@ -51,8 +54,12 @@ TestCase {
             Qt.callLater(() => done({ ok: false, code: 126, stdout: "", stderr: "", dismissed: true, refused: false, cancelled: false, blocked: "", error: "" }));
             return;
         }
+        const answer = _answer;
         const go = () => _exec(["sh", "-c", "umask 000; exec \"$@\"", "sh"].concat(request.argv), (code, stdout, stderr) =>
-            done({ ok: code === 0, code: code, stdout: stdout, stderr: stderr, dismissed: false, refused: false, cancelled: false, blocked: "", error: "" }));
+            done({ ok: answer === "run" || answer === "hold" ? code === 0 : false,
+                   code: answer === "lost" ? -1 : answer === "noStdout" ? 141 : code,
+                   stdout: answer === "lost" || answer === "noStdout" ? "" : stdout, stderr: answer === "lost" ? "" : stderr,
+                   dismissed: false, refused: false, cancelled: false, blocked: "", error: "" }));
         if (_answer === "hold")
             _held = go;
         else
@@ -157,7 +164,7 @@ TestCase {
                 sudo: file("pam.d/sudo"), polkit: file("pam.d/polkit-1"),
                 modes: sections["modes"].filter(line => line !== ""),
                 listing: sections["pam.d"].filter(line => line !== ""),
-                backups: sections["backups"].filter(line => line !== ""),
+                backups: sections["backups"].filter(line => line !== "" && line !== ".lock"),
                 backupModes: sections["backup modes"].filter(line => line !== "")
             };
         });
@@ -175,11 +182,12 @@ TestCase {
     property var _sudoOutcome: null
     property var _polkitBuilt: null
     property var _direct: null
+    property bool _holder: false
 
     // The script run directly with the given words (its argument checks)
-    function _runDirect(words) {
+    function _runDirect(words, paths) {
         _direct = null;
-        _exec(["sh", "-c", PamApplyRules.applyScript(_paths), "sh"].concat(words), (code, stdout, stderr) => suite._direct = { code: code, stdout: stdout, stderr: stderr.trim() });
+        _exec(["sh", "-c", PamApplyRules.applyScript(paths ?? _paths), "sh"].concat(words), (code, stdout, stderr) => suite._direct = { code: code, stdout: stdout, stderr: stderr.trim() });
     }
 
     function runAsync() {
@@ -236,6 +244,7 @@ TestCase {
         });
         _then("refused for the included file", () => _outcome !== null, () => {
             assertEqual(_outcome.ok + " " + _outcome.refused, "false included", "refused: an included file changed since the trial");
+            assertEqual(_outcome.file, "unchanged", "… the file read again: as before");
             _look();
         });
         _then("read after the included refusal", () => _read !== null, () => {
@@ -384,9 +393,78 @@ TestCase {
         });
         _then("the held run answered", () => _outcome !== null, () => {
             assert(_outcome.ok && !_apply.busy, "the held run written, no longer busy");
+            assertEqual(_outcome.file, "done", "… done, nothing read again");
+            const held = _outcome;
+            _answer = "lost";
+            _outcome = null;
+            assert(_apply.undo({ service: "sudo", backup: held.backup, currentSha256: held.sha256 }).started, "an Undo whose answer is lost: started");
+        });
+        _then("the lost Undo answered", () => _outcome !== null, () => {
+            assertEqual(_outcome.ok + " " + _outcome.file, "false other", "its answer lost: not ok, the file read again is not as before");
+            _outcome = null;
+            assert(_apply.apply({ service: "sudo", built: _sudoBuilt, currentText: _sudo, trial: _passed("sudo", _sudoBuilt.text, _answers()) }).started,
+                   "an Apply whose answer is lost: started");
+        });
+        _then("the lost Apply answered", () => _outcome !== null, () => {
+            assertEqual(_outcome.ok + " " + _outcome.file, "false done", "its answer lost: not ok, the file read again is the one asked for");
+            _answer = "noStdout";
+            _outcome = null;
+            assert(_apply.apply({ service: "sudo", built: other, currentText: _sudoBuilt.text, trial: _passed("sudo", other.text, _answers()) }).started,
+                   "an Apply whose stdout is lost: started");
+        });
+        _then("the Apply without stdout answered", () => _outcome !== null, () => {
+            assertEqual(_outcome.ok + " " + _outcome.kind + " " + _outcome.sha256, "true written " + edit.sha256(other.text),
+                        "stdout lost: done, said on stderr");
+            assert(PamApplyRules.validBackup("sudo", _outcome.backup), "… with its backup");
+            _answer = "run";
+            _runDirect(["undo", "sudo", "sudo.20261123T101500Z", "absent"], Object.assign({}, _paths, { owner: _owner + 1 }));
+        });
+        _then("folders of another owner", () => _direct !== null, () => {
+            assertEqual(_direct.stderr, "refused owner", "folders that are not the owner's: refused");
+            _direct = null;
+            _exec(["chmod", "g+w", "--", _paths.system], () => suite._runDirect(["undo", "sudo", "sudo.20261123T101500Z", "absent"]));
+        });
+        _then("a PAM folder others may write in", () => _direct !== null, () => {
+            assertEqual(_direct.stderr, "refused owner", "a PAM folder the group may write in: refused");
+            _direct = null;
+            _exec(["sh", "-c", "chmod g-w -- \"$1\" && chmod o+w -- \"$2\"", "sh", _paths.system, _scratch + "/lib"], () => suite._runDirect(["undo", "sudo", "sudo.20261123T101500Z", "absent"]));
+        });
+        _then("a backups' parent anyone may write in", () => _direct !== null, () => {
+            assertEqual(_direct.stderr, "refused owner", "the backups' folder's parent writable by anyone: refused");
+            _direct = null;
+            _exec(["chmod", "o-w", "--", _scratch + "/lib"], () => suite._runDirect(["undo", "sudo", "sudo.20261123T101500Z", "absent"]));
+        });
+        _then("the folders back", () => _direct !== null, () => {
+            assertEqual(_direct.stderr, "refused nobackup", "the folders as they were: past the owner check");
+            // Another run holds the lock
+            _ready = false;
+            _holder = false;
+            _exec(["flock", _paths.backups + "/.lock", "sh", "-c", "touch \"$1/held\"; while [ ! -e \"$1/release\" ]; do sleep 0.05; done", "sh", _scratch],
+                  () => suite._holder = true);
+            _exec(["sh", "-c", "while [ ! -e \"$1/held\" ]; do sleep 0.05; done", "sh", _scratch], () => suite._ready = true);
+        });
+        _then("the lock held", () => _ready, () => {
+            _runDirect(["undo", "sudo", "sudo.20261123T101500Z", "absent"]);
+        });
+        _then("refused while held", () => _direct !== null, () => {
+            assertEqual(_direct.code + " " + _direct.stderr, "3 refused busy", "another run holds the lock: refused, not waited for");
+            _exec(["touch", "--", _scratch + "/release"]);
+        });
+        _then("the holder ended", () => _holder, () => {
+            _runDirect(["undo", "sudo", "sudo.20261123T101500Z", "absent"]);
+        });
+        _then("the lock free", () => _direct !== null, () => {
+            assertEqual(_direct.stderr, "refused nobackup", "the lock free again: past it");
         });
         _clock.start();
-        _exec(["sh", "-c", "set -e; mkdir -p \"$1/pam.d\" \"$1/vendor\"; printf '%s' \"$2\" > \"$1/pam.d/sudo\"; printf '%s' \"$3\" > \"$1/pam.d/system-auth\"; "
+        _exec(["id", "-u"], (code, stdout) => {
+            suite._owner = parseInt(stdout.trim(), 10);
+            suite._makeFolders();
+        });
+    }
+
+    function _makeFolders() {
+        _exec(["sh", "-c", "set -e; umask 022; mkdir -p \"$1/pam.d\" \"$1/vendor\"; printf '%s' \"$2\" > \"$1/pam.d/sudo\"; printf '%s' \"$3\" > \"$1/pam.d/system-auth\"; "
                + "printf '%s' \"$4\" > \"$1/vendor/polkit-1\"", "sh", _scratch, _sudo, _systemAuth, _vendorPolkit], code => {
             suite.assertEqual(code, 0, "the scratch folders made");
             suite._ready = true;
