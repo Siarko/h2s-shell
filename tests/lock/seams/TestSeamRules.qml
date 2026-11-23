@@ -19,7 +19,6 @@ Singleton {
     readonly property var seams: [
         { name: "H2S_LOCK_TOOLS", what: "a directory whose gdbus and systemd-inhibit stand in for the real ones (Lockscreen)" },
         { name: "H2S_LOCK_SYSTEM_PAM_DIR", what: "where the system-wide h2s-shell-* PAM configs are looked for instead of /etc/pam.d (Lockscreen)" },
-        { name: "H2S_LOCK_SYSTEM", what: "the system the password fallback assumes, nixos or other, with H2S_LOCK_SYSTEM_PAM_DIR (Lockscreen)" },
         { name: "H2S_LOCK_LEDS_DIR", what: "the keyboard LEDs' directory instead of /sys/class/leds (CapsLockLed)" },
         { name: "H2S_LOCK_TEST_TIMINGS", what: "a JSON object of LockRules.timings overrides (Lockscreen)" },
         { name: "H2S_LOCK_TEST_RELOAD", what: "1: the IPC target locktest, which reloads the shell and drives one progress notification (Lockscreen, Notifier)" },
@@ -44,7 +43,6 @@ Singleton {
 
     // { NAME: value } (undefined or "" for a variable not set) → frozen {
     //   lockTools, systemPamDirectory, ledsDirectory   "" when not given
-    //   lockSystem       "nixos" | "other" | "" (only with systemPamDirectory)
     //   timings          the overrides given ({} for none), timingsProblem ("" or why not)
     //   reloadIpc, moduleNotify, fakeVpnProvider   booleans
     //   moduleGuardMs, moduleCheckMs   > 0, or 0 for none
@@ -57,7 +55,6 @@ Singleton {
     function read(environment) {
         const text = name => _text(environment, name);
         const systemPamDirectory = text("H2S_LOCK_SYSTEM_PAM_DIR");
-        const system = text("H2S_LOCK_SYSTEM");
         let timings = {};
         let timingsProblem = "";
         if (text("H2S_LOCK_TEST_TIMINGS") !== "") {
@@ -75,7 +72,6 @@ Singleton {
         const values = {
             lockTools: text("H2S_LOCK_TOOLS"),
             systemPamDirectory: systemPamDirectory,
-            lockSystem: systemPamDirectory !== "" && (system === "nixos" || system === "other") ? system : "",
             ledsDirectory: text("H2S_LOCK_LEDS_DIR"),
             timings: Object.freeze(timings),
             timingsProblem: timingsProblem,
@@ -90,7 +86,6 @@ Singleton {
         const taken = {
             H2S_LOCK_TOOLS: values.lockTools !== "",
             H2S_LOCK_SYSTEM_PAM_DIR: values.systemPamDirectory !== "",
-            H2S_LOCK_SYSTEM: values.lockSystem !== "",
             H2S_LOCK_LEDS_DIR: values.ledsDirectory !== "",
             H2S_LOCK_TEST_TIMINGS: text("H2S_LOCK_TEST_TIMINGS") !== "" && timingsProblem === "",
             H2S_LOCK_TEST_RELOAD: values.reloadIpc,

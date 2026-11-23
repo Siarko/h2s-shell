@@ -36,21 +36,29 @@
 #
 # The test seams (scripts/seams.sh: constants; a test tree has the test bed's in its place,
 # which reads them from the environment): where system-wide configs are looked for, which
-# system this is, another methods script, the gdbus to ask fprintd with
+# distribution this is, another methods script, the gdbus to ask fprintd with
 source "$(dirname "$(readlink -f "$0")")/seams.sh" || { echo "lock-auth-methods: cannot read seams.sh" >&2; exit 1; }
 system_dir=$seam_system_pam_dir
+shell_dir=$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)
 
-# Which system this is: NixOS (/etc/NIXOS) or any other — or, in a test tree, the system
-# the test names (so that both answers are tested on every machine). The shell's password
-# fallback decides the same way where it asks the machine itself (singletons/Lockscreen.qml).
+# Which system this is: NixOS or any other, as the shell tells it (scripts/distribution.sh,
+# from the distributions' facts) — or, in a test tree, the distribution the test names (so
+# that both answers are tested on every machine). The shell's password fallback decides
+# the same way where it asks without this script (singletons/Lockscreen.qml, Distribution).
+# When it cannot be told, neither answer is given: `--fallback-facts` gives none at all,
+# the methods list fails (below).
+source "$shell_dir/scripts/distribution.sh" || { echo "lock-auth-methods: cannot read distribution.sh" >&2; exit 1; }
 nixos=0
-case "$seam_system" in
-    nixos) nixos=1 ;;
-    other) ;;
-    *) [ -e /etc/NIXOS ] && nixos=1 ;;
-esac
+distribution_problem=""
+if distribution_detect "$shell_dir" "$seam_distribution" ""; then
+    [ "$distribution_id" = nixos ] && nixos=1
+fi
 
 if [ "${1:-}" = --fallback-facts ]; then
+    if [ -n "$distribution_problem" ]; then
+        echo "lock-auth-methods: which distribution this is cannot be told: $distribution_problem" >&2
+        exit 1
+    fi
     [ -r "$system_dir/h2s-shell-password" ] && echo readable
     [ "$nixos" = 1 ] && echo nixos
     echo answered
@@ -67,7 +75,6 @@ fi
 
 set -u
 
-shell_dir=$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)
 # A stand-in in a test tree (as for the logind monitor)
 gdbus=$seam_gdbus
 user=$(id -un)
@@ -92,6 +99,8 @@ config() {
         printf '%s\t%s' "$shell_dir/pam" "$1"
     fi
 }
+
+[ -z "$distribution_problem" ] || cannot_tell "which distribution this is cannot be told: $distribution_problem"
 
 # ---- password -------------------------------------------------------------------------
 # NixOS without the module's h2s-shell-password: "login", as the shell's own password

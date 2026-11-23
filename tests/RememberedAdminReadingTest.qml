@@ -6,7 +6,7 @@ import qs.singletons.io
 
 // The reading and forgetting behind RememberedAdmin (singletons/io/RememberedAdminReader.qml),
 // run for real against stand-ins: scripts/pam-files.sh on a scratch tree in the system's
-// place (the rule file, polkitd.conf, /etc/NIXOS), the real `readlink -f` on a scratch
+// place (the rule file, polkitd.conf; NixOS or not as the reader's `nixos` says), the real `readlink -f` on a scratch
 // timeout, and a stand-in gdbus that answers logind's session id, polkit's list from a file
 // and its revoke (noting every call). Covers: what is installed (Arch, NixOS, a conf that
 // cannot be read), no session, the list, the revoke at the chosen time through the clock
@@ -204,6 +204,7 @@ TestCase {
                 pid: _pid,
                 user: "alex",
                 timeout: _timeout,
+                nixos: false,
                 minutes: 5,
                 retryBaseMs: 600000,
                 now: () => Date.now() + suite._offsetMs
@@ -217,7 +218,7 @@ TestCase {
         _then("the first reading and list", () => _reader.readings > readings && listed(), () => {
             assertEqual(JSON.stringify([_reader.installed.rule, _reader.installed.conf, _reader.installed.seconds, _reader.installed.secondsReason]),
                         JSON.stringify(["none", "none", 300, "default"]), "nothing installed, no conf: polkit's default");
-            assertEqual(_reader.system, "arch", "no /etc/NIXOS: Arch");
+            assertEqual(_reader.system, "arch", "not NixOS: Arch");
             assert(_reader.program.startsWith("/") && _reader.program.endsWith("/bin/timeout"), "the timeout resolved by readlink: " + _reader.program);
             assertEqual(_reader.kept.known + " " + _reader.kept.reason, "false unread", "no logind session: unknown, never nothing kept");
             _withCalls(calls => {
@@ -442,12 +443,18 @@ TestCase {
         _then("the conf unreadable", () => _reader.readings > readings, () => {
             assertEqual(_reader.installed.seconds + " " + _reader.installed.secondsReason, "-1 unreadable", "a conf that cannot be read: the length unknown");
             const block = RememberRules.ruleText({ user: "alex", timeout: _timeout, program: _reader.program });
-            _write({ "tree/etc/NIXOS": "", ["tree" + _reader.nixosRulePath]: "/* NixOS */\npolkit.addRule(function(action, subject) {\n});\n\n" + block });
+            // Whether this is NixOS not known yet (Distribution not answered): read, not judged
+            _reader.nixos = undefined;
+            _write({ ["tree" + _reader.nixosRulePath]: "/* NixOS */\npolkit.addRule(function(action, subject) {\n});\n\n" + block });
         });
         _then("NixOS files written", () => _ready, () => read());
+        _then("the reading waits for the distribution", () => _reader._waitsForDistribution, () => {
+            assertEqual(_reader.readings, readings, "the distribution not known: nothing judged");
+            _reader.nixos = true;
+        });
         _then("NixOS read", () => _reader.readings > readings, () => {
             assertEqual(_reader.system + " " + _reader.installed.rule + " " + _reader.installed.conf, "nixos ours system",
-                        "/etc/NIXOS: the rule read from the system's rules file");
+                        "NixOS: the rule read from the system's rules file");
             lists = _reader.lists;
             _reader.viewers = 1;
         });

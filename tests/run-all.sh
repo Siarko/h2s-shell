@@ -21,6 +21,8 @@
 #
 #   tests/run-all-selftest.sh                           this runner's own verdict
 #   tests/run-system-selftest.sh                        the system runner's own verdict
+#   tests/distribution-selftest.sh                      the distributions' facts as the scripts
+#                                                       read them, and their detection
 #   tests/install-test.sh                               install.sh under stand-ins
 #   tests/run-helper.sh                                 the helper (helper/), built and run;
 #                                                       its build and launch.sh's look-up
@@ -97,6 +99,7 @@ fi
 parts=(
     "this runner's self-test|tests/run-all-selftest.sh"
     "system runner self-test|tests/run-system-selftest.sh"
+    "distribution facts self-test|tests/distribution-selftest.sh"
     "install.sh under stand-ins|tests/install-test.sh"
     "helper|tests/run-helper.sh"
     "unit suites|tests/run-unit.sh"

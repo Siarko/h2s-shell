@@ -17,9 +17,9 @@ seam_system_pam_dir=/etc/pam.d
 seam_vendor_pam_dir=/usr/lib/pam.d
 # pam_faillock's default settings file (pam-files.sh); empty: not read
 seam_faillock_conf=/etc/security/faillock.conf
-# The system the methods script takes itself to be on, nixos or other; empty: it asks the
-# machine (lock-auth-methods.sh)
-seam_system=
+# The distribution the scripts take themselves to be on, by its id (nixos, arch, generic);
+# empty: they detect it (scripts/distribution.sh; lock-auth-methods.sh, launch.sh)
+seam_distribution=
 # An executable that answers for the methods script; empty: none (lock-auth-methods.sh)
 seam_auth_methods=
 # The gdbus the methods script asks fprintd with (lock-auth-methods.sh)

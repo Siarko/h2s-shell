@@ -126,14 +126,21 @@ TestCase {
                                                              suspendWatchdog: 500 });
             _reader.suspended.connect((ok, error, method) => { suite._suspended = { ok: ok, error: error }; suite._method = method; });
             assertEqual(_support(), JSON.stringify({ canSuspend: "unknown", idleAction: null }), "before a read: unknown");
+            // Whether this is NixOS not known yet (Distribution not answered): the read waits
+            _reader.nixos = undefined;
             _readAfter("echo yes > \"$1/can-suspend\"; echo 'ignore 1800000000' > \"$1/idle-action\"");
+        });
+        _then("the read asked for", () => _ready, () => {
+            assert(!_reader.running && _reader.reads === _readsBefore, "the distribution not known: no read started");
+            // … and made once it is (the next step waits for it): not NixOS
+            _reader.nixos = false;
         });
         _then("the first read answered", () => _answered(), () => {
             assertEqual(_support(), JSON.stringify({ canSuspend: "yes", idleAction: { action: "ignore", after: 1800 } }),
                         "CanSuspend yes; IdleAction ignore after 30 min");
             assertEqual(_hibernation(), JSON.stringify({ canHibernate: "unknown", canSuspendThenHibernate: "unknown", hibernation: {
                 swaps: null, memoryInUse: -1, lockdown: "unknown", resume: "unknown", delay: { state: "unknown" }, nixos: false } }),
-                "nothing about hibernation answered or there: unknown, never yes; no /etc/NIXOS under the root: not NixOS");
+                "nothing about hibernation answered or there: unknown, never yes; the distribution not NixOS: not NixOS");
             _readAfter("set -e; r=\"$1/root\"; mkdir -p \"$r/proc\" \"$r/sys/kernel/security\" \"$r/sys/power\" \"$r/etc\"; "
                 + "echo na > \"$1/can-hibernate\"; echo yes > \"$1/can-suspend-then-hibernate\"; "
                 + "printf 'Filename\\t\\tType\\tSize\\tUsed\\tPriority\\n/dev/zram0 partition\\t4194300\\t0\\t100\\n' > \"$r/proc/swaps\"; "
@@ -151,7 +158,8 @@ TestCase {
             assertEqual(HibernateRules.unavailable(Object.assign({ answer: _reader.support.canHibernate }, _reader.support.hibernation)),
                         "Not available here: no swap space to save the session to (only zram, which is lost at power-off).",
                         "… said as the page says it");
-            _readAfter("set -e; r=\"$1/root\"; touch \"$r/etc/NIXOS\"; echo 'none [integrity] confidentiality' > \"$r/sys/kernel/security/lockdown\"; "
+            _reader.nixos = true;
+            _readAfter("set -e; r=\"$1/root\"; echo 'none [integrity] confidentiality' > \"$r/sys/kernel/security/lockdown\"; "
                 + "rm \"$1/sleep-conf\" \"$1/can-hibernate\"");
         });
         _then("the second hibernation read answered", () => _answered(), () => {
@@ -159,11 +167,13 @@ TestCase {
             assertEqual(read.canHibernate + " " + read.hibernation.lockdown + " " + read.hibernation.nixos + " " + JSON.stringify(read.hibernation.delay),
                         "unknown integrity true {\"state\":\"unknown\"}",
                         "CanHibernate failing: unknown; lockdown integrity; NixOS; sleep.conf not printed: the delay unknown");
+            _reader.nixos = null;
             _readAfter("echo na > \"$1/can-suspend\"; echo 'suspend 900000000' > \"$1/idle-action\"");
         });
         _then("the na read answered", () => _answered(), () => {
             assertEqual(_support(), JSON.stringify({ canSuspend: "na", idleAction: { action: "suspend", after: 900 } }),
                         "CanSuspend na; logind suspending by itself after 15 min");
+            assertEqual(_reader.support.hibernation.nixos, null, "… the distribution cannot be told: whether NixOS not known");
             _readAfter("echo challenge > \"$1/can-suspend\"; rm -f \"$1/idle-action\"");
         });
         _then("the challenge read answered", () => _answered(), () => {

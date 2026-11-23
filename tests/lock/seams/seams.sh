@@ -16,9 +16,10 @@ seam_vendor_pam_dir=${H2S_LOCK_VENDOR_PAM_DIR:-/usr/lib/pam.d}
 # H2S_LOCK_SYSTEM_PAM_DIR set, none is read
 seam_faillock_conf=${H2S_LOCK_FAILLOCK_CONF:-/etc/security/faillock.conf}
 [ -z "${H2S_LOCK_SYSTEM_PAM_DIR:-}" ] || [ -n "${H2S_LOCK_FAILLOCK_CONF:-}" ] || seam_faillock_conf=
-# H2S_LOCK_SYSTEM=nixos|other, counted only together with H2S_LOCK_SYSTEM_PAM_DIR (as the
-# shell counts it, LockIoRules.systemSeam): both systems' answers are tested on every machine
-seam_system=${H2S_LOCK_SYSTEM_PAM_DIR:+${H2S_LOCK_SYSTEM:-}}
+# H2S_DISTRIBUTION: the distribution by its id (nixos, arch, generic), counted only together
+# with H2S_LOCK_SYSTEM_PAM_DIR, so that a faked system never chooses among the machine's
+# real PAM configs: both systems' answers are tested on every machine
+seam_distribution=${H2S_LOCK_SYSTEM_PAM_DIR:+${H2S_DISTRIBUTION:-}}
 # H2S_LOCK_AUTH_METHODS: a script of the test's that lists its test PAM stacks
 seam_auth_methods=${H2S_LOCK_AUTH_METHODS:-}
 # H2S_LOCK_TOOLS: a directory whose gdbus stands in (a stand-in fprintd behind it)

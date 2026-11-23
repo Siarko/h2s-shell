@@ -30,7 +30,6 @@ Singleton {
 
     readonly property string lockTools: _read.lockTools
     readonly property string systemPamDirectory: _read.systemPamDirectory
-    readonly property string lockSystem: _read.lockSystem
     readonly property string ledsDirectory: _read.ledsDirectory
     readonly property var timings: _read.timings
     readonly property string timingsProblem: _read.timingsProblem

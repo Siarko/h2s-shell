@@ -7,8 +7,9 @@ import qs.singletons
 // PamStackRules'; this only runs the commands:
 //
 // - the methods script (scripts/lock-auth-methods.sh) for whether a fingerprint and a
-//   security key are ready and which configs the lock uses, and its `--fallback-facts`
-//   for whether this is NixOS (where libpam reads /etc/pam.d only);
+//   security key are ready and which configs the lock uses;
+// - Distribution for whether this is NixOS (where libpam reads /etc/pam.d only): a reading
+//   is published only once it has answered;
 // - scripts/pam-files.sh in rounds: first for the places (the PAM directories and
 //   faillock.conf, its seams), then for the paths the stacks ask for, until none is
 //   missing (PamStackRules.readingStep). It tells a file not there from one it cannot
@@ -23,7 +24,9 @@ QtObject {
 
     property var filesCommand: [Quickshell.shellDir + "/scripts/pam-files.sh"]
     property var methodsCommand: [Quickshell.shellDir + "/scripts/lock-auth-methods.sh"]
-    property var nixosCommand: [Quickshell.shellDir + "/scripts/lock-auth-methods.sh", "--fallback-facts"]
+    // Whether this is NixOS: true, false, null when the distribution cannot be told, or
+    // undefined until Distribution has answered
+    property var nixos: Distribution.ready ? (Distribution.id === "" ? null : Distribution.id === "nixos") : undefined
     // Added to every run's environment (a suite's seams)
     property var environment: ({})
     // The methods script finishes within about four seconds whatever fprintd does
@@ -52,7 +55,7 @@ QtObject {
             run.cancel();
         _runs = [];
         _state = {
-            places: null, answers: {}, rounds: 0, nixos: undefined, reading: false,
+            places: null, answers: {}, rounds: 0, nixos: nixos, reading: false,
             methods: methods ? null
                 : _methods ?? { known: false, fingerprint: "unknown", securityKey: "unknown", lock: {} }
         };
@@ -63,11 +66,15 @@ QtObject {
                 _advance(generation);
             }, generation);
         }
-        _start(nixosCommand, [], (lines, result) => {
-            _state.nixos = PamStackRules.nixosAnswer(lines, result);
-            _advance(generation);
-        }, generation);
         _read([], generation);
+    }
+
+    // A refresh made before Distribution answered takes its answer when it comes
+    onNixosChanged: {
+        if (running && _state.nixos === undefined && nixos !== undefined) {
+            _state.nixos = nixos;
+            _advance(_generation);
+        }
     }
 
     property int _generation: 0

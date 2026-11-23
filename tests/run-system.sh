@@ -7,8 +7,10 @@
 #   tests/run-system.sh <check>…     only the named ones (a check is named by its file in
 #                                    tests/system/<system>/ without ".sh")
 #
-# The system is read from /etc/os-release: ID=nixos is NixOS; ID=arch, or arch among
-# ID_LIKE, is Arch. H2S_OS_RELEASE names another file to read (tests/run-system-selftest.sh).
+# The system is the distribution the shell's scripts detect (scripts/distribution.sh: a
+# marker such as /etc/NIXOS, else os-release's ID, else its ID_LIKE): a set per
+# distribution, none for the generic one. H2S_DISTRIBUTION_ROOT is put before the paths it
+# reads (tests/run-system-selftest.sh's made-up trees).
 #
 # A check file is sourced in a shell of its own with REPO (the checkout) and:
 #
@@ -28,29 +30,16 @@ REPO=$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)
 SYSTEMS=(nixos arch)
 setup_error() { echo "run-system.sh: $*" >&2; exit 2; }
 
-# system_of <os-release file> → nixos, arch, or "unknown <ID>". The file is read as text,
-# never run.
-system_of() {
-    local file=$1 id like
-    [ -r "$file" ] || { echo "unknown (cannot read $file)"; return; }
-    value_of() { sed -n "s/^$1=//p" "$file" | head -n 1 | tr -d "\"'"; }
-    id=$(value_of ID)
-    like=$(value_of ID_LIKE)
-    case "$id" in
-        nixos) echo nixos; return ;;
-        arch) echo arch; return ;;
-    esac
-    case " $like " in
-        *" arch "*) echo arch ;;
-        *) echo "unknown (ID=${id:-none} in $file)" ;;
-    esac
-}
-
 case "${1:-}" in -*) echo "usage: tests/run-system.sh [<check>…]" >&2; exit 2 ;; esac
-system=$(system_of "${H2S_OS_RELEASE:-/etc/os-release}")
+# The distribution as the shell's scripts tell it (scripts/distribution.sh)
+source "$REPO/scripts/distribution.sh" || setup_error "cannot read scripts/distribution.sh; nothing was run"
+if ! distribution_detect "$REPO" "" "${H2S_DISTRIBUTION_ROOT:-}"; then
+    setup_error "which distribution this is cannot be told: $distribution_problem; nothing was run"
+fi
+system=$distribution_id
 case "$system" in
     nixos | arch) ;;
-    *) setup_error "no set for this system: $system; the sets are: ${SYSTEMS[*]}. Nothing was run" ;;
+    *) setup_error "no set for this system: $system (${distribution_os_id:+ID=$distribution_os_id, }${distribution_how}); the sets are: ${SYSTEMS[*]}. Nothing was run" ;;
 esac
 set_dir=$REPO/tests/system/$system
 

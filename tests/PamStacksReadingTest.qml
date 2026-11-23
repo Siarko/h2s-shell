@@ -9,7 +9,8 @@ import qs.singletons.io
 // them, pointed at stand-in directories — Arch-, NixOS- and Debian-shaped — and a stand-in
 // methods script (the methods script's own seam). A file that cannot be read (mode 000) and
 // an include that is not there leave the stack unknown; the methods script failing leaves
-// the fingerprint unknown; a refresh overtaken by another publishes nothing. The hint Settings shows follows the stack read (on Arch through
+// the fingerprint unknown; a refresh overtaken by another publishes nothing; a reading
+// made before the distribution is known (the reader's `nixos`) waits for it. The hint Settings shows follows the stack read (on Arch through
 // `include system-auth`). Never the real /etc/pam.d, /usr/lib/pam.d, faillock.conf or
 // fprintd. Asynchronous.
 TestCase {
@@ -76,7 +77,8 @@ TestCase {
         _ready = false;
         _sh("printf '%s' \"$2\" > \"$1/methods-out\"; printf '%s' \"$3\" > \"$1/methods-code\"",
             [_scratch, methods.map(line => line + "\n").join(""), String(code)], () => {
-            suite._reader.environment = suite._environment(system, nixos);
+            suite._reader.environment = suite._environment(system);
+            suite._reader.nixos = nixos;
             suite._readingsBefore = suite._reader.readings;
             suite._reader.refresh(withMethods);
             suite._ready = true;
@@ -84,13 +86,12 @@ TestCase {
     }
 
     // The seams for the system named (a directory under the scratch one)
-    function _environment(system, nixos) {
+    function _environment(system) {
         const base = _scratch + "/" + system;
         return {
             H2S_LOCK_SYSTEM_PAM_DIR: base + "/etc",
             H2S_LOCK_VENDOR_PAM_DIR: base + "/usr",
             H2S_LOCK_FAILLOCK_CONF: base + "/faillock.conf",
-            H2S_LOCK_SYSTEM: nixos ? "nixos" : "other",
             H2S_LOCK_AUTH_METHODS: _scratch + "/methods"
         };
     }
@@ -112,11 +113,16 @@ TestCase {
         _then("the stand-ins are in place", () => _ready, () => {
             _reader = _readerComponent.createObject(suite, {
                 filesCommand: [_tree + "/pam-files.sh"],
-                methodsCommand: [_tree + "/lock-auth-methods.sh"],
-                nixosCommand: [_tree + "/lock-auth-methods.sh", "--fallback-facts"]
+                methodsCommand: [_tree + "/lock-auth-methods.sh"]
             });
             assertEqual(_reader.reading, null, "before a refresh: nothing read");
-            _readAs("arch", false, true, ["password\t" + _scratch + "/tree/pam\tpassword", "fingerprint\t" + arch + "/etc\th2s-shell-fingerprint"], 0);
+            // Whether this is NixOS not known yet (Distribution not answered): read, not published
+            _readAs("arch", undefined, true, ["password\t" + _scratch + "/tree/pam\tpassword", "fingerprint\t" + arch + "/etc\th2s-shell-fingerprint"], 0);
+        });
+        _then("the Arch reading waits for the distribution", () => _ready && _reader._state.methods !== null
+              && _reader._state.places !== null && !_reader._state.reading, () => {
+            assert(_reader.reading === null && _reader.running, "everything read, the distribution not known: nothing published yet");
+            _reader.nixos = false;
         });
         _then("Arch read", () => _answered(), () => {
             const reading = _reader.reading;
@@ -130,7 +136,7 @@ TestCase {
             assertEqual(reading.faillock["polkit-1"].deny + " " + reading.faillock["polkit-1"].unlockTime, "5 120",
                         "pam_faillock's settings from faillock.conf (the seam's)");
             assertEqual(JSON.stringify(reading.facts), JSON.stringify({ nixos: false, fingerprint: "ready", securityKey: "absent" }),
-                        "facts: not NixOS (the methods script's seam), a fingerprint ready, no security key");
+                        "facts: not NixOS (as the distribution answered), a fingerprint ready, no security key");
             assertEqual(reading.directories.length, 2, "… both directories read");
             assertEqual(reading.lock.fingerprint.known + " " + _names(reading.lock.fingerprint), "true pam_fprintd.so",
                         "the lock's fingerprint config, at the path the methods script gave");
@@ -155,7 +161,7 @@ TestCase {
         _then("NixOS read", () => _answered(), () => {
             const reading = _reader.reading;
             const polkit = reading.services["polkit-1"];
-            assertEqual(reading.facts.nixos, true, "NixOS (the methods script's seam)");
+            assertEqual(reading.facts.nixos, true, "NixOS (as the distribution answered)");
             assertEqual(reading.directories.length, 1, "… /etc/pam.d only");
             assertEqual(polkit.known + " " + _names(polkit), "true pam_fprintd.so pam_unix.so pam_deny.so", "NixOS' generated polkit-1, store paths");
             assertEqual(_order(reading), "fingerprint-first", "… the reader first");
@@ -212,7 +218,8 @@ TestCase {
         _sh([
             "set -e; s=$1; repo=$2; mkdir -p \"$s/tree/scripts\"",
             "cp \"$repo/scripts/pam-files.sh\" \"$repo/scripts/lock-auth-methods.sh\" \"$s/tree/scripts/\"",
-            "cp \"$repo/tests/lock/seams/seams.sh\" \"$s/tree/scripts/seams.sh\"",
+            "cp \"$repo/tests/lock/seams/seams.sh\" \"$s/tree/scripts/seams.sh\"; cp \"$repo/scripts/distribution.sh\" \"$s/tree/scripts/\"",
+            "for id in nixos arch generic; do mkdir -p \"$s/tree/distributions/$id\"; cp \"$repo/distributions/$id/distribution.env\" \"$s/tree/distributions/$id/\"; done",
             // The methods stand-in, and pam-files.sh behind a wait: both hold while "hold" exists
             "printf '#!/bin/sh\\nwhile [ -e \"$(dirname \"$0\")/hold\" ]; do sleep 0.05; done\\ncat \"$(dirname \"$0\")/methods-out\"\\nexit \"$(cat \"$(dirname \"$0\")/methods-code\")\"\\n' > \"$s/methods\"; chmod +x \"$s/methods\"",
             "printf '#!/bin/sh\\nwhile [ -e \"%s/hold\" ]; do sleep 0.05; done\\nexec \"%s/tree/scripts/pam-files.sh\" \"$@\"\\n' \"$s\" \"$s\" > \"$s/held-files\"; chmod +x \"$s/held-files\"",

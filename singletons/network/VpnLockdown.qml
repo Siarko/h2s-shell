@@ -84,7 +84,8 @@ Singleton {
     property int installedVersion: 0
     property string installedAt: ""
     property bool ruleInstalled: false
-    property bool isNixos: false
+    // NixOS (Distribution: false until it has answered)
+    readonly property bool isNixos: Distribution.id === "nixos"
     property bool nftFound: false
     property bool checked: false
     // A password was asked for while running the installed script: its rule does not apply
@@ -177,11 +178,10 @@ Singleton {
             + 'if grep -qs "h2s-vpn-lockdown" "$3" && grep -qs "subject.user == \\"$5\\"" "$3"; then echo "rule yes"; '
             + 'elif cat /etc/static/polkit-1/rules.d/*.rules 2>/dev/null | grep -q "h2s-vpn-lockdown"; then '
             + '  if cat /etc/static/polkit-1/rules.d/*.rules | grep -q "subject.user == \\"$5\\""; then echo "rule yes"; fi; fi; '
-            + '[ -e /etc/NIXOS ] && echo "nixos"; '
             + 'for place in /usr/sbin/nft /usr/bin/nft /sbin/nft /bin/nft /run/current-system/sw/bin/nft; do [ -x "$place" ] && echo "nft" && break; done; true',
             "sh", root.scriptPath, root.installedPath, root.installFolder + "/polkit.rules", root.nixosPath, root.user]
         onDone: lines => {
-            let script = 0, installed = 0, at = "", rule = false, nixos = false, nft = false;
+            let script = 0, installed = 0, at = "", rule = false, nft = false;
             for (const line of lines) {
                 const parts = line.trim().split(" ");
                 if (parts[0] === "script")
@@ -191,8 +191,6 @@ Singleton {
                     at = parts[2] ?? "";
                 } else if (parts[0] === "rule")
                     rule = true;
-                else if (parts[0] === "nixos")
-                    nixos = true;
                 else if (parts[0] === "nft")
                     nft = true;
             }
@@ -201,7 +199,6 @@ Singleton {
             root.installedVersion = installed;
             root.installedAt = at;
             root.ruleInstalled = rule;
-            root.isNixos = nixos;
             root.nftFound = nft;
             root.checked = true;
             if (changed)

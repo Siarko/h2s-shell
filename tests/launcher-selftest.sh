@@ -71,7 +71,7 @@ within() { local seconds=$1 description=$2; shift 2; if wait_until "$seconds" "$
 
 # ---- The fabricated PATH: the utilities launch.sh calls, the real ones, and the stand-in ---
 mkdir -p "$work/bin" "$work/home" "$work/data"
-for name in bash env dirname readlink id date stat mv flock awk sed timeout sleep tr grep head basename cat rm find cksum sort mktemp; do
+for name in bash env dirname readlink id date stat mv flock awk sed timeout sleep tr grep head basename cat rm find cksum sort mktemp wc; do
     real=$(type -P "$name") || { echo "launcher-selftest.sh: $name not found on PATH (launch.sh calls it)" >&2; exit 2; }
     ln -s "$real" "$work/bin/$name"
 done
@@ -152,15 +152,24 @@ fi
 # constants, and the cases need the first pause shortened (H2S_LAUNCHER_TEST_TIMINGS): to
 # 0.02 s, so that the pauses, doubling while the shell keeps dying within 30 s of its start,
 # stay short over the cases' dozen quick deaths in a row (0.1 s made them 0.1 … 3.2 s)
+# (with scripts/distribution.sh and the distributions' facts, which it reads at start)
+copy_distributions() {
+    local env id
+    cp "$REPO/scripts/distribution.sh" "$1/scripts/" || return 1
+    for env in "$REPO"/distributions/*/distribution.env; do
+        id=$(basename "$(dirname "$env")")
+        mkdir -p "$1/distributions/$id" && cp "$env" "$1/distributions/$id/" || return 1
+    done
+}
 mkdir -p "$work/tree/scripts"
 cp "$REPO/scripts/launch.sh" "$work/tree/scripts/launch.sh" \
-    && cp "$REPO/tests/lock/seams/seams.sh" "$work/tree/scripts/seams.sh" \
+    && cp "$REPO/tests/lock/seams/seams.sh" "$work/tree/scripts/seams.sh" && copy_distributions "$work/tree" \
     || { echo "launcher-selftest.sh: cannot copy the launcher and the test seams.sh" >&2; exit 2; }
 launch_script=$work/tree/scripts/launch.sh
 
 # ---- The control: launch.sh with `wait -f` put back, to see what the "killed" case can catch
 mkdir -p "$work/control/scripts"
-cp "$REPO/tests/lock/seams/seams.sh" "$work/control/scripts/seams.sh" \
+cp "$REPO/tests/lock/seams/seams.sh" "$work/control/scripts/seams.sh" && copy_distributions "$work/control" \
     || { echo "launcher-selftest.sh: cannot copy the test seams.sh" >&2; exit 2; }
 control_script=$work/control/scripts/launch.sh
 sed 's/^        wait "\$child"$/        wait -f "$child"/' "$REPO/scripts/launch.sh" > "$control_script"
@@ -250,6 +259,10 @@ for layout in $(seq 1 "$layouts"); do
     [ "$count" -le "$lines" ] || lines=$count
 done
 is "a killed shell is started again, its status known ($restarted of $layouts)" test "$restarted" = "$layouts"
+machine_distribution=$("$REPO/scripts/distribution.sh" | sed -n 's/^id=//p')
+at=$work/layout1
+is "the distribution said once at the start, as scripts/distribution.sh tells it ($machine_distribution)" \
+    test "$(said_times "distribution: $machine_distribution (by ")" = 1
 is "bash never lost the child (\"No record of process\": $lost of $layouts)" test "$lost" = 0
 is "the launcher's output stayed small (at most $lines lines)" test "$lines" -le 20
 end_row layout

@@ -355,8 +355,5 @@ TestCase {
         assertEqual([methods.known, methods.fingerprint, methods.securityKey, Object.keys(methods.lock).length].join(" "), "false unknown unknown 0",
                     "the script failed (fprintd timed out): unknown, its lines not used");
         assertEqual(rules.methodsAnswer([], { failedToStart: true, code: -1 }).fingerprint, "unknown", "not started: unknown");
-        assertEqual(rules.nixosAnswer(["nixos", "answered"], exited(0)), true, "--fallback-facts: NixOS");
-        assertEqual(rules.nixosAnswer(["readable", "answered"], exited(0)), false, "… not NixOS");
-        assertEqual(rules.nixosAnswer(["nixos"], exited(0)), null, "… an answer without its end: not known");
     }
 }

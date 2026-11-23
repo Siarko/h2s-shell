@@ -8,15 +8,16 @@
 # 2. The methods script names a password config PamContext cannot start: the first attempt
 #    says so, the next one takes the fallback — and unlocks.
 # 3. Without the system-wide config, on NixOS: `login` in that directory. The shell is told
-#    it is on NixOS (H2S_LOCK_SYSTEM=nixos, which 1 and 2 do not depend on: a readable
-#    system-wide config wins on every system).
+#    it is on NixOS (H2S_DISTRIBUTION=nixos: Distribution and the methods script both take
+#    it; 1 and 2 do not depend on it: a readable system-wide config wins on every
+#    system).
 # 4. The shell's own methods script (which also answers what the fallback depends on)
 #    cannot be run: the shell asks the machine itself, so the fallback still follows the
 #    system-wide config coming back, and unlocks; and going away again, on NixOS: `login`.
 
 methods_script=$WORK/failing-methods.sh
 printf '#!%s\necho "methods script: deliberately failing" >&2\nexit 3\n' "$(command -v bash)" > "$methods_script"
-stack_start --methods-script "$methods_script" --system-password-stack --shell-env H2S_LOCK_SYSTEM=nixos
+stack_start --methods-script "$methods_script" --system-password-stack --shell-env H2S_DISTRIBUTION=nixos
 
 check_within "$GUARD" "the shell looked for its fallback" state_is fallback_known true
 check "the fallback is the (test's) system-wide config" state_is password_fallback "$WORK/system-pam/h2s-shell-password"

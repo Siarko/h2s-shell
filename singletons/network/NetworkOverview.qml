@@ -58,7 +58,8 @@ Singleton {
     property var permissions: ({})
     // NixOS keeps /etc declarative: written files there are outside the system's own
     // configuration, so the page offers the line for configuration.nix instead
-    property bool isNixos: false
+    // (Distribution: false until it has answered, as until any check has)
+    readonly property bool isNixos: Distribution.id === "nixos"
 
     // polkit's answer for one of NetworkManager's actions ("settings.modify.hostname")
     function need(action: string): string {
@@ -145,12 +146,6 @@ Singleton {
         }
     }
 
-    CommandQuery {
-        id: _nixos
-        command: ["sh", "-c", "test -e /etc/NIXOS && echo yes || true"]
-        onDone: lines => root.isNixos = (lines[0] ?? "") === "yes"
-    }
-    Component.onCompleted: _nixos.request()
     CommandQuery {
         id: _devices
         command: ["nmcli", "-t", "-f", "all", "device", "show"]

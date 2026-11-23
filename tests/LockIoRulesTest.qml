@@ -141,13 +141,6 @@ TestCase {
         assertEqual(fallbackFrom(["readable", "answered"]), JSON.stringify({ directory: "/etc/pam.d", config: "h2s-shell-password" }),
                     "the direct answer elsewhere with the system-wide config: that one");
         assertEqual(fallbackFrom([]), "unknown", "the direct question without an answer: nothing follows");
-        // The test bed's seam for the system counts only with its own PAM directory
-        assertEqual(rules.systemSeam("/tmp/test-pam", "nixos"), "nixos", "system seam: nixos");
-        assertEqual(rules.systemSeam("/tmp/test-pam", "other"), "other", "system seam: other");
-        assertEqual(rules.systemSeam("/tmp/test-pam", "neither"), "", "system seam: a value it does not know: the machine is asked");
-        assertEqual(rules.systemSeam("/tmp/test-pam", null), "", "system seam: not set: the machine is asked");
-        assertEqual(rules.systemSeam("", "nixos"), "", "system seam: without the PAM directory seam it does not count");
-        assertEqual(rules.systemSeam(null, "nixos"), "", "system seam: … also when that is not set at all");
 
         // --- key names ---
         assertEqual(rules.keyName(Qt.Key_Return), "Enter", "Return is Enter");

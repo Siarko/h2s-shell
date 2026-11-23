@@ -18,7 +18,6 @@ import QtQuick
 Singleton {
     readonly property string lockTools: ""
     readonly property string systemPamDirectory: ""
-    readonly property string lockSystem: ""
     readonly property string ledsDirectory: ""
     readonly property var timings: Object.freeze({})
     readonly property string timingsProblem: ""

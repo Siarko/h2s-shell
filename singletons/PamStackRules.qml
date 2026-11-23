@@ -516,12 +516,6 @@ Singleton {
         };
     }
 
-    // The methods script's `--fallback-facts` answer → true (NixOS), false, or null (no answer)
-    function nixosAnswer(lines, result) {
-        const facts = LockIoRules.fallbackFacts(LockIoRules.probeRun(lines, result));
-        return facts.known ? facts.nixos : null;
-    }
-
     // ── faillock.conf ──
 
     readonly property string faillockConfDefault: "/etc/security/faillock.conf"

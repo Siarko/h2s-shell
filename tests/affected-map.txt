@@ -126,8 +126,14 @@ tests/fixtures/pam-nixos/* unit:PamNixosModuleTest self:tests/run-system.sh
 +nix/remember.nix unit:RememberNixosModuleTest
 tests/fixtures/remember-nixos/* unit:RememberNixosModuleTest self:tests/run-system.sh
 # The distributions' facts and the os-release fixtures, read as data by the distribution suites
-distributions/* unit:DistributionRulesTest unit:DistributionReadingTest
-tests/fixtures/distribution/* unit:DistributionRulesTest unit:DistributionReadingTest
+distributions/* unit:DistributionRulesTest unit:DistributionReadingTest self:tests/distribution-selftest.sh
+tests/fixtures/distribution/* unit:DistributionRulesTest unit:DistributionReadingTest self:tests/distribution-selftest.sh
+# The scripts' detection, from the generated distribution.env files: the methods script,
+# the launcher and the system runner read it
++distributions/* lock:methods-* self:tests/run-system-selftest.sh self:tests/launcher-selftest.sh
+scripts/distribution.sh self:tests/distribution-selftest.sh self:tests/run-system-selftest.sh self:tests/launcher-selftest.sh lock:methods-* unit:PamStacksReadingTest
+scripts/distribution-env.py self:tests/distribution-selftest.sh
+tests/distribution-selftest.sh self:tests/distribution-selftest.sh
 
 # ---- Started only by shell.qml ---------------------------------------------------------
 singletons/SleepLockNotice.qml unit:SleepNoticeRulesTest lock:sleep-notice

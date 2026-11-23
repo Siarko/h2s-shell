@@ -7,9 +7,10 @@ import qs.singletons
 // are RememberRules'; this only runs the commands, every one a property so that a suite
 // points it at stand-ins (tests/RememberedAdminReadingTest.qml):
 //
-// - scripts/pam-files.sh for the rule files, polkitd.conf in its three places and
-//   /etc/NIXOS (it tells a file not there from one it cannot read), and `readlink -f` for
-//   the program pkexec reports for the shell's timeout: what is installed (RememberRules.state);
+// - scripts/pam-files.sh for the rule files and polkitd.conf in its three places (it tells a
+//   file not there from one it cannot read), and `readlink -f` for the program pkexec
+//   reports for the shell's timeout: what is installed (RememberRules.state), judged for
+//   the system Distribution names (`nixos`: a reading waits until it is known);
 // - gdbus for the logind session (`session/auto`: the caller's, else the user's display
 //   session — the session polkit takes for a process outside one), asked until known; then
 //   the authority's EnumerateTemporaryAuthorizations for that session: what is kept
@@ -36,6 +37,9 @@ QtObject {
     property string timeout: ""
     // Countdown views showing now: the list is read once a second while above 0
     property int viewers: 0
+    // Whether this is NixOS: true, false, null when the distribution cannot be told (nothing
+    // is judged then), or undefined until Distribution has answered
+    property var nixos: Distribution.ready ? (Distribution.id === "" ? null : Distribution.id === "nixos") : undefined
 
     // ---- Commands (seams) ----
     property var gdbusCommand: ["gdbus"]
@@ -53,7 +57,6 @@ QtObject {
     property var now: () => Date.now()
 
     readonly property string nixosRulePath: "/etc/polkit-1/rules.d/10-nixos.rules"
-    readonly property string nixosMarkPath: "/etc/NIXOS"
 
     // ---- Outputs ----
     // RememberRules.state's answer, or null before the first reading
@@ -92,19 +95,31 @@ QtObject {
     property int readings: 0
     property int revokes: 0
 
+    // The latest reading's settling, and whether it waits for the distribution
+    property var _settle: null
+    property bool _waitsForDistribution: false
+    onNixosChanged: {
+        if (_waitsForDistribution)
+            _settle?.();
+    }
+
     // ---- Requests ----
     function refresh() {
         const generation = ++_filesGeneration;
-        const paths = [RememberRules.rulePath, nixosRulePath, nixosMarkPath].concat(RememberRules.confPaths);
+        const paths = [RememberRules.rulePath, nixosRulePath].concat(RememberRules.confPaths);
         const answers = { files: null, program: undefined };
         // The facts as they are when the reading starts: the state and the facts handed on agree
         const readUser = user, readTimeout = timeout;
         const settle = () => {
             if (generation !== _filesGeneration || answers.files === null || answers.program === undefined)
                 return;
+            // Judged only for a known system: until then the reading waits (onNixosChanged)
+            _waitsForDistribution = typeof root.nixos !== "boolean";
+            if (_waitsForDistribution)
+                return;
             const files = answers.files;
             const text = path => files[path]?.text ?? (files[path]?.absent ? undefined : null);
-            const nixos = files[nixosMarkPath]?.text !== undefined;
+            const nixos = root.nixos;
             const confs = {};
             for (const path of RememberRules.confPaths)
                 confs[path] = text(path);
@@ -116,6 +131,7 @@ QtObject {
             installed = RememberRules.state({ rule, confs }, { system, user: readUser, timeout: readTimeout, program: answers.program });
             readings += 1;
         };
+        _settle = settle;
         _run(filesCommand.concat(paths.map(path => fileRoot + path)), (lines, result) => {
             const answer = PamStackRules.filesAnswer(lines, result, paths.map(path => fileRoot + path)).answers;
             const files = {};

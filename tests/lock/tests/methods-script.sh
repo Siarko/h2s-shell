@@ -5,9 +5,10 @@
 # (H2S_LOCK_SYSTEM_PAM_DIR), the user's config folder a private one (XDG_CONFIG_HOME). The
 # system bus address leads nowhere (lib.sh), so nothing here can reach the real fprintd.
 #
-# Which system the script takes itself to be on is set here too (H2S_LOCK_SYSTEM, `system`
-# below), so both systems' answers are checked on every machine; the last checks are that
-# without the seam the machine itself is asked.
+# Which distribution the script takes itself to be on is set here too (H2S_DISTRIBUTION,
+# `system` below), so both systems' answers are checked on every machine; the last checks
+# are that a distribution it does not know is no answer, and that without the seam the
+# machine itself is asked (scripts/distribution.sh).
 #
 # The contract (the script's header): exit 0 is an answer, also "not
 # here"; non-zero when a question could not be answered — within the shell's 5 s, with the
@@ -19,7 +20,7 @@ tab=$'\t'
 sys=$WORK/system-script
 tools=$WORK/script-tools
 xdg=$WORK/script-xdg
-system=other
+system=arch
 mkdir -p "$sys" "$tools" "$xdg/Yubico" "$WORK/u2f"
 _write_fprintd_standin "$tools"
 ln -sf gdbus-fprintd "$tools/gdbus"
@@ -29,7 +30,7 @@ echo "auth required /nowhere/pam_fprintd.so" > "$sys/h2s-shell-fingerprint"
 # run_script: runs it once; OUTPUT, STATUS, ELAPSED (ms), the stderr in $WORK/script.err
 run_script() {
     local started=${EPOCHREALTIME//[.,]/}
-    OUTPUT=$(env -u H2S_LOCK_AUTH_METHODS H2S_LOCK_SYSTEM="$system" H2S_LOCK_TOOLS="$tools" H2S_LOCK_SYSTEM_PAM_DIR="$sys" \
+    OUTPUT=$(env -u H2S_LOCK_AUTH_METHODS H2S_DISTRIBUTION="$system" H2S_LOCK_TOOLS="$tools" H2S_LOCK_SYSTEM_PAM_DIR="$sys" \
         XDG_CONFIG_HOME="$xdg" timeout 20 "$script" 2> "$WORK/script.err")
     STATUS=$?
     ELAPSED=$(( (${EPOCHREALTIME//[.,]/} - started) / 1000 ))
@@ -120,7 +121,7 @@ check "multiline: the reason is one line" test "$(grep -c . "$WORK/script.err")"
 empty_tools=$WORK/no-tools
 mkdir -p "$empty_tools"
 fprintd_mode enrolled
-OUTPUT=$(env -u H2S_LOCK_AUTH_METHODS H2S_LOCK_SYSTEM="$system" H2S_LOCK_TOOLS="$empty_tools" H2S_LOCK_SYSTEM_PAM_DIR="$sys" \
+OUTPUT=$(env -u H2S_LOCK_AUTH_METHODS H2S_DISTRIBUTION="$system" H2S_LOCK_TOOLS="$empty_tools" H2S_LOCK_SYSTEM_PAM_DIR="$sys" \
     XDG_CONFIG_HOME="$xdg" timeout 20 "$script" 2> "$WORK/script.err")
 STATUS=$?
 check "no gdbus: exit non-zero" status_nonzero
@@ -138,7 +139,7 @@ check "NixOS without a system-wide fingerprint config: not offered" lacks_method
 check "NixOS without a system-wide fingerprint config: fprintd not asked" \
     test "$(grep -c . "$WORK/fprintd/log")" = "$calls_before"
 check "NixOS without a system-wide fingerprint config: exit 0" status_is 0
-system=other
+system=arch
 run_script
 check "elsewhere without a system-wide fingerprint config: the shipped one" has_line "$shipped_fingerprint_line"
 check "elsewhere without a system-wide fingerprint config: exit 0" status_is 0
@@ -147,14 +148,14 @@ mv "$sys/h2s-shell-fingerprint.off" "$sys/h2s-shell-fingerprint"
 # ---- password ------------------------------------------------------------------------
 # facts: what --fallback-facts answers, as one line of words
 facts() {
-    FACTS=$(env -u H2S_LOCK_AUTH_METHODS H2S_LOCK_SYSTEM="$system" H2S_LOCK_SYSTEM_PAM_DIR="$sys" \
+    FACTS=$(env -u H2S_LOCK_AUTH_METHODS H2S_DISTRIBUTION="$system" H2S_LOCK_SYSTEM_PAM_DIR="$sys" \
         timeout 20 "$script" --fallback-facts | tr '\n' ' ')
 }
 facts_are() { [ "$FACTS" = "$1" ]; }
 system=nixos
 facts
 check "fallback facts on NixOS with the system-wide password config" facts_are "readable nixos answered "
-system=other
+system=arch
 facts
 check "fallback facts elsewhere with it" facts_are "readable answered "
 
@@ -165,36 +166,42 @@ check "no system-wide password config on NixOS: login (as the shell's fallback)"
     has_line "password$tab$sys${tab}login"
 facts
 check "fallback facts on NixOS without it" facts_are "nixos answered "
-system=other
+system=arch
 run_script
 check "no system-wide password config elsewhere: the shipped one" \
     has_line "password$tab$LOCKTEST_SHELL/pam${tab}password"
 facts
 check "fallback facts elsewhere without it" facts_are "answered "
 
-# The seam is the test bed's: a value it does not know, or the seam without the test's
-# own PAM directory, and the machine itself is asked. (The second reads the real
-# /etc/pam.d — whether one file is readable — and nothing else.)
-machine="answered "
-other_system=nixos
-[ -e /etc/NIXOS ] && { machine="nixos answered "; other_system=other; }
+# A distribution the seam names that is none: no answer at all (the shell then asks
+# without the script), and the methods list fails, saying why
 system=neither
 facts
-check "an unknown H2S_LOCK_SYSTEM: the machine is asked" facts_are "$machine"
+check "an H2S_DISTRIBUTION that names no distribution: no fallback facts" facts_are ""
+run_script
+check "… the methods list fails" status_nonzero
+check "… saying why" says "which distribution this is cannot be told: H2S_DISTRIBUTION names no distribution: neither"
+check "… the password line printed all the same" has_line "password$tab$LOCKTEST_SHELL/pam${tab}password"
+# The seam is the test bed's: without the test's own PAM directory it does not count, and
+# the machine itself is asked. (This reads the real /etc/pam.d — whether one file is
+# readable — and nothing else.)
+machine="answered "
+other_system=nixos
+[ "$("$LOCKTEST_SHELL/scripts/distribution.sh" | head -n 1)" = id=nixos ] && { machine="nixos answered "; other_system=arch; }
 real_facts() {
-    env -u H2S_LOCK_AUTH_METHODS -u H2S_LOCK_SYSTEM_PAM_DIR H2S_LOCK_SYSTEM="$other_system" \
+    env -u H2S_LOCK_AUTH_METHODS -u H2S_LOCK_SYSTEM_PAM_DIR H2S_DISTRIBUTION="$other_system" \
         timeout 20 "$script" --fallback-facts | grep -vx readable | tr '\n' ' '
 }
-check "H2S_LOCK_SYSTEM without H2S_LOCK_SYSTEM_PAM_DIR: ignored, the machine is asked" \
+check "H2S_DISTRIBUTION without H2S_LOCK_SYSTEM_PAM_DIR: ignored, the machine is asked" \
     test "$(real_facts)" = "$machine"
 # The methods stand-in of the bed never answers this question
 standin_facts() {
-    H2S_LOCK_AUTH_METHODS="$WORK/no-such-methods" H2S_LOCK_SYSTEM=nixos H2S_LOCK_SYSTEM_PAM_DIR="$sys" \
+    H2S_LOCK_AUTH_METHODS="$WORK/no-such-methods" H2S_DISTRIBUTION=nixos H2S_LOCK_SYSTEM_PAM_DIR="$sys" \
         timeout 20 "$script" --fallback-facts | tr '\n' ' '
 }
 check "fallback facts are the script's own even with H2S_LOCK_AUTH_METHODS set" \
     test "$(standin_facts)" = "nixos answered "
-system=other
+system=arch
 mv "$sys/h2s-shell-password.off" "$sys/h2s-shell-password"
 
 # ---- u2f -----------------------------------------------------------------------------
@@ -250,7 +257,7 @@ mkdir -p "$WORK/glob-cwd/authfile=$WORK/u2f"
 : > "$WORK/glob-cwd/authfile=$WORK/u2f/k-matched"
 printf '%s:khandle,pubkey,es256,+presence\n' "$user" > "$WORK/u2f/k*"
 echo "auth required /nowhere/pam_u2f.so authfile=$WORK/u2f/k* cue" > "$sys/h2s-shell-u2f"
-OUTPUT=$(cd "$WORK/glob-cwd" && env -u H2S_LOCK_AUTH_METHODS H2S_LOCK_SYSTEM="$system" H2S_LOCK_TOOLS="$tools" H2S_LOCK_SYSTEM_PAM_DIR="$sys" \
+OUTPUT=$(cd "$WORK/glob-cwd" && env -u H2S_LOCK_AUTH_METHODS H2S_DISTRIBUTION="$system" H2S_LOCK_TOOLS="$tools" H2S_LOCK_SYSTEM_PAM_DIR="$sys" \
     XDG_CONFIG_HOME="$xdg" timeout 20 "$script" 2> "$WORK/script.err")
 check "u2f: authfile= with a * is taken literally, not expanded against the current directory" has_line "$u2f_line"
 rm -f "$WORK/u2f/k*"
@@ -261,11 +268,11 @@ printf '#!%s\necho "a.b"\n' "$(command -v bash)" > "$WORK/fake-id/id"
 chmod +x "$WORK/fake-id/id"
 echo "auth required /nowhere/pam_u2f.so cue" > "$sys/h2s-shell-u2f"
 printf 'axb:khandle,pubkey,es256,+presence\n' > "$keys"
-OUTPUT=$(env -u H2S_LOCK_AUTH_METHODS H2S_LOCK_SYSTEM="$system" PATH="$WORK/fake-id:$PATH" H2S_LOCK_TOOLS="$tools" H2S_LOCK_SYSTEM_PAM_DIR="$sys" \
+OUTPUT=$(env -u H2S_LOCK_AUTH_METHODS H2S_DISTRIBUTION="$system" PATH="$WORK/fake-id:$PATH" H2S_LOCK_TOOLS="$tools" H2S_LOCK_SYSTEM_PAM_DIR="$sys" \
     XDG_CONFIG_HOME="$xdg" timeout 20 "$script" 2> "$WORK/script.err")
 check "u2f: user a.b, keys only for axb: not offered (the name is no pattern)" lacks_method u2f
 printf 'a.b:khandle,pubkey,es256,+presence\n' > "$keys"
-OUTPUT=$(env -u H2S_LOCK_AUTH_METHODS H2S_LOCK_SYSTEM="$system" PATH="$WORK/fake-id:$PATH" H2S_LOCK_TOOLS="$tools" H2S_LOCK_SYSTEM_PAM_DIR="$sys" \
+OUTPUT=$(env -u H2S_LOCK_AUTH_METHODS H2S_DISTRIBUTION="$system" PATH="$WORK/fake-id:$PATH" H2S_LOCK_TOOLS="$tools" H2S_LOCK_SYSTEM_PAM_DIR="$sys" \
     XDG_CONFIG_HOME="$xdg" timeout 20 "$script" 2> "$WORK/script.err")
 check "u2f: user a.b with a key: offered" has_line "$u2f_line"
 printf '%s:khandle,pubkey,es256,+presence\n' "$user" > "$keys"
@@ -275,13 +282,14 @@ printf '%s:khandle,pubkey,es256,+presence\n' "$user" > "$keys"
 # a copy of the script beside a pam/u2f that names pam_u2f, as the real one does.
 rm -f "$sys/h2s-shell-u2f"
 mkdir -p "$WORK/script-shell/scripts" "$WORK/script-shell/pam"
-cp "$script" "$(dirname "$script")/seams.sh" "$WORK/script-shell/scripts/"
+cp "$script" "$(dirname "$script")/seams.sh" "$(dirname "$script")/distribution.sh" "$WORK/script-shell/scripts/"
+cp -r "$LOCKTEST_SHELL/distributions" "$WORK/script-shell/"
 echo "auth required /nowhere/pam_u2f.so cue" > "$WORK/script-shell/pam/u2f"
 script=$WORK/script-shell/scripts/lock-auth-methods.sh
 system=nixos
 run_script
 check "u2f: NixOS without a system-wide u2f config: not offered, keys or not" lacks_method u2f
-system=other
+system=arch
 run_script
 check "u2f: elsewhere without a system-wide u2f config: the shipped one" has_line "u2f$tab$WORK/script-shell/pam${tab}u2f"
 check "u2f checks: the fingerprint question stayed 'not here'" status_is 0

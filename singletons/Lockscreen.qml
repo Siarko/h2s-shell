@@ -557,6 +557,16 @@ Singleton {
             // and the question asked again (below)
             if (_fallbackDirectProbe.running)
                 return;
+            // Until the distribution is known nothing is answered — not "not NixOS": the
+            // question is asked when Distribution answers (below). One that cannot be told
+            // leaves the fallback as it is
+            if (!Distribution.ready)
+                return;
+            if (Distribution.id === "") {
+                fallbackDirectFor = 0;
+                fallbackAnsweredBy("none", "which distribution this is cannot be told: " + Distribution.detection.problem);
+                return;
+            }
             _fallbackDirectProbe.generation = fallbackDirectFor;
             _fallbackDirectProbe.request();
         }
@@ -596,6 +606,11 @@ Singleton {
             fallbackAnsweredBy("direct", facts.reason);
             fallbackDirectFor = fallbackAsked;
             probeFallbackDirectly();
+        });
+
+        Distribution.readyChanged.connect(() => {
+            if (fallbackDirectFor !== 0)
+                probeFallbackDirectly();
         });
 
         _fallbackDirectProbe.answered.connect((lines, result) => {
@@ -989,19 +1004,18 @@ Singleton {
     }
 
     // The same question without the script, for when the script gives no answer: nothing
-    // here but `sh` and `test`. The test bed's seam for the system (H2S_LOCK_SYSTEM, read
-    // as the script reads it: LockIoRules.systemSeam) is honoured here too, so that a test
-    // of this path gets the same answer on every machine. `generation`: the request it
-    // was started for
+    // here but `sh` and `test`, and which distribution this is from the shell's own
+    // detection (Distribution; in a test tree H2S_DISTRIBUTION names it, so that a test of
+    // this path gets the same answer on every machine). Asked only once Distribution has
+    // answered (probeFallbackDirectly). `generation`: the request it was started for
     LatestQuery {
         id: _fallbackDirectProbe
         property int generation: 0
         command: ["sh", "-c",
             "test -r \"$1/h2s-shell-password\" && echo readable\n"
-            + "case $2 in nixos) echo nixos ;; other) ;; *) test -e /etc/NIXOS && echo nixos ;; esac\n"
+            + "[ \"$2\" = nixos ] && echo nixos\n"
             + "echo answered",
-            "sh", root._systemPamDirectory,
-            LockIoRules.systemSeam(TestSeams.systemPamDirectory, TestSeams.lockSystem)]
+            "sh", root._systemPamDirectory, Distribution.id]
     }
 
     // ---- Adapters for the shell's lifetime ----

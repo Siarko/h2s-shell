@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# Checks tests/run-system.sh itself: which system it reads from an os-release file, that a
+# Checks tests/run-system.sh itself: which system it takes from made-up system trees
+# (scripts/distribution.sh reads their os-release and markers), that a
 # set which did not run is never a pass (an unknown system, the other system's check, an
 # unknown name, an empty set, a check that could not run: status 2), and its verdict. It
-# runs a copy of the runner beside made-up sets and made-up os-release files, so it runs
+# runs a copy of the runner beside made-up sets and made-up systems, so it runs
 # the same on every system and starts neither nix nor pacman. The real check files are
 # only read for syntax — but for Arch's package names, run against a stand-in pacman: a
 # machine without a sync database is NOT RUN, not a FAIL.
@@ -20,25 +21,37 @@ check() {
     if "$@"; then echo "  PASS $description"; else echo "  FAIL $description"; failed=1; fi
 }
 
-mkdir -p "$work/tree/tests/system/nixos" "$work/tree/tests/system/arch" "$work/empty/tests/system/arch"
-cp "$REPO/tests/run-system.sh" "$work/tree/tests/"
-cp "$REPO/tests/run-system.sh" "$work/empty/tests/"
+mkdir -p "$work/tree/tests/system/nixos" "$work/tree/tests/system/arch" "$work/empty/tests/system/arch" "$work/pacman-tree/tests"
+for tree in tree empty pacman-tree; do
+    mkdir -p "$work/$tree/scripts"
+    cp "$REPO/tests/run-system.sh" "$work/$tree/tests/"
+    cp "$REPO/scripts/distribution.sh" "$work/$tree/scripts/"
+    for env in "$REPO"/distributions/*/distribution.env; do
+        id=$(basename "$(dirname "$env")")
+        mkdir -p "$work/$tree/distributions/$id"
+        cp "$env" "$work/$tree/distributions/$id/"
+    done
+done
 echo 'check "the nixos one ran" true' > "$work/tree/tests/system/nixos/one.sh"
 echo 'check "the arch one ran" true' > "$work/tree/tests/system/arch/two.sh"
 echo 'check "the arch one ran" true' > "$work/tree/tests/system/arch/three.sh"
-printf 'ID=nixos\nNAME=NixOS\n' > "$work/nixos"
-printf 'NAME="Arch Linux"\nID=arch\n' > "$work/arch"
-printf 'ID=endeavouros\nID_LIKE=arch\n' > "$work/like"
-printf 'ID="manjaro"\nID_LIKE="arch linux"\n' > "$work/like-quoted"
-printf 'ID=fedora\nID_LIKE="rhel centos"\n' > "$work/fedora"
-printf 'ID=other\nID_LIKE="archish debian"\n' > "$work/like-lookalike"
-printf 'ID=archcraftish\nVERSION_ID=arch\nNAME=nixos\n' > "$work/lookalike"
+# Made-up systems: a root each, with its /etc/os-release (the runner reads under
+# H2S_DISTRIBUTION_ROOT); "marked", NixOS by its /etc/NIXOS beside a Fedora os-release
+release() { mkdir -p "$work/$1/etc" && printf "$2" > "$work/$1/etc/os-release"; }
+release nixos 'ID=nixos\nNAME=NixOS\n'
+release arch 'NAME="Arch Linux"\nID=arch\n'
+release like 'ID=endeavouros\nID_LIKE=arch\n'
+release like-quoted 'ID="manjaro"\nID_LIKE="arch linux"\n'
+release fedora 'ID=fedora\nID_LIKE="rhel centos"\n'
+release like-lookalike 'ID=other\nID_LIKE="archish debian"\n'
+release lookalike 'ID=archcraftish\nVERSION_ID=arch\nNAME=nixos\n'
+release marked 'ID=fedora\n' && : > "$work/marked/etc/NIXOS"
 
-# run <tree> <os-release file> [names…]: OUTPUT (both streams), STATUS
+# run <tree> <system root> [names…]: OUTPUT (both streams), STATUS
 run() {
     local tree=$1 release=$2
     shift 2
-    OUTPUT=$(H2S_OS_RELEASE="$release" "$work/$tree/tests/run-system.sh" "$@" 2>&1)
+    OUTPUT=$(H2S_DISTRIBUTION_ROOT="$release" "$work/$tree/tests/run-system.sh" "$@" 2>&1)
     STATUS=$?
 }
 status_is() { [ "$STATUS" = "$1" ]; }
@@ -74,9 +87,11 @@ for release in fedora lookalike like-lookalike; do
 done
 run tree "$work/fedora"
 check "fedora: the system found is named" says "ID=fedora"
-run tree "$work/no-such-file"
+run tree "$work/no-such-root"
 check "no os-release file: status 2" status_is 2
 check "no os-release file: no pass printed" no_pass
+run tree "$work/marked"
+check "/etc/NIXOS beside another os-release: the NixOS set" says "^system: nixos "
 
 run tree "$work/arch" one
 check "the other system's check: status 2" status_is 2
@@ -126,7 +141,6 @@ rm "$work/tree/tests/system/arch/hollow.sh"
 # against a stand-in pacman, first on PATH: it knows every name once `synced` is there,
 # but those in `dropped`
 mkdir -p "$work/pacman-tree/tests/system/arch" "$work/pacman-bin"
-cp "$REPO/tests/run-system.sh" "$work/pacman-tree/tests/"
 cp "$REPO/tests/system/arch/packages.sh" "$work/pacman-tree/tests/system/arch/"
 cp "$REPO/install.sh" "$REPO/Hud.qml" "$work/pacman-tree/"
 cat > "$work/pacman-bin/pacman" << STANDIN
@@ -141,7 +155,7 @@ STANDIN
 chmod +x "$work/pacman-bin/pacman"
 : > "$work/dropped"
 run_packages() {
-    OUTPUT=$(PATH="$work/pacman-bin:$PATH" H2S_OS_RELEASE="$work/arch" "$work/pacman-tree/tests/run-system.sh" packages 2>&1)
+    OUTPUT=$(PATH="$work/pacman-bin:$PATH" H2S_DISTRIBUTION_ROOT="$work/arch" "$work/pacman-tree/tests/run-system.sh" packages 2>&1)
     STATUS=$?
 }
 run_packages

@@ -688,6 +688,21 @@ for timing in ${seam_launcher_timings:-}; do
     esac
 done
 
+# Which distribution this is, as the shell and the lock's methods script tell it
+# (scripts/distribution.sh: the distributions' facts, distributions/<id>/distribution.env;
+# in a test tree seam_distribution may name it), said once per start in the log. Never in
+# the way of a start: a distribution.sh that cannot be read, or a distribution that cannot
+# be told, is said and the shell starts all the same.
+report_distribution() {
+    if ! source "$shell_dir/scripts/distribution.sh" 2> /dev/null; then
+        say "distribution: not known (scripts/distribution.sh cannot be read)"
+    elif distribution_detect "$shell_dir" "${seam_distribution:-}" ""; then
+        say "distribution: $distribution_id (by $distribution_how)"
+    else
+        say "distribution: not known ($distribution_problem)"
+    fi
+}
+
 # Becomes the session's one supervisor: takes the lock, waiting (bounded) for a launcher
 # that is ending — `--restart` starts this one while the old one lets its shell go — and
 # gives up when another keeps it (a second autostart, a second terminal). Without flock
@@ -854,6 +869,7 @@ supervise() {
     fi
     # (Once per supervisor: a build must not keep a restart after a crash waiting)
     find_helper {lock_fd}>&-
+    report_distribution
     rm -f "$locked_restarts_file"
     compositor_identity=$(socket_identity)
     say "supervising the shell in $shell_dir (compositor socket $(compositor_socket)${compositor_identity:+, $compositor_identity})"
@@ -1034,7 +1050,7 @@ case "$1" in
         # nothing to supervise (and a supervisor would take that exit for the shell's)
         for argument in "$@"; do
             case "$argument" in
-                -d | --daemonize) prepare_environment; unset H2S_SHELL_LOCK_NOTICE; discover_modules; find_helper; exec qs -p "$shell_dir" "$@" ;;
+                -d | --daemonize) prepare_environment; unset H2S_SHELL_LOCK_NOTICE; discover_modules; find_helper; report_distribution; exec qs -p "$shell_dir" "$@" ;;
             esac
         done
         supervise "$@"

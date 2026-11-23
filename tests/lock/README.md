@@ -236,9 +236,10 @@ was reached"), `vanished` (the reader gone between the two calls), `multiline` (
 two lines);
 `fprintd_mode <mode>` changes it during a test — and notes each call in `fprintd/log`.
 `methods-script.sh` runs the script alone against the same stand-in (no stack), and as
-both kinds of system on every machine: `H2S_LOCK_SYSTEM=nixos|other` is the script's seam
-for which system it is on, honoured only together with `H2S_LOCK_SYSTEM_PAM_DIR` (the shell
-honours it the same way where it asks the machine itself, below).
+both kinds of system on every machine: `H2S_DISTRIBUTION=nixos|arch|generic` is the
+scripts' seam for which distribution they are on, honoured only together with
+`H2S_LOCK_SYSTEM_PAM_DIR`; the shell's `Distribution` takes it too (the bed always sets the
+PAM directory), so the driver's own question, below, gets the same answer.
 
 **The password fallback** (used when the methods script fails or names no password, and for
 the next attempt after a password config that cannot be used) is chosen by the shell from
@@ -380,7 +381,7 @@ value, one set to a value that cannot be used is ignored (and named in the log).
 | `H2S_LOCK_SYSTEM_PAM_DIR` | `TestSeams`, `seams.sh` | where the system-wide `h2s-shell-*` PAM configs are looked for, instead of `/etc/pam.d` |
 | `H2S_LOCK_VENDOR_PAM_DIR` | `seams.sh` | libpam's vendor directory for `pam-files.sh`, instead of `/usr/lib/pam.d`; none when only `H2S_LOCK_SYSTEM_PAM_DIR` is set |
 | `H2S_LOCK_FAILLOCK_CONF` | `seams.sh` | faillock.conf for `pam-files.sh`, instead of `/etc/security/faillock.conf`; none when only `H2S_LOCK_SYSTEM_PAM_DIR` is set |
-| `H2S_LOCK_SYSTEM` | `TestSeams`, `seams.sh` | `nixos` or `other`: the system the lock takes itself to be on (only with `H2S_LOCK_SYSTEM_PAM_DIR`) |
+| `H2S_DISTRIBUTION` | `TestSeams`, `seams.sh` | `nixos`, `arch` or `generic`: the distribution the shell (`Distribution`) and its scripts (`scripts/distribution.sh`; there only with `H2S_LOCK_SYSTEM_PAM_DIR`) take themselves to be on |
 | `H2S_LOCK_AUTH_METHODS` | `seams.sh` | an executable that answers for the methods script (the test PAM stacks) |
 | `H2S_LOCK_LEDS_DIR` | `TestSeams` | where the Caps Lock LEDs are read, instead of `/sys/class/leds` |
 | `H2S_LOCK_TEST_TIMINGS` | `TestSeams` | JSON overrides of `LockRules.timings` |

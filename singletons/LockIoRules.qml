@@ -134,16 +134,6 @@ Singleton {
         return { started: started, exitCode: code, crashed: started && code === -1, lines: lines };
     }
 
-    // The test bed's seam for which system this is, as scripts/lock-auth-methods.sh reads
-    // it: H2S_LOCK_SYSTEM=nixos|other, counted only together with H2S_LOCK_SYSTEM_PAM_DIR
-    // (against the real /etc/pam.d the machine itself is asked). → "nixos", "other", or ""
-    // (ask the machine)
-    function systemSeam(pamDirectory, system) {
-        if (typeof pamDirectory !== "string" || pamDirectory === "")
-            return "";
-        return system === "nixos" || system === "other" ? system : "";
-    }
-
     // ---- Keys ----
 
     // Qt's key codes for the names in LockRules.namedKeys. Return and the keypad's Enter
