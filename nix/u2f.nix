@@ -3,8 +3,10 @@
 # brackets): `arguments overrides`, `overrides` laid over the settings. One place for the
 # lock screen's key check (module.nix) and the security key rows of sudo's and polkit's
 # rules (pam.nix): both look for the keys where the machine says (authfile, appid,
-# origin…). `broken`: the names of settings whose value holds a line break — written into
-# a PAM file it would end the line there and start another, so pam.nix refuses them.
+# origin…). `broken`: the settings pam.nix refuses — a name that is not a plain option name
+# (lower-case letters and _: "userpresence=0" set true would be written as that argument),
+# or a name or value holding a tab (libpam splits the argument there) or a line break (it
+# would end the line and start another).
 lib: settings:
 let
   formatArgument = argument:
@@ -12,6 +14,7 @@ let
     then "[${lib.replaceStrings [ "]" ] [ "\\]" ] argument}]"
     else argument;
   written = value: !(lib.isBool value) && value != null;
+  splits = text: lib.any (character: lib.hasInfix character text) [ "\t" "\n" "\r" ];
 in
 {
   arguments = overrides: lib.concatLists (lib.mapAttrsToList
@@ -20,6 +23,6 @@ in
       else lib.optional (value != null) (formatArgument "${name}=${toString value}"))
     (settings // overrides));
   broken = lib.attrNames (lib.filterAttrs
-    (name: value: written value && (lib.hasInfix "\n" (toString value) || lib.hasInfix "\r" (toString value)))
+    (name: value: builtins.match "[a-z_]+" name == null || splits name || (written value && splits (toString value)))
     settings);
 }

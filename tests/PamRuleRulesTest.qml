@@ -256,7 +256,8 @@ TestCase {
         assert(!has([password("r1"), raw("r2", "auth [success=ok ignore=die default=ignore] pam_ldap.so")], arch(), "W13"), "W13 not: … ignore=die");
         assert(has([password("r1"), raw("r2", "auth [success=ok ignore=ignore default=bad] pam_ldap.so")], arch(), "W13"),
                "W13: a bracketed control that fails but lets ignore pass");
-        assert(has([password("r1"), raw("r2", "auth [success=ok auth_err=die] pam_ldap.so")], arch(), "W13"), "W13: … ignore not named, no default");
+        assert(!has([password("r1"), raw("r2", "auth [success=ok auth_err=die] pam_ldap.so")], arch(), "W13"),
+               "W13 not: ignore not named and no default is bad in libpam");
         assert(!has([password("r1"), raw("r2", "auth required pam_unix.so")], arch(), "W13"), "W13 not: a module the shell knows");
         assert(!has([password("r1"), raw("r2", "auth required pam_ldap.so")], arch({ system: "nixos" }), "W13"), "W13 not: a refused line");
         // W14: no time limit on a reader above a password

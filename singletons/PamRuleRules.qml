@@ -480,7 +480,7 @@ Singleton {
     // that fails), firstPass (a raw pam_unix use_first_pass: only checks a password asked
     // above), nullok, unknownMust (a raw line of a module the shell does not know that
     // fails the stack but lets PAM_IGNORE pass as no answer: plain required/requisite, or a
-    // bracketed control whose ignore — or default — is neither bad nor die), refusals }
+    // bracketed control whose ignore — or default, else bad — is neither bad nor die), refusals }
     function _role(row, service, facts) {
         const role = { method: "unknown", raw: false, atOnce: false, okOnSuccess: false, fails: false,
                        credential: "unknown", denies: false, firstPass: false, nullok: false, unknownMust: false,
@@ -516,7 +516,8 @@ Singleton {
                 role.firstPass = named === "pam_unix.so" && line.args.includes("use_first_pass");
                 role.nullok = named === "pam_unix.so" && line.args.includes("nullok");
                 role.moduleName = line.moduleName;
-                const onIgnore = line.controlKind === "simple" ? "ignore" : (actions.ignore ?? actions.default ?? "");
+                // libpam sets a bracketed control's unnamed codes to bad
+                const onIgnore = line.controlKind === "simple" ? "ignore" : (actions.ignore ?? actions.default ?? "bad");
                 role.unknownMust = role.fails && onIgnore !== "bad" && onIgnore !== "die" && judged.credential === "unknown";
             }
             return role;

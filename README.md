@@ -159,7 +159,10 @@ Registering a security key (`pamu2fcfg`, from pam-u2f): the FIRST key with
 `mkdir -p ~/.config/Yubico && pamu2fcfg > ~/.config/Yubico/u2f_keys`; every further key
 with `pamu2fcfg -n >> ~/.config/Yubico/u2f_keys` (`-n` leaves out the user name, so the key
 is added to your line). `>` replaces the file: run on a file that has keys, it throws away
-every key registered before.
+every key registered before. On NixOS and on Arch alike, the default keys file (or an
+`authfile` with `%u` or `%h`) is a file your user can write, so anyone with a moment in your
+unlocked session can add a key of their own; a central `authfile` that only root can write
+(e.g. `/etc/u2f_mappings`) avoids that.
 
 An account with an **empty password** cannot unlock by password: the lock never sends an
 empty password, and no config allows one (no `nullok`). Give the account a password, or

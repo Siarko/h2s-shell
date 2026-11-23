@@ -487,7 +487,7 @@ in
         "programs.h2s-shell.pam: keep a password in sudo's or polkit's rules: one is the way to repair the other."
       ++ lib.optional (u2f.broken != [ ] && (config.security.pam.u2f.enable
           || lib.any (service: lib.any (row: row.method == "securityKey") service.rows) (lib.attrValues ruled)))
-        "security.pam.u2f.settings: ${lib.concatStringsSep ", " u2f.broken} holds a line break: written into a PAM file it would end the line there and start another."
+        "security.pam.u2f.settings: ${lib.concatStringsSep ", " u2f.broken} is not a plain option name, or holds a tab or a line break: pam_u2f would not get it as one argument."
       ++ lib.optional (polkitRuled && passwordFirstSet && cfg.polkit.passwordFirst)
         "polkit's rules come from programs.h2s-shell.pam: remove programs.h2s-shell.polkit.passwordFirst."
     ));

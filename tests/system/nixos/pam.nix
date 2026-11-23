@@ -283,7 +283,16 @@ let
         { })
       (expect "a u2f setting with a line break: refused"
         (keyRules // { security.pam.u2f = { enable = true; settings.authfile = "/etc/keys\nauth sufficient pam_permit.so"; }; })
-        { refusals = [ "security.pam.u2f.settings: authfile holds a line break" ]; })
+        { refusals = [ "security.pam.u2f.settings: authfile is not a plain option name, or holds a tab or a line break" ]; })
+      (expect "a u2f setting with a tab: refused (libpam would split it into two arguments)"
+        (keyRules // { security.pam.u2f = { enable = true; settings.authfile = "/etc/keys\tnouserok"; }; })
+        { refusals = [ "security.pam.u2f.settings: authfile is not" ]; })
+      (expect "a u2f setting named as an argument with its value: refused"
+        (keyRules // { security.pam.u2f = { enable = true; settings."userpresence=0" = true; }; })
+        { refusals = [ "security.pam.u2f.settings: userpresence=0 is not" ]; })
+      (expect "a u2f setting set true whose name holds a line break: refused"
+        (keyRules // { security.pam.u2f = { enable = true; settings."cue\nauth" = true; }; })
+        { refusals = [ "is not a plain option name" ]; })
     ];
 
   # The machine's pam_u2f settings on a key row, as the lock screen takes them: authfile and
