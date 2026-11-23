@@ -32,7 +32,8 @@ import Quickshell
 //   polkitRulesInstallable    whether the shell may install a rule file there
 //
 // Detection, one reading at start: H2S_DISTRIBUTION (a test seam, TestSeams.distribution)
-// names one and wins; else a distribution whose marker is present; else os-release's ID
+// names one and wins; else a distribution whose marker exists (one that cannot be read
+// exists too, as `test -e` has it); else os-release's ID
 // matched against each distribution's `matches`; else each word of ID_LIKE in its order;
 // else the generic one. Until every reading has answered nothing is known — the id is ""
 // and the facts null, never a default system's; a reading that failed (rather than found
@@ -74,24 +75,33 @@ Singleton {
     }
 
     // os-release's text → frozen { NAME: value } of its assignments (os-release(5): shell-like
-    // KEY=value lines, a value in double quotes with \" \\ \$ \` escapes, or in single
-    // quotes, or bare). Comments, blank lines and lines that are no assignment are left out;
-    // a later assignment of a name wins. Not a string, or too long: {}
+    // KEY=value lines, white space before the name ignored as systemd does; a value in double
+    // quotes with \" \\ \$ \` escapes, or in single quotes, or bare). Comments, blank lines
+    // and lines that are no well-formed assignment (an unescaped quote inside the quotes, a
+    // backslash escaping the closing quote, a bare value with a quote, a "$" or white space)
+    // are left out; a later assignment of a name wins. Not a string, or too long: null
     function parseOsRelease(text) {
-        const values = {};
         if (typeof text !== "string" || text.length > maxFileLength)
-            return Object.freeze(values);
+            return null;
+        const values = {};
         for (const line of text.split("\n")) {
-            const match = /^([A-Z][A-Z0-9_]*)=(.*)$/.exec(line.replace(/\r$/, ""));
+            const match = /^\s*([A-Z][A-Z0-9_]*)=(.*)$/.exec(line.replace(/\r$/, ""));
             if (!match)
                 continue;
             let value = match[2];
-            if (value.length >= 2 && value.startsWith("\"") && value.endsWith("\""))
-                value = value.slice(1, -1).replace(/\\([\\"$`])/g, "$1");
-            else if (value.length >= 2 && value.startsWith("'") && value.endsWith("'"))
-                value = value.slice(1, -1);
-            else if (/["'\\$`\s]/.test(value))
+            if (value.startsWith("\"")) {
+                const quoted = /^"((?:[^"\\]|\\.)*)"$/.exec(value);
+                if (!quoted)
+                    continue;
+                value = quoted[1].replace(/\\([\\"$`])/g, "$1");
+            } else if (value.startsWith("'")) {
+                const quoted = /^'([^']*)'$/.exec(value);
+                if (!quoted)
+                    continue;
+                value = quoted[1];
+            } else if (/["'\\$`\s]/.test(value)) {
                 continue;
+            }
             values[match[1]] = value;
         }
         return Object.freeze(values);
@@ -100,7 +110,8 @@ Singleton {
     // The os-release readings, one per osReleasePaths entry in order, each null (not
     // answered) or { state: "text" | "absent" | "failed", text } → { answered, known, values }:
     // the first file that is there is the one read; one that failed before it leaves the
-    // answer unknown (it might have been the one). None there: known, without values ({}).
+    // answer unknown (it might have been the one), and so does one too long, or holding no
+    // well-formed assignment at all. None there: known, without values ({}).
     function osReleaseOf(readings) {
         const list = Array.isArray(readings) ? readings : [];
         for (let i = 0; i < osReleasePaths.length; ++i) {
@@ -111,7 +122,10 @@ Singleton {
                 continue;
             if (reading.state !== "text")
                 return { answered: true, known: false, values: Object.freeze({}) };
-            return { answered: true, known: true, values: parseOsRelease(reading.text) };
+            const values = parseOsRelease(reading.text);
+            if (values === null || Object.keys(values).length === 0)
+                return { answered: true, known: false, values: Object.freeze({}) };
+            return { answered: true, known: true, values: values };
         }
         return { answered: true, known: true, values: Object.freeze({}) };
     }
@@ -196,7 +210,7 @@ Singleton {
         if (!osRelease.answered)
             return unknown(false);
         for (const id of ids) {
-            if (manifests[id].markers.some(path => markers[path] === "present"))
+            if (manifests[id].markers.some(path => markers[path] === "present" || markers[path] === "failed"))
                 return known(id, manifests[id], "marker");
         }
         if (!osRelease.known)

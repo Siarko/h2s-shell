@@ -96,5 +96,15 @@ QtObject {
         }
     }
 
-    Component.onCompleted: refresh()
+    // A new override reads everything again (late answers of the old one are dropped)
+    onOverrideChanged: {
+        if (_completed)
+            refresh();
+    }
+    property bool _completed: false
+
+    Component.onCompleted: {
+        _completed = true;
+        refresh();
+    }
 }

@@ -2,6 +2,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import qs.singletons
+import qs.singletons.io
 
 // Which distribution the shell runs on (DistributionRules): os-release's parsing, which
 // os-release file counts, the distribution.json schema, and detection from the fixture
@@ -14,6 +15,10 @@ TestCase {
     suiteName: "DistributionRules"
 
     readonly property var rules: DistributionRules
+
+    property Component _rememberReader: Component {
+        RememberedAdminReader {}
+    }
 
     property FileView _file: FileView {
         blockAllReads: true
@@ -61,8 +66,14 @@ TestCase {
         assertEqual(values.ID, "again", "a later assignment wins");
         assert(!("lower" in values) && !("BAD" in values), "a lower-case name and a bare value with a space: no assignment");
         assert(Object.isFrozen(values), "frozen");
-        assertEqual(JSON.stringify(rules.parseOsRelease(null)), "{}", "no text: nothing");
-        assertEqual(JSON.stringify(rules.parseOsRelease("ID=x\n".repeat(20000))), "{}", "too long: nothing");
+        assertEqual(rules.parseOsRelease(null), null, "no text: none");
+        assertEqual(rules.parseOsRelease("ID=x\n".repeat(20000)), null, "too long: none");
+        const strict = rules.parseOsRelease("  ID=indented\nA=\"one \"inner\" two\"\nB=\"trailing\\\"\nC='it's'\nD=\"ok \\\"x\\\" \\\\\"\n");
+        assertEqual(strict.ID, "indented", "white space before the name: ignored, as systemd does");
+        assert(!("A" in strict), "an unescaped quote inside double quotes: no assignment");
+        assert(!("B" in strict), "a backslash escaping the closing quote: no assignment");
+        assert(!("C" in strict), "a quote inside single quotes: no assignment");
+        assertEqual(strict.D, "ok \"x\" \\", "escaped quotes and a final escaped backslash: kept");
         assertEqual(rules.parseOsRelease(_read("tests/fixtures/distribution/endeavouros.os-release")).ID_LIKE, "arch",
                     "single quotes (EndeavourOS)");
     }
@@ -79,6 +90,12 @@ TestCase {
         assert(answer.answered && answer.known && JSON.stringify(answer.values) === "{}", "neither there: known, without values");
         assert(!rules.osReleaseOf([text("absent"), null]).answered, "one not answered yet: not answered");
         assert(!rules.osReleaseOf(null).answered, "nothing: not answered");
+        answer = rules.osReleaseOf([{ state: "text", text: "ID=x\n".repeat(20000) }, text("absent")]);
+        assert(answer.answered && !answer.known, "an os-release too long: unknown");
+        answer = rules.osReleaseOf([{ state: "text", text: "<html>not os-release</html>\n" }, text("absent")]);
+        assert(answer.answered && !answer.known, "an os-release without one assignment: unknown");
+        answer = rules.osReleaseOf([{ state: "text", text: "" }, text("absent")]);
+        assert(answer.answered && !answer.known, "an empty os-release: unknown");
     }
 
     function _manifests() {
@@ -129,7 +146,7 @@ TestCase {
         expect(_detect(_osRelease("fedora")), "generic", "fallback", "Fedora: generic");
         expect(_detect(_osRelease("linuxmint")), "generic", "fallback", "Linux Mint (ID_LIKE=\"ubuntu debian\"): generic");
         expect(_detect([{ state: "absent" }, { state: "absent" }]), "generic", "fallback", "no os-release at all: generic");
-        expect(_detect(_osRelease("arch"), "failed"), "arch", "id", "the marker unreadable, os-release says arch: arch");
+        expect(_detect(_osRelease("arch"), "failed"), "nixos", "marker", "the marker there but unreadable, os-release says arch: nixos (it exists, as `test -e` has it)");
         expect(_detect([{ state: "absent" }, { state: "text", text: "ID=nixos\n" }]), "nixos", "id", "only /usr/lib/os-release: read");
         expect(_detect(_osRelease("nixos"), "present", "arch"), "arch", "override", "H2S_DISTRIBUTION=arch on NixOS: arch");
         expect(_detect(_osRelease("arch"), "absent", "generic"), "generic", "override", "H2S_DISTRIBUTION=generic: generic");
@@ -141,7 +158,8 @@ TestCase {
         };
         unknown(_detect(_osRelease("arch"), "absent", "plan9"), true, "H2S_DISTRIBUTION naming no distribution");
         unknown(_detect([{ state: "failed" }, { state: "text", text: "ID=arch\n" }]), true, "os-release unreadable, no marker");
-        unknown(_detect([{ state: "failed" }, { state: "absent" }], "failed"), true, "os-release and the marker unreadable");
+        expect(_detect([{ state: "failed" }, { state: "absent" }], "failed"), "nixos", "marker", "os-release and the marker unreadable: nixos, by the marker");
+        unknown(_detect([{ state: "text", text: "ID=arch\n".repeat(10000) }, { state: "absent" }]), true, "an os-release too long, no marker");
         unknown(_detect([null, null]), false, "os-release not answered yet");
         unknown(rules.detect({ manifests: _shipped(), markers: {}, osRelease: _osRelease("arch") }), false, "the marker not answered yet");
         const partial = _shipped();
@@ -177,6 +195,17 @@ TestCase {
         assertEqual(facts.arch.polkitRulesDirectory + "/40-h2s-shell.rules", RememberRules.rulePath,
                     "Arch's polkit rules directory: where RememberRules installs its rule");
         assert(facts.arch.polkitRulesInstallable && !facts.nixos.polkitRulesInstallable, "polkit rules installed on Arch, not on NixOS");
+        const reader = _rememberReader.createObject(suite);
+        assertEqual(facts.nixos.polkitRulesDirectory + "/10-nixos.rules", reader.nixosRulePath,
+                    "NixOS's polkit rules directory: where RememberedAdminReader reads NixOS's rule");
+        reader.destroy();
+        const packageText = _read("nix/package.nix");
+        const launcherText = _read("scripts/launch.sh");
+        assert(/export H2S_SHELL_LIBEXEC=/.test(packageText) && /export H2S_SHELL_BUILTIN_MODULES="\$out\/share\//.test(packageText),
+               "the NixOS package hands over its helper and its built-in modules (nix/package.nix)");
+        assert(launcherText.includes('export H2S_SHELL_BUILTIN_MODULES="${XDG_DATA_HOME:-$HOME/.local/share}/h2s-shell/builtin"')
+               && launcherText.includes("build-helper.sh"),
+               "without the package, the launcher takes the data home's built-in modules and builds the helper (scripts/launch.sh)");
         same(facts.nixos.markers, ["/etc/NIXOS"], "NixOS's marker: /etc/NIXOS, as the code tests it");
         assert(facts.nixos.etcManaged && !facts.arch.etcManaged && !facts.generic.etcManaged, "/etc generated on NixOS only");
         assertEqual([facts.nixos.helper, facts.arch.helper, facts.generic.helper].join(","), "package,build,build",

@@ -8,7 +8,8 @@ import qs.singletons.io
 // (its fileRoot): the fixture os-release files of tests/fixtures/distribution/ put where
 // each system has them — Arch's /etc/os-release a link to /usr/lib/os-release, NixOS's an
 // empty /etc/NIXOS beside it —, a tree with only /usr/lib/os-release, one whose os-release
-// cannot be read, the override, and made-up distributions directories (one with a broken
+// cannot be read, markers that exist but cannot be read, the override (also changed after the
+// start), and made-up distributions directories (one with a broken
 // distribution.json). Then the shell's own Distribution: it answers, and takes the test seam.
 TestCase {
     id: suite
@@ -27,12 +28,15 @@ TestCase {
         notYet.destroy();
         _sh([
             "set -e; d=$1; f=$2; shipped=$3",
-            "mkdir -p \"$d/arch/etc\" \"$d/arch/usr/lib\" \"$d/nixos/etc\" \"$d/endeavouros/etc\" \"$d/usronly/usr/lib\" \"$d/unreadable/etc\" \"$d/none\"",
+            "mkdir -p \"$d/arch/etc\" \"$d/arch/usr/lib\" \"$d/nixos/etc\" \"$d/endeavouros/etc\" \"$d/usronly/usr/lib\" \"$d/unreadable/etc\" \"$d/none\" \"$d/lockedmark/etc\" \"$d/dirmark/etc/NIXOS\"",
             "cp \"$f/arch.os-release\" \"$d/arch/usr/lib/os-release\"; ln -s ../usr/lib/os-release \"$d/arch/etc/os-release\"",
             "cp \"$f/nixos.os-release\" \"$d/nixos/etc/os-release\"; : > \"$d/nixos/etc/NIXOS\"",
             "cp \"$f/endeavouros.os-release\" \"$d/endeavouros/etc/os-release\"",
             "cp \"$f/fedora.os-release\" \"$d/usronly/usr/lib/os-release\"",
             "cp \"$f/arch.os-release\" \"$d/unreadable/etc/os-release\"; chmod 000 \"$d/unreadable/etc/os-release\"",
+            // /etc/NIXOS there but not readable: mode 000, and a directory
+            "cp \"$f/arch.os-release\" \"$d/lockedmark/etc/os-release\"; : > \"$d/lockedmark/etc/NIXOS\"; chmod 000 \"$d/lockedmark/etc/NIXOS\"",
+            "cp \"$f/arch.os-release\" \"$d/dirmark/etc/os-release\"",
             // A distributions directory whose arch/distribution.json is broken
             "mkdir -p \"$d/broken-distributions\"; cp -r \"$shipped\"/. \"$d/broken-distributions/\"",
             "printf '{\"id\": \"arch\"}\\n' > \"$d/broken-distributions/arch/distribution.json\""
@@ -59,6 +63,10 @@ TestCase {
         _make("override", Object.assign(tree("nixos"), { override: "arch" }));
         _make("unknownOverride", Object.assign(tree("arch"), { override: "plan9" }));
         _make("broken", Object.assign(tree("arch"), { distributionsDirectory: _scratch + "/broken-distributions" }));
+        _make("lockedmark", tree("lockedmark"));
+        _make("dirmark", tree("dirmark"));
+        // The override changed at once: the first reading's answers are dropped, the new one counts
+        _make("switched", Object.assign(tree("nixos"), { override: "arch" })).override = "";
         _make("missing", Object.assign(tree("arch"), { distributionsDirectory: _scratch + "/nowhere" }));
         _clock.start();
     }
@@ -91,6 +99,9 @@ TestCase {
         expect("usronly", "generic", "fallback", "only /usr/lib/os-release, Fedora's: read, generic");
         expect("none", "generic", "fallback", "no os-release, no marker: generic");
         expect("override", "arch", "override", "the override on a NixOS tree: arch");
+        expect("lockedmark", "nixos", "marker", "/etc/NIXOS of mode 000 beside Arch's os-release: nixos (it exists, as `test -e` has it)");
+        expect("dirmark", "nixos", "marker", "/etc/NIXOS a directory: nixos (it exists)");
+        expect("switched", "nixos", "marker", "the override taken away after the start: read again, nixos");
         assertEqual(answer("arch").facts.pamDirectories.join(","), "/etc/pam.d,/usr/lib/pam.d", "Arch's facts read from its distribution.json");
         assertEqual(answer("nixos").facts.setuidWrapperDirectory, "/run/wrappers/bin", "NixOS's facts read from its distribution.json");
         const unknown = (name, message) => {
@@ -103,10 +114,10 @@ TestCase {
         unknown("broken", "a broken distribution.json");
         unknown("missing", "no distributions directory");
 
-        // The shell's own: the real machine's answer, whatever it is, and the seam handed on
-        assert(Distribution.ready, "Distribution answers");
-        assert(Distribution.id === "" ? Distribution.facts === null : DistributionRules.ids.includes(Distribution.id) && Distribution.facts?.id === Distribution.id,
-               "… with one of the distributions and its facts, or unknown (" + Distribution.id + ")");
+        // The shell's own, on the machine the tests run on (NixOS or Arch, os-release readable): a distribution, and the seam handed on
+        assert(Distribution.ready && Distribution.id !== "", "Distribution answers, with a distribution (" + Distribution.detection.problem + ")");
+        assert(DistributionRules.ids.includes(Distribution.id) && Distribution.facts?.id === Distribution.id,
+               "… one of the distributions, with its facts (" + Distribution.id + ")");
         assertEqual(Distribution._reader.override, TestSeams.distribution, "… the override is the test seam's");
 
         for (const name of Object.keys(_readers))
