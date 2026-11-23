@@ -262,7 +262,7 @@ Item {
 
             Text {
                 anchors.centerIn: parent
-                text: "＋ Add"
+                text: "󰐕 Add"
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeBody
                 color: Theme.textSecondary

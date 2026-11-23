@@ -9,7 +9,7 @@ import qs.singletons
 // arrow that opens it and its "×". An opened row offers the control words its method takes,
 // with the picked one's explanation, and the method's details; a raw line opens to its text
 // and how it reads; the fixed last row ("Password (as the system)") has a lock for a handle,
-// does not move, nothing moves below it, and its "×" asks in the Settings modal. "＋ Add a
+// does not move, nothing moves below it, and its "×" asks in the Settings modal. "Add a
 // row" lists the methods, those the machine lacks off with their reason; a new row opens.
 //
 // The list is the owner's: every change comes back as `edited(rows)`, the whole new list,
@@ -588,7 +588,7 @@ Item {
                 height: 30
                 Text {
                     anchors.centerIn: parent
-                    text: "＋ Add a row"
+                    text: "󰐕 Add a row"
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.fontSizeBody
                     color: _addArea.lit ? Theme.textPrimary : Theme.textSecondary

@@ -100,7 +100,10 @@ Item {
 
     readonly property bool _isIconTheme: entry?.optionsFrom === "iconThemes"
     on_IsIconThemeChanged: if (_isIconTheme) IconThemes.refresh()
-    Component.onCompleted: if (_isIconTheme) IconThemes.refresh()
+    // The icon themes installed, read each time the row shows (one installed meanwhile)
+    PageShown {
+        onBecameShown: if (root._isIconTheme) IconThemes.refresh()
+    }
 
     readonly property var _choices: {
         if (!entry)

@@ -20,9 +20,10 @@ Item {
     anchors.fill: parent
     clip: true
 
-    Component.onCompleted: {
-        NetworkOverview.watch();
-        VpnManager.readPlugins();
+    Component.onCompleted: NetworkOverview.watch()
+    // The VPN plugins installed, read each time the page shows (one installed meanwhile)
+    PageShown {
+        onBecameShown: VpnManager.readPlugins()
     }
     Component.onDestruction: NetworkOverview.unwatch()
 

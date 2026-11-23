@@ -172,3 +172,9 @@ Hud.qml lock:toast-* lock:hud-bar-bottom
 singletons/BarGeometry.qml lock:hud-bar-bottom lock:toast-*
 singletons/SleepNoticeRules.qml lock:sleep-*
 singletons/SystemSleep.qml lock:sleep-*
+# The glyphs the Settings write, read from the sources by GlyphsTest
++panels/settings/*.qml unit:GlyphsTest
++panels/widget_settings/*.qml unit:GlyphsTest
++panels/*.qml unit:GlyphsTest
++components/*.qml unit:GlyphsTest
++api/*.qml unit:GlyphsTest

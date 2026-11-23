@@ -69,9 +69,10 @@ Item {
     function _readInstalled() {
         installer?.readInstalled?.(read => root._installed = read);
     }
-    Component.onCompleted: {
-        _readInstalled();
-        _followOpenRequest();
+    Component.onCompleted: _followOpenRequest()
+    // The modules installed, read each time the page shows (one added or removed meanwhile)
+    PageShown {
+        onBecameShown: root._readInstalled()
     }
     // A card's open part: "versions" or "backups" (by id), the list it shows
     property var _shownList: ({})

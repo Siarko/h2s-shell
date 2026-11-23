@@ -51,9 +51,11 @@ ColumnLayout {
     readonly property string note: _pageNote !== "" ? _pageNote : (actions?.note ?? "")
     property bool copied: false
 
-    Component.onCompleted: {
-        admin?.refresh();
-        _syncCountdown();
+    Component.onCompleted: _syncCountdown()
+    // What is installed and remembered, read each time the page shows: the window keeps the
+    // page while it is hidden
+    PageShown {
+        onBecameShown: root.admin?.refresh()
     }
 
     function install() {

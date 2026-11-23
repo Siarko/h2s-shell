@@ -719,7 +719,7 @@ password, a raw PAM line) with PAM's control word and its details as chips, and 
 last row "Password (as the system)" — the service's own lines, kept as they are; removing it
 asks first. A row opens to its control words (with what each means), the fingerprint's
 timeout and tries (each may be "No limit"), the key's PIN, whether wrong passwords count
-toward pam_faillock, or a raw line's text. Rows are dragged by their handle; "＋ Add a row"
+toward pam_faillock, or a raw line's text. Rows are dragged by their handle; "Add a row"
 lists the methods, those the computer lacks off with the reason. Under each list its checks:
 refusals in red (nothing is saved while one stands), warnings in the warning colour. "Show
 file" shows the file that would be written, the shell's lines in the accent colour.

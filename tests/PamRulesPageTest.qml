@@ -39,6 +39,8 @@ TestCase {
     readonly property string _password: "secret"
 
     property bool _nixos: false
+    // What the stand-in reading says of a security key
+    property string _securityKey: "absent"
     property var _settings: ({ "lockscreen.offerFingerprint": true, "lockscreen.offerSecurityKey": true })
     property var _writes: []
     property string _copied: ""
@@ -197,7 +199,7 @@ TestCase {
             const step = PamStackRules.readingStep({ services: ["polkit-1", "sudo"], lock: {}, directories, faillockPath: "" }, answers, true);
             suite._stacks.reading = {
                 services: step.services, lock: {}, faillock: step.faillock,
-                facts: { nixos: suite._nixos, fingerprint: "ready", securityKey: "absent" },
+                facts: { nixos: suite._nixos, fingerprint: "ready", securityKey: suite._securityKey },
                 directories, files: answers
             };
             suite._reads++;
@@ -481,7 +483,7 @@ TestCase {
         assert(_until(() => _texts("refusal").length === 0 && !section.changed), "… back to what is in force");
 
         // --- a row added: pending ---
-        assert(_click("addRow"), "＋ Add a row");
+        assert(_click("addRow"), "Add a row");
         assert(_until(() => _visible(_item("add:fingerprint"))) && _click("add:fingerprint"), "… the fingerprint");
         assert(_until(() => section.changed && _texts("pendingLine").length === 1), "the orange line: not in force until Apply");
         assert(_item("apply").available, "… Apply on");
@@ -640,6 +642,19 @@ TestCase {
         _item("unlock:securityKey").toggled();
         driver.wait(50);
         assertEqual(_writes.length, 1, "… nothing written");
+
+        // --- the window closed and opened again: what the computer has is read again ---
+        const asked = _stacks.methodsAsked;
+        _window.visible = false;
+        assert(_until(() => !section._shown), "the window hidden, the page kept");
+        assertEqual(_stacks.methodsAsked, asked, "… nothing read while hidden");
+        _securityKey = "ready";
+        const reads = _reads;
+        _window.visible = true;
+        assert(_until(() => section._shown && _stacks.methodsAsked === asked + 1), "shown again: read, with what the computer has");
+        assert(_until(() => _reads > reads && _item("unlock:securityKey").enabled), "… the key registered meanwhile: its switch available");
+        driver.wait(50);
+        assertEqual(_stacks.methodsAsked, asked + 1, "… read once for the showing");
     }
 
     // ── Processes ──

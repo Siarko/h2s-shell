@@ -182,6 +182,9 @@ ticks, cells respond to clicks, and popups toggle.
   `MouseArea`'s `containsMouse` — so a tap shows too, and small controls get a larger
   target. Rows of a list that touch take `centred: false`. See "Conventions" in
   `docs/ARCHITECTURE.md`.
+- **A Settings page or section that reads the system reads it on `components/PageShown.qml`'s
+  `becameShown`**, not only in `Component.onCompleted`: the window hides instead of closing
+  and keeps its page, so a read at creation shows the first opening's facts ever after.
 - **`ShapePath` has no `visible` property.**
 - **Do not add a `qmldir`.** Quickshell registers types per directory automatically. (A
   module directory, loaded by `file://` URL, is the exception: a copy outside the tree, or

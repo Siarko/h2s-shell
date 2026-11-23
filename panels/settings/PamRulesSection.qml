@@ -75,9 +75,13 @@ ColumnLayout {
     property var _lastReading: null
     readonly property var _reading: stacks?.reading ?? null
     on_ReadingChanged: _takeReading()
-    Component.onCompleted: {
-        _takeReading();
-        stacks?.refresh(true);
+    Component.onCompleted: _takeReading()
+    // What is in force and what the computer has, read each time the page shows (a key
+    // registered while the window was hidden); a flow running reads again itself when it ends
+    readonly property bool _shown: _pageShown.shown
+    PageShown {
+        id: _pageShown
+        onBecameShown: if (!root._busy) root.stacks?.refresh(true)
     }
     function _takeReading() {
         if (_reading === null || _reading === _lastReading)
@@ -214,7 +218,7 @@ ColumnLayout {
     property int _questions: 0
 
     // A page closed while a write runs drops its outcome: the run goes on as administrator,
-    // and the page reads what is in force again when it is opened next (Component.onCompleted).
+    // and the page reads what is in force again when it shows next (PageShown).
     function apply() {
         if (_busy || !editor || nixos)
             return;

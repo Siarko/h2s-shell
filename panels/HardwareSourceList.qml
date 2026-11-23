@@ -17,7 +17,7 @@ ReorderList {
     signal labelsEdited(var newLabels)
 
     items: model ?? []
-    addLabel: "＋ Add source"
+    addLabel: "󰐕 Add source"
     // Compared by source, not id: "gpu" in an older config is the same source as its
     // "gpu@<slot>"
     addOptions: Hardware.sourceIds.filter(id =>

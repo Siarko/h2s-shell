@@ -23,7 +23,7 @@ ReorderList {
     }
 
     items: (entries ?? []).map(entry => entry.type)
-    addLabel: "＋ Add widget"
+    addLabel: "󰐕 Add widget"
     // Once per section, except widgets that can repeat with different presets (two clocks,
     // two hardware capsules)
     addOptions: WidgetRegistry.types.filter(type => !items.includes(type) || WidgetRegistry.allowsMultiple(type))

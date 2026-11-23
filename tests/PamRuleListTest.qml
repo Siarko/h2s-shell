@@ -316,7 +316,7 @@ TestCase {
         assert(_item("field:r1/tries").enabled, "… the field on");
 
         // --- a row added ---
-        assert(_click("addRow"), "＋ Add a row clicked");
+        assert(_click("addRow"), "Add a row clicked");
         assert(_until(() => list.addOpen && _item("add:password")?.visible === true), "… the methods listed");
         const icons = ["fingerprint", "securityKey", "password", "raw"].map(method => _find(_item("add:" + method), "addTexts"));
         assert(icons.every(texts => texts && Math.abs(texts.mapToItem(area, 0, 0).x - icons[0].mapToItem(area, 0, 0).x) < 0.5),

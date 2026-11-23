@@ -184,10 +184,11 @@ Flickable {
     }
 
     onSectionChanged: Qt.callLater(_showRequested)
-    Component.onCompleted: {
-        // What logind allows may have changed since the start (a polkit rule, a new kernel)
-        Idle.refreshSleepSupport();
-        Qt.callLater(_showRequested);
+    Component.onCompleted: Qt.callLater(_showRequested)
+    // What logind allows may have changed since the start (a polkit rule, a new kernel): read
+    // each time the page shows
+    PageShown {
+        onBecameShown: Idle.refreshSleepSupport()
     }
     function _showRequested() {
         if (section !== "")

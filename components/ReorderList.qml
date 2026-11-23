@@ -5,7 +5,7 @@ import qs.singletons
 
 // An editable list in a card: rows reordered by dragging their handle (the settings page
 // scrolls when the drag nears its edge), removed with their ×, and added from a list that
-// opens under "＋ Add …". What a row shows is the owner's: `rowContent` between the handle
+// opens under "Add …". What a row shows is the owner's: `rowContent` between the handle
 // and the ×, and `rowDetail` under the row while `expandedRows` says so; each is given the
 // row's `value` and `index`. The list itself is the owner's too: changes come back as
 // moved, removed and added, and `items` follows.
@@ -18,7 +18,7 @@ Item {
     property Component rowDetail: null
     // Rows showing their detail, { index: true }
     property var expandedRows: ({})
-    property string addLabel: "＋ Add"
+    property string addLabel: "󰐕 Add"
     // What the add list offers, and how each is named there
     property var addOptions: []
     property var optionLabel: value => String(value)

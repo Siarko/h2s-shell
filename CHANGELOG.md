@@ -80,6 +80,14 @@ The interface modules are written against (`qs.api`), versioned on its own
   password row above the fingerprint row in `programs.h2s-shell.pam.rules` does the same.
   Without polkit rules it works as before; set to true beside them, it stops the build.
 
+### Fixed
+- Settings pages that read the system read it again each time the window is shown, not only
+  when the page is first built: the sign-in rules and the lock screen's switches (a security
+  key registered meanwhile), "Remember the password", what sleep logind allows, the
+  installed VPN plugins, the installed modules and the icon themes.
+- The plus before "Add a row", "Add widget", "Add source" and "Add" is the icon font's: it
+  showed as an empty box where no font had the full-width plus.
+
 ## [2.1.0] - 2026-11-23
 
 A minor release, though it changes two things people rely on: toasts now follow the
