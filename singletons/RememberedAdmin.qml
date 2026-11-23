@@ -12,8 +12,9 @@ import qs.singletons.io
 // keeps longer than its conf file says. The list is read after each run of the privileged
 // queue, after unlock, and once a second while a view counts down (showCountdown /
 // hideCountdown). Started with the shell (shell.qml), so that the lock's revoke is never
-// missed. In a test tree it asks the lock bed's stand-in gdbus (TestSeams.lockTools), or
-// nothing at all: never the real bus.
+// missed. gdbus and readlink are looked for once on PATH, trusted matches only (as
+// CommandTools finds timeout); nothing runs until they are found. In a test tree it asks the
+// lock bed's stand-in gdbus (TestSeams.lockTools), or nothing at all: never the real bus.
 Singleton {
     id: root
 
@@ -27,8 +28,10 @@ Singleton {
     readonly property real forgetAtMs: _reader.forgetAtMs
     readonly property int minutes: Profiles.value("system.rememberAdminMinutes") ?? 5
 
-    // In a test tree without the lock bed's tools: nothing is run
-    readonly property bool _inert: TestSeams.active && TestSeams.lockTools === ""
+    // In a test tree without the lock bed's tools, or before the tools are found: nothing is run
+    readonly property bool _inert: (TestSeams.active && TestSeams.lockTools === "") || _gdbus === "" || _readlink === ""
+    property string _gdbus: ""
+    property string _readlink: ""
 
     function refresh() {
         if (_inert)
@@ -57,7 +60,35 @@ Singleton {
         pid: Quickshell.processId
         user: SystemFacts.facts.userName
         timeout: CommandTools.timeout
-        gdbusCommand: [TestSeams.lockTools !== "" ? TestSeams.lockTools + "/gdbus" : "gdbus"]
+        gdbusCommand: [TestSeams.lockTools !== "" ? TestSeams.lockTools + "/gdbus" : root._gdbus]
+        resolveCommand: [root._readlink, "-f", "--"]
+    }
+
+    // gdbus and readlink: the first trusted match of each on the shell's PATH (only root can
+    // change it), as the probe's own tools come from the system's directories
+    property CommandRunner _lookup: CommandRunner {}
+
+    function _lookUp() {
+        const lines = [];
+        _lookup.start([ModuleRules.probeShell, "-c", ModuleRules.programProbeScript, "sh", "all", Quickshell.env("PATH") ?? "", "gdbus", "readlink"], {
+            timeoutMs: 5000,
+            keepOutput: false,
+            environment: { PATH: ModuleRules.probeToolPath },
+            onLine: (line, stream) => {
+                if (stream === "stdout")
+                    lines.push(line);
+            },
+            done: () => {
+                const gdbus = ModuleRules.trustedPrograms(lines, "gdbus")[0] ?? "";
+                const readlink = ModuleRules.trustedPrograms(lines, "readlink")[0] ?? "";
+                if (gdbus === "" || readlink === "")
+                    console.warn("[RememberedAdmin] no trusted " + (gdbus === "" ? "gdbus" : "readlink")
+                                 + " on PATH: what is remembered is not read, and not forgotten at lock");
+                root._readlink = readlink;
+                root._gdbus = gdbus;
+                root.refresh();
+            }
+        });
     }
 
     // A run of the queue ended: it may have obtained, used or installed something
@@ -73,5 +104,5 @@ Singleton {
     readonly property string _factsKey: SystemFacts.facts.userName + "\n" + CommandTools.timeout
     on_FactsKeyChanged: Qt.callLater(root.refresh)
 
-    Component.onCompleted: refresh()
+    Component.onCompleted: _lookUp()
 }

@@ -158,7 +158,10 @@ TestCase {
             + "    fi\n"
             + "    printf '%s\\n' \"$list\"; exit \"$(cat \"$d/list-code\")\" ;;\n"
             + "  *RevokeTemporaryAuthorizations*) code=$(cat \"$d/revoke-code\")\n"
-            + "    [ \"$code\" = 0 ] && printf '(@a(ss(sa{sv})tt) [],)\\n' > \"$d/list\"\n"
+            + "    if [ -e \"$d/hold-revoke\" ] && mv \"$d/hold-revoke\" \"$d/held-revoke\" 2> /dev/null; then\n"
+            + "      while [ -e \"$d/held-revoke\" ]; do sleep 0.02; done\n"
+            + "    fi\n"
+            + "    [ \"$code\" = 0 ] && [ ! -e \"$d/keep-list\" ] && printf '(@a(ss(sa{sv})tt) [],)\\n' > \"$d/list\"\n"
             + "    printf '()\\n'; exit \"$code\" ;;\n"
             + "esac\n"
             + "exit 1\n";
@@ -196,6 +199,7 @@ TestCase {
                 user: "alex",
                 timeout: _timeout,
                 minutes: 5,
+                retryBaseMs: 600000,
                 now: () => Date.now() + suite._offsetMs
             });
             assertEqual(_reader.installed, null, "before a reading: nothing known");
@@ -211,16 +215,29 @@ TestCase {
             assertEqual(_reader.kept.known + " " + _reader.kept.reason, "false unread", "no logind session: unknown, never nothing kept");
             _withCalls(calls => {
                 assertEqual(calls.filter(line => line.includes("EnumerateTemporaryAuthorizations")).length, 0, "… polkit not asked without a session");
-                // Locked while the rule is known absent: nothing is revoked
+                // Locked with the rule absent but what is kept unknown: forgotten all the same
                 revokes = _reader.revokes;
-                lists = _reader.lists;
                 _reader.locked = true;
-                _reader.locked = false;
             });
         });
-        _then("unlocked: the list read again", () => _ready && listed(), () => {
-            assertEqual(_reader.revokes, revokes, "locked with the rule absent: nothing forgotten");
-            _write({ "bus/session-code": "0",
+        _then("locked, what is kept unknown", () => _ready && _reader.revokes > revokes, () => {
+            assertEqual(_reader.forgetOutcome + " " + _reader.forgetReason, "failed lock",
+                        "the rule absent, what is kept unknown: the lock forgets (here without a session: could not)");
+            _reader.locked = false;
+            _write({ "bus/session-code": "0" });
+        });
+        _then("a session", () => _ready, () => readList());
+        _then("nothing kept, known", () => listed(), () => {
+            assertEqual(_reader.kept.known + " " + _reader.kept.entries.length, "true 0", "nothing kept, known");
+            assertEqual(_reader._retryTimer.running, false, "nothing due: no retry waits");
+            revokes = _reader.revokes;
+            lists = _reader.lists;
+            _reader.locked = true;
+            _reader.locked = false;
+        });
+        _then("unlocked: the list read again", () => listed(), () => {
+            assertEqual(_reader.revokes, revokes, "locked with the rule absent and nothing kept: nothing forgotten");
+            _write({
                      ["tree" + RememberRules.rulePath]: RememberRules.ruleText({ user: "alex", timeout: _timeout, program: _reader.program }),
                      ["tree" + RememberRules.confPath]: RememberRules.confText(600) });
         });
@@ -297,40 +314,113 @@ TestCase {
             revokes = _reader.revokes;
             _reader.forget();
         });
-        _then("a revoke that fails", () => _reader.revokes > revokes, () => {
+        _then("a revoke that fails", () => _reader.revokes > revokes && listed(), () => {
             assertEqual(_reader.forgetOutcome + " " + _reader.forgetReason, "failed forget", "polkit refused: could not forget");
+            assertEqual(_reader._retryTimer.running, false, "nothing was due: no retry");
             const now = _nowSeconds();
-            _write({ "bus/revoke-code": "0", "bus/hold": "",
-                     "bus/list": _list([{ id: "stale", pid: _pid, obtained: now - 5, expires: now + 595 }]) });
+            // Due a minute ago (obtained 2 min ago, the setting 1 min), within polkit's 10 min
+            _reader.minutes = 1;
+            _write({ "bus/list": _list([{ id: "due", pid: _pid, obtained: now - 120, expires: now + 180 }]) });
+        });
+        _then("a due entry, the revoke failing", () => _ready, () => _withCalls(calls => {
+            _mark = calls.length;
+            revokes = _reader.revokes;
+            readList();
+        }));
+        _then("the due revoke failed", () => _ready && _reader.revokes > revokes && listed(), () => {
+            assertEqual(_reader.forgetOutcome, "failed", "the time revoke failed");
+            assertEqual(_reader._retryTimer.running, true, "… a retry waits on the backoff");
+            readList();
+        });
+        _then("read again while the retry waits", () => listed(), () => readList());
+        _then("and again", () => listed(), () => _withCalls(calls => {
+            assertEqual(calls.slice(_mark).filter(line => line.includes("RevokeTemporaryAuthorizations")).length, 1,
+                        "a failed revoke is not tried again at each reading: once until the backoff ends");
+            assertEqual(_reader.forgetOutcome, "failed", "… still failed");
+            // polkit answers again, yet leaves the entry: the revoke did nothing
+            _write({ "bus/revoke-code": "0", "bus/keep-list": "" }, () => suite._mark = calls.length);
+        }));
+        _then("the retry, the entry left", () => _ready, () => {
+            revokes = _reader.revokes;
+            lists = _reader.lists;
+            // The backoff's end, without waiting it out
+            _reader._retryTimer.stop();
+            _reader._retryTimer.triggered();
+        });
+        _then("revoked, still listed", () => _reader.revokes > revokes && _reader.lists > lists && !_reader._revoking, () => {
+            assertEqual(_reader.forgetOutcome, "failed", "polkit said done, the list still shows it: could not forget");
+            assertEqual(_reader._retryTimer.running, true, "… a retry waits");
+            readList();
+        });
+        _then("read while the retry waits", () => listed(), () => _withCalls(calls => {
+            assertEqual(calls.slice(_mark).filter(line => line.includes("RevokeTemporaryAuthorizations")).length, 1,
+                        "a revoke that did nothing is not repeated at once");
+            _sh("rm -f \"$1/bus/keep-list\"", [_scratch], () => {
+                revokes = _reader.revokes;
+                lists = _reader.lists;
+                _reader._retryTimer.stop();
+                _reader._retryTimer.triggered();
+            });
+        }));
+        _then("the retry works", () => _reader.revokes > revokes && _reader.lists > lists && !_reader._revoking && _reader.kept.entries.length === 0, () => {
+            assertEqual(_reader.forgetOutcome + " " + _reader.forgetReason, "forgotten time", "the retry forgot it");
+            assertEqual(_reader._retryTimer.running, false, "… nothing waits after");
+            _reader.minutes = 5;
+            // The lock during another revoke: its own revoke runs when that one ends
+            _write({ "bus/hold-revoke": "" });
+        });
+        _then("a revoke to be held", () => _ready, () => {
+            revokes = _reader.revokes;
+            _reader.forget();
+        });
+        _then("the forget held", () => _reader._revoking, () => _sh("while [ ! -e \"$1/bus/held-revoke\" ]; do sleep 0.02; done", [_scratch], () => {
+            suite._withCalls(calls => {
+                suite._mark = calls.length;
+                suite._reader.locked = true;
+                suite._sh("rm -f \"$1/bus/held-revoke\"", [suite._scratch], () => {});
+            });
+        }));
+        _then("both revokes done", () => _ready && _reader.revokes >= revokes + 2 && !_reader._revoking, () => {
+            assertEqual(_reader.forgetReason, "lock", "the lock's revoke ran after the one under way");
+            _withCalls(calls => {
+                assertEqual(calls.slice(_mark).filter(line => line.includes("RevokeTemporaryAuthorizations")).length, 1, "… once more");
+                lists = _reader.lists;
+                _reader.locked = false;
+            });
         });
         let staleShown = false;
         const watchStale = () => {
             if (_reader.kept?.entries?.some(entry => entry.id === "stale"))
                 staleShown = true;
         };
-        _then("a list read held", () => _ready, () => {
+        _then("unlocked", () => _ready && listed(), () => {
+            const now = _nowSeconds();
+            _write({ "bus/hold": "", "bus/hold-revoke": "",
+                     "bus/list": _list([{ id: "stale", pid: _pid, obtained: now - 5, expires: now + 595 }]) });
+        });
+        _then("a list read and a revoke to be held", () => _ready, () => {
             _reader.keptChanged.connect(watchStale);
             lists = _reader.lists;
             revokes = _reader.revokes;
             _reader.readKept();
         });
-        _then("the read held", () => _reader._runner.running > 0, () => _withCalls(() => {
-            // The revoke overtakes the read that is under way; the list read after it is not held
-            _reader.forget();
-        }));
-        _then("the revoke done and listed again", () => _ready && _reader.revokes > revokes && _reader.lists > lists && !_reader._revoking, () => {
-            assertEqual(_reader.kept.entries.length, 0, "after the revoke: nothing kept");
-            lists = _reader.lists;
-            _sh("rm -f \"$1/bus/held\"", [_scratch], () => {});
-        });
-        _then("the held read let go", () => _sh !== null, () => _sh("while [ ! -e \"$1/bus/released\" ]; do sleep 0.02; done", [_scratch], () => {
+        // The read under way when a revoke starts answers while the revoke is still held:
+        // its list may show what the revoke ends, so it must not be published
+        _then("the read held", () => _reader._runner.running > 0, () => _sh("while [ ! -e \"$1/bus/held\" ]; do sleep 0.02; done", [_scratch], () => {
+            suite._reader.forget();
+            suite._sh("while [ ! -e \"$1/bus/held-revoke\" ]; do sleep 0.02; done; rm -f \"$1/bus/held\"; "
+                      + "while [ ! -e \"$1/bus/released\" ]; do sleep 0.02; done", [suite._scratch], () => suite._ready = true);
             suite._ready = false;
-            readList();
-            suite._ready = true;
         }));
-        _then("read once more", () => _ready && listed(), () => {
-            _reader.keptChanged.disconnect(watchStale);
+        _then("the read answered, the revoke still held", () => _ready && _reader._runner.running === 1, () => {
             assertEqual(staleShown, false, "the read from before the revoke is dropped: its stale entry never shown");
+            assertEqual(_reader._revoking, true, "… while the revoke is still under way");
+            _sh("rm -f \"$1/bus/held-revoke\"", [_scratch], () => {});
+        });
+        _then("the revoke done and listed again", () => _reader.revokes > revokes && _reader.lists > lists && !_reader._revoking, () => {
+            _reader.keptChanged.disconnect(watchStale);
+            assertEqual(staleShown, false, "the stale entry never shown");
+            assertEqual(_reader.kept.entries.length, 0, "after the revoke: nothing kept");
             _write({ ["tree" + RememberRules.confPath]: RememberRules.confText(600) });
         });
         _then("a moment", () => _ready, () => _sh("chmod 000 \"$1\"", [_tree + RememberRules.confPath], () => read()));

@@ -589,6 +589,9 @@ notification_server_up() {
 #                    logind/refuse-suspend, one method with logind/refuse-<method>) — the
 #                    wake is the test's (logind_signal wake)
 #                    ("call LockedHint")
+#                    `… Session Id` answers this test's session id, polkit's
+#                    EnumerateTemporaryAuthorizations an empty list and
+#                    RevokeTemporaryAuthorizations "()" (RememberedAdmin), none noted
 #   systemd-inhibit  notes "hold <pid> <time>" in logind/log, runs the command it was given
 #                    (the shell's `read -r release`) and notes "release <pid> <time>" when
 #                    that ends; between logind_signal sleep and wake it refuses, as logind
@@ -687,6 +690,21 @@ case "\$1" in
                 fi
                 echo true > "\$preparing"
                 echo "/org/freedesktop/login1: org.freedesktop.login1.Manager.PrepareForSleep (true,)" >> "\$signals"
+                echo "()"
+                exit 0
+                ;;
+            *" org.freedesktop.login1.Session Id "*)
+                # The session's id (RememberedAdmin asks session/auto): this test's, not noted
+                echo "(<'$LOCKTEST_SESSION_ID'>,)"
+                exit 0
+                ;;
+            *".EnumerateTemporaryAuthorizations "*)
+                # polkit's kept authorizations (RememberedAdmin): none, not noted
+                echo "(@a(ss(sa{sv})tt) [],)"
+                exit 0
+                ;;
+            *".RevokeTemporaryAuthorizations "*)
+                # … and their revoke at lock: "()" as polkit answers, not noted
                 echo "()"
                 exit 0
                 ;;

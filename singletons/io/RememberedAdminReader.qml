@@ -18,9 +18,10 @@ import qs.singletons
 //
 // The list is read on readKept() (after a privileged run, after unlock — RememberedAdmin),
 // after each revoke, and once a second only while `viewers` is above 0. A revoke comes at
-// lock (when the rule is not known to be absent), on forget(), at the time the setting
-// gives (one timer, armed from the earliest obtained time) and at once when the list says
-// "longer". Nothing here asks for a password: polkit's authority answers these calls
+// lock (unless the rule is absent and nothing is known to be kept; again when the lock came
+// during another revoke), on forget(), at the time the setting gives (one timer, armed from
+// the earliest obtained time) and at once when the list says "longer"; after one that
+// failed or left the entry listed, that revoke waits on a doubling backoff. Nothing here asks for a password: polkit's authority answers these calls
 // without one. A read started before a revoke, or overtaken by a newer read, is dropped
 // (late answers lose); outcomes are logged when they change.
 QtObject {
@@ -44,6 +45,10 @@ QtObject {
     property string fileRoot: ""
     property var environment: ({})
     property int timeoutMs: 5000
+    // After a revoke that failed, or after which the list still shows what it should have
+    // ended, the time revoke is tried again only after this, doubling up to retryMaxMs
+    property int retryBaseMs: 2000
+    property int retryMaxMs: 60000
     // The wall clock in ms (a suite's seam: the revoke time without real minutes)
     property var now: () => Date.now()
 
@@ -150,6 +155,11 @@ QtObject {
     property real _revokeAt: 0
     property string _listProblem: ""
     property string _forgetLogged: ""
+    // Revokes that failed (or did nothing) in a row; a revoke reported done whose list is
+    // not read yet; the lock's revoke waiting for one under way
+    property int _failures: 0
+    property bool _checkAfterRevoke: false
+    property bool _lockPending: false
 
     function _systemSeconds() {
         return installed?.seconds ?? -1;
@@ -196,9 +206,23 @@ QtObject {
             _listProblem = said;
         }
         const step = RememberRules.revokeStep(list, minutes, now());
+        // Reported done, yet still due: it did nothing
+        const ineffective = _checkAfterRevoke && step.now;
+        _checkAfterRevoke = false;
+        if (ineffective) {
+            forgetOutcome = "failed";
+            _logForget(false, forgetReason);
+            _armRetry();
+        }
+        if (!step.now) {
+            _failures = 0;
+            _retryTimer.stop();
+        }
         if (step.now) {
             _revokeTimer.stop();
-            _revoke(list.reason === "longer" ? "longer" : "time");
+            // Waiting on the backoff after a revoke that failed or did nothing
+            if (!_retryTimer.running)
+                _revoke(list.reason === "longer" ? "longer" : "time");
         } else if (step.atMs > 0) {
             _revokeAt = step.atMs;
             _revokeTimer.interval = Math.max(1, Math.min(step.atMs - now(), 2147483647));
@@ -208,9 +232,31 @@ QtObject {
         }
     }
 
-    function _revoke(reason) {
-        if (_revoking)
+    function _logForget(ok, reason) {
+        const outcome = ok ? "forgotten" : "failed";
+        if (outcome === _forgetLogged)
             return;
+        if (ok)
+            console.log("[RememberedAdmin] the remembered password was forgotten (" + reason + ")");
+        else
+            console.warn("[RememberedAdmin] could not forget the remembered password (" + reason + ")");
+        _forgetLogged = outcome;
+    }
+
+    function _armRetry() {
+        _failures += 1;
+        _retryTimer.interval = Math.min(retryBaseMs * Math.pow(2, Math.min(_failures - 1, 20)), retryMaxMs);
+        _retryTimer.restart();
+    }
+
+    function _revoke(reason) {
+        if (_revoking) {
+            // The lock's revoke runs again when this one ends: what was obtained just before
+            // the lock, or a revoke that fails, must not leave a password kept while locked
+            if (reason === "lock")
+                _lockPending = true;
+            return;
+        }
         // A read under way is dropped: it may list what this revoke ends
         _listGeneration++;
         _revokeTimer.stop();
@@ -221,13 +267,17 @@ QtObject {
             forgetReason = reason;
             forgetAtMs = now();
             revokes += 1;
-            const outcome = forgetOutcome;
-            if (outcome !== _forgetLogged) {
-                if (ok)
-                    console.log("[RememberedAdmin] the remembered password was forgotten (" + reason + ")");
-                else
-                    console.warn("[RememberedAdmin] could not forget the remembered password (" + reason + ")");
-                _forgetLogged = outcome;
+            _logForget(ok, reason);
+            if (ok)
+                _checkAfterRevoke = true;
+            else
+                _armRetry();
+            if (_lockPending) {
+                _lockPending = false;
+                if (locked) {
+                    _revoke("lock");
+                    return;
+                }
             }
             readKept();
         };
@@ -254,11 +304,16 @@ QtObject {
         });
     }
 
+    // Not revoked at lock only when it is known that nothing is kept and the rule is absent
     onLockedChanged: {
-        if (locked && installed?.rule !== "none")
+        if (locked && !(installed?.rule === "none" && kept?.known === true && kept.entries.length === 0))
             _revoke("lock");
         else if (!locked)
             readKept();
+    }
+
+    property Timer _retryTimer: Timer {
+        onTriggered: root.readKept()
     }
 
     property Timer _revokeTimer: Timer {
