@@ -25,6 +25,12 @@ TestCase {
         assertEqual(rules.defaultControl, "sufficient", "a new row is sufficient");
         assertEqual(rules.explanation("requisite"), "Must pass. A failure ends it at once.", "a word's explanation");
         assertEqual(rules.explanation("include"), "", "no explanation for another word");
+        assertEqual(rules.controlsFor("raw").join(" "), "sufficient required requisite optional", "a raw line: all four words");
+        for (const method of ["fingerprint", "securityKey", "password"])
+            assertEqual(rules.controlsFor(method).join(" "), "sufficient required requisite", method + ": no optional");
+        assertEqual(rules.controlsFor("system").length + rules.controlsFor("smartcard").length, 0, "no words for the fixed row or an unknown method");
+        assert(rules.controlAllowed("raw", "optional") && !rules.controlAllowed("password", "optional")
+               && rules.controlAllowed("password", "requisite"), "a word allowed for a method");
         assertEqual(rules.explanation("sufficient"), "If it passes and no row above has failed, you are in; if not, the next row is tried.",
                     "sufficient: a failure above still counts");
 
@@ -77,7 +83,6 @@ TestCase {
         assert(!has([password("r1")], arch({ fingerprint: "absent" }), "R1"), "R1 not: a password row");
         assert(has([password("r1", "optional")], arch({ fingerprint: "absent" }), "R1"), "R1: an optional row alone decides nothing");
         assert(has([fingerprint("r1", "optional")], arch(), "R1"), "R1: … an optional reader alone");
-        assert(!has([fingerprint("r1", "optional"), fixed], arch(), "R1"), "R1 not: optional beside the fixed row");
         assert(has([raw("r1", "auth optional pam_unix.so")], arch(), "R1"), "R1: a raw optional line decides nothing");
         assert(has([password("r1", "optional")], arch({ otherService: [password("p1", "optional")] }), "R5"),
                "R5: optional passwords alone in both services");
@@ -88,7 +93,20 @@ TestCase {
         assert(!has([fingerprint("r1", "sufficient"), fixed], arch({ fingerprint: "absent" }), "R2"), "R2 not: sufficient");
         assertEqual(codes([], arch()).join(" "), "R3", "R3: no rows");
         assert(!has([fixed], arch(), "R3"), "R3 not: the fixed row alone");
-        assert(has([fingerprint("r1", "sufficient", { timeout: 121 }), fixed], arch(), "R4"), "R4: timeout above 120");
+        assert(has([fingerprint("r1", "sufficient", { timeout: 601 }), fixed], arch(), "R4"), "R4: timeout above 600");
+        assert(has([fingerprint("r1", "sufficient", { timeout: 0 }), fixed], arch(), "R4"), "R4: timeout 0");
+        assert(has([fingerprint("r1", "sufficient", { timeout: -2 }), fixed], arch(), "R4"), "R4: a negative timeout other than -1");
+        assert(has([fingerprint("r1", "sufficient", { tries: -2 }), fixed], arch(), "R4"), "R4: … tries");
+        assert(!has([fingerprint("r1", "sufficient", { timeout: -1, tries: -1 }), fixed], arch(), "R4"), "R4 not: -1, no limit");
+        assertEqual(rules.check([fingerprint("r1", "sufficient", { timeout: 601 }), fixed], arch()).refusals[0].text,
+                    "Timeout must be 1–600 s, or no limit.", "the range's text names no limit");
+        for (const method of ["fingerprint", "securityKey", "password"]) {
+            const made = rules.newRow(method, []);
+            made.control = "optional";
+            const found = rules.check([made, fixed], arch()).refusals.find(refusal => refusal.code === "R4");
+            assertEqual(found?.text, rules.texts.R4optional, "R4: an own " + method + " row cannot be optional");
+        }
+        assert(!has([raw("r1", "auth optional pam_env.so"), fixed], arch(), "R4"), "R4 not: a raw optional line");
         assert(has([fingerprint("r1", "sufficient", { tries: 0 }), fixed], arch(), "R4"), "R4: tries below 1");
         assert(has([fingerprint("r1", "sufficient", { tries: 2.5 }), fixed], arch(), "R4"), "R4: tries not whole");
         assert(has([row("r1", "smartcard"), fixed], arch(), "R4"), "R4: an unknown method");
@@ -96,8 +114,8 @@ TestCase {
         assert(has([row("r1", "securityKey", "sufficient", { cue: false }), fixed], arch(), "R4"), "R4: cue cannot be turned off");
         assert(has([password("r1", "sufficient", true), fixed], arch({ faillockPresent: false }), "R4"), "R4: counted where nothing counts");
         assert(has([fixed, fingerprint("r1")], arch(), "R4"), "R4: the fixed row not last");
-        assert(!has([fingerprint("r1", "sufficient", { timeout: 5, tries: 10 }), password("r2", "required", true), fixed], arch(), "R4"),
-               "R4 not: the range's ends");
+        assert(!has([fingerprint("r1", "sufficient", { timeout: 1, tries: 20 }), password("r2", "required", true), fixed], arch(), "R4")
+               && !has([fingerprint("r1", "sufficient", { timeout: 600 }), fixed], arch(), "R4"), "R4 not: the range's ends");
         let both = arch({ otherService: [fingerprint("p1")] });
         assert(has([fingerprint("r1")], both, "R5"), "R5: neither service keeps a password");
         assert(has([fingerprint("r1")], arch({ otherService: null }), "R5"), "R5: the other service not known counts as none");
@@ -223,9 +241,33 @@ TestCase {
         assert(has([raw("r1", "auth sufficient pam_ldap.so"), fixed], arch(), "W4"), "W4: a module the checks do not know");
         assert(!has([raw("r1", "auth sufficient pam_unix.so try_first_pass"), fixed], arch(), "W4"), "W4 not: a raw pam_unix line");
         assert(!has([raw("r1", "auth sufficient pam_ldap.so"), fixed], arch({ system: "nixos" }), "W4"), "W4 not: a refused line");
-        assert(has([fingerprint("r1", "optional"), fixed], arch(), "W5"), "W5: an optional row beside a deciding one");
-        assert(has([password("r1", "optional")], arch(), "W5"), "W5: … without the fixed row the closing line decides");
-        assert(!has([fingerprint("r1", "sufficient"), fixed], arch(), "W5"), "W5 not: no optional row");
+        // W13: an unknown module's required line where nothing below decides
+        result = rules.check([password("r1", "sufficient"), raw("r2", "auth required /usr/lib/security/pam_ldap.so")], arch());
+        found = result.warnings.find(warning => warning.code === "W13");
+        assert(found !== undefined && found.row === 1 && found.id === "r2", "W13: a raw required line of an unknown module, no fixed row, on its row");
+        assertEqual(found.text, "If pam_ldap.so answers that it does not apply to someone, the list ends without a refusal and lets them in. "
+                    + "Add the row \"Password (as the system)\", or make sure pam_ldap.so refuses users it does not know.", "… naming the module");
+        assert(result.refusals.length === 0, "… a warning, not a refusal");
+        assert(has([password("r1"), raw("r2", "auth requisite pam_ldap.so")], arch(), "W13"), "W13: requisite too");
+        assert(has([password("r1"), raw("r2", "auth required /home/u/pam_unix.so")], arch(), "W13"), "W13: a module from outside, whatever its name");
+        assert(!has([raw("r1", "auth required pam_ldap.so"), fixed], arch(), "W13"), "W13 not: the fixed row decides below");
+        assert(!has([password("r1"), raw("r2", "auth sufficient pam_ldap.so")], arch(), "W13"), "W13 not: sufficient");
+        assert(!has([password("r1"), raw("r2", "auth [success=ok default=bad] pam_ldap.so")], arch(), "W13"), "W13 not: a bracketed control says what ignore does");
+        assert(!has([password("r1"), raw("r2", "auth required pam_unix.so")], arch(), "W13"), "W13 not: a module the shell knows");
+        assert(!has([password("r1"), raw("r2", "auth required pam_ldap.so")], arch({ system: "nixos" }), "W13"), "W13 not: a refused line");
+        // W14: no time limit on a reader above a password
+        const endless = fingerprint("r1", "sufficient", { timeout: -1 });
+        result = rules.check([endless, fixed], arch());
+        found = result.warnings.find(warning => warning.code === "W14");
+        assert(found !== undefined && found.row === 0, "W14: an unlimited reader above the system's password, on its row");
+        assertEqual(found.text, "Waits for the finger until it is touched or the prompt is cancelled: the password is asked only after that.", "… its text");
+        assert(has([endless, password("r2", "required")], arch(), "W14"), "W14: … above an own password row");
+        assert(has([endless, raw("r2", "auth sufficient pam_unix.so")], arch(), "W14"), "W14: … above a raw password line");
+        assert(!has([fingerprint("r1", "sufficient", { timeout: 600 }), fixed], arch(), "W14"), "W14 not: a time limit");
+        assert(!has([password("r1", "required"), endless], arch(), "W14"), "W14 not: the password above it");
+        assert(!has([fingerprint("r1", "required", { timeout: -1 }), fixed], arch(), "W14"), "W14 not: a required reader (both are asked anyway)");
+        assert(!has([endless, key("r2")], arch(), "W14"), "W14 not: no password below");
+        assert(!has([fingerprint("r1", "sufficient", { tries: -1 }), fixed], arch(), "W14"), "W14 not: unlimited tries only");
         result = rules.check([fingerprint("r1"), fingerprint("r2"), fixed], arch());
         assertEqual(result.warnings.filter(warning => warning.code === "W6").map(warning => warning.id).join(" "), "r2", "W6: the second of two");
         assert(has([password("r1", "required"), raw("r2", "auth sufficient pam_unix.so"), fixed], arch(), "W6"), "W6: a raw line of the same method");
@@ -247,7 +289,7 @@ TestCase {
 
         // --- edges (tests/mutate.sh) ---
         assert(!has([fingerprint("r1", "sufficient", { tries: 1 }), fixed], arch(), "R4"), "R4 not: one try");
-        assert(has([fingerprint("r1", "sufficient", { tries: 11 }), fixed], arch(), "R4"), "R4: tries above 10");
+        assert(has([fingerprint("r1", "sufficient", { tries: 21 }), fixed], arch(), "R4"), "R4: tries above 20");
         assert(rules.detailOffered("fingerprint", "timeout", { faillockPresent: false }), "a reader's detail is offered without pam_faillock");
         assert(!rules.detailOffered("fingerprint", "pin", {}) && !rules.detailOffered("fingerprint", "counted", { faillockPresent: true }),
                "… a detail the method does not have is not");

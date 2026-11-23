@@ -33,7 +33,7 @@
     }
   },
   {
-    "name": "one list per service: a key with its PIN and a required password; no system rows",
+    "name": "one list per service: a key with its PIN and a required password; no system rows; readers without and with the longest limit",
     "machine": {
       "fprintd": true,
       "u2f": true
@@ -71,20 +71,23 @@
         {
           "id": "r2",
           "method": "fingerprint",
-          "control": "optional",
-          "details": {}
+          "control": "sufficient",
+          "details": {
+            "timeout": -1,
+            "tries": -1
+          }
         },
         {
           "id": "r3",
           "method": "fingerprint",
           "control": "sufficient",
           "details": {
-            "timeout": 120
+            "timeout": 600
           }
         }
       ]
     },
-    "snippet": "programs.h2s-shell.pam = {\n  sudo.rules = [\n    { method = \"securityKey\"; control = \"sufficient\"; pin = true; }\n    { method = \"password\"; control = \"required\"; counted = false; }\n  ];\n  polkit.rules = [\n    { method = \"password\"; control = \"sufficient\"; counted = false; }\n    { method = \"fingerprint\"; control = \"optional\"; }\n    { method = \"fingerprint\"; control = \"sufficient\"; timeout = 120; }\n  ];\n};\n",
+    "snippet": "programs.h2s-shell.pam = {\n  sudo.rules = [\n    { method = \"securityKey\"; control = \"sufficient\"; pin = true; }\n    { method = \"password\"; control = \"required\"; counted = false; }\n  ];\n  polkit.rules = [\n    { method = \"password\"; control = \"sufficient\"; counted = false; }\n    { method = \"fingerprint\"; control = \"sufficient\"; timeout = -1; tries = -1; }\n    { method = \"fingerprint\"; control = \"sufficient\"; timeout = 600; }\n  ];\n};\n",
     "lines": {
       "sudo": [
         "auth sufficient pam_u2f.so cue pinverification=1",
@@ -94,8 +97,8 @@
       ],
       "polkit-1": [
         "auth sufficient pam_unix.so try_first_pass",
-        "auth optional pam_fprintd.so",
-        "auth sufficient pam_fprintd.so timeout=120",
+        "auth sufficient pam_fprintd.so timeout=-1 max-tries=-1",
+        "auth sufficient pam_fprintd.so timeout=600",
         "auth requisite pam_deny.so"
       ]
     }
@@ -161,7 +164,7 @@
     }
   },
   {
-    "name": "counted passwords, optional and requisite",
+    "name": "a raw optional line; a counted requisite password",
     "machine": {
       "logFailures": true
     },
@@ -170,10 +173,10 @@
       "sudo": [
         {
           "id": "r1",
-          "method": "password",
-          "control": "optional",
+          "method": "raw",
+          "control": "",
           "details": {
-            "counted": true
+            "text": "auth optional pam_env.so"
           }
         },
         {
@@ -194,12 +197,10 @@
         }
       ]
     },
-    "snippet": "programs.h2s-shell.pam = {\n  sudo.rules = [\n    { method = \"password\"; control = \"optional\"; counted = true; }\n    { method = \"system\"; }\n  ];\n  polkit.rules = [\n    { method = \"password\"; control = \"requisite\"; counted = true; }\n  ];\n};\n",
+    "snippet": "programs.h2s-shell.pam = {\n  sudo.rules = [\n    { method = \"raw\"; control = \"optional\"; module = \"pam_env.so\"; args = [ ]; }\n    { method = \"system\"; }\n  ];\n  polkit.rules = [\n    { method = \"password\"; control = \"requisite\"; counted = true; }\n  ];\n};\n",
     "lines": {
       "sudo": [
-        "auth required pam_faillock.so preauth",
-        "auth [success=1 default=ignore] pam_unix.so try_first_pass",
-        "auth optional pam_faillock.so authfail"
+        "auth optional pam_env.so"
       ],
       "polkit-1": [
         "auth required pam_faillock.so preauth",

@@ -9,7 +9,7 @@ import QtQuick
 // polkit-1: a whole /etc/pam.d/polkit-1 of the shell's own that shadows the vendor file —
 // its first line `# Written by h2s-shell <sha256>` (the hash of the rest), then the vendor
 // file with the same block at the top of its auth lines; removing the rules removes the file.
-// Here: how each row is written (`-auth` for an optional reader or key, the counted
+// Here: how each row is written (`-auth` for a sufficient reader or key, the counted
 // pattern, the closing lines), reading the block back into rows, taking in a hand-made file
 // (`adopt`: lines the editor writes become rows, everything else a raw row in its place,
 // non-auth lines kept), noticing a file changed by hand, and the NixOS module options for
@@ -127,20 +127,19 @@ Singleton {
 
     // ── Rows to lines ──
 
-    // A sufficient or optional reader or key line may be skipped when its module is gone
-    // (`-auth`): the row falls away instead of breaking the stack. A required or requisite
-    // one is plain `auth`: a second factor never silently disappears.
+    // A sufficient reader or key line may be skipped when its module is gone (`-auth`): the
+    // row falls away instead of breaking the stack. A required or requisite one is plain
+    // `auth`: a second factor never silently disappears.
     function _prefix(control) {
-        return control === "sufficient" || control === "optional" ? "-auth" : "auth";
+        return control === "sufficient" ? "-auth" : "auth";
     }
 
     // A counted Password row: pam_faillock's preauth (a lockout closes the service),
     // pam_unix, and authfail reached only on a wrong password — the jump on success skips it
-    // where a pass must not end the stack
+    // where a pass must not end the stack. No pattern for `optional`: an own row never is.
     function countedLines(control) {
         const middle = {
             sufficient: ["[success=done default=ignore]", "optional"],
-            optional: ["[success=1 default=ignore]", "optional"],
             required: ["[success=1 default=bad]", "[default=bad]"],
             requisite: ["[success=1 default=bad]", "[default=die]"]
         }[control];
@@ -291,24 +290,29 @@ Singleton {
     // ── Lines to rows ──
 
     // The row that writes exactly this line (its words), or null: a reader, key or
-    // uncounted password line in the editor's own form with details in range
+    // uncounted password line in the editor's own form with details in range and a word
+    // the editor offers for it (an `optional` one stays a raw line, kept as it is)
     function _ownRow(words) {
         const line = PamStackRules.parseLine(words.join(" "));
         // A hand-made file's plain required/requisite is read as the word too
         const word = controlWord(line);
         if (line.error !== undefined || line.module === undefined || !PamRuleRules.isControl(word))
             return null;
+        const method = { "pam_fprintd.so": "fingerprint", "pam_u2f.so": "securityKey", "pam_unix.so": "password" }[line.module];
+        if (method === undefined || !PamRuleRules.controlAllowed(method, word))
+            return null;
         let candidate = null;
         if (line.module === "pam_fprintd.so") {
             const details = {};
             const spec = PamRuleRules.methods.fingerprint.details;
             for (const argument of line.args) {
-                const match = argument.match(/^(timeout|max-tries)=(\d+)$/);
+                const match = argument.match(/^(timeout|max-tries)=(-1|\d+)$/);
                 if (!match)
                     return null;
                 const name = match[1] === "timeout" ? "timeout" : "tries";
                 const value = parseInt(match[2], 10);
-                if (name in details || value < spec[name].min || value > spec[name].max)
+                const inRange = value === spec[name].noLimit || (value >= spec[name].min && value <= spec[name].max);
+                if (name in details || !inRange)
                     return null;
                 details[name] = value;
             }
@@ -326,7 +330,7 @@ Singleton {
 
     // The control of a counted pattern starting at items[index], or ""
     function _countedAt(items, index) {
-        for (const control of ["sufficient", "optional", "required", "requisite"]) {
+        for (const control of PamRuleRules.controlsFor("password")) {
             const lines = countedLines(control);
             if (index + lines.length <= items.length
                     && lines.every((line, i) => JSON.stringify(_words(line)) === JSON.stringify(items[index + i].words)))

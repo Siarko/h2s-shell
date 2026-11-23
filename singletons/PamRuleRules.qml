@@ -19,8 +19,8 @@ Singleton {
 
     // ── Control words ──
 
-    // The four words the editor's own rows carry, in the order the editor offers them; a
-    // raw line keeps whatever it says
+    // PAM's four words, in the order the editor offers them. A raw line may use any of
+    // them (or another control); the editor's own rows never `optional` (controlsFor)
     readonly property string defaultControl: "sufficient"
     readonly property var controls: [
         { word: "sufficient", explanation: "If it passes and no row above has failed, you are in; if not, the next row is tried." },
@@ -38,9 +38,24 @@ Singleton {
         return controls.some(control => control.word === word);
     }
 
+    // The words offered for a method's row: all four for a raw line; for a fingerprint, key
+    // or password row all but `optional` — PAM ignores an optional row's result whenever
+    // another row decides, so for a way in it only misleads; none for the fixed row or an
+    // unknown method
+    readonly property var _ownControls: ["sufficient", "required", "requisite"]
+    function controlsFor(method) {
+        if (method === "raw")
+            return controls.map(control => control.word);
+        return addOrder.includes(method) ? _ownControls.slice() : [];
+    }
+
+    function controlAllowed(method, word) {
+        return controlsFor(method).includes(word);
+    }
+
     // ── Methods and their details ──
 
-    // `kind`: "int" (whole number in min–max), "bool", "fixed" (only `value`), "text" (one
+    // `kind`: "int" (whole number in min–max, or `noLimit` where the module takes it), "bool", "fixed" (only `value`), "text" (one
     // line, at most maxLength characters). `counts`: the chip saying whether pam_faillock
     // counts the row's failures ("" where it depends on the row).
     readonly property string systemId: "system"
@@ -49,8 +64,9 @@ Singleton {
         fingerprint: {
             label: "Fingerprint", module: "pam_fprintd.so", counts: "Not counted",
             details: {
-                timeout: { kind: "int", min: 5, max: 120, initial: 10, label: "Timeout", unit: "s" },
-                tries: { kind: "int", min: 1, max: 10, initial: 3, label: "Tries", unit: "" }
+                // pam_fprintd: a negative value is no limit (-1 here)
+                timeout: { kind: "int", min: 1, max: 600, noLimit: -1, initial: 10, label: "Timeout", unit: "s" },
+                tries: { kind: "int", min: 1, max: 20, noLimit: -1, initial: 3, label: "Tries", unit: "" }
             }
         },
         securityKey: {
@@ -419,6 +435,7 @@ Singleton {
         R4control: "Unknown control word.",
         R4fixed: "The system's password row can only be last, and only once.",
         R4counted: "Failures cannot count here: the system's rules do not count them.",
+        R4optional: "Optional is only for a raw line: this row's result would be ignored.",
         R5: "Keep a password in sudo or in administrator prompts: one is the way to repair the other.",
         R6: "Changed outside the shell. Replace it to edit here.",
         R8: "Not a PAM line.",
@@ -428,22 +445,26 @@ Singleton {
         W2: "Both needed: without the reader nobody gets in.",
         W3: "An empty Enter to reach the reader counts as a wrong password.",
         W4: "The shell does not know this line: the trial runs it, the checks do not.",
-        W5: "Does nothing here: another row decides.",
         W9: "nullok: an account with an empty password gets in.",
         W10: "Nothing above asks for the password, so this line never lets you in.",
         W6: "Asked twice: the same method is in another row.",
         W7: "A wrong password is asked again by the last row.",
         W8: "Not saved for both: Apply again to make the lists the same.",
         W11: "A path in the Nix store changes with an update or a garbage collection.",
-        W12: "Not in the system's module folders: if your user can write this file, any of your programs can replace it without a password, and it runs as root at the next sudo or administrator prompt."
+        W12: "Not in the system's module folders: if your user can write this file, any of your programs can replace it without a password, and it runs as root at the next sudo or administrator prompt.",
+        // {module}: the line's module, by its file name
+        W13: "If {module} answers that it does not apply to someone, the list ends without a refusal and lets them in. Add the row \"Password (as the system)\", or make sure {module} refuses users it does not know.",
+        W14: "Waits for the finger until it is touched or the prompt is cancelled: the password is asked only after that."
     })
 
     function _detailProblem(method, name, value) {
         const spec = methods[method].details[name];
         if (value === undefined)
             return "";
-        if (spec.kind === "int" && (!Number.isInteger(value) || value < spec.min || value > spec.max))
-            return spec.label + " must be " + spec.min + "–" + spec.max + (spec.unit ? " " + spec.unit : "") + ".";
+        if (spec.kind === "int" && !(spec.noLimit !== undefined && value === spec.noLimit)
+                && (!Number.isInteger(value) || value < spec.min || value > spec.max))
+            return spec.label + " must be " + spec.min + "–" + spec.max + (spec.unit ? " " + spec.unit : "")
+                + (spec.noLimit !== undefined ? ", or no limit" : "") + ".";
         if (spec.kind === "bool" && typeof value !== "boolean")
             return spec.label + " must be on or off.";
         if (spec.kind === "fixed" && value !== spec.value)
@@ -455,12 +476,14 @@ Singleton {
     // "system" / "unknown"), raw, atOnce (passing lets the user in at once: sufficient, a
     // bracketed done on success), okOnSuccess (a bracketed ok on success: in only when the
     // permit closing keeps the result), fails (failing fails the stack: required, requisite, a
-    // bracketed bad/die), optional, credential (raw: credentialOf's), denies (a raw pam_deny
+    // bracketed bad/die), credential (raw: credentialOf's), denies (a raw pam_deny
     // that fails), firstPass (a raw pam_unix use_first_pass: only checks a password asked
-    // above), nullok, refusals }
+    // above), nullok, unknownMust (a raw required/requisite line of a module the shell
+    // does not know), refusals }
     function _role(row, service, facts) {
-        const role = { method: "unknown", raw: false, atOnce: false, okOnSuccess: false, fails: false, optional: false,
-                       credential: "unknown", denies: false, firstPass: false, nullok: false, refusals: [], warnings: [] };
+        const role = { method: "unknown", raw: false, atOnce: false, okOnSuccess: false, fails: false,
+                       credential: "unknown", denies: false, firstPass: false, nullok: false, unknownMust: false,
+                       moduleName: "", refusals: [], warnings: [] };
         const method = row?.method;
         if (method === "system") {
             role.method = "system";
@@ -484,7 +507,6 @@ Singleton {
                 role.okOnSuccess = !role.atOnce && onSuccess === "ok";
                 role.fails = line.control === "required" || line.control === "requisite"
                     || Object.keys(actions).some(key => key !== "success" && (actions[key] === "bad" || actions[key] === "die"));
-                role.optional = line.control === "optional";
                 role.credential = judged.credential;
                 // A module from outside the system's folders is judged by nothing its name says
                 const named = judged.warning === null ? line.moduleName : "";
@@ -492,6 +514,8 @@ Singleton {
                 role.denies = line.moduleName === "pam_deny.so" && role.fails;
                 role.firstPass = named === "pam_unix.so" && line.args.includes("use_first_pass");
                 role.nullok = named === "pam_unix.so" && line.args.includes("nullok");
+                role.moduleName = line.moduleName;
+                role.unknownMust = (line.control === "required" || line.control === "requisite") && judged.credential === "unknown";
             }
             return role;
         }
@@ -500,7 +524,9 @@ Singleton {
             return role;
         }
         role.method = method;
-        if (!isControl(row.control))
+        if (row.control === "optional")
+            role.refusals.push({ code: "R4", text: texts.R4optional });
+        else if (!isControl(row.control))
             role.refusals.push({ code: "R4", text: texts.R4control });
         for (const name of Object.keys(methods[method].details)) {
             const problem = _detailProblem(method, name, row.details?.[name]);
@@ -511,7 +537,6 @@ Singleton {
             role.refusals.push({ code: "R4", text: texts.R4counted });
         role.atOnce = row.control === "sufficient";
         role.fails = row.control === "required" || row.control === "requisite";
-        role.optional = row.control === "optional";
         return role;
     }
 
@@ -532,8 +557,8 @@ Singleton {
 
     // The rows' roles, each with `decides`: whether it can decide that the user is in — the
     // fixed row always; a row that lets in at once or fails the stack; a bracketed ok on
-    // success unless the closing is the deny; an own optional row only beside the fixed
-    // row; a raw pam_unix use_first_pass only below a row that asks for the password
+    // success unless the closing is the deny; a raw pam_unix use_first_pass only below a
+    // row that asks for the password
     function _analyse(list, service, facts) {
         const roles = list.map(row => _role(row, service, facts));
         const closing = _closing(roles);
@@ -542,10 +567,8 @@ Singleton {
                 role.decides = true;
             else if (role.atOnce || role.fails)
                 role.decides = true;
-            else if (role.okOnSuccess)
-                role.decides = closing !== "deny";
             else
-                role.decides = !role.raw && role.optional && closing === "system";
+                role.decides = role.okOnSuccess && closing !== "deny";
             role.unasked = role.firstPass
                 && !roles.slice(0, i).some(above => above.method === "password" && !above.firstPass);
             if (role.unasked)
@@ -672,13 +695,20 @@ Singleton {
                 warn("W10", i, texts.W10);
         });
 
-        // W5: an own optional row: another row decides, or the closing lines do
+        // W13: a raw required/requisite line of a module the shell does not know, without
+        // the fixed row: a module that answers PAM_IGNORE for a user it does not know leaves
+        // no result, and the permit closing then lets the user in
         roles.forEach((role, i) => {
-            if (role.raw || !role.optional)
-                return;
-            const decides = fixedIndex < 0 || roles.some((other, j) => j !== i && !other.optional);
-            if (decides)
-                warn("W5", i, texts.W5);
+            if (role.unknownMust && !fixedPresent && role.refusals.length === 0)
+                warn("W13", i, texts.W13.replace(/\{module\}/g, () => role.moduleName));
+        });
+
+        // W14: a fingerprint row with no time limit that lets in at once, a password row
+        // below it: the password waits until the finger is touched or the prompt cancelled
+        roles.forEach((role, i) => {
+            if (role.method === "fingerprint" && !role.raw && list[i].details?.timeout === -1 && role.atOnce
+                    && roles.slice(i + 1).some(later => later.method === "password" || later.method === "system"))
+                warn("W14", i, texts.W14);
         });
 
         // W6: the same method in two rows (the fixed row is not counted)

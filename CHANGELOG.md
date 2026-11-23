@@ -956,17 +956,23 @@ The interface modules are written against (`qs.api`), versioned on its own
   most), instead of one accent dot for the day.
 - NixOS: the module's `programs.h2s-shell.pam.rules` (sudo and polkit) — or
   `pam.sudo.rules` and `pam.polkit.rules`, one list per service — set sudo's and polkit's
-  `auth` rules as an ordered list of rows: fingerprint (`timeout`, `tries`), security key
-  (`pin`), password (`counted`), a raw line (`module`, `args`), and `{ method = "system"; }`
-  for NixOS's own rules below them; without that row the list ends with closing lines
-  that keep NixOS's own rules from being reached.
-  `control` is PAM's word (`sufficient` by default). NixOS's own fingerprint and key rules
-  are off for a service with rules. A list nobody could get in with, a required reader the
-  machine does not have, both services without a password, a raw line that lets anyone in
-  (a module that asks for nothing), or a module of another package named without its path
-  stops the build with an assertion; a reader as the only way in, a
-  store path written out (`"${pkgs.…}/lib/security/…"` is the way) and a module from
-  outside the store are warnings. null (the default) leaves the service as NixOS makes it.
+  `auth` rules as an ordered list of rows: fingerprint (`timeout` 1–600 s and `tries`
+  1–20, each -1 for no limit), security key (`pin`; the machine's
+  `security.pam.u2f.settings` apply, as on the lock screen, always with `cue` and never
+  `interactive`), password (`counted`), a raw line (`module`, `args`), and
+  `{ method = "system"; }` for NixOS's own rules below them; without that row the list ends
+  with closing lines that keep NixOS's own rules from being reached.
+  `control` is PAM's word (`sufficient` by default; `optional` only on a raw row — a
+  fingerprint, key or password row's result would be ignored). NixOS's own fingerprint and
+  key rules are off for a service with rules. A list nobody could get in with, a required
+  reader the machine does not have, both services without a password, a raw line that lets
+  anyone in (a module that asks for nothing), an optional fingerprint, key or password row,
+  or a module of another package named without its path stops the build with an assertion;
+  a reader as the only way in, a store path written out (`"${pkgs.…}/lib/security/…"` is
+  the way), a module from outside the store, a required raw line of a module the shell does
+  not know without the `system` row (it lets in a user the module says it does not apply
+  to), and a fingerprint with no time limit above a password (the password waits for the
+  finger) are warnings. null (the default) leaves the service as NixOS makes it.
 
 ### Changed
 - NixOS: `programs.h2s-shell.polkit.passwordFirst` is deprecated (a warning when set): a

@@ -187,11 +187,13 @@ PAM `auth` stack.
   ];
   ```
 
-  A row is `fingerprint` (`timeout`, `tries`), `securityKey` (`pin`), `password`
+  A row is `fingerprint` (`timeout`, `tries`; -1 for no limit), `securityKey` (`pin`; with
+  your `security.pam.u2f.settings`, as on the lock screen), `password`
   (`counted`: wrong passwords count toward pam_faillock's lockout, where the service has
   `logFailures`), `raw` (`module`, `args`: another module, by its package's path, e.g.
   `"${pkgs.pam_ldap}/lib/security/pam_ldap.so"`) or `system`. `control` is PAM's word:
-  `sufficient` (the default), `required`, `requisite` or `optional`. Without a `system` row
+  `sufficient` (the default), `required` or `requisite`, and on a `raw` row also `optional`.
+  Without a `system` row
   NixOS's own rules are not reached. A list that would keep everyone out (no row that can
   let you in, a required fingerprint without `services.fprintd.enable`, sudo and polkit
   both without a password) stops the build. `polkit.passwordFirst` is deprecated: a

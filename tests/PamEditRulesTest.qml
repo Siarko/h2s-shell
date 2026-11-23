@@ -74,8 +74,10 @@ TestCase {
         assertEqual(edit.sha256("a".repeat(1000)), "41edece42d63e8d9bf515a9ba6932e1c20cbc9f5a5d134645adb5db1b9737ea3", "… over several blocks");
 
         // --- how rows are written ---
-        assertEqual(edit.rowLines(fingerprint("r1")).join("|"), "-auth sufficient pam_fprintd.so timeout=10 max-tries=3", "an optional reader: -auth");
-        assertEqual(edit.rowLines(fingerprint("r1", "optional"))[0].startsWith("-auth optional"), true, "… optional too");
+        assertEqual(edit.rowLines(fingerprint("r1")).join("|"), "-auth sufficient pam_fprintd.so timeout=10 max-tries=3", "a sufficient reader: -auth");
+        assertEqual(edit.rowLines(row("r1", "fingerprint", "sufficient", { timeout: -1, tries: -1 })).join("|"),
+                    "-auth sufficient pam_fprintd.so timeout=-1 max-tries=-1", "a reader with no limits: -1");
+        assertEqual(edit.countedLines("optional").length, 0, "no counted pattern for optional: an own row never is");
         assertEqual(edit.rowLines(fingerprint("r1", "required")).join("|"),
                     "auth [success=ok new_authtok_reqd=ok ignore=bad default=bad] pam_fprintd.so timeout=10 max-tries=3",
                     "a required reader: plain auth, its word with ignore a failure");
@@ -146,7 +148,9 @@ TestCase {
             ["a reader", [fingerprint("r1"), fixed]],
             ["counted password then reader", [password("r1", "sufficient", true), fingerprint("r2"), fixed]],
             ["required key with PIN, counted required password", [key("r1", "required", true), password("r2", "required", true), fixed]],
-            ["optional counted, requisite counted", [password("r1", "optional", true), password("r2", "requisite", true), fixed]],
+            ["requisite counted", [password("r1", "requisite", true), fixed]],
+            ["a reader with no limits", [row("r1", "fingerprint", "sufficient", { timeout: -1, tries: -1 }), fixed]],
+            ["a raw optional line", [raw("r1", "auth optional pam_env.so"), fingerprint("r2"), fixed]],
             ["reader, no fixed row (deny)", [fingerprint("r1")]],
             ["required reader and password, no fixed row (permit)", [fingerprint("r1", "required"), password("r2")]],
             ["raw lines among rows", [raw("r1", "auth sufficient /usr/lib/security/pam_ldap.so use_first_pass # ldap"), key("r2"), fixed]]
@@ -332,8 +336,22 @@ TestCase {
         // No trailing run of the system's lines: no fixed row
         assertEqual(edit.adopt("auth sufficient pam_unix.so try_first_pass\n", "sudo", facts()).rows.map(item => item.method).join(" "), "password",
                     "no system's lines at the end: no fixed row");
-        assertEqual(edit.adopt("auth sufficient pam_fprintd.so timeout=500\nauth include system-auth\n", "sudo", facts()).rows[0].method, "raw",
+        assertEqual(edit.adopt("auth sufficient pam_fprintd.so timeout=601\nauth include system-auth\n", "sudo", facts()).rows[0].method, "raw",
                     "a detail out of range stays raw");
+        assertEqual(JSON.stringify(edit.adopt("-auth sufficient pam_fprintd.so timeout=-1 max-tries=-1\nauth include system-auth\n", "sudo", facts()).rows[0]),
+                    JSON.stringify({ method: "fingerprint", control: "sufficient", details: { timeout: -1, tries: -1 }, id: "r1" }), "no limit is read as -1");
+        assertEqual(edit.adopt("-auth sufficient pam_fprintd.so timeout=-2\nauth include system-auth\n", "sudo", facts()).rows[0].method, "raw",
+                    "… another negative value stays raw");
+        for (const optional of ["auth optional pam_fprintd.so timeout=10", "-auth optional pam_fprintd.so timeout=10", "auth optional pam_u2f.so cue",
+                               "auth optional pam_unix.so try_first_pass"]) {
+            const taken = edit.adopt(optional + "\nauth include system-auth\n", "sudo", facts());
+            assertEqual(JSON.stringify(taken.rows.map(item => [item.method, item.details.text ?? ""])), JSON.stringify([["raw", optional], ["system", ""]]),
+                        "an own module's optional line stays a raw row, kept exactly: " + optional);
+        }
+        const countedOptional = "auth required pam_faillock.so preauth\nauth [success=1 default=ignore] pam_unix.so try_first_pass\n"
+            + "auth optional pam_faillock.so authfail\nauth include system-auth\n";
+        assertEqual(edit.adopt(countedOptional, "sudo", facts()).rows.map(item => item.method).join(" "), "raw raw raw system",
+                    "… the counted pattern's optional form: raw rows");
         assertEqual(edit.adopt("auth sufficient pam_u2f.so cue authfile=/etc/u2f\nauth include system-auth\n", "sudo", facts()).rows[0].method, "raw",
                     "a key line with its own authfile stays raw");
 
@@ -353,6 +371,8 @@ TestCase {
                     + "    { method = \"system\"; }\n  ];\n};\n", "NixOS: one list per service, a raw line with its full path");
         snippet = edit.nixosSnippet([raw("r1", "-auth sufficient /run/current-system/sw/lib/security/pam_ldap.so"), fixed], false, {});
         assert(!snippet.ok && snippet.text === null && snippet.refusals[0].code === "R8", "NixOS: a -auth raw line cannot be an option");
+        snippet = edit.nixosSnippet([row("r1", "fingerprint", "sufficient", { timeout: -1, tries: -1 }), fixed], false, { fingerprint: "ready" });
+        assert(snippet.ok && snippet.text.includes("{ method = \"fingerprint\"; control = \"sufficient\"; timeout = -1; tries = -1; }"), "NixOS: no limit is -1");
         snippet = edit.nixosSnippet({ sudo: [], polkit: [fixed] }, true, {});
         assert(!snippet.ok && snippet.refusals.some(item => item.code === "R3" && item.service === "sudo"), "NixOS: an empty list refused, with its service");
         snippet = edit.nixosSnippet([raw("r1", "auth sufficient pam_ldap.so"), fixed], false, {});

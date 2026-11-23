@@ -59,16 +59,21 @@ TestCase {
         assertEqual(JSON.stringify(_nixList(text, "\\bcontrols = ")), JSON.stringify(PamRuleRules.controls.map(control => control.word)),
                     "the control words are the editor's four");
         const spec = PamRuleRules.methods.fingerprint.details;
-        assert(text.includes("timeout = mkOption {\n        type = types.nullOr (types.ints.between " + spec.timeout.min + " " + spec.timeout.max + ");"),
-               "timeout's range is the editor's (" + spec.timeout.min + "–" + spec.timeout.max + ")");
-        assert(text.includes("tries = mkOption {\n        type = types.nullOr (types.ints.between " + spec.tries.min + " " + spec.tries.max + ");"),
-               "tries' range is the editor's (" + spec.tries.min + "–" + spec.tries.max + ")");
+        for (const name of ["timeout", "tries"]) {
+            const range = spec[name];
+            assert(text.includes(name + " = mkOption {\n        type = types.nullOr (types.either (types.ints.between " + range.min + " " + range.max
+                                 + ") (types.enum [ (" + range.noLimit + ") ]));"),
+                   name + "'s range is the editor's (" + range.min + "–" + range.max + ", or " + range.noLimit + ")");
+        }
+        assertEqual(JSON.stringify(_nixList(text, "\\bownMethods = ")),
+                    JSON.stringify(PamRuleRules.addOrder.filter(method => method !== "raw" && !PamRuleRules.controlAllowed(method, "optional"))),
+                    "the methods whose rows are never optional are the editor's");
         const libpam = _nixList(text, "\\blibpamModules = ");
         assertEqual(JSON.stringify((libpam ?? []).map(name => name + ".so")), JSON.stringify(PamRuleRules.libpamModules),
                     "libpam's own modules are the editor's");
         assert(text.includes("systemModules = \"" + PamRuleRules.nixosModuleDirectories[0] + "\";"),
                "the system profile's module folder is the editor's");
-        for (const control of PamRuleRules.controls.map(item => item.word)) {
+        for (const control of PamRuleRules.controlsFor("password")) {
             const lines = PamEditRules.countedLines(control);
             assert(text.includes(control + " = [ \"" + PamStackRules.words(lines[1])[1] + "\" \"" + PamStackRules.words(lines[2])[1] + "\" ];"),
                    "a counted " + control + " row's controls are the editor's");

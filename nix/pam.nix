@@ -5,7 +5,8 @@
 # from the configuration are assertions and warnings, as the editor's are refusals and
 # warnings (PamRuleRules.check). tests/PamNixosModuleTest.qml checks the names and ranges
 # here against the editor's; tests/system/nixos/pam.sh evaluates the lines against
-# PamEditRules' for the same rows.
+# PamEditRules' for the same rows (a security key row's arguments from the machine's
+# security.pam.u2f.settings left out: the editor's lines have none).
 { config, options, lib, pkgs, ... }:
 
 let
@@ -14,6 +15,9 @@ let
 
   methods = [ "fingerprint" "securityKey" "password" "system" "raw" ];
   controls = [ "sufficient" "required" "requisite" "optional" ];
+  # The methods whose rows never take `optional` (a raw row may): PAM ignores an optional
+  # row's result whenever another row decides, so for a way in it only misleads
+  ownMethods = [ "fingerprint" "securityKey" "password" ];
   # libpam's own modules: NixOS's libpam finds these, and only these, by bare name
   libpamModules = map (name: name + ".so") [ "pam_access" "pam_canonicalize_user" "pam_debug"
     "pam_deny" "pam_echo" "pam_env" "pam_exec" "pam_faildelay" "pam_faillock" "pam_filter"
@@ -46,23 +50,30 @@ let
           above has failed, you are in; if not, the next row is tried), `required` (must
           pass; the next rows still run and a failure is told at the end), `requisite` (must
           pass; a failure ends it at once), `optional` (counts only when no other row
-          decides). Not used by the `system` row.
+          decides; only for a `raw` row: a fingerprint, key or password row's result would be
+          ignored). Not used by the `system` row.
         '';
       };
       timeout = mkOption {
-        type = types.nullOr (types.ints.between 5 120);
+        type = types.nullOr (types.either (types.ints.between 1 600) (types.enum [ (-1) ]));
         default = null;
-        description = "Fingerprint: seconds to wait for a finger (pam_fprintd's `timeout`); null leaves pam_fprintd's.";
+        description = "Fingerprint: seconds to wait for a finger (pam_fprintd's `timeout`), -1 for no limit; null leaves pam_fprintd's.";
       };
       tries = mkOption {
-        type = types.nullOr (types.ints.between 1 10);
+        type = types.nullOr (types.either (types.ints.between 1 20) (types.enum [ (-1) ]));
         default = null;
-        description = "Fingerprint: fingers tried before it fails (pam_fprintd's `max-tries`); null leaves pam_fprintd's.";
+        description = "Fingerprint: fingers tried before it fails (pam_fprintd's `max-tries`), -1 for no limit; null leaves pam_fprintd's.";
       };
       pin = mkOption {
         type = types.bool;
         default = false;
-        description = "Security key: ask for the key's PIN too (pam_u2f's `pinverification=1`). pam_u2f always says when to touch the key (`cue`).";
+        description = ''
+          Security key: ask for the key's PIN too (pam_u2f's `pinverification=1`). The
+          row takes the machine's `security.pam.u2f.settings` (where the keys are:
+          `authfile`, `appid`, `origin`…), as the lock screen does, but always says when to
+          touch the key (`cue`), never waits for Enter (no `interactive`), and asks for the
+          PIN only as this says.
+        '';
       };
       counted = mkOption {
         type = types.bool;
@@ -212,12 +223,15 @@ let
             && (row.control == "sufficient" || (fails row && closing != "system"));
           nullok = row.method == "raw" && methodOf row == "password" && lib.elem "nullok" row.args;
           unknown = row.method == "raw" && methodOf row == "unknown" && credentialOf row != "no" && rawName row != "pam_deny.so";
-          # An own optional row: another row decides, or the closing lines do
-          idle = row.method != "raw" && row.method != "system" && row.control == "optional"
-            && (closing != "system"
-              || lib.any (other: other.method == "system" || other.control != "optional") (lib.take index rows ++ lib.drop (index + 1) rows));
-          decides = !unasked && (row.method == "system" || row.control == "sufficient" || fails row
-            || (row.method != "raw" && row.control == "optional" && closing == "system"));
+          # A raw required/requisite line of a module the shell does not know, without NixOS's
+          # rules below: a module that answers PAM_IGNORE for a user it does not know leaves
+          # no result, and the permit closing then lets the user in
+          unknownMust = row.method == "raw" && fails row && credentialOf row == "unknown" && closing != "system";
+          # A fingerprint row with no time limit that lets in at once, a password row below:
+          # the password waits until the finger is touched or the prompt is cancelled
+          endless = row.method == "fingerprint" && row.timeout == -1 && row.control == "sufficient"
+            && lib.any (later: lib.elem (methodOf later) [ "password" "system" ]) (lib.drop (index + 1) rows);
+          decides = !unasked && (row.method == "system" || row.control == "sufficient" || fails row);
         };
       roles = lib.imap0 role rows;
       hasPassword = lib.any (role: lib.elem role.method [ "password" "system" ] && role.decides) roles;
@@ -254,6 +268,8 @@ let
             "${at index row}: counted is a password row's."
           ++ lib.optional (row.method != "raw" && (row.module != null || row.args != [ ]))
             "${at index row}: module and args are a raw row's."
+          ++ lib.optional (lib.elem row.method ownMethods && row.control == "optional")
+            "${at index row}: optional is only for a raw row: this row's result would be ignored."
           ++ lib.optional (row.method == "password" && row.counted && !config.security.pam.services.${name}.logFailures)
             "${at index row}: failures cannot count here: ${name}'s rules do not count them (security.pam.services.${name}.logFailures)."
           ++ lib.optional (row.method == "raw" && placeOf row == "missing")
@@ -292,8 +308,10 @@ let
             "${at index (lib.elemAt rows index)}: both needed: without the reader nobody gets in."
           ++ lib.optional role.unknown
             "${at index (lib.elemAt rows index)}: the shell does not know ${rawName (lib.elemAt rows index)}: its checks do not judge this line."
-          ++ lib.optional role.idle
-            "${at index (lib.elemAt rows index)}: does nothing here: another row decides."
+          ++ lib.optional role.unknownMust
+            "${at index (lib.elemAt rows index)}: if ${rawName (lib.elemAt rows index)} answers that it does not apply to someone, the rules end without a refusal and let them in. Add the { method = \"system\"; } row, or make sure ${rawName (lib.elemAt rows index)} refuses users it does not know."
+          ++ lib.optional role.endless
+            "${at index (lib.elemAt rows index)}: waits for the finger until it is touched or the prompt is cancelled: the password is asked only after that."
           ++ lib.optional role.nullok
             "${at index (lib.elemAt rows index)}: nullok: an account with an empty password gets in.")
           analysis.roles)
@@ -347,20 +365,24 @@ let
   writtenControl = control: writtenControls.${control} or control;
   line = control: modulePath: args: { inherit control modulePath args; };
   # A counted password row: pam_faillock's preauth (a lockout closes the service), pam_unix,
-  # and authfail reached only on a wrong password
+  # and authfail reached only on a wrong password. An optional password row is an assertion;
+  # the `or` only keeps the evaluation going until it is reported.
   countedLines = control:
     let
       middle = {
         sufficient = [ "[success=done default=ignore]" "optional" ];
-        optional = [ "[success=1 default=ignore]" "optional" ];
         required = [ "[success=1 default=bad]" "[default=bad]" ];
         requisite = [ "[success=1 default=bad]" "[default=die]" ];
-      }.${control};
+      }.${control} or [ "optional" "optional" ];
     in [
       (line "required" (pamModule "pam_faillock.so") [ "preauth" ])
       (line (lib.elemAt middle 0) (pamModule "pam_unix.so") [ "try_first_pass" ])
       (line (lib.elemAt middle 1) (pamModule "pam_faillock.so") [ "authfail" ])
     ];
+  # A key row's arguments: the machine's pam_u2f settings with `cue`, without `interactive`
+  # (it would wait for Enter), the PIN as the row says
+  u2fArguments = row: import ./u2f.nix lib config.security.pam.u2f.settings
+    { cue = true; interactive = false; pinverification = if row.pin then 1 else null; };
   # The lines of one row. The modules come from their packages, so a fingerprint or key row
   # never needs Arch's `-auth` (skip the line when the module is gone).
   rowLines = row:
@@ -370,7 +392,7 @@ let
          ++ lib.optional (row.tries != null) "max-tries=${toString row.tries}"))
     ]
     else if row.method == "securityKey" then [
-      (line (writtenControl row.control) "${pkgs.pam_u2f}/lib/security/pam_u2f.so" ([ "cue" ] ++ lib.optional row.pin "pinverification=1"))
+      (line (writtenControl row.control) "${pkgs.pam_u2f}/lib/security/pam_u2f.so" (u2fArguments row))
     ]
     else if row.method == "password" then
       (if row.counted then countedLines row.control else [ (line (writtenControl row.control) (pamModule "pam_unix.so") [ "try_first_pass" ]) ])

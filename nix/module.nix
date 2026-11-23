@@ -7,18 +7,8 @@ self:
 let
   cfg = config.programs.h2s-shell;
 
-  # security.pam.u2f.settings as module arguments, the way NixOS's PAM module writes them
-  # (true → the name alone, false and null → nothing, else name=value; a value with a
-  # space in brackets), with the two the lock needs forced
-  u2fArguments = lib.concatLists (lib.mapAttrsToList
-    (name: value:
-      if lib.isBool value then lib.optional value name
-      else lib.optional (value != null) (formatArgument "${name}=${toString value}"))
-    (config.security.pam.u2f.settings // { cue = true; interactive = false; }));
-  formatArgument = argument:
-    if lib.hasInfix " " argument
-    then "[${lib.replaceStrings [ "]" ] [ "\\]" ] argument}]"
-    else argument;
+  # security.pam.u2f.settings as module arguments, with the two the lock needs forced
+  u2fArguments = import ./u2f.nix lib config.security.pam.u2f.settings { cue = true; interactive = false; };
 
   # The system's delay before a sleep the shell starts turns into hibernation: sleep.conf's
   # HibernateDelaySec, through whichever option this NixOS has for it

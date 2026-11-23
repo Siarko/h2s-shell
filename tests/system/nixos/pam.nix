@@ -234,13 +234,55 @@ let
     (expect "a module the shell does not know: a warning"
       { programs.h2s-shell.pam.rules = [ { method = "raw"; module = "/run/current-system/sw/lib/security/pam_ldap.so"; } system ]; }
       { warnings = [ "the shell does not know pam_ldap.so" ]; })
-    (expect "an optional password row beside the system row: a warning, it does nothing"
+    (expect "an optional password row: refused, optional is only for a raw row"
       { programs.h2s-shell.pam.rules = [ { method = "password"; control = "optional"; } system ]; }
-      { warnings = [ "row 1 (password): does nothing here" ]; })
+      { refusals = [ "row 1 (password): optional is only for a raw row" ]; })
+    (expect "an optional counted password row: refused, and it still evaluates"
+      { programs.h2s-shell.pam.rules = [ { method = "password"; control = "optional"; counted = true; } system ];
+        security.pam.services.sudo.logFailures = true; security.pam.services.polkit-1.logFailures = true; }
+      { refusals = [ "row 1 (password): optional is only for a raw row" ]; })
+    (expect "an optional fingerprint row: refused"
+      { programs.h2s-shell.pam.rules = [ (fingerprint // { control = "optional"; }) system ]; services.fprintd.enable = true; }
+      { refusals = [ "row 1 (fingerprint): optional is only for a raw row" ]; })
+    (expect "a raw optional line: allowed"
+      { programs.h2s-shell.pam.rules = [ { method = "raw"; module = "pam_env.so"; control = "optional"; } system ]; }
+      { })
+    (expect "an unknown module's required line without the system row: a warning naming it"
+      { programs.h2s-shell.pam.sudo.rules = [ { method = "password"; } { method = "raw"; module = "/run/current-system/sw/lib/security/pam_ldap.so"; control = "required"; } ]; }
+      { warnings = [ "row 2 (raw): if pam_ldap.so answers that it does not apply to someone, the rules end without a refusal and let them in" ]; })
+    (expect "… with the system row: no such warning"
+      { programs.h2s-shell.pam.sudo.rules = [ { method = "raw"; module = "/run/current-system/sw/lib/security/pam_ldap.so"; control = "required"; } system ]; }
+      { notWarnings = [ "does not apply to someone" ]; })
+    (expect "a fingerprint with no time limit above the system row: a warning"
+      { programs.h2s-shell.pam.rules = [ (fingerprint // { timeout = -1; tries = -1; }) system ]; services.fprintd.enable = true; }
+      { warnings = [ "row 1 (fingerprint): waits for the finger until it is touched or the prompt is cancelled" ]; })
+    (expect "… with a time limit: no such warning"
+      { programs.h2s-shell.pam.rules = [ (fingerprint // { timeout = 600; tries = 20; }) system ]; services.fprintd.enable = true; }
+      { notWarnings = [ "waits for the finger" ]; })
     (expect "nothing set: no assertion, no warning of the shell's"
       { services.fprintd.enable = true; }
       { notWarnings = [ "h2s-shell" ]; })
   ];
+
+  # The machine's pam_u2f settings on a key row, as the lock screen takes them: authfile and
+  # appid there, `cue` always, never `interactive`; with them left out, the editor's line
+  u2fSettings =
+    let
+      config = configOf {
+        programs.h2s-shell.pam.rules = [ { method = "securityKey"; pin = true; } system ];
+        security.pam.u2f = { enable = true; settings = { authfile = "/etc/u2f-keys"; appid = "pam://machine"; interactive = true; cue = false; }; };
+      };
+      line = lib.findFirst ours "" (authLines config "sudo");
+      words = lib.filter (word: word != "") (lib.splitString " " (normalized line));
+      settings = [ "authfile=/etc/u2f-keys" "appid=pam://machine" ];
+      without = lib.concatStringsSep " " (lib.filter (word: !(lib.elem word settings)) words);
+      lock = lib.filter (text: lib.hasInfix "pam_u2f.so" text) (lib.splitString "\n" config.security.pam.services.h2s-shell-u2f.text);
+    in [
+      (result (lib.all (word: lib.elem word words) settings) "a key row takes the machine's u2f settings (authfile, appid)" line)
+      (result (lib.elem "cue" words && !(lib.elem "interactive" words)) "… always cue, never interactive" line)
+      (result (without == "auth sufficient pam_u2f.so cue pinverification=1") "… without them, the editor's line" without)
+      (result (lock != [ ] && lib.all (word: lib.hasInfix word (lib.head lock)) settings) "… as the lock screen's key check has them" (builtins.toJSON lock))
+    ];
 
   # Nothing set: the files are NixOS's, and polkit's fingerprint still follows its password
   # (polkit.passwordFirst's default with fprintd)
@@ -255,4 +297,4 @@ let
         "nothing set, with fprintd: polkit asks the password before the reader" (builtins.toJSON polkit))
     ];
 in
-lib.concatStringsSep "\n" (lib.concatMap caseResults cases ++ checks ++ untouched) + "\n"
+lib.concatStringsSep "\n" (lib.concatMap caseResults cases ++ checks ++ u2fSettings ++ untouched) + "\n"
