@@ -160,7 +160,7 @@ Item {
                         id: _changedMark
                         visible: (Theme.drafts, (_delegate.page.draftGroups ?? []).some(group => Theme.hasDraft(root.editTheme, group)))
                         anchors { verticalCenter: parent.verticalCenter; right: parent.right; rightMargin: 8 }
-                        text: "✎"
+                        text: "󰏫"
                         font.family: Theme.fontFamily
                         font.pixelSize: Theme.fontSizeBodyLarge
                         color: Theme.warning

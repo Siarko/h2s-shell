@@ -183,8 +183,10 @@ ticks, cells respond to clicks, and popups toggle.
   target. Rows of a list that touch take `centred: false`. See "Conventions" in
   `docs/ARCHITECTURE.md`.
 - **A Settings page or section that reads the system reads it on `components/PageShown.qml`'s
-  `becameShown`**, not only in `Component.onCompleted`: the window hides instead of closing
-  and keeps its page, so a read at creation shows the first opening's facts ever after.
+  `becameShown`** (which also comes when it is built on screen), not in
+  `Component.onCompleted`: the window hides instead of closing and keeps its page. A read
+  skipped while a flow runs is made up when the flow ends; a watch or scan is held only
+  while `shown`.
 - **`ShapePath` has no `visible` property.**
 - **Do not add a `qmldir`.** Quickshell registers types per directory automatically. (A
   module directory, loaded by `file://` URL, is the exception: a copy outside the tree, or

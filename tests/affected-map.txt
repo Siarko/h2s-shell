@@ -178,3 +178,4 @@ singletons/SystemSleep.qml lock:sleep-*
 +panels/*.qml unit:GlyphsTest
 +components/*.qml unit:GlyphsTest
 +api/*.qml unit:GlyphsTest
++singletons/*.qml unit:GlyphsTest

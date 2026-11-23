@@ -27,7 +27,7 @@ RowLayout {
 
     Text {
         Layout.fillWidth: true
-        text: "✎ " + root.message
+        text: "󰏫 " + root.message
         elide: Text.ElideRight
         font.family: Theme.fontFamily
         font.pixelSize: Theme.fontSizeSmall

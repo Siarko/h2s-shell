@@ -18,8 +18,25 @@ Flickable {
     flickableDirection: Flickable.VerticalFlick
     clip: true
 
-    Component.onCompleted: NetworkOverview.watch()
-    Component.onDestruction: NetworkOverview.unwatch()
+    // The overview's watch (devices, connectivity),
+    // held while the page is on screen, not while the window is hidden
+    property bool _held: false
+    PageShown {
+        id: _onScreen
+        onShownChanged: root._hold(shown)
+    }
+    Component.onCompleted: _hold(_onScreen.shown)
+    Component.onDestruction: _hold(false)
+    function _hold(wanted) {
+        if (wanted === _held)
+            return;
+        _held = wanted;
+        if (wanted) {
+            NetworkOverview.watch();
+        } else {
+            NetworkOverview.unwatch();
+        }
+    }
 
     readonly property var _connectivityText: ({
         "full": "Online",

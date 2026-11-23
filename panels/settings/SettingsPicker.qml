@@ -16,7 +16,7 @@ ColumnLayout {
     property var marked: []
     property var edited: []
     function display(name) {
-        return name + (marked.includes(name) ? " •" : "") + (edited.includes(name) ? " ✎" : "");
+        return name + (marked.includes(name) ? " •" : "") + (edited.includes(name) ? " 󰏫" : "");
     }
     // Shown, but not changed, e.g. while the theme picked is previewed
     property bool locked: false

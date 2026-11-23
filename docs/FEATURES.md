@@ -712,7 +712,8 @@ Settings → System → Authentication, under the polkit agent's rows, sets how 
 administrator prompts (polkit) ask who you are (`panels/settings/PamRulesSection.qml`). At
 the top what is in force now, as steps per service (e.g. fingerprint → password; one row when
 both ask the same, "not known" when a file cannot be read), what the computer has (a finger
-enrolled, a security key registered) and where the rules go. "Separate rules for
+enrolled, a security key registered) and where the rules go; all of it is read again each
+time the page shows, the window reopened included (fprintd is asked again). "Separate rules for
 administrator prompts" gives each service a list of its own; turning it off while they differ
 asks first. Each list holds rows tried from the top: a method (fingerprint, security key,
 password, a raw PAM line) with PAM's control word and its details as chips, and the fixed

@@ -2206,8 +2206,10 @@ missing repository, and the destination in no file written.
 
 ### Where the test tools come from
 
-The unit and module suites need Quickshell, labwc, `setpriv` and `setsid` (util-linux) and
-`timeout` (coreutils). `tests/lock/resolve.sh` takes labwc and `setpriv` from one source
+The unit and module suites need Quickshell, labwc, `setpriv` and `setsid` (util-linux),
+`timeout` (coreutils) and `fc-match` (fontconfig: the glyphs suite reads the theme font's
+characters with it, and fails where that font, JetBrainsMono Nerd Font, is not installed).
+`tests/lock/resolve.sh` takes labwc, `setpriv` and `fc-match` from one source
 for the whole run: the pinned build of `tests/lock/tools.nix` when a `nix` command exists,
 else the programs on `PATH`, in whatever version is installed. `H2S_TEST_TOOLS=nix` or
 `H2S_TEST_TOOLS=system` chooses. Quickshell is `LOCKTEST_QS` when set, else the one the

@@ -92,7 +92,13 @@ TestCase {
         // What it recorded, backups, versions
         property var installedRead: ({ ok: false, records: { ok: false, modules: {} }, found: {} })
         property var backupLists: ({})
+        // Reads held for the suite to answer, in its order (null: answered at once)
+        property var heldReads: null
         function readInstalled(done) {
+            if (heldReads !== null) {
+                heldReads = heldReads.concat([done]);
+                return;
+            }
             Qt.callLater(() => done(installedRead));
         }
         function refreshBackups(id) {
@@ -387,6 +393,18 @@ TestCase {
         pageLoader.active = true;
         _window.visible = true;
         assert(_until(() => _window.visible && area.width > 0 && _cards().length === 7), "the window shows the cards");
+
+        // --- late answers lose: a read started before another answers after it ---
+        _installer.heldReads = [];
+        page._readInstalled();
+        page._readInstalled();
+        const held = _installer.heldReads;
+        _installer.heldReads = null;
+        assertEqual(held.length, 2, "(two reads started)");
+        const newer = Object.assign({}, _installer.installedRead, { marker: "newer" });
+        held[1](newer);
+        held[0](Object.assign({}, _installer.installedRead, { marker: "older" }));
+        assertEqual(page._installed?.marker, "newer", "the older read answering last is dropped");
 
         // --- the list ---
         assertEqual(_cards().map(card => card.modelData).join(","), "evil,backup,exitmap,tailscale,weather,dictation,player",

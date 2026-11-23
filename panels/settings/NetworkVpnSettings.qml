@@ -20,12 +20,27 @@ Item {
     anchors.fill: parent
     clip: true
 
-    Component.onCompleted: NetworkOverview.watch()
-    // The VPN plugins installed, read each time the page shows (one installed meanwhile)
+    // The overview's watch (devices, connectivity),
+    // held while the page is on screen, not while the window is hidden
+    property bool _held: false
     PageShown {
+        id: _onScreen
+        onShownChanged: root._hold(shown)
+        // The VPN plugins installed, read each time the page shows (one installed meanwhile)
         onBecameShown: VpnManager.readPlugins()
     }
-    Component.onDestruction: NetworkOverview.unwatch()
+    Component.onCompleted: _hold(_onScreen.shown)
+    Component.onDestruction: _hold(false)
+    function _hold(wanted) {
+        if (wanted === _held)
+            return;
+        _held = wanted;
+        if (wanted) {
+            NetworkOverview.watch();
+        } else {
+            NetworkOverview.unwatch();
+        }
+    }
 
     // The VPN open for its settings, by UUID
     property string _open: ""

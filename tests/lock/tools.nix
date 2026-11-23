@@ -4,7 +4,7 @@
 #   nix build --no-link --print-out-paths --impure -f tests/lock/tools.nix
 #
 # prints one store path holding bin/ (labwc, Hyprland, hyprctl, grim, setpriv, python3
-# with pywayland, xkbcli, dbus-daemon, gdbus, wl-copy, wl-paste, wlr-randr), share/ltproto (Python bindings of the input
+# with pywayland, xkbcli, dbus-daemon, gdbus, wl-copy, wl-paste, wlr-randr, fc-match), share/ltproto (Python bindings of the input
 # and window protocols), share/us.xkb (the keymap the virtual keyboard sends by default) and
 # share/keymaps/<name>.xkb (the others a test may ask for). run.sh does this itself.
 #
@@ -81,6 +81,8 @@ pkgs.linkFarm "h2s-locktest-tools" [
   { name = "bin/python3"; path = "${python}/bin/python3"; }
   # Every process of a test runs with no new privileges (setpriv --no-new-privs)
   { name = "bin/setpriv"; path = "${pkgs.util-linux}/bin/setpriv"; }
+  # The unit suites' glyph check reads which characters the theme's font has
+  { name = "bin/fc-match"; path = "${pkgs.fontconfig.bin}/bin/fc-match"; }
   # The virtual keyboard asks it which key and modifiers type a character (how-to-type)
   { name = "bin/xkbcli"; path = "${pkgs.libxkbcommon}/bin/xkbcli"; }
   # A private session bus, for the tests that need notifications (stack_start

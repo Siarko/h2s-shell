@@ -77,6 +77,7 @@ setpriv_stand_in() {
 # The system's tools
 answers system/labwc "labwc 7.8.9 (+xwayland +nls) wlroots-0.19.0"
 setpriv_stand_in system/setpriv 6.5.4
+stand_in system/fc-match "exit 0"
 answers hyprland/Hyprland "Hyprland 0.50.0 built from branch v0.50.0"
 answers hyprland-same/Hyprland "Hyprland 0.57.1 built from branch v0.57.1"
 stand_in hyprland-silent/Hyprland "exit 3"
@@ -117,7 +118,7 @@ answers "${store#"$work/"}/bin/labwc" "labwc 1.2.3 (+xwayland) wlroots-0.20.2"
 setpriv_stand_in "${store#"$work/"}/bin/setpriv" 4.5.6
 answers "${store#"$work/"}/bin/Hyprland" "Hyprland 0.57.1 built from branch v0.57.1"
 mkdir -p "$store/share/ltproto" "$store/share/keymaps"
-touch "$store/share/us.xkb" "$store/bin/hyprctl" "$store/bin/grim" "$store/bin/python3" "$store/bin/xkbcli" \
+touch "$store/share/us.xkb" "$store/bin/fc-match" "$store/bin/hyprctl" "$store/bin/grim" "$store/bin/python3" "$store/bin/xkbcli" \
     "$store/bin/dbus-daemon" "$store/bin/gdbus" "$store/bin/wl-copy" "$store/bin/wl-paste" "$store/bin/wlr-randr"
 # The same set with two parts gone, and one whose Hyprland does not say its version
 cp -a "$store" "$work/store/bbbbbbbb-h2s-locktest-tools"
@@ -245,6 +246,7 @@ missing_labwc="  labwc not found on PATH (the headless compositor the suites' wi
 missing_setpriv="  setpriv not found on PATH (starts every test process with no new privileges)"
 missing_setsid="  setsid not found on PATH (puts the compositor in a process group of its own, to be stopped whole)"
 missing_timeout="  timeout not found on PATH (ends a compositor or a Quickshell that hangs)"
+missing_fc_match="  fc-match not found on PATH (the characters of the theme's font, for the glyphs suite)"
 missing_quickshell="  Quickshell (qs or quickshell) not found on PATH (it runs the suites; LOCKTEST_QS names one, LOCKTEST_LAUNCHER a launcher to ask)"
 stand_in_launcher=$REPO/tests/lock/launcher.sh
 stand_in_launcher_line="launcher: $stand_in_launcher (the test bed's stand-in: no LOCKTEST_LAUNCHER, no h2s-shell on PATH)"
@@ -325,6 +327,7 @@ prints err "$missing_labwc"
 prints err "$missing_setpriv"
 prints err "$missing_setsid"
 prints err "$missing_timeout"
+prints err "$missing_fc_match"
 prints err "$missing_quickshell"
 hands_over_nothing
 

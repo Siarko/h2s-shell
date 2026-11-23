@@ -77,11 +77,19 @@ ColumnLayout {
     on_ReadingChanged: _takeReading()
     Component.onCompleted: _takeReading()
     // What is in force and what the computer has, read each time the page shows (a key
-    // registered while the window was hidden); a flow running reads again itself when it ends
+    // registered while the window was hidden); a showing while a flow runs is made up when it
+    // ends, if the page is still shown
     readonly property bool _shown: _pageShown.shown
+    property bool _refreshDue: false
     PageShown {
         id: _pageShown
-        onBecameShown: if (!root._busy) root.stacks?.refresh(true)
+        onBecameShown: root._readShown()
+    }
+    on_BusyChanged: if (!_busy && _refreshDue && _shown) _readShown()
+    function _readShown() {
+        _refreshDue = _busy;
+        if (!_busy)
+            stacks?.refresh(true);
     }
     function _takeReading() {
         if (_reading === null || _reading === _lastReading)

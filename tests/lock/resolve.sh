@@ -5,7 +5,7 @@
 # path), PROBE_TIMEOUT, `probe` (empty; the launcher probe's temp dir while it exists, for
 # setup_error to remove) and LOCKTEST_NEED, what it uses:
 #
-#   unit   labwc, setpriv, setsid, timeout
+#   unit   labwc, setpriv, setsid, timeout, fc-match
 #   lock   the lock test bed's whole set (below), setsid, timeout, and a launcher
 #   python python3 and timeout only (tests/device/deploy-check.sh reads JSON with it): the
 #          pinned set's bin/python3, or the one on PATH; no launcher, no Quickshell. Sets
@@ -72,6 +72,7 @@ tool_use() {
         setpriv) echo "starts every test process with no new privileges" ;;
         setsid) echo "puts the compositor in a process group of its own, to be stopped whole" ;;
         timeout) echo "ends a compositor or a Quickshell that hangs" ;;
+        fc-match) echo "the characters of the theme's font, for the glyphs suite" ;;
         Hyprland | hyprctl) echo "the compositor the lock screen is tested in" ;;
         grim) echo "screenshots of the lock screen" ;;
         python3) if [ "${LOCKTEST_NEED:-}" = python ]; then echo "reads the shell's answers, JSON"; else echo "the virtual keyboard and pointer"; fi ;;
@@ -162,7 +163,7 @@ pinned_parts() {
     elif [ "$LOCKTEST_NEED" = python ]; then
         echo bin/python3
     else
-        printf '%s\n' bin/labwc bin/setpriv
+        printf '%s\n' bin/labwc bin/setpriv bin/fc-match
     fi
 }
 # remembered_tools <file>: the path in it, when it is still a tool set this caller can use.
@@ -233,7 +234,7 @@ else
     elif [ "$LOCKTEST_NEED" = lock ]; then
         needed_tools=("${lock_programs[@]}" pkg-config setsid timeout)
     else
-        needed_tools=(labwc setpriv setsid timeout)
+        needed_tools=(labwc setpriv setsid timeout fc-match)
     fi
 fi
 for tool in "${needed_tools[@]}"; do

@@ -21,7 +21,7 @@ Item {
                     run: () => Session.shutdown()
                 },
                 {
-                    icon: "↻",
+                    icon: "󰑐",
                     label: "Restart",
                     run: () => Session.restart()
                 },

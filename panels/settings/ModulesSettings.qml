@@ -66,8 +66,15 @@ Item {
     // What the installer recorded of the modules it installed (readInstalled's { ok, records,
     // found }), read at the start and after each job — the versions kept, a refused one
     property var _installed: ({ ok: false, records: { modules: {} }, found: {} })
+    // Late answers lose: only the answer to the last read started is taken (a read started
+    // during a job must not overwrite the one after it)
+    property int _readGeneration: 0
     function _readInstalled() {
-        installer?.readInstalled?.(read => root._installed = read);
+        const generation = ++_readGeneration;
+        installer?.readInstalled?.(read => {
+            if (generation === root._readGeneration)
+                root._installed = read;
+        });
     }
     Component.onCompleted: _followOpenRequest()
     // The modules installed, read each time the page shows (one added or removed meanwhile)

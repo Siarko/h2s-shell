@@ -27,12 +27,12 @@ RowLayout {
     Text {
         text: {
             if (root._origin?.draft)
-                return "✎ changed";
+                return "󰏫 changed";
             const source = !root._origin?.theme ? "built in"
                 : root._origin.palette ? "palette of " + root._origin.theme
                 : root._origin.theme === root.themeName ? "set here"
                 : "from " + root._origin.theme;
-            return root._origin?.reset ? "✎ reset, " + source : source;
+            return root._origin?.reset ? "󰏫 reset, " + source : source;
         }
         font.family: Theme.fontFamily
         font.pixelSize: Theme.fontSizeSmall

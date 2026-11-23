@@ -314,7 +314,7 @@ FloatingWindow {
 
                 Text {
                     Layout.fillWidth: true
-                    text: "✎ Unsaved changes in " + root.editTheme
+                    text: "󰏫 Unsaved changes in " + root.editTheme
                     elide: Text.ElideRight
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.fontSizeBody

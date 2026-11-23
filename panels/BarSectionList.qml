@@ -90,7 +90,7 @@ ReorderList {
             Text {
                 font.family: Theme.fontFamily
                 anchors.centerIn: parent
-                text: "⚙"
+                text: "󰒓"
                 font.pixelSize: Theme.fontSizeBodyLarge
                 color: root.expandedRows[_content.index] === true ? Theme.accent : Theme.textSecondary
             }

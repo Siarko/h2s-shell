@@ -10,6 +10,7 @@ tools=(
     "labwc|the headless compositor the suites' windows open in"
     "util-linux|setpriv, setsid, flock, script: the test processes' isolation, the bed's lock, a terminal for install.sh"
     "coreutils|timeout: ends a compositor or a Quickshell that hangs"
+    "fontconfig|fc-match: the characters of the theme's font, for the glyphs suite"
     "hyprland|the compositor the lock screen is tested in"
     "grim|screenshots of the lock screen"
     "wlr-randr|sets the headless output's size"

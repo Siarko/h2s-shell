@@ -62,14 +62,14 @@ Flickable {
     function _originText(token) {
         const origin = _origins[token];
         if (origin?.draft)
-            return "✎ changed";
+            return "󰏫 changed";
         const leader = origin?.follows ? ThemeRules.colorTokens.find(entry => entry.token === origin.follows) : null;
         const source = leader ? "follows " + leader.label
             : !origin?.theme ? "built in"
             : origin.palette ? "palette of " + origin.theme
             : origin.theme === themeName ? "set here"
             : "from " + origin.theme;
-        return origin?.reset ? "✎ reset, " + source : source;
+        return origin?.reset ? "󰏫 reset, " + source : source;
     }
 
     // Whether the draft changes or resets the colour

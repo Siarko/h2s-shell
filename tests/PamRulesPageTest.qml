@@ -655,6 +655,20 @@ TestCase {
         assert(_until(() => _reads > reads && _item("unlock:securityKey").enabled), "… the key registered meanwhile: its switch available");
         driver.wait(50);
         assertEqual(_stacks.methodsAsked, asked + 1, "… read once for the showing");
+
+        // --- shown again while a write runs: the read made up when it ends ---
+        _window.visible = false;
+        assert(_until(() => !section._shown), "the window hidden again");
+        _securityKey = "absent";
+        // (a write under way, as Apply's: the flow's own state)
+        section._flow = Object.assign(section._idleFlow(), { phase: "writing" });
+        _window.visible = true;
+        assert(_until(() => section._shown), "shown while the write runs");
+        driver.wait(50);
+        assertEqual(_stacks.methodsAsked, asked + 1, "… not read meanwhile");
+        section._flow = section._idleFlow();
+        assert(_until(() => _stacks.methodsAsked === asked + 2), "the write over: read, with what the computer has");
+        assert(_until(() => !_item("unlock:securityKey").enabled), "… the key gone meanwhile: its switch off");
     }
 
     // ── Processes ──
