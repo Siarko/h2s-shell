@@ -60,6 +60,10 @@ QtObject {
     property var _distributionRules: DistributionRulesTest {}
     property var _distributionReading: DistributionReadingTest {}
     property var _distributionUnknown: DistributionUnknownTest {}
+    property var _etcFilesRules: EtcFilesRulesTest {}
+    property var _etcFiles: EtcFilesTest {}
+    property var _distributionContract: DistributionContractTest {}
+    property var _integrationRules: IntegrationRulesTest {}
     property var _notifier: NotifierTest {}
     property var _scrollNotches: ScrollNotchesTest {}
     property var _curvePoints: CurvePointsTest {}

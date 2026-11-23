@@ -149,13 +149,30 @@ with `:`), parsed, never sourced, because bash reads no JSON. Those files are ge
 read-only package has them; `tests/distribution-selftest.sh` fails while one differs, and
 checks `distribution.sh`'s answers against the os-release fixtures the shell's suites use.
 
+What a change to the system is on this distribution is its **integration**'s
+(`distributions/Integration.qml`, one per distribution in `distributions/<id>/`; the answers'
+shapes are `singletons/IntegrationRules.qml`'s). `Distribution` forwards to the one the system
+is: per change kind (`sleep.hibernateDelay`, …) `capability(kind)` says how the system makes it
+— `apply` (the shell writes it), `declare`, `copy` (the line for the system's configuration)
+or `unavailable` with its reason — and `plan`, `apply`, `undo` and `readInForce` act on it;
+while the distribution is not known nothing is offered and nothing runs. Where `/etc` is the
+machine's own, `distributions/EtcFiles.qml` writes the shell's files there: one root step
+(`scripts/root/etc-files.sh`, whose files are fixed in it, one per kind), the file as read
+checked before it is replaced, the old one kept as a backup in
+`/var/lib/h2s-shell/backup/<kind>/` that Undo puts back, and a file the shell did not write
+replaced only when the request says the user was told. Its `run` is also how the PAM editor,
+the remembered authorization and the hibernation delay queue their own root steps.
+`tests/DistributionContractTest.qml` holds every integration to the same answers.
+
 #### NixOS
 
-`/etc/NIXOS` makes it `nixos`, whatever os-release says.
+`/etc/NIXOS` makes it `nixos`, whatever os-release says. `/etc` is generated: the integration
+writes nothing; a setting the shell's NixOS module has an option for is the line to copy.
 
 #### Arch
 
-`ID=arch` in os-release, or `arch` among `ID_LIKE` (EndeavourOS, Manjaro).
+`ID=arch` in os-release, or `arch` among `ID_LIKE` (EndeavourOS, Manjaro). The integration
+applies its kinds through `EtcFiles`.
 
 ## Layers
 

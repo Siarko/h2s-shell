@@ -13,7 +13,8 @@ import qs.singletons.network
 //   bindings on one answer: read apart, one may still hold the old value);
 // - with the distribution not known, nothing is looked up on a guessed PATH: the command
 //   runner's tools, pkexec, RememberedAdmin's gdbus and readlink, a module's programs;
-// - the VPN plugins are looked for in every shipped distribution's directories.
+// - the VPN plugins are looked for in every shipped distribution's directories;
+// - the integration is the answer's; with none, no change kind is offered and nothing runs.
 TestCase {
     id: suite
     suiteName: "DistributionUnknown"
@@ -32,6 +33,7 @@ TestCase {
     property var _seen: ({ sleep: [], admin: [] })
     property var _readyAnswers: []
     property int _question: 0
+    property var _inForce: null
 
     function _note(key, value) {
         const seen = Object.assign({}, _seen);
@@ -67,12 +69,22 @@ TestCase {
                         "LogindSleep: not answered, then the new answer — never a moment's \"cannot be told\" (null) between");
             assertEqual(_seen.admin.join(","), "undefined," + expected, "RememberedAdminReader: the same");
             assertEqual(_readyAnswers.join(","), Distribution.detection.id, "the answer read from detection when ready changes: the new one");
+            assertEqual(Distribution.integration?.distribution, Distribution.detection.id, "the integration: the new answer's");
             _seen = { sleep: [], admin: [] };
             Distribution._reader.override = "no-such-distribution";
         });
         _then("the distribution not known", () => Distribution.detection.ready && Distribution.detection.id === "", () => {
             assertEqual(_seen.sleep.join(","), "undefined,null", "LogindSleep: not answered, then cannot be told");
             assertEqual(_seen.admin.join(","), "undefined,null", "RememberedAdminReader: the same");
+            assertEqual(Distribution.integration, null, "no integration");
+            const capability = Distribution.capability("sleep.hibernateDelay");
+            assertEqual(capability.mode + "|" + capability.known + "|" + capability.reason, "unavailable|false|" + IntegrationRules.unknown,
+                        "a change kind: unavailable, not known, with the reason");
+            assertEqual(Distribution.plan("sleep.hibernateDelay", 3600).refusal?.code, "unknown", "… no plan");
+            assertEqual(Distribution.apply("sleep.hibernateDelay", 3600, { done: () => suite.fail("an apply answered while unknown") }).refusal?.code, "unknown",
+                        "… apply refused, nothing run");
+            assertEqual(Distribution.undo("sleep.hibernateDelay", { done: () => suite.fail("an undo answered while unknown") }).refusal?.code, "unknown", "… undo too");
+            Distribution.readInForce("sleep.hibernateDelay", answer => suite._inForce = answer);
             _question = CommandTools._question;
             CommandTools._lookUp();
             assert(CommandTools._question === _question && !CommandTools._lookup.running,
@@ -86,7 +98,8 @@ TestCase {
             Modules.host._checkPrograms(["sh"]);
             assertEqual(VpnManager.pluginDirectories.length, 3, "VPN plugins: still every shipped distribution's directories, whichever this one is");
         });
-        _then("the module host answered", () => Modules.host.programVerdicts.sh !== undefined && !Modules.host._checkingPrograms, () => {
+        _then("the module host answered", () => Modules.host.programVerdicts.sh !== undefined && !Modules.host._checkingPrograms && _inForce !== null, () => {
+            assertEqual(_inForce.state, "unknown", "what is in force while unknown: unknown");
             const verdict = Modules.host.programVerdicts.sh;
             assertEqual(verdict.path + "|" + verdict.trusted + "|" + verdict.reason, "|false|the distribution is not known",
                         "a module's program: not looked up, the reason said");

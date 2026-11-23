@@ -96,7 +96,9 @@ scripts/seams.sh lock:all self:tests/launcher-selftest.sh
 +tests/lock/seams/seams.sh unit:PamStacksReadingTest unit:TestSeamsShapeTest unit:PamTrialTest
 scripts/pam-files.sh unit:PamStacksReadingTest unit:PamTrialTest self:tests/distribution-selftest.sh
 scripts/pam-trial-stage.sh unit:PamTrialTest
-scripts/root/replace-lib.sh unit:PamApplyTest unit:RememberInstallTest unit:PamRulesPageTest unit:RememberAdminPageTest
+scripts/root/replace-lib.sh unit:PamApplyTest unit:RememberInstallTest unit:PamRulesPageTest unit:RememberAdminPageTest unit:EtcFilesTest unit:DistributionContractTest
+scripts/root/replace-file.sh unit:PamApplyTest unit:PamRulesPageTest unit:EtcFilesTest unit:DistributionContractTest
+scripts/root/etc-files.sh unit:EtcFilesTest unit:DistributionContractTest
 scripts/root/pam-apply.sh unit:PamApplyTest unit:PamRulesPageTest
 scripts/root/remember-install.sh unit:RememberInstallTest unit:RememberAdminPageTest
 scripts/root/hibernate-delay.sh unit:HibernateDelayWriterTest
@@ -130,11 +132,11 @@ tests/fixtures/pam-nixos/* unit:PamNixosModuleTest self:tests/run-system.sh
 +nix/remember.nix unit:RememberNixosModuleTest
 tests/fixtures/remember-nixos/* unit:RememberNixosModuleTest self:tests/run-system.sh
 # The distributions' facts and the os-release fixtures, read as data by the distribution suites
-distributions/* unit:DistributionRulesTest unit:DistributionReadingTest self:tests/distribution-selftest.sh
+distributions/*/distribution.* unit:DistributionRulesTest unit:DistributionReadingTest self:tests/distribution-selftest.sh
 tests/fixtures/distribution/* unit:DistributionRulesTest unit:DistributionReadingTest self:tests/distribution-selftest.sh
 # The scripts' detection, from the generated distribution.env files: the methods script,
 # the launcher and the system runner read it
-+distributions/* lock:methods-* self:tests/run-system-selftest.sh self:tests/launcher-selftest.sh
++distributions/*/distribution.* lock:methods-* self:tests/run-system-selftest.sh self:tests/launcher-selftest.sh
 scripts/distribution.sh self:tests/distribution-selftest.sh self:tests/run-system-selftest.sh self:tests/launcher-selftest.sh self:tests/run-helper.sh lock:methods-* unit:PamStacksReadingTest
 scripts/distribution-env.py self:tests/distribution-selftest.sh
 tests/distribution-selftest.sh self:tests/distribution-selftest.sh

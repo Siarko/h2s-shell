@@ -3,11 +3,18 @@ pragma Singleton
 import Quickshell
 import QtQuick
 import qs.singletons.io
+import qs.distributions.arch
+import qs.distributions.generic
+import qs.distributions.nixos
 
 // Which distribution the shell runs on, and its static facts (distributions/<id>/
 // distribution.json): read by the shell's one DistributionReader, decided by
 // DistributionRules. Until the reading has answered — or when it could not be read — `id`
 // is "" and `facts` null: unknown, never a default system. Made on first use.
+//
+// What a change is on this system is its integration's (distributions/Integration.qml,
+// IntegrationRules): capability, plan, apply, undo and readInForce forward to the one the
+// system is; while it is not known, nothing is offered and nothing runs.
 Singleton {
     id: root
 
@@ -38,6 +45,38 @@ Singleton {
     }
 
     property var _waiting: []
+
+    // The integration of the distribution answered, or null while it is not known
+    readonly property var integration: detection.ready ? (_integrations[detection.id] ?? null) : null
+
+    function capability(kind) {
+        return integration?.capability(kind) ?? IntegrationRules.unknownCapability();
+    }
+
+    function plan(kind, value) {
+        return integration?.plan(kind, value) ?? { preview: null, refusal: IntegrationRules.refusal("unknown") };
+    }
+
+    function apply(kind, value, handlers) {
+        return integration?.apply(kind, value, handlers) ?? { started: false, refusal: IntegrationRules.refusal("unknown") };
+    }
+
+    function undo(kind, handlers) {
+        return integration?.undo(kind, handlers) ?? { started: false, refusal: IntegrationRules.refusal("unknown") };
+    }
+
+    function readInForce(kind, done) {
+        if (integration === null) {
+            Qt.callLater(() => done(IntegrationRules.inForceUnknown()));
+            return;
+        }
+        integration.readInForce(kind, done);
+    }
+
+    readonly property var _integrations: ({ arch: _arch, nixos: _nixos, generic: _generic })
+    property ArchIntegration _arch: ArchIntegration {}
+    property NixosIntegration _nixos: NixosIntegration {}
+    property GenericIntegration _generic: GenericIntegration {}
 
     onDetectionChanged: {
         if (detection.ready)

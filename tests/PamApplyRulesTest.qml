@@ -51,7 +51,7 @@ TestCase {
             "system-auth", edit.sha256(systemAuth)]),
                     "the system's shell, the script, then: the base (\"\": the system's places), write, the service, the candidate's hash, the file's hash, the text, each included name and its hash");
         assertEqual(plan.argv[2], "shared\nown\n", "… the script: the files' texts joined, the shared part first");
-        assertEqual(JSON.stringify(apply.scriptFiles), JSON.stringify(["replace-lib.sh", "pam-apply.sh"]), "… the shared functions, then the PAM step");
+        assertEqual(JSON.stringify(apply.scriptFiles), JSON.stringify(["replace-lib.sh", "replace-file.sh", "pam-apply.sh"]), "… the shared functions, the one-file steps, then the PAM step");
         for (const unread of [null, [], ["shared\n", ""], ["shared\n", null], ["shared", "own\n"], ["shared\n"].concat([undefined])])
             assertEqual(code(apply.applyArgv("/bin/sh", sudoRequest(), live, true, unread)), "script", "a file not read: refused (" + JSON.stringify(unread) + ")");
         assertEqual(apply.refusal("script").text, "The shell's script for this could not be read.", "… with a plain reason");

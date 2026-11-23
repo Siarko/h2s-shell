@@ -1,0 +1,154 @@
+pragma Singleton
+
+import Quickshell
+import QtQuick
+
+// What a distribution integration answers for each change kind (tests/IntegrationRulesTest.qml,
+// tests/DistributionContractTest.qml): how the system makes the change, what the change
+// would be, and what is in force. An integration (distributions/Integration.qml and each
+// distribution's) holds its table of kinds; these functions read it, so every integration
+// answers the same way. Pure.
+//
+//   capability(kind) → { mode, trial, undo, inForce, reason, known }
+//     mode     "apply"        the shell writes the change (distributions/EtcFiles.qml)
+//              "declare"      the shell sets it in the system's configuration and rebuilds
+//              "copy"         the system's configuration sets it: the shell gives the text
+//              "unavailable"  not on this system: `reason` says so
+//     trial    the change is tried before it is applied
+//     undo     the applied change can be put back
+//     inForce  readInForce reads what is in force
+//     known    false only while the distribution is not known (Distribution's answer)
+//   plan(kind, value) → { preview, refusal }
+//     preview  "apply": { files: [{ path, text }] }; "copy": { option, snippet }
+//   apply / undo → { started, refusal }; readInForce → { state ("set", "absent", "unknown"),
+//     value, ours (the file is the shell's) }
+Singleton {
+    id: root
+
+    // The change kinds the shell defines, each with how its value is checked
+    readonly property var kinds: ["sleep.hibernateDelay"]
+    readonly property var modes: ["apply", "declare", "copy", "unavailable"]
+
+    // The reason of a kind the integration does not offer
+    readonly property string unsupported: "Not supported on this distribution."
+    // The reason while the distribution is not known
+    readonly property string unknown: "The distribution is not known."
+
+    readonly property var texts: ({
+        unknown: root.unknown,
+        unavailable: root.unsupported,
+        mode: "This system does not let the shell make this change.",
+        value: "Not a value for this setting.",
+        noUndo: "There is no change of the shell's to undo."
+    })
+
+    function refusal(code, text) {
+        return { code, text: text ?? texts[code] ?? texts.value };
+    }
+
+    function _unavailable(reason, known) {
+        return { mode: "unavailable", trial: false, undo: false, inForce: false, reason, known };
+    }
+
+    // The answer while the distribution is not known: nothing offered
+    function unknownCapability() {
+        return _unavailable(unknown, false);
+    }
+
+    // An integration's `table` ({ <kind>: { mode, trial, undo, inForce, reason, option } })
+    // for `kind` → the capability; a kind the shell does not define, or the table does not
+    // name or names wrongly, is unavailable with a reason
+    function capability(table, kind) {
+        if (!kinds.includes(kind))
+            return _unavailable(unsupported, true);
+        const entry = table !== null && typeof table === "object" && Object.prototype.hasOwnProperty.call(table, kind) ? table[kind] : null;
+        if (entry === null || typeof entry !== "object" || !modes.includes(entry.mode) || entry.mode === "unavailable")
+            return _unavailable(typeof entry?.reason === "string" && entry.reason !== "" ? entry.reason : unsupported, true);
+        // Only an applied change is tried or undone by the shell
+        const applied = entry.mode === "apply";
+        return { mode: entry.mode, trial: applied && entry.trial === true, undo: applied && entry.undo === true,
+                 inForce: entry.inForce === true, reason: "", known: true };
+    }
+
+    // Whether an answer is a capability as the contract has it
+    function valid(answer) {
+        if (answer === null || typeof answer !== "object" || !modes.includes(answer.mode))
+            return false;
+        if (["trial", "undo", "inForce", "known"].some(key => typeof answer[key] !== "boolean") || typeof answer.reason !== "string")
+            return false;
+        if (answer.mode === "unavailable")
+            return answer.reason !== "" && !answer.trial && !answer.undo && !answer.inForce;
+        return answer.known && answer.reason === "" && (answer.mode === "apply" || (!answer.trial && !answer.undo));
+    }
+
+    // Whether `value` is one for the kind
+    function validValue(kind, value) {
+        if (kind === "sleep.hibernateDelay")
+            return Number.isInteger(value) && value >= HibernateRules.delayRange.minimum && value <= HibernateRules.delayRange.maximum;
+        return false;
+    }
+
+    // The file's text the shell writes for an applied kind
+    function textOf(kind, value) {
+        if (kind === "sleep.hibernateDelay")
+            return HibernateRules.dropInText(value);
+        return "";
+    }
+
+    // The line to copy for a kind set by an option: `option` its name
+    function snippetOf(kind, option, value) {
+        if (kind === "sleep.hibernateDelay")
+            return option + " = " + value + ";";
+        return "";
+    }
+
+    // What the change would be: `table` the integration's, `kind`, `value` → { preview, refusal }
+    function plan(table, kind, value) {
+        const answer = capability(table, kind);
+        if (answer.mode === "unavailable")
+            return { preview: null, refusal: refusal("unavailable", answer.reason) };
+        if (!validValue(kind, value))
+            return { preview: null, refusal: refusal("value") };
+        if (answer.mode === "apply")
+            return { preview: { files: [{ path: EtcFilesRules.files[kind] ?? "", text: textOf(kind, value) }] }, refusal: null };
+        const option = String(table[kind].option ?? "");
+        return { preview: { option, snippet: snippetOf(kind, option, value) }, refusal: null };
+    }
+
+    // Why apply may not start for the capability (before the value): null when it may
+    function applyRefusal(answer) {
+        if (answer.mode === "unavailable")
+            return refusal(answer.known === false ? "unknown" : "unavailable", answer.reason);
+        return answer.mode === "apply" ? null : refusal("mode");
+    }
+
+    // Why undo may not start: null when it may
+    function undoRefusal(answer) {
+        const notApplied = applyRefusal(answer);
+        if (notApplied !== null)
+            return notApplied;
+        return answer.undo ? null : refusal("noUndo");
+    }
+
+    // What is in force, from the kind's file as read (EtcFilesRules.inForce's answer) →
+    // { state, value, ours }
+    function inForceOf(kind, current) {
+        if (current?.state === "absent")
+            return { state: "absent", value: null, ours: false };
+        if (current?.state !== "text")
+            return { state: "unknown", value: null, ours: false };
+        if (kind === "sleep.hibernateDelay") {
+            const delay = HibernateRules.hibernateDelay(current.text);
+            if (delay.state === "set")
+                return { state: "set", value: delay.seconds, ours: current.ours === true };
+            if (delay.state === "unset")
+                return { state: "absent", value: null, ours: current.ours === true };
+        }
+        return { state: "unknown", value: null, ours: current.ours === true };
+    }
+
+    // Nothing in force can be told
+    function inForceUnknown() {
+        return { state: "unknown", value: null, ours: false };
+    }
+}

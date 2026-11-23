@@ -6,7 +6,8 @@ import QtQuick
 // Writing a PAM file on Arch, and undoing it (tests/PamApplyRulesTest.qml): the one root
 // step that follows a passed trial (PamTrialRules), and its reply. One service per run.
 //
-// The root step is scripts/root/pam-apply.sh after replace-lib.sh (`scriptFiles`), files in
+// The root step is scripts/root/pam-apply.sh after replace-lib.sh and replace-file.sh
+// (`scriptFiles`, the second shared with EtcFiles' root step), files in
 // the shell's tree that the shell reads and hands as text to the system's /bin/sh through its
 // runs as administrator (PrivilegedRuns.startShell): never run by path, every run asks the
 // password. Its places (the PAM folder, the vendor folder, the backups) are fixed in the file,
@@ -43,7 +44,7 @@ Singleton {
     })
 
     // The root step's files in scripts/root/, joined in this order (RootScriptRules.script)
-    readonly property var scriptFiles: ["replace-lib.sh", "pam-apply.sh"]
+    readonly property var scriptFiles: ["replace-lib.sh", "replace-file.sh", "pam-apply.sh"]
 
     // Why a run was not started, or what the root step refused, by code
     readonly property var texts: ({

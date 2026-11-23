@@ -1,5 +1,6 @@
 import QtQuick
 import Quickshell
+import qs.distributions
 import qs.singletons
 
 // The Hibernate section's Apply, on a system where /etc is the machine's own (not NixOS):
@@ -9,8 +10,9 @@ import qs.singletons
 // scripts/root/), read from the shell's tree at the click and its text run by the system's
 // /bin/sh; never run by path.
 //
-// `start` is what queues the run: PrivilegedRuns.startShell, or a reading suite's stand-in
-// (which runs the same command as the user, under a scratch `base`). One write at a time.
+// `start` is what queues the run (EtcFiles.run's): PrivilegedRuns.startShell, or a reading
+// suite's stand-in (which runs the same command as the user, under a scratch `base`). One
+// write at a time.
 QtObject {
     id: root
 
@@ -25,14 +27,12 @@ QtObject {
     property string scriptsDirectory: Quickshell.shellDir + "/" + RootScriptRules.directory
     // (request { what, argv }, done(result)) → nothing; done once with PrivilegedRules' result
     property var start: (request, done) => PrivilegedRuns.startShell(request, done)
-    readonly property bool busy: _busy
+    readonly property bool busy: _files.busy
 
-    property bool _busy: false
-
-    // → false when not started (one under way, a delay HibernateRules.applyArgv refuses, or
-    // the script not read: said in the log)
+    // → false when not started (one under way, a delay HibernateRules.applyArgv refuses, the
+    // script not read: said in the log, or a run that could not be queued)
     function apply(seconds) {
-        if (_busy)
+        if (_files.busy)
             return false;
         const scripts = _scripts.read();
         if (RootScriptRules.script(scripts) === "") {
@@ -42,13 +42,19 @@ QtObject {
         const argv = HibernateRules.applyArgv(shell, seconds, base, scripts);
         if (argv === null)
             return false;
-        _busy = true;
-        start({ what: "Change the time before hibernating", argv: argv }, result => {
-            root._busy = false;
-            const outcome = HibernateRules.applyOutcome(result, seconds);
-            root.applied(seconds, outcome.ok, outcome.quiet, outcome.error);
-        });
-        return true;
+        return _files.run({
+            what: "Change the time before hibernating",
+            argv: argv,
+            reply: result => HibernateRules.applyOutcome(result, seconds),
+            readBack: [],
+            done: outcome => root.applied(seconds, outcome.ok, outcome.quiet, outcome.error)
+        }) === "";
+    }
+
+    // The run itself (one at a time)
+    property EtcFiles _files: EtcFiles {
+        start: root.start
+        shell: root.shell
     }
 
     property RootScriptFiles _scripts: RootScriptFiles {

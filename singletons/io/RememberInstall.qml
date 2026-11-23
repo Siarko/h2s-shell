@@ -1,5 +1,6 @@
 import QtQuick
 import Quickshell
+import qs.distributions
 import qs.singletons
 
 // Install, Remove and Undo of the remembered administrator authorization on Arch: one run as
@@ -29,9 +30,7 @@ QtObject {
     property var filesCommand: [Quickshell.shellDir + "/scripts/pam-files.sh"]
     // Where the root step's files are (scripts/root/ of the shell's tree), read at each run
     property string scriptsDirectory: Quickshell.shellDir + "/" + RootScriptRules.directory
-    readonly property bool busy: _busy
-
-    property bool _busy: false
+    readonly property bool busy: _files.busy
 
     // Install, or Install again. `request`: RememberInstallRules.installArgv's (facts,
     // minutes, rule, confs, replace). → { started, refusal (null or { code, text }) }
@@ -61,54 +60,29 @@ QtObject {
     }
 
     function _run(plan, what) {
-        if (_busy)
+        if (_files.busy)
             return { started: false, refusal: RememberInstallRules.refusal("busy") };
         if (plan.refusal !== null)
             return { started: false, refusal: plan.refusal };
-        _busy = true;
-        const queue = start ?? ((request, done) => PrivilegedRuns.startShell(request, done));
-        try {
-            queue({ what: what, argv: plan.argv }, result => {
-                const outcome = RememberInstallRules.reply(result, plan.expected);
-                if (outcome.ok) {
-                    root._busy = false;
-                    root.finished(outcome);
-                    return;
-                }
-                root._readAgain(plan.expected, outcome);
-            });
-        } catch (error) {
-            // Nothing will answer: not left busy for good
-            console.warn("[RememberInstall] the run could not be started: " + error);
-            _busy = false;
-            return { started: false, refusal: RememberInstallRules.refusal("start") };
-        }
-        return { started: true, refusal: null };
-    }
-
-    function _readAgain(expected, outcome) {
         const rule = paths.rules + "/" + RememberInstallRules.ruleName;
         const conf = paths.conf + "/" + RememberInstallRules.confName;
-        const lines = [];
-        _runner.start(Array.from(filesCommand).concat([rule, conf]), {
-            timeoutMs: 6000,
-            killAfterMs: 1000,
-            maxOutputBytes: 1048576,
-            keepOutput: false,
-            onLine: (line, stream) => {
-                if (stream === "stdout")
-                    lines.push(line);
-            },
-            done: result => {
-                const answers = PamStackRules.filesAnswer(lines, result, [rule, conf]).answers;
-                outcome.files = RememberInstallRules.afterFailure({ rule: answers[rule], conf: answers[conf] }, expected);
-                root._busy = false;
-                root.finished(outcome);
-            }
+        const code = _files.run({
+            what: what,
+            argv: plan.argv,
+            reply: result => RememberInstallRules.reply(result, plan.expected),
+            readBack: [rule, conf],
+            after: (answers, outcome) => outcome.files = RememberInstallRules.afterFailure({ rule: answers[rule], conf: answers[conf] }, plan.expected),
+            done: outcome => root.finished(outcome)
         });
+        return code === "" ? { started: true, refusal: null } : { started: false, refusal: RememberInstallRules.refusal(code) };
     }
 
-    property CommandRunner _runner: CommandRunner {}
+    // The run itself, and the two files read again after a failure
+    property EtcFiles _files: EtcFiles {
+        start: root.start
+        shell: root.shell
+        filesCommand: root.filesCommand
+    }
     property RootScriptFiles _scripts: RootScriptFiles {
         names: RememberInstallRules.scriptFiles
         directory: root.scriptsDirectory

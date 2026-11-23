@@ -5,8 +5,8 @@ import qs.singletons
 import qs.singletons.io
 
 // Apply and Undo (singletons/io/PamApply.qml), the root step run for real —
-// scripts/root/replace-lib.sh and pam-apply.sh, the text handed over exactly the two files
-// joined — but through a stand-in for the shell's runs as administrator: the suite's `start`
+// scripts/root/replace-lib.sh, replace-file.sh and pam-apply.sh, the text handed over exactly
+// the three files joined — but through a stand-in for the shell's runs as administrator: the suite's `start`
 // runs the words as the user, under a scratch base holding the PAM folder, the vendor folder
 // and the backups. Never pkexec, never /etc: the PamApply's
 // `start` and `paths` are the suite's before anything runs, and the system's runner is
@@ -29,7 +29,7 @@ TestCase {
     property int _owner: -1
     // The script's places under the scratch base
     readonly property var _paths: ({ system: _scratch + "/etc/pam.d", vendor: _scratch + "/usr/lib/pam.d", backups: _scratch + "/var/lib/h2s-shell/pam-backup" })
-    // replace-lib.sh and pam-apply.sh joined, as the suite reads the files itself
+    // replace-lib.sh, replace-file.sh and pam-apply.sh joined, as the suite reads the files itself
     property string _script: ""
 
     readonly property string _systemAuth: "auth required pam_faillock.so preauth\nauth [success=1 default=bad] pam_unix.so try_first_pass\n"
@@ -238,7 +238,7 @@ TestCase {
             assertEqual(JSON.stringify(started), JSON.stringify({ started: true, refusal: null }), "sudo's new rules: started");
             assertEqual(_runs[0].what, "Change the sign-in rules for sudo", "… the run's purpose");
             assertEqual(_runs[0].argv[0], "/bin/sh", "… the system's shell");
-            assertEqual(_runs[0].argv[2], _script, "… the script: replace-lib.sh and pam-apply.sh joined, exactly as the files have them");
+            assertEqual(_runs[0].argv[2], _script, "… the script: replace-lib.sh, replace-file.sh and pam-apply.sh joined, exactly as the files have them");
             assertEqual(_runs[0].argv[4], _scratch, "… the base its first argument");
         });
         _then("sudo written", () => _outcome !== null, () => {
@@ -520,7 +520,8 @@ TestCase {
     }
 
     function _makeFolders() {
-        _exec(["cat", "--", Quickshell.shellDir + "/scripts/root/replace-lib.sh", Quickshell.shellDir + "/scripts/root/pam-apply.sh"],
+        _exec(["cat", "--", Quickshell.shellDir + "/scripts/root/replace-lib.sh", Quickshell.shellDir + "/scripts/root/replace-file.sh",
+               Quickshell.shellDir + "/scripts/root/pam-apply.sh"],
               (code, stdout) => suite._script = code === 0 ? stdout : "");
         _exec(["sh", "-c", "set -e; umask 022; mkdir -p \"$1/etc/pam.d\" \"$1/usr/lib/pam.d\"; printf '%s' \"$2\" > \"$1/etc/pam.d/sudo\"; printf '%s' \"$3\" > \"$1/etc/pam.d/system-auth\"; "
                + "printf '%s' \"$4\" > \"$1/usr/lib/pam.d/polkit-1\"", "sh", _scratch, _sudo, _systemAuth, _vendorPolkit], code => {

@@ -1,7 +1,7 @@
 # shellcheck shell=sh
-# The start of every root script that replaces system files (pam-apply.sh,
+# The start of every root script that replaces system files (pam-apply.sh, etc-files.sh,
 # remember-install.sh). Never run by path: the shell reads this file and the script's own from
-# its tree, joins the two texts (this one first) and hands them to the system's /bin/sh through
+# its tree, joins the texts (this one first) and hands them to the system's /bin/sh through
 # pkexec as `sh -c <text> sh <arguments>…`, so the prompt shows what runs and root reads no
 # file the user can write.
 #
