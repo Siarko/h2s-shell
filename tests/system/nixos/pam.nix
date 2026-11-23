@@ -154,6 +154,49 @@ let
     (expect "polkit.passwordFirst set without rules: deprecated, a warning"
       { programs.h2s-shell.polkit.passwordFirst = true; services.fprintd.enable = true; }
       { warnings = [ "programs.h2s-shell.polkit.passwordFirst is deprecated" ]; })
+    (expect "a raw libpam module that asks nothing, required, without the system row: refused, anyone gets in"
+      { programs.h2s-shell.pam.sudo.rules = [ { method = "password"; } { method = "raw"; module = "pam_env.so"; control = "required"; } ]; }
+      { refusals = [ "row 2 (raw): this line lets anyone in: pam_env.so" ]; })
+    (expect "… the same beside the system row: allowed (the system's rules still decide)"
+      { programs.h2s-shell.pam.sudo.rules = [ { method = "raw"; module = "pam_env.so"; control = "required"; } system ]; }
+      { })
+    (expect "a sufficient pam_permit above the system row: refused"
+      { programs.h2s-shell.pam.rules = [ { method = "raw"; module = "pam_permit.so"; } system ]; }
+      { refusals = [ "this line lets anyone in: pam_permit.so" ]; })
+    (expect "a sufficient pam_u2f with nouserok: refused (no key gets in)"
+      { programs.h2s-shell.pam.rules = [ { method = "raw"; module = "${pkgs.pam_u2f}/lib/security/pam_u2f.so"; args = [ "nouserok" ]; } system ];
+        security.pam.u2f.enable = true; }
+      { refusals = [ "this line lets anyone in: pam_u2f.so" ]; })
+    (expect "a sufficient pam_userdb with its database outside /etc: refused"
+      { programs.h2s-shell.pam.rules = [ { method = "raw"; module = "pam_userdb.so"; args = [ "db=/tmp/users" ]; } system ]; }
+      { refusals = [ "this line lets anyone in: pam_userdb.so" ]; })
+    (expect "… under /etc: allowed"
+      { programs.h2s-shell.pam.rules = [ { method = "raw"; module = "pam_userdb.so"; args = [ "db=/etc/users" ]; } system ]; }
+      { })
+    (expect "a backslash at the end of an argument: refused (it would join the next line)"
+      { programs.h2s-shell.pam.rules = [ { method = "raw"; module = "pam_env.so"; control = "optional"; args = [ "x\\" ]; } system ]; }
+      { refusals = [ "no backslash or # in the module or its arguments" ]; })
+    (expect "a # in the module: refused"
+      { programs.h2s-shell.pam.rules = [ { method = "raw"; module = "/run/current-system/sw/lib/security/pam_x.so#"; control = "optional"; } system ]; }
+      { refusals = [ "no backslash or # in the module or its arguments" ]; })
+    (expect "polkit off: it keeps no password, so a reader-only sudo is refused"
+      { programs.h2s-shell.pam.sudo.rules = [ fingerprint ]; services.fprintd.enable = true; security.polkit.enable = lib.mkForce false; }
+      { refusals = [ "keep a password in sudo's or polkit's rules" ]; })
+    (expect "a raw pam_unix with nullok: a warning"
+      { programs.h2s-shell.pam.rules = [ { method = "raw"; module = "pam_unix.so"; args = [ "nullok" ]; } system ]; }
+      { warnings = [ "nullok: an account with an empty password gets in" ]; })
+    (expect "a path from a package that does not start with the store: a warning"
+      { programs.h2s-shell.pam.rules = [ { method = "raw"; module = "/x${pkgs.pam_u2f}/lib/security/pam_u2f.so"; } system ]; }
+      { warnings = [ "is not in the Nix store" ]; })
+    (expect "systemd-homed on and no system row: a warning that homed accounts are not asked"
+      { programs.h2s-shell.pam.rules = [ { method = "password"; } ]; services.homed.enable = true; }
+      { warnings = [ "systemd-homed accounts are not asked for their password" ]; })
+    (expect "… with the system row: no such warning"
+      { programs.h2s-shell.pam.rules = [ { method = "password"; } system ]; services.homed.enable = true; }
+      { notWarnings = [ "accounts are not asked" ]; })
+    (expect "polkit.passwordFirst = false beside polkit's rules: allowed"
+      { programs.h2s-shell.pam.rules = [ system ]; programs.h2s-shell.polkit.passwordFirst = false; }
+      { })
     (expect "nothing set: no assertion, no warning of the shell's"
       { services.fprintd.enable = true; }
       { notWarnings = [ "h2s-shell" ]; })

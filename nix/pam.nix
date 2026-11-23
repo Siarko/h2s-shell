@@ -142,7 +142,7 @@ let
     if row.module == null then "missing"
     else if !(lib.hasInfix "/" module) then (if lib.elem module libpamModules then null else "bare")
     else if dotted then "place"
-    else if builtins.hasContext module then null
+    else if builtins.hasContext module && lib.hasPrefix "${builtins.storeDir}/" module then null
     else if lib.hasPrefix systemModules module then null
     else if lib.hasPrefix "${builtins.storeDir}/" module then "store"
     else "place";
@@ -154,6 +154,22 @@ let
     else if placeOf row != null then "unknown"
     else rawMethods.${rawName row} or "unknown";
   fails = row: row.method != "system" && lib.elem row.control [ "required" "requisite" ];
+  # Whether a raw row's module asks for a credential: "yes" (pam_unix, pam_fprintd; pam_u2f
+  # without the arguments that let it pass with no key or no touch; pam_userdb with its
+  # database under /etc), "no" (another of libpam's modules, or one of those made to pass by
+  # its arguments), "unknown" (a module the shell does not know, or from outside)
+  credentialOf = row:
+    let
+      name = rawName row;
+      databases = map (word: lib.removePrefix "db=" word) (lib.filter (lib.hasPrefix "db=") row.args);
+      underEtc = path: lib.hasPrefix "/etc/" path && !(lib.elem ".." (lib.splitString "/" path));
+    in
+    if placeOf row != null then "unknown"
+    else if name == "pam_u2f.so" then (if lib.elem "nouserok" row.args || lib.elem "userpresence=0" row.args then "no" else "yes")
+    else if name == "pam_userdb.so" then (if databases != [ ] && lib.all underEtc databases then "yes" else "no")
+    else if lib.elem name [ "pam_unix.so" "pam_fprintd.so" ] then "yes"
+    else if lib.elem name libpamModules then "no"
+    else "unknown";
   firstPass = row: methodOf row == "password" && row.method == "raw" && lib.elem "use_first_pass" row.args;
 
   # The rows' roles and how the rows end: "system" (NixOS's own rules below), "permit" (a
@@ -178,6 +194,11 @@ let
           reader = lib.elem (methodOf row) [ "fingerprint" "securityKey" ];
           fails = fails row;
           denies = row.method == "raw" && placeOf row == null && rawName row == "pam_deny.so" && fails row;
+          # A raw line that can let the user in (sufficient; required or requisite where the
+          # closing line keeps its result) with a module that asks for no credential
+          letsAnyone = row.method == "raw" && credentialOf row == "no" && !(placeOf row == null && rawName row == "pam_deny.so")
+            && (row.control == "sufficient" || (fails row && closing != "system"));
+          nullok = row.method == "raw" && methodOf row == "password" && lib.elem "nullok" row.args;
           decides = !unasked && (row.method == "system" || row.control == "sufficient" || fails row
             || (row.method != "raw" && row.control == "optional" && closing == "system"));
         };
@@ -188,8 +209,9 @@ let
       wayIn = hasPassword || lib.any (role: role.reader && ready role.method && role.decides) roles;
     };
 
-  # A service keeps a password: its rows have one, or it has no rows (NixOS's own rules)
-  keepsPassword = service: service.rows == null || (analyse service.rows).hasPassword;
+  # A service keeps a password: it is enabled, and its rows have one or it has no rows
+  # (NixOS's own rules)
+  keepsPassword = service: service.enabled && (service.rows == null || (analyse service.rows).hasPassword);
 
   # The refusals and warnings of one service's rows, as messages
   problems = name: service:
@@ -222,10 +244,16 @@ let
           ++ lib.optional (row.method == "raw" && placeOf row == "bare")
             "${at index row}: ${toString row.module} needs its full path on NixOS, e.g. \"\${pkgs.<package>}/lib/security/${toString row.module}\"."
           ++ lib.optional (row.method == "raw" && (spaced (toString row.module) || lib.any broken row.args))
-            "${at index row}: the module and its arguments go on one line, the module without spaces.")
+            "${at index row}: the module and its arguments go on one line, the module without spaces."
+          # A backslash at the end would join the next line of the file to this one; a "#"
+          # would end the line there
+          ++ lib.optional (row.method == "raw" && lib.any joins (lib.optional (row.module != null) (toString row.module) ++ row.args))
+            "${at index row}: no backslash or # in the module or its arguments.")
         ++ lib.concatLists (lib.imap0 (index: role:
           lib.optional role.denies
             "${at index (lib.elemAt rows index)}: this line refuses everyone: nobody would get in."
+          ++ lib.optional role.letsAnyone
+            "${at index (lib.elemAt rows index)}: this line lets anyone in: ${rawName (lib.elemAt rows index)} asks for no password, key or finger."
           ++ lib.optional (role.reader && role.fails && !ready role.method)
             "${at index (lib.elemAt rows index)}: this row must pass, but ${readyOption role.method} is off: nobody would get in.")
           analysis.roles)
@@ -240,8 +268,12 @@ let
           "${where}: only the reader lets you in. If it breaks, use the other of sudo and polkit, su or a root console."
         ++ lib.concatLists (lib.imap0 (index: role:
           lib.optional (role.reader && role.fails && ready role.method)
-            "${at index (lib.elemAt rows index)}: both needed: without the reader nobody gets in.")
+            "${at index (lib.elemAt rows index)}: both needed: without the reader nobody gets in."
+          ++ lib.optional role.nullok
+            "${at index (lib.elemAt rows index)}: nullok: an account with an empty password gets in.")
           analysis.roles)
+        ++ lib.optional (rows != [ ] && analysis.closing != "system" && otherAccounts != [ ])
+          "${where}: without the { method = \"system\"; } row, a password row checks only local accounts (pam_unix): ${lib.concatStringsSep ", " otherAccounts} accounts are not asked for their password."
         ++ each (index: row:
           lib.optional (row.method == "raw" && placeOf row == "store")
             "${at index row}: ${toString row.module} is a path in the Nix store: it changes with an update or a garbage collection${storeHint row.module}."
@@ -250,6 +282,14 @@ let
     };
   spaced = text: lib.any (character: lib.hasInfix character text) [ " " "\t" "\n" "\r" ];
   broken = text: lib.hasInfix "\n" text || lib.hasInfix "\r" text;
+  joins = text: lib.hasInfix "\\" text || lib.hasInfix "#" text;
+  # Where accounts live besides the local files, as NixOS's own rules check them
+  otherAccounts =
+    lib.optional config.services.homed.enable "systemd-homed"
+    ++ lib.optional config.services.sssd.enable "SSSD"
+    ++ lib.optional (config.users.ldap.enable && config.users.ldap.loginPam) "LDAP"
+    ++ lib.optional config.services.kanidm.unix.enable "kanidm"
+    ++ lib.optional config.security.pam.krb5.enable "Kerberos";
   fprintAuthSet = name: config.security.pam.services.${name}.fprintAuth;
   # "use ${pkgs.<name>} instead", where the store path names a package of pkgs
   storeHint = module:
@@ -372,7 +412,7 @@ in
       lib.concatMap (found: found.refusals) allProblems
       ++ lib.optional (ruled != { } && !(keepsPassword services.sudo || keepsPassword services.polkit-1))
         "programs.h2s-shell.pam: keep a password in sudo's or polkit's rules: one is the way to repair the other."
-      ++ lib.optional (polkitRuled && passwordFirstSet)
+      ++ lib.optional (polkitRuled && passwordFirstSet && cfg.polkit.passwordFirst)
         "polkit's rules come from programs.h2s-shell.pam: remove programs.h2s-shell.polkit.passwordFirst."
     ));
     warnings = lib.unique (
