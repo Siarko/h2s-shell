@@ -23,10 +23,10 @@ Singleton {
     // them (or another control); the editor's own rows never `optional` (controlsFor)
     readonly property string defaultControl: "sufficient"
     readonly property var controls: [
-        { word: "sufficient", explanation: "If it passes and no row above has failed, you are in; if not, the next row is tried." },
-        { word: "required", explanation: "Must pass. The next rows still run; a failure is told at the end." },
-        { word: "requisite", explanation: "Must pass. A failure ends it at once." },
-        { word: "optional", explanation: "Counts only when no other row decides." }
+        { word: "sufficient", explanation: "If this passes, you are in. If not, the next row is tried." },
+        { word: "required", explanation: "Must pass, but the next rows still run; you learn it failed only at the end." },
+        { word: "requisite", explanation: "Must pass. If it fails, you are refused at once." },
+        { word: "optional", explanation: "Its result is ignored: it neither lets you in nor stops you. Only useful for a line that does something on the side." }
     ]
 
     function explanation(word) {

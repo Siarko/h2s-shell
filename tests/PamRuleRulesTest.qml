@@ -23,7 +23,7 @@ TestCase {
         // --- control words ---
         assertEqual(rules.controls.map(control => control.word).join(" "), "sufficient required requisite optional", "the four words, in order");
         assertEqual(rules.defaultControl, "sufficient", "a new row is sufficient");
-        assertEqual(rules.explanation("requisite"), "Must pass. A failure ends it at once.", "a word's explanation");
+        assertEqual(rules.explanation("requisite"), "Must pass. If it fails, you are refused at once.", "a word's explanation");
         assertEqual(rules.explanation("include"), "", "no explanation for another word");
         assertEqual(rules.controlsFor("raw").join(" "), "sufficient required requisite optional", "a raw line: all four words");
         for (const method of ["fingerprint", "securityKey", "password"])
@@ -31,8 +31,8 @@ TestCase {
         assertEqual(rules.controlsFor("system").length + rules.controlsFor("smartcard").length, 0, "no words for the fixed row or an unknown method");
         assert(rules.controlAllowed("raw", "optional") && !rules.controlAllowed("password", "optional")
                && rules.controlAllowed("password", "requisite"), "a word allowed for a method");
-        assertEqual(rules.explanation("sufficient"), "If it passes and no row above has failed, you are in; if not, the next row is tried.",
-                    "sufficient: a failure above still counts");
+        assertEqual(rules.explanation("sufficient"), "If this passes, you are in. If not, the next row is tried.", "sufficient explained");
+        assert(rules.explanation("optional").startsWith("Its result is ignored"), "optional: its result ignored");
 
         // --- methods and details ---
         let made = rules.newRow("fingerprint", [row("r1", "password")]);

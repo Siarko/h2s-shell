@@ -29,28 +29,24 @@ Singleton {
         return PamRuleRules.methods[method]?.label ?? String(method ?? "");
     }
 
-    // The control words an opened row offers for its method. `optional` only for a raw line:
-    // for the editor's own methods its result is ignored, so offering it only misleads.
-    // PamRuleRules decides this once it has its own `controlsFor(method)`; this follows it.
-    // The list shows no words for a raw line (its word is in its text); the raw answer is
-    // kept to match PamRuleRules' rule.
+    // The control words an opened row offers for its method (the list shows none for a raw
+    // line: its word is in its text)
     function controlsFor(method) {
-        const words = PamRuleRules.controls.map(control => control.word);
-        return method === "raw" ? words : words.filter(word => word !== "optional");
+        return PamRuleRules.controlsFor(method);
     }
 
-    // ── Details that may be unlimited (pam_fprintd's negative timeout and max-tries) ──
-
-    readonly property int noLimit: -1
+    // ── Details that may be unlimited (PamRuleRules' `noLimit`: pam_fprintd's -1) ──
 
     function unlimited(value) {
         return typeof value === "number" && value < 0;
     }
 
-    // { min, max, initial, unit, label } of an int detail, or null
+    // { min, max, noLimit (undefined where the module has none), initial, unit, label } of an
+    // int detail, or null
     function range(method, detail) {
         const spec = PamRuleRules.methods[method]?.details?.[detail];
-        return spec && spec.kind === "int" ? { min: spec.min, max: spec.max, initial: spec.initial, unit: spec.unit ?? "", label: spec.label } : null;
+        return spec && spec.kind === "int"
+            ? { min: spec.min, max: spec.max, noLimit: spec.noLimit, initial: spec.initial, unit: spec.unit ?? "", label: spec.label } : null;
     }
 
     // The details change for a typed value: a whole number in the range, else null (the
@@ -67,10 +63,10 @@ Singleton {
     // is a value in the range, else the detail's initial value
     function limitChange(method, detail, on, text) {
         const spec = range(method, detail);
-        if (!spec)
+        if (!spec || spec.noLimit === undefined)
             return null;
         if (on)
-            return { [detail]: noLimit };
+            return { [detail]: spec.noLimit };
         return typedChange(method, detail, text) ?? { [detail]: spec.initial };
     }
 
