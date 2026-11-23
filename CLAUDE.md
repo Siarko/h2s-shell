@@ -47,7 +47,7 @@ tests/lock/run.sh relock fallback            # … or named lock scenarios
 tests/run-all.sh --quick   # a slice's commit: everything but the lock bed, about half a minute
 tests/run-all.sh           # before merging to master: everything, both machines
 tests/remote-run.sh        # … run on the other machine over SSH (H2S_REMOTE=<destination>)
-tests/mutate.sh <file>     # a new or much changed *Rules.qml: which mutants no suite notices
+tests/mutate.sh <file>     # a security-deciding Rules file changed, or before a release: which mutants no suite notices
 tests/soak.sh <suite> 20   # a suite suspected of flaking: 20 runs in a row under CPU load
 ```
 
@@ -94,9 +94,12 @@ side, none waiting for another. A lock scenario that fails runs once more at the
 
 `tests/mutate.sh <file>` applies one mechanical mutation at a time to a `*Rules.qml` or a
 singleton, in scratch copies of the tree, runs the suites `affected.sh` gives for it, and lists
-the mutants that survived. Run it on a new Rules file or after a big change to one — a slice
-may run it on its own file —; each survivor gets a check, or a reason in the slice's report
-why it cannot be told apart (an equivalent mutant). `run-all.sh` runs only its self-test.
+the mutants that survived. During work it runs only on a new or much changed Rules file that
+decides security — who gets in, what runs as root, the lock screen, module trust —; each
+survivor gets a check, or a reason in the slice's report why it cannot be told apart (an
+equivalent mutant). Before a minor or major release it runs on every Rules file changed since
+the last release, with the full set on both machines and soaks of suites known to flake.
+`run-all.sh` runs only its self-test.
 `tests/soak.sh <suite | module dir> <n>` runs a suite n times in a row under busy loops:
 a check that depends on timing fails there in minutes.
 
