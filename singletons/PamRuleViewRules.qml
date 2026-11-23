@@ -383,9 +383,54 @@ Singleton {
                  body: ["Nothing is changed yet. Sign in as the new rules ask" + (total > 1 ? " (" + progress(index, total, service) + ")." : ".")] };
     }
 
+    // A reason on one line (PAM's message, a run's error)
+    function _oneLine(text) {
+        return String(text ?? "").replace(/[\u0000-\u001f\u007f\s]+/g, " ").trim();
+    }
+
     function notSavedSpec(reason) {
+        const text = _oneLine(reason);
         return { kind: "warning", title: "Not saved",
-                 body: [String(reason ?? "") !== "" ? String(reason) : "The new rules did not let you in.", "Nothing was changed."],
+                 body: [text !== "" ? text : "The new rules did not let you in.", "Nothing was changed."],
+                 buttons: [{ id: "again", label: "Try again", kind: "normal" }] };
+    }
+
+    // What an Apply that stopped tells: `outcomes` the services written before it stopped,
+    // `reason` why ("" for a password prompt dismissed), `failed` the service it stopped at
+    // and `file` what PamApply found there after a failed run ("unchanged", "done", "other",
+    // "unknown"; "" when no run started). → { spec (null: nothing to say — a prompt dismissed
+    // and nothing changed), changed (something may differ from before: read again) }
+    function stoppedSpec(outcomes, reason, failed, file, backupsFolder) {
+        const written = (Array.isArray(outcomes) ? outcomes : []).filter(outcome => outcome?.ok === true);
+        const fileNote = file === "done" ? serviceName(failed) + ": the file was written, but the run did not say so. Read it again."
+            : file === "other" ? serviceName(failed) + ": the file changed in another way. Read it again."
+            : file === "unknown" ? serviceName(failed) + ": the file could not be read again."
+            : "";
+        const text = _oneLine(reason);
+        if (written.length === 0 && fileNote === "") {
+            if (text === "")
+                return { spec: null, changed: false };
+            return { spec: notSavedSpec(text), changed: false };
+        }
+        const body = [text !== "" ? text : "The administrator password was not given."];
+        if (written.length > 0) {
+            const names = written.map(outcome => serviceName(outcome.service));
+            body.push("Written: " + names.join(" and ") + ". Not written: " + serviceName(failed) + ".");
+        }
+        if (fileNote !== "")
+            body.push(fileNote);
+        if (written.length > 0)
+            body.push("Undo puts back " + written.map(outcome => String(backupsFolder ?? "") + "/" + outcome.backup).join(", ") + ".");
+        return { spec: { kind: "warning", title: "Saved in part", cancelLabel: "OK", body }, changed: true };
+    }
+
+    // An Undo that did not finish: what is left is undone again by "Try again"
+    function undoFailedSpec(reason, left) {
+        const text = _oneLine(reason);
+        const names = (Array.isArray(left) ? left : []).map(outcome => serviceName(outcome.service));
+        return { kind: "warning", title: "Not undone",
+                 body: [text !== "" ? text : "The old file could not be put back.",
+                        names.length > 0 ? "Still with the new rules: " + names.join(" and ") + "." : ""],
                  buttons: [{ id: "again", label: "Try again", kind: "normal" }] };
     }
 
@@ -408,7 +453,7 @@ Singleton {
                         + (raw > 0 ? "; " + raw + (raw === 1 ? " line the editor does not make itself stays a raw line" : " lines the editor does not make itself stay raw lines") + ", as written." : "."),
                         "Nothing is written before Apply and its trial."],
                  buttons: [{ id: "replace", label: "Replace", kind: "warning" }],
-                 subject: { service } };
+                 subject: { service, hash: String(adopted?.hash ?? "") } };
     }
 
     // A generated file's lines for the preview: [{ text, kind }] — "marker" (the shell's

@@ -82,7 +82,10 @@ ColumnLayout {
         if (_reading === null || _reading === _lastReading)
             return;
         _lastReading = _reading;
-        if (editor === null || !changed || _resetOnReading) {
+        // A file taken in by Replace that is no longer the hand-made one (written, changed
+        // again, or a system where the shell writes none): its rows go with it
+        const staleReplace = Object.keys(replacing).some(service => !_inForce[service].changed);
+        if (editor === null || !changed || _resetOnReading || staleReplace) {
             _resetOnReading = false;
             _reset();
         }
@@ -97,6 +100,7 @@ ColumnLayout {
                                                     _files.vendorPolkit, _inForce[service].changed && replacing[service] === undefined);
         if (replacing[service] !== undefined)
             facts.replace = replacing[service];
+        facts.sharedApplyStopped = sharedStopped;
         return facts;
     }
 
@@ -167,8 +171,9 @@ ColumnLayout {
         _ask(PamRuleViewRules.replaceSpec(service, _backups, state.adopted), answer => {
             if (answer.cancelled || answer.button !== "replace")
                 return;
+            // The file changed since the question was asked: what it showed is not what is there
             const now = root._inForce[answer.subject.service];
-            if (!now.adopted)
+            if (!now.adopted || now.adopted.hash !== answer.subject.hash)
                 return;
             root.replacing = Object.assign({}, root.replacing, { [answer.subject.service]: now.adopted.hash });
             const next = Object.assign({}, root.editor);
@@ -190,17 +195,29 @@ ColumnLayout {
 
     // ── Apply: a trial, then one write per service ──
 
-    // { phase ("" | "trial" | "writing" | "undoing"), items, index, trialId, passed (the
-    // passed trial's state), outcomes }
-    property var _flow: ({ phase: "", items: [], index: 0, trialId: 0, passed: null, outcomes: [] })
+    // { phase ("" | "trial" | "writing" | "undoing"), items, index, question (the trial's
+    // modal, by a number of this page's), trialId, passed (the passed trial's state),
+    // outcomes, shared (one list for both services) }
+    property var _flow: _idleFlow()
+    function _idleFlow() {
+        return { phase: "", items: [], index: 0, question: 0, trialId: -1, passed: null, outcomes: [], shared: false };
+    }
     readonly property bool _busy: _flow.phase !== "" || (applier?.busy === true)
-    // What the last Apply wrote: its outcomes, for Undo
+    // What the last Apply wrote and Undo has not put back: its outcomes
     property var lastWrite: []
     property string status: ""
+    // Why the last Apply or Undo stopped without its modal (another question was open)
+    property string notice: ""
+    // A shared Apply stopped between the two services: the lists differ until Apply again (W8)
+    property bool sharedStopped: false
+    property int _questions: 0
 
+    // A page closed while a write runs drops its outcome: the run goes on as administrator,
+    // and the page reads what is in force again when it is opened next (Component.onCompleted).
     function apply() {
-        if (_busy || !editor)
+        if (_busy || !editor || nixos)
             return;
+        notice = "";
         const inputs = {};
         for (const service of PamRuleRules.services)
             inputs[service] = { rows: _lists[service], currentText: service === "sudo" ? _files.sudo : _files.polkit, facts: factsFor(service) };
@@ -211,7 +228,7 @@ ColumnLayout {
         }
         if (queue.items.length === 0)
             return;
-        _flow = { phase: "trial", items: queue.items, index: 0, trialId: 0, passed: null, outcomes: [] };
+        _flow = Object.assign(_idleFlow(), { phase: "trial", items: queue.items, shared: editor.split !== true });
         _next();
     }
 
@@ -225,33 +242,43 @@ ColumnLayout {
             _write(item);
             return;
         }
-        trial.start(item.service, item.text);
-        const id = trial.state?.trial ?? 0;
-        _flow = Object.assign({}, _flow, { phase: "trial", trialId: id });
-        _ask(Object.assign(PamRuleViewRules.trialSpec(_flow.index, _flow.items.length, item.service),
-                           { content: _trialContent, subject: { trial: id } }), answer => {
+        // The question first: a trial no field answers would keep PAM waiting
+        const question = ++_questions;
+        _flow = Object.assign({}, _flow, { phase: "trial", question, trialId: -1 });
+        const asked = _ask(Object.assign(PamRuleViewRules.trialSpec(_flow.index, _flow.items.length, item.service),
+                                         { content: _trialContent, subject: { question } }), answer => {
             if (answer.reason === "subject")
                 return;
-            if (root._flow.phase === "trial" && root._flow.trialId === answer.subject.trial) {
-                root.trial.cancel(answer.subject.trial);
-                root._endFlow();
+            if (root._flow.phase === "trial" && root._flow.question === answer.subject.question) {
+                root.trial.cancel(root._flow.trialId);
+                // Cancelled: said only when something was written before
+                root._stop(root._flow.outcomes.length > 0 ? "The trial was cancelled." : "", item.service, "", true);
             }
         });
+        if (!asked) {
+            _stop("The trial could not be shown: another question is open.", item.service, "", false);
+            return;
+        }
+        trial.start(item.service, item.text);
+        _flow = Object.assign({}, _flow, { trialId: trial.state?.trial ?? 0 });
+        // A trial that ended inside start() (a file not read, a refusal) is taken now
+        _takeTrial();
     }
 
     // The trial's outcome, as PamTrial reports it
     readonly property var _trialState: trial?.state ?? null
-    on_TrialStateChanged: {
+    on_TrialStateChanged: _takeTrial()
+    function _takeTrial() {
         const state = _trialState;
         if (_flow.phase !== "trial" || !state || state.trial !== _flow.trialId)
             return;
         if (state.phase === "passed") {
-            modalHost?.withdraw({ trial: state.trial });
+            modalHost?.withdraw({ question: _flow.question });
             _flow = Object.assign({}, _flow, { passed: state });
             _write(_flow.items[_flow.index]);
         } else if (state.phase === "failed") {
-            modalHost?.withdraw({ trial: state.trial });
-            _failed(state.pamReason !== "" ? state.reasonText + " " + state.pamReason : state.reasonText);
+            modalHost?.withdraw({ question: _flow.question });
+            _stop(state.pamReason !== "" ? state.reasonText + " " + state.pamReason : state.reasonText, state.service, "", true);
         }
     }
 
@@ -261,7 +288,7 @@ ColumnLayout {
         const started = applier.apply({ service: item.service, built: item.built, currentText: item.currentText,
                                         vendorText: item.vendorText, trial: _flow.passed });
         if (!started.started)
-            _failed(started.refusal?.text ?? "");
+            _stop(started.refusal?.text ?? "", item.service, "", true);
     }
 
     Connections {
@@ -280,15 +307,7 @@ ColumnLayout {
         if (_flow.phase !== "writing")
             return;
         if (!outcome.ok) {
-            const wrote = _flow.outcomes.length > 0;
-            if (wrote)
-                lastWrite = _flow.outcomes;
-            if (outcome.quiet) {
-                _endFlow();
-            } else {
-                _failed(outcome.error);
-            }
-            _refreshAfter();
+            _stop(outcome.quiet ? "" : outcome.error, outcome.service, outcome.file ?? "", true);
             return;
         }
         const outcomes = _flow.outcomes.concat([outcome]);
@@ -300,20 +319,37 @@ ColumnLayout {
         const outcomes = _flow.outcomes;
         _endFlow();
         lastWrite = outcomes;
+        sharedStopped = false;
         _ask(PamRuleViewRules.savedSpec(outcomes, _backups), () => {});
         _refreshAfter();
     }
 
-    function _failed(reason) {
+    // An Apply that stopped at `service`: what was written stays (Undo puts it back), a shared
+    // list stopped half way says so (W8), the modal says what changed — or, when it cannot
+    // be shown, the line under the buttons
+    function _stop(reason, service, file, canAsk) {
+        const outcomes = _flow.outcomes;
+        const shared = _flow.shared;
         _endFlow();
-        _ask(PamRuleViewRules.notSavedSpec(reason), answer => {
-            if (!answer.cancelled && answer.button === "again")
-                root.apply();
-        });
+        if (outcomes.length > 0)
+            lastWrite = outcomes;
+        if (shared && outcomes.length > 0)
+            sharedStopped = true;
+        const said = PamRuleViewRules.stoppedSpec(outcomes, reason, service, file, _backups);
+        if (said.spec !== null) {
+            const retry = said.spec.buttons?.some(button => button.id === "again") === true;
+            if (!canAsk || !_ask(said.spec, answer => {
+                if (retry && !answer.cancelled && answer.button === "again")
+                    root.apply();
+            }))
+                notice = said.spec.body.join(" ");
+        }
+        if (outcomes.length > 0 || said.changed)
+            _refreshAfter();
     }
 
     function _endFlow() {
-        _flow = { phase: "", items: [], index: 0, trialId: 0, passed: null, outcomes: [] };
+        _flow = _idleFlow();
         status = "";
     }
 
@@ -328,7 +364,8 @@ ColumnLayout {
     function undo() {
         if (_busy || lastWrite.length === 0)
             return;
-        _flow = { phase: "undoing", items: lastWrite.slice().reverse(), index: 0, trialId: 0, passed: null, outcomes: [] };
+        notice = "";
+        _flow = Object.assign(_idleFlow(), { phase: "undoing", items: lastWrite.slice().reverse() });
         _undoNext();
     }
 
@@ -336,27 +373,42 @@ ColumnLayout {
         const outcome = _flow.items[_flow.index];
         if (!outcome) {
             _endFlow();
-            lastWrite = [];
+            sharedStopped = false;
             _refreshAfter();
             return;
         }
         status = "Undoing " + PamRuleViewRules.progress(_flow.index, _flow.items.length, outcome.service) + "…";
         const started = applier.undo({ service: outcome.service, backup: outcome.backup, currentSha256: outcome.sha256 });
         if (!started.started)
-            _failed(started.refusal?.text ?? "");
+            _undoStopped(started.refusal?.text ?? "");
     }
 
     function _undone(outcome) {
         if (!outcome.ok) {
-            if (outcome.quiet)
+            if (outcome.quiet) {
                 _endFlow();
-            else
-                _failed(outcome.error);
-            _refreshAfter();
+                _refreshAfter();
+            } else {
+                _undoStopped(outcome.error);
+            }
             return;
         }
+        // Put back: no longer to undo
+        const done = _flow.items[_flow.index];
+        lastWrite = lastWrite.filter(item => item.backup !== done.backup);
         _flow = Object.assign({}, _flow, { index: _flow.index + 1 });
         _undoNext();
+    }
+
+    function _undoStopped(reason) {
+        _endFlow();
+        const spec = PamRuleViewRules.undoFailedSpec(reason, lastWrite);
+        if (!_ask(spec, answer => {
+            if (!answer.cancelled && answer.button === "again")
+                root.undo();
+        }))
+            notice = spec.body.join(" ");
+        _refreshAfter();
     }
 
     // ── Pieces ──
@@ -775,7 +827,9 @@ ColumnLayout {
         objectName: "status"
         visible: !root.nixos && root.editor !== null
         Layout.fillWidth: true
+        color: root.status === "" && root.notice !== "" ? Theme.warning : Theme.textMuted
         text: root.status !== "" ? root.status
+            : root.notice !== "" ? root.notice
             : root.lastWrite.length > 0 ? "Undo puts back " + root.lastWrite.map(outcome => root._backups + "/" + outcome.backup).join(", ")
             : "Backups go to " + root._backups
     }

@@ -32,6 +32,8 @@ TestCase {
     readonly property string _sudo: "#%PAM-1.0\nauth\t\tinclude\t\tsystem-auth\naccount\t\tinclude\t\tsystem-auth\nsession\t\tinclude\t\tsystem-auth\n"
     readonly property string _handSudo: "#%PAM-1.0\nauth sufficient pam_u2f.so cue authfile=/etc/u2f_mappings\nauth\t\tinclude\t\tsystem-auth\n"
         + "account\t\tinclude\t\tsystem-auth\nsession\t\tinclude\t\tsystem-auth\n"
+    readonly property string _handSudo2: "#%PAM-1.0\nauth sufficient pam_u2f.so cue authfile=/etc/other\nauth\t\tinclude\t\tsystem-auth\n"
+        + "account\t\tinclude\t\tsystem-auth\nsession\t\tinclude\t\tsystem-auth\n"
     readonly property string _vendorPolkit: "#%PAM-1.0\n\nauth       include      system-auth\naccount    include      system-auth\n"
         + "password   include      system-auth\nsession    include      system-auth\n"
     readonly property string _password: "secret"
@@ -52,8 +54,11 @@ TestCase {
         readonly property var directories: reading?.directories ?? []
         readonly property var files: reading?.files ?? ({})
         property int refreshes: 0
+        property int methodsAsked: 0
         function refresh(withMethods) {
             refreshes++;
+            if (withMethods === true)
+                methodsAsked++;
             suite._read();
         }
     }
@@ -62,8 +67,15 @@ TestCase {
     property QtObject _trial: QtObject {
         property var state: PamTrialRules.initialState()
         property int starts: 0
+        // The next start fails at once, inside start(), as a file the rules include not read
+        property bool failInStart: false
         function start(service, text) {
             starts++;
+            if (failInStart) {
+                state = Object.assign(PamTrialRules.initialState(), { phase: "failed", trial: state.trial + 1, service, candidate: text,
+                                                                      reason: "unread", reasonText: PamTrialRules.texts.unread });
+                return;
+            }
             state = Object.assign(PamTrialRules.initialState(), {
                 phase: "running", trial: state.trial + 1, service, candidate: text,
                 messages: [{ text: "Touch the reader or type your password", error: false }],
@@ -96,8 +108,18 @@ TestCase {
     }
 
     // The stand-in for the shell's runs as administrator: the words run as the user
+    // How the next run ends: "" (it runs), "refuse" (the root step refuses: the file changed),
+    // "refuse2" (the next but one refuses)
+    property string _failNext: ""
     function _start(request, done) {
         _runs = _runs.concat([request.what]);
+        if (_failNext === "refuse2") {
+            _failNext = "refuse";
+        } else if (_failNext === "refuse") {
+            _failNext = "";
+            Qt.callLater(() => done({ ok: false, code: 3, stdout: "", stderr: "refused changed", dismissed: false, refused: false, cancelled: false, blocked: "", error: "" }));
+            return;
+        }
         _exec(["sh", "-c", "umask 022; exec \"$@\"", "sh"].concat(request.argv), (code, stdout, stderr) =>
             done({ ok: code === 0, code, stdout, stderr, dismissed: false, refused: false, cancelled: false, blocked: "", error: "" }));
     }
@@ -406,6 +428,22 @@ TestCase {
         assertEqual(unlock[2].hint, "No key registered", "… with its reason");
         assertEqual(rules.savedSpec([{ service: "sudo", backup: "sudo.1" }, { service: "polkit-1", backup: "polkit-1.1" }], "/b").body[1],
                     "Backups: /b/sudo.1, /b/polkit-1.1", "savedSpec: the backups named");
+        const ok = service => ({ ok: true, service, backup: service + ".1" });
+        assertEqual(rules.stoppedSpec([], "", "sudo", "", "/b").spec, null, "stoppedSpec: a prompt dismissed, nothing written: nothing said");
+        assertEqual(rules.stoppedSpec([], "Bad\nthing", "sudo", "unchanged", "/b").spec.body.join(" | "), "Bad thing | Nothing was changed.",
+                    "… a reason, nothing written: not saved, the reason on one line");
+        const half = rules.stoppedSpec([ok("sudo")], "The file changed since it was read: read it again.", "polkit-1", "unchanged", "/b");
+        assertEqual(half.spec.title + " | " + half.spec.body.join(" | ") + " | " + half.changed,
+                    "Saved in part | The file changed since it was read: read it again. | Written: sudo. Not written: administrator prompts. | Undo puts back /b/sudo.1. | true",
+                    "… one written: saved in part, what Undo puts back");
+        assertEqual(rules.stoppedSpec([ok("sudo")], "", "polkit-1", "", "/b").spec.body[0], "The administrator password was not given.", "… the second prompt dismissed");
+        assertEqual(rules.stoppedSpec([], "x", "sudo", "done", "/b").spec.body[1], "sudo: the file was written, but the run did not say so. Read it again.", "… a run that did not say: written");
+        assertEqual(rules.stoppedSpec([], "x", "sudo", "other", "/b").spec.body[1], "sudo: the file changed in another way. Read it again.", "… another change");
+        assertEqual(rules.stoppedSpec([], "x", "polkit-1", "unknown", "/b").spec.body[1], "administrator prompts: the file could not be read again.", "… not read");
+        const undoFailed = rules.undoFailedSpec("refused", [ok("sudo")]);
+        assertEqual(undoFailed.title + " | " + undoFailed.body.join(" | ") + " | " + undoFailed.buttons[0].id, "Not undone | refused | Still with the new rules: sudo. | again",
+                    "undoFailedSpec: what is left, Try again");
+        assertEqual(rules.replaceSpec("sudo", "/b", { own: 1, raw: 0, hash: "abc" }).subject.hash, "abc", "replaceSpec: keyed to the text shown");
         assertEqual(rules.replaceSpec("sudo", "/b", { own: 1, raw: 1 }).body[1],
                     "Taken in as 2 rows; 1 line the editor does not make itself stays a raw line, as written.", "replaceSpec: what is taken in");
     }
@@ -427,7 +465,7 @@ TestCase {
         const section = _sectionHolder._section;
         assert(section !== null, "the section built");
         assert(_until(() => section.editor !== null), "… its editor from what is in force");
-        assert(_stacks.refreshes >= 2, "… it reads the stacks when shown");
+        assert(_stacks.methodsAsked === 1, "… it reads the stacks when shown, with what the computer has");
 
         // --- the summary ---
         assert(_until(() => _steps("sudo and administrator prompts") === "password"), "in force: one row for both, the password");
@@ -506,6 +544,57 @@ TestCase {
         assert(!_visible(_item("undo")), "… Undo done");
         assert(_until(() => !section.changed), "… the editor follows what is in force");
 
+        // --- a second write that stops: saved in part ---
+        assert(_click("addRow") && _until(() => _visible(_item("add:fingerprint"))) && _click("add:fingerprint"), "the fingerprint added again");
+        assert(_until(() => _item("apply").available) && _click("apply"), "Apply");
+        assert(_until(() => _modalTitle() === "Try the new rules" && _find(host.modal, "trialField")?.editing === true), "the trial");
+        const startsHeld = _trial.starts;
+        section.apply();
+        assertEqual(_trial.starts, startsHeld, "a second Apply while one runs: nothing");
+        assert(_reread(), "a reading lands during the trial");
+        assert(section.changed && section.editor.shared.length === 2 && _modalTitle() === "Try the new rules", "… the rows and the trial kept");
+        _failNext = "refuse2";
+        _type(_password);
+        driver.keyClick(Qt.Key_Return);
+        assert(_until(() => _modalTitle() === "Saved in part", 15000), "polkit refused after sudo: saved in part");
+        const partial = _all(host.modal, "modalLine").map(line => line.text);
+        assert(partial.some(text => text === "Written: sudo. Not written: administrator prompts."), "… what was written and what not: " + partial.join(" | "));
+        assert(partial.some(text => text.startsWith("Undo puts back " + _paths.backups + "/sudo.")), "… what Undo puts back");
+        assert(_modalClick("modalButton:0") && _until(() => !host.open), "OK");
+        assert(_until(() => _visible(_item("undo")) && section.lastWrite.length === 1), "Undo offered for sudo");
+        assert(_until(() => section.editor.split && _texts("warning").some(text => text === PamRuleRules.texts.W8)), "… the lists left different: said");
+
+        // --- an Undo that fails, then again ---
+        _failNext = "refuse";
+        assert(_click("undo"), "Undo");
+        assert(_until(() => _modalTitle() === "Not undone"), "refused: not undone");
+        assertEqual(section.lastWrite.length, 1, "… still to undo");
+        assert(_modalClick("modalButton:0"), "Try again");
+        assert(_until(() => !_visible(_item("undo")) && section.lastWrite.length === 0, 15000), "… undone");
+        assertEqual(_readFile(_paths.system + "/sudo"), _sudo, "… sudo's old file back");
+        assert(_until(() => !_texts("warning").some(text => text === PamRuleRules.texts.W8)), "… the lists' warning gone");
+
+        // --- the trial's modal refused: another question open ---
+        assert(_click("addRow") && _until(() => _visible(_item("add:fingerprint"))) && _click("add:fingerprint"), "the fingerprint added again");
+        assert(_until(() => section.changed), "(pending)");
+        assertEqual(host.ask({ title: "Another question" }, () => {}), "", "another question open");
+        const startsBefore = _trial.starts;
+        section.apply();
+        assertEqual(_trial.starts + " " + section._busy, startsBefore + " false", "Apply: no trial without its field, nothing held");
+        assert(section.notice.indexOf("another question is open") >= 0, "… said under the buttons");
+        host.cancel("window");
+        assert(_until(() => !host.open), "(closed)");
+
+        // --- a trial that fails as it starts ---
+        _trial.failInStart = true;
+        assert(_click("apply"), "Apply");
+        assert(_until(() => _modalTitle() === "Not saved"), "a trial failing at once: not saved");
+        assert(_all(host.modal, "modalLine").some(line => line.text === PamTrialRules.texts.unread), "… its reason");
+        assert(!section._busy, "… nothing held");
+        _trial.failInStart = false;
+        assert(_modalClick("modalButton:1") && _until(() => !host.open), "(closed)");
+        assert(_click("reset") && _until(() => !section.changed), "(reset)");
+
         // --- changed by hand ---
         assert(_write(_paths.system + "/sudo", _handSudo) && _reread(), "sudo changed by hand");
         assert(_until(() => _item("hand:sudo") !== null), "… shown as changed outside the shell");
@@ -513,6 +602,11 @@ TestCase {
         assert(_all(_item("hand:sudo"), "fileLine:marked").length === 1, "… the offending line marked");
         assert(_click("replace:sudo"), "Replace…");
         assert(_until(() => _modalTitle() === "Replace /etc/pam.d/sudo?"), "… asked");
+        assert(_write(_paths.system + "/sudo", _handSudo2) && _reread(), "the file changed again while asked");
+        assert(_modalClick("modalButton:0") && _until(() => !host.open), "… Replace");
+        driver.wait(50);
+        assert(_item("hand:sudo") !== null && Object.keys(section.replacing).length === 0, "… not what was shown: nothing taken in");
+        assert(_click("replace:sudo") && _until(() => _modalTitle() === "Replace /etc/pam.d/sudo?"), "Replace… again");
         assert(_modalClick("modalButton:0"), "… Replace");
         assert(_until(() => _item("hand:sudo") === null && !_item("list:sudo")?.readOnly), "taken in: the list editable");
         assert(section.editor.sudo.some(row => row.method === "raw"), "… the key line a raw row");
@@ -521,10 +615,12 @@ TestCase {
         // --- NixOS ---
         _nixos = true;
         assert(_reread(), "read as NixOS");
-        // (The editor starts again from what is in force there: the page has no Reset on NixOS)
-        section._reset();
         assert(_until(() => _visible(_item("nixosSnippet"))), "the module's options shown");
+        assert(_until(() => Object.keys(section.replacing).length === 0 && !section.changed), "… the file taken in gone with its rows: nothing to replace there");
         assert(!_visible(_item("apply")), "… no Apply");
+        const startsNixos = _trial.starts;
+        section.apply();
+        assertEqual(_trial.starts, startsNixos, "… nor does apply() try anything there");
         assert(_click("addRow") && _until(() => _visible(_item("add:fingerprint"))) && _click("add:fingerprint"), "a fingerprint row added");
         assert(_until(() => _item("snippetText").text.indexOf("method = \"fingerprint\"") > 0), "… in the options");
         assert(_click("copy") && _until(() => _copied.indexOf("programs.h2s-shell.pam") === 0), "Copy");
@@ -540,6 +636,8 @@ TestCase {
         assert(_until(() => _writes.join(",") === "lockscreen.offerFingerprint=false"), "… the setting written");
         assert(_until(() => !_item("unlock:fingerprint").checked), "… shown off");
         assert(_clickItem(_item("unlock:securityKey"), _item("unlock:securityKey").width - 12), "the dimmed key clicked");
+        // Its switch said toggled anyway (a keyboard, a module): a method the computer lacks is not offered
+        _item("unlock:securityKey").toggled();
         driver.wait(50);
         assertEqual(_writes.length, 1, "… nothing written");
     }

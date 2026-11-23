@@ -734,7 +734,9 @@ file" shows the file that would be written, the shell's lines in the accent colo
 Apply first tries the new rules as you, in the shell's own prompt, on a private copy (nothing
 is written yet); only when they let you in is each file written, as administrator (sudo,
 then administrator prompts: "1 of 2"). The old file goes to `/var/lib/h2s-shell/pam-backup`
-first; Undo puts it back. A file changed outside the shell is shown read-only with the
+first; Undo puts it back. When the second write stops, the page says which file was
+written ("Saved in part"), Undo puts that one back, and the list warns that the two services
+now differ. A file changed outside the shell is shown read-only with the
 offending lines marked: "Read again", or "Replace…", which takes its lines in as rows (what
 the editor does not make itself as raw lines) and replaces it at the next Apply.
 

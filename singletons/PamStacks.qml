@@ -30,8 +30,6 @@ Singleton {
     readonly property var faillock: reading?.faillock ?? ({})
     readonly property var directories: reading?.directories ?? []
     readonly property var files: reading?.files ?? ({})
-    // A reading is going on
-    readonly property bool refreshing: _reader.running
 
     function refresh(withMethods) {
         _reader.refresh(withMethods === true);

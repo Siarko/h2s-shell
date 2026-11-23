@@ -203,7 +203,9 @@ TestCase {
             const reading = _reader.reading;
             assertEqual(_reader.readings, _readingsBefore + 1, "one reading published, not two");
             assertEqual(reading.services["polkit-1"].file, _scratch + "/debian/etc/polkit-1", "… the newer refresh's (Debian), never the overtaken Arch one");
-            assertEqual(reading.facts.fingerprint, "unknown", "… the overtaken methods answer dropped: the earlier one kept");
+            // The overtaken refresh asked the methods script: the newer one, without it, asks
+            // it again rather than leave it unanswered
+            assertEqual(reading.facts.fingerprint, "ready", "… the methods script asked again by the newer refresh: its answer");
             assert(!_reader.running, "… nothing reading any more");
         });
         _clock.start();

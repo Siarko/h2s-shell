@@ -44,16 +44,19 @@ QtObject {
     // Reads everything again; the methods script only `withMethods` (it asks fprintd over
     // D-Bus, which can take seconds), else its last answer counts (none: "unknown")
     function refresh(withMethods) {
+        // A refresh without the methods script while one with it runs takes it over: its run
+        // is cancelled below, so it runs again rather than leave the methods unanswered
+        const methods = withMethods === true || (running && _state.methods === null);
         const generation = ++_generation;
         for (const run of _runs)
             run.cancel();
         _runs = [];
         _state = {
             places: null, answers: {}, rounds: 0, nixos: undefined, reading: false,
-            methods: withMethods === true ? null
+            methods: methods ? null
                 : _methods ?? { known: false, fingerprint: "unknown", securityKey: "unknown", lock: {} }
         };
-        if (withMethods === true) {
+        if (methods) {
             _start(methodsCommand, [], (lines, result) => {
                 _methods = PamStackRules.methodsAnswer(lines, result);
                 _state.methods = _methods;
