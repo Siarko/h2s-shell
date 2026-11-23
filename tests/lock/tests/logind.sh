@@ -43,14 +43,22 @@ check_within "$GUARD" "a fingerprint conversation runs" _one_finger_waiter
 logind_signal unlock-other
 sleep 1 # fixed sleep: a negative claim: another session's Unlock does nothing
 check "another session's Unlock does not unlock" compositor_locked
+# RememberedAdmin starts with the shell and may revoke at this lock (what is kept is not
+# known yet when its look-up ends after the lock): its revoke is always followed by a read
+# of the list, so once the last call is a read nothing of this lock's is under way; only the
+# revokes after it count below
+polkit_settled() { [ "$(tail -n 1 "$WORK/logind/polkit")" = list ]; }
+check_within "$GUARD" "RememberedAdmin has read what polkit keeps (after any revoke at this lock)" polkit_settled
+polkit_revokes_before=$(grep -c '^revoke' "$WORK/logind/polkit")
+polkit_revoked_again() { [ "$(grep -c '^revoke' "$WORK/logind/polkit")" -gt "$polkit_revokes_before" ]; }
 # A password polkit keeps for the shell's process (the stand-in's list), read at the unlock
 now=$(date +%s)
 printf "([('kept', 'org.freedesktop.policykit.exec', ('unix-process', {'pid': <uint32 %s>, 'start-time': <uint64 5>, 'uid': <1000>}), uint64 %s, uint64 %s)],)\n" \
     "$SHELL_PID" "$((now - 10))" "$((now + 290))" > "$WORK/logind/polkit-list"
 polkit_lists_before=$(grep -c '^list' "$WORK/logind/polkit")
 polkit_listed_again() { [ "$(grep -c '^list' "$WORK/logind/polkit")" -gt "$polkit_lists_before" ]; }
-polkit_kept() { [ -f "$WORK/logind/polkit-list" ] && ! grep -q '^revoke' "$WORK/logind/polkit"; }
-polkit_revoked() { [ ! -f "$WORK/logind/polkit-list" ] && grep -q '^revoke' "$WORK/logind/polkit"; }
+polkit_kept() { [ -f "$WORK/logind/polkit-list" ] && ! polkit_revoked_again; }
+polkit_revoked() { [ ! -f "$WORK/logind/polkit-list" ] && polkit_revoked_again; }
 logind_signal unlock
 check_within "$GUARD" "logind's Unlock unlocks" compositor_unlocked
 check_within "$GUARD" "after the unlock, what polkit keeps is read again" polkit_listed_again
