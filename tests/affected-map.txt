@@ -96,6 +96,10 @@ scripts/seams.sh lock:all self:tests/launcher-selftest.sh
 +tests/lock/seams/seams.sh unit:PamStacksReadingTest unit:TestSeamsShapeTest unit:PamTrialTest
 scripts/pam-files.sh unit:PamStacksReadingTest unit:PamTrialTest self:tests/distribution-selftest.sh
 scripts/pam-trial-stage.sh unit:PamTrialTest
+scripts/root/replace-lib.sh unit:PamApplyTest unit:RememberInstallTest unit:PamRulesPageTest unit:RememberAdminPageTest
+scripts/root/pam-apply.sh unit:PamApplyTest unit:PamRulesPageTest
+scripts/root/remember-install.sh unit:RememberInstallTest unit:RememberAdminPageTest
+scripts/root/hibernate-delay.sh unit:HibernateDelayWriterTest
 tests/test-tree.sh unit:TestTreeTest lock:all
 tests/lock-closure.sh unit:ModuleRegistriesTest
 tests/affected.sh self:tests/affected-selftest.sh

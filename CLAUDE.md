@@ -280,9 +280,13 @@ new kind.
 - **Tests never touch the real session, polkit, PAM, the network or a real daemon:** stand-ins
   only, and stand-ins never meet the real `pkexec`. — A test must not change the machine.
 - **Root helpers and scripts run as root are never loaded from a place the user can
-  write.** The one exception: the shell's own fixed script texts, written in its code and
-  run through `PrivilegedRuns.startShell`, each run authorized by polkit and announced as
-  the shell's. — Otherwise any user process can become root at the next prompt.
+  write.** The one exception: the shell's own fixed scripts, `.sh` files in its tree
+  (`scripts/root/`), read by the shell and passed as text through `PrivilegedRuns.startShell`
+  (`sh -c <text>`), never run by path; each run authorized by polkit and announced as the
+  shell's. Per-run values reach them as positional arguments, never spliced into the text;
+  their places are fixed in the file. No QML builds a root script's text. — Otherwise any
+  user process can become root at the next prompt; scripts built as strings in QML could not
+  be read or reviewed as scripts.
 - **The module API is ours.** If it lacks something, stop and extend it (minor version, a
   `### Module API` line in `CHANGELOG.md`, the reference in `api/Api.qml`) — never build a
   substitute in a module. It covers capabilities (running things, system state,

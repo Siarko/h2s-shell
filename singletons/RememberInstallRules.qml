@@ -9,11 +9,12 @@ import QtQuick
 // only while the setting is longer than the length polkitd has without it, the polkitd.conf
 // that sets it (RememberRules.confPath, first in polkitd's order).
 //
-// The root step is `applyScript`, a fixed script in the shell's code run by the system's
-// /bin/sh through the shell's runs as administrator (PrivilegedRuns.startShell): nothing is
-// loaded from a file. Its places (the rules folder, the conf folder, the backups, the
-// system's systemctl) and the owner the folders must have are written into the script text,
-// never handed as arguments; its arguments are checked inside it — each file's operation
+// The root step is scripts/root/remember-install.sh after replace-lib.sh (`scriptFiles`),
+// files in the shell's tree that the shell reads and hands as text to the system's /bin/sh
+// through its runs as administrator (PrivilegedRuns.startShell): never run by path. Its places
+// (the rules folder, the conf folder, the backups, the system's systemctl) are fixed in the
+// file, under the folder its first argument names — "" for the system, the only one it takes
+// as root —; its other arguments are checked inside it — each file's operation
 // from a fixed list, hashes as 64 hex digits, a backup by its exact stamp, the user and the
 // paths the rule names and the conf's seconds by fixed patterns. It builds the rule and the
 // conf itself from templates in its text, so a run can write nothing but the shell's own rule
@@ -46,10 +47,11 @@ Singleton {
         rules: _dirName(RememberRules.rulePath),
         conf: _dirName(RememberRules.confPath),
         backups: "/var/lib/h2s-shell/polkit-backup",
-        systemctl: "/usr/bin/systemctl",
-        // Who must own the folders written in (root; a suite's stand-in: the user)
-        owner: 0
+        systemctl: "/usr/bin/systemctl"
     })
+
+    // The root step's files in scripts/root/, joined in this order (RootScriptRules.script)
+    readonly property var scriptFiles: ["replace-lib.sh", "remember-install.sh"]
 
     readonly property var _placeNames: ["rules", "conf", "backups", "systemctl"]
 
@@ -64,6 +66,7 @@ Singleton {
         backupName: "Not a backup of these files.",
         paths: "Not a place the shell writes polkit files to.",
         busy: "A change is already being saved.",
+        script: "The shell's script for this could not be read.",
         // By the root step
         arguments: "The request was not valid.",
         system: "polkit's folders are not there.",
@@ -122,217 +125,6 @@ Singleton {
         return typeof path === "string" && path.length <= 4096 && /^\/[A-Za-z0-9\/._+-]*$/.test(path) && !path.endsWith("/");
     }
 
-    // The root step's script for these places ("" for places that are not plain absolute
-    // paths). Its arguments ($0 is "sh"):
-    //   apply <rule op> <rule current> <rule sha256 | -> <conf op> <conf current> <conf sha256 | ->
-    //         <user | -> <timeout | -> <program | -> <seconds | ->
-    //   undo  <stamp> <rule current> <conf current>
-    // an op: write (with the sha256 the new file must have), remove or keep (`-`); a current:
-    // the file's sha256 as the shell read it, or `absent`. The rule is written only from the
-    // user, the timeout and the program (RememberRules.ruleText's facts, checked by fixed
-    // patterns), the conf only from the seconds (1 to maxMinutes × 60): the texts are the
-    // script's own templates, so a run can write nothing but the shell's rule and conf; the
-    // file it built must have the sha256 the shell computed for the same facts. Each run
-    // records what it left (`run.<stamp>`: the two sha256s or `absent`); Undo of a stamp
-    // needs the files to be exactly that. Its last line on success, on stdout and stderr:
-    // `applied|restored <rule sha256 | absent> <conf sha256 | absent> <stamp> <hup | nohup |
-    // none>` (polkitd told, telling it failed, the conf unchanged); a refusal: `refused
-    // <code>` on stderr, exit 3.
-    function applyScript(paths) {
-        if (pathsRefusal(paths, false) !== "" && pathsRefusal(paths, true) !== "")
-            return "";
-        const quoted = RootScriptRules.quoted;
-        return RootScriptRules.header
-            + "rules=" + quoted(paths.rules) + "; conf=" + quoted(paths.conf) + "; backups=" + quoted(paths.backups)
-            + "; systemctl=" + quoted(paths.systemctl) + "; owner=" + paths.owner + "\n"
-            + "rule_name=" + quoted(ruleName) + "; conf_name=" + quoted(confName) + "; max_seconds=" + (maxMinutes * 60) + "\n"
-            + "rule_marker=" + quoted(RememberRules.ruleMarker) + "; conf_marker=" + quoted(RememberRules.confMarker)
-            + "; action=" + quoted(RememberRules.execAction) + "\n"
-            + "rule_temporary=; conf_temporary=; backup_temporary=\n"
-            + "trap 'for leftover in \"$rule_temporary\" \"$conf_temporary\" \"$backup_temporary\"; do [ -z \"$leftover\" ] || rm -f -- \"$leftover\"; done' EXIT\n"
-            + RootScriptRules.functions
-            // One file's request: op, current, sha256
-            + "check_request() {\n"
-            + "  case \"$1\" in\n"
-            + "  write) is_hash \"$3\" || refuse arguments;;\n"
-            + "  remove|keep) [ \"$3\" = - ] || refuse arguments;;\n"
-            + "  *) refuse arguments;;\n"
-            + "  esac\n"
-            + "  [ \"$2\" = absent ] || is_hash \"$2\" || refuse arguments\n"
-            + "  if [ \"$1\" = remove ] && [ \"$2\" = absent ]; then refuse arguments; fi\n"
-            + "}\n"
-            // The facts, as RememberRules takes them
-            + "check_user() {\n"
-            + "  [ ${#1} -le 256 ] || refuse arguments\n"
-            + "  name=${1%\\$}\n"
-            + "  case \"$name\" in ''|[!A-Za-z0-9_]*|*[!A-Za-z0-9_.-]*) refuse arguments;; esac\n"
-            + "}\n"
-            + "check_path() {\n"
-            + "  [ ${#1} -le 4096 ] || refuse arguments\n"
-            + "  case \"$1\" in /*) ;; *) refuse arguments;; esac\n"
-            + "  case \"$1\" in */|*[!A-Za-z0-9/._+-]*) refuse arguments;; esac\n"
-            + "}\n"
-            + "check_seconds() {\n"
-            + "  case \"$1\" in ''|0*|*[!0-9]*) refuse arguments;; esac\n"
-            + "  [ ${#1} -le 9 ] && [ \"$1\" -le \"$max_seconds\" ] || refuse arguments\n"
-            + "}\n"
-            // The templates (RememberRules.ruleText, confText): a multi-call binary's program
-            // also needs the command line's first word to be the timeout
-            + "rule_body() {\n"
-            + "  printf 'polkit.addRule(function(action, subject) {\\n'\n"
-            + "  printf '    if (action.id == \"%s\" && subject.user == \"%s\" &&\\n' \"$action\" \"$user\"\n"
-            + "  printf '        action.lookup(\"program\") == \"%s\"' \"$program\"\n"
-            + "  case \"${program##*/}\" in\n"
-            + "  timeout) ;;\n"
-            + "  *) printf ' &&\\n        action.lookup(\"command_line\").indexOf(\"%s \") == 0' \"$timeout\";;\n"
-            + "  esac\n"
-            + "  printf ')\\n        return \"auth_admin_keep\";\\n});\\n'\n"
-            + "}\n"
-            + "conf_body() { printf '[Polkitd]\\nExpirationSeconds=%s\\n' \"$seconds\"; }\n"
-            // A body behind its marker and its sha256, into a new file
-            + "marked() {\n"
-            + "  sum=$(\"$2\" | sha256sum) || refuse write\n"
-            + "  is_hash \"${sum%% *}\" || refuse write\n"
-            + "  { printf '%s %s\\n' \"$1\" \"${sum%% *}\"; \"$2\"; } > \"$3\" || refuse write\n"
-            + "}\n"
-            // A new file beside its target: mode 0644, the bytes checked (against $2 when
-            // given), flushed; its hash left in $got
-            + "seal() {\n"
-            + "  chmod 0644 -- \"$1\" || refuse write\n"
-            + "  got=$(hash_of \"$1\") || refuse write\n"
-            + "  if [ -n \"$2\" ] && [ \"$got\" != \"$2\" ]; then refuse hash; fi\n"
-            + "  sync -- \"$1\" || refuse write\n"
-            + "}\n"
-            // A stamp no backup or record has
-            + "taken() {\n"
-            + "  for path in \"$backups/run.$1\" \"$backups/$rule_name.$1\" \"$backups/$rule_name.$1.absent\" \"$backups/$conf_name.$1\" \"$backups/$conf_name.$1.absent\"; do\n"
-            + "    if [ -e \"$path\" ] || [ -L \"$path\" ]; then return 0; fi\n"
-            + "  done\n"
-            + "  return 1\n"
-            + "}\n"
-            // Into the backups under $stamp: $1 a file to copy, or empty for none (and then
-            // $3 the text, for the record); ln fails on a name that is there
-            + "keep_file() {\n"
-            + "  backup_temporary=$(mktemp -- \"$backups/.new.XXXXXX\") || refuse backup\n"
-            + "  if [ -n \"$1\" ]; then cat -- \"$1\" > \"$backup_temporary\" || refuse backup\n"
-            + "  else printf '%s' \"$3\" > \"$backup_temporary\" || refuse backup; fi\n"
-            + "  chmod 0600 -- \"$backup_temporary\" || refuse backup\n"
-            + "  sync -- \"$backup_temporary\" || refuse backup\n"
-            + "  ln -- \"$backup_temporary\" \"$backups/$2\" 2> /dev/null || refuse backup\n"
-            + "  rm -f -- \"$backup_temporary\"; backup_temporary=\n"
-            + "}\n"
-            // Both files as they are (checked before), and what this run leaves, under one stamp
-            + "make_backups() {\n"
-            + "  base=$(date -u +%Y%m%dT%H%M%SZ)\n"
-            + "  stamp=$base; count=0\n"
-            + "  while taken \"$stamp\"; do\n"
-            + "    count=$((count + 1)); [ \"$count\" -le 9 ] || refuse backup\n"
-            + "    stamp=\"$base-$count\"\n"
-            + "  done\n"
-            + "  if [ \"$rule_current\" = absent ]; then keep_file '' \"$rule_name.$stamp.absent\" ''; else keep_file \"$rule_target\" \"$rule_name.$stamp\"; fi\n"
-            + "  if [ \"$conf_current\" = absent ]; then keep_file '' \"$conf_name.$stamp.absent\" ''; else keep_file \"$conf_target\" \"$conf_name.$stamp\"; fi\n"
-            + "  keep_file '' \"run.$stamp\" \"$rule_after $conf_after\"\n"
-            + "  sync -- \"$backups\" || refuse backup\n"
-            + "}\n"
-            // One file into place: op, the new file, the target, its folder. After the first
-            // file changed a failure is no longer "nothing changed"
-            + "placed=\n"
-            + "put() {\n"
-            + "  case \"$1\" in\n"
-            + "  write) mv -fT -- \"$2\" \"$3\" || { [ -z \"$placed\" ] || refuse partial; refuse write; };;\n"
-            + "  remove) rm -f -- \"$3\" || { [ -z \"$placed\" ] || refuse partial; refuse write; };;\n"
-            + "  *) return 0;;\n"
-            + "  esac\n"
-            + "  placed=1\n"
-            + "  sync -- \"$4\" 2> /dev/null || :\n"
-            + "}\n"
-            + "[ $# -ge 1 ] || refuse arguments\n"
-            + "mode=$1; shift\n"
-            + "for dir in \"$rules\" \"$conf\"; do\n"
-            + "  if [ -L \"$dir\" ] || [ ! -d \"$dir\" ]; then refuse system; fi\n"
-            + "  safe_dir \"$dir\"\n"
-            + "done\n"
-            + "rule_target=$rules/$rule_name; conf_target=$conf/$conf_name\n"
-            + "prepare_backups\n"
-            + RootScriptRules.lock
-            + "case \"$mode\" in\n"
-            + "apply)\n"
-            + "  [ $# -eq 10 ] || refuse arguments\n"
-            + "  rule_op=$1; rule_current=$2; rule_want=$3; conf_op=$4; conf_current=$5; conf_want=$6\n"
-            + "  user=$7; timeout=$8; program=$9; seconds=${10}\n"
-            + "  check_request \"$rule_op\" \"$rule_current\" \"$rule_want\"\n"
-            + "  check_request \"$conf_op\" \"$conf_current\" \"$conf_want\"\n"
-            + "  [ \"$rule_op\" != keep ] || [ \"$conf_op\" != keep ] || refuse arguments\n"
-            + "  if [ \"$rule_op\" = write ]; then check_user \"$user\"; check_path \"$timeout\"; check_path \"$program\"\n"
-            + "  else [ \"$user\" = - ] && [ \"$timeout\" = - ] && [ \"$program\" = - ] || refuse arguments; fi\n"
-            + "  if [ \"$conf_op\" = write ]; then check_seconds \"$seconds\"\n"
-            + "  else [ \"$seconds\" = - ] || refuse arguments; fi\n"
-            + "  check_current \"$rule_target\" \"$rule_current\"\n"
-            + "  check_current \"$conf_target\" \"$conf_current\"\n"
-            + "  rule_after=$rule_current; conf_after=$conf_current\n"
-            + "  if [ \"$rule_op\" = write ]; then\n"
-            + "    rule_temporary=$(mktemp -- \"$rules/.h2s-shell.XXXXXX\") || refuse write\n"
-            + "    marked \"$rule_marker\" rule_body \"$rule_temporary\"\n"
-            + "    seal \"$rule_temporary\" \"$rule_want\"; rule_after=$got\n"
-            + "  elif [ \"$rule_op\" = remove ]; then rule_after=absent; fi\n"
-            + "  if [ \"$conf_op\" = write ]; then\n"
-            + "    conf_temporary=$(mktemp -- \"$conf/.h2s-shell.XXXXXX\") || refuse write\n"
-            + "    marked \"$conf_marker\" conf_body \"$conf_temporary\"\n"
-            + "    seal \"$conf_temporary\" \"$conf_want\"; conf_after=$got\n"
-            + "  elif [ \"$conf_op\" = remove ]; then conf_after=absent; fi\n"
-            + "  kind=applied;;\n"
-            + "undo)\n"
-            + "  [ $# -eq 3 ] || refuse arguments\n"
-            + "  stamp_given=$1; rule_current=$2; conf_current=$3\n"
-            + "  stamp_pattern='[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]T[0-9][0-9][0-9][0-9][0-9][0-9]Z'\n"
-            + "  case \"$stamp_given\" in $stamp_pattern|$stamp_pattern-[1-9]) ;; *) refuse arguments;; esac\n"
-            + "  [ \"$rule_current\" = absent ] || is_hash \"$rule_current\" || refuse arguments\n"
-            + "  [ \"$conf_current\" = absent ] || is_hash \"$conf_current\" || refuse arguments\n"
-            // Each file's backup of that stamp (a copy, or a record of no file), and what that
-            // run left
-            + "  for name in \"$rule_name\" \"$conf_name\"; do\n"
-            + "    copy=$backups/$name.$stamp_given\n"
-            + "    if [ -f \"$copy\" ] && [ ! -L \"$copy\" ]; then :\n"
-            + "    elif [ -f \"$copy.absent\" ] && [ ! -L \"$copy.absent\" ]; then :\n"
-            + "    else refuse nobackup; fi\n"
-            + "  done\n"
-            + "  record=$backups/run.$stamp_given\n"
-            + "  if [ -L \"$record\" ] || [ ! -f \"$record\" ]; then refuse nobackup; fi\n"
-            + "  left=$(cat -- \"$record\") || refuse nobackup\n"
-            + "  [ \"$left\" = \"$rule_current $conf_current\" ] || refuse changed\n"
-            + "  check_current \"$rule_target\" \"$rule_current\"\n"
-            + "  check_current \"$conf_target\" \"$conf_current\"\n"
-            + "  rule_op=keep; conf_op=keep; rule_after=$rule_current; conf_after=$conf_current\n"
-            + "  copy=$backups/$rule_name.$stamp_given\n"
-            + "  if [ -f \"$copy\" ] && [ ! -L \"$copy\" ]; then\n"
-            + "    rule_temporary=$(mktemp -- \"$rules/.h2s-shell.XXXXXX\") || refuse write\n"
-            + "    cat -- \"$copy\" > \"$rule_temporary\" || refuse write\n"
-            + "    seal \"$rule_temporary\" ''; rule_after=$got\n"
-            + "    if [ \"$got\" != \"$rule_current\" ]; then rule_op=write; fi\n"
-            + "  elif [ \"$rule_current\" != absent ]; then rule_op=remove; rule_after=absent; fi\n"
-            + "  copy=$backups/$conf_name.$stamp_given\n"
-            + "  if [ -f \"$copy\" ] && [ ! -L \"$copy\" ]; then\n"
-            + "    conf_temporary=$(mktemp -- \"$conf/.h2s-shell.XXXXXX\") || refuse write\n"
-            + "    cat -- \"$copy\" > \"$conf_temporary\" || refuse write\n"
-            + "    seal \"$conf_temporary\" ''; conf_after=$got\n"
-            + "    if [ \"$got\" != \"$conf_current\" ]; then conf_op=write; fi\n"
-            + "  elif [ \"$conf_current\" != absent ]; then conf_op=remove; conf_after=absent; fi\n"
-            + "  kind=restored;;\n"
-            + "*) refuse arguments;;\n"
-            + "esac\n"
-            + "make_backups\n"
-            + "put \"$rule_op\" \"$rule_temporary\" \"$rule_target\" \"$rules\"\n"
-            + "if [ \"$rule_op\" = write ]; then rule_temporary=; fi\n"
-            + "put \"$conf_op\" \"$conf_temporary\" \"$conf_target\" \"$conf\"\n"
-            + "if [ \"$conf_op\" = write ]; then conf_temporary=; fi\n"
-            // polkitd reads its conf only at its start and on SIGHUP
-            + "reload=none\n"
-            + "if [ \"$conf_op\" != keep ]; then\n"
-            + "  if \"$systemctl\" kill -s HUP --kill-whom=main polkit.service >&2; then reload=hup; else reload=nohup; fi\n"
-            + "fi\n"
-            + "say \"$kind $rule_after $conf_after $stamp $reload\"\n";
-    }
-
     function _currentOf(text) {
         if (typeof text === "string")
             return PamEditRules.sha256(text);
@@ -342,7 +134,7 @@ Singleton {
     // `rule` { op, current, text, facts }, `conf` { op, current, text, seconds }: the words
     // carry the facts and the seconds, never the texts; the texts give the sha256s the files
     // the root step builds must have
-    function _plan(shell, paths, live, rule, conf) {
+    function _plan(start, rule, conf) {
         const want = part => part.op === "write" ? PamEditRules.sha256(part.text) : "-";
         const writeRule = rule.op === "write", writeConf = conf.op === "write";
         const words = ["apply", rule.op, rule.current, want(rule), conf.op, conf.current, want(conf),
@@ -350,7 +142,7 @@ Singleton {
                        writeConf ? String(conf.seconds) : "-"];
         const after = part => part.op === "write" ? PamEditRules.sha256(part.text) : part.op === "remove" ? "absent" : part.current;
         return {
-            argv: [shell, "-c", applyScript(paths), "sh"].concat(words),
+            argv: start.argv.concat(words),
             expected: {
                 mode: "apply",
                 before: { rule: rule.current, conf: conf.current },
@@ -361,15 +153,27 @@ Singleton {
         };
     }
 
-    // The common checks of install and remove → { refusal code | "", rule: { text, current,
-    // state }, conf: { text, current, state } }
-    function _read(shell, request, paths, live) {
-        const failed = code => ({ refusal: code });
+    // The run's first words: the shell, the script (`scripts`: the texts of scriptFiles as
+    // read), its base (the folder the places are under) → { argv, refusal: null } or a refusal
+    function _start(shell, paths, live, scripts) {
         if (typeof shell !== "string" || !shell.startsWith("/"))
-            return failed("arguments");
+            return _refused("arguments");
         const pathProblem = pathsRefusal(paths, live);
         if (pathProblem !== "")
-            return failed(pathProblem);
+            return _refused(pathProblem);
+        const script = RootScriptRules.script(scripts);
+        if (script === "")
+            return _refused("script");
+        return { argv: [shell, "-c", script, "sh", RootScriptRules.base(paths, _placeNames, livePaths)], refusal: null };
+    }
+
+    // The common checks of install and remove → { refusal code | "", start (_start's),
+    // rule: { text, current, state }, conf: { text, current, state } }
+    function _read(shell, request, paths, live, scripts) {
+        const failed = code => ({ refusal: code });
+        const start = _start(shell, paths, live, scripts);
+        if (start.refusal !== null)
+            return failed(start.refusal.code);
         const facts = Object.assign({}, request?.facts ?? {}, { system: "arch" });
         if (RememberRules.ruleText(facts) === "" || !scriptPath(facts.timeout) || !scriptPath(facts.program))
             return failed("facts");
@@ -380,7 +184,7 @@ Singleton {
         if (state.rule === "unknown" || state.conf === "unknown")
             return failed("unread");
         return {
-            refusal: "", facts, confs,
+            refusal: "", start, facts, confs,
             rule: { text: ruleText, current: _currentOf(ruleText), state: state.rule },
             conf: { text: confText, current: _currentOf(confText), state: state.conf }
         };
@@ -423,10 +227,10 @@ Singleton {
     // the question showed) }. The rule is written unless it is
     // already the one these facts make; the conf is written when the setting needs one,
     // removed when it is the shell's and not needed, and left alone when not the shell's
-    // unless `replace.conf`. → { argv ([shell, "-c", script, "sh", words…]), expected (for
-    // reply), refusal (null or { code, text }) }
-    function installArgv(shell, request, paths, live) {
-        const read = _read(shell, request, paths, live);
+    // unless `replace.conf`. `scripts`: the texts of scriptFiles as read. → { argv ([shell,
+    // "-c", script, "sh", base, words…]), expected (for reply), refusal (null or { code, text }) }
+    function installArgv(shell, request, paths, live, scripts) {
+        const read = _read(shell, request, paths, live, scripts);
         if (read.refusal !== "")
             return _refused(read.refusal);
         const minutes = request?.minutes;
@@ -447,14 +251,14 @@ Singleton {
         }
         if (rule.op === "keep" && conf.op === "keep")
             return _refused(read.conf.state === "changed" && !replace.conf ? "changed" : "unchanged");
-        return _plan(shell, paths, live, rule, conf);
+        return _plan(read.start, rule, conf);
     }
 
     // The root step for Remove: `request` as installArgv's without minutes. The rule file goes
     // (one not written by the shell only with `replace.rule`), and the conf when it is the
     // shell's; a conf not written by the shell stays. → as installArgv
-    function removeArgv(shell, request, paths, live) {
-        const read = _read(shell, request, paths, live);
+    function removeArgv(shell, request, paths, live, scripts) {
+        const read = _read(shell, request, paths, live, scripts);
         if (read.refusal !== "")
             return _refused(read.refusal);
         if (read.rule.state === "changed" && !replacing(request?.replace).rule)
@@ -463,26 +267,24 @@ Singleton {
         const conf = { op: read.conf.state === "ours" ? "remove" : "keep", current: read.conf.current, text: "" };
         if (rule.op === "keep" && conf.op === "keep")
             return _refused("unchanged");
-        return _plan(shell, paths, live, rule, conf);
+        return _plan(read.start, rule, conf);
     }
 
     // The root step for Undo: `request` { stamp (the backup the run's reply gave), rule, conf
     // (what that run left: its reply's sha256 of each, or "absent") }. The root step puts the
     // backups of that stamp back only while both files are what that run recorded it left.
     // → as installArgv
-    function undoArgv(shell, request, paths, live) {
-        if (typeof shell !== "string" || !shell.startsWith("/"))
-            return _refused("arguments");
-        const pathProblem = pathsRefusal(paths, live);
-        if (pathProblem !== "")
-            return _refused(pathProblem);
+    function undoArgv(shell, request, paths, live, scripts) {
+        const start = _start(shell, paths, live, scripts);
+        if (start.refusal !== null)
+            return start;
         if (!validStamp(request?.stamp))
             return _refused("backupName");
         const current = value => value === "absent" || PamApplyRules.isHash(value);
         if (!current(request?.rule) || !current(request?.conf))
             return _refused("unread");
         return {
-            argv: [shell, "-c", applyScript(paths), "sh", "undo", request.stamp, request.rule, request.conf],
+            argv: start.argv.concat(["undo", request.stamp, request.rule, request.conf]),
             expected: { mode: "undo", before: { rule: request.rule, conf: request.conf }, after: null },
             refusal: null
         };

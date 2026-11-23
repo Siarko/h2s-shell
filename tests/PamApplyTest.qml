@@ -4,26 +4,33 @@ import Quickshell.Io
 import qs.singletons
 import qs.singletons.io
 
-// Apply and Undo (singletons/io/PamApply.qml), the root step run for real — the fixed script
-// PamApplyRules.applyScript — but through a stand-in for the shell's runs as administrator:
-// the suite's `start` runs the words as the user, on scratch folders standing for the PAM
-// folder, the vendor folder and the backups. Never pkexec, never /etc: the PamApply's
+// Apply and Undo (singletons/io/PamApply.qml), the root step run for real —
+// scripts/root/replace-lib.sh and pam-apply.sh, the text handed over exactly the two files
+// joined — but through a stand-in for the shell's runs as administrator: the suite's `start`
+// runs the words as the user, under a scratch base holding the PAM folder, the vendor folder
+// and the backups. Never pkexec, never /etc: the PamApply's
 // `start` and `paths` are the suite's before anything runs, and the system's runner is
 // refused scratch places. Covered: sudo written (its backup, modes, no temp file left),
 // refused when an included file or the file itself changed since, for a link, for bytes
 // that are not the candidate's, for arguments that are not a service, a name or a backup;
 // Undo; polkit written where there was none, its Undo (a backup of no file), removed back
 // to the vendor file, refused when the vendor file changed; a prompt dismissed; one run at
-// a time. Asynchronous.
+// a time; a script that cannot be read refused before any run; the script's own place checks
+// (as root only the system's places; as the user a plain folder outside /etc, /usr, /var).
+// Asynchronous.
 TestCase {
     id: suite
     suiteName: "PamApply"
     asynchronous: true
 
     readonly property string _scratch: (Quickshell.env("XDG_RUNTIME_DIR") || "/tmp") + "/h2s-pam-apply-test-" + Date.now()
-    // The folders must be their owner's: the user's here (the script's owner seam)
+    // The folders must be their owner's: the one running (the user here; a stand-in `id` says
+    // another)
     property int _owner: -1
-    readonly property var _paths: ({ system: _scratch + "/pam.d", vendor: _scratch + "/vendor", backups: _scratch + "/lib/pam-backup", owner: _owner })
+    // The script's places under the scratch base
+    readonly property var _paths: ({ system: _scratch + "/etc/pam.d", vendor: _scratch + "/usr/lib/pam.d", backups: _scratch + "/var/lib/h2s-shell/pam-backup" })
+    // replace-lib.sh and pam-apply.sh joined, as the suite reads the files itself
+    property string _script: ""
 
     readonly property string _systemAuth: "auth required pam_faillock.so preauth\nauth [success=1 default=bad] pam_unix.so try_first_pass\n"
         + "auth [default=die] pam_faillock.so authfail\nauth optional pam_permit.so\naccount required pam_unix.so\n"
@@ -148,10 +155,10 @@ TestCase {
     // Reads the scratch folders: each file's text (or "(none)"), the listings and modes
     function _look() {
         _read = null;
-        const script = "cd \"$1\"; for f in pam.d/sudo pam.d/polkit-1; do printf '%s\\n' \"== $f\"; if [ -e \"$f\" ] || [ -L \"$f\" ]; then cat \"$f\"; else printf '(none)'; fi; printf '\\n'; done; "
-            + "printf '== modes\\n'; stat -c '%a' pam.d/sudo lib/pam-backup 2> /dev/null; "
-            + "printf '== pam.d\\n'; ls -A pam.d; printf '== backups\\n'; ls -A lib/pam-backup 2> /dev/null; "
-            + "printf '== backup modes\\n'; for f in lib/pam-backup/*; do [ -e \"$f\" ] && stat -c '%a' \"$f\"; done; true";
+        const script = "cd \"$1\"; for f in etc/pam.d/sudo etc/pam.d/polkit-1; do printf '%s\\n' \"== $f\"; if [ -e \"$f\" ] || [ -L \"$f\" ]; then cat \"$f\"; else printf '(none)'; fi; printf '\\n'; done; "
+            + "printf '== modes\\n'; stat -c '%a' etc/pam.d/sudo var/lib/h2s-shell/pam-backup 2> /dev/null; "
+            + "printf '== pam.d\\n'; ls -A etc/pam.d; printf '== backups\\n'; ls -A var/lib/h2s-shell/pam-backup 2> /dev/null; "
+            + "printf '== backup modes\\n'; for f in var/lib/h2s-shell/pam-backup/*; do [ -e \"$f\" ] && stat -c '%a' \"$f\"; done; true";
         _exec(["sh", "-c", script, "sh", _scratch], (code, stdout) => {
             const sections = {};
             let name = "";
@@ -169,7 +176,7 @@ TestCase {
                 return text === "(none)" ? null : text;
             };
             suite._read = {
-                sudo: file("pam.d/sudo"), polkit: file("pam.d/polkit-1"),
+                sudo: file("etc/pam.d/sudo"), polkit: file("etc/pam.d/polkit-1"),
                 modes: sections["modes"].filter(line => line !== ""),
                 listing: sections["pam.d"].filter(line => line !== ""),
                 backups: sections["backups"].filter(line => line !== "" && line !== ".lock"),
@@ -192,18 +199,27 @@ TestCase {
     property var _direct: null
     property bool _holder: false
 
-    // The script run directly with the given words (its argument checks)
-    function _runDirect(words, paths) {
+    // The script run directly as the user with the given words after its base (_scratch unless
+    // given); `id`: what a stand-in `id` says (none: the system's)
+    function _runDirect(words, id, base) {
         _direct = null;
-        _exec(["sh", "-c", PamApplyRules.applyScript(paths ?? _paths), "sh"].concat(words), (code, stdout, stderr) => suite._direct = { code: code, stdout: stdout, stderr: stderr.trim() });
+        const wrapper = "d=$1; n=$2; t=$3; shift 3; "
+            + "if [ -n \"$n\" ]; then mkdir -p \"$d/id-$n\" && printf '#!/bin/sh\\necho %s\\n' \"$n\" > \"$d/id-$n/id\" && chmod +x \"$d/id-$n/id\" && PATH=\"$d/id-$n:$PATH\"; fi; "
+            + "exec sh -c \"$t\" sh \"$@\"";
+        _exec(["sh", "-c", wrapper, "sh", _scratch, id === undefined || id === null ? "" : String(id), _script, base ?? _scratch].concat(words),
+              (code, stdout, stderr) => suite._direct = { code: code, stdout: stdout, stderr: stderr.trim() });
     }
 
     function runAsync() {
         const edit = PamEditRules;
         const fixed = PamRuleRules.fixedRow();
         _sudoBuilt = edit.build(_sudo, [_row("r1"), fixed], _facts("sudo"));
-        _then("the scratch folders are there, the shell's timeout looked up", () => _ready && CommandTools.known, () => {
+        _then("the scratch folders are there, the script read, the shell's timeout looked up", () => _ready && _script !== "" && CommandTools.known, () => {
             assert(_sudoBuilt.ok, "the sudo fixture builds");
+            const unread = _applyComponent.createObject(suite, { start: suite._start, paths: _paths, scriptsDirectory: _scratch + "/none" });
+            assertEqual(JSON.stringify(unread.apply({ service: "sudo", built: _sudoBuilt, currentText: _sudo, trial: _passed("sudo", _sudoBuilt.text, _answers()) })),
+                        JSON.stringify({ started: false, refusal: PamApplyRules.refusal("script") }), "the script's files not there: refused, with its reason");
+            unread.destroy();
             // The system's runner never gets scratch places, a stand-in never the system's
             const system = _applyComponent.createObject(suite, { paths: _paths });
             const request = { service: "sudo", built: _sudoBuilt, currentText: _sudo, trial: _passed("sudo", _sudoBuilt.text, _answers()) };
@@ -222,6 +238,8 @@ TestCase {
             assertEqual(JSON.stringify(started), JSON.stringify({ started: true, refusal: null }), "sudo's new rules: started");
             assertEqual(_runs[0].what, "Change the sign-in rules for sudo", "… the run's purpose");
             assertEqual(_runs[0].argv[0], "/bin/sh", "… the system's shell");
+            assertEqual(_runs[0].argv[2], _script, "… the script: replace-lib.sh and pam-apply.sh joined, exactly as the files have them");
+            assertEqual(_runs[0].argv[4], _scratch, "… the base its first argument");
         });
         _then("sudo written", () => _outcome !== null, () => {
             assertEqual(_outcome.ok + " " + _outcome.kind + " " + _outcome.sha256, "true written " + edit.sha256(_sudoBuilt.text), "written, its hash in force");
@@ -425,7 +443,7 @@ TestCase {
                         "stdout lost: done, said on stderr");
             assert(PamApplyRules.validBackup("sudo", _outcome.backup), "… with its backup");
             _answer = "run";
-            _runDirect(["undo", "sudo", "sudo.20261123T101500Z", "absent"], Object.assign({}, _paths, { owner: _owner + 1 }));
+            _runDirect(["undo", "sudo", "sudo.20261123T101500Z", "absent"], _owner + 1);
         });
         _then("folders of another owner", () => _direct !== null, () => {
             assertEqual(_direct.stderr, "refused owner", "folders that are not the owner's: refused");
@@ -435,12 +453,12 @@ TestCase {
         _then("a PAM folder others may write in", () => _direct !== null, () => {
             assertEqual(_direct.stderr, "refused owner", "a PAM folder the group may write in: refused");
             _direct = null;
-            _exec(["sh", "-c", "chmod g-w -- \"$1\" && chmod o+w -- \"$2\"", "sh", _paths.system, _scratch + "/lib"], () => suite._runDirect(["undo", "sudo", "sudo.20261123T101500Z", "absent"]));
+            _exec(["sh", "-c", "chmod g-w -- \"$1\" && chmod o+w -- \"$2\"", "sh", _paths.system, _scratch + "/var/lib/h2s-shell"], () => suite._runDirect(["undo", "sudo", "sudo.20261123T101500Z", "absent"]));
         });
         _then("a backups' parent anyone may write in", () => _direct !== null, () => {
             assertEqual(_direct.stderr, "refused owner", "the backups' folder's parent writable by anyone: refused");
             _direct = null;
-            _exec(["chmod", "o-w", "--", _scratch + "/lib"], () => suite._runDirect(["undo", "sudo", "sudo.20261123T101500Z", "absent"]));
+            _exec(["chmod", "o-w", "--", _scratch + "/var/lib/h2s-shell"], () => suite._runDirect(["undo", "sudo", "sudo.20261123T101500Z", "absent"]));
         });
         _then("the folders back", () => _direct !== null, () => {
             assertEqual(_direct.stderr, "refused nobackup", "the folders as they were: past the owner check");
@@ -463,6 +481,36 @@ TestCase {
         });
         _then("the lock free", () => _direct !== null, () => {
             assertEqual(_direct.stderr, "refused nobackup", "the lock free again: past it");
+            // The places: as root (a stand-in `id` saying 0) only the system's
+            _runDirect(["undo", "sudo", "sudo.20261123T101500Z", "absent"], 0);
+        });
+        _then("a scratch base as root", () => _direct !== null, () => {
+            assertEqual(_direct.code + " " + _direct.stderr, "3 refused paths", "as root, places under a scratch folder: refused");
+            _runDirect(["undo", "sudo", "sudo.20261123T101500Z", "absent"], null, "");
+        });
+        _then("the system's places as the user", () => _direct !== null, () => {
+            assertEqual(_direct.stderr, "refused paths", "as the user, the system's places: refused");
+            _runDirect(["undo", "sudo", "sudo.20261123T101500Z", "absent"], null, "/var/tmp/x");
+        });
+        _then("a base under /var", () => _direct !== null, () => {
+            assertEqual(_direct.stderr, "refused paths", "as the user, a base under /var: refused");
+            _runDirect(["undo", "sudo", "sudo.20261123T101500Z", "absent"], null, _scratch + "/../x");
+        });
+        _then("a base with ..", () => _direct !== null, () => {
+            assertEqual(_direct.stderr, "refused paths", "a base with a .. part: refused");
+            _runDirect(["undo", "sudo", "sudo.20261123T101500Z", "absent"], null, "relative");
+        });
+        _then("a relative base", () => _direct !== null, () => {
+            assertEqual(_direct.stderr, "refused paths", "a relative base: refused");
+            _runDirect([], null, null);
+        });
+        _then("no arguments", () => _direct !== null, () => {
+            assertEqual(_direct.stderr, "refused arguments", "a base and nothing more: refused");
+            _direct = null;
+            _exec(["sh", "-c", _script, "sh"], (code, stdout, stderr) => suite._direct = { code: code, stdout: stdout, stderr: stderr.trim() });
+        });
+        _then("not even a base", () => _direct !== null, () => {
+            assertEqual(_direct.code + " " + _direct.stderr, "3 refused arguments", "no base: refused");
         });
         _clock.start();
         _exec(["id", "-u"], (code, stdout) => {
@@ -472,8 +520,10 @@ TestCase {
     }
 
     function _makeFolders() {
-        _exec(["sh", "-c", "set -e; umask 022; mkdir -p \"$1/pam.d\" \"$1/vendor\"; printf '%s' \"$2\" > \"$1/pam.d/sudo\"; printf '%s' \"$3\" > \"$1/pam.d/system-auth\"; "
-               + "printf '%s' \"$4\" > \"$1/vendor/polkit-1\"", "sh", _scratch, _sudo, _systemAuth, _vendorPolkit], code => {
+        _exec(["cat", "--", Quickshell.shellDir + "/scripts/root/replace-lib.sh", Quickshell.shellDir + "/scripts/root/pam-apply.sh"],
+              (code, stdout) => suite._script = code === 0 ? stdout : "");
+        _exec(["sh", "-c", "set -e; umask 022; mkdir -p \"$1/etc/pam.d\" \"$1/usr/lib/pam.d\"; printf '%s' \"$2\" > \"$1/etc/pam.d/sudo\"; printf '%s' \"$3\" > \"$1/etc/pam.d/system-auth\"; "
+               + "printf '%s' \"$4\" > \"$1/usr/lib/pam.d/polkit-1\"", "sh", _scratch, _sudo, _systemAuth, _vendorPolkit], code => {
             suite.assertEqual(code, 0, "the scratch folders made");
             suite._ready = true;
         });

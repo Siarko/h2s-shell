@@ -6,13 +6,14 @@ import QtQuick
 // Writing a PAM file on Arch, and undoing it (tests/PamApplyRulesTest.qml): the one root
 // step that follows a passed trial (PamTrialRules), and its reply. One service per run.
 //
-// The root step is `applyScript`, a fixed script in the shell's code run by the system's
-// /bin/sh through the shell's runs as administrator (PrivilegedRuns.startShell): nothing is
-// loaded from a file, every run asks the password. Its places (the PAM folder, the vendor
-// folder, the backups) are written into the script text, never handed as arguments; its
-// arguments are checked inside it — the service from a fixed list, hashes as 64 hex digits,
-// included files as names (no path), a backup by its exact pattern. It refuses before
-// changing anything when:
+// The root step is scripts/root/pam-apply.sh after replace-lib.sh (`scriptFiles`), files in
+// the shell's tree that the shell reads and hands as text to the system's /bin/sh through its
+// runs as administrator (PrivilegedRuns.startShell): never run by path, every run asks the
+// password. Its places (the PAM folder, the vendor folder, the backups) are fixed in the file,
+// under the folder its first argument names — "" for the system, the only one it takes as
+// root —; its other arguments are checked inside it — the service from a fixed list, hashes
+// as 64 hex digits, included files as names (no path), a backup by its exact pattern. It
+// refuses before changing anything when:
 // - the bytes it would write are not the ones the trial passed (sha256 of the written temp
 //   file against the candidate's, before the rename);
 // - the service's file changed since the shell read it (its sha256, or that there was none);
@@ -38,10 +39,11 @@ Singleton {
     readonly property var livePaths: ({
         system: "/etc/pam.d",
         vendor: "/usr/lib/pam.d",
-        backups: "/var/lib/h2s-shell/pam-backup",
-        // Who must own the folders written in (root; a suite's stand-in: the user)
-        owner: 0
+        backups: "/var/lib/h2s-shell/pam-backup"
     })
+
+    // The root step's files in scripts/root/, joined in this order (RootScriptRules.script)
+    readonly property var scriptFiles: ["replace-lib.sh", "pam-apply.sh"]
 
     // Why a run was not started, or what the root step refused, by code
     readonly property var texts: ({
@@ -56,6 +58,7 @@ Singleton {
         backupName: "Not a backup of this service.",
         paths: "Not a place the shell writes PAM files to.",
         busy: "A change is already being saved.",
+        script: "The shell's script for this could not be read.",
         // By the root step
         arguments: "The request was not valid.",
         system: "The PAM folder is not there.",
@@ -103,132 +106,24 @@ Singleton {
     // Whether the places may be written: "" when they may, else a refusal code. `live`: the
     // run goes to the system's pkexec, so only livePaths; a stand-in's run never touches
     // /etc, /usr or /var.
+    readonly property var _placeNames: ["system", "vendor", "backups"]
+
     function pathsRefusal(paths, live) {
-        return RootScriptRules.placesRefusal(paths, ["system", "vendor", "backups"], livePaths, live);
+        return RootScriptRules.placesRefusal(paths, _placeNames, livePaths, live);
     }
 
-    // The root step's script for these places ("" for places that are not plain absolute
-    // paths). Its arguments ($0 is "sh"):
-    //   write  <service> <candidate sha256> <current sha256 | absent> <text> [<name> <sha256>]…
-    //   remove polkit-1  <vendor sha256>    <current sha256>          [<name> <sha256>]…
-    //   undo   <service> <backup name>      <current sha256 | absent>
-    // Its last line on success, on stdout and stderr: `written|removed|restored <service>
-    // <sha256 in force | absent> <backup made>`; a refusal: `refused <code>` on stderr, exit 3.
-    function applyScript(paths) {
-        if (pathsRefusal(paths, false) !== "" && pathsRefusal(paths, true) !== "")
-            return "";
-        return RootScriptRules.header
-            + "system=" + RootScriptRules.quoted(paths.system) + "; vendor=" + RootScriptRules.quoted(paths.vendor)
-            + "; backups=" + RootScriptRules.quoted(paths.backups) + "; owner=" + paths.owner + "\n"
-            + "pam_temporary=; backup_temporary=\n"
-            + "trap 'for leftover in \"$pam_temporary\" \"$backup_temporary\"; do [ -z \"$leftover\" ] || rm -f -- \"$leftover\"; done' EXIT\n"
-            + RootScriptRules.functions
-            + "is_name() { case \"$1\" in ''|[!A-Za-z0-9_]*|*[!A-Za-z0-9._@+-]*) return 1;; esac; [ ${#1} -le 255 ]; }\n"
-            // Each included name where libpam finds it, as the trial read it
-            + "check_includes() {\n"
-            + "  while [ $# -gt 0 ]; do\n"
-            + "    [ $# -ge 2 ] || refuse arguments\n"
-            + "    is_name \"$1\" && is_hash \"$2\" || refuse arguments\n"
-            + "    if [ -e \"$system/$1\" ] || [ -L \"$system/$1\" ]; then file=\"$system/$1\"\n"
-            + "    elif [ -e \"$vendor/$1\" ] || [ -L \"$vendor/$1\" ]; then file=\"$vendor/$1\"\n"
-            + "    else refuse included; fi\n"
-            + "    [ -f \"$file\" ] || refuse included\n"
-            + "    got=$(hash_of \"$file\") || refuse included\n"
-            + "    [ \"$got\" = \"$2\" ] || refuse included\n"
-            + "    shift 2\n"
-            + "  done\n"
-            + "}\n"
-            // The current file (checked) into the backups; a name never taken twice (ln
-            // fails on a name that is there)
-            + "make_backup() {\n"
-            + "  stamp=$(date -u +%Y%m%dT%H%M%SZ)\n"
-            + "  suffix=\n"
-            + "  if [ \"$1\" = absent ]; then suffix=.absent; fi\n"
-            + "  backup_temporary=$(mktemp -- \"$backups/.new.XXXXXX\") || refuse backup\n"
-            + "  if [ \"$1\" != absent ]; then cat -- \"$target\" > \"$backup_temporary\" || refuse backup; fi\n"
-            + "  chmod 0600 -- \"$backup_temporary\" || refuse backup\n"
-            + "  sync -- \"$backup_temporary\" || refuse backup\n"
-            + "  count=0; extra=\n"
-            + "  while :; do\n"
-            + "    backup_name=\"$service.$stamp$extra$suffix\"\n"
-            + "    if ln -- \"$backup_temporary\" \"$backups/$backup_name\" 2> /dev/null; then break; fi\n"
-            + "    count=$((count + 1)); [ \"$count\" -le 9 ] || refuse backup\n"
-            + "    extra=\"-$count\"\n"
-            + "  done\n"
-            + "  rm -f -- \"$backup_temporary\"; backup_temporary=\n"
-            + "  sync -- \"$backups\" || refuse backup\n"
-            + "}\n"
-            // A new file beside the target, checked, renamed into place (never half a file;
-            // a rename replaces a link, never follows it)
-            + "new_file() { pam_temporary=$(mktemp -- \"$system/.h2s-shell.XXXXXX\") || refuse write; }\n"
-            + "seal() {\n"
-            + "  chmod 0644 -- \"$pam_temporary\" || refuse write\n"
-            + "  got=$(hash_of \"$pam_temporary\") || refuse write\n"
-            + "  if [ -n \"$1\" ] && [ \"$got\" != \"$1\" ]; then refuse hash; fi\n"
-            + "  sync -- \"$pam_temporary\" || refuse write\n"
-            + "}\n"
-            + "settle() { sync -- \"$system\" 2> /dev/null || :; }\n"
-            + "put_in_place() { mv -fT -- \"$pam_temporary\" \"$target\" || refuse write; pam_temporary=; settle; }\n"
-            + "[ $# -ge 2 ] || refuse arguments\n"
-            + "mode=$1; service=$2; shift 2\n"
-            + "case \"$service\" in sudo|polkit-1) ;; *) refuse arguments;; esac\n"
-            + "if [ -L \"$system\" ] || [ ! -d \"$system\" ]; then refuse system; fi\n"
-            + "safe_dir \"$system\"\n"
-            + "target=$system/$service\n"
-            + "prepare_backups\n"
-            + RootScriptRules.lock
-            + "case \"$mode\" in\n"
-            + "write)\n"
-            + "  [ $# -ge 3 ] || refuse arguments\n"
-            + "  want=$1; current=$2; text=$3; shift 3\n"
-            + "  is_hash \"$want\" || refuse arguments\n"
-            + "  [ \"$current\" = absent ] || is_hash \"$current\" || refuse arguments\n"
-            + "  check_current \"$target\" \"$current\"\n"
-            + "  check_includes \"$@\"\n"
-            + "  new_file\n"
-            + "  printf '%s' \"$text\" > \"$pam_temporary\" || refuse write\n"
-            + "  seal \"$want\"\n"
-            + "  make_backup \"$current\"\n"
-            + "  put_in_place\n"
-            + "  say \"written $service $got $backup_name\";;\n"
-            + "remove)\n"
-            + "  [ \"$service\" = polkit-1 ] && [ $# -ge 2 ] || refuse arguments\n"
-            + "  want=$1; current=$2; shift 2\n"
-            + "  is_hash \"$want\" && is_hash \"$current\" || refuse arguments\n"
-            + "  source=$vendor/$service\n"
-            + "  if [ -L \"$source\" ] || [ ! -f \"$source\" ]; then refuse vendor; fi\n"
-            + "  got=$(hash_of \"$source\") || refuse vendor\n"
-            + "  [ \"$got\" = \"$want\" ] || refuse vendor\n"
-            + "  check_current \"$target\" \"$current\"\n"
-            + "  check_includes \"$@\"\n"
-            + "  make_backup \"$current\"\n"
-            + "  rm -f -- \"$target\"; settle\n"
-            + "  say \"removed $service $want $backup_name\";;\n"
-            + "undo)\n"
-            + "  [ $# -eq 2 ] || refuse arguments\n"
-            + "  name=$1; current=$2\n"
-            + "  stamp_pattern='[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]T[0-9][0-9][0-9][0-9][0-9][0-9]Z'\n"
-            + "  case \"$name\" in \"$service\".*) ;; *) refuse arguments;; esac\n"
-            + "  case \"${name#\"$service\".}\" in $stamp_pattern|$stamp_pattern-[1-9]|$stamp_pattern.absent|$stamp_pattern-[1-9].absent) ;; *) refuse arguments;; esac\n"
-            + "  [ \"$current\" = absent ] || is_hash \"$current\" || refuse arguments\n"
-            + "  source=$backups/$name\n"
-            + "  if [ -L \"$source\" ] || [ ! -f \"$source\" ]; then refuse nobackup; fi\n"
-            + "  check_current \"$target\" \"$current\"\n"
-            + "  case \"$name\" in\n"
-            + "  *.absent)\n"
-            + "    make_backup \"$current\"\n"
-            + "    rm -f -- \"$target\"; settle\n"
-            + "    say \"restored $service absent $backup_name\";;\n"
-            + "  *)\n"
-            + "    new_file\n"
-            + "    cat -- \"$source\" > \"$pam_temporary\" || refuse write\n"
-            + "    seal ''\n"
-            + "    make_backup \"$current\"\n"
-            + "    put_in_place\n"
-            + "    say \"restored $service $got $backup_name\";;\n"
-            + "  esac;;\n"
-            + "*) refuse arguments;;\n"
-            + "esac\n";
+    // The run's first words: the shell, the script, its base (the folder the places are
+    // under) → { argv, refusal: null } or a refusal
+    function _start(shell, paths, live, scripts) {
+        if (typeof shell !== "string" || !shell.startsWith("/"))
+            return _refused("arguments");
+        const pathProblem = pathsRefusal(paths, live);
+        if (pathProblem !== "")
+            return _refused(pathProblem);
+        const script = RootScriptRules.script(scripts);
+        if (script === "")
+            return _refused("script");
+        return { argv: [shell, "-c", script, "sh", RootScriptRules.base(paths, _placeNames, livePaths)], refusal: null };
     }
 
     // What the trial must have passed for a build (PamEditRules.build's answer): its text,
@@ -254,14 +149,13 @@ Singleton {
     // none), vendorText (polkit's vendor file), trial (PamTrialRules' state) }. The trial
     // must have passed for this exact candidate, or — one trial for a shared list — for the
     // other service's candidate whose auth lines are the same (PamTrialRules.sameAuthLines,
-    // the files this one includes all among those the trial read). → { argv ([shell, "-c",
-    // script, "sh", words…]), expected (for applyReply), refusal (null or { code, text }) }
-    function applyArgv(shell, request, paths, live) {
-        if (typeof shell !== "string" || !shell.startsWith("/"))
-            return _refused("arguments");
-        const pathProblem = pathsRefusal(paths, live);
-        if (pathProblem !== "")
-            return _refused(pathProblem);
+    // the files this one includes all among those the trial read). `scripts`: the texts of
+    // scriptFiles as read. → { argv ([shell, "-c", script, "sh", base, words…]), expected (for
+    // applyReply), refusal (null or { code, text }) }
+    function applyArgv(shell, request, paths, live, scripts) {
+        const start = _start(shell, paths, live, scripts);
+        if (start.refusal !== null)
+            return start;
         const service = String(request?.service ?? "");
         if (!PamRuleRules.services.includes(service))
             return _refused("service");
@@ -308,7 +202,7 @@ Singleton {
         const words = chosen.remove ? ["remove", service, want, current].concat(includes)
             : ["write", service, want, current, chosen.text].concat(includes);
         return {
-            argv: [shell, "-c", applyScript(paths), "sh"].concat(words),
+            argv: start.argv.concat(words),
             expected: { mode: chosen.remove ? "remove" : "write", service, sha256: want, before: current, after: chosen.remove ? "absent" : want },
             refusal: null
         };
@@ -317,12 +211,10 @@ Singleton {
     // The root step for Undo: `request` { service, backup (the name the apply's reply gave),
     // currentSha256 (what that apply left in force: its reply's sha256, "absent" after a
     // removal) }. No trial: the backup is the state that was in force. → as applyArgv
-    function undoArgv(shell, request, paths, live) {
-        if (typeof shell !== "string" || !shell.startsWith("/"))
-            return _refused("arguments");
-        const pathProblem = pathsRefusal(paths, live);
-        if (pathProblem !== "")
-            return _refused(pathProblem);
+    function undoArgv(shell, request, paths, live, scripts) {
+        const start = _start(shell, paths, live, scripts);
+        if (start.refusal !== null)
+            return start;
         const service = String(request?.service ?? "");
         if (!PamRuleRules.services.includes(service))
             return _refused("service");
@@ -332,7 +224,7 @@ Singleton {
         if (current !== "absent" && !isHash(current))
             return _refused("unread");
         return {
-            argv: [shell, "-c", applyScript(paths), "sh", "undo", service, request.backup, current],
+            argv: start.argv.concat(["undo", service, request.backup, current]),
             expected: { mode: "undo", service, sha256: "", before: current, after: "" },
             refusal: null
         };

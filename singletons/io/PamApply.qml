@@ -2,9 +2,9 @@ import QtQuick
 import Quickshell
 import qs.singletons
 
-// Apply and Undo of the PAM rules on Arch: one run as administrator per service, the fixed
-// script PamApplyRules.applyScript run by the system's /bin/sh — nothing is loaded from a
-// file. Apply follows a passed trial (the user's click on Apply started both); Undo is a
+// Apply and Undo of the PAM rules on Arch: one run as administrator per service, the root
+// step's files (PamApplyRules.scriptFiles, in scripts/root/) read from the shell's tree at the
+// click and their text run by the system's /bin/sh — never run by path. Apply follows a passed trial (the user's click on Apply started both); Undo is a
 // click of its own. What may run and what the answer means are PamApplyRules'; this only
 // queues the run, reads the service's file again (as the user, scripts/pam-files.sh) when the
 // run did not say it was done — a run cut short may still have changed it — and hands the
@@ -13,7 +13,8 @@ import qs.singletons
 // `start` is what queues the run: null for the shell's runs as administrator
 // (PrivilegedRuns.startShell, which says who asks and what for), and then only the system's
 // places (PamApplyRules.livePaths); a suite's stand-in (which runs the same words as the
-// user) only with places outside /etc, /usr and /var (PamApplyRules.pathsRefusal).
+// user) only with places under a scratch folder outside /etc, /usr and /var
+// (PamApplyRules.pathsRefusal).
 QtObject {
     id: root
 
@@ -26,6 +27,8 @@ QtObject {
     property var paths: PamApplyRules.livePaths
     property string shell: "/bin/sh"
     property var filesCommand: [Quickshell.shellDir + "/scripts/pam-files.sh"]
+    // Where the root step's files are (scripts/root/ of the shell's tree), read at each run
+    property string scriptsDirectory: Quickshell.shellDir + "/" + RootScriptRules.directory
     readonly property bool busy: _busy
 
     property bool _busy: false
@@ -33,12 +36,12 @@ QtObject {
     // Apply one service's new rules. `request`: PamApplyRules.applyArgv's (service, built,
     // currentText, vendorText, trial). → { started, refusal (null or { code, text }) }
     function apply(request) {
-        return _run(PamApplyRules.applyArgv(shell, request, paths, start === null), PamApplyRules.what("apply", String(request?.service ?? "")));
+        return _run(PamApplyRules.applyArgv(shell, request, paths, start === null, _scripts.read()), PamApplyRules.what("apply", String(request?.service ?? "")));
     }
 
     // Put a backup back. `request`: PamApplyRules.undoArgv's (service, backup, currentSha256)
     function undo(request) {
-        return _run(PamApplyRules.undoArgv(shell, request, paths, start === null), PamApplyRules.what("undo", String(request?.service ?? "")));
+        return _run(PamApplyRules.undoArgv(shell, request, paths, start === null, _scripts.read()), PamApplyRules.what("undo", String(request?.service ?? "")));
     }
 
     function _run(plan, what) {
@@ -82,4 +85,8 @@ QtObject {
     }
 
     property CommandRunner _runner: CommandRunner {}
+    property RootScriptFiles _scripts: RootScriptFiles {
+        names: PamApplyRules.scriptFiles
+        directory: root.scriptsDirectory
+    }
 }

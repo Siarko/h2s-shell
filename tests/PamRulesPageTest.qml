@@ -25,7 +25,7 @@ TestCase {
 
     readonly property string _scratch: (Quickshell.env("XDG_RUNTIME_DIR") || "/tmp") + "/h2s-pam-page-test-" + Date.now()
     property int _owner: -1
-    readonly property var _paths: ({ system: _scratch + "/pam.d", vendor: _scratch + "/vendor", backups: _scratch + "/lib/pam-backup", owner: _owner })
+    readonly property var _paths: ({ system: _scratch + "/etc/pam.d", vendor: _scratch + "/usr/lib/pam.d", backups: _scratch + "/var/lib/h2s-shell/pam-backup" })
 
     readonly property string _systemAuth: "auth required pam_faillock.so preauth\nauth [success=1 default=bad] pam_unix.so try_first_pass\n"
         + "auth [default=die] pam_faillock.so authfail\nauth optional pam_permit.so\naccount required pam_unix.so\n"
@@ -452,8 +452,8 @@ TestCase {
         let ready = false;
         _exec(["id", "-u"], (code, stdout) => {
             suite._owner = parseInt(stdout.trim(), 10);
-            suite._exec(["sh", "-c", "set -e; umask 022; mkdir -p \"$1/pam.d\" \"$1/vendor\"; printf '%s' \"$2\" > \"$1/pam.d/sudo\"; printf '%s' \"$3\" > \"$1/pam.d/system-auth\"; "
-                         + "printf '%s' \"$4\" > \"$1/vendor/polkit-1\"", "sh", suite._scratch, suite._sudo, suite._systemAuth, suite._vendorPolkit], () => ready = true);
+            suite._exec(["sh", "-c", "set -e; umask 022; mkdir -p \"$1/etc/pam.d\" \"$1/usr/lib/pam.d\"; printf '%s' \"$2\" > \"$1/etc/pam.d/sudo\"; printf '%s' \"$3\" > \"$1/etc/pam.d/system-auth\"; "
+                         + "printf '%s' \"$4\" > \"$1/usr/lib/pam.d/polkit-1\"", "sh", suite._scratch, suite._sudo, suite._systemAuth, suite._vendorPolkit], () => ready = true);
         });
         assert(_until(() => ready), "the scratch folders made");
         _applier = _applierComponent.createObject(suite, { start: suite._start, paths: suite._paths });

@@ -5,12 +5,14 @@ import qs.singletons
 import qs.singletons.io
 
 // The Hibernate section's Apply (singletons/io/HibernateDelayWriter.qml), its command run
-// for real — the fixed script HibernateRules.applyArgv gives — but through a stand-in for the
-// shell's runs as administrator: the suite's `start` runs the words as the user, into a
-// scratch directory, and answers as PrivilegedRuns would. Never pkexec, never /etc: the
-// writer's `start` and `directory` are the suite's before anything is applied. The drop-in
+// for real — scripts/root/hibernate-delay.sh, its text exactly as the file has it — but through
+// a stand-in for the shell's runs as administrator: the suite's `start` runs the words as the
+// user, under a scratch base, and answers as PrivilegedRuns would. Never pkexec, never /etc:
+// the writer's `start` and `base` are the suite's before anything is applied. The drop-in
 // written, written again, read back as sleep.conf's delay; a prompt dismissed; a failure; a
-// delay refused before any run; one write at a time. Asynchronous.
+// delay refused before any run; a script that cannot be read refused before any run; the
+// script's own refusals (as root only the system's place, a base that is no path); one write
+// at a time. Asynchronous.
 TestCase {
     id: suite
     suiteName: "HibernateDelayWriter"
@@ -27,6 +29,9 @@ TestCase {
     property string _file: ""
     property string _modes: ""
     property bool _ready: false
+    // hibernate-delay.sh as the file has it, read by the suite itself
+    property string _script: ""
+    property var _direct: null
 
     property Component _writerComponent: Component {
         HibernateDelayWriter {}
@@ -98,14 +103,21 @@ TestCase {
 
     function _readFile() {
         _file = "";
-        _sh("cat \"$1/systemd/sleep.conf.d/h2s-shell.conf\" 2> /dev/null || echo '(none)'", [_scratch], null, text => suite._file = text);
+        _sh("cat \"$1/etc/systemd/sleep.conf.d/h2s-shell.conf\" 2> /dev/null || echo '(none)'", [_scratch], null, text => suite._file = text);
     }
 
     function runAsync() {
-        _then("the scratch directory is there, the shell's timeout looked up", () => _ready && CommandTools.known, () => {
-            _writer = _writerComponent.createObject(suite, { directory: _scratch + "/systemd/sleep.conf.d", start: suite._start });
+        _then("the scratch directory is there, the script read, the shell's timeout looked up", () => _ready && _script !== "" && CommandTools.known, () => {
+            const unread = _writerComponent.createObject(suite, { base: _scratch, start: suite._start, scriptsDirectory: _scratch + "/none" });
+            assert(!unread.apply(10800), "the script not there: not started");
+            assertEqual(_runs.length, 0, "… nothing run");
+            unread.destroy();
+            _writer = _writerComponent.createObject(suite, { base: _scratch, start: suite._start });
             _writer.applied.connect((seconds, ok, quiet, error) => suite._applied = { seconds: seconds, ok: ok, quiet: quiet, error: error });
-            assertEqual(_writerComponent.createObject(suite).directory, "/etc/systemd/sleep.conf.d", "by default: the system's drop-in directory");
+            const fresh = _writerComponent.createObject(suite);
+            assertEqual(fresh.base, "", "by default: the system's drop-in folder (base \"\")");
+            assertEqual(fresh.scriptsDirectory, Quickshell.shellDir + "/scripts/root", "… the script from the shell's tree");
+            fresh.destroy();
             assert(!_writer.apply(59), "a delay under a minute: not started");
             assert(!_writer.apply(7200.5), "… nor one that is not whole seconds");
             assertEqual(_runs.length, 0, "… nothing run");
@@ -118,16 +130,16 @@ TestCase {
             assert(!_writer.busy, "… no longer busy");
             assertEqual(_runs.length, 1, "… one run");
             assertEqual(_runs[0].argv[0], "/bin/sh", "… the system's shell, the first word handed to the runs as administrator");
-            assertEqual(JSON.stringify(_runs[0].argv.slice(3)), JSON.stringify(["sh", "10800", _scratch + "/systemd/sleep.conf.d"]),
-                        "… the delay and the directory as arguments");
-            assertEqual(_runs[0].argv[2], HibernateRules.applyScript, "… the fixed script");
+            assertEqual(JSON.stringify(_runs[0].argv.slice(3)), JSON.stringify(["sh", _scratch, "10800"]),
+                        "… the base and the delay as arguments");
+            assertEqual(_runs[0].argv[2], _script, "… the script: hibernate-delay.sh's text exactly");
             assert(!_runs[0].argv.includes("pkexec"), "… no pkexec in the stand-in's words");
             _readFile();
         });
         _then("the drop-in read", () => _file !== "", () => {
             assertEqual(_file, HibernateRules.dropInText(10800), "the drop-in as the rules say");
             _modes = "";
-            _sh("stat -c %a \"$1/systemd\" \"$1/systemd/sleep.conf.d\" \"$1/systemd/sleep.conf.d/h2s-shell.conf\"", [_scratch], null, text => suite._modes = text.trim().split("\n").join(" "));
+            _sh("stat -c %a \"$1/etc/systemd\" \"$1/etc/systemd/sleep.conf.d\" \"$1/etc/systemd/sleep.conf.d/h2s-shell.conf\"", [_scratch], null, text => suite._modes = text.trim().split("\n").join(" "));
             assertEqual(JSON.stringify(HibernateRules.hibernateDelay(_file)), JSON.stringify({ state: "set", seconds: 10800, file: "" }),
                         "… read back as sleep.conf's delay");
         });
@@ -142,7 +154,7 @@ TestCase {
         });
         _then("the drop-in read again", () => _file !== "", () => {
             assertEqual(_file, HibernateRules.dropInText(7200), "… replaced whole");
-            _sh("ls -a \"$1/systemd/sleep.conf.d\"", [_scratch], null, text => suite._file = "ls:" + text.split("\n").filter(name => name !== "").join(" "));
+            _sh("ls -a \"$1/etc/systemd/sleep.conf.d\"", [_scratch], null, text => suite._file = "ls:" + text.split("\n").filter(name => name !== "").join(" "));
             _file = "";
         });
         _then("the directory listed", () => _file !== "", () => {
@@ -162,7 +174,7 @@ TestCase {
             _applied = null;
             _ready = false;
             // A plain file where the directory should be: the write fails
-            _sh("set -e; rm -rf \"$1/systemd/sleep.conf.d\"; touch \"$1/systemd/sleep.conf.d\"", [_scratch], () => {
+            _sh("set -e; rm -rf \"$1/etc/systemd/sleep.conf.d\"; touch \"$1/etc/systemd/sleep.conf.d\"", [_scratch], () => {
                 suite.assert(suite._writer.apply(1800), "30 min: started");
                 suite._ready = true;
             });
@@ -170,12 +182,40 @@ TestCase {
         _then("the failing write answered", () => _ready && _applied !== null, () => {
             assertEqual(_applied.ok + " " + _applied.quiet, "false false", "a write that fails: not written, and said");
             assert(_applied.error !== "", "… with the reason: " + _applied.error);
+            // The script's own checks: as root (a stand-in id saying 0) only the system's place
+            _runDirect([_scratch, "10800"], "0");
+        });
+        _then("a scratch base as root answered", () => _direct !== null, () => {
+            assertEqual(_direct.code + " " + _direct.stderr, "2 not the system", "as root, a base other than the system's: refused");
+            _runDirect(["", "10800"], null);
+        });
+        _then("no base as the user answered", () => _direct !== null, () => {
+            assertEqual(_direct.code + " " + _direct.stderr, "2 not a directory", "as the user, the system's place: refused");
+            _runDirect([_scratch, "1x"], null);
+        });
+        _then("not a delay answered", () => _direct !== null, () => {
+            assertEqual(_direct.code + " " + _direct.stderr, "2 not a delay", "a delay that is not a number: refused");
+            _runDirect([_scratch], null);
+        });
+        _then("one argument answered", () => _direct !== null, () => {
+            assertEqual(_direct.code + " " + _direct.stderr, "2 not a request", "a missing argument: refused");
         });
         _clock.start();
-        _sh("mkdir -p \"$1\"", [_scratch], code => {
+        _sh("mkdir -p \"$1/bin\" && printf '#!/bin/sh\\necho 0\\n' > \"$1/bin/id\" && chmod +x \"$1/bin/id\"", [_scratch], code => {
             suite.assertEqual(code, 0, "the scratch directory made");
             suite._ready = true;
         });
+        _sh("cat -- \"$1\"", [Quickshell.shellDir + "/scripts/root/hibernate-delay.sh"], null, text => suite._script = text);
+    }
+
+    // The script run directly as the user with the given words; `id`: what a stand-in `id`
+    // says (null: the system's)
+    function _runDirect(words, id) {
+        _direct = null;
+        const path = id === null ? Quickshell.env("PATH") : _scratch + "/bin:" + Quickshell.env("PATH");
+        const process = _shell.createObject(suite, { command: ["env", "PATH=" + path, "sh", "-c", _script, "sh"].concat(words), done: null, read: null });
+        process.finished.connect((code, stdout, stderr) => suite._direct = { code: code, stdout: stdout, stderr: stderr.trim() });
+        process.running = true;
     }
 
     function _sh(script, args, done, read) {

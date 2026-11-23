@@ -3,16 +3,27 @@ pragma Singleton
 import Quickshell
 import QtQuick
 
-// What the shell's fixed root scripts that replace system files share
-// (PamApplyRules, RememberInstallRules, and their suites): the places a run may
-// write, the shell functions every such script defines, the lock that keeps runs to one at a
-// time, and how a run that did not say it was done is read. Pure.
+// What the shell's root scripts share: where they are and the text handed to pkexec (every
+// one: PamApplyRules, RememberInstallRules, HibernateRules); for the ones that replace system
+// files (the first two), the places a run may write and how a run that did not say it was done
+// is read. The scripts themselves are files in the shell's tree (scripts/root/), never text
+// built in QML; replace-lib.sh, the functions of the ones that replace system files, is joined
+// before each one's own. Pure.
 Singleton {
     id: root
 
-    // A value as one single-quoted shell word
-    function quoted(value) {
-        return "'" + String(value).replace(/'/g, "'\\''") + "'";
+    // Where the root scripts are, under the shell's tree; never run by path, read as text
+    readonly property string directory: "scripts/root"
+
+    // The text handed to pkexec for the files' texts, in order (a library first): joined as
+    // they are, or "" when one could not be read (not a string, empty, or not ending in a line
+    // break) — the run is then refused
+    function script(texts) {
+        if (!Array.isArray(texts) || texts.length === 0)
+            return "";
+        if (texts.some(text => typeof text !== "string" || text === "" || !text.endsWith("\n")))
+            return "";
+        return texts.join("");
     }
 
     // An absolute path of plain names: no space, no quote, no `.` or `..` part
@@ -21,67 +32,32 @@ Singleton {
             && !path.split("/").some(part => part === "." || part === "..");
     }
 
-    // Whether the places `names` of `paths` may be written: "" when they may, else "paths".
-    // `paths.owner` is who must own the folders written in. `live`: the run goes to the
-    // system's pkexec, so exactly `livePaths`; a stand-in's run never touches /etc, /usr or
-    // /var.
-    function placesRefusal(paths, names, livePaths, live) {
+    // The folder the places `names` of `paths` are under, each the same path below it as in
+    // `livePaths` ("" for the system's own places), or null when they are not
+    function base(paths, names, livePaths) {
         if (paths === null || typeof paths !== "object" || names.some(name => !plainPath(paths[name])))
-            return "paths";
-        if (!Number.isInteger(paths.owner) || paths.owner < 0)
-            return "paths";
-        if (live === true)
-            return names.every(name => paths[name] === livePaths?.[name]) && paths.owner === livePaths.owner ? "" : "paths";
-        const system = ["/etc", "/usr", "/var"];
-        return names.some(name => system.some(top => paths[name] === top || paths[name].startsWith(top + "/"))) ? "paths" : "";
+            return null;
+        const first = paths[names[0]], tail = livePaths[names[0]];
+        if (!first.endsWith(tail))
+            return null;
+        const under = first.slice(0, first.length - tail.length);
+        return names.every(name => paths[name] === under + livePaths[name]) ? under : null;
     }
 
-    // The first line of every such script: stop at the first failure, files made private
-    // (pkexec keeps the caller's umask), messages and sorting in the C locale
-    readonly property string header: "set -eu; umask 077; export LC_ALL=C\n"
-
-    // The functions every such script defines; they expect $owner (who owns the folders
-    // written in) and $backups (the backups' folder):
-    // - refuse <code>: `refused <code>` on stderr, exit 3;
-    // - say <line>: what was done, on stderr first — it reaches the shell even when stdout
-    //   is gone — then on stdout;
-    // - safe_dir <dir>: no link, the owner's, nobody else may write in it;
-    // - hash_of <file>, is_hash <word>;
-    // - check_current <file> <sha256 | absent>: the file as the shell read it, never a link;
-    // - prepare_backups: the backups' folder made, it and its parent safe, 0700.
-    readonly property string functions: "refuse() { echo \"refused $1\" >&2; exit 3; }\n"
-        + "say() { printf '%s\\n' \"$1\" >&2; printf '%s\\n' \"$1\" || :; }\n"
-        + "safe_dir() {\n"
-        + "  if [ -L \"$1\" ] || [ ! -d \"$1\" ]; then refuse owner; fi\n"
-        + "  facts=$(stat -c '%u %a' -- \"$1\") || refuse owner\n"
-        + "  [ \"${facts%% *}\" = \"$owner\" ] || refuse owner\n"
-        + "  [ $((0${facts#* } & 022)) -eq 0 ] || refuse owner\n"
-        + "}\n"
-        + "hash_of() { sum=$(sha256sum < \"$1\") || return 1; printf '%s\\n' \"${sum%% *}\"; }\n"
-        + "is_hash() { case \"$1\" in ''|*[!0-9a-f]*) return 1;; esac; [ ${#1} -eq 64 ]; }\n"
-        + "check_current() {\n"
-        + "  if [ -L \"$1\" ]; then refuse link; fi\n"
-        + "  if [ \"$2\" = absent ]; then\n"
-        + "    if [ -e \"$1\" ]; then refuse changed; fi\n"
-        + "    return 0\n"
-        + "  fi\n"
-        + "  [ -f \"$1\" ] || refuse changed\n"
-        + "  got=$(hash_of \"$1\") || refuse unreadable\n"
-        + "  [ \"$got\" = \"$2\" ] || refuse changed\n"
-        + "}\n"
-        + "prepare_backups() {\n"
-        + "  if [ -L \"${backups%/*}\" ] || [ -L \"$backups\" ]; then refuse backup; fi\n"
-        + "  mkdir -p -- \"$backups\" || refuse backup\n"
-        + "  safe_dir \"${backups%/*}\"\n"
-        + "  safe_dir \"$backups\"\n"
-        + "  chmod 0700 -- \"$backups\" || refuse backup\n"
-        + "}\n"
-
-    // One run at a time, from the first check to the last write, on the backups' lock file;
-    // a second run is refused, never waited for. flock says 1 for a lock held; anything else
-    // (no flock) is not "busy".
-    readonly property string lock: "exec 9>> \"$backups/.lock\" || refuse backup\n"
-        + "flock -n 9 || { held=$?; [ \"$held\" -ne 1 ] || refuse busy; refuse lock; }\n"
+    // Whether the places `names` of `paths` may be written: "" when they may, else "paths".
+    // The script's places are fixed in its file, under the folder its first argument names
+    // (base): `live`, the run goes to the system's pkexec, so exactly `livePaths` (base "");
+    // a stand-in's run is under a scratch folder outside /etc, /usr and /var — the script
+    // checks the same.
+    function placesRefusal(paths, names, livePaths, live) {
+        const under = base(paths, names, livePaths);
+        if (under === null)
+            return "paths";
+        if (live === true)
+            return under === "" ? "" : "paths";
+        const system = ["/etc", "/usr", "/var"];
+        return plainPath(under) && !system.some(top => under === top || under.startsWith(top + "/")) ? "" : "paths";
+    }
 
     // A run that did not say it was done (PrivilegedRules' result) → { quiet } for a prompt
     // dismissed, a run refused, cancelled or blocked (said elsewhere, or the user's choice);

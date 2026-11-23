@@ -165,18 +165,22 @@ TestCase {
         assertEqual(rules.delayOverride({ state: "set", seconds: 7200, file: other }, 1), other, "written one second: a write");
 
         // ---- the Apply ----
-        const argv = rules.applyArgv("/bin/sh", 10800, "/etc/systemd/sleep.conf.d");
-        assertEqual(json(argv.slice(0, 2).concat(argv.slice(3))), json(["/bin/sh", "-c", "sh", "10800", "/etc/systemd/sleep.conf.d"]),
-                    "the script's arguments: the delay and the directory");
-        assertEqual(argv[2], rules.applyScript, "… the fixed script");
-        assert(!/\$\(|`/.test(rules.applyScript.replace("$(mktemp", "")), "… no command substitution but mktemp's");
-        assert(rules.applyScript.startsWith("set -eu; umask 022; "), "… files made by it readable, never writable by others (pkexec keeps the caller's umask)");
-        assert(rules.applyArgv("/bin/sh", 60, "/etc") !== null && rules.applyArgv("/bin/sh", 86400, "/etc") !== null,
+        const scripts = ["script\n"];
+        const argv = rules.applyArgv("/bin/sh", 10800, "", scripts);
+        assertEqual(json(argv.slice(0, 2).concat(argv.slice(3))), json(["/bin/sh", "-c", "sh", "", "10800"]),
+                    "the script's arguments: the base (\"\": the system's drop-in folder, fixed in the script) and the delay");
+        assertEqual(argv[2], "script\n", "… the script: the file's text as read");
+        assertEqual(json(rules.scriptFiles), json(["hibernate-delay.sh"]), "… of hibernate-delay.sh");
+        assertEqual(json(rules.applyArgv("/bin/sh", 10800, "/run/user/1000/t", scripts).slice(4)), json(["/run/user/1000/t", "10800"]),
+                    "a stand-in's base: a scratch folder");
+        assert(rules.applyArgv("/bin/sh", 60, "", scripts) !== null && rules.applyArgv("/bin/sh", 86400, "", scripts) !== null,
                "a minute and a day: the ends of the range, taken");
-        for (const bad of [[ "sh", 10800, "/etc" ], [ "/bin/sh", 59, "/etc" ], [ "/bin/sh", 86401, "/etc" ], [ "/bin/sh", 7200.5, "/etc" ],
-                           [ "/bin/sh", "7200", "/etc" ], [ "/bin/sh", 7200, "etc" ], [ "/bin/sh", 7200, "/etc/../root" ],
-                           [ "/bin/sh", 7200, "/etc/x y" ], [ "/bin/sh", 7200, "/etc/$(id)" ], [ "/bin/sh", 7200, null ]])
-            assertEqual(rules.applyArgv(bad[0], bad[1], bad[2]), null, "refused: " + JSON.stringify(bad));
+        for (const bad of [[ "sh", 10800, "" ], [ "/bin/sh", 59, "" ], [ "/bin/sh", 86401, "" ], [ "/bin/sh", 7200.5, "" ],
+                           [ "/bin/sh", "7200", "" ], [ "/bin/sh", 7200, "tmp" ], [ "/bin/sh", 7200, "/tmp/../root" ],
+                           [ "/bin/sh", 7200, "/tmp/x y" ], [ "/bin/sh", 7200, "/tmp/$(id)" ], [ "/bin/sh", 7200, null ], [ "/bin/sh", 7200, "/tmp/" ]])
+            assertEqual(rules.applyArgv(bad[0], bad[1], bad[2], scripts), null, "refused: " + JSON.stringify(bad));
+        for (const unread of [null, [], [""], ["script"], [null]])
+            assertEqual(rules.applyArgv("/bin/sh", 10800, "", unread), null, "the script not read: refused (" + JSON.stringify(unread) + ")");
         assertEqual(rules.dropInText(10800), "# Written by h2s-shell: Settings, When away, Hibernate\n[Sleep]\nHibernateDelaySec=10800\n",
                     "the drop-in's text");
         assertEqual(json(rules.hibernateDelay(rules.dropInText(10800))), json({ state: "set", seconds: 10800, file: "" }), "… read back as written");

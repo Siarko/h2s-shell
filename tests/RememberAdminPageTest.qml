@@ -27,8 +27,8 @@ TestCase {
 
     readonly property string _scratch: (Quickshell.env("XDG_RUNTIME_DIR") || "/tmp") + "/h2s-remember-page-test-" + Date.now()
     property int _owner: -1
-    readonly property var _paths: ({ rules: _scratch + "/rules.d", conf: _scratch + "/polkit-1", backups: _scratch + "/lib/polkit-backup",
-                                     systemctl: _scratch + "/bin/systemctl", owner: _owner })
+    readonly property var _paths: ({ rules: _scratch + "/usr/share/polkit-1/rules.d", conf: _scratch + "/etc/polkit-1",
+                                     backups: _scratch + "/var/lib/h2s-shell/polkit-backup", systemctl: _scratch + "/usr/bin/systemctl" })
     readonly property var _facts: ({ user: "alex", timeout: "/usr/bin/timeout", program: "/usr/bin/timeout" })
     property string _copied: ""
     property var _runs: []
@@ -396,7 +396,7 @@ TestCase {
         const systemctl = "#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"" + _scratch + "/systemctl.log\"\n";
         _exec(["id", "-u"], (code, stdout) => {
             suite._owner = parseInt(stdout.trim(), 10);
-            suite._exec(["sh", "-c", "set -e; umask 022; mkdir -p \"$1/rules.d\" \"$1/polkit-1\" \"$1/bin\" \"$1/lib\"; printf '%s' \"$2\" > \"$1/bin/systemctl\"; chmod 755 \"$1/bin/systemctl\"",
+            suite._exec(["sh", "-c", "set -e; umask 022; mkdir -p \"$1/usr/share/polkit-1/rules.d\" \"$1/etc/polkit-1\" \"$1/usr/bin\"; printf '%s' \"$2\" > \"$1/usr/bin/systemctl\"; chmod 755 \"$1/usr/bin/systemctl\"",
                          "sh", suite._scratch, systemctl], () => ready = true);
         });
         assert(_until(() => ready), "the scratch folders made");

@@ -640,8 +640,9 @@ launcher agree on the contract described under "Recovery" below):
   "na" or tells the delay without root (`/proc/swaps`, `/proc/meminfo`, the kernel's lockdown,
   `/sys/power/resume`, `/proc/cmdline`, whether this is NixOS (`Distribution`), `systemd-analyze cat-config
   systemd/sleep.conf`), parsed by `HibernateRules`. The page's Apply of the delay is the one
-  write: `singletons/io/HibernateDelayWriter.qml` hands `HibernateRules.applyArgv`'s fixed
-  `/bin/sh` script to `PrivilegedRuns.startShell` (the shell's own runs as administrator, in
+  write: `singletons/io/HibernateDelayWriter.qml` reads the fixed `/bin/sh` script
+  `scripts/root/hibernate-delay.sh` and hands its text (`HibernateRules.applyArgv`) to
+  `PrivilegedRuns.startShell` (the shell's own runs as administrator, in
   the one queue, announced in the prompt as the shell's — "Shell: h2s-shell" and its purpose,
   `PolkitRules.announcement`'s `shell` —, refused when a module's code asks), which writes the drop-in beside its place and
   renames it in. IPC: `idle state` (JSON, with the monitors' ids) and
@@ -814,7 +815,7 @@ the lock screen's:
 - **Rules** — pure, each with its suite: `PamRuleRules` (the rows, control words, details
   and every check), `PamEditRules` (rows to a file and back, a file changed by hand, the NixOS
   options), `PamTrialRules` (what a trial stages and its lifetime), `PamApplyRules` (the root
-  step's fixed script and its reply), `PamRuleViewRules` (what the list and the page show and
+  step's words and its reply; the step itself is `scripts/root/pam-apply.sh`), `PamRuleViewRules` (what the list and the page show and
   allow: steps, chips, drops, the queue of writes, the modals' texts).
 - **I/O** — `singletons/io/PamTrial.qml` runs one PAM conversation as the user on a staged
   copy of the candidate; `singletons/io/PamApply.qml` writes one service per run through
@@ -1579,8 +1580,8 @@ and a trusted `timeout` are found.
     `security.polkit.extraConfig` and, above 5 minutes, `/etc/polkit-1/polkitd.conf`; the
     page shows the option to copy, built from the setting.
   - Arch: Install, Install again, Remove and Undo are one run as administrator each
-    (`singletons/io/RememberInstall.qml`, the fixed script in
-    `singletons/RememberInstallRules.qml`; the requests and what the last run left are
+    (`singletons/io/RememberInstall.qml`, the fixed script
+    `scripts/root/remember-install.sh`, its words in `singletons/RememberInstallRules.qml`; the requests and what the last run left are
     `singletons/io/RememberActions.qml`'s, `RememberedAdmin.actions`, so a page closed
     mid-run keeps them), built only from what the reader read: it writes
     `/usr/share/polkit-1/rules.d/40-h2s-shell.rules` and, when the setting is longer than

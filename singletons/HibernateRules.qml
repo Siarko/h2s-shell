@@ -245,30 +245,28 @@ Singleton {
 
     // ---- The Apply ----
 
-    // The command run as root for the Apply: a fixed script in the shell's code (no file is
-    // loaded), the delay and the directory as its arguments. It checks both, writes the
-    // drop-in beside its place and renames it there (never half a file), and says what it
-    // wrote. → [shell, "-c", script, "sh", seconds, directory], or null for a delay outside
-    // delayRange or a directory that is not a plain absolute path
-    readonly property string applyScript: "set -eu; umask 022; "
-        + "case \"$1\" in ''|*[!0-9]*) echo 'not a delay' >&2; exit 2;; esac; "
-        + "case \"$2\" in /*) ;; *) echo 'not a directory' >&2; exit 2;; esac; "
-        + "if [ ! -d \"$2\" ]; then mkdir -p -- \"$2\"; chmod 0755 -- \"$2\"; fi; "
-        + "file=\"$2/" + dropInName + "\"; "
-        + "temporary=$(mktemp -- \"$file.XXXXXX\"); "
-        + "printf '%s\\n' '# Written by h2s-shell: Settings, When away, Hibernate' '[Sleep]' \"HibernateDelaySec=$1\" > \"$temporary\"; "
-        + "chmod 0644 -- \"$temporary\"; "
-        + "mv -f -- \"$temporary\" \"$file\"; "
-        + "echo \"written $1\""
+    // The root step of the Apply: scripts/root/hibernate-delay.sh (`scriptFiles`), a file in
+    // the shell's tree the shell reads and hands as text to the system's /bin/sh — never run by
+    // path. The drop-in's place is fixed in it, under the folder its first argument names ("" for
+    // the system, the only one it takes as root; a suite's stand-in: a scratch folder); the
+    // delay is its second. It checks both, writes the drop-in beside its place and renames it
+    // there (never half a file), and says what it wrote.
+    readonly property var scriptFiles: ["hibernate-delay.sh"]
 
-    function applyArgv(shell, seconds, directory) {
+    // `base`: "" or a plain absolute path; `scripts`: the texts of scriptFiles as read →
+    // [shell, "-c", script, "sh", base, seconds], or null for a delay outside delayRange, a base
+    // that is neither, or a script not read
+    function applyArgv(shell, seconds, base, scripts) {
         if (typeof shell !== "string" || !shell.startsWith("/"))
             return null;
         if (!Number.isInteger(seconds) || seconds < delayRange.minimum || seconds > delayRange.maximum)
             return null;
-        if (typeof directory !== "string" || !/^\/[A-Za-z0-9._\/-]*$/.test(directory) || directory.split("/").includes(".."))
+        if (base !== "" && !RootScriptRules.plainPath(base))
             return null;
-        return [shell, "-c", applyScript, "sh", String(seconds), directory];
+        const script = RootScriptRules.script(scripts);
+        if (script === "")
+            return null;
+        return [shell, "-c", script, "sh", base, String(seconds)];
     }
 
     // The drop-in's text as the script writes it
