@@ -191,6 +191,14 @@ TestCase {
         });
         _then("no base as the user answered", () => _direct !== null, () => {
             assertEqual(_direct.code + " " + _direct.stderr, "2 not a directory", "as the user, the system's place: refused");
+            _runDirect([_scratch + "/../x", "10800"], null);
+        });
+        _then("a base with .. answered", () => _direct !== null, () => {
+            assertEqual(_direct.code + " " + _direct.stderr, "2 not a directory", "as the user, a base with a .. part: refused");
+            _runDirect(["/var/tmp/x", "10800"], null);
+        });
+        _then("a base under /var answered", () => _direct !== null, () => {
+            assertEqual(_direct.code + " " + _direct.stderr, "2 not a directory", "as the user, a base under /var: refused");
             _runDirect([_scratch, "1x"], null);
         });
         _then("not a delay answered", () => _direct !== null, () => {

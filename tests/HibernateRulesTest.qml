@@ -177,7 +177,8 @@ TestCase {
                "a minute and a day: the ends of the range, taken");
         for (const bad of [[ "sh", 10800, "" ], [ "/bin/sh", 59, "" ], [ "/bin/sh", 86401, "" ], [ "/bin/sh", 7200.5, "" ],
                            [ "/bin/sh", "7200", "" ], [ "/bin/sh", 7200, "tmp" ], [ "/bin/sh", 7200, "/tmp/../root" ],
-                           [ "/bin/sh", 7200, "/tmp/x y" ], [ "/bin/sh", 7200, "/tmp/$(id)" ], [ "/bin/sh", 7200, null ], [ "/bin/sh", 7200, "/tmp/" ]])
+                           [ "/bin/sh", 7200, "/tmp/x y" ], [ "/bin/sh", 7200, "/tmp/$(id)" ], [ "/bin/sh", 7200, null ], [ "/bin/sh", 7200, "/tmp/" ],
+                           [ "/bin/sh", 7200, "/etc" ], [ "/bin/sh", 7200, "/usr/x" ], [ "/bin/sh", 7200, "/var/tmp/x" ]])
             assertEqual(rules.applyArgv(bad[0], bad[1], bad[2], scripts), null, "refused: " + JSON.stringify(bad));
         for (const unread of [null, [], [""], ["script"], [null]])
             assertEqual(rules.applyArgv("/bin/sh", 10800, "", unread), null, "the script not read: refused (" + JSON.stringify(unread) + ")");

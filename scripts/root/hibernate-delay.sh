@@ -14,7 +14,10 @@ case "$seconds" in ''|*[!0-9]*) echo 'not a delay' >&2; exit 2;; esac
 if [ "$(id -u)" = 0 ]; then
   [ -z "$base" ] || { echo 'not the system' >&2; exit 2; }
 else
+  # The same folders replace-lib.sh's take_base takes: plain, absolute, outside /etc, /usr, /var
   case "$base" in /*) ;; *) echo 'not a directory' >&2; exit 2;; esac
+  case "$base" in */|*//*|*/.|*/..|*/./*|*/../*|*[!A-Za-z0-9/._-]*) echo 'not a directory' >&2; exit 2;; esac
+  case "$base" in /etc|/etc/*|/usr|/usr/*|/var|/var/*) echo 'not a directory' >&2; exit 2;; esac
 fi
 directory=$base/etc/systemd/sleep.conf.d
 if [ ! -d "$directory" ]; then mkdir -p -- "$directory"; chmod 0755 -- "$directory"; fi

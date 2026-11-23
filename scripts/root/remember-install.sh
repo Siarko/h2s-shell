@@ -97,11 +97,11 @@ keep_file() {
 }
 # Both files as they are (checked before), and what this run leaves, under one stamp
 make_backups() {
-  base=$(date -u +%Y%m%dT%H%M%SZ)
-  stamp=$base; count=0
+  stamp_base=$(date -u +%Y%m%dT%H%M%SZ)
+  stamp=$stamp_base; count=0
   while taken "$stamp"; do
     count=$((count + 1)); [ "$count" -le 9 ] || refuse backup
-    stamp="$base-$count"
+    stamp="$stamp_base-$count"
   done
   if [ "$rule_current" = absent ]; then keep_file '' "$rule_name.$stamp.absent" ''; else keep_file "$rule_target" "$rule_name.$stamp"; fi
   if [ "$conf_current" = absent ]; then keep_file '' "$conf_name.$stamp.absent" ''; else keep_file "$conf_target" "$conf_name.$stamp"; fi

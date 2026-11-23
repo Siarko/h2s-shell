@@ -253,7 +253,7 @@ Singleton {
     // there (never half a file), and says what it wrote.
     readonly property var scriptFiles: ["hibernate-delay.sh"]
 
-    // `base`: "" or a plain absolute path; `scripts`: the texts of scriptFiles as read →
+    // `base`: "" or a plain absolute path outside /etc, /usr and /var; `scripts`: the texts of scriptFiles as read →
     // [shell, "-c", script, "sh", base, seconds], or null for a delay outside delayRange, a base
     // that is neither, or a script not read
     function applyArgv(shell, seconds, base, scripts) {
@@ -261,7 +261,7 @@ Singleton {
             return null;
         if (!Number.isInteger(seconds) || seconds < delayRange.minimum || seconds > delayRange.maximum)
             return null;
-        if (base !== "" && !RootScriptRules.plainPath(base))
+        if (base !== "" && (!RootScriptRules.plainPath(base) || ["/etc", "/usr", "/var"].some(top => base === top || base.startsWith(top + "/"))))
             return null;
         const script = RootScriptRules.script(scripts);
         if (script === "")
