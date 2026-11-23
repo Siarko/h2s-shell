@@ -64,6 +64,8 @@ QtObject {
     // when the request is a run of the shell's queue (PrivilegedRuns.announcementFor).
     // Never over the lock screen: Authentication cancels a request while locked
     property var _authentication: Authentication
+    // A remembered administrator password is forgotten at lock: started with the shell
+    property var _rememberedAdmin: RememberedAdmin
     property var _authPrompt: LazyLoader {
         active: Authentication.flow !== null && !Profiles.screenLocked
         AuthPrompt {

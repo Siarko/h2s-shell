@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# PAM's files as PamStacks reads them (singletons/io/PamStackReader.qml), read only:
+# PAM's files as PamStacks reads them (singletons/io/PamStackReader.qml), and polkit's as
+# RememberedAdmin does (singletons/io/RememberedAdminReader.qml), read only:
 #
 #   pam-files.sh [<absolute path> ...]
 #

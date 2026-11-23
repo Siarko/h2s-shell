@@ -7,9 +7,9 @@ import QtQuick
 // the shell's own root runs — `pkexec <timeout> …`, action org.freedesktop.policykit.exec —
 // AUTH_ADMIN_KEEP, so polkitd keeps a typed password for the shell's process for its
 // ExpirationSeconds. Here: the rule's text and the polkitd.conf text for a longer length, the
-// length polkitd resolves from its conf files, what is installed, the kept authorizations in
-// `pkcheck --list-temp`'s output, when the shell revokes itself for a shorter setting, the
-// NixOS configuration line and the prompt's line. Pure: texts are handed in, nothing is read
+// length polkitd resolves from its conf files, what is installed, the kept authorizations as
+// polkit's authority lists them over D-Bus (`gdbus call`), when the shell revokes them for a
+// shorter setting, the NixOS configuration line and the prompt's line. Pure: texts are handed in, nothing is read
 // or written.
 Singleton {
     id: root
@@ -233,68 +233,182 @@ Singleton {
 
     // ── What is kept now ──
 
-    // `pkcheck --list-temp`'s relative time ("2 min 5 sec from now", "40 sec ago") in
-    // seconds; NaN when it is not one
-    function _relativeSeconds(text) {
-        const match = text.match(/^(?:(\d+) min )?(\d+) sec (from now|ago)$/);
-        if (!match || Number(match[2]) >= 60)
-            return NaN;
-        const seconds = Number(match[1] ?? 0) * 60 + Number(match[2]);
-        return match[3] === "ago" ? -seconds : seconds;
+    // A GVariant as `gdbus call` prints it (g_variant_print with type annotations) → the
+    // value: a tuple or an array as a JS array, a dictionary as an object, a variant as its
+    // value, numbers as numbers, strings as strings; undefined for anything else
+    function parseVariant(text) {
+        if (typeof text !== "string" || text.length > 1000000)
+            return undefined;
+        const failed = {};
+        let at = 0, depth = 0;
+        const space = () => { while (/^[ \t\n\r]$/.test(text[at] ?? "")) at++; };
+        const annotations = ["boolean", "byte", "int16", "uint16", "int32", "uint32", "int64", "uint64", "double",
+                             "handle", "objectpath", "signature"];
+        const simple = { n: "\n", t: "\t", r: "\r", a: "\u0007", b: "\b", f: "\f", v: "\v", "\\": "\\", "'": "'", "\"": "\"" };
+        const string = () => {
+            const body = text.slice(at).match(text[at] === "'" ? /^'([^'\\]*(?:\\[\s\S][^'\\]*)*)'/ : /^"([^"\\]*(?:\\[\s\S][^"\\]*)*)"/);
+            if (!body)
+                return failed;
+            at += body[0].length;
+            let bad = false;
+            const value = body[1].replace(/\\(u[0-9a-fA-F]{4}|U[0-9a-fA-F]{8}|[\s\S])/g, (all, escaped) => {
+                if (escaped.length === 1) {
+                    bad = bad || !(escaped in simple);
+                    return simple[escaped] ?? "";
+                }
+                const code = parseInt(escaped.slice(1), 16);
+                bad = bad || code > 0x10ffff;
+                return code > 0x10ffff ? "" : String.fromCodePoint(code);
+            });
+            return bad ? failed : value;
+        };
+        // The items up to `close`, separated by commas (a trailing one allowed)
+        const items = (close, item) => {
+            const list = [];
+            space();
+            if (text[at] === close) {
+                at++;
+                return list;
+            }
+            for (;;) {
+                const value = item();
+                if (value === failed)
+                    return failed;
+                list.push(value);
+                space();
+                if (text[at] === ",") {
+                    at++;
+                    space();
+                    if (text[at] === close) {
+                        at++;
+                        return list;
+                    }
+                    continue;
+                }
+                if (text[at] !== close)
+                    return failed;
+                at++;
+                return list;
+            }
+        };
+        const value = () => {
+            if (++depth > 64)
+                return failed;
+            try {
+                space();
+                if (text[at] === "@") {
+                    // A type for an empty container: skipped
+                    while (/^[^ \t\n\r]$/.test(text[at] ?? ""))
+                        at++;
+                    return value();
+                }
+                const word = text.slice(at).match(/^[a-z][a-z0-9]*/)?.[0] ?? "";
+                if (annotations.includes(word)) {
+                    at += word.length;
+                    return value();
+                }
+                if (word === "true" || word === "false") {
+                    at += word.length;
+                    return word === "true";
+                }
+                const character = text[at];
+                if (character === "'" || character === "\"")
+                    return string();
+                if (character === "(")
+                    return (at++, items(")", value));
+                if (character === "[")
+                    return (at++, items("]", value));
+                if (character === "<") {
+                    at++;
+                    const inner = value();
+                    space();
+                    if (inner === failed || text[at] !== ">")
+                        return failed;
+                    at++;
+                    return inner;
+                }
+                if (character === "{") {
+                    at++;
+                    const entries = items("}", () => {
+                        const key = value();
+                        space();
+                        if (key === failed || text[at] !== ":")
+                            return failed;
+                        at++;
+                        const item = value();
+                        return item === failed ? failed : [key, item];
+                    });
+                    if (entries === failed)
+                        return failed;
+                    const object = {};
+                    for (const [key, item] of entries)
+                        object[String(key)] = item;
+                    return object;
+                }
+                const number = text.slice(at).match(/^-?\d+(\.\d+)?([eE][+-]?\d+)?/)?.[0];
+                if (number !== undefined) {
+                    at += number.length;
+                    return Number(number);
+                }
+                return failed;
+            } finally {
+                depth--;
+            }
+        };
+        const result = value();
+        space();
+        return result === failed || at !== text.length ? undefined : result;
     }
 
-    // The shell's kept authorizations in `pkcheck --list-temp`'s output (standard output of a
-    // run that exited 0; nothing at all when the session holds none), for the shell's process
-    // `pid`. nowMs is the time just before the run started: pkcheck's own clock is then no
-    // earlier, and it prints whole seconds, so an obtained time is taken a second early (the
-    // shell's revoke comes sooner, never later). Each entry is five lines and a blank one:
-    //   authorization id: <id>
-    //   action:           <action id>
-    //   subject:          unix-process:<pid>:<start time> (<command line>)
-    //   obtained:         <relative> (<local time>)
-    //   expires:          <relative> (<local time>)
-    // Entries of other actions or subjects, and those already expired, are left out. Anything
-    // not in that form makes the whole list unknown, never "nothing kept".
-    // A command line is printed with its newlines, so another process of the user holding a
-    // kept authorization can print lines that read as entries of the shell's: an entry kept
-    // longer than polkitd's length (systemSeconds, when known) makes the list unknown
-    // ("longer": forged, or polkitd keeps a length other than its conf file's), its entries
-    // still given so that the shell can forget them; and the revoke is armed from the earliest
-    // obtained time (revokeAtMs), which a forged entry can only bring forward.
+    // The logind session's id from `gdbus call … Properties.Get … Session Id` (`(<'2'>,)`):
+    // "" when it is not one a subject may carry
+    function sessionIdOf(text) {
+        const value = parseVariant(String(text ?? "").trim());
+        const id = Array.isArray(value) && value.length === 1 ? value[0] : null;
+        return typeof id === "string" && /^[A-Za-z0-9_.-]{1,64}$/.test(id) ? id : "";
+    }
+
+    // The session as polkit's subject, a gdbus argument: "" for an id that is not one
+    function sessionSubject(sessionId) {
+        return typeof sessionId === "string" && /^[A-Za-z0-9_.-]{1,64}$/.test(sessionId)
+            ? "('unix-session', {'session-id': <'" + sessionId + "'>})" : "";
+    }
+
+    // The shell's kept authorizations from the authority's EnumerateTemporaryAuthorizations
+    // for the session, as `gdbus call` prints it (exit 0):
+    //   ([('<id>', '<action>', ('unix-process', {'pid': <uint32 N>, 'start-time': <…>,
+    //     'uid': <…>}), uint64 <obtained>, uint64 <expires>), …],)   — `(@a(ss(sa{sv})tt) [],)`
+    // for none — the times in seconds since the epoch. Those of the exec action whose subject
+    // is the shell's process `pid` count; others, and those expired at nowMs, are left out.
+    // Anything not in that form makes the list unknown, never "nothing kept". An entry kept
+    // longer than polkitd's length (systemSeconds, when known, a second's slack) makes it
+    // unknown too, "longer" — polkitd keeps a length other than its conf file's, which it
+    // reads only at its start and on SIGHUP — its entries still given, so that the shell can
+    // forget them.
     // → { known, reason ("" | "unread" | "malformed" | "longer"),
     //     entries: [{ id, obtainedMs, untilMs }], latest (kept longest), earliest (obtained first) }
-    function parseList(text, nowMs, pid, systemSeconds) {
+    function parseKept(text, nowMs, pid, systemSeconds) {
         const unknown = reason => ({ known: false, reason, entries: [], latest: null, earliest: null });
         if (typeof text !== "string" || !Number.isFinite(nowMs) || !Number.isInteger(pid) || pid <= 0)
             return unknown("unread");
-        const lines = text.split("\n");
+        const value = parseVariant(text.trim());
+        if (!Array.isArray(value) || value.length !== 1 || !Array.isArray(value[0]))
+            return unknown("malformed");
         const entries = [];
         let longer = false;
-        let i = 0;
-        while (i < lines.length) {
-            if (lines[i].trim() === "") {
-                i++;
+        for (const item of value[0]) {
+            const well = Array.isArray(item) && item.length === 5 && typeof item[0] === "string" && typeof item[1] === "string"
+                && Array.isArray(item[2]) && item[2].length === 2 && typeof item[2][0] === "string"
+                && typeof item[2][1] === "object" && !Array.isArray(item[2][1])
+                && Number.isInteger(item[3]) && Number.isInteger(item[4]);
+            if (!well)
+                return unknown("malformed");
+            const [id, action, subject, obtained, expires] = item;
+            if (action !== execAction || subject[0] !== "unix-process" || subject[1].pid !== pid || expires * 1000 <= nowMs)
                 continue;
-            }
-            if (i + 5 > lines.length)
-                return unknown("malformed");
-            const id = lines[i].match(/^authorization id: (\S+)$/);
-            const action = lines[i + 1].match(/^action: +(\S+)$/);
-            const subject = lines[i + 2].match(/^subject: +(\S+) \(.*\)$/);
-            const obtained = lines[i + 3].match(/^obtained: +(.+?) \(.*\)$/);
-            const expires = lines[i + 4].match(/^expires: +(.+?) \(.*\)$/);
-            if (!id || !action || !subject || !obtained || !expires)
-                return unknown("malformed");
-            const obtainedSeconds = _relativeSeconds(obtained[1]), expiresSeconds = _relativeSeconds(expires[1]);
-            if (Number.isNaN(obtainedSeconds) || Number.isNaN(expiresSeconds))
-                return unknown("malformed");
-            const process = subject[1].match(/^unix-process:(\d+):\d+$/);
-            if (action[1] === execAction && process && Number(process[1]) === pid && expiresSeconds > 0) {
-                entries.push({ id: id[1], obtainedMs: nowMs + (obtainedSeconds - 1) * 1000, untilMs: nowMs + expiresSeconds * 1000 });
-                if (systemSeconds >= 0 && expiresSeconds - obtainedSeconds > systemSeconds + 1)
-                    longer = true;
-            }
-            i += 5;
+            entries.push({ id, obtainedMs: obtained * 1000, untilMs: expires * 1000 });
+            if (systemSeconds >= 0 && expires - obtained > systemSeconds + 1)
+                longer = true;
         }
         let latest = null, earliest = null;
         for (const entry of entries) {
@@ -330,6 +444,21 @@ Singleton {
         const until = Math.max(...entries.map(entry => entry.untilMs));
         const revoke = revokeAtMs(entries, minutes);
         return revoke ? Math.min(until, revoke) : until;
+    }
+
+    // What the shell does after reading the list (parseKept's answer) at nowMs: revoke at
+    // once — the list says "longer", or the revoke time has passed (a timer that did not fire
+    // in time, across a suspend) —, arm one timer for the revoke time, or nothing.
+    // → { now (revoke now), atMs (the time to arm for, 0 for none) }
+    function revokeStep(list, minutes, nowMs) {
+        if (list?.reason === "longer" && (list.entries?.length ?? 0) > 0)
+            return { now: true, atMs: 0 };
+        if (list?.known !== true)
+            return { now: false, atMs: 0 };
+        const at = revokeAtMs(list.entries, minutes);
+        if (at === 0)
+            return { now: false, atMs: 0 };
+        return at <= nowMs ? { now: true, atMs: 0 } : { now: false, atMs: at };
     }
 
     // The prompt's line for a run of the shell's queue while the rule is installed: the

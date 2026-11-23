@@ -168,119 +168,137 @@ TestCase {
         const fullState = rules.state({ rule: archText, confs: confFor(900) }, archFacts);
         assertEqual(fullState.secondsSource, etc, "the length's source is named");
 
-        // ---- pkcheck --list-temp ----
-        // As polkit 127/128's pkcheck prints it (src/programs/pkcheck.c: the labels padded to
-        // one column, polkit_subject_to_string, the command line read from /proc, the times
-        // relative to pkcheck's own clock and in %c)
+        // ---- gdbus's answers ----
+        const variant = text => json(rules.parseVariant(text));
+        assertEqual(variant("(<'2'>,)"), json(["2"]), "a variant in a tuple");
+        assertEqual(variant("(@a(ss(sa{sv})tt) [],)"), json([[]]), "an empty typed array");
+        assertEqual(variant("([uint32 1, 2, -3],)"), json([[1, 2, -3]]), "annotated and bare numbers");
+        assertEqual(variant("{'a': <true>, 'b': <false>, \"c'\": <'x'>}"), json({ a: true, b: false, "c'": "x" }), "a dictionary, both quotes");
+        assertEqual(variant("('a\\'b\\\\c\\n\\u00e9\\U0001F600',)"), json(["a'b\\c\né😀"]), "escapes");
+        assertEqual(rules.parseVariant("(handle 0, objectpath '/x', byte 0x1,)"), undefined, "a byte in hex: not read");
+        assertEqual(variant("(handle 0, objectpath '/x', 1.5e3)"), json([0, "/x", 1500]), "handles, paths, doubles");
+        assertEqual(variant("()"), json([]), "an empty tuple");
+        assertEqual(variant(" ( 1 , ) \n"), json([1]), "spaces around the whole");
+        assertEqual(variant("( 1 , )"), json([1]), "spaces inside");
+        for (const bad of ["", "(", "(1", "(1,,)", "('a)", "('\\q',)", "('\\u12',)", "('\\U00110000',)", "<1", "{'a' 1}", "(1) x", "[1 2]",
+                           "nothing", "uint32", "@as", "(<1>,", "{'a': <1>", "(<1 2>,)"])
+            assertEqual(rules.parseVariant(bad), undefined, "not a GVariant: " + json(bad));
+        assertEqual(rules.parseVariant(null), undefined, "no text");
+        assertEqual(rules.parseVariant("[".repeat(65) + "]".repeat(65)), undefined, "nested 65 deep: too deep");
+        assert(rules.parseVariant("[".repeat(64) + "]".repeat(64)) !== undefined, "nested 64 deep: read");
+        assertEqual(rules.parseVariant("'" + "x".repeat(999999) + "'"), undefined, "over a million characters: too long");
+        assertEqual(rules.parseVariant("'" + "x".repeat(999998) + "'")?.length, 999998, "a million characters: read");
+        assertEqual(variant("('\\U0010FFFF',)"), json(["\u{10FFFF}"]), "the last code point");
+        assertEqual(rules.parseVariant("(<1 ,)"), undefined, "a variant not closed before a comma");
+        assertEqual(rules.parseVariant("{'a',<1>}"), undefined, "a dictionary entry without its colon");
+        assertEqual(rules.parseVariant("('a\\'"), undefined, "a string whose end is escaped");
+        assertEqual(variant("('',\"\")"), json(["", ""]), "empty strings");
+        assertEqual(variant("('\\u20ac\\U0001f600',)"), json(["\u20ac\uD83D\uDE00"]), "escapes whose first digit is not 0");
+        assertEqual(variant("(uint32\t5,)"), json([5]), "an annotation before a tab");
+        assertEqual(variant("(@as\t[],)"), json([[]]), "an empty array's type before a tab");
+
+        assertEqual(rules.sessionIdOf("(<'2'>,)\n"), "2", "the session's id");
+        assertEqual(rules.sessionIdOf("(<'c1.x_y-z'>,)"), "c1.x_y-z", "letters, dot, dash, underscore");
+        for (const bad of ["(<''>,)", "(<'a b'>,)", "(<'a\\'b'>,)", "(<2>,)", "(<'1'>, <'2'>)", "('2',).", "", null, "(<'" + "x".repeat(65) + "'>,)"])
+            assertEqual(rules.sessionIdOf(bad), "", "no session id in " + json(bad));
+        assertEqual(rules.sessionSubject("2"), "('unix-session', {'session-id': <'2'>})", "the session as polkit's subject");
+        for (const bad of ["", "a'b", "a b", 2, null])
+            assertEqual(rules.sessionSubject(bad), "", "no subject for " + json(bad));
+
+        // ---- What is kept: EnumerateTemporaryAuthorizations ----
+        // As gdbus prints polkit's answer (a(ss(sa{sv})tt): id, action, subject, obtained,
+        // expires in seconds since the epoch; numbers after the first annotated only once)
         const shellPid = 4242;
         const nowMs = 1795000000000;
-        const entry = (id, action, subject, obtained, expires) => "authorization id: " + id + "\n"
-            + "action:           " + action + "\n"
-            + "subject:          " + subject + "\n"
-            + "obtained:         " + obtained + " (Mon 23 Nov 2026 10:02:11 AM CET)\n"
-            + "expires:          " + expires + " (Mon 23 Nov 2026 10:07:11 AM CET)\n"
-            + "\n";
-        const shellSubject = "unix-process:4242:1234567 (/usr/bin/quickshell -p /home/alex/.config/quickshell/default)";
-        const ours = entry("tmpauthz12", "org.freedesktop.policykit.exec", shellSubject, "1 min 0 sec ago", "4 min 0 sec from now");
-        const list = text => rules.parseList(text, nowMs, shellPid, 300);
-        const kept = text => { const got = list(text); return got.known === false ? "unknown" : got.known !== true ? "broken" : got.entries.map(item => [item.id, item.obtainedMs - nowMs, item.untilMs - nowMs].join(",")).join(";"); };
-        assertEqual(kept(ours), "tmpauthz12,-61000,240000", "the shell's kept authorization");
-        assertEqual(kept(""), "", "nothing kept: pkcheck prints nothing");
-        assertEqual(kept("\n"), "", "a lone newline: nothing kept");
-        assertEqual(list("").known, true, "an empty list is known");
-        assertEqual(list("").latest, null, "nothing kept: no latest");
-        assertEqual(kept(ours.slice(0, -1)), "tmpauthz12,-61000,240000", "without the closing blank line");
-        assertEqual(kept(ours.slice(0, -2)), "tmpauthz12,-61000,240000", "without any closing newline");
-        assertEqual(rules.parseList(ours.replace(/4242/g, "1"), nowMs, 1).entries.length, 1, "pid 1 is a pid");
-        assertEqual(kept(entry("tmpauthz3", "org.freedesktop.policykit.exec", shellSubject, "12 sec ago", "4 min 48 sec from now")),
-                    "tmpauthz3,-13000,288000", "seconds alone");
-        assertEqual(kept(entry("tmpauthz4", "org.freedesktop.policykit.exec", shellSubject, "0 sec from now", "5 min 0 sec from now")),
-                    "tmpauthz4,-1000,300000", "just obtained");
-        const others = entry("tmpauthz1", "org.freedesktop.udisks2.filesystem-mount", shellSubject, "2 min 0 sec ago", "3 min 0 sec from now")
-            + entry("tmpauthz2", "org.freedesktop.policykit.exec", "unix-process:777:99 (bash)", "30 sec ago", "4 min 30 sec from now")
-            + entry("tmpauthz5", "org.freedesktop.policykit.exec", "unix-process:42420:5 (other)", "30 sec ago", "4 min 30 sec from now")
-            + entry("tmpauthz6", "org.freedesktop.policykit.exec", "unix-process:unknown ((null))", "30 sec ago", "4 min 30 sec from now")
-            + entry("tmpauthz7", "org.freedesktop.policykit.exec", "system-bus-name::1.42 ((null))", "30 sec ago", "4 min 30 sec from now");
-        assertEqual(kept(others), "", "other actions and other subjects: left out");
-        assertEqual(kept(others + ours), "tmpauthz12,-61000,240000", "ours among others");
-        assertEqual(kept(entry("tmpauthz8", "org.freedesktop.policykit.exec", shellSubject, "6 min 0 sec ago", "1 min 0 sec ago")), "",
-                    "already expired: not kept");
-        assertEqual(kept(entry("tmpauthz8", "org.freedesktop.policykit.exec", shellSubject, "5 min 0 sec ago", "0 sec from now")), "",
-                    "expiring now: not kept");
-        assertEqual(kept(entry("tmpauthz9", "org.freedesktop.policykit.exec", "unix-process:4242:1 (a (b) c)", "1 sec ago", "1 sec from now")),
-                    "tmpauthz9,-2000,1000", "parentheses in the command line");
-        const two = ours + entry("tmpauthz13", "org.freedesktop.policykit.exec", shellSubject, "10 sec ago", "4 min 50 sec from now");
-        assertEqual(kept(two), "tmpauthz12,-61000,240000;tmpauthz13,-11000,290000", "two of ours, in their order");
-        assertEqual(list(two).latest.id, "tmpauthz13", "the latest is the one kept longest");
-        assertEqual(list(entry("a", "org.freedesktop.policykit.exec", shellSubject, "1 sec ago", "9 min 0 sec from now") + ours).latest.id, "a",
-                    "kept longest, wherever it stands");
-        assertEqual(list(entry("first", "org.freedesktop.policykit.exec", shellSubject, "1 sec ago", "4 min 0 sec from now") + ours).latest.id, "first",
-                    "a tie: the first");
+        const now = nowMs / 1000;
+        const process = (pid, more) => "('unix-process', {'pid': <uint32 " + pid + ">, 'start-time': <uint64 1234567>, 'uid': <1000>" + (more ?? "") + "})";
+        const item = (id, action, subject, obtained, expires, first) =>
+            "('" + id + "', '" + action + "', " + subject + ", " + (first === false ? "" : "uint64 ") + obtained + ", " + (first === false ? "" : "uint64 ") + expires + ")";
+        const answer = items => items.length === 0 ? "(@a(ss(sa{sv})tt) [],)" : "([" + items.join(", ") + "],)";
+        const exec = "org.freedesktop.policykit.exec";
+        const ours = item("tmpauthz12", exec, process(shellPid), now - 60, now + 240);
+        const parse = (text, system) => rules.parseKept(text, nowMs, shellPid, system === undefined ? 300 : system);
+        const kept = (text, system) => {
+            const got = parse(text, system);
+            return got.known === false ? "unknown:" + got.reason : got.known !== true ? "broken"
+                : got.entries.map(entry => [entry.id, entry.obtainedMs - nowMs, entry.untilMs - nowMs].join(",")).join(";");
+        };
+        assertEqual(kept(answer([ours])), "tmpauthz12,-60000,240000", "the shell's kept authorization");
+        assertEqual(kept(answer([])), "", "nothing kept");
+        assertEqual(parse(answer([])).known, true, "nothing kept is known");
+        assertEqual(parse(answer([])).reason, "", "… no reason");
+        assertEqual(parse(answer([])).latest, null, "… no latest");
+        assertEqual(parse(answer([])).earliest, null, "… no earliest");
+        assertEqual(kept(answer([ours]) + "\n"), "tmpauthz12,-60000,240000", "a trailing line break");
+        assertEqual(kept(answer([ours, item("tmpauthz13", exec, process(shellPid), now - 10, now + 290, false)])),
+                    "tmpauthz12,-60000,240000;tmpauthz13,-10000,290000", "two of ours, the second unannotated as gdbus prints it");
+        assertEqual(kept(answer([item("a", exec, process(shellPid, ", 'pidfd': <handle 0>"), now - 1, now + 299)])), "a,-1000,299000",
+                    "a pidfd beside the pid");
+        const others = [item("o1", "org.freedesktop.udisks2.filesystem-mount", process(shellPid), now - 120, now + 180),
+                        item("o2", exec, process(777), now - 30, now + 3000),
+                        item("o3", exec, "('unix-session', {'session-id': <'2'>})", now - 30, now + 270),
+                        item("o4", exec, "('unix-process', {'pidfd': <handle 0>, 'uid': <1000>})", now - 30, now + 270),
+                        item("o5", exec, "('system-bus-name', {'name': <':1.42'>})", now - 30, now + 270),
+                        item("o6", exec, "('unix-process', {'pid': <'4242'>})", now - 30, now + 270)];
+        assertEqual(kept(answer(others)), "", "other actions and subjects, another process kept long: left out");
+        assertEqual(kept(answer(others.concat([ours]))), "tmpauthz12,-60000,240000", "ours among others");
+        assertEqual(kept(answer([item("e", exec, process(shellPid), now - 300, now)])), "", "expiring now: not kept");
+        assertEqual(kept(answer([item("e", exec, process(shellPid), now - 299, now + 1)])), "e,-299000,1000", "a second left: kept");
+        const two = answer([item("late", exec, process(shellPid), now - 10, now + 290), item("early", exec, process(shellPid), now - 100, now + 200)]);
+        assertEqual(parse(two).latest.id, "late", "the latest is the one kept longest");
+        assertEqual(parse(two).earliest.id, "early", "the earliest is the one obtained first");
+        const ties = answer([item("first", exec, process(shellPid), now - 10, now + 200), item("second", exec, process(shellPid), now - 10, now + 200)]);
+        assertEqual(parse(ties).latest.id + " " + parse(ties).earliest.id, "first first", "ties: the first");
+        // Kept longer than polkitd's length: its conf says less than it keeps
+        const hour = answer([item("h", exec, process(shellPid), now - 60, now + 3540)]);
+        assertEqual(kept(hour), "unknown:longer", "kept an hour, the conf saying 5 min: unknown, longer");
+        assertEqual(parse(hour).entries.length, 1, "… its entries still given");
+        assertEqual(parse(hour).earliest.id, "h", "… and the earliest");
+        assertEqual(kept(answer([item("s", exec, process(shellPid), now - 1, now + 300)])), "s,-1000,300000", "the length and a second's slack: kept");
+        assertEqual(kept(answer([item("s", exec, process(shellPid), now - 2, now + 300)])), "unknown:longer", "two seconds over: longer");
+        assertEqual(kept(hour, -1), "h,-60000,3540000", "the system's length unknown: no such check");
+        assertEqual(kept(answer([ours]), 0), "unknown:longer", "a zero length: anything kept is longer");
+        assertEqual(kept(answer([item("o", exec, process(777), now - 60, now + 3540)])), "", "another process kept long: no matter");
         // Not understood: unknown, never "nothing kept"
         for (const [label, text] of [
-                ["junk", "Error: something\n"],
-                ["cut short", ours.split("\n").slice(0, 3).join("\n") + "\n"],
-                ["a line missing", ours.replace(/^action:.*\n/m, "")],
-                ["lines out of order", ours.replace(/^(action:.*)\n(subject:.*)$/m, "$2\n$1")],
-                ["an unknown relative time", ours.replace("1 min 0 sec ago", "a while ago")],
-                ["a subject without its command line", ours.replace(" (/usr/bin/quickshell -p /home/alex/.config/quickshell/default)", "")],
-                ["an empty id", ours.replace("tmpauthz12", "")],
-                ["no local time", ours.replace(/ \(Mon 23 Nov 2026 10:07:11 AM CET\)/, "")],
-                ["an extra line", ours.slice(0, -1) + "note: x\n"],
-                ["text after a good entry", ours + "trailing\n"]])
-            assertEqual(kept(text), "unknown", label + ": unknown");
-        assertEqual(kept(null), "unknown", "no output: unknown");
-        // Without a length to check against, so that only the form decides
-        assertEqual(rules.parseList(ours.replace("1 min 0 sec ago", "75 sec ago"), nowMs, shellPid).reason, "malformed", "75 sec, never printed so: malformed");
-        assertEqual(rules.parseList(ours.replace("1 min 0 sec ago", "60 sec ago"), nowMs, shellPid).reason, "malformed", "60 sec alone: malformed");
-        assertEqual(rules.parseList(ours.replace("4 min 0 sec from now", "4 min 60 sec from now"), nowMs, shellPid).reason, "malformed", "seconds past 59: malformed");
-        assertEqual(rules.parseList(ours.replace("1 min 0 sec ago", "59 sec ago"), nowMs, shellPid).known, true, "59 sec: read");
-        assertEqual(rules.parseList(ours, nowMs, shellPid, 0).reason, "longer", "a zero length: anything kept is longer");
-        assertEqual(rules.parseList(ours, NaN, shellPid).known, false, "no clock: unknown");
-        assertEqual(rules.parseList(ours, nowMs, 0).known, false, "no pid: unknown");
-        assertEqual(rules.parseList(ours, nowMs, "4242").known, false, "a pid as text: unknown");
-        assertEqual(rules.parseList(ours, nowMs, undefined).latest, null, "unknown: no latest");
-        assertEqual(rules.parseList("x", nowMs, shellPid).entries.length, 0, "unknown: no entries");
-        assertEqual(rules.parseList("x", nowMs, shellPid).reason, "malformed", "not in the form: malformed");
-        assertEqual(rules.parseList(null, nowMs, shellPid).reason, "unread", "no output: unread");
-        assertEqual(list(ours).reason, "", "known: no reason");
-        assertEqual(list(two).earliest.id, "tmpauthz12", "the earliest is the one obtained first");
-        assertEqual(list(entry("b", "org.freedesktop.policykit.exec", shellSubject, "4 min 0 sec ago", "1 min 0 sec from now") + ours).earliest.id, "b",
-                    "obtained first, wherever it stands");
-        assertEqual(list(ours + entry("tie", "org.freedesktop.policykit.exec", shellSubject, "1 min 0 sec ago", "2 min 0 sec from now")).earliest.id, "tmpauthz12",
-                    "a tie: the first");
-        assertEqual(list("").earliest, null, "nothing kept: no earliest");
-        // Kept longer than polkitd's length: forged, or a length other than the conf's
-        const outliving = entry("tmpauthz20", "org.freedesktop.policykit.exec", shellSubject, "1 min 0 sec ago", "59 min 0 sec from now");
-        assertEqual(kept(outliving), "unknown", "an entry outliving the system's length: unknown");
-        assertEqual(list(outliving).reason, "longer", "… said why");
-        assertEqual(list(outliving).entries.length, 1, "… its entries still given, to be forgotten");
-        assertEqual(list(outliving).earliest.id, "tmpauthz20", "… and the earliest");
-        assertEqual(kept(entry("e", "org.freedesktop.policykit.exec", shellSubject, "1 sec ago", "5 min 0 sec from now")), "e,-2000,300000",
-                    "the system's length and the second's truncation: kept");
-        assertEqual(kept(entry("f", "org.freedesktop.policykit.exec", shellSubject, "2 sec ago", "5 min 0 sec from now")), "unknown",
-                    "a second past the tolerance: unknown");
-        assertEqual(kept(entry("g", "org.freedesktop.policykit.exec", "unix-process:777:1 (bash)", "1 min 0 sec ago", "59 min 0 sec from now")), "",
-                    "another process's long entry: not the shell's, no matter");
-        assertEqual(rules.parseList(outliving, nowMs, shellPid, -1).known, true, "the system's length unknown: no such check");
-        assertEqual(rules.parseList(outliving, nowMs, shellPid).known, true, "no length handed in: no such check");
-        // Another process of the user whose command line carries newlines and lines that read
-        // as an entry of the shell's: either the list breaks, or the forged entry is checked
-        // like any other
-        const forger = text => entry("tmpauthz30", "org.freedesktop.policykit.exec", "unix-process:777:99 (sh -c " + text + ")", "30 sec ago", "4 min 30 sec from now");
-        // The forger's command line closes its own entry, adds one for the shell's pid, and
-        // opens a last one that the forger's real obtained and expires lines complete
-        const forgedEntry = (expires) => "x)\nobtained:         1 sec ago (x)\nexpires:          4 min 0 sec from now (x)\n\n"
-            + "authorization id: forged\naction:           org.freedesktop.policykit.exec\n"
-            + "subject:          unix-process:4242:1234567 (q)\nobtained:         0 sec from now (x)\nexpires:          " + expires + " (x)\n\n"
-            + "authorization id: tail\naction:           a.b\nsubject:          unix-session:2 (y";
-        assertEqual(list(forger(forgedEntry("999 min 0 sec from now"))).reason, "longer", "a forged entry kept for ever: unknown, as longer");
-        assertEqual(kept(forger("\naction: junk")), "unknown", "a command line breaking the form: unknown");
-        const forgedFresh = forgedEntry("5 min 0 sec from now");
-        const withForged = list(ours + forger(forgedFresh));
-        assertEqual(withForged.entries.map(item => item.id).join(","), "tmpauthz12,forged", "a fresh forged entry within the length: read as the shell's");
-        assertEqual(withForged.earliest.id, "tmpauthz12", "… but the revoke stays armed from the real, earlier one");
-        assertEqual(rules.revokeAtMs(withForged.entries, 3), nowMs - 61000 + 180000, "… and the revoke time with it");
+                ["junk", "Error: GDBus.Error:org.freedesktop.PolicyKit1.Error.Failed: Can only enumerate for your own session"],
+                ["not a tuple", "[]"],
+                ["a tuple of two", "([], [])"],
+                ["not an array inside", "('x',)"],
+                ["an entry of four", "([('a', 'b', " + process(shellPid) + ", uint64 1)],)"],
+                ["a subject without details", "([('a', 'b', ('unix-process',), uint64 1, uint64 2)],)"],
+                ["a subject's details as a list", "([('a', 'b', ('unix-process', [1]), uint64 1, uint64 2)],)"],
+                ["times as text", "([('a', 'b', " + process(shellPid) + ", '1', '2')],)"],
+                ["a time not whole", "([('a', 'b', " + process(shellPid) + ", 1.5, 2)],)"],
+                ["an id not text", "([(1, 'b', " + process(shellPid) + ", 1, 2)],)"],
+                ["an action not text", "([('a', 2, " + process(shellPid) + ", 1, 2)],)"],
+                ["a subject kind not text", "([('a', 'b', (1, {}), 1, 2)],)"],
+                ["a subject of three", "([('a', 'b', ('unix-process', {}, 1), 1, 2)],)"],
+                ["a null subject", "([('a', 'b', ('unix-process', nothing), 1, 2)],)"],
+                ["cut short", answer([ours]).slice(0, -3)]])
+            assertEqual(kept(text), "unknown:malformed", label + ": unknown");
+        assertEqual(rules.parseKept(null, nowMs, shellPid, 300).reason, "unread", "no output: unread");
+        assertEqual(rules.parseKept(answer([ours]), NaN, shellPid, 300).reason, "unread", "no clock: unread");
+        assertEqual(rules.parseKept(answer([ours]), nowMs, 0, 300).reason, "unread", "no pid: unread");
+        assertEqual(rules.parseKept(answer([ours]), nowMs, "4242", 300).reason, "unread", "a pid as text: unread");
+        assertEqual(rules.parseKept(answer([item("p", exec, process(1), now - 1, now + 1)]), nowMs, 1, 300).entries.length, 1, "pid 1 is a pid");
+        assertEqual(rules.parseKept("x", nowMs, shellPid, 300).entries.length, 0, "unknown: no entries");
+
+        // ---- What to do after a reading ----
+        const step = (list, minutes, at) => json(rules.revokeStep(list, minutes, at ?? nowMs));
+        const listOf = (entries, known, reason) => ({ known: known ?? true, reason: reason ?? "", entries });
+        const fresh = { obtainedMs: nowMs - 60000, untilMs: nowMs + 240000 };
+        assertEqual(step(listOf([fresh]), 3), json({ now: false, atMs: nowMs + 120000 }), "shorter: armed for obtained plus the setting");
+        assertEqual(step(listOf([fresh]), 5), json({ now: false, atMs: 0 }), "as long as polkit's: nothing");
+        assertEqual(step(listOf([fresh]), 1), json({ now: true, atMs: 0 }), "the time passed (a suspend): at once");
+        assertEqual(step(listOf([{ obtainedMs: nowMs - 120000, untilMs: nowMs + 180000 }]), 2), json({ now: true, atMs: 0 }), "the time just reached: at once");
+        assertEqual(step(listOf([{ obtainedMs: nowMs - 119999, untilMs: nowMs + 180000 }]), 2), json({ now: false, atMs: nowMs + 1 }), "a millisecond before: armed");
+        assertEqual(step(listOf([]), 3), json({ now: false, atMs: 0 }), "nothing kept: nothing");
+        assertEqual(step(listOf([fresh], false, "longer"), 15), json({ now: true, atMs: 0 }), "longer: at once, whatever the setting");
+        assertEqual(step(listOf([], false, "longer"), 15), json({ now: false, atMs: 0 }), "longer with nothing in it: nothing");
+        assertEqual(step({ known: false, reason: "longer" }, 15), json({ now: false, atMs: 0 }), "longer without entries: nothing");
+        assertEqual(step(listOf([fresh], false, "malformed"), 1), json({ now: false, atMs: 0 }), "not understood: nothing (the next reading decides)");
+        assertEqual(step(null, 3), json({ now: false, atMs: 0 }), "no list: nothing");
 
         // ---- The shell's own revoke ----
         // Judged by the entries alone: polkitd's length in force may differ from its conf file

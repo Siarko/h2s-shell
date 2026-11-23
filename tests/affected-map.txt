@@ -125,6 +125,9 @@ tests/fixtures/pam-nixos/* unit:PamNixosModuleTest self:tests/run-system.sh
 
 # ---- Started only by shell.qml ---------------------------------------------------------
 singletons/SleepLockNotice.qml unit:SleepNoticeRulesTest lock:sleep-notice
+# Its wiring (the lock, the setting, the queue's runs) has no suite: its reader's suite, and
+# the shell locking and unlocking with it started
+singletons/RememberedAdmin.qml unit:RememberedAdminReadingTest lock:relock lock:logind
 # (no suite: the shell starting is its check)
 singletons/DictationMusicPause.qml lock:harness
 # (nothing instantiates it: a description of what each hardware source provides)
