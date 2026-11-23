@@ -135,6 +135,7 @@ QtObject {
     property var _pamTrial: PamTrialTest {}
     property var _pamNixosModule: PamNixosModuleTest {}
     property var _pamApplyRules: PamApplyRulesTest {}
+    property var _rememberRules: RememberRulesTest {}
     property var _pamApply: PamApplyTest {}
     property var _pamRuleList: PamRuleListTest {}
     property var _pamRulesPage: PamRulesPageTest {}
