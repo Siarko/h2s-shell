@@ -87,7 +87,7 @@ Singleton {
         const lines = [];
         // The probe's own tools come from the distribution's program directories (asked once
         // it has answered, see start()); not known: nothing is trusted
-        const toolPath = ModuleRules.probeToolPath(Distribution.facts);
+        const toolPath = ModuleRules.probeToolPath(Distribution.detection.facts);
         if (toolPath === "") {
             console.warn("[RememberedAdmin] the distribution is not known: no trusted gdbus or readlink looked for;"
                          + " what is remembered is not read, and not forgotten at lock");

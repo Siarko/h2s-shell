@@ -135,7 +135,10 @@ QtObject {
         // facts: looked at once it has answered; not known, the probe is not run (no answer:
         // taken for the real pkexec)
         Distribution.whenReady(() => {
-            const toolPath = ModuleRules.probeToolPath(Distribution.facts);
+            // Gone meanwhile (its module turned off): nothing is asked for it
+            if (root._gone)
+                return;
+            const toolPath = ModuleRules.probeToolPath(Distribution.detection.facts);
             const verdict = probe => {
                 const problem = ModuleRules.testElevateVerdict(probe.ok, probe.lines);
                 if (problem !== "") {
@@ -151,10 +154,13 @@ QtObject {
                 return;
             }
             _probe.run([ModuleRules.probeShell, "-c", ModuleRules.testElevateProbeScript, "sh", elevating[0],
-                        PrivilegedRules.pkexecSearchPath(Distribution.facts)].concat(ModuleRules.systemPkexecPaths(Distribution.shipped)),
+                        PrivilegedRules.pkexecSearchPath(Distribution.detection.facts)].concat(ModuleRules.systemPkexecPaths(Distribution.detection.shipped)),
                        verdict, { PATH: toolPath });
         });
     }
+
+    // Destroyed: a look-up waiting for Distribution asks nothing for it any more
+    property bool _gone: false
 
     // Test mode, the gate: the elevating programs the probe found to be stand-ins (REMOVED IN
     // SLICE Z with the gate)
@@ -237,6 +243,7 @@ QtObject {
     property Io.CommandAction _probe: Io.CommandAction {}
 
     Component.onDestruction: {
+        _gone = true;
         if (_ownerKey !== "")
             PrivilegedRuns.ownerGone(_ownerKey);
     }

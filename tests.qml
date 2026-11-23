@@ -53,6 +53,7 @@ QtObject {
     property var _systemFacts: SystemFactsTest {}
     property var _distributionRules: DistributionRulesTest {}
     property var _distributionReading: DistributionReadingTest {}
+    property var _distributionUnknown: DistributionUnknownTest {}
     property var _notifier: NotifierTest {}
     property var _scrollNotches: ScrollNotchesTest {}
     property var _curvePoints: CurvePointsTest {}

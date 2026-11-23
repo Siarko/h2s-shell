@@ -59,7 +59,7 @@ Singleton {
     // NixOS keeps /etc declarative: written files there are outside the system's own
     // configuration, so the page offers the line for configuration.nix instead
     // (Distribution: false until it has answered, as until any check has)
-    readonly property bool isNixos: Distribution.id === "nixos"
+    readonly property bool isNixos: Distribution.detection.id === "nixos"
 
     // polkit's answer for one of NetworkManager's actions ("settings.modify.hostname")
     function need(action: string): string {

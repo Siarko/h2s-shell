@@ -22,13 +22,15 @@ Singleton {
     // system's places; null until the manifests are read, or when one cannot be used
     readonly property var shipped: detection.shipped
 
-    // Calls `callback` once Distribution has answered (`ready`): at once when it has, else
-    // just after it does (once every property here has taken the answer). For what needs
-    // the facts before it may start — never a guess meanwhile
+    // Calls `callback` once Distribution has answered: at once when it has, else just after
+    // it does. For what needs the facts before it may start — never a guess meanwhile. Code
+    // that acts on the answer reads it from `detection` (whose ready, id, facts and shipped
+    // change together): `ready`, `id`, `facts` and `shipped` are bindings on it, and while
+    // one of them takes a new answer another may still hold the old one
     function whenReady(callback) {
         if (typeof callback !== "function")
             return;
-        if (ready) {
+        if (detection.ready) {
             callback();
             return;
         }
@@ -37,13 +39,13 @@ Singleton {
 
     property var _waiting: []
 
-    onReadyChanged: {
-        if (ready)
+    onDetectionChanged: {
+        if (detection.ready)
             Qt.callLater(root._flush);
     }
 
     function _flush() {
-        if (!ready)
+        if (!detection.ready)
             return;
         const waiting = _waiting;
         _waiting = [];

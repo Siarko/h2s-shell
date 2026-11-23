@@ -448,6 +448,8 @@ Singleton {
     // this is. Read once a page asks, and once Distribution has read the facts.
     property var plugins: []
     property bool pluginsRead: false
+    // Where their .name files are looked for: every shipped distribution's directories
+    readonly property var pluginDirectories: DistributionRules.unionOf(Distribution.detection.shipped, "networkManagerVpnDirectories")
 
     function readPlugins(): void {
         Distribution.whenReady(() => _plugins.request());
@@ -458,7 +460,7 @@ Singleton {
         // Each file with a line end after it: one without would glue the next file's
         // "[VPN Connection]" to its last line. The directories are arguments, never code
         command: ["sh", "-c", "for dir; do for file in \"$dir\"/*.name; do [ -f \"$file\" ] && cat \"$file\" && echo; done; done; true", "sh"]
-            .concat(DistributionRules.unionOf(Distribution.shipped, "networkManagerVpnDirectories"))
+            .concat(root.pluginDirectories)
         onDone: lines => {
             root.plugins = NetworkRules.vpnPlugins(lines.join("\n"));
             root.pluginsRead = true;

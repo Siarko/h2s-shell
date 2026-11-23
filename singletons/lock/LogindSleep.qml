@@ -38,7 +38,9 @@ Scope {
     property string fileRoot: ""
     // Whether this is NixOS: true, false, null when the distribution cannot be told, or
     // undefined until Distribution has answered
-    property var nixos: Distribution.ready ? (Distribution.id === "" ? null : Distribution.id === "nixos") : undefined
+    // (From the one answer object: Distribution's ready and id are two bindings on it, and
+    // one may still hold the old value while the other changes)
+    property var nixos: Distribution.detection.ready ? (Distribution.detection.id === "" ? null : Distribution.detection.id === "nixos") : undefined
     property int watchdog: 32000
     property int suspendWatchdog: 30000
     // { canSuspend, canHibernate, canSuspendThenHibernate: "yes" | "no" | "challenge" | "na" |

@@ -559,9 +559,12 @@ Singleton {
                 return;
             // Until the distribution has answered nothing is asked — its silence is not "not
             // NixOS": the question is asked when it answers (below)
-            if (!Distribution.ready)
+            if (!Distribution.detection.ready)
                 return;
             _fallbackDirectProbe.generation = fallbackDirectFor;
+            // Its distribution read from the answer itself, now (Distribution's id may not
+            // have taken a new answer yet while its readiness has)
+            _fallbackDirectProbe.command = ["sh", "-c", root._fallbackDirectScript, "sh", root._systemPamDirectory, Distribution.detection.id];
             _fallbackDirectProbe.request();
         }
 
@@ -602,8 +605,8 @@ Singleton {
             probeFallbackDirectly();
         });
 
-        Distribution.readyChanged.connect(() => {
-            if (fallbackDirectFor !== 0)
+        Distribution.detectionChanged.connect(() => {
+            if (Distribution.detection.ready && fallbackDirectFor !== 0)
                 probeFallbackDirectly();
         });
 
@@ -1004,14 +1007,15 @@ Singleton {
     // answered (probeFallbackDirectly); when it could not tell the system ($2 empty), a
     // readable system-wide config is still an answer — it wins on every system — and
     // anything else none (status 3). `generation`: the request it was started for
+    readonly property string _fallbackDirectScript:
+        "if test -r \"$1/h2s-shell-password\"; then echo readable; elif [ -z \"$2\" ]; then exit 3; fi\n"
+        + "[ \"$2\" = nixos ] && echo nixos\n"
+        + "echo answered"
     LatestQuery {
         id: _fallbackDirectProbe
         property int generation: 0
-        command: ["sh", "-c",
-            "if test -r \"$1/h2s-shell-password\"; then echo readable; elif [ -z \"$2\" ]; then exit 3; fi\n"
-            + "[ \"$2\" = nixos ] && echo nixos\n"
-            + "echo answered",
-            "sh", root._systemPamDirectory, Distribution.id]
+        // Set by probeFallbackDirectly, with the distribution as it is then
+        command: []
     }
 
     // ---- Adapters for the shell's lifetime ----

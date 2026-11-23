@@ -53,7 +53,7 @@ Singleton {
     function _lookUp() {
         // The probe's own tools come from the distribution's program directories: not
         // known, nothing is looked up (an empty PATH would search the working directory)
-        const toolPath = ModuleRules.probeToolPath(Distribution.facts);
+        const toolPath = ModuleRules.probeToolPath(Distribution.detection.facts);
         if (toolPath === "") {
             console.warn("[Commands] the distribution is not known (" + Distribution.detection.problem + "): `timeout` and `setpriv` are not looked for");
             _finish();
@@ -162,5 +162,25 @@ Singleton {
 
     // Looked up once the distribution has answered: until then runs that take the tools
     // wait, as they wait for the look-up
-    Component.onCompleted: Distribution.whenReady(() => root._lookUp())
+    // A Distribution that does not answer within lookupMs is a look-up that did not answer:
+    // nothing is found, runs start bare rather than wait for ever
+    Component.onCompleted: {
+        _distributionWait.start();
+        Distribution.whenReady(() => {
+            _distributionWait.stop();
+            if (!root._known)
+                root._lookUp();
+        });
+    }
+
+    property Timer _distributionWait: Timer {
+        interval: root.lookupMs
+        onTriggered: {
+            if (root._known)
+                return;
+            console.warn("[Commands] the distribution did not answer within " + root.lookupMs / 1000
+                         + " s: `timeout` and `setpriv` are not looked for");
+            root._finish();
+        }
+    }
 }

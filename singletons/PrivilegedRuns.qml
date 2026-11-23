@@ -407,7 +407,7 @@ Singleton {
             timeoutMs: 5000,
             keepOutput: false,
             // Only the shell's builtin `[` runs: nothing is looked up on this PATH
-            environment: { PATH: ModuleRules.probeToolPath(Distribution.facts) },
+            environment: { PATH: ModuleRules.probeToolPath(Distribution.detection.facts) },
             done: result => {
                 if (!root._stillChecking(job))
                     return;
@@ -623,8 +623,8 @@ Singleton {
     }
 
     function _lookUpPkexec() {
-        const searched = PrivilegedRules.pkexecSearchPath(Distribution.facts);
-        const toolPath = ModuleRules.probeToolPath(Distribution.facts);
+        const searched = PrivilegedRules.pkexecSearchPath(Distribution.detection.facts);
+        const toolPath = ModuleRules.probeToolPath(Distribution.detection.facts);
         if (searched === "" || toolPath === "") {
             _pkexec = "";
             _pkexecReason = "the distribution is not known, so neither is where pkexec is";

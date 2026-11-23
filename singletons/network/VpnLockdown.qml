@@ -85,7 +85,7 @@ Singleton {
     property string installedAt: ""
     property bool ruleInstalled: false
     // NixOS (Distribution: false until it has answered)
-    readonly property bool isNixos: Distribution.id === "nixos"
+    readonly property bool isNixos: Distribution.detection.id === "nixos"
     property bool nftFound: false
     property bool checked: false
     // A password was asked for while running the installed script: its rule does not apply

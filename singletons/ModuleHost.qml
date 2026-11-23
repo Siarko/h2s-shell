@@ -2107,18 +2107,18 @@ Scope {
         _checkingPrograms = true;
         // The probe's own tools come from the distribution's program directories: asked
         // once it has answered; not known, nothing is looked up (each name unanswered)
-        if (!Distribution.ready) {
+        if (!Distribution.detection.ready) {
             Distribution.whenReady(() => {
                 root._checkingPrograms = false;
                 root._checkPrograms(names);
             });
             return;
         }
-        const toolPath = ModuleRules.probeToolPath(Distribution.facts);
+        const toolPath = ModuleRules.probeToolPath(Distribution.detection.facts);
         if (toolPath === "") {
             Qt.callLater(() => {
                 root._checkingPrograms = false;
-                root._programsAnswered(names, [], false);
+                root._programsAnswered(names, [], false, "the distribution is not known");
                 root._applyGuarded();
             });
             return;
@@ -2145,13 +2145,16 @@ Scope {
         });
     }
 
-    function _programsAnswered(names, lines, timedOut) {
+    // `unanswered`: why a name the look-up did not answer has no verdict (default: the
+    // look-up's own silence or its time limit)
+    function _programsAnswered(names, lines, timedOut, unanswered) {
         const verdicts = ModuleRules.programVerdicts(lines, names);
         for (const program of names) {
             const before = _programs.get(program);
             let verdict = verdicts[program];
             if (!verdict) {
-                const reason = timedOut ? "the look-up did not answer within " + checkTimeoutMs / 1000 + " s" : "the look-up gave no answer";
+                const reason = typeof unanswered === "string" ? unanswered
+                    : timedOut ? "the look-up did not answer within " + checkTimeoutMs / 1000 + " s" : "the look-up gave no answer";
                 verdict = before && before.path !== ""
                     ? Object.freeze(Object.assign({}, before, { trusted: false, reason: reason }))
                     : Object.freeze({ path: "", real: "", trusted: false, reason: reason, owner: "", mode: "" });
@@ -2207,7 +2210,7 @@ Scope {
         _checkingTestPrograms = true;
         _testProgramsLooking = record;
         // The probe's own tools: as for _checkPrograms (not known: no stand-in found)
-        if (!Distribution.ready) {
+        if (!Distribution.detection.ready) {
             Distribution.whenReady(() => {
                 root._checkingTestPrograms = false;
                 root._testProgramsLooking = null;
@@ -2215,12 +2218,12 @@ Scope {
             });
             return;
         }
-        const toolPath = ModuleRules.probeToolPath(Distribution.facts);
+        const toolPath = ModuleRules.probeToolPath(Distribution.detection.facts);
         if (toolPath === "") {
             Qt.callLater(() => {
                 root._checkingTestPrograms = false;
                 root._testProgramsLooking = null;
-                root._testProgramsAnswered(record, names, directory, []);
+                root._testProgramsAnswered(record, names, directory, [], "the distribution is not known");
                 root._applyGuarded();
                 root._checkTestPrograms([]);
             });
@@ -2242,13 +2245,14 @@ Scope {
         });
     }
 
-    function _testProgramsAnswered(record, names, directory, lines) {
+    function _testProgramsAnswered(record, names, directory, lines, unanswered) {
         if (!_records.includes(record) || !_fromStandIns(record))
             return;
         const answered = ModuleRules.testProgramVerdicts(lines, names, directory);
         const verdicts = {};
         for (const name of names)
-            verdicts[name] = answered[name] ?? Object.freeze({ path: "", real: "", trusted: false, reason: "the look-up gave no answer", owner: "", mode: "" });
+            verdicts[name] = answered[name] ?? Object.freeze({ path: "", real: "", trusted: false,
+                                                               reason: typeof unanswered === "string" ? unanswered : "the look-up gave no answer", owner: "", mode: "" });
         // One line per change of what its stand-ins are
         if (logStates && JSON.stringify(record.testVerdicts) !== JSON.stringify(verdicts)) {
             const found = names.filter(name => verdicts[name].path !== "");
