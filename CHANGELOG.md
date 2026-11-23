@@ -15,6 +15,16 @@ section to the new version and date.
 
 ## [Unreleased]
 
+### Module API
+The interface modules are written against (`qs.api`), versioned on its own
+(`Api.version`; its reference is `api/Api.qml`).
+- 1.39: `module.privileged.remembered`, frozen `{ kept, untilMs }`: while the shell's
+  process holds a remembered administrator password, a run through
+  `module.privileged.start` asks for none until `untilMs`; a new object when it changes and
+  when it runs out. `PrivilegedMark` and `SwitchRow` take it as `remembered`: while kept, a
+  mark that asks shows an open lock, dimmed, its tooltip the time left ("No password needed
+  for 4 min"). In module test mode `ModuleTestKit.setRemembered(untilMs)` sets it.
+
 ### Added
 - Settings → System → Authentication: "Sign-in rules" for sudo and administrator prompts
   (polkit) — what is in force as steps, rows of methods (fingerprint, security key,

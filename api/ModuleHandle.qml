@@ -152,6 +152,11 @@ QtObject {
         })
         readonly property bool available: _tools.available
         readonly property string unavailableReason: _tools.reason
+        // (API 1.39) What polkit keeps for the shell's process, frozen { kept, untilMs }: while
+        // `kept`, a run through start() asks for no password until `untilMs` (ms since the
+        // epoch; 0 when not kept). A new object when it changes, and when it runs out. In
+        // module test mode the test kit's (ModuleTestKit.setRemembered)
+        readonly property var remembered: ModuleHandleHosts.hostOf(root._hostKey)?.testMode === true ? Api._testRemembered : RememberedAdmin.remembered
 
         function start(argv, options) {
             if (root._privilegedKey === "")

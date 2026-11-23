@@ -62,12 +62,16 @@ import qs.components as Components
 //                          row is left out, and so are localNetworks rows with
 //                          localNetworksReady false (the shell lists none then). Nothing of the real NetworkManager is read in test
 //                          mode. Reset before each suite
+//   setRemembered(untilMs) (1.39) what module.privileged.remembered tells: kept until
+//                          untilMs (ms since the epoch, from now on); 0, a time past or not a
+//                          number: nothing kept. It does not run out by itself: it stays until
+//                          the next call. Reset before each suite
 //   dataHome               (1.13) the data home the modules' data directories are in now:
 //                          below the host's private temporary home ("" until it is made)
 //   clearRecords()         empties `opened`, `notified` and `chooserCalls`, and sets the
-//                          real clock and the default system and network facts again. The
-//                          records are shared by every module's suites (they run side by
-//                          side): it clears theirs too
+//                          real clock, the default system and network facts and nothing
+//                          remembered again. The records are shared by every module's
+//                          suites (they run side by side): it clears theirs too
 //   (1.17, the file chooser: module.chooseFiles opens no dialog in test mode — each call
 //   that would open one is recorded and waits for the suite's answer; the lock is the one
 //   setSessionLocked or setChooserLocked sets. A chooser a suite left open and the chooser's
@@ -227,6 +231,13 @@ Singleton {
             Api._testNow = typeof ms === "number" && Number.isFinite(ms) && ms > 0 ? ms : 0;
     }
 
+    function setRemembered(untilMs) {
+        if (!Modules.host.testMode)
+            return;
+        const kept = typeof untilMs === "number" && Number.isFinite(untilMs) && untilMs > Date.now();
+        Api._testRemembered = Object.freeze({ kept: kept, untilMs: kept ? untilMs : 0 });
+    }
+
     function setSystem(facts) {
         if (!Modules.host.testMode)
             return Object.freeze(["module test mode is off"]);
@@ -279,6 +290,7 @@ Singleton {
             Api._testNow = 0;
             Api._testSystemGiven = null;
             Api._testNetworkGiven = null;
+            setRemembered(0);
         }
         Api._opened = [];
         Notifier.clearRecorded();

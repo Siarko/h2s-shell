@@ -337,6 +337,34 @@ TestCase {
         assertEqual(rules.keptUntilMs([], 3), 0, "nothing kept: 0");
         assertEqual(rules.keptUntilMs(null, 3), 0, "no entries: 0");
 
+        // ---- What a mark is told, and shows ----
+        const known = entries => ({ known: true, reason: "", entries: entries });
+        const told = (list, minutes, at) => json(rules.remembered(list, minutes, at));
+        assertEqual(told(known([one]), 15, nowMs), json({ kept: true, untilMs: nowMs + 240000 }), "kept: until polkitd's expiry");
+        assertEqual(told(known([one]), 3, nowMs), json({ kept: true, untilMs: nowMs + 120000 }), "… until the shell's revoke when sooner");
+        assertEqual(told(known(pair), 15, nowMs), json({ kept: true, untilMs: nowMs + 290000 }), "several: the latest");
+        assertEqual(told(known([one]), 15, nowMs + 239999), json({ kept: true, untilMs: nowMs + 240000 }), "a moment before the end: kept");
+        assertEqual(told(known([one]), 15, nowMs + 240000), json({ kept: false, untilMs: 0 }), "at the end: not kept");
+        assertEqual(told(known([]), 15, nowMs), json({ kept: false, untilMs: 0 }), "nothing kept");
+        assertEqual(told({ known: false, reason: "longer", entries: [one] }, 15, nowMs), json({ kept: false, untilMs: 0 }),
+                    "kept longer than the conf says (forgotten at once): not kept");
+        assertEqual(told({ known: false, reason: "unread", entries: [] }, 15, nowMs), json({ kept: false, untilMs: 0 }), "the list unread: not kept");
+        assertEqual(told(null, 15, nowMs), json({ kept: false, untilMs: 0 }), "no list: not kept");
+        assertEqual(told(known([one]), 15, NaN), json({ kept: false, untilMs: 0 }), "no clock: not kept");
+        assert(Object.isFrozen(rules.remembered(known([one]), 15, nowMs)), "frozen");
+        assertEqual(rules.markKeptUntil("auth", { kept: true, untilMs: 5000 }), 5000, "a mark that asks, kept: until then");
+        for (const need of ["no", "yes", "", "perhaps"])
+            assertEqual(rules.markKeptUntil(need, { kept: true, untilMs: 5000 }), 0, "a mark " + json(need) + ": as polkit says");
+        for (const bad of [null, undefined, "kept", { kept: false, untilMs: 5000 }, { kept: "true", untilMs: 5000 }, { kept: true },
+                           { kept: true, untilMs: 0 }, { kept: true, untilMs: -1 }, { kept: true, untilMs: Infinity }, { kept: true, untilMs: "5000" }])
+            assertEqual(rules.markKeptUntil("auth", bad), 0, "told " + json(bad) + ": the lock");
+        assertEqual(rules.keptTip(nowMs + 240000, nowMs), "No password needed for 4 min", "whole minutes");
+        assertEqual(rules.keptTip(nowMs + 180001, nowMs), "No password needed for 4 min", "… rounded up");
+        assertEqual(rules.keptTip(nowMs + 60000, nowMs), "No password needed for 1 min", "a minute");
+        assertEqual(rules.keptTip(nowMs + 59000, nowMs), "No password needed for 59 s", "under a minute: seconds");
+        assertEqual(rules.keptTip(nowMs + 400, nowMs), "No password needed for 1 s", "part of a second: 1 s");
+        assertEqual(rules.keptTip(nowMs - 5000, nowMs), "No password needed for 1 s", "past its end (the reading turns it back): 1 s");
+
         // ---- The NixOS line ----
         assertEqual(rules.nixLine("alex", 5), "programs.h2s-shell.polkit.rememberAdmin = {\n  enable = true;\n  users = [ \"alex\" ];\n  minutes = 5;\n};",
                     "the module's option");

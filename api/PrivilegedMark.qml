@@ -9,6 +9,13 @@ import qs.singletons
 //
 //   PrivilegedMark { need: client.need }
 //
+// (1.39) `remembered`: the module's `module.privileged.remembered`, beside a control that
+// runs through module.privileged.start. While it is kept, a mark whose need is "auth" shows
+// an open lock, dimmed, its tooltip the time left; anything else leaves the mark as `need`
+// says.
+//
+//   PrivilegedMark { need: client.need; remembered: module.privileged.remembered }
+//
 // With nothing to mark it is hidden and takes no room. A module that sets `visible`
 // itself decides alone whether the element is there: the mark inside still shows only
 // when there is something to mark, and the element left empty has no size — but a layout
@@ -20,6 +27,7 @@ Item {
     id: root
 
     property string need: "auth"
+    property var remembered: null
 
     visible: ApiElementRules.markShown(need)
     implicitWidth: _inner.shown ? _inner.implicitWidth : 0
@@ -36,5 +44,6 @@ Item {
         width: root.width
         height: root.height
         need: needWord.value
+        remembered: root.remembered
     }
 }

@@ -88,6 +88,8 @@ QtObject {
             ModuleTestKit.setSystem(null);
             // … nor the network facts (ModuleTestKit.setNetworks)
             ModuleTestKit.setNetworks(null);
+            // … nor what it said is remembered (ModuleTestKit.setRemembered)
+            ModuleTestKit.setRemembered(0);
             // … nor a file chooser it left open, nor the chooser's lock it set
             FileChooser.testReset();
             // … nor the side panels' lock (ModuleTestKit.setSessionLocked)

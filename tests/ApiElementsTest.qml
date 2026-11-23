@@ -29,7 +29,7 @@ TestCase {
         "Pill": ["clicked", "label", "picked", "size", "textSize", "tooltip"],
         "Checkbox": ["checked", "label", "toggled"],
         "ToggleSwitch": ["checked", "toggled"],
-        "PrivilegedMark": ["need"],
+        "PrivilegedMark": ["need", "remembered"],
         "SettingsRow": ["controls", "hint", "label", "value"],
         "ExpandingRow": ["content", "hint", "label", "open"],
         "Notice": ["kind", "text"],
@@ -708,6 +708,18 @@ TestCase {
         return element.children[0];
     }
 
+    // The first privileged mark under `item`, at any depth (null: none)
+    function _findMark(item) {
+        for (const child of Array.from(item.children)) {
+            if (child.keptUntilMs !== undefined && child.remembered !== undefined)
+                return child;
+            const inner = _findMark(child);
+            if (inner)
+                return inner;
+        }
+        return null;
+    }
+
     // The texts under `item`, at any depth, in order
     function _texts(item) {
         let found = [];
@@ -1307,6 +1319,32 @@ TestCase {
         assertEqual(mistypedMark.need, "perhaps", "the element keeps the word it was given");
         assert(forcedMark.visible && !_within(forcedMark).visible, "a mark a module shows itself still shows nothing when there is nothing to mark");
         assertEqual(forcedMark.width + " " + forcedMark.height + " " + forcedMark.implicitWidth, "0 0 0", "… and has no size");
+        // (1.39) While kept: an open lock, dimmed, in the privileged colour
+        const kept = Object.freeze({ kept: true, untilMs: Date.now() + 240000 });
+        const look = item => [item.text, item.opacity, item.color].join(" ");
+        variedMark.need = "auth";
+        variedMark.remembered = kept;
+        assertEqual(look(_within(variedMark)), ["\uf09c", 0.5, Theme.privileged].join(" "), "kept: an open lock at half strength, the privileged colour");
+        assertEqual(_within(variedMark).keptUntilMs, kept.untilMs, "… until the time it was told");
+        assertEqual(_within(variedMark)._counting, false, "… its tooltip's clock still while the tooltip is not open");
+        variedMark.remembered = Object.freeze({ kept: false, untilMs: 0 });
+        assertEqual(look(_within(variedMark)), ["\uf023", 1, Theme.privileged].join(" "), "not kept: the lock");
+        variedMark.remembered = kept;
+        variedMark.need = "no";
+        assertEqual(_within(variedMark).text + " " + _within(variedMark).opacity, "\uf05e 1", "kept, but not allowed: the no-entry sign");
+        variedMark.need = "";
+        assertEqual(variedMark.visible, false, "kept, nothing to mark: hidden");
+        variedMark.remembered = null;
+        variedMark.need = "auth";
+        assertEqual(look(_within(variedMark)), ["\uf023", 1, Theme.privileged].join(" "), "told nothing: the lock");
+        // The settings window's switch row hands it to its mark
+        const rowMark = _findMark(switchRow);
+        switchRow.need = "auth";
+        switchRow.remembered = kept;
+        assertEqual(rowMark?.text, "\uf09c", "a switch row's mark, kept: the open lock");
+        switchRow.remembered = null;
+        switchRow.need = "";
+        assertEqual(rowMark?.text, "\uf023", "… told nothing: the lock");
 
         // --- words it does not know ---
         assertEqual(_within(mistypedPill).size + " " + mistypedPill.height, "m " + Theme.pill.mediumHeight, "a pill of a size that does not exist shows as m");

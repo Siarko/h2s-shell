@@ -11,8 +11,9 @@ import qs.singletons.io
 // `system.rememberAdminMinutes` is shorter than what polkit keeps, and at once when polkit
 // keeps longer than its conf file says. The list is read after each run of the privileged
 // queue, after unlock, and once a second while a view counts down (showCountdown /
-// hideCountdown). Started with the shell (shell.qml), so that the lock's revoke is never
-// missed. gdbus and readlink are looked for once on PATH, trusted matches only (as
+// hideCountdown). Started with the shell (shell.qml calls start()), so that the lock's
+// revoke is never missed; until then nothing is run, so that a suite reaching it through the
+// module API (module.privileged.remembered) never reads or revokes the real polkit's. gdbus and readlink are looked for once on PATH, trusted matches only (as
 // CommandTools finds timeout); nothing runs until they are found. In a test tree it asks the
 // lock bed's stand-in gdbus (TestSeams.lockTools), or nothing at all: never the real bus.
 Singleton {
@@ -23,6 +24,9 @@ Singleton {
     readonly property var kept: _reader.kept
     readonly property real keptUntilMs: _reader.keptUntilMs
     readonly property real revokeAtMs: _reader.revokeAtMs
+    // What a privileged mark is told (RememberRules.remembered): frozen { kept, untilMs },
+    // a new object only when it changes, turned back when what is kept runs out
+    readonly property var remembered: _reader.remembered
     readonly property string forgetOutcome: _reader.forgetOutcome
     readonly property string forgetReason: _reader.forgetReason
     readonly property real forgetAtMs: _reader.forgetAtMs
@@ -104,5 +108,12 @@ Singleton {
     readonly property string _factsKey: SystemFacts.facts.userName + "\n" + CommandTools.timeout
     on_FactsKeyChanged: Qt.callLater(root.refresh)
 
-    Component.onCompleted: _lookUp()
+    // Once, by the shell at its start
+    function start() {
+        if (_started)
+            return;
+        _started = true;
+        _lookUp();
+    }
+    property bool _started: false
 }

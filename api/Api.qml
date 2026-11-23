@@ -9,7 +9,7 @@ import qs.singletons.network
 // The module API: everything a
 // module may use of the shell. A module imports `qs.api` and reaches:
 //
-//   Api.version            "1.38" — this shell's module API, "major.minor". A module's manifest
+//   Api.version            "1.39" — this shell's module API, "major.minor". A module's manifest
 //                          asks for one ("api"); it loads when the major is the same, this
 //                          minor is at least the one asked for, and the one asked for is not
 //                          below the shell's floor (ModuleRules.apiFloor: the oldest version
@@ -553,7 +553,13 @@ import qs.singletons.network
 //   PrivilegedMark         (1.5) need — polkit's answer for what the control beside it
 //                          does: "auth" (the default: the lock), "no" (not allowed), "yes"
 //                          or "" (nothing to mark: hidden, no room taken). An answer it
-//                          does not know shows the lock. Where a module sets `visible`
+//                          does not know shows the lock. (1.39) remembered — the module's
+//                          `module.privileged.remembered`, for a control that runs through
+//                          module.privileged.start: while it is kept, a mark whose need is
+//                          "auth" shows an open lock, dimmed, its tooltip the time left ("No
+//                          password needed for 4 min"); anything else, or nothing (the
+//                          default, null), leaves the mark as `need` says. SwitchRow takes
+//                          the same `remembered` for its mark. Where a module sets `visible`
 //                          itself, an element with nothing to mark is empty and without
 //                          size, but a layout keeps its spacing around it.
 //   SettingsRow            (1.6) label, hint (a short line under the label), value (a
@@ -842,6 +848,17 @@ import qs.singletons.network
 //   module.privileged.available   a trusted pkexec, setuid root, and a trusted `timeout`
 //                          (coreutils) were found
 //   module.privileged.unavailableReason   why not, in a few words ("" when available)
+//   module.privileged.remembered   (1.39) what polkit keeps for the shell's process, frozen
+//                          { kept, untilMs }: while `kept`, a run through start() asks for no
+//                          password until `untilMs` (ms since the epoch; 0 when not kept) —
+//                          the shell's remembered administrator authorization. A new object
+//                          only when it changes, and when it runs out (kept false then);
+//                          forgotten at lock and on the user's "Forget now". A list the
+//                          shell could not read is not kept. Hand it to PrivilegedMark's
+//                          `remembered` beside a control that runs through start(); a control
+//                          that asks through anything else (PrivilegedAction's own program,
+//                          another daemon's polkit action) is not covered by it. In module
+//                          test mode the test kit's (ModuleTestKit.setRemembered)
 //   module.privileged.start(argv, options)   runs a command as root through pkexec →
 //                          a handle { running (bool), cancel() }.
 //                          `argv`: a real array of strings (not a QML list, not an object
@@ -1132,6 +1149,8 @@ Singleton {
     }
     // Set by ModuleTestKit.setNow in test mode (0: the real clock)
     property real _testNow: 0
+    // (1.39) module.privileged.remembered in test mode, set by ModuleTestKit.setRemembered
+    property var _testRemembered: RememberRules.remembered(null, 5, 0)
 
     // (1.13) System facts (above): the shell's reading, or in test mode the test kit's
     readonly property var system: testMode ? _systemObject(_testSystemFacts, true) : _systemObject(SystemFacts.facts, false)

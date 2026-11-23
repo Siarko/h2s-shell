@@ -66,6 +66,11 @@ QtObject {
     property var kept: null
     // Until when something stays kept (RememberRules.keptUntilMs), 0 for nothing
     readonly property real keptUntilMs: kept === null ? 0 : RememberRules.keptUntilMs(kept.entries, minutes)
+    // What a privileged mark is told (RememberRules.remembered: frozen { kept, untilMs }): a
+    // new object only when it changes — after a list, a change of the setting, and when what
+    // is kept runs out (one timer, armed for that moment)
+    readonly property var remembered: _remembered
+    property var _remembered: RememberRules.remembered(null, minutes, 0)
     // The armed revoke time, 0 for none
     readonly property real revokeAtMs: _revokeTimer.running ? _revokeAt : 0
     // The last revoke's outcome: "" (none yet) | "forgotten" | "failed"; why it ran
@@ -327,6 +332,25 @@ QtObject {
     }
 
     // The countdown's reading, only while a view shows it
+    function _updateRemembered() {
+        const next = RememberRules.remembered(kept, minutes, now());
+        if (next.kept !== _remembered.kept || next.untilMs !== _remembered.untilMs)
+            _remembered = next;
+        if (next.kept) {
+            _expiry.interval = Math.max(1, Math.min(next.untilMs - now(), 2147483647));
+            _expiry.restart();
+        } else {
+            _expiry.stop();
+        }
+    }
+    onKeptChanged: _updateRemembered()
+    onMinutesChanged: _updateRemembered()
+
+    // Fires when what is kept runs out (early, as after a clock change: armed again)
+    property Timer _expiry: Timer {
+        onTriggered: root._updateRemembered()
+    }
+
     property Timer _countdown: Timer {
         interval: 1000
         repeat: true

@@ -9,7 +9,8 @@ import QtQuick
 // ExpirationSeconds. Here: the rule's text and the polkitd.conf text for a longer length, the
 // length polkitd resolves from its conf files, what is installed, the kept authorizations as
 // polkit's authority lists them over D-Bus (`gdbus call`), when the shell revokes them for a
-// shorter setting, the NixOS configuration line and the prompt's line. Pure: texts are handed in, nothing is read
+// shorter setting, what a privileged mark is told and shows, the NixOS configuration line
+// and the prompt's line. Pure: texts are handed in, nothing is read
 // or written.
 Singleton {
     id: root
@@ -465,6 +466,34 @@ Singleton {
         if (at === 0)
             return { now: false, atMs: 0 };
         return at <= nowMs ? { now: true, atMs: 0 } : { now: false, atMs: at };
+    }
+
+    // What a privileged mark is told while something is kept (module.privileged.remembered):
+    // frozen { kept, untilMs } — kept while the list is known and something stays kept after
+    // nowMs, until keptUntilMs; { false, 0 } otherwise. A list not known (unread, malformed,
+    // or kept longer than the conf says, which the shell forgets at once) is not kept: a
+    // mark then shows the lock, never a promise that may not hold.
+    function remembered(list, minutes, nowMs) {
+        const until = list?.known === true ? keptUntilMs(list.entries, minutes) : 0;
+        const kept = Number.isFinite(nowMs) && until > nowMs;
+        return Object.freeze({ kept: kept, untilMs: kept ? until : 0 });
+    }
+
+    // A mark's need and what it is told (remembered's shape, from the shell or a module) →
+    // until when it shows that no password is needed; 0: the mark as polkit's answer says.
+    // Only a mark that would ask ("auth") changes, and only for a kept, real time.
+    function markKeptUntil(need, remembered) {
+        if (need !== "auth" || remembered === null || typeof remembered !== "object" || remembered.kept !== true)
+            return 0;
+        const until = remembered.untilMs;
+        return typeof until === "number" && Number.isFinite(until) && until > 0 ? until : 0;
+    }
+
+    // The kept mark's tooltip at nowMs: the time left in whole minutes rounded up, under a
+    // minute in seconds, at least 1 s (the reading turns the mark back a moment later)
+    function keptTip(untilMs, nowMs) {
+        const seconds = Math.max(1, Math.ceil((untilMs - nowMs) / 1000) || 0);
+        return "No password needed for " + (seconds >= 60 ? Math.ceil(seconds / 60) + " min" : seconds + " s");
     }
 
     // The prompt's line for a run of the shell's queue while the rule is installed: the

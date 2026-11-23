@@ -14,6 +14,9 @@ RowLayout {
     // polkit's answer for what it changes (NetworkOverview.need): marked when it asks
     // for an administrator's password, off when not allowed
     property string need: ""
+    // What polkit keeps for the shell's process (PrivilegedMark's `remembered`), for a switch
+    // that runs through the shell's queue
+    property var remembered: null
     signal toggled()
     Layout.fillWidth: true
     Layout.bottomMargin: 6
@@ -41,7 +44,10 @@ RowLayout {
             color: Theme.textMuted
         }
     }
-    PrivilegedMark { need: _switchRow.need }
+    PrivilegedMark {
+        need: _switchRow.need
+        remembered: _switchRow.remembered
+    }
     ToggleSwitch {
         checked: _switchRow.checked
         enabled: _switchRow.need !== "no"

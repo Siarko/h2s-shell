@@ -6,7 +6,8 @@ import qs.tests
 // module.privileged.start against the fixture's stand-in pkexec (tests/programs/pkexec, which
 // prints the words it was given and runs them) and its command (tests/programs/talk). The
 // polkit agent and the lock are the test kit's (ModuleTestKit.setPolkitAgent,
-// setPolkitRequest, setSessionLocked; polkitAnnouncement: what the prompt would show). One
+// setPolkitRequest, setSessionLocked; polkitAnnouncement: what the prompt would show), and
+// what polkit keeps (module.privileged.remembered, ModuleTestKit.setRemembered). One
 // scenario after another, each starting with the shell's queue idle: they share the one
 // queue.
 TestCase {
@@ -141,6 +142,29 @@ TestCase {
     // --- Refused before pkexec runs: every `blocked` reason, notFound, errors ---
     function _refusals() {
         assertEqual(module.privileged.unavailableReason, "", "available: no reason given");
+        // (1.39) What polkit keeps for the shell's process: the test kit's in test mode
+        const remembered = () => JSON.stringify(module.privileged.remembered);
+        assertEqual(remembered(), JSON.stringify({ kept: false, untilMs: 0 }), "remembered: nothing kept at a suite's start");
+        let changes = 0;
+        const counted = () => changes++;
+        module.privileged.rememberedChanged.connect(counted);
+        const until = Date.now() + 240000;
+        ModuleTestKit.setRemembered(until);
+        assertEqual(remembered() + " " + changes, JSON.stringify({ kept: true, untilMs: until }) + " 1", "… kept until the time set, the change told");
+        assert(Object.isFrozen(module.privileged.remembered), "… frozen");
+        let written = true;
+        try {
+            module.privileged.remembered = { kept: false, untilMs: 0 };
+        } catch (error) {
+            written = false;
+        }
+        assert(!written && module.privileged.remembered.kept === true, "… read-only");
+        ModuleTestKit.setRemembered(Date.now() - 1);
+        assertEqual(remembered(), JSON.stringify({ kept: false, untilMs: 0 }), "… a time past: not kept");
+        ModuleTestKit.setRemembered(until);
+        ModuleTestKit.clearRecords();
+        assertEqual(remembered(), JSON.stringify({ kept: false, untilMs: 0 }), "… clearRecords(): nothing kept");
+        module.privileged.rememberedChanged.disconnect(counted);
         assert(_path("pkexec").endsWith("/tests/programs/pkexec"), "its pkexec is its stand-in: " + _path("pkexec"));
         ModuleTestKit.clearRecords();
         const talk = _path("talk");

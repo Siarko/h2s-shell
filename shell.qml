@@ -57,6 +57,7 @@ QtObject {
     Component.onCompleted: {
         VpnManager.start();
         VpnLockdown.start();
+        RememberedAdmin.start();
     }
 
     // The polkit agent decides at start whether it answers (Authentication); its prompt
@@ -65,7 +66,7 @@ QtObject {
     // Never over the lock screen: Authentication cancels a request while locked
     property var _authentication: Authentication
     // A remembered administrator password is forgotten at lock: started with the shell
-    property var _rememberedAdmin: RememberedAdmin
+    // (RememberedAdmin.start(), above)
     property var _authPrompt: LazyLoader {
         active: Authentication.flow !== null && !Profiles.screenLocked
         AuthPrompt {

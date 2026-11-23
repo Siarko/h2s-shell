@@ -11,8 +11,9 @@ import qs.singletons.io
 // and its revoke (noting every call). Covers: what is installed (Arch, NixOS, a conf that
 // cannot be read), no session, the list, the revoke at the chosen time through the clock
 // seam, at once when polkit keeps longer than its conf says, at lock (and not while the rule
-// is known absent), on forget(), a revoke that fails, a list read overtaken by a revoke, and
-// the countdown's reading while a view shows it. Never the real bus, polkit or /etc.
+// is known absent), on forget(), a revoke that fails, a list read overtaken by a revoke,
+// the countdown's reading while a view shows it, and what a privileged mark is told (kept
+// until its end, turned back when it runs out). Never the real bus, polkit or /etc.
 // Asynchronous.
 TestCase {
     id: suite
@@ -439,6 +440,31 @@ TestCase {
         _then("a countdown shown: read without being asked", () => _reader.lists > lists, () => {
             _reader.viewers = 0;
             assertEqual(_reader._countdown.running, false, "no view: the countdown's reading stops");
+            assertEqual(JSON.stringify(_reader.remembered), JSON.stringify({ kept: false, untilMs: 0 }), "nothing kept: a mark is told so");
+            const now = _nowSeconds();
+            _write({ "bus/list": _list([{ id: "runs-out", pid: _pid, obtained: now - 60, expires: now + 240 }]) });
+        });
+        let told = null;
+        _then("an entry that runs out by itself", () => _ready, () => readList());
+        _then("what a mark is told", () => listed() && _reader.remembered.kept, () => {
+            const until = _reader.kept.entries[0].untilMs;
+            assertEqual(JSON.stringify(_reader.remembered), JSON.stringify({ kept: true, untilMs: until }), "kept: until polkit's expiry");
+            assert(Object.isFrozen(_reader.remembered), "… frozen");
+            assertEqual(_reader.revokeAtMs, 0, "… with no revoke armed: it runs out by itself");
+            const left = until - (Date.now() + _offsetMs);
+            assert(_reader._expiry.running && Math.abs(_reader._expiry.interval - left) < 5000, "… a timer armed for its end: " + _reader._expiry.interval + " ms, " + left + " left");
+            told = _reader.remembered;
+            readList();
+        });
+        _then("the same list again", () => listed(), () => {
+            assert(_reader.remembered === told, "the same list read again: the same object, no change told");
+            // The clock past its end; the timer's firing, without waiting it out
+            _offsetMs += told.untilMs - (Date.now() + _offsetMs) + 1;
+            _reader._expiry.stop();
+            _reader._expiry.triggered();
+            assertEqual(JSON.stringify(_reader.remembered), JSON.stringify({ kept: false, untilMs: 0 }), "run out: not kept any more, without a reading");
+            assertEqual(_reader._expiry.running, false, "… and nothing armed");
+            _offsetMs = 0;
         });
         _clock.start();
     }
