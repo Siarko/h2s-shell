@@ -33,7 +33,8 @@ QtObject {
     // The last complete reading, or null before the first: { services: { name: stack },
     // lock: { method: stack }, faillock: { name: settings or null }, facts: { nixos (true /
     // false / null), fingerprint, securityKey ("ready" / "absent" / "unknown") },
-    // directories }
+    // directories, files: { path: { text } | { absent: true } | { unreadable: true } } (every
+    // file read: the editor builds from the texts) }
     property var reading: null
     // A refresh is going on
     readonly property bool running: _generation !== _finished
@@ -140,7 +141,8 @@ QtObject {
             lock: step.lock,
             faillock: step.faillock,
             facts: { nixos: _state.nixos, fingerprint: _state.methods.fingerprint, securityKey: _state.methods.securityKey },
-            directories: request.directories
+            directories: request.directories,
+            files: Object.assign({}, _state.answers)
         };
         _finished = generation;
         readings += 1;

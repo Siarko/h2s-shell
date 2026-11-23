@@ -204,4 +204,274 @@ Singleton {
                  buttons: [{ id: "remove", label: "Remove", kind: "delete" }],
                  subject: { list: String(title ?? ""), id: PamRuleRules.systemId } };
     }
+
+    // ── The sign-in rules page (panels/settings/PamRulesSection.qml) ──
+
+    readonly property var stepLabels: ({ fingerprint: "fingerprint", securityKey: "security key", password: "password" })
+    readonly property var _stepModules: ({ "pam_fprintd.so": "fingerprint", "pam_u2f.so": "securityKey", "pam_unix.so": "password" })
+
+    // What a stack in force asks, in order, as steps: the methods its auth lines (included
+    // files' too) ask for, the same one twice in a row once; other modules are no step.
+    // null when the stack is not known (a file not read or not understood)
+    function stepsOf(stack) {
+        if (!stack || stack.known !== true)
+            return null;
+        const steps = [];
+        for (const line of stack.lines ?? []) {
+            const method = _stepModules[line?.moduleName];
+            if (method && steps[steps.length - 1] !== method)
+                steps.push(method);
+        }
+        return steps;
+    }
+
+    // The summary's rows: [{ title, steps (null: not known) }] — one row for both services
+    // when they ask the same, else one each
+    function summaryRows(sudoStack, polkitStack) {
+        const sudo = stepsOf(sudoStack), polkit = stepsOf(polkitStack);
+        if (sudo !== null && polkit !== null && sudo.join(",") === polkit.join(","))
+            return [{ title: "sudo and administrator prompts", steps: sudo }];
+        return [{ title: "sudo", steps: sudo }, { title: "Administrator prompts", steps: polkit }];
+    }
+
+    // "This computer has: …"
+    function computerHas(facts) {
+        const finger = facts?.fingerprint === "ready" ? "a finger enrolled"
+            : facts?.fingerprint === "absent" ? "no finger enrolled" : "fingerprint not known";
+        const key = facts?.securityKey === "ready" ? "a security key registered"
+            : facts?.securityKey === "absent" ? "no security key registered" : "security key not known";
+        return finger + " · " + key;
+    }
+
+    // Where the rules go: { label, text }
+    function writtenTo(nixos, directory) {
+        if (nixos === true)
+            return { label: "Set through", text: "the NixOS module" };
+        const folder = String(directory ?? "") !== "" ? String(directory) : "/etc/pam.d";
+        return { label: "Written to", text: folder + "/sudo and " + folder + "/polkit-1" };
+    }
+
+    // The texts a reading holds for the page (PamStacks' `files`, `directories`): sudo's file,
+    // our polkit-1 (null: none there), polkit's own vendor file; undefined where not read.
+    // On NixOS there is one folder: polkit-1 is NixOS's file and there is no vendor file.
+    function filesOf(files, directories) {
+        const answers = files ?? {};
+        const folders = Array.isArray(directories) ? directories : [];
+        const textAt = path => {
+            const answer = answers[path];
+            if (typeof answer?.text === "string")
+                return answer.text;
+            return answer?.absent === true ? null : undefined;
+        };
+        const system = folders[0] ?? "";
+        const vendor = folders[1] ?? "";
+        return {
+            sudo: system !== "" ? textAt(system + "/sudo") : undefined,
+            polkit: system !== "" ? textAt(system + "/polkit-1") : undefined,
+            vendorPolkit: vendor !== "" ? textAt(vendor + "/polkit-1") : undefined
+        };
+    }
+
+    // A service's file in force for the page: PamEditRules.state's answer, or not known when
+    // the file (or polkit's own file) was not read — PamEditRules takes a missing text for
+    // "no file". On NixOS the shell writes no file: the fixed row alone, nothing changed by hand.
+    function inForceOf(text, service, vendorText, facts) {
+        if (facts?.system === "nixos")
+            return { known: true, changed: false, reasons: [], rows: [PamRuleRules.fixedRow()], adopted: null, vendorChanged: false };
+        if (text === undefined || (service === "polkit-1" && typeof vendorText !== "string"))
+            return { known: false, changed: false, reasons: [], rows: null, adopted: null, vendorChanged: false };
+        return PamEditRules.state(text, service, Object.assign({}, facts ?? {}, { vendorText: vendorText ?? undefined }));
+    }
+
+    // A service's facts for PamRuleRules.check and PamEditRules.build: the machine's (`base`:
+    // { nixos, fingerprint, securityKey }), its faillock (`faillock`: PamStacks' settings or
+    // null; present: the stack counts), the other service's rows, polkit's vendor text
+    function serviceFacts(base, service, stack, faillock, otherRows, vendorText, changedByHand) {
+        return {
+            system: base?.nixos === true ? "nixos" : "arch",
+            service,
+            fingerprint: base?.fingerprint ?? "unknown",
+            securityKey: base?.securityKey ?? "unknown",
+            faillockPresent: stack?.faillock?.present === true,
+            faillock: faillock ?? null,
+            otherService: otherRows,
+            vendorText: typeof vendorText === "string" ? vendorText : undefined,
+            changedByHand: changedByHand === true
+        };
+    }
+
+    // The editor's lists as the files in force give them: { split, shared, sudo, polkit }; a
+    // service not known starts with the fixed row alone
+    function editorFrom(sudoRows, polkitRows) {
+        const sudo = Array.isArray(sudoRows) ? sudoRows : [PamRuleRules.fixedRow()];
+        const polkit = Array.isArray(polkitRows) ? polkitRows : [PamRuleRules.fixedRow()];
+        const split = !PamRuleRules.sameRows(sudo, polkit);
+        return { split, shared: sudo, sudo, polkit };
+    }
+
+    // Whether the editor's lists differ from the rows in force
+    function pending(editor, inForceSudo, inForcePolkit) {
+        const lists = PamRuleRules.listsFor(editor);
+        return !PamRuleRules.sameRows(lists["sudo"], inForceSudo ?? []) || !PamRuleRules.sameRows(lists["polkit-1"], inForcePolkit ?? []);
+    }
+
+    // The split switch clicked: { ask (the warning modal first), editor (as it would be) }
+    function splitToggled(editor) {
+        if (editor?.split === true) {
+            const joined = PamRuleRules.joinLists(editor.sudo, editor.polkit);
+            return { ask: joined.asks, editor: { split: false, shared: joined.shared, sudo: editor.sudo, polkit: editor.polkit } };
+        }
+        const split = PamRuleRules.splitLists(editor?.shared);
+        return { ask: false, editor: { split: true, shared: editor?.shared ?? [], sudo: split.sudo, polkit: split.polkit } };
+    }
+
+    readonly property var joinSpec: ({
+        kind: "warning", title: "Use sudo's rules for both?",
+        body: ["Administrator prompts have rules of their own. One list means they are replaced by sudo's."],
+        buttons: [{ id: "join", label: "Use sudo's", kind: "warning" }]
+    })
+
+    // What Apply writes: each service whose new file differs from the one in force, in order
+    // (sudo, then polkit-1). `inputs`: { service: { rows, currentText, facts } }. → { items:
+    // [{ service, built, currentText, vendorText, text (the candidate) }], refusals (a build
+    // that refused, with its service) }
+    function applyQueue(inputs) {
+        const items = [], refusals = [];
+        for (const service of PamRuleRules.services) {
+            const input = inputs?.[service];
+            if (!input)
+                continue;
+            const built = PamEditRules.build(input.currentText, input.rows, input.facts);
+            if (!built.ok) {
+                refusals.push(...built.refusals.map(item => Object.assign({ service }, item)));
+                continue;
+            }
+            const chosen = PamApplyRules.candidate(built, input.facts?.vendorText);
+            if (chosen === null)
+                continue;
+            const current = input.currentText;
+            const same = chosen.remove ? (current === null || current === undefined) : chosen.text === current;
+            if (!same)
+                items.push({ service, built, currentText: current, vendorText: input.facts?.vendorText, text: chosen.text });
+        }
+        return { items, refusals };
+    }
+
+    // Whether a passed trial also stands for `text` as `service`'s file: its own candidate, or
+    // the other service's with the same auth lines (one trial for a shared list)
+    function trialCovers(trial, service, text) {
+        if (trial?.phase !== "passed" || typeof trial.candidate !== "string")
+            return false;
+        if (trial.service === service)
+            return trial.candidate === text;
+        const step = PamTrialRules.stagingStep(service, text, trial.answers ?? {}, trial.directories ?? [], false);
+        return step.refusal === null && step.pending.length === 0 && PamTrialRules.sameAuthLines(trial.stack, step.stack);
+    }
+
+    function serviceName(service) {
+        return service === "sudo" ? "sudo" : "administrator prompts";
+    }
+
+    // "1 of 2: sudo", or the service alone when it is the only one
+    function progress(index, total, service) {
+        return total > 1 ? (index + 1) + " of " + total + ": " + serviceName(service) : serviceName(service);
+    }
+
+    // The trial's modal (its content: PAM's messages and the field)
+    function trialSpec(index, total, service) {
+        return { kind: "info", title: "Try the new rules", size: "m", cancelLabel: "Cancel",
+                 body: ["Nothing is changed yet. Sign in as the new rules ask" + (total > 1 ? " (" + progress(index, total, service) + ")." : ".")] };
+    }
+
+    function notSavedSpec(reason) {
+        return { kind: "warning", title: "Not saved",
+                 body: [String(reason ?? "") !== "" ? String(reason) : "The new rules did not let you in.", "Nothing was changed."],
+                 buttons: [{ id: "again", label: "Try again", kind: "normal" }] };
+    }
+
+    // After the writes: the backups named
+    function savedSpec(outcomes, backupsFolder) {
+        const list = Array.isArray(outcomes) ? outcomes : [];
+        const services = list.map(outcome => serviceName(outcome.service));
+        const target = services.length > 1 ? "sudo and administrator prompts use" : (services[0] === "sudo" ? "sudo uses" : "Administrator prompts use");
+        return { kind: "success", title: "Saved", cancelLabel: "OK",
+                 body: [target + " the new rules.",
+                        (list.length > 1 ? "Backups: " : "Backup: ") + list.map(outcome => String(backupsFolder ?? "") + "/" + outcome.backup).join(", "),
+                        "Undo puts the old file back."] };
+    }
+
+    function replaceSpec(service, backupsFolder, adopted) {
+        const own = adopted?.own ?? 0, raw = adopted?.raw ?? 0;
+        return { kind: "warning", title: "Replace " + (service === "sudo" ? "/etc/pam.d/sudo" : "/etc/pam.d/polkit-1") + "?",
+                 body: ["The hand-made file goes to the backups: " + String(backupsFolder ?? "") + ".",
+                        "Taken in as " + (own + raw) + (own + raw === 1 ? " row" : " rows")
+                        + (raw > 0 ? "; " + raw + (raw === 1 ? " line the editor does not make itself stays a raw line" : " lines the editor does not make itself stay raw lines") + ", as written." : "."),
+                        "Nothing is written before Apply and its trial."],
+                 buttons: [{ id: "replace", label: "Replace", kind: "warning" }],
+                 subject: { service } };
+    }
+
+    // A generated file's lines for the preview: [{ text, kind }] — "marker" (the shell's
+    // marker lines), "ours" (its lines), "counted" (the counted password's lines), "system"
+    // (the file's own lines, kept as they are)
+    function previewLines(text) {
+        const lines = String(text ?? "").replace(/\n$/, "").split("\n");
+        let inside = false;
+        return lines.map(line => {
+            const trimmed = line.trim();
+            if (trimmed.startsWith(PamEditRules.beginMarker)) {
+                inside = true;
+                return { text: line, kind: "marker" };
+            }
+            if (trimmed.startsWith(PamEditRules.endMarker)) {
+                inside = false;
+                return { text: line, kind: "marker" };
+            }
+            if (trimmed.startsWith(PamEditRules.writtenMarker) || trimmed.startsWith(PamEditRules.replacedMarker))
+                return { text: line, kind: "marker" };
+            if (!inside)
+                return { text: line, kind: "system" };
+            const counted = /pam_faillock\.so/.test(line) || /^\s*-?auth\s+\[[^\]]*\]\s+pam_unix\.so/.test(line);
+            return { text: line, kind: counted ? "counted" : "ours" };
+        });
+    }
+
+    // A file changed by hand, its lines with the ones a reason names marked: [{ text, marked,
+    // reason }]
+    function handLines(text, reasons) {
+        const marks = {};
+        for (const reason of reasons ?? []) {
+            if (reason?.line > 0)
+                marks[reason.line] = reason.text;
+        }
+        return String(text ?? "").replace(/\n$/, "").split("\n")
+            .map((line, i) => ({ text: line, marked: marks[i + 1] !== undefined, reason: marks[i + 1] ?? "" }));
+    }
+
+    // Apply's button: { available, tooltip }
+    function applyButton(changed, refused, busy, replacing) {
+        if (busy)
+            return { available: false, tooltip: "Saving…" };
+        if (refused)
+            return { available: false, tooltip: "A check refuses the rows" };
+        if (!changed && !replacing)
+            return { available: false, tooltip: "Nothing changed" };
+        return { available: true, tooltip: "Tries the new rules first, then asks the administrator password" };
+    }
+
+    // The lock screen's ways to unlock: [{ key ("" for the password), method, label, hint,
+    // checked, available }]. `values`: { "lockscreen.offerFingerprint", … } as set
+    function unlockRows(facts, values) {
+        const row = (key, method, label, state, readyHint, absentHint) => ({
+            key, method, label,
+            hint: state === "ready" ? readyHint : state === "absent" ? absentHint : "Not known on this computer",
+            checked: state === "ready" && values?.[key] !== false,
+            available: state === "ready"
+        });
+        return [
+            { key: "", method: "password", label: "Password", hint: "Always offered", checked: true, available: false },
+            row("lockscreen.offerFingerprint", "fingerprint", "Fingerprint", facts?.fingerprint, "A finger is enrolled", "No finger enrolled"),
+            row("lockscreen.offerSecurityKey", "securityKey", "Security key", facts?.securityKey, "A key is registered", "No key registered")
+        ];
+    }
 }

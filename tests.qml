@@ -137,6 +137,7 @@ QtObject {
     property var _pamApplyRules: PamApplyRulesTest {}
     property var _pamApply: PamApplyTest {}
     property var _pamRuleList: PamRuleListTest {}
+    property var _pamRulesPage: PamRulesPageTest {}
     // A new suite: its one line above this comment
 
     // Every suite registered above, read from this object's own properties, and those of them

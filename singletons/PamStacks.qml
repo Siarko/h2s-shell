@@ -25,6 +25,13 @@ Singleton {
     readonly property var lock: reading?.lock ?? ({})
     // { nixos (true / false / null), fingerprint, securityKey ("ready" / "absent" / "unknown") }
     readonly property var facts: reading?.facts ?? ({ nixos: null, fingerprint: "unknown", securityKey: "unknown" })
+    // { service: pam_faillock's settings or null }, the PAM folders read in order, and every
+    // file read ({ path: { text } | { absent } | { unreadable } })
+    readonly property var faillock: reading?.faillock ?? ({})
+    readonly property var directories: reading?.directories ?? []
+    readonly property var files: reading?.files ?? ({})
+    // A reading is going on
+    readonly property bool refreshing: _reader.running
 
     function refresh(withMethods) {
         _reader.refresh(withMethods === true);

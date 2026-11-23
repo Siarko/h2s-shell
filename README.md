@@ -120,6 +120,9 @@ laptop until the next one; `ipc call tablet set true` by hand corrects it.
 
 The lock screen checks each way of unlocking in a PAM conversation of its own, side by
 side, so that a fingerprint reader waiting for a finger never holds up a typed password.
+Which of them it offers is set in Settings → System → Authentication, "Unlocking the lock
+screen": the password always, the fingerprint and the security key each with a switch, once
+the computer has one.
 `scripts/lock-auth-methods.sh` says which ways exist on the machine and which PAM config
 each one uses: `/etc/pam.d/h2s-shell-<method>` when the system has it, else the one
 shipped in `pam/`.

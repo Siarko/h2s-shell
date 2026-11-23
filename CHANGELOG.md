@@ -16,6 +16,14 @@ section to the new version and date.
 ## [Unreleased]
 
 ### Added
+- Settings → System → Authentication: "Sign-in rules" for sudo and administrator prompts
+  (polkit) — what is in force as steps, rows of methods (fingerprint, security key,
+  password, a raw PAM line) tried from the top with their control words and details, one list
+  for both or one each, checks under each list, the file it would write. Arch: Apply tries
+  the new rules first, then writes each file as administrator with a backup; Undo; a file
+  changed outside the shell is shown and can be replaced. NixOS: the module's options, with
+  Copy. Under it, "Unlocking the lock screen": switches for the fingerprint and the security
+  key.
 - NixOS: the module's `programs.h2s-shell.pam.rules` (sudo and polkit) — or
   `pam.sudo.rules` and `pam.polkit.rules`, one list per service — set sudo's and polkit's
   `auth` rules as an ordered list of rows: fingerprint (`timeout` 1–600 s and `tries`

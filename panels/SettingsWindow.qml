@@ -648,7 +648,7 @@ FloatingWindow {
     Component { id: notificationsComp; NotificationsSettings { editIndex: root.editIndex } }
     Component { id: awayComp;          WhenAwaySettings      { editIndex: root.editIndex; section: root.pageSection } }
     Component { id: wallpaperComp;     WallpaperSettings     { editIndex: root.editIndex } }
-    Component { id: authenticationComp; AuthenticationSettings {} }
+    Component { id: authenticationComp; AuthenticationSettings { modalHost: root.modalHost } }
     Component { id: networkOverviewComp; NetworkOverviewSettings {} }
     Component { id: networkWifiComp; NetworkWifiSettings {} }
     Component { id: networkEthernetComp; NetworkEthernetSettings {} }

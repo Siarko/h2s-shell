@@ -777,6 +777,33 @@ one singleton reads the seams, `TestSeams` (the lock screen's above, the module 
 `state` (its `driver` block) carry them as `testSeams`. The two scripts take theirs from
 `scripts/seams.sh` (constants), which a test tree replaces in the same way.
 
+### Authentication: the sign-in rules
+
+sudo's and polkit's `auth` rules, edited in Settings → System → Authentication, in layers as
+the lock screen's:
+
+- **Reading** — `singletons/PamStacks.qml` (through `singletons/io/PamStackReader.qml` and
+  `scripts/pam-files.sh`) reads the stacks, pam_faillock's settings, the files' texts and
+  what the computer has; `PamStackRules` decides, pure.
+- **Rules** — pure, each with its suite: `PamRuleRules` (the rows, control words, details
+  and every check), `PamEditRules` (rows to a file and back, a file changed by hand, the NixOS
+  options), `PamTrialRules` (what a trial stages and its lifetime), `PamApplyRules` (the root
+  step's fixed script and its reply), `PamRuleViewRules` (what the list and the page show and
+  allow: steps, chips, drops, the queue of writes, the modals' texts).
+- **I/O** — `singletons/io/PamTrial.qml` runs one PAM conversation as the user on a staged
+  copy of the candidate; `singletons/io/PamApply.qml` writes one service per run through
+  `PrivilegedRuns.startShell` (Arch only).
+- **Views** — `panels/settings/PamRuleList.qml` (one list of rows: it takes rows and emits
+  the new list) and `panels/settings/PamRulesSection.qml` (the summary, the lists, Apply as a
+  trial then the writes, Undo, Replace, the NixOS options, the lock screen's switches). The
+  section takes its stacks, trial and applier as properties: `tests/PamRulesPageTest.qml`
+  hands it stand-ins and runs the real root step as the user on scratch folders.
+
+Apply runs a trial of the first service's candidate, and a write per service whose file
+changes; a trial stands for the other service when its auth lines are the same
+(`PamRuleViewRules.trialCovers`), so a shared list asks once. Every question is the Settings
+modal's; nothing asks for a password but a click on Apply or Undo.
+
 ### Modules
 
 Integrations as separate packages. The module API's reference

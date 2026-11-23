@@ -6,7 +6,8 @@ import qs.singletons
 
 // System → Authentication: whether the shell is the session's polkit agent — the prompt
 // for an administrator's password when a program needs one (Authentication) —
-// and what answers such requests now.
+// and what answers such requests now; under it the sign-in rules of sudo and administrator
+// prompts and the lock screen's ways to unlock (PamRulesSection).
 Flickable {
     id: root
 
@@ -18,9 +19,8 @@ Flickable {
 
     readonly property string _state: Authentication.state
     readonly property string _others: Authentication.otherAgents.join(", ")
-
-    // The stack may have changed since it was read (a system update)
-    Component.onCompleted: PamStacks.refresh()
+    // Where the sign-in rules ask (SettingsModalHost)
+    property var modalHost: null
 
     ColumnLayout {
         id: _column
@@ -115,6 +115,13 @@ Flickable {
                 onClicked: Authentication.tryPrompt()
             }
             Hint { text: "Asks for the password and does nothing with it." }
+        }
+
+        // Reads the stacks again when shown (a system update may have changed them), with
+        // what the computer has (a finger, a key)
+        PamRulesSection {
+            Layout.fillWidth: true
+            modalHost: root.modalHost
         }
     }
 }

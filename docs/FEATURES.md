@@ -706,6 +706,45 @@ once, and Enter on an empty field goes on to the reader.
 polkit's stack is the system's `/etc/pam.d/polkit-1`, else the vendor file in
 `/usr/lib/pam.d`, as it is.
 
+### Sign-in rules
+
+Settings → System → Authentication, under the polkit agent's rows, sets how sudo and
+administrator prompts (polkit) ask who you are (`panels/settings/PamRulesSection.qml`). At
+the top what is in force now, as steps per service (e.g. fingerprint → password; one row when
+both ask the same, "not known" when a file cannot be read), what the computer has (a finger
+enrolled, a security key registered) and where the rules go. "Separate rules for
+administrator prompts" gives each service a list of its own; turning it off while they differ
+asks first. Each list holds rows tried from the top: a method (fingerprint, security key,
+password, a raw PAM line) with PAM's control word and its details as chips, and the fixed
+last row "Password (as the system)" — the service's own lines, kept as they are; removing it
+asks first. A row opens to its control words (with what each means), the fingerprint's
+timeout and tries (each may be "No limit"), the key's PIN, whether wrong passwords count
+toward pam_faillock, or a raw line's text. Rows are dragged by their handle; "＋ Add a row"
+lists the methods, those the computer lacks off with the reason. Under each list its checks:
+refusals in red (nothing is saved while one stands), warnings in the warning colour. "Show
+file" shows the file that would be written, the shell's lines in the accent colour.
+
+#### NixOS
+
+`/etc/pam.d` is NixOS's: the page shows the module's options for the rows
+(`programs.h2s-shell.pam`), with Copy; they take effect after `nixos-rebuild switch`.
+
+#### Arch
+
+Apply first tries the new rules as you, in the shell's own prompt, on a private copy (nothing
+is written yet); only when they let you in is each file written, as administrator (sudo,
+then administrator prompts: "1 of 2"). The old file goes to `/var/lib/h2s-shell/pam-backup`
+first; Undo puts it back. A file changed outside the shell is shown read-only with the
+offending lines marked: "Read again", or "Replace…", which takes its lines in as rows (what
+the editor does not make itself as raw lines) and replaces it at the next Apply.
+
+### Unlocking the lock screen
+
+Under the sign-in rules, which ways the lock screen offers: the password always, the
+fingerprint and the security key each with a switch (`lockscreen.offerFingerprint`,
+`lockscreen.offerSecurityKey`), off and dimmed with the reason while the computer lacks one.
+Changed at once, without a password.
+
 ## Settings
 
 A separate floating window, reachable from the Settings widget, from

@@ -75,6 +75,8 @@ TestCase {
         "components/WallpaperFitPreview.qml",
         "components/WallpaperPicker.qml",
         "panels/settings/AuthenticationSettings.qml",
+        "panels/settings/PamRuleList.qml",
+        "panels/settings/PamRulesSection.qml",
         "panels/settings/NetworkOverviewSettings.qml",
         "panels/settings/NetworkWifiSettings.qml",
         "panels/settings/NetworkEthernetSettings.qml",

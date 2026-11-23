@@ -1,0 +1,592 @@
+import QtQuick
+import Quickshell
+import Quickshell.Io
+import qs.components
+import qs.singletons
+import qs.singletons.io
+import qs.panels.settings
+
+// The sign-in rules section (panels/settings/PamRulesSection.qml) under clicks, and the page
+// rules it draws (PamRuleViewRules): what is in force as steps, the split switch and its
+// question, a check shown, the generated file, Apply through a trial and the writes, Undo, a
+// file changed by hand and Replace, the NixOS snippet, the lock screen's switches.
+//
+// Stand-ins only: the stacks are read by the suite from scratch folders (PamStackRules on
+// their texts), the trial is a stand-in that passes for one password, and the writes are
+// PamApply's real root step run as the user on the scratch folders (as tests/PamApplyTest.qml
+// runs it). Never /etc, PAM, pkexec or the shell's settings. Opens a small window for a
+// moment, an ordinary one that takes the keyboard, in the runner's headless compositor.
+TestCase {
+    id: suite
+    suiteName: "PamRulesPage"
+    asynchronous: true
+    // Its window takes the keyboard, as other suites' do
+    ownProcess: true
+
+    readonly property string _scratch: (Quickshell.env("XDG_RUNTIME_DIR") || "/tmp") + "/h2s-pam-page-test-" + Date.now()
+    property int _owner: -1
+    readonly property var _paths: ({ system: _scratch + "/pam.d", vendor: _scratch + "/vendor", backups: _scratch + "/lib/pam-backup", owner: _owner })
+
+    readonly property string _systemAuth: "auth required pam_faillock.so preauth\nauth [success=1 default=bad] pam_unix.so try_first_pass\n"
+        + "auth [default=die] pam_faillock.so authfail\nauth optional pam_permit.so\naccount required pam_unix.so\n"
+    readonly property string _sudo: "#%PAM-1.0\nauth\t\tinclude\t\tsystem-auth\naccount\t\tinclude\t\tsystem-auth\nsession\t\tinclude\t\tsystem-auth\n"
+    readonly property string _handSudo: "#%PAM-1.0\nauth sufficient pam_u2f.so cue authfile=/etc/u2f_mappings\nauth\t\tinclude\t\tsystem-auth\n"
+        + "account\t\tinclude\t\tsystem-auth\nsession\t\tinclude\t\tsystem-auth\n"
+    readonly property string _vendorPolkit: "#%PAM-1.0\n\nauth       include      system-auth\naccount    include      system-auth\n"
+        + "password   include      system-auth\nsession    include      system-auth\n"
+    readonly property string _password: "secret"
+
+    property bool _nixos: false
+    property var _settings: ({ "lockscreen.offerFingerprint": true, "lockscreen.offerSecurityKey": true })
+    property var _writes: []
+    property string _copied: ""
+    property var _runs: []
+
+    // The stacks, read from the scratch folders on refresh()
+    property QtObject _stacks: QtObject {
+        property var reading: null
+        readonly property var facts: reading?.facts ?? ({ nixos: null, fingerprint: "unknown", securityKey: "unknown" })
+        readonly property var sudo: reading?.services?.sudo ?? null
+        readonly property var polkit: reading?.services?.["polkit-1"] ?? null
+        readonly property var faillock: reading?.faillock ?? ({})
+        readonly property var directories: reading?.directories ?? []
+        readonly property var files: reading?.files ?? ({})
+        property int refreshes: 0
+        function refresh(withMethods) {
+            refreshes++;
+            suite._read();
+        }
+    }
+
+    // The trial: passes for the password, as PamTrialRules leaves a passed trial
+    property QtObject _trial: QtObject {
+        property var state: PamTrialRules.initialState()
+        property int starts: 0
+        function start(service, text) {
+            starts++;
+            state = Object.assign(PamTrialRules.initialState(), {
+                phase: "running", trial: state.trial + 1, service, candidate: text,
+                messages: [{ text: "Touch the reader or type your password", error: false }],
+                prompt: { text: "Password:", visible: false }
+            });
+        }
+        function respond(trial, text) {
+            if (trial !== state.trial || state.phase !== "running")
+                return;
+            if (text !== suite._password) {
+                state = Object.assign({}, state, { phase: "failed", prompt: null, reason: "failed",
+                                                   reasonText: PamTrialRules.texts.failed, pamReason: "Authentication failure" });
+                return;
+            }
+            const directories = [suite._paths.system, suite._paths.vendor];
+            const answers = {};
+            answers[suite._paths.system + "/system-auth"] = { text: suite._systemAuth };
+            const step = PamTrialRules.stagingStep(state.service, state.candidate, answers, directories, false);
+            state = Object.assign({}, state, { phase: "passed", prompt: null, directories, answers, stack: step.stack });
+        }
+        function cancel(trial) {
+            if (trial === state.trial)
+                state = Object.assign({}, state, { phase: "cancelled", prompt: null });
+        }
+    }
+
+    property var _applier: null
+    property Component _applierComponent: Component {
+        PamApply {}
+    }
+
+    // The stand-in for the shell's runs as administrator: the words run as the user
+    function _start(request, done) {
+        _runs = _runs.concat([request.what]);
+        _exec(["sh", "-c", "umask 022; exec \"$@\"", "sh"].concat(request.argv), (code, stdout, stderr) =>
+            done({ ok: code === 0, code, stdout, stderr, dismissed: false, refused: false, cancelled: false, blocked: "", error: "" }));
+    }
+
+    property var _window: FloatingWindow {
+        title: "h2s-tests pam rules page"
+        visible: false
+        implicitWidth: 900
+        implicitHeight: 900
+        color: Theme.popupBackground
+
+        Item {
+            id: area
+            anchors.fill: parent
+
+            Flickable {
+                id: page
+                anchors.fill: parent
+                contentWidth: width
+                contentHeight: _sectionHolder.implicitHeight + 40
+                boundsBehavior: Flickable.StopAtBounds
+
+                Item {
+                    id: _sectionHolder
+                    x: 20
+                    y: 20
+                    width: 840
+                    implicitHeight: _section ? _section.implicitHeight : 0
+                    property Item _section: null
+                }
+            }
+
+            SettingsModalHost {
+                id: host
+                anchors.fill: parent
+            }
+        }
+
+        WindowDriver {
+            id: driver
+            name: "PamRulesPageDriver"
+        }
+    }
+
+    property Component _sectionComponent: Component {
+        PamRulesSection {
+            width: 840
+            stacks: suite._stacks
+            trial: suite._trial
+            applier: suite._applier
+            modalHost: host
+            settingValue: key => suite._settings[key]
+            writeSetting: (key, value) => {
+                suite._writes = suite._writes.concat([key + "=" + value]);
+                suite._settings = Object.assign({}, suite._settings, { [key]: value });
+            }
+            copyText: text => suite._copied = text
+        }
+    }
+
+    // ── Reading the scratch folders as PamStacks would ──
+
+    property int _reads: 0
+    function _read() {
+        const paths = [_paths.system + "/sudo", _paths.system + "/polkit-1", _paths.system + "/system-auth", _paths.vendor + "/polkit-1"];
+        _exec(["sh", "-c", "for f; do if [ -e \"$f\" ]; then printf 'T%s\\n' \"$(base64 -w0 < \"$f\")\"; else echo A; fi; done", "sh"].concat(paths),
+              (code, stdout) => {
+            const lines = stdout.trim().split("\n");
+            const answers = {};
+            paths.forEach((path, i) => {
+                const line = lines[i] ?? "A";
+                answers[path] = line.startsWith("T") ? { text: Qt.atob(line.slice(1)) } : { absent: true };
+            });
+            const directories = suite._nixos ? [suite._paths.system] : [suite._paths.system, suite._paths.vendor];
+            const step = PamStackRules.readingStep({ services: ["polkit-1", "sudo"], lock: {}, directories, faillockPath: "" }, answers, true);
+            suite._stacks.reading = {
+                services: step.services, lock: {}, faillock: step.faillock,
+                facts: { nixos: suite._nixos, fingerprint: "ready", securityKey: "absent" },
+                directories, files: answers
+            };
+            suite._reads++;
+        });
+    }
+
+    // ── Helpers ──
+
+    function _until(condition, limitMs = 8000) {
+        for (let waited = 0; waited < limitMs && !condition(); waited += 10)
+            driver.wait(10);
+        return condition();
+    }
+
+    function _find(item, name) {
+        if (!item)
+            return null;
+        if (item.objectName === name)
+            return item;
+        for (const child of item.children) {
+            const found = _find(child, name);
+            if (found)
+                return found;
+        }
+        return null;
+    }
+
+    function _all(item, name, found = []) {
+        if (!item)
+            return found;
+        if (item.objectName === name)
+            found.push(item);
+        for (const child of item.children)
+            _all(child, name, found);
+        return found;
+    }
+
+    function _item(name) {
+        return _find(area.Window.window?.contentItem ?? _window.contentItem, name);
+    }
+
+    function _visible(item) {
+        for (let at = item; at; at = at.parent) {
+            if (!at.visible)
+                return false;
+        }
+        return item !== null;
+    }
+
+    function _settle(item) {
+        let last = "", same = 0;
+        for (let waited = 0; waited < 3000 && same < 3; waited += 16) {
+            const place = item.mapToItem(area, 0, 0);
+            const now = place.x + "," + place.y + "," + item.width + "," + item.height;
+            same = now === last ? same + 1 : 0;
+            last = now;
+            driver.wait(16);
+        }
+    }
+
+    // Scrolls the page so that `item` is in view, then clicks it at (x, its middle)
+    function _clickItem(item, x) {
+        if (!item || !_visible(item))
+            return false;
+        _settle(item);
+        const inPage = item.mapToItem(page.contentItem, 0, 0);
+        if (!host.open)
+            page.contentY = Math.max(0, Math.min(inPage.y - 200, page.contentHeight - page.height));
+        _settle(item);
+        driver.mouseClick(item, x ?? item.width / 2, item.height / 2);
+        return true;
+    }
+
+    function _click(name, x) {
+        return _clickItem(_item(name), x);
+    }
+
+    function _modalClick(name) {
+        const item = _find(host.modal, name);
+        if (!item || !_visible(item))
+            return false;
+        _settle(item);
+        driver.mouseClick(item, item.width / 2, item.height / 2);
+        return true;
+    }
+
+    function _modalTitle() {
+        return host.open ? (_find(host.modal, "modalTitle")?.text ?? "") : "";
+    }
+
+    function _type(text) {
+        for (const character of text) {
+            const code = character.toUpperCase().charCodeAt(0);
+            driver.keyClick(code >= 65 && code <= 90 ? Qt.Key_A + code - 65 : code);
+        }
+    }
+
+    function _steps(title) {
+        const row = _item("summary:" + title);
+        if (!row)
+            return "(none)";
+        return _all(row, "step:fingerprint").concat(_all(row, "step:password"), _all(row, "step:securityKey"))
+            .sort((first, second) => first.mapToItem(row, 0, 0).x - second.mapToItem(row, 0, 0).x)
+            .map(step => step.method).join(">");
+    }
+
+    function _texts(name) {
+        return _all(_item("section") ?? _sectionHolder, name).filter(item => _visible(item)).map(item => item.text);
+    }
+
+    property var _fileText: ({})
+    function _readFile(path) {
+        _fileText = Object.assign({}, _fileText, { [path]: undefined });
+        _exec(["sh", "-c", "if [ -e \"$1\" ]; then cat \"$1\"; else printf '(none)'; fi", "sh", path],
+              (code, stdout) => suite._fileText = Object.assign({}, suite._fileText, { [path]: stdout }));
+        _until(() => _fileText[path] !== undefined);
+        return _fileText[path];
+    }
+
+    function _write(path, text) {
+        let done = false;
+        _exec(["sh", "-c", "printf '%s' \"$2\" > \"$1\"", "sh", path, text], () => done = true);
+        return _until(() => done);
+    }
+
+    function _reread() {
+        const before = _reads;
+        _stacks.refresh(false);
+        return _until(() => _reads > before);
+    }
+
+    // ── The run ──
+
+    function runAsync() {
+        try {
+            _rules();
+            _run();
+        } finally {
+            if (host.open)
+                host.cancel("window");
+            _sectionHolder._section?.destroy();
+            _window.visible = false;
+            let removed = false;
+            _exec(["rm", "-rf", "--", _scratch], () => removed = true);
+            _until(() => removed);
+        }
+        finish();
+    }
+
+    function _rules() {
+        const rules = PamRuleViewRules;
+        const stack = lines => ({ known: true, lines: lines.map(name => ({ moduleName: name })) });
+        assertEqual(rules.stepsOf(stack(["pam_fprintd.so", "pam_faillock.so", "pam_unix.so", "pam_faillock.so", "pam_permit.so"])).join(">"),
+                    "fingerprint>password", "stepsOf: the methods asked, in order; other modules no step");
+        assertEqual(rules.stepsOf(stack(["pam_unix.so", "pam_unix.so", "pam_u2f.so"])).join(">"), "password>securityKey", "… twice in a row once");
+        assertEqual(rules.stepsOf({ known: false, lines: [] }) + " " + rules.stepsOf(null), "null null", "… a stack not known: null");
+        const one = rules.summaryRows(stack(["pam_unix.so"]), stack(["pam_unix.so"]));
+        assertEqual(one.map(row => row.title + ":" + row.steps.join(">")).join(" | "), "sudo and administrator prompts:password", "summaryRows: the same: one row");
+        const two = rules.summaryRows(stack(["pam_fprintd.so", "pam_unix.so"]), { known: false });
+        assertEqual(two.map(row => row.title + ":" + (row.steps === null ? "not known" : row.steps.join(">"))).join(" | "),
+                    "sudo:fingerprint>password | Administrator prompts:not known", "… different or not known: two rows");
+        assertEqual(rules.computerHas({ fingerprint: "ready", securityKey: "absent" }), "a finger enrolled · no security key registered", "computerHas");
+        assertEqual(rules.computerHas({}), "fingerprint not known · security key not known", "… not known");
+        assertEqual(JSON.stringify(rules.writtenTo(true, "/etc/pam.d")), JSON.stringify({ label: "Set through", text: "the NixOS module" }), "writtenTo: NixOS");
+        assertEqual(rules.writtenTo(false, "/etc/pam.d").text, "/etc/pam.d/sudo and /etc/pam.d/polkit-1", "… Arch: the files");
+
+        const files = rules.filesOf({ "/e/sudo": { text: "s" }, "/e/polkit-1": { absent: true }, "/v/polkit-1": { unreadable: true } }, ["/e", "/v"]);
+        assertEqual(JSON.stringify([files.sudo, files.polkit, files.vendorPolkit]), JSON.stringify(["s", null, undefined]), "filesOf: a text, none there, not read");
+        assertEqual(rules.inForceOf(undefined, "sudo", "v", { system: "arch" }).known, false, "inForceOf: a file not read is not known");
+        assertEqual(rules.inForceOf(null, "polkit-1", undefined, { system: "arch" }).known, false, "… polkit's own file not read: not known");
+        assertEqual(rules.inForceOf(null, "polkit-1", _vendorPolkit, { system: "arch" }).rows.map(row => row.id).join(","), "system", "… no polkit-1 of ours: the fixed row");
+        assert(rules.inForceOf(_handSudo, "sudo", _vendorPolkit, { system: "arch" }).changed, "… a hand-made line: changed by hand");
+        assertEqual(rules.inForceOf(_handSudo, "sudo", undefined, { system: "nixos" }).changed, false, "… NixOS: never changed by hand");
+
+        const fixed = PamRuleRules.fixedRow();
+        const finger = { id: "r1", method: "fingerprint", control: "sufficient", details: { timeout: 10, tries: 3 } };
+        const editor = rules.editorFrom([finger, fixed], [fixed]);
+        assertEqual(editor.split, true, "editorFrom: different lists: split");
+        assertEqual(rules.editorFrom([fixed], null).split, false, "… a list not known: the fixed row, one list");
+        assert(rules.pending({ split: false, shared: [finger, fixed] }, [fixed], [fixed]), "pending: rows that differ");
+        assert(!rules.pending({ split: false, shared: [fixed] }, [fixed], [fixed]), "… the same: none");
+        const off = rules.splitToggled(editor);
+        assertEqual(off.ask + " " + off.editor.split + " " + off.editor.shared.length, "true false 2", "splitToggled: off with different lists asks, sudo's serve both");
+        const on = rules.splitToggled({ split: false, shared: [finger, fixed] });
+        assertEqual(on.ask + " " + on.editor.sudo.length + " " + on.editor.polkit.length, "false 2 2", "… on: both start as the shared list");
+        assertEqual(rules.splitToggled({ split: true, sudo: [fixed], polkit: [fixed] }).ask, false, "… off with the same lists: no question");
+
+        const facts = service => ({ system: "arch", service, fingerprint: "ready", securityKey: "absent", faillockPresent: true,
+                                    otherService: [finger, fixed], vendorText: _vendorPolkit });
+        const queue = rules.applyQueue({ "sudo": { rows: [finger, fixed], currentText: _sudo, facts: facts("sudo") },
+                                         "polkit-1": { rows: [finger, fixed], currentText: null, facts: facts("polkit-1") } });
+        assertEqual(queue.items.map(item => item.service).join(",") + " " + queue.refusals.length, "sudo,polkit-1 0", "applyQueue: both, sudo first");
+        assert(queue.items[0].text.indexOf("pam_fprintd.so") > 0, "… the candidate's text");
+        const same = rules.applyQueue({ "sudo": { rows: [fixed], currentText: _sudo, facts: facts("sudo") },
+                                        "polkit-1": { rows: [fixed], currentText: null, facts: facts("polkit-1") } });
+        assertEqual(same.items.length, 0, "… nothing that differs: nothing");
+        const refused = rules.applyQueue({ "sudo": { rows: [finger], currentText: _sudo, facts: Object.assign(facts("sudo"), { otherService: [finger] }) } });
+        assertEqual(refused.items.length + " " + refused.refusals[0].service, "0 sudo", "… a refused build: its refusal, nothing written");
+
+        const directories = ["/s", "/v"];
+        const answers = { "/s/system-auth": { text: _systemAuth } };
+        const sudoText = queue.items[0].text;
+        const passed = { phase: "passed", service: "sudo", candidate: sudoText, directories, answers,
+                         stack: PamTrialRules.stagingStep("sudo", sudoText, answers, directories, false).stack };
+        assert(rules.trialCovers(passed, "sudo", sudoText), "trialCovers: its own candidate");
+        assert(!rules.trialCovers(passed, "sudo", sudoText + "\n# x"), "… another text: no");
+        assert(rules.trialCovers(passed, "polkit-1", queue.items[1].text), "… the other service with the same auth lines");
+        assert(!rules.trialCovers(Object.assign({}, passed, { phase: "failed" }), "sudo", sudoText), "… a trial that did not pass: no");
+        assertEqual(rules.progress(0, 2, "sudo") + " | " + rules.progress(1, 2, "polkit-1") + " | " + rules.progress(0, 1, "polkit-1"),
+                    "1 of 2: sudo | 2 of 2: administrator prompts | administrator prompts", "progress");
+
+        const preview = rules.previewLines(sudoText);
+        assertEqual(preview.filter(line => line.kind === "marker").length, 2, "previewLines: the block's two markers");
+        assert(preview.some(line => line.kind === "ours" && line.text.indexOf("pam_fprintd") >= 0), "… our line");
+        assert(preview.some(line => line.kind === "system" && line.text.indexOf("system-auth") >= 0), "… the system's lines");
+        const counted = rules.previewLines("# BEGIN h2s-shell x\nauth required pam_faillock.so preauth\nauth [success=done default=ignore] pam_unix.so try_first_pass\n# END h2s-shell");
+        assertEqual(counted.map(line => line.kind).join(","), "marker,counted,counted,marker", "… the counted lines");
+        const hand = rules.handLines(_handSudo, [{ line: 2, text: "A security key line outside the shell's block." }]);
+        assertEqual(hand.map(line => line.marked ? "x" : "-").join(""), "-x---", "handLines: the reason's line marked");
+        assertEqual(JSON.stringify(rules.applyButton(true, false, false, false)), JSON.stringify({ available: true, tooltip: "Tries the new rules first, then asks the administrator password" }),
+                    "applyButton: changes, no refusal");
+        assertEqual([rules.applyButton(false, false, false, false).available, rules.applyButton(true, true, false, false).available,
+                     rules.applyButton(true, false, true, false).available, rules.applyButton(false, false, false, true).available].join(" "),
+                    "false false false true", "… nothing changed, refused, busy: off; a Replace counts as a change");
+        const unlock = rules.unlockRows({ fingerprint: "ready", securityKey: "absent" }, { "lockscreen.offerFingerprint": false });
+        assertEqual(unlock.map(row => row.method + ":" + row.checked + ":" + row.available).join(" "),
+                    "password:true:false fingerprint:false:true securityKey:false:false", "unlockRows: the password always, a missing key off");
+        assertEqual(unlock[2].hint, "No key registered", "… with its reason");
+        assertEqual(rules.savedSpec([{ service: "sudo", backup: "sudo.1" }, { service: "polkit-1", backup: "polkit-1.1" }], "/b").body[1],
+                    "Backups: /b/sudo.1, /b/polkit-1.1", "savedSpec: the backups named");
+        assertEqual(rules.replaceSpec("sudo", "/b", { own: 1, raw: 1 }).body[1],
+                    "Taken in as 2 rows; 1 line the editor does not make itself stays a raw line, as written.", "replaceSpec: what is taken in");
+    }
+
+    function _run() {
+        let ready = false;
+        _exec(["id", "-u"], (code, stdout) => {
+            suite._owner = parseInt(stdout.trim(), 10);
+            suite._exec(["sh", "-c", "set -e; umask 022; mkdir -p \"$1/pam.d\" \"$1/vendor\"; printf '%s' \"$2\" > \"$1/pam.d/sudo\"; printf '%s' \"$3\" > \"$1/pam.d/system-auth\"; "
+                         + "printf '%s' \"$4\" > \"$1/vendor/polkit-1\"", "sh", suite._scratch, suite._sudo, suite._systemAuth, suite._vendorPolkit], () => ready = true);
+        });
+        assert(_until(() => ready), "the scratch folders made");
+        _applier = _applierComponent.createObject(suite, { start: suite._start, paths: suite._paths });
+        assert(_reread(), "the stacks read");
+
+        _window.visible = true;
+        assert(_until(() => _window.visible && host.Window.active && driver.waitShown()), "the window shows and has the keyboard");
+        _sectionHolder._section = _sectionComponent.createObject(_sectionHolder, { objectName: "section" });
+        const section = _sectionHolder._section;
+        assert(section !== null, "the section built");
+        assert(_until(() => section.editor !== null), "… its editor from what is in force");
+        assert(_stacks.refreshes >= 2, "… it reads the stacks when shown");
+
+        // --- the summary ---
+        assert(_until(() => _steps("sudo and administrator prompts") === "password"), "in force: one row for both, the password");
+        assert(_texts("pendingLine").length === 0, "… nothing pending");
+
+        // --- a check: the fixed row removed ---
+        assert(_click("remove:system"), "the fixed row's × clicked");
+        assert(_until(() => _modalTitle() === "Remove the system's password?") && _modalClick("modalButton:0"), "… removed");
+        assert(_until(() => _texts("refusal").length > 0), "a refusal shown under the list");
+        assert(_texts("refusal").some(text => text === PamRuleRules.texts.R3), "… no rows");
+        assert(!_item("apply").available, "… Apply off");
+        assert(_click("reset"), "Reset");
+        assert(_until(() => _texts("refusal").length === 0 && !section.changed), "… back to what is in force");
+
+        // --- a row added: pending ---
+        assert(_click("addRow"), "＋ Add a row");
+        assert(_until(() => _visible(_item("add:fingerprint"))) && _click("add:fingerprint"), "… the fingerprint");
+        assert(_until(() => section.changed && _texts("pendingLine").length === 1), "the orange line: not in force until Apply");
+        assert(_item("apply").available, "… Apply on");
+
+        // --- the split ---
+        assert(_click("splitSwitch", _item("splitSwitch").width - 12), "the split switched on");
+        assert(_until(() => _item("list:sudo") !== null && _item("list:polkit-1") !== null), "… two lists");
+        const polkitList = _item("list:polkit-1");
+        polkitList.edited(PamRuleRules.removeRow(polkitList._rows, "r1", false));
+        assert(_until(() => section.editor.polkit.length === 1), "(the polkit list changed)");
+        assert(_click("splitSwitch", _item("splitSwitch").width - 12), "switched off");
+        assert(_until(() => _modalTitle() === "Use sudo's rules for both?"), "… the lists differ: asked");
+        assert(_modalClick("modalButton:1") && _until(() => !host.open), "… cancelled");
+        assert(section.editor.split, "… still two lists");
+        assert(_click("splitSwitch", _item("splitSwitch").width - 12) && _until(() => host.open), "switched off again");
+        assert(_modalClick("modalButton:0"), "… Use sudo's");
+        assert(_until(() => !section.editor.split && _item("list:shared") !== null), "… one list, sudo's");
+        assertEqual(section.editor.shared.map(row => row.id).join(","), "r1,system", "… with sudo's rows");
+
+        // --- the file ---
+        assert(_click("showFile"), "Show file");
+        assert(_until(() => _item("preview:sudo") !== null), "… the generated file");
+        const preview = _item("preview:sudo");
+        assert(_all(preview, "fileLine:ours").length === 1 && _all(preview, "fileLine:system").length > 0, "… our line accented, the system's muted");
+        assert(_click("showFile") && _until(() => _item("preview:sudo") === null), "… hidden again");
+
+        // --- Apply: a trial that fails ---
+        assert(_click("apply"), "Apply");
+        assert(_until(() => _modalTitle() === "Try the new rules"), "the trial's modal");
+        assert(_until(() => _visible(_find(host.modal, "trialField"))), "… PAM's question, the field");
+        assert(_item("list:shared").readOnly, "… the list read-only meanwhile");
+        assertEqual(_find(host.modal, "trialPrompt").text + " | " + _find(host.modal, "trialMessage").text, "Password: | Touch the reader or type your password",
+                    "… its question and message");
+        assert(_find(host.modal, "trialMessage").textFormat === Text.PlainText && _find(host.modal, "trialMessage").maximumLineCount === 1, "… as plain text, on one line");
+        assert(_until(() => _find(host.modal, "trialField").editing), "… the field has the keyboard");
+        _type("nope");
+        driver.keyClick(Qt.Key_Return);
+        assert(_until(() => _modalTitle() === "Not saved"), "a wrong password: not saved");
+        assert(_runs.length === 0, "… nothing run as administrator");
+        assert(_modalClick("modalButton:0"), "Try again");
+
+        // --- … and one that passes: both services written ---
+        assert(_until(() => _modalTitle() === "Try the new rules" && _find(host.modal, "trialField")?.editing === true), "the trial again");
+        _type(_password);
+        driver.keyClick(Qt.Key_Return);
+        assert(_until(() => _modalTitle() === "Saved", 15000), "passed: written, said");
+        assertEqual(_trial.starts, 2, "… one trial stood for both services");
+        assertEqual(_runs.join(" | "), "Change the sign-in rules for sudo | Change the sign-in rules for administrator prompts", "… sudo, then administrator prompts");
+        assert(_readFile(_paths.system + "/sudo").indexOf("pam_fprintd.so") > 0, "… sudo's file has the fingerprint");
+        assert(_readFile(_paths.system + "/polkit-1").indexOf("# Written by h2s-shell") === 0, "… polkit's file of the shell's own");
+        assert(_modalClick("modalButton:0") && _until(() => !host.open), "OK");
+        assert(_until(() => _steps("sudo and administrator prompts") === "fingerprint>password"), "in force now: fingerprint, then password");
+        assert(_until(() => !section.changed), "… nothing pending");
+
+        // --- Undo ---
+        assert(_until(() => _visible(_item("undo"))), "Undo offered");
+        assert(_click("undo"), "Undo");
+        assert(_until(() => _steps("sudo and administrator prompts") === "password", 15000), "the old files back: the password alone");
+        assertEqual(_readFile(_paths.system + "/polkit-1"), "(none)", "… polkit's file of the shell's gone");
+        assert(!_visible(_item("undo")), "… Undo done");
+        assert(_until(() => !section.changed), "… the editor follows what is in force");
+
+        // --- changed by hand ---
+        assert(_write(_paths.system + "/sudo", _handSudo) && _reread(), "sudo changed by hand");
+        assert(_until(() => _item("hand:sudo") !== null), "… shown as changed outside the shell");
+        assert(_item("list:shared").readOnly, "… the list read-only");
+        assert(_all(_item("hand:sudo"), "fileLine:marked").length === 1, "… the offending line marked");
+        assert(_click("replace:sudo"), "Replace…");
+        assert(_until(() => _modalTitle() === "Replace /etc/pam.d/sudo?"), "… asked");
+        assert(_modalClick("modalButton:0"), "… Replace");
+        assert(_until(() => _item("hand:sudo") === null && !_item("list:sudo")?.readOnly), "taken in: the list editable");
+        assert(section.editor.sudo.some(row => row.method === "raw"), "… the key line a raw row");
+        assert(section.changed && _texts("pendingLine").length === 1, "… pending until Apply");
+
+        // --- NixOS ---
+        _nixos = true;
+        assert(_reread(), "read as NixOS");
+        // (The editor starts again from what is in force there: the page has no Reset on NixOS)
+        section._reset();
+        assert(_until(() => _visible(_item("nixosSnippet"))), "the module's options shown");
+        assert(!_visible(_item("apply")), "… no Apply");
+        assert(_click("addRow") && _until(() => _visible(_item("add:fingerprint"))) && _click("add:fingerprint"), "a fingerprint row added");
+        assert(_until(() => _item("snippetText").text.indexOf("method = \"fingerprint\"") > 0), "… in the options");
+        assert(_click("copy") && _until(() => _copied.indexOf("programs.h2s-shell.pam") === 0), "Copy");
+        assertEqual(_item("copy").label, "Copied", "… said");
+        assert(_texts("pendingLine")[0].indexOf("nixos-rebuild") >= 0, "… in force after a rebuild");
+
+        // --- the lock screen's switches ---
+        const fingerprint = _item("unlock:fingerprint");
+        assert(fingerprint.checked && fingerprint.enabled, "unlock: the fingerprint on");
+        assert(!_item("unlock:securityKey").enabled && !_item("unlock:securityKey").checked, "… no key: off, dimmed");
+        assert(!_item("unlock:password").enabled && _item("unlock:password").checked, "… the password always on");
+        assert(_clickItem(fingerprint, fingerprint.width - 12), "the fingerprint switched");
+        assert(_until(() => _writes.join(",") === "lockscreen.offerFingerprint=false"), "… the setting written");
+        assert(_until(() => !_item("unlock:fingerprint").checked), "… shown off");
+        assert(_clickItem(_item("unlock:securityKey"), _item("unlock:securityKey").width - 12), "the dimmed key clicked");
+        driver.wait(50);
+        assertEqual(_writes.length, 1, "… nothing written");
+    }
+
+    // ── Processes ──
+
+    function _exec(command, done) {
+        const process = _shell.createObject(suite, { command: command });
+        process.finished.connect((code, stdout, stderr) => done?.(code, stdout, stderr));
+        process.running = true;
+    }
+
+    property Component _shell: Component {
+        Process {
+            id: _process
+            signal finished(int code, string stdout, string stderr)
+            property bool _exited: false
+            property bool _finished: false
+            property bool _errorFinished: false
+            property int _code: -1
+            property string _stdout: ""
+            property string _stderr: ""
+            function _over() {
+                if (!(_exited && _finished && _errorFinished))
+                    return;
+                _process.finished(_code, _stdout, _stderr);
+                _process.destroy();
+            }
+            stdout: StdioCollector {
+                onStreamFinished: {
+                    _process._stdout = text;
+                    _process._finished = true;
+                    _process._over();
+                }
+            }
+            stderr: StdioCollector {
+                onStreamFinished: {
+                    _process._stderr = text;
+                    _process._errorFinished = true;
+                    _process._over();
+                }
+            }
+            onExited: code => {
+                _process._code = code;
+                _process._exited = true;
+                _process._over();
+            }
+        }
+    }
+}
