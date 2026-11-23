@@ -1524,6 +1524,34 @@ and a trusted `timeout` are found.
   prompt (and any that opens while locked), so the run whose pkexec was asking ends
   `dismissed` when pkexec exits. One log line per run started, with the
   module's id and its `what`.
+- **A remembered password** (`singletons/RememberedAdmin.qml`, its I/O
+  `singletons/io/RememberedAdminReader.qml`, its decisions `singletons/RememberRules.qml`):
+  a polkit rule makes the shell's own runs — pkexec's action with the shell's `timeout` as
+  the program, for the user — `auth_admin_keep`, so polkitd keeps a typed password for the
+  shell's process for its `ExpirationSeconds` (5 min by default). Other programs' pkexec
+  still asks. What is installed is read unprivileged (the rules file, the three
+  `polkitd.conf` files, the resolved `timeout`); what is kept is polkit's
+  `EnumerateTemporaryAuthorizations` for the session, read after each run of the queue,
+  after unlock, and once a second only while a view counts down (`showCountdown`). It is
+  forgotten (`RevokeTemporaryAuthorizations`, session-wide: other programs' too) at lock, on
+  "Forget now", at the setting `system.rememberAdminMinutes` when shorter than polkit's
+  length, and when the shell ends. A module's `PrivilegedMark` shows an open, dimmed lock
+  while kept (`module.privileged.remembered`). The prompt says "Remembered for N min" under
+  the field for a run of the queue while the rule is installed and both lengths are known
+  (`RememberRules.promptLine`); Settings → System → Authentication's section "Remember the
+  password" (`panels/settings/RememberAdminSection.qml`, decisions in
+  `singletons/RememberViewRules.qml`) shows the state, the length and what is kept, and
+  installs it.
+  - NixOS: the module's `programs.h2s-shell.polkit.rememberAdmin` writes the rule into
+    `security.polkit.extraConfig` and, above 5 minutes, `/etc/polkit-1/polkitd.conf`; the
+    page shows the option to copy, built from the setting.
+  - Arch: Install, Install again, Remove and Undo are one run as administrator each
+    (`singletons/io/RememberInstall.qml`, the fixed script in
+    `singletons/RememberInstallRules.qml`), built only from what the reader read: it writes
+    `/usr/share/polkit-1/rules.d/40-h2s-shell.rules` and, when the setting is longer than
+    polkit's length, `/etc/polkit-1/polkitd.conf`, backs both up to
+    `/var/lib/h2s-shell/polkit-backup` and tells polkitd to read its conf again. A file
+    changed outside the shell is replaced only through "Replace…", keyed to the text shown.
 - NixOS: pkexec is the setuid wrapper `/run/wrappers/bin/pkexec` (the store's copy is not
   setuid); `timeout` leads into the store.
 - Arch: `/usr/bin/pkexec`, `/usr/bin/timeout`.

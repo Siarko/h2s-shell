@@ -21,6 +21,10 @@ Singleton {
 
     readonly property var installed: _reader.installed
     readonly property string system: _reader.system
+    // What the last reading read: the facts { user, timeout, program } and the texts { rule,
+    // confs } a request to RememberInstall is built from; null before the first reading
+    readonly property var facts: _reader.facts
+    readonly property var files: _reader.files
     readonly property var kept: _reader.kept
     readonly property real keptUntilMs: _reader.keptUntilMs
     readonly property real revokeAtMs: _reader.revokeAtMs
@@ -30,6 +34,7 @@ Singleton {
     readonly property string forgetOutcome: _reader.forgetOutcome
     readonly property string forgetReason: _reader.forgetReason
     readonly property real forgetAtMs: _reader.forgetAtMs
+    readonly property real lastObtainedMs: _reader.lastObtainedMs
     readonly property int minutes: Profiles.value("system.rememberAdminMinutes") ?? 5
 
     // In a test tree without the lock bed's tools, or before the tools are found: nothing is run

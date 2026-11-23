@@ -14,7 +14,9 @@ import qs.singletons
 // run: "Not named", no Authorization line. The
 // prompt's card (polkit/AuthCard.qml) is opaque: nothing behind it shows through. The whole
 // prompt (polkit/AuthPrompt.qml), on a stand-in flow: polkit's message and action id on top
-// for a request not from a module and for an old run, not on top for a module's.
+// for a request not from a module and for an old run, not on top for a module's; the line
+// "Remembered for N min" under the field only for a run of the queue with the rule installed
+// and the system's length known.
 //
 // Opens a small window in a corner for a moment (run it through tests/run-unit.sh).
 TestCase {
@@ -88,6 +90,24 @@ TestCase {
     }
     property Component _flowComponent: Component { StandInFlow {} }
     property Component _promptComponent: Component { AuthPrompt {} }
+
+    // The line under the field for `announcement`, what is installed and the setting:
+    // its text when shown, "" when not
+    function _rememberedLine(announcement, state, minutes) {
+        const flow = _flowComponent.createObject(root);
+        const prompt = _promptComponent.createObject(root, { flow: flow, announcement: announcement, rememberState: state, rememberMinutes: minutes });
+        const line = _find(prompt.contentItem, "rememberedLine");
+        const identity = _find(prompt.contentItem, "identity");
+        assert(line && identity, "the prompt's remembered line and As user row are found");
+        for (let i = 0; i < 100 && !identity.visible; i++)
+            driver.wait(20);
+        assert(identity.visible, "the prompt is shown");
+        const said = line.visible ? line.text : "";
+        prompt.destroy();
+        flow.destroy();
+        driver.wait(50);
+        return said;
+    }
 
     // Whether polkit's message and action id are on the prompt's top, for `announcement`
     function _polkitOnTop(announcement) {
@@ -298,6 +318,15 @@ TestCase {
         assert(oldRun.message && oldRun.actionId, "an old run naming no module or purpose: on top too");
         const fromModule = _polkitOnTop(first);
         assert(!fromModule.message && !fromModule.actionId, "a module's request: not on top (under Command)");
+
+        // How long the password is remembered: a run of the shell's queue, the rule installed
+        const ours = { rule: "ours", seconds: 300 };
+        assertEqual(_rememberedLine(first, ours, 3), "Remembered for 3 min", "a run of the queue, the rule installed: the line, the shorter length");
+        assertEqual(_rememberedLine(first, ours, 15), "Remembered for 5 min", "… the system's length when shorter than the setting");
+        assertEqual(_rememberedLine(first, { rule: "none", seconds: 300 }, 5), "", "the rule not installed: no line");
+        assertEqual(_rememberedLine(first, { rule: "ours", seconds: -1 }, 5), "", "the system's length not known: no line");
+        assertEqual(_rememberedLine(null, ours, 5), "", "a request not of the shell's queue: no line");
+        assertEqual(_rememberedLine(first, null, 5), "", "nothing read: no line");
         finish();
     }
 }

@@ -24,6 +24,8 @@ Item {
     // Replaces the schema hint where the page knows better, e.g. why a feature is not
     // available here
     property string hint: ""
+    // The hint's colour where the page's hint warns
+    property color hintColor: Theme.textMuted
     // A slider's upper bound when it depends on other settings; the schema's otherwise
     property var maximum: undefined
     // Replaces the plain write when an edit has to adjust other settings too, e.g. bar
@@ -400,7 +402,7 @@ Item {
             textFormat: Text.PlainText
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSizeSmall
-            color: Theme.textMuted
+            color: root.hintColor
         }
 
         // Number: a whole number within the schema's range, with its unit (pills where the

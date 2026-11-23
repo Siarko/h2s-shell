@@ -24,7 +24,9 @@ import qs.singletons
 // the shell's queue (`announcement`: PrivilegedRuns.announcementFor) also says who asks and
 // what for: "Module", "Authorization" and the command one click away — for a module's prompt
 // polkit's message and action go there too, as they repeat the command; elsewhere they are
-// the description over the field (PolkitRules.promptLayout). Every text here is plain text:
+// the description over the field (PolkitRules.promptLayout). For such a run, while the
+// shell's rule to remember the password is installed, a line under the field says for how
+// long (RememberRules.promptLine). Every text here is plain text:
 // polkit's message and action, PAM's words and the accounts' names too.
 PanelWindow {
     id: root
@@ -32,6 +34,12 @@ PanelWindow {
     required property var flow
     // { module, authorization, command } for a run of the shell's queue, else null
     property var announcement: null
+    // What is installed (RememberRules.state's answer) and the setting, for the line under
+    // the field: how long a password typed for a run of the shell's queue is remembered
+    property var rememberState: RememberedAdmin.installed
+    property int rememberMinutes: RememberedAdmin.minutes
+    readonly property string rememberLine: announcement === null ? ""
+        : RememberRules.promptLine(rememberState?.rule ?? "", rememberMinutes, rememberState?.seconds ?? -1)
 
     WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive
@@ -304,6 +312,20 @@ PanelWindow {
                         onAccepted: root._submit()
                         Keys.onEscapePressed: root._cancel()
                     }
+                }
+
+                // How long the password is remembered, for a run of the shell's queue while
+                // the rule is installed (a promise: the kept list is the truth afterwards)
+                Text {
+                    objectName: "rememberedLine"
+                    textFormat: Text.PlainText
+                    Layout.fillWidth: true
+                    visible: text !== ""
+                    text: root.rememberLine
+                    color: Theme.glassTextMuted
+                    font.family: Theme.fontFamily
+                    font.pixelSize: Theme.fontSizeSmall
+                    horizontalAlignment: Text.AlignHCenter
                 }
 
                 // What the prompt waits for and what can be done (PolkitRules.conversationHint)

@@ -251,6 +251,13 @@ TestCase {
                         JSON.stringify(["ours", "ours", 600, RememberRules.confPath]), "the rule and our conf installed, 10 min");
             assertEqual(_reader.kept.known + " " + _reader.kept.entries.length, "true 0", "nothing kept: known");
             assertEqual(_reader.revokeAtMs, 0, "nothing kept: no revoke armed");
+            // What a request to install is built from: the facts the state was judged with, the texts read
+            assertEqual(JSON.stringify(_reader.facts), JSON.stringify({ user: "alex", timeout: _timeout, program: _reader.program }),
+                        "the facts read handed on");
+            assertEqual(_reader.files.rule, RememberRules.ruleText(_reader.facts), "… the rule's text");
+            assertEqual(_reader.files.confs[RememberRules.confPath] + "|" + _reader.files.confs["/run/polkit-1/polkitd.conf"],
+                        RememberRules.confText(600) + "|undefined", "… the confs' texts, undefined for no file");
+            assertEqual(_reader.lastObtainedMs, 0, "… nothing obtained seen yet");
             _withCalls(calls => {
             assert(calls.some(line => line.includes("--object-path /org/freedesktop/login1/session/auto") && line.endsWith("org.freedesktop.login1.Session Id")),
                    "the session asked of logind's session/auto");
@@ -272,6 +279,7 @@ TestCase {
             assertEqual(entries.map(entry => entry.id).join(","), "ours", "only the shell's process's entry");
             assertEqual(_reader.revokeAtMs, entries[0].obtainedMs + 300000, "5 of 10 min: the revoke armed for obtained plus 5 min");
             assertEqual(_reader.keptUntilMs, _reader.revokeAtMs, "… kept until then");
+            assertEqual(_reader.lastObtainedMs, entries[0].obtainedMs, "… the latest obtained time seen");
             // The clock moved to just before the revoke time: the timer fires in a moment
             _withCalls(calls => {
                 _mark = calls.length;

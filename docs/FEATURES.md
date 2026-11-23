@@ -747,6 +747,36 @@ fingerprint and the security key each with a switch (`lockscreen.offerFingerprin
 `lockscreen.offerSecurityKey`), off and dimmed with the reason while the computer lacks one.
 Changed at once, without a password.
 
+### Remember the password
+
+Under the lock screen's switches: after the administrator password is typed for one of the
+shell's own root runs (a module's action, a PAM write, the Hibernate section's Apply), the
+next ones pass without asking for a while. Other programs' pkexec still asks.
+"Remember for" (`system.rememberAdminMinutes`, 1–60 min, 5 by default) sets how long: shorter
+than the system keeps a password, the shell forgets it itself (for every program in the
+session); longer, the system's length changes for every program. Under the buttons one box
+says whether the rule is installed (outdated, or changed outside the shell), how long the
+system keeps a password and where that comes from, where the files are, and, while a password
+is kept, "Remembered, 4 min left", counting down, with "Forget now". It is also forgotten
+when the screen locks and when the shell restarts. While kept, "Try the prompt" says no
+prompt will show, and a module's lock marks show an open, dimmed lock. The shell's prompt
+says "Remembered for 5 min" under the password field for its own runs while the rule is
+installed.
+
+#### NixOS
+
+The page shows the module's option `programs.h2s-shell.polkit.rememberAdmin` built from the
+setting, with Copy; it is in force after `nixos-rebuild switch`, and the page reads it back.
+
+#### Arch
+
+Install writes the rule (`/usr/share/polkit-1/rules.d/40-h2s-shell.rules`) as administrator,
+and, when the setting is longer than the system's length, `/etc/polkit-1/polkitd.conf`;
+"Install again" follows a longer setting or a moved `timeout`; Remove takes them away. Each is
+one password prompt (none while a password is kept). The old files go to
+`/var/lib/h2s-shell/polkit-backup` first; Undo puts them back. A file changed outside the
+shell is shown with the lines that are not the shell's marked: "Read again", or "Replace…".
+
 ## Settings
 
 A separate floating window, reachable from the Settings widget, from

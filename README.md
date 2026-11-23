@@ -207,6 +207,27 @@ PAM `auth` stack.
 - **Arch and others**: sudo and polkit use the system's `/etc/pam.d/sudo` and
   `/etc/pam.d/polkit-1` (else `/usr/lib/pam.d/polkit-1`) as they are.
 
+### Remembering the administrator password
+
+The shell can keep a typed administrator password for its own root runs for a few minutes,
+as sudo does; other programs' pkexec still asks. It is forgotten when the screen locks, on
+"Forget now" and when the shell restarts. Settings → System → Authentication → "Remember the
+password" sets how long ("Remember for", 5 min by default) and shows what is kept.
+
+- **NixOS**: the module's option, which the page shows with Copy, built from the setting:
+
+  ```nix
+  programs.h2s-shell.polkit.rememberAdmin = {
+    enable = true;
+    users = [ "<your user>" ];
+    minutes = 5;   # above 5 sets polkit's length for every program
+  };
+  ```
+
+- **Arch**: "Install" on that page writes the polkit rule (and, for more than polkit's 5
+  minutes, `/etc/polkit-1/polkitd.conf`) as administrator, with backups in
+  `/var/lib/h2s-shell/polkit-backup`; Remove and Undo are there too.
+
 ## Google Calendar
 
 Connect an account in **Settings → Calendar** and sign in in the browser. The shell

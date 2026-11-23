@@ -7,7 +7,8 @@ import qs.singletons
 // System → Authentication: whether the shell is the session's polkit agent — the prompt
 // for an administrator's password when a program needs one (Authentication) —
 // and what answers such requests now; under it the sign-in rules of sudo and administrator
-// prompts and the lock screen's ways to unlock (PamRulesSection).
+// prompts and the lock screen's ways to unlock (PamRulesSection), and remembering the
+// administrator password for a while (RememberAdminSection).
 Flickable {
     id: root
 
@@ -19,6 +20,8 @@ Flickable {
 
     readonly property string _state: Authentication.state
     readonly property string _others: Authentication.otherAgents.join(", ")
+    // A typed password is remembered now: polkit would not ask
+    readonly property bool _kept: RememberedAdmin.remembered?.kept === true
     // Where the sign-in rules ask (SettingsModalHost)
     property var modalHost: null
 
@@ -108,18 +111,24 @@ Flickable {
 
             SmallButton {
                 label: "Try the prompt"
-                available: root._state === "active" && !Authentication.tryingPrompt
+                available: root._state === "active" && !Authentication.tryingPrompt && !root._kept
                 tooltip: Authentication.tryingPrompt ? "The prompt is open"
+                    : root._kept ? "Remembered now: no prompt will show"
                     : root._state === "active" ? "Runs pkexec true: asks for the password, then does nothing"
                     : "The shell's prompt is not the one answering"
                 onClicked: Authentication.tryPrompt()
             }
-            Hint { text: "Asks for the password and does nothing with it." }
+            Hint { text: root._kept ? "Remembered now: no prompt will show." : "Asks for the password and does nothing with it." }
         }
 
         // Reads the stacks again when shown (a system update may have changed them), with
         // what the computer has (a finger, a key)
         PamRulesSection {
+            Layout.fillWidth: true
+            modalHost: root.modalHost
+        }
+
+        RememberAdminSection {
             Layout.fillWidth: true
             modalHost: root.modalHost
         }

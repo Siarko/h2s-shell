@@ -368,8 +368,8 @@ Singleton {
           ],
           hint: "Asks for an administrator's password when a program needs one (polkit). Only one agent can answer: turn this off if you run your own (hyprpolkitagent, polkit-gnome)." },
         // How long a typed administrator password is kept for the shell's root runs
-        // (RememberedAdmin): the computer's, never per profile. No control yet: meant for the
-        // Authentication page
+        // (RememberedAdmin): the computer's, never per profile. Edited in System →
+        // Authentication's section "Remember the password" (its hint is the page's)
         { key: "system.rememberAdminMinutes", label: "Remember for", group: "system",
           type: "number", min: 1, max: 60, suffix: "min", default: 5, global: true },
 

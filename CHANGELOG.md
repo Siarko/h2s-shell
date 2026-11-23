@@ -54,6 +54,16 @@ The interface modules are written against (`qs.api`), versioned on its own
   not know without the `system` row (it lets in a user the module says it does not apply
   to), and a fingerprint with no time limit above a password (the password waits for the
   finger) are warnings. null (the default) leaves the service as NixOS makes it.
+- Settings → System → Authentication: "Remember the password" — after the administrator
+  password is typed for one of the shell's own root runs, the next ones pass without asking
+  for "Remember for" minutes (1–60, default 5). One box says whether the rule is installed,
+  how long the system keeps a password and where that comes from, and, while kept,
+  "Remembered, 4 min left" with "Forget now"; it is also forgotten at lock and when the shell
+  restarts. Arch: Install / Install again / Remove / Undo, one password prompt each, with
+  backups in `/var/lib/h2s-shell/polkit-backup`; a file changed outside the shell is shown
+  and replaced only through "Replace…". NixOS: the module's option, with Copy. The shell's
+  prompt says "Remembered for N min" under the field for its own runs while the rule is
+  installed; "Try the prompt" says no prompt will show while a password is kept.
 - NixOS: the module's `programs.h2s-shell.polkit.rememberAdmin = { enable; users; minutes; }`
   remembers the administrator password for the shell's own root runs, for the listed users:
   a polkit rule keeps a typed password for the shell's process; `minutes` (1–60, default 5)

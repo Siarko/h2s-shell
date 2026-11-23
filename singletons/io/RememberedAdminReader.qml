@@ -62,6 +62,12 @@ QtObject {
     property string system: ""
     // The program pkexec reports for the timeout (its path resolved), "" when not known
     property string program: ""
+    // What the last reading read, for Install, Remove and Undo (RememberInstallRules'
+    // requests): the facts the state was judged with { user, timeout, program } and the texts
+    // { rule, confs } (each a string, undefined for no file, null when not readable); null
+    // before the first reading
+    property var facts: null
+    property var files: null
     // RememberRules.parseKept's answer, or null before the first list
     property var kept: null
     // Until when something stays kept (RememberRules.keptUntilMs), 0 for nothing
@@ -78,6 +84,9 @@ QtObject {
     property string forgetOutcome: ""
     property string forgetReason: ""
     property real forgetAtMs: 0
+    // The latest time something kept was obtained, of every list read (0: none seen): a
+    // forget before it is older than what was kept since
+    property real lastObtainedMs: 0
     // Counters a suite waits on
     property int lists: 0
     property int readings: 0
@@ -88,6 +97,8 @@ QtObject {
         const generation = ++_filesGeneration;
         const paths = [RememberRules.rulePath, nixosRulePath, nixosMarkPath].concat(RememberRules.confPaths);
         const answers = { files: null, program: undefined };
+        // The facts as they are when the reading starts: the state and the facts handed on agree
+        const readUser = user, readTimeout = timeout;
         const settle = () => {
             if (generation !== _filesGeneration || answers.files === null || answers.program === undefined)
                 return;
@@ -97,10 +108,12 @@ QtObject {
             const confs = {};
             for (const path of RememberRules.confPaths)
                 confs[path] = text(path);
+            const rule = text(nixos ? nixosRulePath : RememberRules.rulePath);
             system = nixos ? "nixos" : "arch";
             program = answers.program;
-            installed = RememberRules.state({ rule: text(nixos ? nixosRulePath : RememberRules.rulePath), confs },
-                                            { system, user, timeout, program: answers.program });
+            root.facts = Object.freeze({ user: readUser, timeout: readTimeout, program: answers.program });
+            root.files = Object.freeze({ rule, confs: Object.freeze(confs) });
+            installed = RememberRules.state({ rule, confs }, { system, user: readUser, timeout: readTimeout, program: answers.program });
             readings += 1;
         };
         _run(filesCommand.concat(paths.map(path => fileRoot + path)), (lines, result) => {
@@ -111,11 +124,11 @@ QtObject {
             answers.files = files;
             settle();
         });
-        if (timeout === "") {
+        if (readTimeout === "") {
             answers.program = "";
             settle();
         } else {
-            _run(resolveCommand.concat([timeout]), (lines, result) => {
+            _run(resolveCommand.concat([readTimeout]), (lines, result) => {
                 const program = result.ok && lines.length === 1 ? lines[0] : "";
                 answers.program = program.startsWith("/") ? program : "";
                 settle();
@@ -200,6 +213,8 @@ QtObject {
     }
 
     function _listed(list, problem) {
+        for (const entry of list.entries)
+            lastObtainedMs = Math.max(lastObtainedMs, entry.obtainedMs);
         kept = list;
         lists += 1;
         const said = problem === "" || problem === "longer" ? "" : problem;
