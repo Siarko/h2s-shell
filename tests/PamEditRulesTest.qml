@@ -76,8 +76,29 @@ TestCase {
         // --- how rows are written ---
         assertEqual(edit.rowLines(fingerprint("r1")).join("|"), "-auth sufficient pam_fprintd.so timeout=10 max-tries=3", "an optional reader: -auth");
         assertEqual(edit.rowLines(fingerprint("r1", "optional"))[0].startsWith("-auth optional"), true, "… optional too");
-        assertEqual(edit.rowLines(fingerprint("r1", "required")).join("|"), "auth required pam_fprintd.so timeout=10 max-tries=3", "a required reader: plain auth");
-        assertEqual(edit.rowLines(key("r1", "requisite", true)).join("|"), "auth requisite pam_u2f.so cue pinverification=1", "a key: cue, the PIN when asked");
+        assertEqual(edit.rowLines(fingerprint("r1", "required")).join("|"),
+                    "auth [success=ok new_authtok_reqd=ok ignore=bad default=bad] pam_fprintd.so timeout=10 max-tries=3",
+                    "a required reader: plain auth, its word with ignore a failure");
+        assertEqual(edit.rowLines(key("r1", "requisite", true)).join("|"),
+                    "auth [success=ok new_authtok_reqd=ok ignore=die default=die] pam_u2f.so cue pinverification=1",
+                    "a key: cue, the PIN when asked; requisite with ignore ending it");
+        assertEqual(edit.rowLines(password("r1", "required")).join("|"), "auth [success=ok new_authtok_reqd=ok ignore=bad default=bad] pam_unix.so try_first_pass",
+                    "a required password: the same");
+        assertEqual(edit.rowLines(fingerprint("r1", "sufficient")).join("|"), "-auth sufficient pam_fprintd.so timeout=10 max-tries=3",
+                    "sufficient stays the plain word");
+        assertEqual(edit.rowLines(raw("r1", "auth required pam_ldap.so")).join("|"), "auth required pam_ldap.so", "a raw line stays as typed");
+        // A required row that answers PAM_IGNORE fails instead of reaching the permit closing as no answer
+        let permitted = edit.blockLines([key("r1", "required", false), password("r2")], facts());
+        assert(permitted[0].includes("ignore=bad") && permitted[permitted.length - 1] === "auth [default=done] pam_permit.so",
+               "with the permit closing, the required row's ignore is a failure: " + JSON.stringify(permitted));
+        const parse = text => PamStackRules.parseLine(text);
+        assertEqual(edit.controlWord(parse("auth [default=bad ignore=bad new_authtok_reqd=ok success=ok] pam_x.so")), "required",
+                    "the written form read back as its word, in any order");
+        assertEqual(edit.controlWord(parse("auth [success=ok default=bad] pam_x.so")), "", "another bracketed control: no word");
+        assertEqual(edit.controlWord(parse("auth requisite pam_x.so")), "requisite", "a plain word: itself");
+        const plainWords = edit.adopt("auth required pam_fprintd.so\nauth requisite pam_unix.so try_first_pass\nauth include system-auth\n", "sudo", {});
+        assertEqual(plainWords.rows.map(row => row.method + ":" + row.control).join(" "), "fingerprint:required password:requisite system:",
+                    "a hand-made file's plain required and requisite are read as rows with those words");
         assertEqual(edit.rowLines(key("r1", "sufficient")).join("|"), "-auth sufficient pam_u2f.so cue", "… no PIN");
         assertEqual(edit.rowLines(password("r1")).join("|"), "auth sufficient pam_unix.so try_first_pass", "an uncounted password");
         assertEqual(edit.rowLines(password("r1", "sufficient", true)).join("|"),

@@ -141,15 +141,48 @@ Singleton {
                 "auth " + middle[1] + " pam_faillock.so authfail"];
     }
 
+    // How a row's word is written. `required` and `requisite` must pass: libpam's plain words
+    // treat a module's PAM_IGNORE as no answer, and with nothing else deciding the closing
+    // `[default=done] pam_permit.so` would then let the user in; so they are written as the
+    // plain word's actions (libpam's pam_handlers.c) with only `ignore` a failure. (pam_fprintd
+    // returns PAM_AUTHINFO_UNAVAIL without a reader or an enrolled finger, a failure either
+    // way; pam_u2f with `nouserok` returns PAM_IGNORE for a user without a key.)
+    readonly property var writtenControls: ({
+        required: "[success=ok new_authtok_reqd=ok ignore=bad default=bad]",
+        requisite: "[success=ok new_authtok_reqd=ok ignore=die default=die]"
+    })
+
+    function writtenControl(control) {
+        return writtenControls[control] ?? String(control ?? "");
+    }
+
+    // The editor's word for a line's control: the word itself, or the word whose written
+    // form the bracketed control is (the same actions in any order); "" for another control
+    function controlWord(line) {
+        if (line?.controlKind === "simple")
+            return line.control;
+        if (line?.controlKind !== "bracketed" || !line.actions)
+            return "";
+        const same = (first, second) => {
+            const keys = Object.keys(first);
+            return keys.length === Object.keys(second).length && keys.every(key => second[key] === first[key]);
+        };
+        for (const word of Object.keys(writtenControls)) {
+            if (same(line.actions, PamStackRules.controlActions(writtenControls[word])))
+                return word;
+        }
+        return "";
+    }
+
     // The lines one row is written as: a raw row exactly as typed; the fixed row none (the
     // system's lines stay where they are). A detail left unset is not written.
     function rowLines(row) {
-        const method = row?.method, control = String(row?.control ?? "");
+        const method = row?.method, word = String(row?.control ?? ""), control = writtenControl(word);
         const details = row?.details ?? {};
         if (method === "raw")
             return [String(details.text ?? "")];
         if (method === "fingerprint") {
-            const words = [_prefix(control), control, "pam_fprintd.so"];
+            const words = [_prefix(word), control, "pam_fprintd.so"];
             if (details.timeout !== undefined)
                 words.push("timeout=" + details.timeout);
             if (details.tries !== undefined)
@@ -157,9 +190,9 @@ Singleton {
             return [words.join(" ")];
         }
         if (method === "securityKey")
-            return [[_prefix(control), control, "pam_u2f.so", "cue"].concat(details.pin === true ? ["pinverification=1"] : []).join(" ")];
+            return [[_prefix(word), control, "pam_u2f.so", "cue"].concat(details.pin === true ? ["pinverification=1"] : []).join(" ")];
         if (method === "password")
-            return details.counted === true ? countedLines(control) : ["auth " + control + " pam_unix.so try_first_pass"];
+            return details.counted === true ? countedLines(word) : ["auth " + control + " pam_unix.so try_first_pass"];
         return [];
     }
 
@@ -197,6 +230,19 @@ Singleton {
 
     function _sameWords(first, second) {
         return JSON.stringify(_words(first)) === JSON.stringify(_words(second));
+    }
+
+    // The same line but for how its word is spelled (plain or the written bracket form)
+    function _sameRowWords(first, second) {
+        const spelled = text => {
+            const words = _words(text);
+            const line = PamStackRules.parseLine(words.join(" "));
+            const word = controlWord(line);
+            if (words.length > 1 && word !== "")
+                words[1] = word;
+            return JSON.stringify(words);
+        };
+        return spelled(first) === spelled(second);
     }
 
     function _isMarker(line) {
@@ -240,7 +286,9 @@ Singleton {
     // uncounted password line in the editor's own form with details in range
     function _ownRow(words) {
         const line = PamStackRules.parseLine(words.join(" "));
-        if (line.error !== undefined || line.module === undefined || line.controlKind !== "simple" || !PamRuleRules.isControl(line.control))
+        // A hand-made file's plain required/requisite is read as the word too
+        const word = controlWord(line);
+        if (line.error !== undefined || line.module === undefined || !PamRuleRules.isControl(word))
             return null;
         let candidate = null;
         if (line.module === "pam_fprintd.so") {
@@ -256,16 +304,16 @@ Singleton {
                     return null;
                 details[name] = value;
             }
-            candidate = { method: "fingerprint", control: line.control, details };
+            candidate = { method: "fingerprint", control: word, details };
         } else if (line.module === "pam_u2f.so") {
-            candidate = { method: "securityKey", control: line.control, details: { pin: line.args.includes("pinverification=1"), cue: true } };
+            candidate = { method: "securityKey", control: word, details: { pin: line.args.includes("pinverification=1"), cue: true } };
         } else if (line.module === "pam_unix.so") {
-            candidate = { method: "password", control: line.control, details: { counted: false } };
+            candidate = { method: "password", control: word, details: { counted: false } };
         }
         if (candidate === null)
             return null;
         const written = rowLines(candidate);
-        return written.length === 1 && _sameWords(written[0], words.join(" ")) ? candidate : null;
+        return written.length === 1 && _sameRowWords(written[0], words.join(" ")) ? candidate : null;
     }
 
     // The control of a counted pattern starting at items[index], or ""

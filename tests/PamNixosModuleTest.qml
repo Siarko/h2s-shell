@@ -73,6 +73,8 @@ TestCase {
             assert(text.includes(control + " = [ \"" + PamStackRules.words(lines[1])[1] + "\" \"" + PamStackRules.words(lines[2])[1] + "\" ];"),
                    "a counted " + control + " row's controls are the editor's");
         }
+        for (const word of ["required", "requisite"])
+            assert(text.includes(word + " = \"" + PamEditRules.writtenControls[word] + "\";"), "an own " + word + " row is written as the editor writes it");
         for (const kind of ["permit", "deny"]) {
             const words = normalized(PamEditRules.closingLines[kind]).split(" ");
             assert(text.includes(kind + " = line \"" + words[1] + "\" (pamModule \"" + words[2] + "\") [ ];"), "the " + kind + " closing line is the editor's");

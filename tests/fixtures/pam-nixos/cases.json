@@ -88,7 +88,7 @@
     "lines": {
       "sudo": [
         "auth sufficient pam_u2f.so cue pinverification=1",
-        "auth required pam_unix.so try_first_pass",
+        "auth [success=ok new_authtok_reqd=ok ignore=bad default=bad] pam_unix.so try_first_pass",
         "auth [default=done] pam_permit.so"
       ],
       "polkit-1": [
@@ -254,6 +254,72 @@
         "auth optional pam_env.so",
         "auth sufficient pam_ldap.so use_first_pass",
         "auth required pam_krb5.so minimum_uid=1000"
+      ]
+    }
+  },
+  {
+    "name": "required and requisite readers: ignore is a failure",
+    "machine": {
+      "fprintd": true,
+      "u2f": true
+    },
+    "split": true,
+    "rows": {
+      "sudo": [
+        {
+          "id": "r1",
+          "method": "fingerprint",
+          "control": "required",
+          "details": {
+            "timeout": 20
+          }
+        },
+        {
+          "id": "r2",
+          "method": "securityKey",
+          "control": "requisite",
+          "details": {
+            "pin": false,
+            "cue": true
+          }
+        },
+        {
+          "id": "r3",
+          "method": "password",
+          "control": "sufficient",
+          "details": {
+            "counted": false
+          }
+        }
+      ],
+      "polkit": [
+        {
+          "id": "r1",
+          "method": "securityKey",
+          "control": "required",
+          "details": {
+            "pin": true,
+            "cue": true
+          }
+        },
+        {
+          "id": "system",
+          "method": "system",
+          "control": "",
+          "details": {}
+        }
+      ]
+    },
+    "snippet": "programs.h2s-shell.pam = {\n  sudo.rules = [\n    { method = \"fingerprint\"; control = \"required\"; timeout = 20; }\n    { method = \"securityKey\"; control = \"requisite\"; pin = false; }\n    { method = \"password\"; control = \"sufficient\"; counted = false; }\n  ];\n  polkit.rules = [\n    { method = \"securityKey\"; control = \"required\"; pin = true; }\n    { method = \"system\"; }\n  ];\n};\n",
+    "lines": {
+      "sudo": [
+        "auth [success=ok new_authtok_reqd=ok ignore=bad default=bad] pam_fprintd.so timeout=20",
+        "auth [success=ok new_authtok_reqd=ok ignore=die default=die] pam_u2f.so cue",
+        "auth sufficient pam_unix.so try_first_pass",
+        "auth [default=done] pam_permit.so"
+      ],
+      "polkit-1": [
+        "auth [success=ok new_authtok_reqd=ok ignore=bad default=bad] pam_u2f.so cue pinverification=1"
       ]
     }
   }

@@ -337,6 +337,14 @@ let
   # ── The rows as NixOS's rules ──
 
   pamModule = name: "${config.security.pam.package}/lib/security/${name}";
+  # An own row's required/requisite: the plain word's actions with only `ignore` a failure,
+  # so a module's PAM_IGNORE never reaches the closing `[default=done] pam_permit.so` as no
+  # answer (PamEditRules.writtenControls says why)
+  writtenControls = {
+    required = "[success=ok new_authtok_reqd=ok ignore=bad default=bad]";
+    requisite = "[success=ok new_authtok_reqd=ok ignore=die default=die]";
+  };
+  writtenControl = control: writtenControls.${control} or control;
   line = control: modulePath: args: { inherit control modulePath args; };
   # A counted password row: pam_faillock's preauth (a lockout closes the service), pam_unix,
   # and authfail reached only on a wrong password
@@ -357,15 +365,15 @@ let
   # never needs Arch's `-auth` (skip the line when the module is gone).
   rowLines = row:
     if row.method == "fingerprint" then [
-      (line row.control "${config.services.fprintd.package}/lib/security/pam_fprintd.so"
+      (line (writtenControl row.control) "${config.services.fprintd.package}/lib/security/pam_fprintd.so"
         (lib.optional (row.timeout != null) "timeout=${toString row.timeout}"
          ++ lib.optional (row.tries != null) "max-tries=${toString row.tries}"))
     ]
     else if row.method == "securityKey" then [
-      (line row.control "${pkgs.pam_u2f}/lib/security/pam_u2f.so" ([ "cue" ] ++ lib.optional row.pin "pinverification=1"))
+      (line (writtenControl row.control) "${pkgs.pam_u2f}/lib/security/pam_u2f.so" ([ "cue" ] ++ lib.optional row.pin "pinverification=1"))
     ]
     else if row.method == "password" then
-      (if row.counted then countedLines row.control else [ (line row.control (pamModule "pam_unix.so") [ "try_first_pass" ]) ])
+      (if row.counted then countedLines row.control else [ (line (writtenControl row.control) (pamModule "pam_unix.so") [ "try_first_pass" ]) ])
     else if row.method == "raw" then [ (line row.control (toString row.module) row.args) ]
     else [ ];
   closingLines = {
