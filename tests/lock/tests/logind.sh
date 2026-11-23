@@ -6,8 +6,9 @@
 # Also: a monitor that dies is started again, an inhibitor that dies is taken again, and
 # the resume ends a screensaver that was up when the machine went to sleep (it counts as
 # input), and the lock is reported to logind (SetLockedHint, recorded by the stand-in); the
-# sleep notice's look waits for the shell's own lock and says nothing after it. Lock
-# before sleep is off by default: switched on here; the screensaver too.
+# sleep notice's look waits for the shell's own lock and says nothing after it; a password
+# polkit keeps for the shell (the stand-in's list, read at unlock) is revoked at the next
+# lock. Lock before sleep is off by default: switched on here; the screensaver too.
 
 stack_start --logind --methods "password fingerprint" --settings '{"lockscreen.lockOnSleep": true,
     "lockscreen.screensaverEnabled": true, "lockscreen.screensaverTimeout": 5}'
@@ -42,8 +43,18 @@ check_within "$GUARD" "a fingerprint conversation runs" _one_finger_waiter
 logind_signal unlock-other
 sleep 1 # fixed sleep: a negative claim: another session's Unlock does nothing
 check "another session's Unlock does not unlock" compositor_locked
+# A password polkit keeps for the shell's process (the stand-in's list), read at the unlock
+now=$(date +%s)
+printf "([('kept', 'org.freedesktop.policykit.exec', ('unix-process', {'pid': <uint32 %s>, 'start-time': <uint64 5>, 'uid': <1000>}), uint64 %s, uint64 %s)],)\n" \
+    "$SHELL_PID" "$((now - 10))" "$((now + 290))" > "$WORK/logind/polkit-list"
+polkit_lists_before=$(grep -c '^list' "$WORK/logind/polkit")
+polkit_listed_again() { [ "$(grep -c '^list' "$WORK/logind/polkit")" -gt "$polkit_lists_before" ]; }
+polkit_kept() { [ -f "$WORK/logind/polkit-list" ] && ! grep -q '^revoke' "$WORK/logind/polkit"; }
+polkit_revoked() { [ ! -f "$WORK/logind/polkit-list" ] && grep -q '^revoke' "$WORK/logind/polkit"; }
 logind_signal unlock
 check_within "$GUARD" "logind's Unlock unlocks" compositor_unlocked
+check_within "$GUARD" "after the unlock, what polkit keeps is read again" polkit_listed_again
+check "… the kept password left alone while unlocked" polkit_kept
 check "the lock ended by logind" state_is last_end logind
 check_within "$GUARD" "the unlock reported: SetLockedHint false" \
     hints_are "$LOCKTEST_SESSION_PATH=false $LOCKTEST_SESSION_PATH=true $LOCKTEST_SESSION_PATH=false "
@@ -55,6 +66,8 @@ holds_before=$(grep -c '^hold' "$WORK/logind/log")
 sleep_line=$(($(wc -l < "$WORK/shell.log") + 1))
 logind_signal sleep
 check_within "$GUARD" "PrepareForSleep locks" compositor_locked
+check_within "$GUARD" "the lock forgets the kept password (RememberedAdmin, started with the shell): polkit's revoke" \
+    polkit_revoked
 check_within "$GUARD" "the inhibitor is let go" inhibitor_released
 log "PrepareForSleep to the release (the lock confirmed before it): $(release_seconds_after_signal) s"
 check "… locked and let go within 4 s of the PrepareForSleep (logind sleeps 5 s after it at the latest)" \

@@ -589,9 +589,11 @@ notification_server_up() {
 #                    logind/refuse-suspend, one method with logind/refuse-<method>) — the
 #                    wake is the test's (logind_signal wake)
 #                    ("call LockedHint")
-#                    `… Session Id` answers this test's session id, polkit's
-#                    EnumerateTemporaryAuthorizations an empty list and
-#                    RevokeTemporaryAuthorizations "()" (RememberedAdmin), none noted
+#                    `… Session Id` answers this test's session id; polkit's
+#                    EnumerateTemporaryAuthorizations logind/polkit-list (written by the
+#                    test; an empty list without it) and RevokeTemporaryAuthorizations "()",
+#                    removing logind/polkit-list (RememberedAdmin), each noted ("list",
+#                    "revoke") in logind/polkit
 #   systemd-inhibit  notes "hold <pid> <time>" in logind/log, runs the command it was given
 #                    (the shell's `read -r release`) and notes "release <pid> <time>" when
 #                    that ends; between logind_signal sleep and wake it refuses, as logind
@@ -609,6 +611,7 @@ _write_logind_standins() {
     mkdir -p "$WORK/standins" "$WORK/logind"
     : > "$WORK/logind/signals"
     : > "$WORK/logind/log"
+    : > "$WORK/logind/polkit"
     cat > "$WORK/standins/gdbus" << EOF
 #!$bash_path
 # Stand-in for gdbus in the lock test bed (tests/lock/lib.sh): no bus is reached
@@ -699,12 +702,17 @@ case "\$1" in
                 exit 0
                 ;;
             *".EnumerateTemporaryAuthorizations "*)
-                # polkit's kept authorizations (RememberedAdmin): none, not noted
-                echo "(@a(ss(sa{sv})tt) [],)"
+                # polkit's kept authorizations (RememberedAdmin): logind/polkit-list when the
+                # test wrote one, else none; noted "list" in logind/polkit
+                echo list >> "$WORK/logind/polkit"
+                if [ -f "$WORK/logind/polkit-list" ]; then $coreutils/cat "$WORK/logind/polkit-list"; else echo "(@a(ss(sa{sv})tt) [],)"; fi
                 exit 0
                 ;;
             *".RevokeTemporaryAuthorizations "*)
-                # … and their revoke at lock: "()" as polkit answers, not noted
+                # … and their revoke: noted "revoke" in logind/polkit, the list emptied, "()"
+                # as polkit answers
+                echo revoke >> "$WORK/logind/polkit"
+                $coreutils/rm -f "$WORK/logind/polkit-list"
                 echo "()"
                 exit 0
                 ;;

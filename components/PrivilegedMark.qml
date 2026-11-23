@@ -34,10 +34,18 @@ Text {
         acceptedButtons: Qt.NoButton
     }
 
-    // The tooltip's clock: read when the tooltip opens, then once a second while it is open
+    // The tooltip's clock: read when the tooltip opens, then once a second while it is open.
+    // Opening it also reads again what polkit keeps (a forget elsewhere shows at once)
     property real _now: 0
     readonly property bool _counting: root.kept && _area.containsMouse && root.visible && (root.Window.window?.visible ?? false)
-    on_CountingChanged: if (_counting) _now = Date.now()
+    on_CountingChanged: {
+        if (_counting) {
+            _now = Date.now();
+            _refreshKept();
+        }
+    }
+    // A suite's seam: what reads it again
+    property var _refreshKept: () => RememberedAdmin.refresh()
 
     Timer {
         interval: 1000

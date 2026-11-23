@@ -568,9 +568,14 @@ TestCase {
             assertEqual(JSON.stringify(host.testProgramVerdicts), "{}", "… no stand-in verdicts");
             assertEqual(host.describe().testMode, false, "describe(): testMode false");
             // (1.39) Outside test mode what polkit keeps is the shell's own reading (not
-            // started in a suite: nothing kept, the real polkit never asked)
-            assert(handle.privileged.remembered === RememberedAdmin.remembered && handle.privileged.remembered.kept === false,
-                   "test mode off: module.privileged.remembered is the shell's own: " + JSON.stringify(handle.privileged.remembered));
+            // started in a suite: nothing kept, the real polkit never asked) — never the test
+            // kit's, whatever that says
+            const testRemembered = Api._testRemembered;
+            Api._testRemembered = Object.freeze({ kept: true, untilMs: Date.now() + 240000 });
+            const realHandle = handle.privileged.remembered;
+            Api._testRemembered = testRemembered;
+            assert(realHandle === RememberedAdmin.remembered && realHandle.kept === false,
+                   "test mode off: module.privileged.remembered is the shell's own, not the test kit's: " + JSON.stringify(realHandle));
 
             // (1.36) The handle does not hand out its host; and the host itself refuses a
             // switch of test mode (a module reaching it some other way)

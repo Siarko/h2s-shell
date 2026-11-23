@@ -1327,6 +1327,24 @@ TestCase {
         assertEqual(look(_within(variedMark)), ["\uf09c", 0.5, Theme.privileged].join(" "), "kept: an open lock at half strength, the privileged colour");
         assertEqual(_within(variedMark).keptUntilMs, kept.untilMs, "… until the time it was told");
         assertEqual(_within(variedMark)._counting, false, "… its tooltip's clock still while the tooltip is not open");
+        let refreshes = 0;
+        _within(variedMark)._refreshKept = () => refreshes++;
+        assert(_until(() => {
+            driver.mouseMove(away, 5, 5);
+            driver.mouseMove(variedMark, 2, 2);
+            return _within(variedMark)._counting;
+        }, 5000), "… pointed at: its tooltip's clock runs");
+        assert(refreshes >= 1, "… and what is kept is read again as the tooltip opens");
+        assert(Math.abs(_within(variedMark)._now - Date.now()) < 5000, "… the clock read then");
+        driver.mouseMove(away, 5, 5);
+        assert(_until(() => !_within(variedMark)._counting, 5000), "… pointed away: the clock stops");
+        const leftAt = refreshes;
+        assertEqual(refreshes, leftAt, "… nothing read again on leaving");
+        driver.mouseMove(variedMark, 2, 2);
+        assert(_until(() => _within(variedMark)._counting, 5000), "… pointed at again");
+        assertEqual(refreshes, leftAt + 1, "… read again once, as the tooltip opens again");
+        driver.mouseMove(away, 5, 5);
+        assert(_until(() => !_within(variedMark)._counting, 5000), "… pointed away");
         variedMark.remembered = Object.freeze({ kept: false, untilMs: 0 });
         assertEqual(look(_within(variedMark)), ["\uf023", 1, Theme.privileged].join(" "), "not kept: the lock");
         variedMark.remembered = kept;
