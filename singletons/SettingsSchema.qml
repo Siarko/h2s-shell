@@ -237,6 +237,13 @@ Singleton {
               { value: "title", label: "Title only" },
               { value: "app", label: "App only" }
           ] },
+        // The ways to unlock the lock screen offers of those the computer has (Lockscreen,
+        // LockRules.offeredMethods); the password is always offered and has no switch.
+        // Edited on the Authentication page, with the sign-in rules
+        { key: "lockscreen.offerFingerprint", label: "Fingerprint", group: "system",
+          type: "bool", default: true },
+        { key: "lockscreen.offerSecurityKey", label: "Security key", group: "system",
+          type: "bool", default: true },
 
         // ── Notifications ──
         // Regular expressions for one-time codes in incoming notifications

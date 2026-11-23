@@ -252,6 +252,7 @@ TestCase {
         _behaviour14Restored();
         _behaviour15LockedHint();
         _behaviour16ForeignLock();
+        _behaviour17Offered();
         _secrets();
         _totality();
         _livenessCases();
@@ -259,6 +260,108 @@ TestCase {
         _sweep(1600, 24, 20261114);
         assert(_unconfirmedUnlocks === 0, "compositor rule: on every step of every test, unlockCompositor only for a session the compositor confirmed"
                + (_firstUnconfirmedUnlock ? " — " + _unconfirmedUnlocks + " broke it, first: " + _firstUnconfirmedUnlock : ""));
+    }
+
+    // ---- 17. The ways to unlock the user lets the lock offer ----
+
+    function offer(values) {
+        return { type: "settings", values: { offered: values } };
+    }
+
+    function _behaviour17Offered() {
+        // The filter, pure
+        const found = LockRules.parseMethods(allLines.concat(["smartcard\t/etc/pam.d\tsc"]));
+        const kept = LockRules.offeredMethods(found, { fingerprint: false, u2f: true, password: false, smartcard: false });
+        assert(!("fingerprint" in kept) && kept.u2f.config === "h2s-shell-u2f" && kept.password.config === "h2s-shell-password"
+               && kept.smartcard.config === "sc",
+               "17: a switched-off passive method is dropped; the password and any other name are kept whatever the switches say");
+        assert(Object.keys(LockRules.offeredMethods(found, { u2f: false })).join() === "password,fingerprint,smartcard",
+               "17: … the security key is dropped by its own switch, a method not named stays offered");
+        assert("fingerprint" in found && Object.keys(LockRules.offeredMethods(found, null)).length === 4
+               && Object.keys(LockRules.offeredMethods(found, { fingerprint: "no", u2f: 0 })).length === 4,
+               "17: no switches, or switches that are not false: everything found is offered, and `found` is not changed");
+        assert(Object.keys(LockRules.offeredMethods(null, {})).length === 0 && Object.keys(LockRules.offeredMethods("x", {})).length === 0,
+               "17: nothing found: nothing offered");
+        assert(LockRules.offerSetting(false) === false && LockRules.offerSetting(true) === true
+               && LockRules.offerSetting(undefined) === true && LockRules.offerSetting("false") === true,
+               "17: a switch is the profile's boolean, anything else offers the method");
+        assert(SettingsSchema.coreDefaults["lockscreen.offerFingerprint"] === true && SettingsSchema.coreDefaults["lockscreen.offerSecurityKey"] === true
+               && LockRules.initial().settings.offered.fingerprint === true && LockRules.initial().settings.offered.u2f === true,
+               "17: offered by default, in the schema and in the rules");
+
+        // Switched off before the lock: never started; the password works
+        const off = locked(allLines, { lockOnSleep: false, passwordFallback: fallback, offered: { fingerprint: false } });
+        assert(!has(off.all, "startPam", { method: "fingerprint" }) && off.state.passive.fingerprint.status === "unavailable"
+               && off.state.passive.u2f.status === "running",
+               "17: a fingerprint switched off is not started at the lock, the security key is");
+        assert(!LockRules.view(off.state).methods.find(method => method.name === "fingerprint").visible,
+               "17: … and the lock screen does not show it");
+        off.sendAll(enter("pw"));
+        assert(has(off.effects, "startPam", { method: "password" }), "17: … the password is asked as ever");
+
+        // Switched off while running: its conversation ends, the password stays available
+        const mid = locked();
+        const running = conversationOf(mid.state, "fingerprint");
+        mid.send(offer({ fingerprint: false }));
+        assert(mid.ignored === "" && has(mid.effects, "abortPam", { method: "fingerprint", conversation: running })
+               && mid.state.passive.fingerprint.status === "unavailable" && mid.state.passive.fingerprint.conversation === null,
+               "17: switched off while the reader waits: its conversation is aborted, the method unavailable");
+        assert(mid.state.passive.u2f.status === "running" && !has(mid.effects, "abortPam", { method: "u2f" }),
+               "17: … the other method goes on");
+        mid.send({ type: "pamCompleted", method: "fingerprint", conversation: running, result: "error" });
+        assert(!mid.error && mid.ignored !== "" && mid.state.passive.fingerprint.status === "unavailable",
+               "17: … its late completion is ignored");
+        mid.sendAll(enter("pw"));
+        assert(has(mid.effects, "startPam", { method: "password" }), "17: … and the password is asked");
+        mid.send(passwordPrompt()).send(pamCompleted("password", "success"));
+        assert(has(mid.all, "unlockCompositor"), "17: … and lets in");
+
+        // Switched on again: started once its abort has settled, never in the same step
+        const back = locked().send(offer({ fingerprint: false }));
+        back.send(offer({ fingerprint: true }));
+        assert(!has(back.effects, "startPam", { method: "fingerprint" }), "17: switched on again: not in the step that aborted it");
+        back.send(timer("settle:fingerprint"));
+        assert(has(back.effects, "startPam", { method: "fingerprint", config: "h2s-shell-fingerprint" })
+               && back.state.passive.fingerprint.status === "running",
+               "17: … started after its settle timer, with the config detected before");
+        const later = locked(allLines, { lockOnSleep: false, passwordFallback: fallback, offered: { u2f: false } });
+        later.send(offer({ u2f: true }));
+        assert(has(later.effects, "startPam", { method: "u2f", config: "h2s-shell-u2f" }),
+               "17: a method switched off at the lock and on during it starts at once");
+
+        // Backing off: the retry stops
+        const backoff = locked(passwordAndFingerprint).send(pamCompleted("fingerprint", "failed"));
+        assert("retry:fingerprint" in backoff.state.timers, "17: (backing off)");
+        backoff.send(offer({ fingerprint: false }));
+        assert(backoff.state.passive.fingerprint.status === "unavailable" && !("retry:fingerprint" in backoff.state.timers),
+               "17: switched off while backing off: the retry stopped, unavailable");
+
+        // The answers that follow keep the switch
+        const again = locked().send(offer({ fingerprint: false })).send(timer("settle:fingerprint"));
+        again.sendAll(redetected(allLines));
+        assert(!has(again.effects, "startPam", { method: "fingerprint" }) && again.state.passive.fingerprint.status === "unavailable",
+               "17: a re-detection that finds the fingerprint does not offer it while switched off");
+        again.sendAll([activity(), submit("x"), startFailed("password")]);
+        again.send(state => ({ type: "methodsFailed", generation: state.methods.generation, reason: "exited 1" }));
+        again.send(offer({ fingerprint: true }));
+        assert(has(again.effects, "startPam", { method: "fingerprint", config: "h2s-shell-fingerprint" }),
+               "17: … switched on after a failed detection: the fingerprint last found serves");
+        const asking = locked().sendAll([activity(), submit("x"), startFailed("password")]);
+        assert(asking.state.methods.status === "detecting", "17: (the methods asked again)");
+        asking.send(offer({ u2f: false }));
+        assert(has(asking.effects, "abortPam", { method: "u2f" }) && asking.state.passive.u2f.status === "unavailable",
+               "17: switched off while the methods are asked again: stopped at once");
+
+        // The password has no switch
+        const password = started().send(offer({ password: false }));
+        assertEqual(password.ignored, "no known setting", "17: a switch for the password is not a setting");
+        const junk = started().send(offer({ fingerprint: "off" }));
+        assertEqual(junk.ignored, "no known setting", "17: a switch that is not a boolean is not taken");
+        const partial = started().send(offer({ fingerprint: false })).send(offer({ u2f: false }));
+        assert(partial.state.settings.offered.fingerprint === false && partial.state.settings.offered.u2f === false,
+               "17: a switch changed keeps the other's word");
+        const unlocked = started().send(offer({ fingerprint: false }));
+        assert(unlocked.ignored === "" && types(unlocked.effects).length === 0, "17: switched while unlocked: nothing runs");
     }
 
     // ---- 16. Another program's session lock (foreignStep) ----
@@ -2346,7 +2449,9 @@ TestCase {
                 return { type: "unlockRequested", source: "logind" };
             if (roll < 0.92)
                 return { type: "lockRequested", source: pick(["ipc", "idle"]) };
-            return { type: "settings", values: pick([{ lockOnSleep: true }, { lockOnSleep: false }, { lockOnSleep: "yes" }, {}]) };
+            return { type: "settings", values: pick([{ lockOnSleep: true }, { lockOnSleep: false }, { lockOnSleep: "yes" }, {},
+                                                     { offered: { fingerprint: false } }, { offered: { u2f: false } },
+                                                     { offered: { fingerprint: true, u2f: true } }]) };
         }
         // Nonsense: stale ids, wrong sessions, unknown sources and names, malformed events
         const method = pick(["password", "fingerprint", "u2f", "smartcard"]);

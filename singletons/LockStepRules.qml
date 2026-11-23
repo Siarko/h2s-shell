@@ -252,8 +252,23 @@ Singleton {
         return {
             lockOnSleep: typeof given.lockOnSleep === "boolean" ? given.lockOnSleep : false,
             passwordFallback: copyConfig(given.passwordFallback),
+            offered: offeredFrom(given.offered, null),
             timings: times
         };
+    }
+
+    // Which passive methods the user lets the lock screen offer: { <method name>: boolean }
+    // for every entry of `passiveMethods`. A method `given` names with a boolean takes it;
+    // any other keeps `previous`'s word, or true (offered) without one. The password is not
+    // among them: it is always offered.
+    function offeredFrom(given, previous) {
+        const values = given !== null && typeof given === "object" ? given : {};
+        const offered = {};
+        for (const method of passiveMethods) {
+            const value = values[method.name];
+            offered[method.name] = typeof value === "boolean" ? value : previous?.[method.name] !== false;
+        }
+        return offered;
     }
 
     // The regions that live for one lock, as each lock starts them
@@ -267,7 +282,7 @@ Singleton {
             };
         }
         return {
-            methods: { status: "unknown", generation: null, configs: {}, answered: false, waitForAnswer: false,
+            methods: { status: "unknown", generation: null, configs: {}, detected: {}, answered: false, waitForAnswer: false,
                        passwordSource: "none", lastResult: "", askedAt: null },
             password: {
                 status: "idle", conversation: null, config: null, question: "", answerVisible: false,

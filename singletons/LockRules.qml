@@ -73,8 +73,10 @@ Singleton {
 
     // `settings`: { lockOnSleep (default false), passwordFallback: { directory, config } —
     // the password config used when detection names none or fails, or when the detected one
-    // could not be used (null: none), timings: overrides of `timings` (non-negative numbers;
-    // anything else keeps the default) }. Copied: the caller's objects are not kept.
+    // could not be used (null: none), offered: { <passive method name>: boolean } — the
+    // methods the user lets the lock offer (offeredMethods; unnamed: offered), timings:
+    // overrides of `timings` (non-negative numbers; anything else keeps the default) }.
+    // Copied: the caller's objects are not kept.
     function initial(settings) {
         return Object.assign({
             serial: 0,
@@ -141,6 +143,23 @@ Singleton {
     // The methods script's lines and logind's, read (LockParseRules)
     function parseMethods(lines) {
         return LockParseRules.parseMethods(lines);
+    }
+
+    // What the lock offers of the methods found (`found`, as parseMethods gives it): a
+    // passive method the user switched off (`offered`, { <method name>: false }) is dropped;
+    // the password and any other name are kept whatever `offered` says — the password is
+    // the way in that cannot be switched off. A new object; `found` is not changed.
+    function offeredMethods(found, offered) {
+        const result = {};
+        if (found === null || typeof found !== "object")
+            return result;
+        const switches = offered !== null && typeof offered === "object" ? offered : {};
+        for (const name of Object.keys(found)) {
+            const passive = passiveMethods.some(method => method.name === name);
+            if (!passive || switches[name] !== false)
+                result[name] = found[name];
+        }
+        return result;
     }
 
     function parseLogind(line, sessionPath) {
@@ -739,22 +758,39 @@ Singleton {
 
     // The script's answer replaces the configs. A method running keeps its conversation:
     // PamContext cannot change config while active, the new one serves the next round. A
-    // method the answer no longer names stops: aborted if running, unavailable (a broken
-    // one stays broken — only a wake clears that). `result`: "answered", or "failed" when
-    // this is what a failed detection kept.
+    // method the answer no longer names, or the user does not let the lock offer, stops
+    // (_applyOffered). `result`: "answered", or "failed" when this is what a failed
+    // detection kept.
     function _applyDetection(transaction, found, result) {
         LockStepRules.stopTimer(transaction, "detect");
         const detectedPassword = LockStepRules.copyConfig(found.password);
         const fallback = transaction.state.settings.passwordFallback;
-        const configs = { password: detectedPassword ?? fallback ?? null };
+        // The passive methods as found, before the user's switches: what a switch turned
+        // back on, or a failed detection, goes on with
+        const detected = {};
         for (const method of passiveMethods)
-            configs[method.name] = LockStepRules.copyConfig(found[method.name]);
+            detected[method.name] = LockStepRules.copyConfig(found[method.name]);
         LockStepRules.setRegion(transaction, "methods", {
-            status: "known", configs: configs, answered: transaction.state.methods.answered || result === "answered",
+            status: "known", configs: { password: detectedPassword ?? fallback ?? null }, detected: detected,
+            answered: transaction.state.methods.answered || result === "answered",
             waitForAnswer: false, lastResult: result,
             // Where the password config came from: "detected", "fallback" or "none"
             passwordSource: detectedPassword !== null ? "detected" : fallback ? "fallback" : "none"
         });
+        _applyOffered(transaction);
+    }
+
+    // The passive methods' configs from the detected ones and the user's switches
+    // (offeredMethods). One without a config stops: aborted if running (its conversation
+    // ends; the password field is not touched), unavailable (a broken one stays broken —
+    // only a wake clears that). One that gets a config back starts again through _reconcile.
+    function _applyOffered(transaction) {
+        const methods = transaction.state.methods;
+        const offered = offeredMethods(methods.detected, transaction.state.settings.offered);
+        const configs = { password: methods.configs.password };
+        for (const method of passiveMethods)
+            configs[method.name] = LockStepRules.copyConfig(offered[method.name]);
+        LockStepRules.setRegion(transaction, "methods", { configs: configs });
         for (const method of passiveMethods) {
             const passive = transaction.state.passive[method.name];
             const config = configs[method.name];
@@ -777,7 +813,7 @@ Singleton {
         const last = {};
         if (methods.answered) {
             for (const method of passiveMethods)
-                last[method.name] = methods.configs[method.name];
+                last[method.name] = methods.detected[method.name];
             // Only a password config the script named is an answer; a fallback is taken afresh
             if (methods.passwordSource === "detected")
                 last.password = methods.configs.password;
@@ -1182,9 +1218,18 @@ Singleton {
             changes.lockOnSleep = values.lockOnSleep;
         if (values.passwordFallback === null || LockStepRules.isConfig(values.passwordFallback))
             changes.passwordFallback = LockStepRules.copyConfig(values.passwordFallback);
+        const offered = values.offered !== null && typeof values.offered === "object"
+            && passiveMethods.some(method => typeof values.offered[method.name] === "boolean");
+        if (offered)
+            changes.offered = LockStepRules.offeredFrom(values.offered, transaction.state.settings.offered);
         if (Object.keys(changes).length === 0)
             return "no known setting";
         LockStepRules.setRegion(transaction, "settings", changes);
+        // A switch changed: what is offered follows at once, also while the methods are
+        // asked again (the configs known so far serve meanwhile) — a method switched off
+        // stops, one switched on starts (_reconcile); the password goes on as it was
+        if (offered)
+            _applyOffered(transaction);
     }
 
     // ------------------------------------------------------------------------------------
@@ -1318,6 +1363,13 @@ Singleton {
         if (configFailed === true)
             return true;
         return typeof value === "boolean" ? value : schemaDefault === true;
+    }
+
+    // A "Fingerprint" or "Security key" switch as the driver takes it: the profile's value
+    // when it is a boolean, else offered. A value that could not be read never takes a way
+    // in away; the password is offered whatever these say
+    function offerSetting(value) {
+        return typeof value === "boolean" ? value : true;
     }
 
     // ------------------------------------------------------------------------------------

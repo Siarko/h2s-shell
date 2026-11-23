@@ -389,7 +389,11 @@ sleep (`sleepEnabled`, `sleepTimeout`) and hibernation (`hibernateEnabled`,
   is started again, not counted as a fault). `scripts/lock-auth-methods.sh` says which are there: the password always, the
   fingerprint when fprintd (asked over D-Bus, within 4 s) has a finger enrolled for the
   user, the key when the user has one registered where the key's PAM config looks
-  (pam_u2f's `authfile`, else `~/.config/Yubico/u2f_keys`). An answer of "not there" is
+  (pam_u2f's `authfile`, else `~/.config/Yubico/u2f_keys`). Of those, the settings
+  `lockscreen.offerFingerprint` and `lockscreen.offerSecurityKey` (on by default, per
+  profile; no control on a settings page yet) leave out a method switched off: one switched
+  off while locked stops at once (its conversation ends), one switched on starts; the
+  password is always offered. An answer of "not there" is
   not asked again at every wake of the prompt; a question that could not be answered
   (fprintd stuck or failing) is asked again at the first wake of the prompt at least 30 s
   after the last question. Each uses

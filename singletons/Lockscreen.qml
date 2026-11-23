@@ -123,6 +123,14 @@ Singleton {
     // The driver reads the setting itself: nothing passed in can change it
     onLockOnSleepChanged: _api?.lockOnSleepChanged()
 
+    // The passive methods the user lets the lock offer, by the rules' names; the password
+    // is always offered
+    readonly property var offered: ({
+        fingerprint: LockRules.offerSetting(Profiles.value("lockscreen.offerFingerprint")),
+        u2f: LockRules.offerSetting(Profiles.value("lockscreen.offerSecurityKey"))
+    })
+    onOfferedChanged: _api?.offeredChanged()
+
     // ---- The driver ----
 
     property var _view: LockRules.view(LockRules.initial({}))
@@ -213,6 +221,7 @@ Singleton {
         // and old states are never kept
         let state = LockRules.initial({
             lockOnSleep: root.lockOnSleep,
+            offered: root.offered,
             passwordFallback: LockIoRules.passwordFallback({ shellDirectory: Quickshell.shellDir, systemDirectory: root._systemPamDirectory }),
             timings: root._testTimings()
         });
@@ -785,6 +794,13 @@ Singleton {
                     _capsLed.read();
             },
             lockOnSleepChanged: () => dispatch({ type: "settings", values: { lockOnSleep: root.lockOnSleep } }),
+            // The binding gives a new object at any change of the profiles: only a switch
+            // that changed is the rules' event
+            offeredChanged: () => {
+                const current = state.settings.offered;
+                if (Object.keys(root.offered).some(name => root.offered[name] !== current[name]))
+                    dispatch({ type: "settings", values: { offered: root.offered } });
+            },
             // A reload while locked (`_carried` said so): the rules go on with the lock this
             // process holds — called before Quickshell realizes the new WlSessionLock
             restoreAfterReload: secure => {
