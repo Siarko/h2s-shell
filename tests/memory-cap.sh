@@ -110,13 +110,13 @@ memory_cap_label() {
 memory_cap_meminfo() { awk -v key="$1:" '$1 == key { print $2 * 1024 }' /proc/meminfo 2> /dev/null; }
 
 # The words that reach the user's service manager: its runtime dir and bus as the caller had
-# them, whatever the environment of the command will be
+# them, whatever the environment of the command will be. env takes its options (-u) only
+# before the first NAME=value: after one, "-u" is taken for the command to run
 memory_cap_manager_env() {
-    MEMORY_CAP_MANAGER_ENV=(env "XDG_RUNTIME_DIR=$MEMORY_CAP_USER_RUNTIME_DIR")
     if [ -n "$MEMORY_CAP_USER_BUS" ]; then
-        MEMORY_CAP_MANAGER_ENV+=("DBUS_SESSION_BUS_ADDRESS=$MEMORY_CAP_USER_BUS")
+        MEMORY_CAP_MANAGER_ENV=(env "XDG_RUNTIME_DIR=$MEMORY_CAP_USER_RUNTIME_DIR" "DBUS_SESSION_BUS_ADDRESS=$MEMORY_CAP_USER_BUS")
     else
-        MEMORY_CAP_MANAGER_ENV+=(-u DBUS_SESSION_BUS_ADDRESS)
+        MEMORY_CAP_MANAGER_ENV=(env -u DBUS_SESSION_BUS_ADDRESS "XDG_RUNTIME_DIR=$MEMORY_CAP_USER_RUNTIME_DIR")
     fi
 }
 memory_cap_systemctl() { "${MEMORY_CAP_MANAGER_ENV[@]}" systemctl --user "$@"; }
@@ -155,6 +155,23 @@ memory_cap_stop_stale_slices() {
     done
 }
 
+# memory_cap_slice_started <slice>: the slice became active. StartTransientUnit returns once
+# the start job is queued, not done: asked at once, the manager can still say "inactive" (one
+# start in fifty on an idle machine, more under load), and the run then went without its
+# budget. Asked again until it is active, has failed, or 5 s have passed
+memory_cap_slice_started() {
+    local state
+    for _ in $(seq 50); do
+        state=$(memory_cap_systemctl show -p ActiveState --value "$1" 2> /dev/null)
+        case "$state" in
+            active) return 0 ;;
+            failed) return 1 ;;
+        esac
+        sleep 0.1
+    done
+    return 1
+}
+
 # memory_cap_make_slice <budget bytes>: MEMORY_CAP_SLICE, a transient slice with that MemoryMax
 memory_cap_make_slice() {
     local slice="h2s_test_$$_$RANDOM.slice"
@@ -163,8 +180,7 @@ memory_cap_make_slice() {
     "${MEMORY_CAP_MANAGER_ENV[@]}" busctl --user call org.freedesktop.systemd1 /org/freedesktop/systemd1 \
         org.freedesktop.systemd1.Manager StartTransientUnit 'ssa(sv)a(sa(sv))' "$slice" fail \
         2 MemoryMax t "$1" MemorySwapMax t 0 0 > /dev/null 2>&1 || return 1
-    [ "$(memory_cap_systemctl show -p ActiveState --value "$slice" 2> /dev/null)" = active ] \
-        || { memory_cap_systemctl stop "$slice" > /dev/null 2>&1; return 1; }
+    memory_cap_slice_started "$slice" || { memory_cap_systemctl stop "$slice" > /dev/null 2>&1; return 1; }
     MEMORY_CAP_SLICE=$slice
     MEMORY_CAP_OWNER=1
 }
@@ -353,10 +369,12 @@ memory_cap_wrap() {
             MEMORY_CAP_UNIT="h2s-test-${tag//[^A-Za-z0-9_-]/_}-$$-$MEMORY_CAP_SERIAL-$RANDOM.scope"
             MEMORY_CAP_BASE[$MEMORY_CAP_UNIT]=$(memory_cap_slice_ooms)
             # The command gets back the runtime dir and bus it was given (or none), and not
-            # the INVOCATION_ID systemd-run sets for the scope
-            local -a restore=(env -u INVOCATION_ID)
-            if [ -n "${XDG_RUNTIME_DIR+set}" ]; then restore+=("XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR"); else restore+=(-u XDG_RUNTIME_DIR); fi
-            if [ -n "${DBUS_SESSION_BUS_ADDRESS+set}" ]; then restore+=("DBUS_SESSION_BUS_ADDRESS=$DBUS_SESSION_BUS_ADDRESS"); else restore+=(-u DBUS_SESSION_BUS_ADDRESS); fi
+            # the INVOCATION_ID systemd-run sets for the scope (env's -u options before its
+            # NAME=value words: after one, "-u" would be taken for the command)
+            local -a restore=(env -u INVOCATION_ID) assign=()
+            if [ -n "${XDG_RUNTIME_DIR+set}" ]; then assign+=("XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR"); else restore+=(-u XDG_RUNTIME_DIR); fi
+            if [ -n "${DBUS_SESSION_BUS_ADDRESS+set}" ]; then assign+=("DBUS_SESSION_BUS_ADDRESS=$DBUS_SESSION_BUS_ADDRESS"); else restore+=(-u DBUS_SESSION_BUS_ADDRESS); fi
+            restore+=("${assign[@]}")
             MEMORY_CAP_PREFIX=("${MEMORY_CAP_MANAGER_ENV[@]}" systemd-run --user --scope --quiet "${MEMORY_CAP_EXPAND[@]}"
                 "--unit=$MEMORY_CAP_UNIT" ${MEMORY_CAP_SLICE:+"--slice=$MEMORY_CAP_SLICE"}
                 -p MemoryMax="$MEMORY_CAP_BYTES" -p MemorySwapMax=0 -p OOMPolicy=stop --

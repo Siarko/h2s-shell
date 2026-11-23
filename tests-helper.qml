@@ -1,5 +1,6 @@
 //@ pragma UseQApplication
 import QtQuick
+import Quickshell
 import qs.singletons
 import qs.tests.helper
 
@@ -11,6 +12,11 @@ QtObject {
 
     // First: the suites use the real Config singleton, whose file is the user's
     readonly property bool _configReadOnly: { Config.readOnly = true; return true; }
+    // First too: no reload when a file of the tree changes (Quickshell watches the files it
+    // loaded by default). A reload in the middle of a run starts every suite again in a new
+    // generation while the old one's timers still fire: a shard reports its suites twice or
+    // crashes, whenever the tree is edited while the tests run.
+    readonly property bool _noReload: { Quickshell.watchFiles = false; return true; }
 
     readonly property var _suites: [_screenSaverClient, _idleService]
     property var _screenSaverClient: ScreenSaverClientTest {}

@@ -22,6 +22,11 @@ QtObject {
 
     // First: the suites use the real Config singleton, whose file is the user's
     readonly property bool _configReadOnly: { Config.readOnly = true; return true; }
+    // First too: no reload when a file of the tree changes (Quickshell watches the files it
+    // loaded by default). A reload in the middle of a run starts every suite again in a new
+    // generation while the old one's timers still fire: a shard reports its suites twice or
+    // crashes, whenever the tree is edited while the tests run.
+    readonly property bool _noReload: { Quickshell.watchFiles = false; return true; }
 
     // The shell's host: a module's suites see the registries, handles and slots as they are in
     // the shell (its environment gave it no module: H2S_SHELL_MODULES is not set here)

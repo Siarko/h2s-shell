@@ -27,6 +27,9 @@
 #   parent-gone  a runner handed a budget that has ended (or a service manager that does
 #              not answer): it says so and takes the address-space limit, no budget of
 #              its own beside the parent's                                     → must pass
+#   slow-slice (no session bus in the environment) the manager says the run's slice is still
+#              inactive when asked at once after
+#              starting it (stand-ins for busctl and systemctl): waited for, the budget made
 #   capped     under a memory cap of 200M (H2S_TEST_MEMORY_MAX), Format's shard takes
 #              400 MB after its summary: stopped, said to be killed at the memory cap,
 #              naming the suite                                               → must fail
@@ -51,6 +54,8 @@
 #              while the other has changed something for a while passes        → must pass
 #   pinned     (the same) a suite that leaves a global setting behind, beside one that pins
 #              another and puts back only what it pinned: the leak fails      → must fail
+#   edited     (the same) a suite that edits tests.qml while the shard runs: no reload, the
+#              suite reports once                                             → must pass
 #
 # tests/run-modules.sh with --suite, on the fixture module tests/fixtures/modules/good — the
 # first two with the real Quickshell, so tests-modules.qml's part is checked too:
@@ -375,6 +380,34 @@ H2S_TEST_MEMORY_MODE=systemd H2S_TEST_SLICE=h2s_test_1_gone.slice H2S_TEST_MEMOR
     H2S_TEST_USER_RUNTIME_DIR=$work/no-manager verdict parent-unanswered obedient 0 FormatTest
 check parent-unanswered "said the parent's budget cannot be confirmed, took the address-space limit" \
     bash -c 'grep -q "^warning: the run.s memory budget (h2s_test_1_gone.slice) cannot be confirmed" "$1" && grep -q "^memory cap: .*address-space limit" "$1"' _ "$work/parent-unanswered.log"
+# slow-slice: the manager queues the slice's start and answers "inactive" when asked at once
+# (stand-ins for busctl and systemctl: the first two asks say so, then "active"): the budget
+# is made all the same, not dropped
+mkdir -p "$work/slow-slice/bin"
+cat > "$work/slow-slice/bin/busctl" << 'SH'
+#!/usr/bin/env bash
+exit 0
+SH
+cat > "$work/slow-slice/bin/systemctl" << 'SH'
+#!/usr/bin/env bash
+# show -p ActiveState: "inactive" for the first two asks, then "active"
+case " $* " in
+    *" ActiveState "*)
+        count=$(cat "$SLOW_SLICE_COUNT" 2> /dev/null || echo 0)
+        echo $((count + 1)) > "$SLOW_SLICE_COUNT"
+        if [ "$count" -lt 2 ]; then echo inactive; else echo active; fi ;;
+esac
+exit 0
+SH
+chmod +x "$work/slow-slice/bin/busctl" "$work/slow-slice/bin/systemctl"
+slow_slice=$(PATH="$work/slow-slice/bin:$PATH" SLOW_SLICE_COUNT=$work/slow-slice/count bash -c '
+    source "$1/tests/memory-cap.sh"
+    MEMORY_CAP_USER_RUNTIME_DIR=/nonexistent MEMORY_CAP_USER_BUS=""
+    memory_cap_manager_env
+    memory_cap_make_slice 1073741824 && echo "made $MEMORY_CAP_SLICE" || echo "not made"' _ "$REPO" 2>&1)
+check slow-slice "a slice still starting when first asked is waited for, not dropped ($slow_slice)" \
+    grep -q "^made h2s_test_" <<< "$slow_slice"
+
 H2S_TEST_MEMORY_MAX=200M H2S_TEST_MEMORY_BUDGET=1G H2S_TEST_MEMORY_AS_FLOOR=0 verdict capped capped 1 "${three[@]}"
 if grep -q '^warning: no memory cap' "$work/capped.log"; then
     echo "SKIP capped: neither the user's service manager nor prlimit can be used here"
@@ -592,6 +625,33 @@ pinned_status=$?
 check pinned "run-unit.sh exited 1 (it exited $pinned_status)" test "$pinned_status" = 1
 check pinned "the suite that leaked failed, naming the globals" grep -q "FAIL: left Config.globals, Profiles.globals changed" "$work/pinned.log"
 check pinned "… counted on it" grep -q -- "^  --- LeakBeside: 1/2 passed, 1 FAILED" "$work/pinned.log"
+
+# edited: (the same) a file of the tree edited while a shard runs (here by the suite itself,
+# its copy's tests.qml) reloads nothing: a reload started the suites again in a new
+# generation while the old one's timers still fired (suites reported twice, or a crash)
+tree_copy "$work/edited"
+cat > "$work/edited/tests/EditsTest.qml" << 'QML'
+import QtQuick
+import Quickshell
+import Quickshell.Io
+TestCase {
+    suiteName: "Edits"
+    asynchronous: true
+    property FileView root: FileView { path: Quickshell.shellDir + "/tests.qml"; blockLoading: true }
+    // The edit once the process has settled (Quickshell watches the files after loading),
+    // then long enough for a watcher to see it and reload
+    property Timer edit: Timer { interval: 500; onTriggered: { root.setText(root.text() + "\n// edited while the tests ran\n"); later.start(); } }
+    property Timer later: Timer { interval: 1500; onTriggered: { assert(true, "outlived an edit of tests.qml"); finish(); } }
+    function runAsync() { edit.start(); }
+}
+QML
+with_suites "$work/edited" EditsTest
+"$work/edited/tests/run-unit.sh" EditsTest > "$work/edited.log" 2>&1
+edited_status=$?
+check edited "run-unit.sh exited 0 (it exited $edited_status)" test "$edited_status" = 0
+check edited "the edit was made" grep -q "^// edited while the tests ran$" "$work/edited/tests.qml"
+check edited "no reload" bash -c '! grep -q "Reloading configuration" "$1"' _ "$work/edited.log"
+check edited "the suite reported once" grep -q -- "^  --- Edits: 1/1 passed" "$work/edited.log"
 
 runner=run-modules.sh
 good=$REPO/tests/fixtures/modules/good
