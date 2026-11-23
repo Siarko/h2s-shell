@@ -15,6 +15,8 @@ section to the new version and date.
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-11-23
+
 A minor release, though it changes two things people rely on: toasts now follow the
 display time an app asks for, which changes how long some toasts show (apps that leave it to
 the shell, most, see no change, and Settings → Notifications → "Apps choose how long", off,
