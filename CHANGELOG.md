@@ -86,7 +86,11 @@ The interface modules are written against (`qs.api`), versioned on its own
   key registered meanwhile), "Remember the password", what sleep logind allows, the
   installed VPN plugins, the installed modules and the icon themes.
 - The plus before "Add a row", "Add widget", "Add source" and "Add" is the icon font's: it
-  showed as an empty box where no font had the full-width plus.
+  showed as an empty box where no font had the full-width plus. The theme drafts' pencil, the
+  bar section editor's cog, the power menu's restart and the drag handles are the icon
+  font's too, not drawn from another font.
+- The network pages watch the connection state and scan for Wi-Fi networks only while the
+  Settings window shows them, not while it is hidden.
 
 ## [2.1.0] - 2026-11-23
 
