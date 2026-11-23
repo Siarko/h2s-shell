@@ -1,0 +1,18 @@
+{
+    "id": "generic",
+    "label": "Other Linux",
+    "matches": [],
+    "markers": [],
+    "etcManaged": false,
+    "helper": "build",
+    "builtinModules": "dataHome",
+    "programDirectories": ["/usr/bin", "/bin"],
+    "setuidWrapperDirectory": "",
+    "pamDirectories": ["/etc/pam.d", "/usr/lib/pam.d"],
+    "pamModuleDirectories": ["/usr/lib/security/", "/lib/security/", "/usr/lib64/security/", "/lib64/security/",
+        "/usr/lib/x86_64-linux-gnu/security/", "/lib/x86_64-linux-gnu/security/",
+        "/usr/lib/aarch64-linux-gnu/security/", "/lib/aarch64-linux-gnu/security/"],
+    "networkManagerVpnDirectories": ["/usr/lib/NetworkManager/VPN", "/etc/NetworkManager/VPN"],
+    "polkitRulesDirectory": "/usr/share/polkit-1/rules.d",
+    "polkitRulesInstallable": true
+}

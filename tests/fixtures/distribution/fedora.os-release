@@ -1,0 +1,10 @@
+NAME="Fedora Linux"
+VERSION="43 (Workstation Edition)"
+ID=fedora
+VERSION_ID=43
+PRETTY_NAME="Fedora Linux 43 (Workstation Edition)"
+ANSI_COLOR="0;38;2;60;110;180"
+CPE_NAME="cpe:/o:fedoraproject:fedora:43"
+HOME_URL="https://fedoraproject.org/"
+VARIANT="Workstation Edition"
+VARIANT_ID=workstation

@@ -27,7 +27,8 @@ Singleton {
         { name: "H2S_SHELL_TEST_MODULE_CHECK_PATH", what: "a directory put first on the module file check's PATH (Modules)" },
         { name: "H2S_SHELL_TEST_MODULE_CHECK_MS", what: "the module host's checks' deadline in ms (Modules)" },
         { name: "H2S_SHELL_TEST_MODULE_NOTIFY", what: "1: in module test mode the shell's notifications are sent all the same, not only recorded (Modules)" },
-        { name: "H2S_FAKE_VPN_PROVIDER", what: "1: the stand-in VPN provider of tests/FakeVpnProvider.qml (VpnManager)" }
+        { name: "H2S_FAKE_VPN_PROVIDER", what: "1: the stand-in VPN provider of tests/FakeVpnProvider.qml (VpnManager)" },
+        { name: "H2S_DISTRIBUTION", what: "the distribution the shell takes itself to be on, by its id: nixos, arch, generic (Distribution)" }
     ]
     readonly property var names: seams.map(seam => seam.name)
 
@@ -48,6 +49,8 @@ Singleton {
     //   reloadIpc, moduleNotify, fakeVpnProvider   booleans
     //   moduleGuardMs, moduleCheckMs   > 0, or 0 for none
     //   moduleCheckPath  an absolute directory, or ""
+    //   distribution     a distribution's id as given (an identifier; Distribution tells
+    //                    one it does not know), or ""
     //   inForce          the names that change something, in `names`' order
     //   ignored          the names set to something unusable
     // }
@@ -81,7 +84,8 @@ Singleton {
             moduleCheckPath: checkPath.startsWith("/") ? checkPath : "",
             moduleCheckMs: _positive(text("H2S_SHELL_TEST_MODULE_CHECK_MS")),
             moduleNotify: text("H2S_SHELL_TEST_MODULE_NOTIFY") === "1",
-            fakeVpnProvider: text("H2S_FAKE_VPN_PROVIDER") === "1"
+            fakeVpnProvider: text("H2S_FAKE_VPN_PROVIDER") === "1",
+            distribution: /^[a-z0-9._-]{1,64}$/.test(text("H2S_DISTRIBUTION")) ? text("H2S_DISTRIBUTION") : ""
         };
         const taken = {
             H2S_LOCK_TOOLS: values.lockTools !== "",
@@ -94,7 +98,8 @@ Singleton {
             H2S_SHELL_TEST_MODULE_CHECK_PATH: values.moduleCheckPath !== "",
             H2S_SHELL_TEST_MODULE_CHECK_MS: values.moduleCheckMs > 0,
             H2S_SHELL_TEST_MODULE_NOTIFY: values.moduleNotify,
-            H2S_FAKE_VPN_PROVIDER: values.fakeVpnProvider
+            H2S_FAKE_VPN_PROVIDER: values.fakeVpnProvider,
+            H2S_DISTRIBUTION: values.distribution !== ""
         };
         values.inForce = Object.freeze(names.filter(name => taken[name]));
         values.ignored = Object.freeze(names.filter(name => !taken[name] && text(name) !== ""));

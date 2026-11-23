@@ -390,6 +390,7 @@ value, one set to a value that cannot be used is ignored (and named in the log).
 | `H2S_SHELL_TEST_MODULE_CHECK_MS` | `TestSeams` | the module checks' deadline, ms |
 | `H2S_SHELL_TEST_MODULE_NOTIFY` | `TestSeams` | `1`: in module test mode notifications are sent all the same (to the bed's private bus), not only recorded |
 | `H2S_FAKE_VPN_PROVIDER` | `TestSeams` | `1`: the stand-in VPN provider (`tests/FakeVpnProvider.qml`, IPC target `fakevpn`) |
+| `H2S_DISTRIBUTION` | `TestSeams` | the distribution the shell takes itself to be on, by its id (`nixos`, `arch`, `generic`; `distributions/`), instead of detecting it; an id it does not know leaves it unknown |
 | `H2S_LAUNCHER_TEST_TIMINGS` | `seams.sh` | the launcher's pauses, `first=S lockwait=S`, and `discoveryhang=S` |
 
 When any of the QML ones is in force the shell logs `[TestSeams] test bed: <names>`, and

@@ -7,7 +7,7 @@ import QtQuick
 // test tree's reader says when no seam is set — so the lock screen's tools, PAM directory
 // and LEDs, its timings, the module host's checks and the VPN providers are the real ones
 // whatever the environment holds. Lockscreen, CapsLockLed, Modules and VpnManager read
-// them here; an empty directory means their own default (/etc/pam.d, /sys/class/leds,
+// them here, Distribution its system; an empty directory means their own default (/etc/pam.d, /sys/class/leds,
 // gdbus from PATH).
 //
 // A test tree — the lock bed's copy of the checkout (tests/lock/run.sh) — has
@@ -28,6 +28,8 @@ Singleton {
     readonly property int moduleCheckMs: 0
     readonly property bool moduleNotify: false
     readonly property bool fakeVpnProvider: false
+    // The distribution the shell takes itself to be on (Distribution): "" — it detects it
+    readonly property string distribution: ""
     // Module test mode (ModuleHost.testMode): off
     readonly property bool moduleTestMode: false
     // The names of the seams in force, and whether there is any
