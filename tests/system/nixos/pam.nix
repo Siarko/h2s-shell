@@ -197,6 +197,46 @@ let
     (expect "polkit.passwordFirst = false beside polkit's rules: allowed"
       { programs.h2s-shell.pam.rules = [ system ]; programs.h2s-shell.polkit.passwordFirst = false; }
       { })
+    (expect "a bracketed argument: refused (libpam hands the module the word inside)"
+      { programs.h2s-shell.pam.rules = [ { method = "raw"; module = "${pkgs.pam_u2f}/lib/security/pam_u2f.so"; args = [ "[nouserok]" ]; } system ];
+        security.pam.u2f.enable = true; }
+      { refusals = [ "one word per argument" ]; })
+    (expect "a tab inside an argument: refused"
+      { programs.h2s-shell.pam.rules = [ { method = "raw"; module = "${pkgs.pam_u2f}/lib/security/pam_u2f.so"; args = [ "cue\tnouserok" ]; } system ];
+        security.pam.u2f.enable = true; }
+      { refusals = [ "one word per argument" ]; })
+    (expect "pam_u2f with alwaysok: refused"
+      { programs.h2s-shell.pam.rules = [ { method = "raw"; module = "${pkgs.pam_u2f}/lib/security/pam_u2f.so"; args = [ "alwaysok" ]; } system ];
+        security.pam.u2f.enable = true; }
+      { refusals = [ "this line lets anyone in: pam_u2f.so" ]; })
+    (expect "pam_u2f with userpresence=00: refused"
+      { programs.h2s-shell.pam.rules = [ { method = "raw"; module = "${pkgs.pam_u2f}/lib/security/pam_u2f.so"; args = [ "userpresence=00" ]; } system ];
+        security.pam.u2f.enable = true; }
+      { refusals = [ "this line lets anyone in: pam_u2f.so" ]; })
+    (expect "pam_userdb with unknown_ok, required, without the system row: refused"
+      { programs.h2s-shell.pam.sudo.rules = [ { method = "password"; } { method = "raw"; module = "pam_userdb.so"; control = "required"; args = [ "db=/etc/users" "unknown_ok" ]; } ]; }
+      { refusals = [ "this line lets anyone in: pam_userdb.so" ]; })
+    (expect "pam_userdb with UNKNOWN_OK in capitals: refused"
+      { programs.h2s-shell.pam.rules = [ { method = "raw"; module = "pam_userdb.so"; args = [ "db=/etc/users" "UNKNOWN_OK" ]; } system ]; }
+      { refusals = [ "this line lets anyone in: pam_userdb.so" ]; })
+    (expect "pam_userdb with a second DB= outside /etc: refused"
+      { programs.h2s-shell.pam.rules = [ { method = "raw"; module = "pam_userdb.so"; args = [ "db=/etc/users" "DB=/tmp/users" ]; } system ]; }
+      { refusals = [ "this line lets anyone in: pam_userdb.so" ]; })
+    (expect "pam_permit by a store path written out: refused by its name"
+      { programs.h2s-shell.pam.rules = [ { method = "raw"; module = "/nix/store/0123456789abcdfghijklmnpqrsvwxyz-linux-pam-1.7.2/lib/security/pam_permit.so"; } system ]; }
+      { refusals = [ "this line lets anyone in: pam_permit.so" ]; })
+    (expect "a copy of pam_permit in /etc: refused by its name"
+      { programs.h2s-shell.pam.rules = [ { method = "raw"; module = "/etc/pam_permit.so"; } system ]; }
+      { refusals = [ "this line lets anyone in: pam_permit.so" ]; })
+    (expect "a copy of pam_deny in /etc, required: refused, nobody gets in"
+      { programs.h2s-shell.pam.rules = [ { method = "raw"; module = "/etc/pam_deny.so"; control = "required"; } system ]; }
+      { refusals = [ "this line refuses everyone" ]; })
+    (expect "a module the shell does not know: a warning"
+      { programs.h2s-shell.pam.rules = [ { method = "raw"; module = "/run/current-system/sw/lib/security/pam_ldap.so"; } system ]; }
+      { warnings = [ "the shell does not know pam_ldap.so" ]; })
+    (expect "an optional password row beside the system row: a warning, it does nothing"
+      { programs.h2s-shell.pam.rules = [ { method = "password"; control = "optional"; } system ]; }
+      { warnings = [ "row 1 (password): does nothing here" ]; })
     (expect "nothing set: no assertion, no warning of the shell's"
       { services.fprintd.enable = true; }
       { notWarnings = [ "h2s-shell" ]; })

@@ -308,14 +308,22 @@ Singleton {
     // Whether a module line asks for a credential: "yes" (pam_unix, pam_fprintd; pam_u2f
     // without the arguments that let it pass with no key or no touch; pam_userdb with its
     // database under /etc), "no" (another of libpam's modules, or one of those made to pass
-    // by its arguments), "unknown" (a module the shell does not know)
+    // by its arguments), "unknown" (a module the shell does not know). The arguments as the
+    // modules read them: pam_u2f's words exactly (`nouserok`, `alwaysok`; `userpresence=`
+    // through sscanf, so anything but a plain 1 may be off), pam_userdb's without case (every
+    // `db=` counts: the last one wins)
     function credentialOf(line) {
         const name = line.moduleName, args = line.args ?? [];
-        if (name === "pam_u2f.so")
-            return args.includes("nouserok") || args.includes("userpresence=0") ? "no" : "yes";
+        if (name === "pam_u2f.so") {
+            const passes = args.includes("nouserok") || args.includes("alwaysok")
+                || args.some(word => word.startsWith("userpresence=") && word !== "userpresence=1");
+            return passes ? "no" : "yes";
+        }
         if (name === "pam_userdb.so") {
-            const db = args.filter(word => word.startsWith("db=")).map(word => word.slice(3));
-            return db.length > 0 && db.every(path => path.startsWith("/etc/") && !path.split("/").includes("..")) ? "yes" : "no";
+            const lower = args.map(word => word.toLowerCase());
+            const db = args.filter(word => /^db=/i.test(word)).map(word => word.slice(3));
+            return !lower.includes("unknown_ok") && db.length > 0
+                && db.every(path => path.startsWith("/etc/") && !path.split("/").includes("..")) ? "yes" : "no";
         }
         if (credentialModules.includes(name))
             return "yes";
@@ -360,7 +368,8 @@ Singleton {
     function rawLine(text, facts) {
         const result = (line, reads, method, code, refusalText, warning) => ({
             line, reads, method: warning ? "unknown" : method,
-            credential: line && !warning ? credentialOf(line) : "unknown",
+            // The name never makes a module from outside trusted, only refusable
+            credential: !line ? "unknown" : !warning ? credentialOf(line) : (credentialOf(line) === "no" ? "no" : "unknown"),
             refusal: code ? { code, text: refusalText } : null,
             warning: warning ?? null
         });
@@ -479,7 +488,8 @@ Singleton {
                 role.credential = judged.credential;
                 // A module from outside the system's folders is judged by nothing its name says
                 const named = judged.warning === null ? line.moduleName : "";
-                role.denies = named === "pam_deny.so" && role.fails;
+                // … but a name that refuses is believed wherever the file is
+                role.denies = line.moduleName === "pam_deny.so" && role.fails;
                 role.firstPass = named === "pam_unix.so" && line.args.includes("use_first_pass");
                 role.nullok = named === "pam_unix.so" && line.args.includes("nullok");
             }

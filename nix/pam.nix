@@ -158,18 +158,29 @@ let
   # without the arguments that let it pass with no key or no touch; pam_userdb with its
   # database under /etc), "no" (another of libpam's modules, or one of those made to pass by
   # its arguments), "unknown" (a module the shell does not know, or from outside)
+  # its arguments), "unknown" (a module the shell does not know). The arguments as the
+  # modules read them: pam_u2f's words exactly (nouserok, alwaysok; userpresence= through
+  # sscanf, so anything but a plain 1 may be off), pam_userdb's without case (every db=
+  # counts: the last one wins). A module from outside is judged by its name only to refuse
+  # it, never to trust it.
   credentialOf = row:
     let
       name = rawName row;
-      databases = map (word: lib.removePrefix "db=" word) (lib.filter (lib.hasPrefix "db=") row.args);
+      lower = map lib.toLower row.args;
+      databases = map (lib.substring 3 (-1)) (lib.filter (word: lib.hasPrefix "db=" (lib.toLower word)) row.args);
       underEtc = path: lib.hasPrefix "/etc/" path && !(lib.elem ".." (lib.splitString "/" path));
+      byName =
+        if name == "pam_u2f.so" then
+          (if lib.elem "nouserok" row.args || lib.elem "alwaysok" row.args
+              || lib.any (word: lib.hasPrefix "userpresence=" word && word != "userpresence=1") row.args
+           then "no" else "yes")
+        else if name == "pam_userdb.so" then
+          (if !(lib.elem "unknown_ok" lower) && databases != [ ] && lib.all underEtc databases then "yes" else "no")
+        else if lib.elem name [ "pam_unix.so" "pam_fprintd.so" ] then "yes"
+        else if lib.elem name libpamModules then "no"
+        else "unknown";
     in
-    if placeOf row != null then "unknown"
-    else if name == "pam_u2f.so" then (if lib.elem "nouserok" row.args || lib.elem "userpresence=0" row.args then "no" else "yes")
-    else if name == "pam_userdb.so" then (if databases != [ ] && lib.all underEtc databases then "yes" else "no")
-    else if lib.elem name [ "pam_unix.so" "pam_fprintd.so" ] then "yes"
-    else if lib.elem name libpamModules then "no"
-    else "unknown";
+    if placeOf row == null || byName == "no" then byName else "unknown";
   firstPass = row: methodOf row == "password" && row.method == "raw" && lib.elem "use_first_pass" row.args;
 
   # The rows' roles and how the rows end: "system" (NixOS's own rules below), "permit" (a
@@ -193,12 +204,18 @@ let
           method = methodOf row;
           reader = lib.elem (methodOf row) [ "fingerprint" "securityKey" ];
           fails = fails row;
-          denies = row.method == "raw" && placeOf row == null && rawName row == "pam_deny.so" && fails row;
+          # A name that refuses is believed wherever the file is
+          denies = row.method == "raw" && rawName row == "pam_deny.so" && fails row;
           # A raw line that can let the user in (sufficient; required or requisite where the
           # closing line keeps its result) with a module that asks for no credential
-          letsAnyone = row.method == "raw" && credentialOf row == "no" && !(placeOf row == null && rawName row == "pam_deny.so")
+          letsAnyone = row.method == "raw" && credentialOf row == "no" && rawName row != "pam_deny.so"
             && (row.control == "sufficient" || (fails row && closing != "system"));
           nullok = row.method == "raw" && methodOf row == "password" && lib.elem "nullok" row.args;
+          unknown = row.method == "raw" && methodOf row == "unknown" && credentialOf row != "no" && rawName row != "pam_deny.so";
+          # An own optional row: another row decides, or the closing line does
+          idle = row.method != "raw" && row.method != "system" && row.control == "optional"
+            && (closing != "system"
+              || lib.any (other: other.method == "system" || other.control != "optional") (lib.take index rows ++ lib.drop (index + 1) rows));
           decides = !unasked && (row.method == "system" || row.control == "sufficient" || fails row
             || (row.method != "raw" && row.control == "optional" && closing == "system"));
         };
@@ -248,7 +265,11 @@ let
           # A backslash at the end would join the next line of the file to this one; a "#"
           # would end the line there
           ++ lib.optional (row.method == "raw" && lib.any joins (lib.optional (row.module != null) (toString row.module) ++ row.args))
-            "${at index row}: no backslash or # in the module or its arguments.")
+            "${at index row}: no backslash or # in the module or its arguments."
+          # NixOS writes a bracketed argument or one with a tab as it is, and libpam hands the
+          # module the words inside: what the checks read would not be what the module gets
+          ++ lib.optional (row.method == "raw" && lib.any (word: spaced word || lib.hasPrefix "[" word) row.args)
+            "${at index row}: one word per argument: no spaces, tabs or brackets.")
         ++ lib.concatLists (lib.imap0 (index: role:
           lib.optional role.denies
             "${at index (lib.elemAt rows index)}: this line refuses everyone: nobody would get in."
@@ -261,14 +282,18 @@ let
           "${where}: no row can let you in: keep a password row, or a fingerprint or security key row with services.fprintd.enable or security.pam.u2f.enable."
         ++ lib.optional (fprintAuthSet name)
           "${name}'s rules come from programs.h2s-shell.pam: remove security.pam.services.${name}.fprintAuth."
-        ++ lib.optional config.security.pam.services.${name}.u2f.enable
-          "${name}'s rules come from programs.h2s-shell.pam: remove security.pam.services.${name}.u2f.enable.";
+        ++ lib.optional (serviceU2f name)
+          "${name}'s rules come from programs.h2s-shell.pam: remove security.pam.services.${name}.${u2fName}.";
       warnings =
         lib.optional (rows != [ ] && analysis.wayIn && !analysis.hasPassword)
           "${where}: only the reader lets you in. If it breaks, use the other of sudo and polkit, su or a root console."
         ++ lib.concatLists (lib.imap0 (index: role:
           lib.optional (role.reader && role.fails && ready role.method)
             "${at index (lib.elemAt rows index)}: both needed: without the reader nobody gets in."
+          ++ lib.optional role.unknown
+            "${at index (lib.elemAt rows index)}: the shell does not know ${rawName (lib.elemAt rows index)}: its checks do not judge this line."
+          ++ lib.optional role.idle
+            "${at index (lib.elemAt rows index)}: does nothing here: another row decides."
           ++ lib.optional role.nullok
             "${at index (lib.elemAt rows index)}: nullok: an account with an empty password gets in.")
           analysis.roles)
@@ -282,13 +307,19 @@ let
     };
   spaced = text: lib.any (character: lib.hasInfix character text) [ " " "\t" "\n" "\r" ];
   broken = text: lib.hasInfix "\n" text || lib.hasInfix "\r" text;
+  # A service's own switch for NixOS's key rule: u2f.enable, u2fAuth before it
+  serviceOptions = options.security.pam.services.type.getSubOptions [ ];
+  u2fName = if serviceOptions ? u2f then "u2f.enable" else "u2fAuth";
+  serviceU2f = name:
+    if serviceOptions ? u2f then config.security.pam.services.${name}.u2f.enable
+    else config.security.pam.services.${name}.u2fAuth or false;
   joins = text: lib.hasInfix "\\" text || lib.hasInfix "#" text;
   # Where accounts live besides the local files, as NixOS's own rules check them
   otherAccounts =
     lib.optional config.services.homed.enable "systemd-homed"
     ++ lib.optional config.services.sssd.enable "SSSD"
     ++ lib.optional (config.users.ldap.enable && config.users.ldap.loginPam) "LDAP"
-    ++ lib.optional config.services.kanidm.unix.enable "kanidm"
+    ++ lib.optional (options.services ? kanidm && options.services.kanidm ? unix && config.services.kanidm.unix.enable) "kanidm"
     ++ lib.optional config.security.pam.krb5.enable "Kerberos";
   fprintAuthSet = name: config.security.pam.services.${name}.fprintAuth;
   # "use ${pkgs.<name>} instead", where the store path names a package of pkgs
@@ -357,7 +388,7 @@ let
     in {
       # NixOS's own fingerprint and key rules would ask a second time below the rows
       fprintAuth = lib.mkDefault false;
-      u2f.enable = lib.mkDefault false;
+    } // (if serviceOptions ? u2f then { u2f.enable = lib.mkDefault false; } else { u2fAuth = lib.mkDefault false; }) // {
       rules.auth = lib.listToAttrs (lib.imap1 (index: rule:
         lib.nameValuePair "h2s-${toString index}" (rule // { order = first - 10 * (count - index + 1); }))
         lines);

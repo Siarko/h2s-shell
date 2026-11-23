@@ -136,8 +136,18 @@ TestCase {
         assertEqual(rules.storePackage(store + "-linux-pam-1.6.1/lib/security/pam_unix.so"), "linux-pam", "a package's name: up to the version");
         assertEqual(rules.storePackage(store + "-pam_u2f/lib/security/pam_u2f.so"), "pam_u2f", "… no version");
         assertEqual(rules.storePackage("/nix/store/short-pam_u2f/lib/security/pam_u2f.so"), "", "… not a store path's name: none");
-        assert(!has([raw("r1", "auth required /nix/store/abc-x/lib/security/pam_deny.so"), password("r2"), fixed], arch(), "R1"),
-               "R1 not: a pam_deny from another place is judged by nothing its name says");
+        assert(has([raw("r1", "auth required /nix/store/abc-x/lib/security/pam_deny.so"), password("r2"), fixed], arch(), "R1"),
+               "R1: a pam_deny from another place is judged by its name (a name may refuse, never trust)");
+        assert(has([raw("r1", "auth sufficient /nix/store/abc-linux-pam-1.7.2/lib/security/pam_permit.so"), fixed], arch({ system: "nixos" }), "R9")
+               && has([raw("r1", "auth sufficient /etc/pam_permit.so"), fixed], arch(), "R9"), "R9: pam_permit from another place, by its name");
+        assert(!has([raw("r1", "auth sufficient /home/u/pam_unix.so")], arch({ otherService: [] }), "R9")
+               && has([raw("r1", "auth sufficient /home/u/pam_unix.so")], arch({ otherService: [] }), "R1"), "… while pam_unix from another place is no password");
+        for (const passes of ["nouserok", "[nouserok]", "alwaysok", "userpresence=0", "userpresence=00", "userpresence=-0", "userpresence=2"])
+            assert(has([raw("r1", "auth sufficient pam_u2f.so cue " + passes), fixed], arch(), "R9"), "R9: pam_u2f with " + passes);
+        assert(!has([raw("r1", "auth sufficient pam_u2f.so cue userpresence=1"), fixed], arch(), "R9"), "R9 not: pam_u2f userpresence=1");
+        for (const passes of ["db=/etc/users unknown_ok", "db=/etc/users UNKNOWN_OK", "db=/etc/users DB=/tmp/users", "db=/etc/users [db=/tmp/x]"])
+            assert(has([raw("r1", "auth sufficient pam_userdb.so " + passes), fixed], arch(), "R9"), "R9: pam_userdb " + passes);
+        assert(!has([raw("r1", "auth sufficient pam_userdb.so DB=/etc/users"), fixed], arch(), "R9"), "R9 not: pam_userdb DB= under /etc");
         for (const bad of ["account required pam_unix.so", "auth sufficient", "auth include system-auth", "@include common-auth",
                            "auth required pam_unix.so\nauth sufficient pam_permit.so", "auth [sucess=done] pam_unix.so"])
             assert(has([raw("r1", bad), fixed], arch(), "R8"), "R8: " + JSON.stringify(bad));
@@ -276,7 +286,7 @@ TestCase {
                "W10: a reader above is no password asked");
         assert(!has([fixed, raw("r1", "auth required pam_permit.so")], arch(), "R9"), "R9 not: the fixed row present, even first");
         assert(has([raw("r1", "auth sufficient /home/u/pam_permit.so"), fixed], arch(), "W12")
-               && !has([raw("r1", "auth sufficient /home/u/pam_permit.so"), fixed], arch(), "R9"), "R9 not: a module from another place is not known by its name");
+               && has([raw("r1", "auth sufficient /home/u/pam_permit.so"), fixed], arch(), "R9"), "R9: a module from another place is refused by its name");
         assert(!has([raw("r1", "auth sufficient pam_ldap.so"), raw("r2", "auth sufficient pam_krb5.so"), fixed], arch(), "W6"),
                "W6 not: two lines the checks do not know");
         for (const unknown of [null, { deny: 0, failInterval: 60, unlockTime: 0 }]) {
