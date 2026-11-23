@@ -34,8 +34,10 @@ Singleton {
         return typeof user === "string" && user.length <= 256 && /^[A-Za-z0-9_][A-Za-z0-9_.-]*\$?$/.test(user);
     }
 
+    // An absolute path the texts may carry quoted; no spaces, as the command line's first
+    // word is matched up to one
     function _validPath(path) {
-        return typeof path === "string" && /^\/[^\x00-\x1f\x7f"\\]*$/.test(path) && !path.endsWith("/");
+        return typeof path === "string" && /^\/[^\x00-\x20\x7f"\\]*$/.test(path) && !path.endsWith("/");
     }
 
     function _baseName(path) {
@@ -57,7 +59,7 @@ Singleton {
             + "        action.lookup(\"program\") == \"" + program + "\""
             + (multiCall ? " &&\n        action.lookup(\"command_line\").indexOf(\"" + timeout + " \") == 0" : "")
             + ")\n"
-            + "        return polkit.Result.AUTH_ADMIN_KEEP;\n"
+            + "        return \"auth_admin_keep\";\n"
             + "});\n";
         return ruleMarker + " " + PamEditRules.sha256(body) + "\n" + body;
     }
@@ -91,15 +93,15 @@ Singleton {
     function _keyFileString(text, group, key) {
         let current = null, found = null;
         for (const line of String(text).split("\n")) {
-            const trimmed = line.replace(/\r$/, "").replace(/^\s+/, "");
+            const trimmed = line.replace(/\r$/, "").replace(/^[ \t\n\v\f\r]+/, "");
             if (trimmed === "" || trimmed.startsWith("#"))
                 continue;
-            const groupLine = trimmed.match(/^\[([^\[\]\x00-\x1f]+)\]\s*$/);
+            const groupLine = trimmed.match(/^\[([^\[\]\x00-\x1f]+)\][ \t\n\v\f\r]*$/);
             if (groupLine) {
                 current = groupLine[1];
                 continue;
             }
-            const pair = trimmed.match(/^([^=]*?)\s*=\s*(.*)$/);
+            const pair = trimmed.match(/^([^=]*?)[ \t\n\v\f\r]*=[ \t\n\v\f\r]*(.*)$/);
             if (!pair || current === null || !/^[^\[\]=]+(\[[^\[\]=]+\])?$/.test(pair[1]))
                 return null;
             if (current === group && pair[1] === key)
@@ -179,10 +181,10 @@ Singleton {
         };
     }
 
-    // A whole file written by the shell: its first line the header, the hash of the rest
+    // The conf is the shell's when it is exactly a text confText makes
     function _confOurs(text) {
-        const header = text.match(/^#\s*Written by h2s-shell\s+(\S+)[ \t]*\n/);
-        return header !== null && PamEditRules.sha256(text.slice(header[0].length)) === header[1];
+        const seconds = text.match(/\nExpirationSeconds=(\d+)\n$/);
+        return seconds !== null && text === confText(Number(seconds[1]));
     }
 
     // What is in force, from the texts read (each: a string, undefined when there is no such
@@ -242,8 +244,10 @@ Singleton {
     }
 
     // The shell's kept authorizations in `pkcheck --list-temp`'s output (standard output of a
-    // run that exited 0; nothing at all when the session holds none), read at nowMs, for the
-    // shell's process `pid`. Each entry is five lines and a blank one:
+    // run that exited 0; nothing at all when the session holds none), for the shell's process
+    // `pid`. nowMs is the time just before the run started: pkcheck's own clock is then no
+    // earlier, and it prints whole seconds, so an obtained time is taken a second early (the
+    // shell's revoke comes sooner, never later). Each entry is five lines and a blank one:
     //   authorization id: <id>
     //   action:           <action id>
     //   subject:          unix-process:<pid>:<start time> (<command line>)
@@ -251,13 +255,21 @@ Singleton {
     //   expires:          <relative> (<local time>)
     // Entries of other actions or subjects, and those already expired, are left out. Anything
     // not in that form makes the whole list unknown, never "nothing kept".
-    // → { known, entries: [{ id, obtainedMs, untilMs }], latest (the entry kept longest, or null) }
-    function parseList(text, nowMs, pid) {
-        const unknown = { known: false, entries: [], latest: null };
+    // A command line is printed with its newlines, so another process of the user holding a
+    // kept authorization can print lines that read as entries of the shell's: an entry kept
+    // longer than polkitd's length (systemSeconds, when known) makes the list unknown
+    // ("longer": forged, or polkitd keeps a length other than its conf file's), its entries
+    // still given so that the shell can forget them; and the revoke is armed from the earliest
+    // obtained time (revokeAtMs), which a forged entry can only bring forward.
+    // → { known, reason ("" | "unread" | "malformed" | "longer"),
+    //     entries: [{ id, obtainedMs, untilMs }], latest (kept longest), earliest (obtained first) }
+    function parseList(text, nowMs, pid, systemSeconds) {
+        const unknown = reason => ({ known: false, reason, entries: [], latest: null, earliest: null });
         if (typeof text !== "string" || !Number.isFinite(nowMs) || !Number.isInteger(pid) || pid <= 0)
-            return unknown;
+            return unknown("unread");
         const lines = text.split("\n");
         const entries = [];
+        let longer = false;
         let i = 0;
         while (i < lines.length) {
             if (lines[i].trim() === "") {
@@ -265,45 +277,59 @@ Singleton {
                 continue;
             }
             if (i + 5 > lines.length)
-                return unknown;
+                return unknown("malformed");
             const id = lines[i].match(/^authorization id: (\S+)$/);
             const action = lines[i + 1].match(/^action: +(\S+)$/);
             const subject = lines[i + 2].match(/^subject: +(\S+) \(.*\)$/);
             const obtained = lines[i + 3].match(/^obtained: +(.+?) \(.*\)$/);
             const expires = lines[i + 4].match(/^expires: +(.+?) \(.*\)$/);
             if (!id || !action || !subject || !obtained || !expires)
-                return unknown;
+                return unknown("malformed");
             const obtainedSeconds = _relativeSeconds(obtained[1]), expiresSeconds = _relativeSeconds(expires[1]);
             if (Number.isNaN(obtainedSeconds) || Number.isNaN(expiresSeconds))
-                return unknown;
+                return unknown("malformed");
             const process = subject[1].match(/^unix-process:(\d+):\d+$/);
-            if (action[1] === execAction && process && Number(process[1]) === pid && expiresSeconds > 0)
-                entries.push({ id: id[1], obtainedMs: nowMs + obtainedSeconds * 1000, untilMs: nowMs + expiresSeconds * 1000 });
+            if (action[1] === execAction && process && Number(process[1]) === pid && expiresSeconds > 0) {
+                entries.push({ id: id[1], obtainedMs: nowMs + (obtainedSeconds - 1) * 1000, untilMs: nowMs + expiresSeconds * 1000 });
+                if (systemSeconds >= 0 && expiresSeconds - obtainedSeconds > systemSeconds + 1)
+                    longer = true;
+            }
             i += 5;
         }
-        let latest = null;
+        let latest = null, earliest = null;
         for (const entry of entries) {
             if (latest === null || entry.untilMs > latest.untilMs)
                 latest = entry;
+            if (earliest === null || entry.obtainedMs < earliest.obtainedMs)
+                earliest = entry;
         }
-        return { known: true, entries, latest };
+        return { known: !longer, reason: longer ? "longer" : "", entries, latest, earliest };
     }
 
-    // When the shell revokes a kept authorization itself: its obtained time plus the setting,
-    // when the setting is shorter than the system's length (or that length is unknown —
-    // forgetting early is harmless); 0 when polkitd's own expiry comes first or together.
-    function revokeAtMs(entry, minutes, systemSeconds) {
-        if (!Number.isFinite(entry?.obtainedMs) || !Number.isInteger(minutes) || minutes < 1)
+    // When the shell revokes the kept authorizations itself (one revoke ends them all): the
+    // earliest obtained time plus the setting, when any entry would outlive it by more than a
+    // second. Judged by the entries alone: polkitd reads its length only at its start and on
+    // SIGHUP, so its conf file may say less than it keeps. 0: nothing to revoke.
+    function revokeAtMs(entries, minutes) {
+        if (!Array.isArray(entries) || !Number.isInteger(minutes) || minutes < 1)
             return 0;
-        if (systemSeconds >= 0 && minutes * 60 >= systemSeconds)
-            return 0;
-        return entry.obtainedMs + minutes * 60000;
+        let earliest = Infinity, until = -Infinity;
+        for (const entry of entries) {
+            earliest = Math.min(earliest, entry.obtainedMs);
+            until = Math.max(until, entry.untilMs);
+        }
+        const revoke = earliest + minutes * 60000;
+        return until > revoke + 1000 ? revoke : 0;
     }
 
-    // Until when an entry stays kept: the sooner of polkitd's expiry and the shell's revoke
-    function keptUntilMs(entry, minutes, systemSeconds) {
-        const revoke = revokeAtMs(entry, minutes, systemSeconds);
-        return revoke ? Math.min(entry.untilMs, revoke) : entry?.untilMs ?? 0;
+    // Until when something stays kept: the latest expiry, or the shell's revoke when sooner;
+    // 0 when nothing is kept
+    function keptUntilMs(entries, minutes) {
+        if (!Array.isArray(entries) || entries.length === 0)
+            return 0;
+        const until = Math.max(...entries.map(entry => entry.untilMs));
+        const revoke = revokeAtMs(entries, minutes);
+        return revoke ? Math.min(until, revoke) : until;
     }
 
     // The prompt's line for a run of the shell's queue while the rule is installed: the
