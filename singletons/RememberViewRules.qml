@@ -249,20 +249,26 @@ Singleton {
         };
     }
 
-    // What a question acts on: the sha256 of both files as the page shows them ("absent"
-    // for none; null when not readable — never acted on), and the files it names
-    function subjectOf(files, replace) {
+    // What a question acts on: the sha256 of the rules file and of every polkitd.conf (the
+    // length Install writes depends on all of them) as the page shows them ("absent" for
+    // none; null when not readable — never acted on), the setting, and the files it names
+    function subjectOf(files, replace, minutes) {
+        const confs = {};
+        for (const path of RememberRules.confPaths)
+            confs[path] = currentOf(files?.confs?.[path]);
         return {
-            rule: currentOf(files?.rule), conf: currentOf(files?.confs?.[RememberRules.confPath]),
+            rule: currentOf(files?.rule), conf: confs[RememberRules.confPath], confs, minutes: minutes,
             replace: { rule: replace?.rule === true, conf: replace?.conf === true }
         };
     }
 
-    // The answer still acts: both files are exactly what the question was asked about
-    function subjectHolds(subject, files) {
-        const now = subjectOf(files, null);
-        return !!subject && typeof subject.rule === "string" && typeof subject.conf === "string"
-            && subject.rule === now.rule && subject.conf === now.conf;
+    // The answer still acts: the files and the setting are exactly what the question was
+    // asked about
+    function subjectHolds(subject, files, minutes) {
+        const now = subjectOf(files, null, minutes);
+        return !!subject && typeof subject.rule === "string" && subject.rule === now.rule
+            && Number.isInteger(subject.minutes) && subject.minutes === minutes
+            && RememberRules.confPaths.every(path => typeof subject.confs?.[path] === "string" && subject.confs[path] === now.confs[path]);
     }
 
     function _pathOf(name) {
@@ -286,8 +292,8 @@ Singleton {
 
     // The question before Replace: `replace` { rule, conf } the files changed by hand it
     // replaces, `plan` what the Install would change, `handMade` { rule, conf } the files not
-    // the shell's, `files` the texts shown (its subject)
-    function replaceSpec(replace, plan, handMade, files, backups) {
+    // the shell's, `files` the texts shown and `minutes` the setting (its subject)
+    function replaceSpec(replace, plan, handMade, files, backups, minutes) {
         const names = ["rule", "conf"].filter(name => replace?.[name] === true).map(_pathOf);
         return {
             kind: "warning",
@@ -296,12 +302,12 @@ Singleton {
                 .concat(_touchLines(replace, plan, handMade, "changed"))
                 .concat(["Then the shell writes its own in their place. Undo puts them back."]),
             buttons: [{ id: "replace", label: "Replace", kind: "warning" }],
-            subject: subjectOf(files, replace)
+            subject: subjectOf(files, replace, minutes)
         };
     }
 
     // The question before Remove of a rules file changed by hand
-    function removeSpec(plan, handMade, files, backups) {
+    function removeSpec(plan, handMade, files, backups, minutes) {
         const named = { rule: true, conf: false };
         return {
             kind: "warning",
@@ -310,7 +316,7 @@ Singleton {
                 .concat(_touchLines(named, plan, handMade, "removed"))
                 .concat(["Undo puts it back."]),
             buttons: [{ id: "remove", label: "Remove", kind: "warning" }],
-            subject: subjectOf(files, named)
+            subject: subjectOf(files, named, minutes)
         };
     }
 }

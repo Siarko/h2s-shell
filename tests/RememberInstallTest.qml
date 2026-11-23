@@ -198,7 +198,7 @@ TestCase {
     function runAsync() {
         const rules = RememberInstallRules;
         const sha = PamEditRules.sha256;
-        _then("the scratch folders are there", () => _ready, () => _look());
+        _then("the scratch folders are there, the shell's timeout looked up", () => _ready && CommandTools.known, () => _look());
         _then("read before anything", () => _read !== null, () => {
             assertEqual(_read.rule + " " + _read.conf, "null null", "nothing installed yet");
             // The system's runner never gets scratch places, a stand-in never the system's

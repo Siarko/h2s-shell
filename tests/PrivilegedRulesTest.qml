@@ -223,6 +223,8 @@ TestCase {
                     ",,,", "… no trusted timeout or no absolute command: null");
         assertEqual([rules.shellArgv("/t", "/bin/sh"), rules.shellArgv("/t", [5]), rules.shellArgv("/t", ["sh", "/x"]), rules.shellArgv(null, ["/bin/sh"])].join(","),
                     ",,,", "… a command that is not a list of words, a first word not text, a relative first word: null");
+        assertEqual([rules.shellCheckWaits(true, false), rules.shellCheckWaits(true, true), rules.shellCheckWaits(false, false)].join(" "),
+                    "true false false", "shellCheckWaits: the shell's own command waits for the look-up of the timeout, others do not");
         assertEqual(JSON.stringify(rules.shellArgv("/t", ["/bin/true"])), JSON.stringify(["pkexec", "/t", "-k", "3", "300", "/bin/true"]),
                     "… a command of one word");
 

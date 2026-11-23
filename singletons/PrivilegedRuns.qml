@@ -187,8 +187,8 @@ Singleton {
         _dispatch({ type: "add", id: job.id, owner: job.owner });
     }
 
-    // The words the last command of the shell's own was queued with, before pkexec's path
-    // replaced argv[0] (the fixture suites read it: in test mode it never launches)
+    // The words the last command of the shell's own was launched with, before pkexec's path
+    // replaced argv[0] (the fixture suites read it: in test mode it is refused right after)
     property var _lastShellArgv: []
 
     // A fixed command of the shell's own, started by the user's click (a setting's Apply):
@@ -197,7 +197,8 @@ Singleton {
     // PrivilegedRules' result (ok, code, stdout, stderr, dismissed, refused, notFound,
     // cancelled, blocked, error). It runs under the trusted, setuid pkexec found by the
     // look-up (none: refused, not available), inside the shell's trusted `timeout` with the
-    // limit PrivilegedRules.shellRunMs (none found: refused); its prompt says who asks
+    // limit PrivilegedRules.shellRunMs (waiting, checking, for its look-up; none found:
+    // refused at the launch); its prompt says who asks
     // ("Shell: h2s-shell", PolkitRules.announcement) and what, the command collapsed, as a
     // module's run. Never from a module's code (the call's stack names a module directory:
     // refused before the queue, so no module is announced as the shell). A refusal is told
@@ -226,19 +227,11 @@ Singleton {
             _refuse(job, PrivilegedRules.lockedResult());
             return;
         }
-        // Under the shell's trusted timeout, as a module's run: the remembered
-        // authorization's rule then covers it (PrivilegedRules.shellArgv)
-        const argv = PrivilegedRules.shellArgv(CommandTools.known ? CommandTools.timeout : "", words);
-        if (argv === null) {
-            _refuse(job, PrivilegedRules.refusedResult({ blocked: "", error: CommandTools.known
-                ? "running as administrator is not available: no trusted timeout (coreutils) on PATH"
-                : "running as administrator is not available: timeout is still being looked for" }));
-            return;
-        }
-        job.argv = argv;
+        // Its words under the shell's trusted timeout are made at its launch (_launch), once
+        // the look-up of the timeout has answered: it waits for it while checking
+        job.words = words;
         job.timeoutMs = PrivilegedRules.shellRunMs;
         job.program = String(words[0]);
-        _lastShellArgv = job.argv;
         _jobs.set(job.id, job);
         _dispatch({ type: "add", id: job.id, owner: job.owner });
     }
@@ -416,7 +409,8 @@ Singleton {
             done: result => {
                 if (!root._stillChecking(job))
                     return;
-                if (PrivilegedRules.legacyCheckWaits(job.systemPkexec === true, root._lookupAnswered)) {
+                if (PrivilegedRules.legacyCheckWaits(job.systemPkexec === true, root._lookupAnswered)
+                        || PrivilegedRules.shellCheckWaits(job.kind === "shell", root._timeoutKnown)) {
                     root._waitingForLookup.push(job);
                     return;
                 }
@@ -446,8 +440,26 @@ Singleton {
         if (_lookupAnswered)
             _resumeChecks();
     }
+    // The look-up of the trusted timeout answered: the shell's own commands waiting for it
+    readonly property bool _timeoutKnown: CommandTools.known
+    on_TimeoutKnownChanged: {
+        if (_timeoutKnown)
+            _resumeChecks();
+    }
 
     function _launch(job) {
+        // A command of the shell's own: under the shell's trusted timeout, as a module's run,
+        // so that the remembered authorization's rule covers it (PrivilegedRules.shellArgv)
+        if (job.kind === "shell") {
+            const argv = PrivilegedRules.shellArgv(CommandTools.timeout, job.words);
+            if (argv === null) {
+                job.result = { refusal: "running as administrator is not available: no trusted timeout (coreutils) on PATH" };
+                Qt.callLater(() => root._dispatch({ type: "exited", id: job.id }));
+                return;
+            }
+            job.argv = argv;
+            _lastShellArgv = argv;
+        }
         // The old type's default "pkexec": the trusted one, once the look-up has answered
         const launch = PrivilegedRules.legacyLaunch(job.argv, job.systemPkexec === true, _lookupAnswered, _pkexec, _pkexecReason);
         job.argv = launch.argv;

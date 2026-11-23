@@ -202,7 +202,7 @@ TestCase {
         const edit = PamEditRules;
         const fixed = PamRuleRules.fixedRow();
         _sudoBuilt = edit.build(_sudo, [_row("r1"), fixed], _facts("sudo"));
-        _then("the scratch folders are there", () => _ready, () => {
+        _then("the scratch folders are there, the shell's timeout looked up", () => _ready && CommandTools.known, () => {
             assert(_sudoBuilt.ok, "the sudo fixture builds");
             // The system's runner never gets scratch places, a stand-in never the system's
             const system = _applyComponent.createObject(suite, { paths: _paths });

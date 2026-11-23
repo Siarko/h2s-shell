@@ -102,7 +102,7 @@ TestCase {
     }
 
     function runAsync() {
-        _then("the scratch directory is there", () => _ready, () => {
+        _then("the scratch directory is there, the shell's timeout looked up", () => _ready && CommandTools.known, () => {
             _writer = _writerComponent.createObject(suite, { directory: _scratch + "/systemd/sleep.conf.d", start: suite._start });
             _writer.applied.connect((seconds, ok, quiet, error) => suite._applied = { seconds: seconds, ok: ok, quiet: quiet, error: error });
             assertEqual(_writerComponent.createObject(suite).directory, "/etc/systemd/sleep.conf.d", "by default: the system's drop-in directory");

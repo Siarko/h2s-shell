@@ -360,20 +360,25 @@ TestCase {
         assertEqual(rules.handRule(RememberRules.ruleText(_facts), _facts).caption, "Changed outside the shell.", "… none added");
 
         const files = { rule: "a", confs: {} };
-        const shown = rules.replaceSpec({ rule: true, conf: false }, { refusal: null, rule: true, conf: false }, { rule: true, conf: true }, files, "/b");
+        const shown = rules.replaceSpec({ rule: true, conf: false }, { refusal: null, rule: true, conf: false }, { rule: true, conf: true }, files, "/b", 5);
         assertEqual(shown.title + " | " + shown.body.join(" | "),
                     "Replace /usr/share/polkit-1/rules.d/40-h2s-shell.rules? | The hand-made file goes to the backups: /b. | "
                     + "Kept as it is: /etc/polkit-1/polkitd.conf. | Then the shell writes its own in their place. Undo puts them back.",
                     "replaceSpec: names the file replaced and the hand-made one kept");
-        assertEqual(JSON.stringify(shown.subject), JSON.stringify({ rule: rules.currentOf("a"), conf: "absent", replace: { rule: true, conf: false } }),
-                    "… keyed to both files as shown, no file as absent, and the files it names");
-        const both = rules.replaceSpec({ rule: false, conf: true }, { refusal: null, rule: true, conf: true }, { rule: false, conf: true }, files, "/b");
+        assertEqual(JSON.stringify(shown.subject), JSON.stringify({ rule: rules.currentOf("a"), conf: "absent",
+                    confs: { "/etc/polkit-1/polkitd.conf": "absent", "/run/polkit-1/polkitd.conf": "absent", "/usr/share/polkit-1/polkitd.conf": "absent" },
+                    minutes: 5, replace: { rule: true, conf: false } }),
+                    "… keyed to the rules file and every polkitd.conf as shown (absent: none), the setting, and the files it names");
+        const both = rules.replaceSpec({ rule: false, conf: true }, { refusal: null, rule: true, conf: true }, { rule: false, conf: true }, files, "/b", 5);
         assertEqual(both.body[1], "Also changed: /usr/share/polkit-1/rules.d/40-h2s-shell.rules.", "… another file the run changes: named");
-        assert(rules.subjectHolds(shown.subject, files), "subjectHolds: both as shown");
-        assert(!rules.subjectHolds(shown.subject, { rule: "b", confs: {} }), "… the rule changed since: no");
-        assert(!rules.subjectHolds(shown.subject, { rule: "a", confs: { [RememberRules.confPath]: "hand" } }), "… a conf appeared since: no");
-        assert(!rules.subjectHolds(rules.subjectOf({ rule: null, confs: {} }, null), { rule: null, confs: {} }), "… a file not read: never");
-        const removeQuestion = rules.removeSpec({ refusal: null, rule: true, conf: true }, { rule: true, conf: false }, files, "/b");
+        assert(rules.subjectHolds(shown.subject, files, 5), "subjectHolds: all as shown");
+        assert(!rules.subjectHolds(shown.subject, { rule: "b", confs: {} }, 5), "… the rule changed since: no");
+        assert(!rules.subjectHolds(shown.subject, { rule: "a", confs: { [RememberRules.confPath]: "hand" } }, 5), "… a conf appeared since: no");
+        assert(!rules.subjectHolds(shown.subject, { rule: "a", confs: { "/usr/share/polkit-1/polkitd.conf": "[Polkitd]\nExpirationSeconds=900\n" } }, 5),
+               "… the vendor conf changed since (the length written follows it): no");
+        assert(!rules.subjectHolds(shown.subject, files, 15), "… the setting changed since: no");
+        assert(!rules.subjectHolds(rules.subjectOf({ rule: null, confs: {} }, null, 5), { rule: null, confs: {} }, 5), "… a file not read: never");
+        const removeQuestion = rules.removeSpec({ refusal: null, rule: true, conf: true }, { rule: true, conf: false }, files, "/b", 5);
         assertEqual(removeQuestion.body[1], "Also removed: /etc/polkit-1/polkitd.conf.", "removeSpec: the shell's conf going too is named");
         const long = Array.from({ length: 50 }, (unused, i) => i === 0 ? "x".repeat(300) : "line " + i).join("\n");
         const capped = rules.handConf(long).lines;
@@ -395,6 +400,7 @@ TestCase {
                          "sh", suite._scratch, systemctl], () => ready = true);
         });
         assert(_until(() => ready), "the scratch folders made");
+        assert(_until(() => CommandTools.known), "the shell's timeout looked up: its runs go under it");
         _installer = _installerComponent.createObject(suite, { start: suite._start, paths: suite._paths });
         _actions = _actionsComponent.createObject(suite, { admin: suite._admin, installer: suite._installer });
 
@@ -416,7 +422,12 @@ TestCase {
         assert(!_shown("remember:keptLine"), "… nothing about what is kept");
 
         // --- Install ---
-        assert(_runAndRead("remember:install"), "Install: one run, then read again");
+        // A second request while a run is under way: refused, said
+        const busyRuns = _runs.length, busyReads = _admin.refreshes;
+        assert(_click("remember:install") && _until(() => _installer.busy), "Install: under way");
+        _actions.remove(null);
+        assertEqual(_text("remember:note"), RememberInstallRules.texts.busy, "… another request meanwhile: refused, said under the buttons");
+        assert(_until(() => _runs.length > busyRuns && _admin.refreshes > busyReads && !_installer.busy), "Install: one run, then read again");
         assertEqual(_runs[0], RememberInstallRules.what("install"), "… the run says what it is for");
         assert(_until(() => _text("remember:ruleLine") === "Installed"), "installed");
         assertEqual(_shown("remember:install") + " " + _shown("remember:remove") + " " + _shown("remember:undo"), "false true true", "… Remove and Undo");
@@ -484,7 +495,7 @@ TestCase {
         assert(_until(() => _admin.refreshes > before), "(read again)");
         const runs = _runs.length;
         assert(_modalClick("modalButton:0") && _until(() => !host.open), "… Replace");
-        assertEqual(_runs.length + " " + _text("remember:note"), runs + " The file changed since it was shown: nothing replaced.",
+        assertEqual(_runs.length + " " + _text("remember:note"), runs + " Changed since it was shown: nothing replaced.",
                     "… the text shown is gone: nothing run");
         assert(_click("remember:readAgain"), "Read again");
         assert(_click("remember:replace") && _until(() => host.open), "Replace… again");

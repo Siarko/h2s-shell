@@ -403,6 +403,12 @@ Singleton {
         return systemPkexec === true && known !== true;
     }
 
+    // A command of the shell's own also waits, checking, for the look-up of the trusted
+    // `timeout` it runs under (shellArgv), as one naming the trusted pkexec waits for that
+    function shellCheckWaits(shell, timeoutKnown) {
+        return shell === true && timeoutKnown !== true;
+    }
+
     // The words a PrivilegedAction's run starts with. `argv`: the elevating words, then the
     // command; `systemPkexec` (legacySystemPkexec); `known`, `pkexec`, `reason`: the look-up
     // of the trusted pkexec (PrivilegedRuns). → { argv, problem (not available: the run

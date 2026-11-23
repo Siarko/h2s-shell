@@ -41,21 +41,37 @@ QtObject {
 
     // `replace` { rule, conf }: the files changed by hand the question named
     function install(minutes, replace) {
-        if (busy || !admin?.files || !admin?.facts)
+        if (busy) {
+            note = RememberInstallRules.refusal("busy").text;
             return;
+        }
+        if (!admin?.files || !admin?.facts) {
+            note = RememberInstallRules.refusal("unread").text;
+            return;
+        }
         const files = admin.files;
         _started("install", installer.install(request(minutes, replace)), files);
     }
 
     function remove(replace) {
-        if (busy || !admin?.files || !admin?.facts)
+        if (busy) {
+            note = RememberInstallRules.refusal("busy").text;
             return;
+        }
+        if (!admin?.files || !admin?.facts) {
+            note = RememberInstallRules.refusal("unread").text;
+            return;
+        }
         const files = admin.files;
         _started("remove", installer.remove(request(undefined, replace)), files);
     }
 
     function undo() {
-        if (busy || !lastWrite)
+        if (busy) {
+            note = RememberInstallRules.refusal("busy").text;
+            return;
+        }
+        if (!lastWrite)
             return;
         _started("undo", installer.undo({ stamp: lastWrite.stamp, rule: lastWrite.after.rule, conf: lastWrite.after.conf }), admin?.files ?? null);
     }

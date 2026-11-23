@@ -71,20 +71,20 @@ ColumnLayout {
     }
 
     // Replace…: the files changed by hand the page shows (the conf only where the setting
-    // needs the shell's), keyed by the sha256 of both files as shown
+    // needs the shell's), keyed to the files and the setting as shown
     function askReplace() {
         const replace = { rule: _handMade.rule, conf: RememberViewRules.confInTheWay(_installed, _files, minutes) };
         if (!replace.rule && !replace.conf)
             return;
         _pageNote = "";
         const plan = actions.plan("install", minutes, replace);
-        _ask(RememberViewRules.replaceSpec(replace, plan, _handMade, _files, _backups), answer => {
+        _ask(RememberViewRules.replaceSpec(replace, plan, _handMade, _files, _backups, minutes), answer => {
             if (answer.cancelled || answer.button !== "replace")
                 return;
-            if (RememberViewRules.subjectHolds(answer.subject, root._files))
+            if (RememberViewRules.subjectHolds(answer.subject, root._files, root.minutes))
                 root.actions.install(root.minutes, answer.subject.replace);
             else
-                root._pageNote = "The file changed since it was shown: nothing replaced.";
+                root._pageNote = "Changed since it was shown: nothing replaced.";
         });
     }
 
@@ -95,13 +95,13 @@ ColumnLayout {
             return;
         }
         const plan = actions.plan("remove", minutes, { rule: true, conf: false });
-        _ask(RememberViewRules.removeSpec(plan, _handMade, _files, _backups), answer => {
+        _ask(RememberViewRules.removeSpec(plan, _handMade, _files, _backups, minutes), answer => {
             if (answer.cancelled || answer.button !== "remove")
                 return;
-            if (RememberViewRules.subjectHolds(answer.subject, root._files))
+            if (RememberViewRules.subjectHolds(answer.subject, root._files, root.minutes))
                 root.actions.remove(answer.subject.replace);
             else
-                root._pageNote = "The file changed since it was shown: nothing removed.";
+                root._pageNote = "Changed since it was shown: nothing removed.";
         });
     }
 
