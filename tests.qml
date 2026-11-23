@@ -131,6 +131,8 @@ QtObject {
     property var _helper: HelperTest {}
     property var _pamRuleRules: PamRuleRulesTest {}
     property var _pamEditRules: PamEditRulesTest {}
+    property var _pamTrialRules: PamTrialRulesTest {}
+    property var _pamTrial: PamTrialTest {}
     property var _pamNixosModule: PamNixosModuleTest {}
     // A new suite: its one line above this comment
 
