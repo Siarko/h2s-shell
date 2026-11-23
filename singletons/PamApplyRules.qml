@@ -100,28 +100,11 @@ Singleton {
         return String(paths?.backups ?? "") + "/" + String(name ?? "");
     }
 
-    function _plainPath(path) {
-        return typeof path === "string" && /^(\/[A-Za-z0-9._-]+)+$/.test(path)
-            && !path.split("/").some(part => part === "." || part === "..");
-    }
-
     // Whether the places may be written: "" when they may, else a refusal code. `live`: the
     // run goes to the system's pkexec, so only livePaths; a stand-in's run never touches
     // /etc, /usr or /var.
     function pathsRefusal(paths, live) {
-        const names = ["system", "vendor", "backups"];
-        if (paths === null || typeof paths !== "object" || names.some(name => !_plainPath(paths[name])))
-            return "paths";
-        if (!Number.isInteger(paths.owner) || paths.owner < 0)
-            return "paths";
-        if (live === true)
-            return names.every(name => paths[name] === livePaths[name]) && paths.owner === livePaths.owner ? "" : "paths";
-        const system = ["/etc", "/usr", "/var"];
-        return names.some(name => system.some(top => paths[name] === top || paths[name].startsWith(top + "/"))) ? "paths" : "";
-    }
-
-    function _quoted(value) {
-        return "'" + String(value).replace(/'/g, "'\\''") + "'";
+        return RootScriptRules.placesRefusal(paths, ["system", "vendor", "backups"], livePaths, live);
     }
 
     // The root step's script for these places ("" for places that are not plain absolute
@@ -134,35 +117,13 @@ Singleton {
     function applyScript(paths) {
         if (pathsRefusal(paths, false) !== "" && pathsRefusal(paths, true) !== "")
             return "";
-        return "set -eu; umask 077; export LC_ALL=C\n"
-            + "system=" + _quoted(paths.system) + "; vendor=" + _quoted(paths.vendor) + "; backups=" + _quoted(paths.backups)
-            + "; owner=" + paths.owner + "\n"
+        return RootScriptRules.header
+            + "system=" + RootScriptRules.quoted(paths.system) + "; vendor=" + RootScriptRules.quoted(paths.vendor)
+            + "; backups=" + RootScriptRules.quoted(paths.backups) + "; owner=" + paths.owner + "\n"
             + "pam_temporary=; backup_temporary=\n"
             + "trap 'for leftover in \"$pam_temporary\" \"$backup_temporary\"; do [ -z \"$leftover\" ] || rm -f -- \"$leftover\"; done' EXIT\n"
-            + "refuse() { echo \"refused $1\" >&2; exit 3; }\n"
-            // What was done, on stderr first: it reaches the shell even when stdout is gone
-            + "say() { printf '%s\\n' \"$1\" >&2; printf '%s\\n' \"$1\" || :; }\n"
-            // A folder the step writes in: no link, the owner's, nobody else may write in it
-            + "safe_dir() {\n"
-            + "  if [ -L \"$1\" ] || [ ! -d \"$1\" ]; then refuse owner; fi\n"
-            + "  facts=$(stat -c '%u %a' -- \"$1\") || refuse owner\n"
-            + "  [ \"${facts%% *}\" = \"$owner\" ] || refuse owner\n"
-            + "  [ $((0${facts#* } & 022)) -eq 0 ] || refuse owner\n"
-            + "}\n"
-            + "hash_of() { sum=$(sha256sum < \"$1\") || return 1; printf '%s\\n' \"${sum%% *}\"; }\n"
-            + "is_hash() { case \"$1\" in ''|*[!0-9a-f]*) return 1;; esac; [ ${#1} -eq 64 ]; }\n"
+            + RootScriptRules.functions
             + "is_name() { case \"$1\" in ''|[!A-Za-z0-9_]*|*[!A-Za-z0-9._@+-]*) return 1;; esac; [ ${#1} -le 255 ]; }\n"
-            // The service's file as the shell read it: that hash, or none
-            + "check_current() {\n"
-            + "  if [ -L \"$target\" ]; then refuse link; fi\n"
-            + "  if [ \"$1\" = absent ]; then\n"
-            + "    if [ -e \"$target\" ]; then refuse changed; fi\n"
-            + "    return 0\n"
-            + "  fi\n"
-            + "  [ -f \"$target\" ] || refuse changed\n"
-            + "  got=$(hash_of \"$target\") || refuse unreadable\n"
-            + "  [ \"$got\" = \"$1\" ] || refuse changed\n"
-            + "}\n"
             // Each included name where libpam finds it, as the trial read it
             + "check_includes() {\n"
             + "  while [ $# -gt 0 ]; do\n"
@@ -176,13 +137,6 @@ Singleton {
             + "    [ \"$got\" = \"$2\" ] || refuse included\n"
             + "    shift 2\n"
             + "  done\n"
-            + "}\n"
-            + "prepare_backups() {\n"
-            + "  if [ -L \"${backups%/*}\" ] || [ -L \"$backups\" ]; then refuse backup; fi\n"
-            + "  mkdir -p -- \"$backups\" || refuse backup\n"
-            + "  safe_dir \"${backups%/*}\"\n"
-            + "  safe_dir \"$backups\"\n"
-            + "  chmod 0700 -- \"$backups\" || refuse backup\n"
             + "}\n"
             // The current file (checked) into the backups; a name never taken twice (ln
             // fails on a name that is there)
@@ -222,17 +176,14 @@ Singleton {
             + "safe_dir \"$system\"\n"
             + "target=$system/$service\n"
             + "prepare_backups\n"
-            // One run at a time, from the first check to the last write; a second is refused
-            + "exec 9>> \"$backups/.lock\" || refuse backup\n"
-            // flock says 1 for a lock held; anything else (no flock) is not "busy"
-            + "flock -n 9 || { held=$?; [ \"$held\" -ne 1 ] || refuse busy; refuse lock; }\n"
+            + RootScriptRules.lock
             + "case \"$mode\" in\n"
             + "write)\n"
             + "  [ $# -ge 3 ] || refuse arguments\n"
             + "  want=$1; current=$2; text=$3; shift 3\n"
             + "  is_hash \"$want\" || refuse arguments\n"
             + "  [ \"$current\" = absent ] || is_hash \"$current\" || refuse arguments\n"
-            + "  check_current \"$current\"\n"
+            + "  check_current \"$target\" \"$current\"\n"
             + "  check_includes \"$@\"\n"
             + "  new_file\n"
             + "  printf '%s' \"$text\" > \"$pam_temporary\" || refuse write\n"
@@ -248,7 +199,7 @@ Singleton {
             + "  if [ -L \"$source\" ] || [ ! -f \"$source\" ]; then refuse vendor; fi\n"
             + "  got=$(hash_of \"$source\") || refuse vendor\n"
             + "  [ \"$got\" = \"$want\" ] || refuse vendor\n"
-            + "  check_current \"$current\"\n"
+            + "  check_current \"$target\" \"$current\"\n"
             + "  check_includes \"$@\"\n"
             + "  make_backup \"$current\"\n"
             + "  rm -f -- \"$target\"; settle\n"
@@ -262,7 +213,7 @@ Singleton {
             + "  [ \"$current\" = absent ] || is_hash \"$current\" || refuse arguments\n"
             + "  source=$backups/$name\n"
             + "  if [ -L \"$source\" ] || [ ! -f \"$source\" ]; then refuse nobackup; fi\n"
-            + "  check_current \"$current\"\n"
+            + "  check_current \"$target\" \"$current\"\n"
             + "  case \"$name\" in\n"
             + "  *.absent)\n"
             + "    make_backup \"$current\"\n"
@@ -414,17 +365,7 @@ Singleton {
                 ok: true, kind, sha256: kind === "removed" ? "absent" : said[3], backup: said[4], file: "done"
             });
         }
-        if (result?.dismissed === true || result?.refused === true || result?.cancelled === true || (result?.blocked ?? "") !== "")
-            return Object.assign(outcome, { quiet: true });
-        const stderr = String(result?.stderr ?? "").trim().split("\n").map(line => line.trim());
-        const refusedLine = stderr.slice().reverse().find(line => /^refused [a-z]+$/.test(line));
-        if (refusedLine !== undefined) {
-            const code = refusedLine.slice("refused ".length);
-            return Object.assign(outcome, { refused: code, error: texts[code] ?? texts.arguments });
-        }
-        const reason = String(result?.error || stderr.pop() || (result?.ok === true ? "an answer that is not the one asked for" : ""))
-            .replace(/[\u0000-\u001f\u007f]+/g, " ").trim();
-        return Object.assign(outcome, { error: reason !== "" ? reason.slice(0, 200) : "exit code " + (result?.code ?? -1) });
+        return Object.assign(outcome, RootScriptRules.failure(result, texts));
     }
 
     // What a run that did not say it was done left in the PAM folder, the service's file read
