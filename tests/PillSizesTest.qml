@@ -32,6 +32,7 @@ TestCase {
         "panels/settings/MonitorTimesCard.qml": "m,m,m",
         "panels/settings/NetworkConnectionEditor.qml": "m,m,m",
         "panels/settings/NetworkVpnSettings.qml": "m",
+        "panels/settings/PamRuleList.qml": "-,m,m",
         "panels/settings/SchemaSettingEditor.qml": "m",
         "panels/settings/ThemesSettings.qml": "-",
         "panels/settings/WallpaperSettings.qml": "m",
