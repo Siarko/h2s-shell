@@ -1,18 +1,20 @@
 # Evaluated by tests/system/nixos/remember.sh: the flake's programs.h2s-shell.polkit.rememberAdmin
-# for a set of minimal systems, not built. → lines "<ok|bad>\t<description>\t<detail>".
+# for a set of minimal systems, not built. → a line "count\t<n>\t" (how many follow), then
+# lines "<ok|bad>\t<description>\t<detail>".
 #
 # The case set (tests/fixtures/remember-nixos/cases.json; tests/RememberNixosModuleTest.qml
 # checks it against RememberRules), each with the package's coreutils set to the case's:
 # polkit's rules file holds each expected rule as whole lines, and no other of the shell's;
 # polkitd.conf is the expected text, or absent, and its text reloads polkit. Then the real
 # package: the rule names the coreutils whose timeout its command puts first on PATH. Then
-# the assertions.
+# the assertions and warnings, and the shell's rules before the machine's own.
 { repo }:
 let
   flake = builtins.getFlake "path:${repo}";
   lib = flake.inputs.nixpkgs.lib;
   fixture = builtins.fromJSON (builtins.readFile "${repo}/tests/fixtures/remember-nixos/cases.json");
   package = flake.packages.x86_64-linux.default;
+  pkgs = flake.inputs.nixpkgs.legacyPackages.x86_64-linux;
 
   base = {
     programs.h2s-shell.enable = true;
@@ -70,6 +72,9 @@ let
       (result (confOf config == "") "the default minutes: no polkitd.conf" "")
     ];
 
+  warned = description: options: expected:
+    let warnings = (configOf options).warnings;
+    in result (lib.any (message: lib.hasInfix expected message) warnings) description (builtins.toJSON warnings);
   refused = description: options: expected:
     let failed = failedOf (configOf options);
     in result (lib.any (message: lib.hasInfix expected message) failed) description (builtins.toJSON failed);
@@ -81,10 +86,29 @@ let
     (refused "61 minutes: refused" (remember { minutes = 61; }) "rememberAdmin.minutes is 61")
     (refused "polkit off: refused" { imports = [ (remember { }) ]; security.polkit.enable = lib.mkForce false; } "needs security.polkit.enable")
     (refused "the shell off: refused" { imports = [ (remember { }) ]; programs.h2s-shell.enable = lib.mkForce false; } "needs programs.h2s-shell.enable")
+    (refused "polkitd.conf's text set elsewhere beside 15 minutes: refused, naming the file and minutes"
+      { imports = [ (remember { minutes = 15; }) ]; environment.etc."polkit-1/polkitd.conf".text = "[Polkitd]\nExpirationSeconds=60\n"; }
+      "rememberAdmin.minutes = 15 sets /etc/polkit-1/polkitd.conf")
+    (refused "polkitd.conf's source set elsewhere beside 15 minutes: refused"
+      { imports = [ (remember { minutes = 15; }) ]; environment.etc."polkit-1/polkitd.conf".source = pkgs.writeText "polkitd.conf" "[Polkitd]\n"; }
+      "is also set elsewhere in the configuration")
+    (let config = configOf { imports = [ (remember { }) ]; environment.etc."polkit-1/polkitd.conf".text = "[Polkitd]\nExpirationSeconds=60\n"; };
+     in result (failedOf config == [ ]) "polkitd.conf set elsewhere beside the default minutes: allowed (the module writes none)" (builtins.toJSON (failedOf config)))
+    (warned "a package without coreutils in its passthru: a warning"
+      { imports = [ (remember { }) ]; programs.h2s-shell.package = builtins.removeAttrs package [ "coreutils" ]; }
+      "has no `coreutils` in its passthru")
+    (let config = configOf (remember { });
+     in result (!(lib.any (lib.hasInfix "rememberAdmin") config.warnings)) "the flake's package: no warning" (builtins.toJSON config.warnings))
+    (let
+       config = configOf (remember { } // { security.polkit.extraConfig = "// the machine's own\n"; });
+       rules = rulesOf config;
+       before = lib.head (lib.splitString "// the machine's own" rules);
+     in result (lib.hasInfix "// the machine's own" rules && lib.hasInfix "// Written by h2s-shell" before) "the shell's rules come before the machine's own extraConfig" (builtins.toJSON rules))
     (let config = configOf { };
      in result (headers (rulesOf config) == 0 && confOf config == "" && failedOf config == [ ]) "nothing set: no rule, no conf" (builtins.toJSON (rulesOf config)))
     (let config = configOf { programs.h2s-shell.polkit.rememberAdmin = { users = [ "alex" ]; minutes = 30; }; };
      in result (headers (rulesOf config) == 0 && confOf config == "") "not enabled: no rule, no conf, whatever else is set" (builtins.toJSON (rulesOf config)))
   ];
 in
-lib.concatStringsSep "\n" (lib.concatMap caseResults fixture.cases ++ real ++ checks) + "\n"
+let lines = lib.concatMap caseResults fixture.cases ++ real ++ checks;
+in lib.concatStringsSep "\n" ([ "count\t${toString (lib.length lines)}\t" ] ++ lines) + "\n"

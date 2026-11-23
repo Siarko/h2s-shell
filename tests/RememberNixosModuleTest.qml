@@ -8,7 +8,7 @@ import qs.singletons
 // evaluates on NixOS (tests/fixtures/remember-nixos/cases.json): each case's rules are
 // RememberRules.ruleText's for its users with the timeout from the case's coreutils (one per
 // user, a user named twice once), its conf confText's above polkit's own length and none
-// otherwise, and a rules file holding a one-user case's rule reads back as the shell's own.
+// otherwise, and a rules file holding a case's rules reads back as the shell's own for each user.
 TestCase {
     suiteName: "RememberNixosModule"
 
@@ -60,13 +60,12 @@ TestCase {
                         testCase.name + ": its rules are RememberRules'");
             assertEqual(testCase.conf, testCase.minutes * 60 > RememberRules.defaultSeconds ? RememberRules.confText(testCase.minutes * 60) : "",
                         testCase.name + ": its conf is RememberRules'");
-            if (users.length === 1) {
-                // As NixOS writes it: its own admin rule, then security.polkit.extraConfig
-                const file = "polkit.addAdminRule(function(action, subject) {\n  return [\"unix-group:wheel\"];\n});\n\n"
-                    + testCase.rules.join("") + "\n";
-                assertEqual(RememberRules.state({ rule: file, confs: {} }, facts(users[0])).rule, "ours",
-                            testCase.name + ": the rules file reads back as the shell's");
-            }
+            // As NixOS writes it: its own admin rule, then security.polkit.extraConfig
+            const file = "polkit.addAdminRule(function(action, subject) {\n  return [\"unix-group:wheel\"];\n});\n\n"
+                + testCase.rules.join("") + "\n";
+            for (const user of users)
+                assertEqual(RememberRules.state({ rule: file, confs: {} }, facts(user)).rule, "ours",
+                            testCase.name + ": the rules file reads back as the shell's for " + user);
         }
         assert(fixture.cases.some(testCase => testCase.conf === "") && fixture.cases.some(testCase => testCase.conf !== ""),
                "(the cases have a conf and none)");

@@ -165,6 +165,17 @@ TestCase {
         assertEqual(st({ rule: nixosRules, confs: {} }, Object.assign({}, nixosFacts, { program: "/nix/store/0new-coreutils-full-9.12/bin/coreutils" })),
                     "outdated|system|300|default", "NixOS: coreutils moved since the switch: outdated");
         assertEqual(st({ rule: undefined, confs: {} }, nixosFacts), "none|system|300|default", "NixOS: no rules file");
+        // The module's list of users: one block each
+        const otherText = rules.ruleText(Object.assign({}, nixos, { user: "bob" }));
+        assertEqual(st({ rule: nixosRules.replace(nixosText, otherText + nixosText), confs: {} }, nixosFacts), "ours|system|300|default",
+                    "NixOS: two users' blocks, this user's second: ours");
+        assertEqual(st({ rule: nixosRules.replace(nixosText, nixosText + otherText), confs: {} }, nixosFacts), "ours|system|300|default",
+                    "NixOS: … this user's first: ours");
+        assertEqual(st({ rule: nixosRules.replace(nixosText, otherText + otherText.replace(/bob/g, "carol")), confs: {} }, nixosFacts),
+                    "outdated|system|300|default", "NixOS: other users' blocks only: outdated");
+        assertEqual(st({ rule: nixosRules.replace(nixosText, otherText + nixosText.replace(/\}\);\n$/, "}); x\n")), confs: {} }, nixosFacts),
+                    "outdated|system|300|default", "NixOS: this user's block not as whole lines: not ours");
+        assertEqual(st({ rule: archText + archText, confs: {} }, archFacts).split("|")[0], "changed", "Arch: two blocks in the shell's file: changed");
         const fullState = rules.state({ rule: archText, confs: confFor(900) }, archFacts);
         assertEqual(fullState.secondsSource, etc, "the length's source is named");
 

@@ -15,11 +15,19 @@ evaluated=0
 [ "$evaluated" = 1 ] || tail -n 30 "$work/nix.log"
 check "the module's rememberAdmin option evaluates" test "$evaluated" = 1
 count=0
+expected=
 while IFS=$'\t' read -r verdict description detail; do
     [ -n "$verdict" ] || continue
+    if [ "$verdict" = count ]; then
+        expected=$description
+        continue
+    fi
     count=$((count + 1))
     [ "$verdict" = ok ] || echo "  $description: $detail"
     check "$description" test "$verdict" = ok
 done <<< "$text"
-# The case set and the checks: a short list would mean the expression lost some
-check "every case and check reported ($count lines)" test "$count" -ge 50
+# The expression counts its own lines: fewer read would mean some were lost; and each case
+# of the fixture gives five
+cases=$(grep -c '^      "name": ' "$REPO/tests/fixtures/remember-nixos/cases.json")
+check "every case and check reported ($count of ${expected:-none})" test "$count" = "${expected:-x}"
+check "… five lines per case of the fixture at least ($cases cases)" test "$count" -ge $((cases * 5))

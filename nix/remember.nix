@@ -22,9 +22,13 @@ let
   defaultMinutes = 5;
 
   # The timeout the shell's runs start: the first on the shell's PATH, which the package's
-  # command puts its own coreutils at the front of. NixOS's coreutils is one multi-call
-  # binary that pkexec resolves every coreutils program to, so the rule also tests the
-  # command line's first word.
+  # command puts its own coreutils at the front of (its passthru names it; a package
+  # without it falls back to nixpkgs' coreutils, with a warning). nixpkgs' coreutils is
+  # built as one binary with symlinks: pkexec resolves bin/timeout, as every coreutils
+  # program, to bin/coreutils, so the rule names that and also tests the command line's
+  # first word. A coreutils built otherwise would have a real bin/timeout, and this rule
+  # would not match it (the shell then shows it as outdated).
+  hasCoreutils = cfg.package ? coreutils;
   coreutils = cfg.package.coreutils or pkgs.coreutils;
   timeout = "${coreutils}/bin/timeout";
   program = "${coreutils}/bin/coreutils";
@@ -50,6 +54,14 @@ let
 
   users = lib.unique remember.users;
   active = cfg.enable && remember.enable;
+
+  conf = confText (remember.minutes * 60);
+  confNeeded = active && remember.minutes > defaultMinutes;
+  # The conf as the system ends up with it: ours alone, or what else in the configuration
+  # sets the file (a text joined to ours, a source in its place)
+  etcConf = config.environment.etc."polkit-1/polkitd.conf" or null;
+  confOurs = etcConf != null && etcConf.text == conf
+    && toString etcConf.source == toString (pkgs.writeText "etc-polkit-1-polkitd.conf" conf);
 in
 {
   options.programs.h2s-shell.polkit.rememberAdmin = {
@@ -98,21 +110,28 @@ in
           assertion = remember.minutes >= minMinutes && remember.minutes <= maxMinutes;
           message = "programs.h2s-shell.polkit.rememberAdmin.minutes is ${toString remember.minutes}: it must be ${toString minMinutes}–${toString maxMinutes}.";
         }
+        {
+          assertion = !confNeeded || confOurs;
+          message = "programs.h2s-shell.polkit.rememberAdmin.minutes = ${toString remember.minutes} sets /etc/polkit-1/polkitd.conf (ExpirationSeconds=${toString (remember.minutes * 60)}), but environment.etc.\"polkit-1/polkitd.conf\" is also set elsewhere in the configuration: remove that, or set minutes to ${toString defaultMinutes} or less.";
+        }
       ] ++ map (user: {
         assertion = validUser user;
         message = "programs.h2s-shell.polkit.rememberAdmin.users: ${builtins.toJSON user} is not a user name (letters, digits, _ . -, not starting with - or ., at most a final $).";
       }) users;
+      warnings = lib.optional (active && !hasCoreutils)
+        "programs.h2s-shell.polkit.rememberAdmin: programs.h2s-shell.package has no `coreutils` in its passthru, so the rule names nixpkgs' coreutils; if the shell's PATH has another timeout first, its runs are not remembered.";
     }
     (lib.mkIf active {
-      security.polkit.extraConfig = lib.concatMapStrings ruleText users;
+      # Before the machine's own rules: polkit takes the first rule that answers
+      security.polkit.extraConfig = lib.mkBefore (lib.concatMapStrings ruleText users);
     })
     # polkitd reads its conf only at its start and on SIGHUP: its unit (Type=notify-reload)
-    # gets SIGHUP from a reload, which the switch does when the conf changes
-    (lib.mkIf (active && remember.minutes > defaultMinutes) (
-      let conf = confText (remember.minutes * 60);
-      in {
-        environment.etc."polkit-1/polkitd.conf".text = conf;
-        systemd.services.polkit.reloadTriggers = [ conf ];
-      }))
+    # gets SIGHUP from a reload, which the switch does when the conf changes. mkDefault: a
+    # text set elsewhere replaces ours instead of being joined to it, and a source set
+    # elsewhere wins without a conflict; the assertion above names either.
+    (lib.mkIf confNeeded {
+      environment.etc."polkit-1/polkitd.conf".text = lib.mkDefault conf;
+      systemd.services.polkit.reloadTriggers = [ conf ];
+    })
   ]);
 }

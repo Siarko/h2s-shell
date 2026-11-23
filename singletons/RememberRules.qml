@@ -190,7 +190,9 @@ Singleton {
     // What is in force, from the texts read (each: a string, undefined when there is no such
     // file, null when it could not be read). files { rule, confs: { path: text } } and facts
     // { system: "arch" | "nixos", user, timeout, program }. On Arch the rule file is the
-    // shell's alone; on NixOS the rule is a block in the system's rules file, among others.
+    // shell's alone; on NixOS the rule is a block in the system's rules file, among others
+    // (one per user of the module's list: another user's block first is "outdated" for this
+    // one).
     // → { rule: "none" | "ours" | "outdated" | "changed" | "unknown", conf: "none" | "ours" |
     //     "changed" | "unknown" | "system" (NixOS: the module's), seconds, secondsSource,
     //     secondsReason } — "outdated": the shell's own rule, intact, made for other facts
@@ -215,9 +217,13 @@ Singleton {
         const block = _ruleBlock(text);
         if (block === null)
             return nixos || text.trim() === "" ? "none" : "changed";
-        if (!block.complete || block.count !== 1 || (!nixos && !block.alone) || PamEditRules.sha256(block.body) !== block.hash)
-            return "changed";
+        // NixOS: the module writes one block per user of its list, so this user's exact block
+        // anywhere in the file, as whole lines, is the shell's rule
         const wanted = ruleText(facts);
+        if (nixos && wanted !== "" && ("\n" + text).includes("\n" + wanted))
+            return "ours";
+        if (!block.complete || (!nixos && (block.count !== 1 || !block.alone)) || PamEditRules.sha256(block.body) !== block.hash)
+            return "changed";
         if (wanted === "")
             return "unknown";
         return wanted === ruleMarker + " " + block.hash + "\n" + block.body ? "ours" : "outdated";
