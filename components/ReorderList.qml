@@ -234,7 +234,7 @@ Item {
                                 Text {
                                     font.family: Theme.fontFamily
                                     anchors.centerIn: parent
-                                    text: "⠿"
+                                    text: "󰇞"
                                     font.pixelSize: Theme.fontSizeMedium
                                     color: _handleArea.lit ? Theme.textSecondary : Theme.textDisabled
                                     Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }

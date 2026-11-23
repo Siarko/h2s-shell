@@ -318,7 +318,7 @@ Item {
                 Text {
                     id: _handle
                     readonly property bool movable: !_row.fixed && !root.readOnly && PamRuleRules.canMove(_row.row)
-                    text: _row.fixed ? PamRuleViewRules.icon("system") : "⠿"
+                    text: _row.fixed ? PamRuleViewRules.icon("system") : "󰇞"
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.fontSizeMedium
                     color: _handleArea.lit && movable ? Theme.textSecondary : Theme.textDisabled
