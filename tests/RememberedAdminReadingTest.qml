@@ -33,6 +33,9 @@ TestCase {
     // The reader's clock is the wall clock moved by this much (the revoke time without real minutes)
     property real _offsetMs: 0
     property int _mark: 0
+    // The reader's list count when its last revoke ended: the list read after a revoke is
+    // waited for, not one from before it (a slow machine answers it after the next tick)
+    property int _listsAtRevoke: 0
     property string _log: ""
 
     property Component _readerComponent: Component {
@@ -188,6 +191,8 @@ TestCase {
             _reader.refresh();
         };
         const listed = () => _reader.lists > lists;
+        // A revoke has ended since `revokes` was taken, and the list read after it is in
+        const revokedAndListed = () => _reader.revokes > revokes && _reader.lists > _listsAtRevoke && !_reader._revoking;
         const readList = () => {
             lists = _reader.lists;
             _reader.readKept();
@@ -203,6 +208,7 @@ TestCase {
                 retryBaseMs: 600000,
                 now: () => Date.now() + suite._offsetMs
             });
+            _reader.revokesChanged.connect(() => suite._listsAtRevoke = suite._reader.lists);
             assertEqual(_reader.installed, null, "before a reading: nothing known");
             assertEqual(_reader.kept, null, "… nothing listed");
             read();
@@ -323,7 +329,7 @@ TestCase {
             revokes = _reader.revokes;
             _reader.forget();
         });
-        _then("a revoke that fails", () => _reader.revokes > revokes && listed(), () => {
+        _then("a revoke that fails", () => revokedAndListed(), () => {
             assertEqual(_reader.forgetOutcome + " " + _reader.forgetReason, "failed forget", "polkit refused: could not forget");
             assertEqual(_reader._retryTimer.running, false, "nothing was due: no retry");
             const now = _nowSeconds();
@@ -356,7 +362,7 @@ TestCase {
             _reader._retryTimer.stop();
             _reader._retryTimer.triggered();
         });
-        _then("revoked, still listed", () => _reader.revokes > revokes && _reader.lists > lists && !_reader._revoking, () => {
+        _then("revoked, still listed", () => revokedAndListed(), () => {
             assertEqual(_reader.forgetOutcome, "failed", "polkit said done, the list still shows it: could not forget");
             assertEqual(_reader._retryTimer.running, true, "… a retry waits");
             readList();
@@ -371,7 +377,7 @@ TestCase {
                 _reader._retryTimer.triggered();
             });
         }));
-        _then("the retry works", () => _reader.revokes > revokes && _reader.lists > lists && !_reader._revoking && _reader.kept.entries.length === 0, () => {
+        _then("the retry works", () => revokedAndListed() && _reader.kept.entries.length === 0, () => {
             assertEqual(_reader.forgetOutcome + " " + _reader.forgetReason, "forgotten time", "the retry forgot it");
             assertEqual(_reader._retryTimer.running, false, "… nothing waits after");
             _reader.minutes = 5;
@@ -426,7 +432,7 @@ TestCase {
             assertEqual(_reader._revoking, true, "… while the revoke is still under way");
             _sh("rm -f \"$1/bus/held-revoke\"", [_scratch], () => {});
         });
-        _then("the revoke done and listed again", () => _reader.revokes > revokes && _reader.lists > lists && !_reader._revoking, () => {
+        _then("the revoke done and listed again", () => revokedAndListed(), () => {
             _reader.keptChanged.disconnect(watchStale);
             assertEqual(staleShown, false, "the stale entry never shown");
             assertEqual(_reader.kept.entries.length, 0, "after the revoke: nothing kept");
