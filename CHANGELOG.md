@@ -20,28 +20,27 @@ section to the new version and date.
 A minor release, though it changes two things people rely on: toasts now follow the
 display time an app asks for, which changes how long some toasts show (apps that leave it to
 the shell, most, see no change, and Settings → Notifications → "Apps choose how long", off,
-keeps the old behaviour); and the screen no longer locks before the computer sleeps unless
-Settings → When away → "Lock before the computer sleeps" is on (below, under Changed).
+keeps the old behaviour; below, under Added); and the screen no longer locks before the
+computer sleeps unless Settings → When away → "Lock before the computer sleeps" is on
+(below, under Changed).
 
 ### Module API
 The interface modules are written against (`qs.api`), versioned on its own
 (`Api.version`; its reference is `api/Api.qml`).
-- `ExpandingRow` slides open and shut (the theme's expand duration and curve; at once with
-  reduced motion); its child is destroyed once the row has slid shut.
-- CommandRunner's `_runner`, the internal runner it held, is removed: it was internal, and
-  through it a module could change what the runner refuses and read its runs. A run's
-  handle carries no state of the runner's either.
 - 1.38: `SectionTitle` takes the look of the core's sections: a size larger
   (`fontSizeMedium`) in the primary text colour, with room and a line above it across the
   column it stands in; `divider` (default true) — false leaves the line out, for the first
   section under a page's heading. `Api.theme.settings` has the three gaps it uses:
   `sectionGap` (above the line), `sectionLineGap` (line to title) and `sectionTitleGap`
-  (under the title).
+  (under the title). `ExpandingRow` slides open and shut (the theme's expand duration and
+  curve; at once with reduced motion); its child is destroyed once the row has slid shut.
 - 1.37: module.json's `backup`, a list of paths inside the module's data directory
   (`["notes.db", "accounts"]`: relative, no `..`, at most 32) that belong in its
   configuration backups; the data directory itself never goes in one. A path that is not
   such a path is dropped with a warning. The id `idle` is reserved: it is the core's IPC
-  target for idleness and the screensaver.
+  target for idleness and the screensaver. CommandRunner's `_runner`, the internal runner it
+  held, is removed: it was internal, and through it a module could change what the runner
+  refuses and read its runs. A run's handle carries no state of the runner's either.
 - 1.36: module.json's `privileged` block, `{ "why": "…", "programs": [names] }`: a module
   says what it runs as administrator and why (`why` plain text on one line, at most 200
   characters; `programs` names among its `requires.programs` and `optionalPrograms`); a
@@ -685,7 +684,7 @@ The interface modules are written against (`qs.api`), versioned on its own
   in the shipped and the NixOS module's configs), and a round that times out anyway is
   started again rather than counted against the reader. An account with an empty password
   cannot unlock by password.
-- Lock screen: locks before the computer sleeps (Settings → When away, on by default),
+- Lock screen: locks before the computer sleeps (Settings → When away, off by default),
   holding the sleep back until the compositor confirms the screen is covered (at most 4 s).
 - Lock screen: every authentication event goes to the shell's log — locks and unlocks and
   why, each PAM conversation started, answered, aborted or finished, the methods found,
@@ -1068,9 +1067,8 @@ The interface modules are written against (`qs.api`), versioned on its own
 - `h2s-shell` (the launcher): one supervisor per session — a second start waits a little for
   the first to end and then gives up, and `--restart` tells the supervisor even when it is
   between two restarts (two shells came of it). It now needs `flock` (util-linux), and
-  logs to `$XDG_RUNTIME_DIR/h2s-shell-launcher.log`. A shell that keeps dying while the screen
-  is locked is tried again once a minute instead of given up after five restarts. SIGHUP
-  (the terminal it was started from closing) no longer stops it.
+  logs to `$XDG_RUNTIME_DIR/h2s-shell-launcher.log`. SIGHUP (the terminal it was started
+  from closing) no longer stops it.
 - `h2s-shell` (the launcher): after the shell dies it looks for leftover PAM helpers without
   starting a process per running process, so the restart comes ~1.5 s sooner (more on a
   busy machine).
