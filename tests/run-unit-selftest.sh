@@ -650,8 +650,8 @@ with_suites "$work/edited" EditsTest
 edited_status=$?
 check edited "run-unit.sh exited 0 (it exited $edited_status)" test "$edited_status" = 0
 check edited "the edit was made" grep -q "^// edited while the tests ran$" "$work/edited/tests.qml"
-check edited "no reload" bash -c '! grep -q "Reloading configuration" "$1"' _ "$work/edited.log"
-check edited "the suite reported once" grep -q -- "^  --- Edits: 1/1 passed" "$work/edited.log"
+check edited "the suite reported once (a reload reports it again)" test "$(grep -c "^=== Edits ===$" "$work/edited.log")" = 1
+check edited "… and passed" grep -q -- "^  --- Edits: 1/1 passed" "$work/edited.log"
 
 runner=run-modules.sh
 good=$REPO/tests/fixtures/modules/good
