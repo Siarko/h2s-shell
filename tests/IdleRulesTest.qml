@@ -102,6 +102,7 @@ TestCase {
         _perMonitorTimes();
         _monitorTimes();
         _screenOff();
+        _offAfterFade();
         _lock();
         _input();
         _lockScreen();
@@ -361,7 +362,8 @@ TestCase {
                         "a time not set (" + JSON.stringify(unset) + "): the default");
         assertEqual(rules.config({ monitorIdle: { oled: oledTimes } }, ["oled"], true).times.oled.screenOffAfter, 0,
                     "own times only with Set per monitor on, which is off unless set");
-        const quick = _machine({ screensaverEnabled: true, screensaverTimeout: 1, screenOffEnabled: true, screenOffTimeout: 2 }, ["oled"], true);
+        const quick = _machine({ screensaverEnabled: true, screensaverTimeout: 1, screenOffEnabled: true, screenOffTimeout: 2,
+                                 fadeInDuration: 100 }, ["oled"], true);
         quick.idle(500, 0);
         assertEqual(quick.next(), 1000, "a time of one second: due after it");
         assertEqual([900, 1000, 2000].map(ms => rules.stage(quick.state, quick.config, ms).oled).join(" "), "0 1 2",
@@ -831,6 +833,53 @@ TestCase {
         direct.idle(5000, 0).deadline();
         assertEqual(direct.actions, "showSaver:lcd,powerOff:lcd,active:true",
                     "screen-off without the screensaver: off with its black surface");
+    }
+
+    // A screen-off at or soon after the screensaver waits for its fade in: the OLED with the
+    // screensaver and the screen-off both at 60 s, a fade in of 2 s
+    function _offAfterFade() {
+        const rules = IdleRules;
+        const fade = 2000 + rules.saverFadeMargin;
+        const values = { screensaverEnabled: true, screensaverTimeout: 60, screenOffEnabled: true, screenOffTimeout: 60,
+                         fadeInDuration: 2000 };
+        const oled = _machine(_own({ fadeInDuration: 2000 }, { oled: _entry(60, 60) }), ["oled"], true);
+        oled.idle(5000, 0).deadline();
+        assertEqual(oled.actions, "showSaver:oled,active:true", "equal times: the screensaver first, not off at once");
+        assertEqual(oled.next(), 60000 + fade, "… off once it has faded in");
+        oled.at(60000 + fade - 1, { type: "deadline" });
+        assertEqual(oled.actions, "", "… not a moment before");
+        oled.deadline();
+        assertEqual(oled.actions, "powerOff:oled", "… then off");
+
+        const close = _machine(_with(values, { screenOffTimeout: 61 }), ["lcd"], true);
+        close.idle(5000, 0).deadline();
+        assertEqual(close.next(), 60000 + fade, "a screen-off within the fade: after the fade");
+        const later = _machine(_with(values, { screenOffTimeout: 120 }), ["lcd"], true);
+        later.idle(5000, 0).deadline();
+        assertEqual(later.next(), 120000, "a screen-off well after the screensaver: its own time");
+        const before = _machine(_with(values, { screensaverTimeout: 120 }), ["lcd"], true);
+        before.idle(5000, 0).deadline();
+        assertEqual(before.actions, "showSaver:lcd,powerOff:lcd,active:true",
+                    "a screensaver after the screen-off never shows: off at its own time");
+        const noSaver = _machine({ screenOffEnabled: true, screenOffTimeout: 60, fadeInDuration: 2000 }, ["lcd"], true);
+        noSaver.idle(5000, 0);
+        assertEqual(noSaver.next(), 60000, "no screensaver: off at its own time");
+        const noPower = _machine(values, ["lcd"], false);
+        noPower.idle(5000, 0).deadline();
+        assertEqual(noPower.shown(), "lcd=saver", "without power control: the screensaver, as before");
+
+        const forced = _machine(_own({ fadeInDuration: 2000 }, { tv: _entry(60, 61) }), ["tv"], true);
+        forced.at(1000, { type: "force" });
+        assertEqual(forced.next(), 1000 + fade, "forced: the screen-off one second after it waits for the fade too");
+        const forcedLong = _machine(_own({ fadeInDuration: 2000 }, { tv: _entry(60, 120) }), ["tv"], true);
+        forcedLong.at(1000, { type: "force" });
+        assertEqual(forcedLong.next(), 61000, "… a longer gap: as long after the force as after the screensaver");
+
+        const locked = _machine(_with(values, { lockedScreenOffTimeout: 30 }), ["lcd"], true);
+        locked.at(1000, { type: "locked" }).idle(6000, 1000);
+        assertEqual(locked.next(), 31000, "the lock screen's own screen-off: its time, no fade waited for");
+        assertEqual(rules.config({ fadeInDuration: 1500 }, [], false).saverFade, 1500, "the fade in read from the profile (ms)");
+        assertEqual(rules.config({}, [], false).saverFade, 800, "… its default when not set");
     }
 
     function _lock() {

@@ -295,7 +295,8 @@ sleep (`sleepEnabled`, `sleepTimeout`) and hibernation (`hibernateEnabled`,
   unticked. The default is one "every screen dark" entry without commands.
 - **Screens off** — the shell turns monitors off itself at "Turn screens off after"
   (`screenOffTimeout`, off by default); with the screensaver off, straight from the
-  desktop (an OLED's own protection mode starts even on a black picture). Input, an unlock and waking from sleep turn them on again, and so does a shell
+  desktop (an OLED's own protection mode starts even on a black picture); with the
+  screensaver at or just before that time, once the screensaver has faded in. Input, an unlock and waking from sleep turn them on again, and so does a shell
   that restarted while they were off; a monitor another program turned off is left alone.
   The lock screen's screen-off waits while somebody is at it (the prompt awake, a check under
   way). On the lock screen

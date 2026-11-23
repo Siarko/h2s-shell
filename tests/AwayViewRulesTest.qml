@@ -177,7 +177,7 @@ TestCase {
         assert(rules.anySaver([{ saverAfter: 0, screenOffAfter: 300 }], false), "… unless monitors cannot be turned off: the screensaver stands in");
         assert(!rules.anySaver([{ saverAfter: 0, screenOffAfter: 0 }], false), "both off: no screensaver");
         assert(!rules.anySaver([{ saverAfter: 600, screenOffAfter: 300 }], true), "a screen-off before the screensaver: it never shows");
-        assert(!rules.anySaver([{ saverAfter: 300, screenOffAfter: 300 }], true), "… at the same time neither");
+        assert(rules.anySaver([{ saverAfter: 300, screenOffAfter: 300 }], true), "… at the same time it does: the screen-off waits for its fade in");
         assert(rules.anySaver([{ saverAfter: 600, screenOffAfter: 300 }], false), "… without power control it does (the screen-off shows it)");
         assert(rules.anySaver([{ saverAfter: 600, screenOffAfter: 300 }, { saverAfter: 300, screenOffAfter: 0 }], true), "another lane showing it is enough");
         assert(rules.anything([{ saverAfter: 0, screenOffAfter: 0 }], 600), "the lock alone is something");
@@ -206,6 +206,8 @@ TestCase {
         const marks = list => list.map(mark => mark.kind + ":" + mark.text).join(" | ");
         assertEqual(marks(rules.marks([{ saverAfter: 300, screenOffAfter: 900 }], 1200, -1, minutes)), "time:5 min | time:15 min | lock:Lock 20 min",
                     "the stages and the lock, in time order");
+        assertEqual(marks(rules.marks([{ saverAfter: 300, screenOffAfter: 300 }], 0, -1, minutes)), "time:5 min",
+                    "a screensaver and a screen-off at one time: one mark");
         assertEqual(marks(rules.marks([{ saverAfter: 600, screenOffAfter: 900 }], 600, -1, minutes)), "time:10 min | lock:Lock 10 min | time:15 min",
                     "at one time the stage first, the lock after it");
         assertEqual(marks(rules.marks(desk, 1200, [{ t: 300, number: 1 }], minutes)), "time:2 min | time:5 min | commands:\u25B81 5 min | time:15 min | lock:Lock 20 min",

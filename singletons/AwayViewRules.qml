@@ -47,12 +47,13 @@ QtObject {
         return moments.length === 0 ? -1 : Math.max(...moments);
     }
 
-    // A lane shows its screensaver: on, and before its screen-off — or with no power
-    // control, where the screen-off shows the screensaver too
+    // A lane shows its screensaver: on, and at or before its screen-off (at the same time
+    // the screen-off waits for its fade in) — or with no power control, where the screen-off
+    // shows the screensaver too
     function showsSaver(times, canPowerOff) {
         const saver = _seconds(times?.saverAfter);
         const off = _seconds(times?.screenOffAfter);
-        return saver > 0 && (off === 0 || saver < off || canPowerOff !== true);
+        return saver > 0 && (off === 0 || saver <= off || canPowerOff !== true);
     }
 
     // Some monitor shows the screensaver at some point: its own stage (showsSaver), or its

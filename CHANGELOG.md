@@ -1131,6 +1131,8 @@ The interface modules are written against (`qs.api`), versioned on its own
   took the screensaver down and ran its end command, as if you had come back; it now stays,
   and a screensaver switched off by the profile goes without the end command. Waking the
   computer ends a screensaver that was up when it went to sleep.
+- A screen turned off at the same time as its screensaver (or just after it) went dark at
+  once, without the screensaver's fade in: the screen now turns off once the fade in is over.
 - The launcher could lose the exit status of a shell that died just as the launcher got SIGHUP
   (its terminal closed), and take it for a crash: a shell that had quit was started again.
   SIGHUP is now ignored by the launcher (it no longer logs a line for it).

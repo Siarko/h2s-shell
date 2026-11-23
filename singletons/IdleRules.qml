@@ -95,6 +95,9 @@ Singleton {
     readonly property var sleepReadRetry: ({ minimum: 5000, maximum: 300000 })
     // logind's sleep support (CanSuspend) not read: read again after a growing pause (ms)
     readonly property var supportRetry: ({ minimum: 10000, maximum: 600000 })
+    // A screen-off that follows the screensaver waits for its fade in, and this much more
+    // (ms): the screensaver's window is mapped and drawn once before the fade starts
+    readonly property int saverFadeMargin: 250
 
     // The profile's values, by their names in the "lockscreen" group, normalised.
     // `values`: { screensaverEnabled, screensaverTimeout, screenOffEnabled, screenOffTimeout,
@@ -102,7 +105,8 @@ Singleton {
     // ({ monitorId: { screensaverEnabled, screensaverTimeout, screenOffEnabled,
     // screenOffTimeout } }), commandEntries ([{ id, moment, monitors, go, back }]:
     // commandEntries()), sleepEnabled, sleepTimeout, lockOnSleep, hibernateEnabled,
-    // hibernateTimeout } — times in seconds; `monitors`: the
+    // hibernateTimeout, fadeInDuration (the screensaver's fade in, ms) } — times in seconds
+    // unless said; `monitors`: the
     // connected monitors' ids (make|model|serial, MonitorRules) or objects with an `id` — as
     // read ({ id, base, connector }), a monitor's entry is found under either form of its key
     // (MonitorRules.overrideFor); `canPowerOff`: a backend can cut a monitor's power;
@@ -119,7 +123,8 @@ Singleton {
     // last input), after (the profile's time) } — hibernateBase; `hibernateAfter`: the stage
     // on the clock with sleep off (at + after, 0 = none); `sleepThenHibernate`: the sleep
     // asks SuspendThenHibernate; `commands`: the command entries understood
-    // (commandEntries()).
+    // (commandEntries()); `saverFade`: the screensaver's fade in (ms), which a screen-off
+    // following it waits for (offAt).
     function config(values, monitors, canPowerOff, canSuspend, canHibernate, canSuspendThenHibernate) {
         const given = values ?? {};
         const power = canPowerOff === true;
@@ -189,6 +194,7 @@ Singleton {
             screenOffAfter: defaults.screenOffAfter,
             lockAfter: lockAfter,
             lockedScreenOffAfter: seconds(given.lockedScreenOffTimeout, 60),
+            saverFade: seconds(given.fadeInDuration, 800),
             sleepAfter: sleepAfter,
             hibernate: hibernate,
             hibernateAfter: hibernate.on && sleepAfter <= 0 ? base.at + hibernateTime : 0,
@@ -540,6 +546,16 @@ Singleton {
         return times.screenOffAfter > 0;
     }
 
+    // When a monitor's screen-off comes (ms from the last input), its stage on: its time, but
+    // never before the screensaver shown at or before it has faded in (and saverFadeMargin) —
+    // powering off at once would cut the fade short (equal times: never seen at all)
+    function offAt(config, times) {
+        const off = times.screenOffAfter * 1000;
+        if (!(times.saverAfter > 0 && times.saverAfter <= times.screenOffAfter))
+            return off;
+        return Math.max(off, times.saverAfter * 1000 + (config.saverFade ?? 0) + saverFadeMargin);
+    }
+
     // A monitor goes dark at some point: a stage of its own on (or the screensaver forced)
     function _goesDark(times, state) {
         return _saverOn(times, state) || _offOn(times);
@@ -561,13 +577,13 @@ Singleton {
         let timeline = 0;
         if (state.forced) {
             timeline = 1;
-            if (_offOn(times) && now - state.forcedAt >= _forcedOffAfter(times) * 1000)
+            if (_offOn(times) && now - state.forcedAt >= _forcedOffAfter(config, times))
                 timeline = 2;
         } else {
             const idleFor = now - state.idleSince;
             if (times.saverAfter > 0 && idleFor >= times.saverAfter * 1000)
                 timeline = 1;
-            if (times.screenOffAfter > 0 && idleFor >= times.screenOffAfter * 1000)
+            if (times.screenOffAfter > 0 && idleFor >= offAt(config, times))
                 timeline = 2;
         }
         return Math.max(reached, timeline);
@@ -575,9 +591,11 @@ Singleton {
 
     // A forced screensaver shows on every monitor; a monitor's screen-off then comes as long
     // after it as it would after its own screensaver (seconds) — after its whole time where
-    // it has no screensaver before the screen-off — never at once
-    function _forcedOffAfter(times) {
-        return times.saverAfter < times.screenOffAfter ? times.screenOffAfter - times.saverAfter : times.screenOffAfter;
+    // it has no screensaver before the screen-off — never at once, nor before the forced
+    // screensaver has faded in (ms)
+    function _forcedOffAfter(config, times) {
+        const gap = times.saverAfter < times.screenOffAfter ? times.screenOffAfter - times.saverAfter : times.screenOffAfter;
+        return Math.max(gap * 1000, (config.saverFade ?? 0) + saverFadeMargin);
     }
 
     // → { monitorId: 0 | 1 | 2 } for every connected monitor: the stage each has reached now
@@ -828,13 +846,13 @@ Singleton {
                 const reached = state.stage[id] ?? 0;
                 if (state.forced) {
                     if (_offOn(times) && reached < 2)
-                        due.push(state.forcedAt + _forcedOffAfter(times) * 1000);
+                        due.push(state.forcedAt + _forcedOffAfter(config, times));
                     continue;
                 }
                 if (times.saverAfter > 0 && reached < 1)
                     due.push(state.idleSince + times.saverAfter * 1000);
                 if (times.screenOffAfter > 0 && reached < 2)
-                    due.push(state.idleSince + times.screenOffAfter * 1000);
+                    due.push(state.idleSince + offAt(config, times));
             }
         }
         const lockAt = _lockAt(state, config.lockAfter);

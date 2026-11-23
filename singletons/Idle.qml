@@ -140,7 +140,8 @@ Singleton {
         sleepTimeout: Profiles.value("lockscreen.sleepTimeout"),
         lockOnSleep: Profiles.value("lockscreen.lockOnSleep"),
         hibernateEnabled: Profiles.value("lockscreen.hibernateEnabled"),
-        hibernateTimeout: Profiles.value("lockscreen.hibernateTimeout")
+        hibernateTimeout: Profiles.value("lockscreen.hibernateTimeout"),
+        fadeInDuration: Profiles.value("lockscreen.fadeInDuration")
     })
     // A profile switch changes several values in one pass: one config event after it
     on_ValuesChanged: Qt.callLater(root._settingsChanged)
