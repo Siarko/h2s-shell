@@ -171,6 +171,34 @@ reach a module that asks for typed input — no `pam_unix`, no `include` of a st
 it, no `interactive` for pam_u2f, no key that needs a PIN: the lock treats a fingerprint or
 key check that asks for input as broken and stops it.
 
+### sudo and polkit: fingerprint, security key, password
+
+Which ways sudo and the administrator prompts (polkit) accept, and in which order, is their
+PAM `auth` stack.
+
+- **NixOS**: the module's `programs.h2s-shell.pam.rules` sets both (or `pam.sudo.rules`
+  and `pam.polkit.rules`, one list each), as rows tried from the top; null, the default,
+  leaves them as NixOS makes them:
+
+  ```nix
+  programs.h2s-shell.pam.rules = [
+    { method = "fingerprint"; control = "sufficient"; timeout = 10; tries = 3; }
+    { method = "system"; }   # NixOS's own rules: the password
+  ];
+  ```
+
+  A row is `fingerprint` (`timeout`, `tries`), `securityKey` (`pin`), `password`
+  (`counted`: wrong passwords count toward pam_faillock's lockout, where the service has
+  `logFailures`), `raw` (`module`, `args`: another module, by its package's path, e.g.
+  `"${pkgs.pam_ldap}/lib/security/pam_ldap.so"`) or `system`. `control` is PAM's word:
+  `sufficient` (the default), `required`, `requisite` or `optional`. Without a `system` row
+  NixOS's own rules are not reached. A list that would keep everyone out (no row that can
+  let you in, a required fingerprint without `services.fprintd.enable`, sudo and polkit
+  both without a password) stops the build. `polkit.passwordFirst` is deprecated: a
+  password row above the fingerprint row does the same.
+- **Arch and others**: sudo and polkit use the system's `/etc/pam.d/sudo` and
+  `/etc/pam.d/polkit-1` (else `/usr/lib/pam.d/polkit-1`) as they are.
+
 ## Google Calendar
 
 Connect an account in **Settings → Calendar** and sign in in the browser. The shell

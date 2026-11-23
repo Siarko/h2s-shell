@@ -1,0 +1,260 @@
+[
+  {
+    "name": "one list: a fingerprint above the system's password",
+    "machine": {
+      "fprintd": true
+    },
+    "split": false,
+    "rows": [
+      {
+        "id": "r1",
+        "method": "fingerprint",
+        "control": "sufficient",
+        "details": {
+          "timeout": 10,
+          "tries": 3
+        }
+      },
+      {
+        "id": "system",
+        "method": "system",
+        "control": "",
+        "details": {}
+      }
+    ],
+    "snippet": "programs.h2s-shell.pam = {\n  rules = [\n    { method = \"fingerprint\"; control = \"sufficient\"; timeout = 10; tries = 3; }\n    { method = \"system\"; }\n  ];\n};\n",
+    "lines": {
+      "sudo": [
+        "auth sufficient pam_fprintd.so timeout=10 max-tries=3"
+      ],
+      "polkit-1": [
+        "auth sufficient pam_fprintd.so timeout=10 max-tries=3"
+      ]
+    }
+  },
+  {
+    "name": "one list per service: a key with its PIN and a required password; no system rows",
+    "machine": {
+      "fprintd": true,
+      "u2f": true
+    },
+    "split": true,
+    "rows": {
+      "sudo": [
+        {
+          "id": "r1",
+          "method": "securityKey",
+          "control": "sufficient",
+          "details": {
+            "pin": true,
+            "cue": true
+          }
+        },
+        {
+          "id": "r2",
+          "method": "password",
+          "control": "required",
+          "details": {
+            "counted": false
+          }
+        }
+      ],
+      "polkit": [
+        {
+          "id": "r1",
+          "method": "password",
+          "control": "sufficient",
+          "details": {
+            "counted": false
+          }
+        },
+        {
+          "id": "r2",
+          "method": "fingerprint",
+          "control": "optional",
+          "details": {}
+        },
+        {
+          "id": "r3",
+          "method": "fingerprint",
+          "control": "sufficient",
+          "details": {
+            "timeout": 120
+          }
+        }
+      ]
+    },
+    "snippet": "programs.h2s-shell.pam = {\n  sudo.rules = [\n    { method = \"securityKey\"; control = \"sufficient\"; pin = true; }\n    { method = \"password\"; control = \"required\"; counted = false; }\n  ];\n  polkit.rules = [\n    { method = \"password\"; control = \"sufficient\"; counted = false; }\n    { method = \"fingerprint\"; control = \"optional\"; }\n    { method = \"fingerprint\"; control = \"sufficient\"; timeout = 120; }\n  ];\n};\n",
+    "lines": {
+      "sudo": [
+        "auth sufficient pam_u2f.so cue pinverification=1",
+        "auth required pam_unix.so try_first_pass",
+        "auth [default=done] pam_permit.so"
+      ],
+      "polkit-1": [
+        "auth sufficient pam_unix.so try_first_pass",
+        "auth optional pam_fprintd.so",
+        "auth sufficient pam_fprintd.so timeout=120",
+        "auth requisite pam_deny.so"
+      ]
+    }
+  },
+  {
+    "name": "counted passwords, sufficient and required",
+    "machine": {
+      "fprintd": true,
+      "logFailures": true
+    },
+    "split": true,
+    "rows": {
+      "sudo": [
+        {
+          "id": "r1",
+          "method": "password",
+          "control": "sufficient",
+          "details": {
+            "counted": true
+          }
+        },
+        {
+          "id": "system",
+          "method": "system",
+          "control": "",
+          "details": {}
+        }
+      ],
+      "polkit": [
+        {
+          "id": "r1",
+          "method": "fingerprint",
+          "control": "sufficient",
+          "details": {
+            "tries": 1
+          }
+        },
+        {
+          "id": "r2",
+          "method": "password",
+          "control": "required",
+          "details": {
+            "counted": true
+          }
+        }
+      ]
+    },
+    "snippet": "programs.h2s-shell.pam = {\n  sudo.rules = [\n    { method = \"password\"; control = \"sufficient\"; counted = true; }\n    { method = \"system\"; }\n  ];\n  polkit.rules = [\n    { method = \"fingerprint\"; control = \"sufficient\"; tries = 1; }\n    { method = \"password\"; control = \"required\"; counted = true; }\n  ];\n};\n",
+    "lines": {
+      "sudo": [
+        "auth required pam_faillock.so preauth",
+        "auth [success=done default=ignore] pam_unix.so try_first_pass",
+        "auth optional pam_faillock.so authfail"
+      ],
+      "polkit-1": [
+        "auth sufficient pam_fprintd.so max-tries=1",
+        "auth required pam_faillock.so preauth",
+        "auth [success=1 default=bad] pam_unix.so try_first_pass",
+        "auth [default=bad] pam_faillock.so authfail",
+        "auth [default=done] pam_permit.so"
+      ]
+    }
+  },
+  {
+    "name": "counted passwords, optional and requisite",
+    "machine": {
+      "logFailures": true
+    },
+    "split": true,
+    "rows": {
+      "sudo": [
+        {
+          "id": "r1",
+          "method": "password",
+          "control": "optional",
+          "details": {
+            "counted": true
+          }
+        },
+        {
+          "id": "system",
+          "method": "system",
+          "control": "",
+          "details": {}
+        }
+      ],
+      "polkit": [
+        {
+          "id": "r1",
+          "method": "password",
+          "control": "requisite",
+          "details": {
+            "counted": true
+          }
+        }
+      ]
+    },
+    "snippet": "programs.h2s-shell.pam = {\n  sudo.rules = [\n    { method = \"password\"; control = \"optional\"; counted = true; }\n    { method = \"system\"; }\n  ];\n  polkit.rules = [\n    { method = \"password\"; control = \"requisite\"; counted = true; }\n  ];\n};\n",
+    "lines": {
+      "sudo": [
+        "auth required pam_faillock.so preauth",
+        "auth [success=1 default=ignore] pam_unix.so try_first_pass",
+        "auth optional pam_faillock.so authfail"
+      ],
+      "polkit-1": [
+        "auth required pam_faillock.so preauth",
+        "auth [success=1 default=bad] pam_unix.so try_first_pass",
+        "auth [default=die] pam_faillock.so authfail",
+        "auth [default=done] pam_permit.so"
+      ]
+    }
+  },
+  {
+    "name": "raw lines: libpam's own by name, the system profile's, a store path",
+    "machine": {},
+    "split": false,
+    "rows": [
+      {
+        "id": "r1",
+        "method": "raw",
+        "control": "",
+        "details": {
+          "text": "auth optional pam_env.so"
+        }
+      },
+      {
+        "id": "r2",
+        "method": "raw",
+        "control": "",
+        "details": {
+          "text": "auth sufficient /run/current-system/sw/lib/security/pam_ldap.so use_first_pass"
+        }
+      },
+      {
+        "id": "r3",
+        "method": "raw",
+        "control": "",
+        "details": {
+          "text": "auth required /nix/store/0123456789abcdfghijklmnpqrsvwxyz-pam_krb5-4.11/lib/security/pam_krb5.so minimum_uid=1000"
+        }
+      },
+      {
+        "id": "system",
+        "method": "system",
+        "control": "",
+        "details": {}
+      }
+    ],
+    "snippet": "programs.h2s-shell.pam = {\n  rules = [\n    { method = \"raw\"; control = \"optional\"; module = \"pam_env.so\"; args = [ ]; }\n    { method = \"raw\"; control = \"sufficient\"; module = \"/run/current-system/sw/lib/security/pam_ldap.so\"; args = [ \"use_first_pass\" ]; }\n    { method = \"raw\"; control = \"required\"; module = \"/nix/store/0123456789abcdfghijklmnpqrsvwxyz-pam_krb5-4.11/lib/security/pam_krb5.so\"; args = [ \"minimum_uid=1000\" ]; }\n    { method = \"system\"; }\n  ];\n};\n",
+    "lines": {
+      "sudo": [
+        "auth optional pam_env.so",
+        "auth sufficient pam_ldap.so use_first_pass",
+        "auth required pam_krb5.so minimum_uid=1000"
+      ],
+      "polkit-1": [
+        "auth optional pam_env.so",
+        "auth sufficient pam_ldap.so use_first_pass",
+        "auth required pam_krb5.so minimum_uid=1000"
+      ]
+    }
+  }
+]

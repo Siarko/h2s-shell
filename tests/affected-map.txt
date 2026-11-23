@@ -117,6 +117,10 @@ tests/fixtures/helper/* unit:HelperTest
 flake.nix self:tests/run-system.sh
 flake.lock self:tests/run-system.sh unit:QuickshellPinTest
 nix/* self:tests/run-system.sh
+# The PAM options' names and ranges against the editor's (read as text), and the case set
+# both the suite and the NixOS evaluation read
++nix/pam.nix unit:PamNixosModuleTest
+tests/fixtures/pam-nixos/* unit:PamNixosModuleTest self:tests/run-system.sh
 
 # ---- Started only by shell.qml ---------------------------------------------------------
 singletons/SleepLockNotice.qml unit:SleepNoticeRulesTest lock:sleep-notice

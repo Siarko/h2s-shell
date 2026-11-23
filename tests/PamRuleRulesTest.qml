@@ -105,17 +105,39 @@ TestCase {
         assert(!has([fingerprint("r1"), fixed], both, "R5"), "R5 not: this one keeps it");
         assert(has([fixed], arch({ changedByHand: true }), "R6"), "R6: changed by hand");
         assert(!has([fixed], arch({ changedByHand: false }), "R6"), "R6 not: as written");
-        assert(has([raw("r1", "auth sufficient /home/user/pam_evil.so"), fixed], arch(), "R7"), "R7: a module from the home");
-        assert(has([raw("r1", "auth sufficient /usr/lib/security/../../../tmp/x.so"), fixed], arch(), "R7"), "R7: … through ..");
-        assert(has([raw("r1", "auth sufficient lib/../../tmp/x.so"), fixed], arch(), "R7"), "R7: … a relative path");
-        assert(has([raw("r1", "auth sufficient /nix/store/abc-pam_ldap/lib/security/pam_ldap.so"), fixed], arch(), "R7"), "R7: a store path on Arch");
-        assert(!has([raw("r1", "auth sufficient /usr/lib/security/pam_ldap.so"), fixed], arch(), "R7"), "R7 not: the system's folder");
-        assert(!has([raw("r1", "auth sufficient /run/current-system/sw/lib/security/pam_ldap.so"), fixed], arch({ system: "nixos" }), "R7"),
-               "R7 not: the system profile on NixOS");
-        assert(has([raw("r1", "auth sufficient /nix/store/abc-evil/lib/security/pam_unix.so"), fixed], arch({ system: "nixos" }), "R7"),
-               "R7: any other store path on NixOS, whatever its file is called (anyone can add to the store)");
+        const store = "/nix/store/" + "0123456789abcdfghijklmnpqrsvwxyz";
+        assert(has([raw("r1", "auth sufficient /home/user/pam_evil.so"), fixed], arch(), "W12"), "W12: a module from the home");
+        assert(has([raw("r1", "auth sufficient /usr/lib/security/../../../tmp/x.so"), fixed], arch(), "W12"), "W12: … through ..");
+        assert(has([raw("r1", "auth sufficient lib/../../tmp/x.so"), fixed], arch(), "W12"), "W12: … a relative path");
+        assert(has([raw("r1", "auth sufficient /nix/store/abc-pam_ldap/../../../home/u/x.so"), fixed], arch({ system: "nixos" }), "W12"),
+               "W12: … out of the store through ..");
+        assert(rules.check([raw("r1", "auth sufficient /home/user/pam_evil.so"), fixed], arch()).refusals.length === 0,
+               "a module from another place is allowed: a warning, no refusal");
+        assert(has([raw("r1", "auth sufficient /nix/store/abc-pam_ldap/lib/security/pam_ldap.so"), fixed], arch(), "W11"), "W11: a store path on Arch");
+        assert(!has([raw("r1", "auth sufficient /usr/lib/security/pam_ldap.so"), fixed], arch(), "W12")
+               && !has([raw("r1", "auth sufficient /usr/lib/security/pam_ldap.so"), fixed], arch(), "W11"), "W11/W12 not: the system's folder");
+        assert(!has([raw("r1", "auth sufficient /run/current-system/sw/lib/security/pam_ldap.so"), fixed], arch({ system: "nixos" }), "W12"),
+               "W12 not: the system profile on NixOS");
+        assert(has([raw("r1", "auth sufficient /usr/lib/security/pam_ldap.so"), fixed], arch({ system: "nixos" }), "W12"),
+               "W12: Arch's folder on NixOS");
+        assert(has([raw("r1", "auth sufficient /nix/store/abc-evil/lib/security/pam_unix.so"), fixed], arch({ system: "nixos" }), "W11"),
+               "W11: any other store path on NixOS, whatever its file is called");
         assert(has([raw("r1", "auth sufficient /nix/store/abc-evil/lib/security/pam_unix.so")], arch({ system: "nixos", otherService: [] }), "R1"),
-               "… and it is no password: no way in");
+               "… and it is no password (anyone can add to the store): no way in");
+        assert(has([raw("r1", "auth sufficient /nix/store/abc-evil/lib/security/pam_ldap.so"), fixed], arch({ system: "nixos" }), "W4"),
+               "… not checked either: W4");
+        let placed = rules.check([raw("r1", "auth sufficient " + store + "-pam_ldap-186/lib/security/pam_ldap.so"), fixed], arch({ system: "nixos" }))
+            .warnings.find(warning => warning.code === "W11");
+        assertEqual(placed.text, "A path in the Nix store changes with an update or a garbage collection: use ${pkgs.pam_ldap} instead.",
+                    "W11 names the package where the path says it");
+        placed = rules.check([raw("r1", "auth sufficient /nix/store/abc-pam_ldap/lib/security/pam_ldap.so"), fixed], arch({ system: "nixos" }))
+            .warnings.find(warning => warning.code === "W11");
+        assertEqual(placed.text, rules.texts.W11, "… and none where it does not (no hash)");
+        assertEqual(rules.storePackage(store + "-linux-pam-1.6.1/lib/security/pam_unix.so"), "linux-pam", "a package's name: up to the version");
+        assertEqual(rules.storePackage(store + "-pam_u2f/lib/security/pam_u2f.so"), "pam_u2f", "… no version");
+        assertEqual(rules.storePackage("/nix/store/short-pam_u2f/lib/security/pam_u2f.so"), "", "… not a store path's name: none");
+        assert(!has([raw("r1", "auth required /nix/store/abc-x/lib/security/pam_deny.so"), password("r2"), fixed], arch(), "R1"),
+               "R1 not: a pam_deny from another place is judged by nothing its name says");
         for (const bad of ["account required pam_unix.so", "auth sufficient", "auth include system-auth", "@include common-auth",
                            "auth required pam_unix.so\nauth sufficient pam_permit.so", "auth [sucess=done] pam_unix.so"])
             assert(has([raw("r1", bad), fixed], arch(), "R8"), "R8: " + JSON.stringify(bad));
@@ -189,7 +211,7 @@ TestCase {
         assert(!has([fingerprint("r2"), password("r1", "sufficient", true), fixed], arch(), "W3"), "W3 not: the reader above it");
         assert(has([raw("r1", "auth sufficient pam_ldap.so"), fixed], arch(), "W4"), "W4: a module the checks do not know");
         assert(!has([raw("r1", "auth sufficient pam_unix.so try_first_pass"), fixed], arch(), "W4"), "W4 not: a raw pam_unix line");
-        assert(!has([raw("r1", "auth sufficient /home/u/x.so"), fixed], arch(), "W4"), "W4 not: a refused line");
+        assert(!has([raw("r1", "auth sufficient pam_ldap.so"), fixed], arch({ system: "nixos" }), "W4"), "W4 not: a refused line");
         assert(has([fingerprint("r1", "optional"), fixed], arch(), "W5"), "W5: an optional row beside a deciding one");
         assert(has([password("r1", "optional")], arch(), "W5"), "W5: … without the fixed row the closing line decides");
         assert(!has([fingerprint("r1", "sufficient"), fixed], arch(), "W5"), "W5 not: no optional row");
@@ -253,8 +275,8 @@ TestCase {
         assert(has([fingerprint("r1"), raw("r2", "auth sufficient pam_unix.so use_first_pass")], arch(), "W10"),
                "W10: a reader above is no password asked");
         assert(!has([fixed, raw("r1", "auth required pam_permit.so")], arch(), "R9"), "R9 not: the fixed row present, even first");
-        assert(has([raw("r1", "auth sufficient /home/u/pam_permit.so"), fixed], arch(), "R7")
-               && !has([raw("r1", "auth sufficient /home/u/pam_permit.so"), fixed], arch(), "R9"), "R9 not: a line refused already");
+        assert(has([raw("r1", "auth sufficient /home/u/pam_permit.so"), fixed], arch(), "W12")
+               && !has([raw("r1", "auth sufficient /home/u/pam_permit.so"), fixed], arch(), "R9"), "R9 not: a module from another place is not known by its name");
         assert(!has([raw("r1", "auth sufficient pam_ldap.so"), raw("r2", "auth sufficient pam_krb5.so"), fixed], arch(), "W6"),
                "W6 not: two lines the checks do not know");
         for (const unknown of [null, { deny: 0, failInterval: 60, unlockTime: 0 }]) {

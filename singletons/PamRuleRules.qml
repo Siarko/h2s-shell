@@ -280,14 +280,16 @@ Singleton {
 
     // ── Raw lines ──
 
-    // The places root loads modules from: a module named by an absolute path elsewhere is
-    // refused (R7). NixOS's store and its system profile are read-only; elsewhere the
-    // distribution's module directories.
+    // The places root loads modules from: a module named by a path elsewhere is allowed with
+    // a warning — W11 for a path in the Nix store (it changes with an update or a garbage
+    // collection), W12 for any other place (a file the user can write is a way to root) —
+    // and is no known method to the checks, whatever its file is called
     readonly property var moduleDirectories: ["/usr/lib/security/", "/lib/security/", "/usr/lib64/security/",
         "/lib64/security/", "/usr/lib/x86_64-linux-gnu/security/", "/lib/x86_64-linux-gnu/security/",
         "/usr/lib/aarch64-linux-gnu/security/", "/lib/aarch64-linux-gnu/security/"]
     // On NixOS only the system profile: any user can add a module to the store, so a store
     // path's file name says nothing about what the module does
+    readonly property string storeDirectory: "/nix/store/"
     readonly property var nixosModuleDirectories: ["/run/current-system/sw/lib/security/"]
     // libpam's own modules: NixOS's libpam finds these, and only these, by bare name
     readonly property var libpamModules: ["pam_access", "pam_canonicalize_user", "pam_debug", "pam_deny", "pam_echo",
@@ -320,15 +322,47 @@ Singleton {
         return libpamModules.includes(name) ? "no" : "unknown";
     }
 
+    // The package a store path comes from, for W11's hint: "pam_ldap" for
+    // /nix/store/<hash>-pam_ldap-186/lib/security/pam_ldap.so (the name before the first
+    // dash followed by a digit, as Nix splits a name from its version); "" when the path does
+    // not say
+    function storePackage(path) {
+        const match = /^\/nix\/store\/[0-9a-z]{32}-([^/]+)\//.exec(String(path ?? ""));
+        if (!match)
+            return "";
+        const name = match[1].split(/-(?=\d)/)[0];
+        return /^[A-Za-z_][A-Za-z0-9_'-]*$/.test(name) ? name : "";
+    }
+
+    // The warning for a module named by a path outside the system's module folders:
+    // { code, text } or null
+    function _placeWarning(module, nixos) {
+        const places = nixos ? nixosModuleDirectories : moduleDirectories;
+        const segments = module.split("/");
+        const inPlace = module.startsWith("/") && !segments.includes("..") && !segments.includes(".")
+            && places.some(place => module.startsWith(place));
+        if (inPlace)
+            return null;
+        if (module.startsWith(storeDirectory) && !segments.includes("..")) {
+            const name = storePackage(module);
+            return { code: "W11", text: name !== "" ? texts.W11.replace(/\.$/, () => ": use ${pkgs." + name + "} instead.") : texts.W11 };
+        }
+        return { code: "W12", text: texts.W12 };
+    }
+
     // One raw line judged alone: { line (PamStackRules.parseLine's, or null), reads ("auth ·
     // sufficient · pam_ldap.so", or why it does not parse), method ("password" / "fingerprint"
-    // / "securityKey" for those modules, else "unknown"), credential (credentialOf's, "unknown"
-    // for a line that does not parse), refusal ({ code, text } or null) }. The list-wide
-    // checks (R1, R9) are check()'s.
+    // / "securityKey" for those modules, else "unknown"; "unknown" too for a module from
+    // outside the system's folders), credential (credentialOf's; "unknown" for a line that
+    // does not parse or a module from outside), refusal ({ code, text } or null), warning
+    // (W11 / W12 for a module from outside the system's folders: { code, text } or null) }.
+    // The list-wide checks (R1, R9) are check()'s.
     function rawLine(text, facts) {
-        const result = (line, reads, method, code, refusalText) => ({
-            line, reads, method, credential: line ? credentialOf(line) : "unknown",
-            refusal: code ? { code, text: refusalText } : null
+        const result = (line, reads, method, code, refusalText, warning) => ({
+            line, reads, method: warning ? "unknown" : method,
+            credential: line && !warning ? credentialOf(line) : "unknown",
+            refusal: code ? { code, text: refusalText } : null,
+            warning: warning ?? null
         });
         if (typeof text !== "string")
             return result(null, "Not a line", "unknown", "R8", texts.R8);
@@ -357,12 +391,9 @@ Singleton {
         const nixos = facts?.system === "nixos";
         const module = line.module;
         if (module.includes("/")) {
-            const places = nixos ? nixosModuleDirectories : moduleDirectories;
-            const segments = module.split("/");
-            const inPlace = module.startsWith("/") && !segments.includes("..") && !segments.includes(".")
-                && places.some(place => module.startsWith(place));
-            if (!inPlace)
-                return result(line, reads, method, "R7", texts.R7);
+            const warning = _placeWarning(module, nixos);
+            if (warning)
+                return result(line, reads, method, null, "", warning);
         } else if (nixos && !libpamModules.includes(module)) {
             return result(line, reads, method, "R8", "Needs the module's full path on NixOS.");
         }
@@ -381,7 +412,6 @@ Singleton {
         R4counted: "Failures cannot count here: the system's rules do not count them.",
         R5: "Keep a password in sudo or in administrator prompts: one is the way to repair the other.",
         R6: "Changed outside the shell. Replace it to edit here.",
-        R7: "The module is not in the system's module folders.",
         R8: "Not a PAM line.",
         R9: "This line lets anyone in.",
         R1deny: "This line refuses everyone: nobody would get in.",
@@ -394,7 +424,9 @@ Singleton {
         W10: "Nothing above asks for the password, so this line never lets you in.",
         W6: "Asked twice: the same method is in another row.",
         W7: "A wrong password is asked again by the last row.",
-        W8: "Not saved for both: Apply again to make the lists the same."
+        W8: "Not saved for both: Apply again to make the lists the same.",
+        W11: "A path in the Nix store changes with an update or a garbage collection.",
+        W12: "Not in the system's module folders: if your user can write this file, any of your programs can replace it without a password, and it runs as root at the next sudo or administrator prompt."
     })
 
     function _detailProblem(method, name, value) {
@@ -419,7 +451,7 @@ Singleton {
     // above), nullok, refusals }
     function _role(row, service, facts) {
         const role = { method: "unknown", raw: false, atOnce: false, okOnSuccess: false, fails: false, optional: false,
-                       credential: "unknown", denies: false, firstPass: false, nullok: false, refusals: [] };
+                       credential: "unknown", denies: false, firstPass: false, nullok: false, refusals: [], warnings: [] };
         const method = row?.method;
         if (method === "system") {
             role.method = "system";
@@ -433,6 +465,8 @@ Singleton {
             role.method = judged.refusal ? "unknown" : judged.method;
             if (judged.refusal)
                 role.refusals.push(judged.refusal);
+            if (judged.warning)
+                role.warnings.push(judged.warning);
             const line = judged.line;
             if (line !== null) {
                 const actions = line.actions ?? {};
@@ -443,9 +477,11 @@ Singleton {
                     || Object.keys(actions).some(key => key !== "success" && (actions[key] === "bad" || actions[key] === "die"));
                 role.optional = line.control === "optional";
                 role.credential = judged.credential;
-                role.denies = line.moduleName === "pam_deny.so" && role.fails;
-                role.firstPass = line.moduleName === "pam_unix.so" && line.args.includes("use_first_pass");
-                role.nullok = line.moduleName === "pam_unix.so" && line.args.includes("nullok");
+                // A module from outside the system's folders is judged by nothing its name says
+                const named = judged.warning === null ? line.moduleName : "";
+                role.denies = named === "pam_deny.so" && role.fails;
+                role.firstPass = named === "pam_unix.so" && line.args.includes("use_first_pass");
+                role.nullok = named === "pam_unix.so" && line.args.includes("nullok");
             }
             return role;
         }
@@ -543,10 +579,13 @@ Singleton {
         const isReader = role => _readers.includes(role.method);
         const fixedIndex = list.findIndex(row => isFixed(row));
 
-        // Each row alone: its own refusals (R4, R7, R8), the fixed row's place (R4)
+        // Each row alone: its own refusals (R4, R8) and warnings (W11, W12), the fixed row's
+        // place (R4)
         roles.forEach((role, i) => {
             for (const refusal of role.refusals)
                 refuse(refusal.code, i, refusal.text);
+            for (const warning of role.warnings)
+                warn(warning.code, i, warning.text);
             if (role.method === "system" && (i !== list.length - 1 || i !== fixedIndex))
                 refuse("R4", i, texts.R4fixed);
         });

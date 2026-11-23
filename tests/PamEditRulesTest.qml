@@ -317,5 +317,8 @@ TestCase {
         assert(!snippet.ok && snippet.refusals.some(item => item.code === "R3" && item.service === "sudo"), "NixOS: an empty list refused, with its service");
         snippet = edit.nixosSnippet([raw("r1", "auth sufficient pam_ldap.so"), fixed], false, {});
         assert(!snippet.ok && snippet.refusals.some(item => item.code === "R8"), "NixOS: a bare third-party module refused");
+        snippet = edit.nixosSnippet([raw("r1", "auth sufficient /nix/store/abc-pam_ldap/lib/security/pam_ldap.so"), fixed], false, {});
+        assert(snippet.ok && snippet.text.includes("module = \"/nix/store/abc-pam_ldap/lib/security/pam_ldap.so\";")
+               && snippet.warnings.some(item => item.code === "W11"), "NixOS: a store path written out is allowed, with a warning");
     }
 }

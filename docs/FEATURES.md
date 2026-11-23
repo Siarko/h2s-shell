@@ -682,11 +682,25 @@ polkit's helper runs one PAM stack, `polkit-1`; NixOS puts a fingerprint reader 
 it, so PAM asks for the password only after the reader gives up (30 s, or three fingers
 that do not match). The prompt's field is there from the start: a password typed and
 Entered meanwhile is held and sent the moment it is asked for, and a line under PAM's
-message says what the prompt waits for (`PolkitRules.conversationHint`). The NixOS
-module's `programs.h2s-shell.polkit.passwordFirst` (on by default with fprintd) moves
-pam_fprintd after pam_unix: the password is asked at once, and Enter on an empty field
-goes on to the reader. Settings → System → Authentication says which order this computer
-has (read from `/etc/pam.d/polkit-1`).
+message says what the prompt waits for (`PolkitRules.conversationHint`). Settings → System →
+Authentication says which order this computer has (read from `/etc/pam.d/polkit-1`).
+
+#### NixOS
+
+The module's `programs.h2s-shell.pam.rules` (or `pam.polkit.rules`) sets polkit's `auth`
+rules — a password row above the fingerprint row asks the password at once —, and sudo's
+(`pam.sudo.rules` for a list of its own); the README's "sudo and polkit" has the rows. The
+rows go above NixOS's own rules (the `system` row) or replace them; NixOS's own fingerprint
+and key rules are off where the shell's rules are. A list that would keep everyone out stops
+the build with an assertion; a module from outside the store, or a store path written out,
+is a warning. Without polkit rules the deprecated `programs.h2s-shell.polkit.passwordFirst`
+(on by default with fprintd) still moves pam_fprintd after pam_unix: the password is asked at
+once, and Enter on an empty field goes on to the reader.
+
+#### Arch
+
+polkit's stack is the system's `/etc/pam.d/polkit-1`, else the vendor file in
+`/usr/lib/pam.d`, as it is.
 
 ## Settings
 

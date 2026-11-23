@@ -954,8 +954,22 @@ The interface modules are written against (`qs.api`), versioned on its own
   where it starts and ends — instead of a dot on each day; up to three stacked. Under the
   number, a dot for each single-day event, in the event's colour (two rows of four at
   most), instead of one accent dot for the day.
+- NixOS: the module's `programs.h2s-shell.pam.rules` (sudo and polkit) — or
+  `pam.sudo.rules` and `pam.polkit.rules`, one list per service — set sudo's and polkit's
+  `auth` rules as an ordered list of rows: fingerprint (`timeout`, `tries`), security key
+  (`pin`), password (`counted`), a raw line (`module`, `args`), and `{ method = "system"; }`
+  for NixOS's own rules below them; without that row the list ends with a closing line.
+  `control` is PAM's word (`sufficient` by default). NixOS's own fingerprint and key rules
+  are off for a service with rules. A list nobody could get in with, a required reader the
+  machine does not have, both services without a password, or a module of another package
+  named without its path stops the build with an assertion; a reader as the only way in, a
+  store path written out (`"${pkgs.…}/lib/security/…"` is the way) and a module from
+  outside the store are warnings. null (the default) leaves the service as NixOS makes it.
 
 ### Changed
+- NixOS: `programs.h2s-shell.polkit.passwordFirst` is deprecated (a warning when set): a
+  password row above the fingerprint row in `programs.h2s-shell.pam.rules` does the same.
+  Without polkit rules it works as before; set beside them, it stops the build.
 - Settings: every page's sections stand apart the same way — a line and room above each
   section, its title a size larger than the rows. A theme can change the spacing (Appearance
   → Other → Settings window: "Section spacing", "Line to title", "Under a title").
