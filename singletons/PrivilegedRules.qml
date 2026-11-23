@@ -300,6 +300,22 @@ Singleton {
             .concat(Array.from(argv));
     }
 
+    // The limit of a command of the shell's own (startShell): its fixed root scripts write a
+    // few small files, flush them and signal a service, in well under a second; five minutes
+    // leave room for a slow or busy disk and still end one that hangs
+    readonly property int shellRunMs: 300000
+
+    // The words of a command of the shell's own, before the trusted pkexec takes argv[0]
+    // (legacyLaunch): under the shell's `timeout`, as a module's run — the same program the
+    // remembered authorization's rule names (RememberRules.ruleText), so that a kept
+    // password covers the shell's own runs too. null without a usable timeout or command.
+    function shellArgv(timeout, argv) {
+        if (typeof timeout !== "string" || !timeout.startsWith("/") || !Array.isArray(argv) || argv.length === 0
+                || typeof argv[0] !== "string" || !argv[0].startsWith("/"))
+            return null;
+        return pkexecArgv("pkexec", timeout, shellRunMs, killAfterMs, argv);
+    }
+
     // A real file's mode (octal text, as the probe prints it) with the setuid bit, owned by
     // root
     function setuidRoot(verdict) {

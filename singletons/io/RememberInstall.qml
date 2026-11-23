@@ -45,6 +45,17 @@ QtObject {
         return _run(RememberInstallRules.undoArgv(shell, request, paths, start === null), RememberInstallRules.what("undo"));
     }
 
+    // What a request would change, without running it: `mode` "install" or "remove" →
+    // { refusal (null or { code, text }), rule, conf (true: that file would change) }
+    function plan(mode, request) {
+        const planned = mode === "remove" ? RememberInstallRules.removeArgv(shell, request, paths, start === null)
+                                          : RememberInstallRules.installArgv(shell, request, paths, start === null);
+        if (planned.refusal !== null)
+            return { refusal: planned.refusal, rule: false, conf: false };
+        const expected = planned.expected;
+        return { refusal: null, rule: expected.before.rule !== expected.after.rule, conf: expected.before.conf !== expected.after.conf };
+    }
+
     function _run(plan, what) {
         if (_busy)
             return { started: false, refusal: RememberInstallRules.refusal("busy") };

@@ -32,7 +32,8 @@ import QtQuick
 // Each run records in the backups what it left (`run.<stamp>`); Undo puts back the two
 // backups of one stamp only while both files are exactly what that record says.
 // A rules file or a polkitd.conf not written by the shell is replaced or removed only when
-// the request says so (`replace`: "Replace…"); otherwise Install leaves such a conf as it is.
+// the request names that file (`replace`: { rule, conf }, "Replace…"); otherwise Install
+// leaves such a conf as it is.
 // Pure: texts and states are handed in, nothing is read or written.
 Singleton {
     id: root
@@ -401,6 +402,12 @@ Singleton {
         return seconds > vendorSeconds(confs) ? RememberRules.confText(seconds) : "";
     }
 
+    // Which files a request may replace although not written by the shell: { rule, conf },
+    // true only where said so in so many words (anything else replaces nothing)
+    function replacing(replace) {
+        return { rule: replace?.rule === true, conf: replace?.conf === true };
+    }
+
     // What the prompt says the run is for
     function what(mode) {
         return mode === "remove" ? "Stop remembering the administrator password"
@@ -411,11 +418,12 @@ Singleton {
     // The root step for Install (and Install again). `request`: { facts { user, timeout,
     // program } (RememberRules.ruleText's), minutes (the setting), rule (the rules file's
     // text: undefined for none, null when it could not be read), confs (the polkitd.conf
-    // files' texts by RememberRules.confPaths, as the reader gives them), replace (true:
-    // a file not written by the shell is replaced) }. The rule is written unless it is
+    // files' texts by RememberRules.confPaths, as the reader gives them), replace ({ rule,
+    // conf }: each true replaces that file when not written by the shell — only the files
+    // the question showed) }. The rule is written unless it is
     // already the one these facts make; the conf is written when the setting needs one,
     // removed when it is the shell's and not needed, and left alone when not the shell's
-    // unless `replace`. → { argv ([shell, "-c", script, "sh", words…]), expected (for
+    // unless `replace.conf`. → { argv ([shell, "-c", script, "sh", words…]), expected (for
     // reply), refusal (null or { code, text }) }
     function installArgv(shell, request, paths, live) {
         const read = _read(shell, request, paths, live);
@@ -424,32 +432,32 @@ Singleton {
         const minutes = request?.minutes;
         if (!Number.isInteger(minutes) || minutes < 1 || minutes > maxMinutes)
             return _refused("setting");
-        const replace = request?.replace === true;
-        if (read.rule.state === "changed" && !replace)
+        const replace = replacing(request?.replace);
+        if (read.rule.state === "changed" && !replace.rule)
             return _refused("changed");
         const ruleWant = RememberRules.ruleText(read.facts);
         const rule = { op: read.rule.text === ruleWant ? "keep" : "write", current: read.rule.current, text: ruleWant, facts: read.facts };
         const confWant = confFor(minutes, read.confs);
         const conf = { op: "keep", current: read.conf.current, text: confWant, seconds: minutes * 60 };
-        if (read.conf.state !== "changed" || replace) {
+        if (read.conf.state !== "changed" || replace.conf) {
             if (confWant !== "")
                 conf.op = read.conf.text === confWant ? "keep" : "write";
             else
                 conf.op = read.conf.current === "absent" ? "keep" : "remove";
         }
         if (rule.op === "keep" && conf.op === "keep")
-            return _refused(read.conf.state === "changed" && !replace ? "changed" : "unchanged");
+            return _refused(read.conf.state === "changed" && !replace.conf ? "changed" : "unchanged");
         return _plan(shell, paths, live, rule, conf);
     }
 
     // The root step for Remove: `request` as installArgv's without minutes. The rule file goes
-    // (one not written by the shell only with `replace`), and the conf when it is the
+    // (one not written by the shell only with `replace.rule`), and the conf when it is the
     // shell's; a conf not written by the shell stays. → as installArgv
     function removeArgv(shell, request, paths, live) {
         const read = _read(shell, request, paths, live);
         if (read.refusal !== "")
             return _refused(read.refusal);
-        if (read.rule.state === "changed" && request?.replace !== true)
+        if (read.rule.state === "changed" && !replacing(request?.replace).rule)
             return _refused("changed");
         const rule = { op: read.rule.current === "absent" ? "keep" : "remove", current: read.rule.current, text: "" };
         const conf = { op: read.conf.state === "ours" ? "remove" : "keep", current: read.conf.current, text: "" };

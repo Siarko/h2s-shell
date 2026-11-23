@@ -187,12 +187,17 @@ Singleton {
         _dispatch({ type: "add", id: job.id, owner: job.owner });
     }
 
+    // The words the last command of the shell's own was queued with, before pkexec's path
+    // replaced argv[0] (the fixture suites read it: in test mode it never launches)
+    property var _lastShellArgv: []
+
     // A fixed command of the shell's own, started by the user's click (a setting's Apply):
     // `request` { what (for the log and a failure's notice), argv (an absolute program and
     // its words, from the shell's code) }; `done(result)` once, never inside this call, with
     // PrivilegedRules' result (ok, code, stdout, stderr, dismissed, refused, notFound,
     // cancelled, blocked, error). It runs under the trusted, setuid pkexec found by the
-    // look-up (none: refused, not available), without a time limit; its prompt says who asks
+    // look-up (none: refused, not available), inside the shell's trusted `timeout` with the
+    // limit PrivilegedRules.shellRunMs (none found: refused); its prompt says who asks
     // ("Shell: h2s-shell", PolkitRules.announcement) and what, the command collapsed, as a
     // module's run. Never from a module's code (the call's stack names a module directory:
     // refused before the queue, so no module is announced as the shell). A refusal is told
@@ -221,8 +226,19 @@ Singleton {
             _refuse(job, PrivilegedRules.lockedResult());
             return;
         }
-        job.argv = ["pkexec"].concat(words);
+        // Under the shell's trusted timeout, as a module's run: the remembered
+        // authorization's rule then covers it (PrivilegedRules.shellArgv)
+        const argv = PrivilegedRules.shellArgv(CommandTools.known ? CommandTools.timeout : "", words);
+        if (argv === null) {
+            _refuse(job, PrivilegedRules.refusedResult({ blocked: "", error: CommandTools.known
+                ? "running as administrator is not available: no trusted timeout (coreutils) on PATH"
+                : "running as administrator is not available: timeout is still being looked for" }));
+            return;
+        }
+        job.argv = argv;
+        job.timeoutMs = PrivilegedRules.shellRunMs;
         job.program = String(words[0]);
+        _lastShellArgv = job.argv;
         _jobs.set(job.id, job);
         _dispatch({ type: "add", id: job.id, owner: job.owner });
     }
@@ -459,7 +475,7 @@ Singleton {
         if (notice)
             Notifier.send(notice.summary, notice.options);
         const legacy = job.kind === "legacy";
-        // No time limit around pkexec: the module's limit is the `timeout` inside it
+        // No time limit around pkexec: a module's or the shell's limit is the `timeout` inside it
         // (PrivilegedRules.pkexecArgv); the old type has none, as before
         job.runner = _runner.start(job.argv, {
             timeoutMs: 0,
@@ -541,7 +557,7 @@ Singleton {
                 if (reply.refused)
                     reportDenied(job.what);
                 else {
-                    const notice = PrivilegedRules.failureNotice(reply, job.what, 0, true);
+                    const notice = PrivilegedRules.failureNotice(reply, job.what, job.timeoutMs, true);
                     if (notice)
                         Notifier.send(notice.summary, { body: notice.body });
                 }

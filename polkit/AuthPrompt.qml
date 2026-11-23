@@ -35,10 +35,11 @@ PanelWindow {
     // { module, authorization, command } for a run of the shell's queue, else null
     property var announcement: null
     // What is installed (RememberRules.state's answer) and the setting, for the line under
-    // the field: how long a password typed for a run of the shell's queue is remembered
+    // the field: how long a password typed for a module's run or the shell's own command
+    // (both under the shell's timeout, which the rule names) is remembered
     property var rememberState: RememberedAdmin.installed
     property int rememberMinutes: RememberedAdmin.minutes
-    readonly property string rememberLine: announcement === null ? ""
+    readonly property string rememberLine: !PolkitRules.timeoutRun(announcement) ? ""
         : RememberRules.promptLine(rememberState?.rule ?? "", rememberMinutes, rememberState?.seconds ?? -1)
 
     WlrLayershell.layer: WlrLayer.Overlay

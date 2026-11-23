@@ -62,6 +62,12 @@ Singleton {
         _reader.viewers = Math.max(0, _reader.viewers - 1);
     }
 
+    // Install, Remove and Undo as Settings asks for them, and what the last run left
+    readonly property RememberActions actions: RememberActions {
+        admin: root
+        installer: RememberInstall {}
+    }
+
     RememberedAdminReader {
         id: _reader
         locked: !root._inert && Profiles.screenLocked

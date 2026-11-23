@@ -98,8 +98,20 @@ TestCase {
     property Component _installerComponent: Component {
         RememberInstall {}
     }
+    property var _actions: null
+    property Component _actionsComponent: Component {
+        RememberActions {}
+    }
 
     // The stand-in for the shell's runs as administrator: the words run as the user
+    // The words as PrivilegedRuns.startShell runs them after pkexec: under the shell's
+    // trusted timeout, with its limit
+    function _underTimeout(argv) {
+        const words = PrivilegedRules.shellArgv(CommandTools.timeout, Array.from(argv));
+        assert(words !== null, "the shell's trusted timeout is known: " + CommandTools.timeout);
+        return words === null ? Array.from(argv) : words.slice(1);
+    }
+
     function _start(request, done) {
         _runs = _runs.concat([request.what]);
         if (_failNext === "refuse") {
@@ -107,7 +119,7 @@ TestCase {
             Qt.callLater(() => done({ ok: false, code: 3, stdout: "", stderr: "refused changed", dismissed: false, refused: false, cancelled: false, blocked: "", error: "" }));
             return;
         }
-        _exec(["sh", "-c", "umask 022; exec \"$@\"", "sh"].concat(request.argv), (code, stdout, stderr) =>
+        _exec(["sh", "-c", "umask 022; exec \"$@\"", "sh"].concat(suite._underTimeout(request.argv)), (code, stdout, stderr) =>
             done({ ok: code === 0, code, stdout, stderr, dismissed: false, refused: false, cancelled: false, blocked: "", error: "" }));
     }
 
@@ -154,8 +166,7 @@ TestCase {
     property Component _sectionComponent: Component {
         RememberAdminSection {
             width: 840
-            admin: suite._admin
-            installer: suite._installer
+            actions: suite._actions
             modalHost: host
             settingShown: false
             minutes: 5
@@ -281,6 +292,7 @@ TestCase {
             if (host.open)
                 host.cancel("window");
             _sectionHolder._section?.destroy();
+            _actions?.destroy();
             _installer?.destroy();
             _window.visible = false;
             let removed = false;
@@ -348,11 +360,25 @@ TestCase {
         assertEqual(rules.handRule(RememberRules.ruleText(_facts), _facts).caption, "Changed outside the shell.", "… none added");
 
         const files = { rule: "a", confs: {} };
-        const shown = rules.replaceSpec({ rule: rules.currentOf("a"), conf: null }, "/b");
-        assertEqual(shown.title, "Replace /usr/share/polkit-1/rules.d/40-h2s-shell.rules?", "replaceSpec: names the file");
-        assert(rules.subjectHolds(shown.subject, files), "subjectHolds: the text shown");
-        assert(!rules.subjectHolds(shown.subject, { rule: "b", confs: {} }), "… changed since: no");
-        assert(!rules.subjectHolds({ rule: null, conf: null }, files), "… nothing shown: no");
+        const shown = rules.replaceSpec({ rule: true, conf: false }, { refusal: null, rule: true, conf: false }, { rule: true, conf: true }, files, "/b");
+        assertEqual(shown.title + " | " + shown.body.join(" | "),
+                    "Replace /usr/share/polkit-1/rules.d/40-h2s-shell.rules? | The hand-made file goes to the backups: /b. | "
+                    + "Kept as it is: /etc/polkit-1/polkitd.conf. | Then the shell writes its own in their place. Undo puts them back.",
+                    "replaceSpec: names the file replaced and the hand-made one kept");
+        assertEqual(JSON.stringify(shown.subject), JSON.stringify({ rule: rules.currentOf("a"), conf: "absent", replace: { rule: true, conf: false } }),
+                    "… keyed to both files as shown, no file as absent, and the files it names");
+        const both = rules.replaceSpec({ rule: false, conf: true }, { refusal: null, rule: true, conf: true }, { rule: false, conf: true }, files, "/b");
+        assertEqual(both.body[1], "Also changed: /usr/share/polkit-1/rules.d/40-h2s-shell.rules.", "… another file the run changes: named");
+        assert(rules.subjectHolds(shown.subject, files), "subjectHolds: both as shown");
+        assert(!rules.subjectHolds(shown.subject, { rule: "b", confs: {} }), "… the rule changed since: no");
+        assert(!rules.subjectHolds(shown.subject, { rule: "a", confs: { [RememberRules.confPath]: "hand" } }), "… a conf appeared since: no");
+        assert(!rules.subjectHolds(rules.subjectOf({ rule: null, confs: {} }, null), { rule: null, confs: {} }), "… a file not read: never");
+        const removeQuestion = rules.removeSpec({ refusal: null, rule: true, conf: true }, { rule: true, conf: false }, files, "/b");
+        assertEqual(removeQuestion.body[1], "Also removed: /etc/polkit-1/polkitd.conf.", "removeSpec: the shell's conf going too is named");
+        const long = Array.from({ length: 50 }, (unused, i) => i === 0 ? "x".repeat(300) : "line " + i).join("\n");
+        const capped = rules.handConf(long).lines;
+        assertEqual(capped.length + " " + capped[0].text.length + " " + capped[40].text, "41 201 … 10 more lines",
+                    "handConf: 40 lines shown, each cut to 200 characters, the rest counted");
 
         const lastWrite = rules.lastWriteOf("install", { ok: true, stamp: "20261123T100200Z", rule: "f".repeat(64), conf: "absent" }, { rule: undefined, confs: {} });
         assertEqual(rules.backupCaption(lastWrite, { backups: "/b" }), "Undo puts back /b/40-h2s-shell.rules.20261123T100200Z.absent",
@@ -370,11 +396,12 @@ TestCase {
         });
         assert(_until(() => ready), "the scratch folders made");
         _installer = _installerComponent.createObject(suite, { start: suite._start, paths: suite._paths });
+        _actions = _actionsComponent.createObject(suite, { admin: suite._admin, installer: suite._installer });
 
         _window.visible = true;
         assert(_until(() => _window.visible && host.Window.active && driver.waitShown()), "the window shows and has the keyboard");
         _sectionHolder._section = _sectionComponent.createObject(_sectionHolder, { objectName: "section" });
-        const section = _sectionHolder._section;
+        let section = _sectionHolder._section;
         assert(section !== null, "the section built");
         assert(_until(() => _admin.installed !== null), "… it reads what is installed when shown");
 
@@ -415,9 +442,15 @@ TestCase {
         assertEqual(_text("remember:ruleLine") + " " + _shown("remember:undo"), "Installed false", "… the rule stays, nothing more to undo");
         section.minutes = 5;
 
-        // --- Remove, and its Undo ---
-        assert(_runAndRead("remember:remove"), "Remove");
-        assert(_until(() => _text("remember:ruleLine") === "Not installed: every root run asks for the password."), "… removed");
+        // --- Remove, the page closed while it runs, and its Undo ---
+        const removeRuns = _runs.length, removeReads = _admin.refreshes;
+        assert(_click("remember:remove") && _until(() => _installer.busy), "Remove");
+        _sectionHolder._section.destroy();
+        _sectionHolder._section = null;
+        assert(_until(() => _runs.length > removeRuns && _admin.refreshes > removeReads && !_installer.busy), "… the page closed: the run ends");
+        _sectionHolder._section = _sectionComponent.createObject(_sectionHolder, { objectName: "section" });
+        section = _sectionHolder._section;
+        assert(_until(() => _text("remember:ruleLine") === "Not installed: every root run asks for the password."), "… opened again: removed");
         assert(/^Removed\. Undo puts back .*\/40-h2s-shell\.rules\.\S+[0-9Z]$/.test(_text("remember:caption")), "… what Undo puts back: " + _text("remember:caption"));
         assert(_runAndRead("remember:undo"), "Undo of Remove");
         assert(_until(() => _text("remember:ruleLine") === "Installed"), "… installed again");
@@ -459,6 +492,29 @@ TestCase {
         assert(_modalClick("modalButton:0") && _until(() => _runs.length > runs && _admin.refreshes > replaceReads && !_installer.busy), "… Replace: one run");
         assert(_until(() => _text("remember:ruleLine") === "Installed"), "… the shell's rule in its place");
         assert(!_shown("remember:hand:rule"), "… the file no longer shown");
+
+        // A hand-made conf beside a hand-made rule, at 5 min: Replace touches the rule only
+        const handConf = "[Polkitd]\nExpirationSeconds=120\n";
+        const confFile = _paths.conf + "/" + RememberInstallRules.confName;
+        assert(_write(confFile, handConf) && _write(_paths.rules + "/" + RememberInstallRules.ruleName, handText), "(a hand conf and a hand rule)");
+        const handReads = _admin.refreshes;
+        _admin.refresh();
+        assert(_until(() => _admin.refreshes > handReads && _shown("remember:hand:rule")), "… read: the rule changed");
+        assert(!_shown("remember:hand:conf"), "… the conf not in the way at 5 min: not offered for replacing");
+        assert(_click("remember:replace") && _until(() => host.open), "Replace…");
+        const body = _all(host.modal, "modalLine").map(item => item.text).join(" | ");
+        assert(_modalTitle() === "Replace " + RememberRules.rulePath + "?", "… names the rule only: " + _modalTitle());
+        assert(body.includes("Kept as it is: " + RememberRules.confPath + "."), "… and says the hand-made conf stays: " + body);
+        const handRuns = _runs.length, handReplaceReads = _admin.refreshes;
+        assert(_modalClick("modalButton:0") && _until(() => _runs.length > handRuns && _admin.refreshes > handReplaceReads && !_installer.busy), "… Replace");
+        assert(_until(() => _text("remember:ruleLine") === "Installed"), "… the shell's rule in place");
+        assertEqual(_admin.files.confs[RememberRules.confPath], handConf, "… the hand-made conf untouched");
+        let removedConf = false;
+        _exec(["rm", "--", confFile], () => removedConf = true);
+        assert(_until(() => removedConf), "(the hand conf taken away)");
+        const cleanReads = _admin.refreshes;
+        _admin.refresh();
+        assert(_until(() => _admin.refreshes > cleanReads), "(read again)");
 
         // --- something kept: the countdown, Forget now ---
         const markBefore = _item("remember:mark").kept;

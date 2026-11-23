@@ -48,6 +48,14 @@ TestCase {
 
     // The stand-in for PrivilegedRuns.startShell: the words run as the user (no pkexec), with
     // the most open umask a caller could hand on
+    // The words as PrivilegedRuns.startShell runs them after pkexec: under the shell's
+    // trusted timeout, with its limit
+    function _underTimeout(argv) {
+        const words = PrivilegedRules.shellArgv(CommandTools.timeout, Array.from(argv));
+        assert(words !== null, "the shell's trusted timeout is known: " + CommandTools.timeout);
+        return words === null ? Array.from(argv) : words.slice(1);
+    }
+
     function _start(request, done) {
         _runs.push({ what: request.what, argv: Array.from(request.argv) });
         if (_answer === "dismissed") {
@@ -55,7 +63,7 @@ TestCase {
             return;
         }
         const answer = _answer;
-        const go = () => _exec(["sh", "-c", "umask 000; exec \"$@\"", "sh"].concat(request.argv), (code, stdout, stderr) =>
+        const go = () => _exec(["sh", "-c", "umask 000; exec \"$@\"", "sh"].concat(suite._underTimeout(request.argv)), (code, stdout, stderr) =>
             done({ ok: answer === "run" || answer === "hold" ? code === 0 : false,
                    code: answer === "lost" ? -1 : answer === "noStdout" ? 141 : code,
                    stdout: answer === "lost" || answer === "noStdout" ? "" : stdout, stderr: answer === "lost" ? "" : stderr,

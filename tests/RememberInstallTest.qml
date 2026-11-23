@@ -55,6 +55,14 @@ TestCase {
 
     // The stand-in for PrivilegedRuns.startShell: the words run as the user (no pkexec), with
     // the most open umask a caller could hand on
+    // The words as PrivilegedRuns.startShell runs them after pkexec: under the shell's
+    // trusted timeout, with its limit
+    function _underTimeout(argv) {
+        const words = PrivilegedRules.shellArgv(CommandTools.timeout, Array.from(argv));
+        assert(words !== null, "the shell's trusted timeout is known: " + CommandTools.timeout);
+        return words === null ? Array.from(argv) : words.slice(1);
+    }
+
     function _start(request, done) {
         _runs.push({ what: request.what, argv: Array.from(request.argv) });
         if (_answer === "dismissed") {
@@ -62,7 +70,7 @@ TestCase {
             return;
         }
         const answer = _answer;
-        const go = () => _exec(["sh", "-c", "umask 000; exec \"$@\"", "sh"].concat(request.argv), (code, stdout, stderr) =>
+        const go = () => _exec(["sh", "-c", "umask 000; exec \"$@\"", "sh"].concat(suite._underTimeout(request.argv)), (code, stdout, stderr) =>
             done({ ok: answer === "lost" ? false : code === 0, code: answer === "lost" ? -1 : code,
                    stdout: answer === "lost" ? "" : stdout, stderr: answer === "lost" ? "" : stderr,
                    dismissed: false, refused: false, cancelled: false, blocked: "", error: "" }));
@@ -299,7 +307,7 @@ TestCase {
             assertEqual(_read.rule, _rule + "// mine\n", "… left as the hand made it");
             assertEqual(_install.install(_request(15)).refusal?.code, "changed", "read again: changed outside the shell, not started");
             _outcome = null;
-            assert(_install.install(_request(15, { replace: true })).started, "Replace: started");
+            assert(_install.install(_request(15, { replace: { rule: true, conf: true } })).started, "Replace: started");
         });
         _then("replaced", () => _outcome !== null, () => {
             assertEqual(_outcome.ok + " " + _outcome.rule + " " + _outcome.conf, "true " + sha(_rule) + " " + sha(_conf15), "replaced: ours in force");

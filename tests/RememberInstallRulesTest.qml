@@ -94,7 +94,9 @@ TestCase {
         // ── Files not the shell's ──
         const byHand = rule.replace("auth_admin_keep", "yes");
         assertEqual(code(install.installArgv("/bin/sh", request({ rule: byHand }), live, true)), "changed", "a rule changed by hand: not replaced");
-        assertEqual(words(install.installArgv("/bin/sh", request({ rule: byHand, replace: true }), live, true))[1], "write", "… unless replace");
+        assertEqual(words(install.installArgv("/bin/sh", request({ rule: byHand, replace: { rule: true } }), live, true))[1], "write", "… unless replace names the rule");
+        assertEqual(code(install.installArgv("/bin/sh", request({ rule: byHand, replace: true }), live, true)), "changed", "… a bare true replaces nothing");
+        assertEqual(code(install.installArgv("/bin/sh", request({ rule: byHand, replace: { conf: true } }), live, true)), "changed", "… nor the conf's word");
         assertEqual(code(install.installArgv("/bin/sh", request({ rule: "polkit.addRule(function() {});\n" }), live, true)), "changed",
                     "another file under our name: not replaced");
         const foreign = "[Polkitd]\nExpirationSeconds=60\n";
@@ -103,10 +105,13 @@ TestCase {
                     "a conf not ours: the rule installed, the conf left as it is");
         assertEqual(code(install.installArgv("/bin/sh", request({ minutes: 15, rule: rule, confs: confs({ [etc]: foreign }) }), live, true)), "changed",
                     "… and with the rule in place: changed, not \"nothing to do\"");
-        assertEqual(words(install.installArgv("/bin/sh", request({ minutes: 15, rule: rule, confs: confs({ [etc]: foreign }), replace: true }), live, true))[4],
+        assertEqual(words(install.installArgv("/bin/sh", request({ minutes: 15, rule: rule, confs: confs({ [etc]: foreign }), replace: { conf: true } }), live, true))[4],
                     "write", "… replace: ours written");
-        assertEqual(words(install.installArgv("/bin/sh", request({ minutes: 5, rule: rule, confs: confs({ [etc]: foreign }), replace: true }), live, true))[4],
+        assertEqual(words(install.installArgv("/bin/sh", request({ minutes: 5, rule: rule, confs: confs({ [etc]: foreign }), replace: { conf: true } }), live, true))[4],
                     "remove", "… replace at the system's length: it goes");
+        assertEqual(words(install.installArgv("/bin/sh", request({ minutes: 5, rule: byHand, confs: confs({ [etc]: foreign }), replace: { rule: true } }), live, true)).slice(1, 2)
+                    .concat(words(install.installArgv("/bin/sh", request({ minutes: 5, rule: byHand, confs: confs({ [etc]: foreign }), replace: { rule: true } }), live, true)).slice(4, 5)).join(" "),
+                    "write keep", "… the rule named only: a hand-made conf kept");
 
         // ── Refused before the run ──
         assertEqual(code(install.installArgv("/bin/sh", request({ rule: null }), live, true)), "unread", "the rules file not read");
@@ -137,7 +142,7 @@ TestCase {
         assertEqual(words(plan)[4] + " " + plan.expected.reload, "keep false", "a conf not ours stays");
         assertEqual(words(install.removeArgv("/bin/sh", request({ rule: outdated }), live, true))[1], "remove", "our outdated rule goes");
         assertEqual(code(install.removeArgv("/bin/sh", request({ rule: byHand }), live, true)), "changed", "a rule changed by hand: not removed");
-        assertEqual(words(install.removeArgv("/bin/sh", request({ rule: byHand, replace: true }), live, true))[1], "remove", "… unless replace");
+        assertEqual(words(install.removeArgv("/bin/sh", request({ rule: byHand, replace: { rule: true } }), live, true))[1], "remove", "… unless replace names the rule");
         assertEqual(code(install.removeArgv("/bin/sh", request(), live, true)), "unchanged", "nothing installed: nothing to remove");
         assertEqual(code(install.removeArgv("/bin/sh", request({ confs: confs({ [etc]: foreign }) }), live, true)), "unchanged", "… a conf not ours is not ours to remove");
         assertEqual(words(install.removeArgv("/bin/sh", request({ confs: confs({ [etc]: conf15 }) }), live, true)).slice(1, 2).concat([words(install.removeArgv("/bin/sh", request({ confs: confs({ [etc]: conf15 }) }), live, true))[4]]).join(" "),
@@ -164,6 +169,12 @@ TestCase {
         const ran = (stdout, more) => Object.assign({ ok: true, code: 0, stdout, stderr: "", dismissed: false, refused: false, cancelled: false, blocked: "", error: "" }, more ?? {});
         const line = (kind, ruleHash, confHash, stamp, reload) => kind + " " + ruleHash + " " + confHash + " " + stamp + " " + reload + "\n";
         let outcome = install.reply(ran(line("applied", sha(rule), sha(conf15), "20261123T101500Z", "hup")), expected);
+        // Ended by the shell's timeout (TERM: 124, KILL after it: 137) before saying it was done
+        for (const stopped of [124, 137]) {
+            const timedOut = install.reply(ran("", { ok: false, code: stopped, timedOut: true }), expected);
+            assertEqual(timedOut.ok + " " + timedOut.quiet + " " + timedOut.error, "false false exit code " + stopped,
+                        "stopped by the timeout (" + stopped + "): a failure, said, the files read again");
+        }
         assertEqual(JSON.stringify(outcome), JSON.stringify({ ok: true, quiet: false, kind: "applied", rule: sha(rule), conf: sha(conf15), stamp: "20261123T101500Z",
                                                               reload: "hup", refused: "", error: "", files: "done" }), "applied: what is in force, the stamp, polkitd told");
         assertEqual(install.reply(ran(line("applied", sha(rule), sha(conf15), "20261123T101500Z", "nohup")), expected).reload, "nohup",

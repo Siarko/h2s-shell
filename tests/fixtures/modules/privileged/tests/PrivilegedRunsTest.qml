@@ -858,6 +858,11 @@ TestCase {
             const shell = answers.find(entry => entry[0] === "shell")[1];
             assert(!shell.ok && !shell.dismissed && !shell.refused && shell.code === -1 && shell.error !== "",
                    "the shell's command: refused at its launch, nothing run: " + JSON.stringify(shell));
+            const words = PrivilegedLookupSeam.lastShellArgv();
+            assertEqual(JSON.stringify(words.slice(2, 5).concat(words.slice(5))),
+                        JSON.stringify(["-k", "3", "300", _path("talk"), "lines", "1", "0"]),
+                        "… queued under the shell's timeout, as a module's run: " + JSON.stringify(words));
+            assert(words[0] === "pkexec" && words[1].startsWith("/") && words[1].endsWith("timeout"), "… pkexec by name, then the trusted timeout");
             assertEqual(JSON.stringify(_notices().map(entry => entry.body)), JSON.stringify(["Authorization: behind the shell's"]),
                         "… never announced as a module's: only the module's run behind it");
             assertEqual(ModuleTestKit.notified.filter(entry => entry.summary.startsWith("Shell: ")).length, 0,

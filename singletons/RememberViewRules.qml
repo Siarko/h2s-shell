@@ -207,9 +207,26 @@ Singleton {
         };
     }
 
+    // How much of a file changed by hand is shown: at most this many lines, each cut to
+    // this many characters
+    readonly property int handMaxLines: 40
+    readonly property int handMaxCharacters: 200
+
+    // A file's lines for the page, capped: [{ text, marked, more (the "… N more lines" line) }]
+    function _capped(lines) {
+        const shown = lines.slice(0, handMaxLines).map(line => ({
+            text: line.text.length > handMaxCharacters ? line.text.slice(0, handMaxCharacters) + "…" : line.text,
+            marked: line.marked, more: false
+        }));
+        const rest = lines.length - shown.length;
+        if (rest > 0)
+            shown.push({ text: "… " + rest + (rest === 1 ? " more line" : " more lines"), marked: false, more: true });
+        return shown;
+    }
+
     // A rules file changed by hand, its lines against the shell's rule for the facts: those
     // the shell's text has not are marked (its header line never) → { lines: [{ text,
-    // marked }], caption }
+    // marked, more }], caption } — every marked line counted, the shown ones capped
     function handRule(text, facts) {
         const own = RememberRules.ruleText(facts).split("\n");
         const lines = String(text ?? "").replace(/\n$/, "").split("\n").map(line => ({
@@ -218,7 +235,7 @@ Singleton {
         }));
         const count = lines.filter(line => line.marked).length;
         return {
-            lines,
+            lines: _capped(lines),
             caption: count === 0 ? "Changed outside the shell."
                 : (_counts[count] ?? String(count)) + (count === 1 ? " line was" : " lines were") + " added outside the shell."
         };
@@ -227,47 +244,73 @@ Singleton {
     // A polkitd.conf not written by the shell, as it is
     function handConf(text) {
         return {
-            lines: String(text ?? "").replace(/\n$/, "").split("\n").map(line => ({ text: line, marked: false })),
+            lines: _capped(String(text ?? "").replace(/\n$/, "").split("\n").map(line => ({ text: line, marked: false }))),
             caption: "Not written by the shell."
         };
     }
 
-    // The question before Replace: the files changed by hand go to the backups, the shell's
-    // are written. `shown` { rule, conf }: the sha256 of each text the page showed (null:
-    // not shown), the subject the answer is checked against.
-    function replaceSpec(shown, backups) {
-        const names = [];
-        if (shown?.rule)
-            names.push(RememberRules.rulePath);
-        if (shown?.conf)
-            names.push(RememberRules.confPath);
+    // What a question acts on: the sha256 of both files as the page shows them ("absent"
+    // for none; null when not readable — never acted on), and the files it names
+    function subjectOf(files, replace) {
+        return {
+            rule: currentOf(files?.rule), conf: currentOf(files?.confs?.[RememberRules.confPath]),
+            replace: { rule: replace?.rule === true, conf: replace?.conf === true }
+        };
+    }
+
+    // The answer still acts: both files are exactly what the question was asked about
+    function subjectHolds(subject, files) {
+        const now = subjectOf(files, null);
+        return !!subject && typeof subject.rule === "string" && typeof subject.conf === "string"
+            && subject.rule === now.rule && subject.conf === now.conf;
+    }
+
+    function _pathOf(name) {
+        return name === "rule" ? RememberRules.rulePath : RememberRules.confPath;
+    }
+
+    // Every file a run will touch, and a hand-made one it leaves, in the question's words.
+    // `named` { rule, conf }: the files changed by hand the question replaces or removes;
+    // `plan` RememberInstall.plan's answer; `kept` { rule, conf }: hand-made files left as
+    // they are
+    function _touchLines(named, plan, kept, verb) {
+        const lines = [];
+        const others = ["rule", "conf"].filter(name => plan?.[name] === true && named?.[name] !== true).map(_pathOf);
+        if (others.length > 0)
+            lines.push("Also " + verb + ": " + others.join(", ") + ".");
+        const left = ["rule", "conf"].filter(name => kept?.[name] === true && named?.[name] !== true).map(_pathOf);
+        if (left.length > 0)
+            lines.push("Kept as it is: " + left.join(", ") + ".");
+        return lines;
+    }
+
+    // The question before Replace: `replace` { rule, conf } the files changed by hand it
+    // replaces, `plan` what the Install would change, `handMade` { rule, conf } the files not
+    // the shell's, `files` the texts shown (its subject)
+    function replaceSpec(replace, plan, handMade, files, backups) {
+        const names = ["rule", "conf"].filter(name => replace?.[name] === true).map(_pathOf);
         return {
             kind: "warning",
             title: "Replace " + names.join(" and ") + "?",
-            body: ["The hand-made " + (names.length === 1 ? "file goes" : "files go") + " to the backups: " + String(backups ?? "") + ".",
-                   "Then the shell writes its own in their place. Undo puts them back."],
+            body: ["The hand-made " + (names.length === 1 ? "file goes" : "files go") + " to the backups: " + String(backups ?? "") + "."]
+                .concat(_touchLines(replace, plan, handMade, "changed"))
+                .concat(["Then the shell writes its own in their place. Undo puts them back."]),
             buttons: [{ id: "replace", label: "Replace", kind: "warning" }],
-            subject: { rule: shown?.rule ?? null, conf: shown?.conf ?? null }
+            subject: subjectOf(files, replace)
         };
     }
 
-    // The question before Remove of a rules file changed by hand, keyed to its sha256
-    function removeSpec(hash, backups) {
+    // The question before Remove of a rules file changed by hand
+    function removeSpec(plan, handMade, files, backups) {
+        const named = { rule: true, conf: false };
         return {
             kind: "warning",
             title: "Remove " + RememberRules.rulePath + "?",
-            body: ["It was changed outside the shell. It goes to the backups: " + String(backups ?? "") + ".",
-                   "Undo puts it back."],
+            body: ["It was changed outside the shell. It goes to the backups: " + String(backups ?? "") + "."]
+                .concat(_touchLines(named, plan, handMade, "removed"))
+                .concat(["Undo puts it back."]),
             buttons: [{ id: "remove", label: "Remove", kind: "warning" }],
-            subject: { rule: hash }
+            subject: subjectOf(files, named)
         };
-    }
-
-    // The answer still acts: the files are what the question showed
-    function subjectHolds(subject, files) {
-        const now = { rule: currentOf(files?.rule), conf: currentOf(files?.confs?.[RememberRules.confPath]) };
-        return !!subject && (subject.rule === null || subject.rule === undefined || subject.rule === now.rule)
-            && (subject.conf === null || subject.conf === undefined || subject.conf === now.conf)
-            && (!!subject.rule || !!subject.conf);
     }
 }

@@ -1500,7 +1500,10 @@ and a trusted `timeout` are found.
   the shell cannot know whether that agent asks. One per run started; none for a run
   refused before pkexec, none while locked (nothing starts then), none with the shell's
   own prompt.
-- **The words pkexec gets**: `<pkexec> <timeout> -k 3 <limit> <argv…>`. The shell's own
+- **The words pkexec gets**: `<pkexec> <timeout> -k 3 <limit> <argv…>`, for a module's run
+  and for a command of the shell's own (`startShell`: its fixed `/bin/sh` scripts, the
+  limit `PrivilegedRules.shellRunMs`, 5 minutes; refused while no trusted `timeout` is
+  found). Only an old `PrivilegedAction` run is handed to pkexec as it is. The shell's own
   trusted `timeout` runs inside pkexec, as root, and ends the command at its limit whatever
   happens to the shell. Nothing is put around pkexec: once the command runs as root the
   shell cannot signal it, and the kernel drops `setpriv --pdeathsig` at the exec of a setuid
@@ -1527,7 +1530,9 @@ and a trusted `timeout` are found.
 - **A remembered password** (`singletons/RememberedAdmin.qml`, its I/O
   `singletons/io/RememberedAdminReader.qml`, its decisions `singletons/RememberRules.qml`):
   a polkit rule makes the shell's own runs — pkexec's action with the shell's `timeout` as
-  the program, for the user — `auth_admin_keep`, so polkitd keeps a typed password for the
+  the program, for the user: every module's run and every command of the shell's own (PAM
+  writes, the Hibernate Apply, this feature's Install), not an old `PrivilegedAction` run —
+  `auth_admin_keep`, so polkitd keeps a typed password for the
   shell's process for its `ExpirationSeconds` (5 min by default). Other programs' pkexec
   still asks. What is installed is read unprivileged (the rules file, the three
   `polkitd.conf` files, the resolved `timeout`); what is kept is polkit's
@@ -1537,8 +1542,8 @@ and a trusted `timeout` are found.
   "Forget now", at the setting `system.rememberAdminMinutes` when shorter than polkit's
   length, and when the shell ends. A module's `PrivilegedMark` shows an open, dimmed lock
   while kept (`module.privileged.remembered`). The prompt says "Remembered for N min" under
-  the field for a run of the queue while the rule is installed and both lengths are known
-  (`RememberRules.promptLine`); Settings → System → Authentication's section "Remember the
+  the field for a run under the shell's `timeout` (`PolkitRules.timeoutRun`) while the rule
+  is installed and both lengths are known (`RememberRules.promptLine`); Settings → System → Authentication's section "Remember the
   password" (`panels/settings/RememberAdminSection.qml`, decisions in
   `singletons/RememberViewRules.qml`) shows the state, the length and what is kept, and
   installs it.
@@ -1547,11 +1552,14 @@ and a trusted `timeout` are found.
     page shows the option to copy, built from the setting.
   - Arch: Install, Install again, Remove and Undo are one run as administrator each
     (`singletons/io/RememberInstall.qml`, the fixed script in
-    `singletons/RememberInstallRules.qml`), built only from what the reader read: it writes
+    `singletons/RememberInstallRules.qml`; the requests and what the last run left are
+    `singletons/io/RememberActions.qml`'s, `RememberedAdmin.actions`, so a page closed
+    mid-run keeps them), built only from what the reader read: it writes
     `/usr/share/polkit-1/rules.d/40-h2s-shell.rules` and, when the setting is longer than
     polkit's length, `/etc/polkit-1/polkitd.conf`, backs both up to
     `/var/lib/h2s-shell/polkit-backup` and tells polkitd to read its conf again. A file
-    changed outside the shell is replaced only through "Replace…", keyed to the text shown.
+    changed outside the shell is replaced only through "Replace…", which names every file
+    the run touches and acts only on the files it named, while both are as shown.
 - NixOS: pkexec is the setuid wrapper `/run/wrappers/bin/pkexec` (the store's copy is not
   setuid); `timeout` leads into the store.
 - Arch: `/usr/bin/pkexec`, `/usr/bin/timeout`.

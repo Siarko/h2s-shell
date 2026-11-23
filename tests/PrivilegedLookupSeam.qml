@@ -24,6 +24,7 @@ import qs.singletons
 //                         `detached`, it is asked from the event loop, as the shell's own code
 //                         asks — then queued, and in test mode refused at its launch (no
 //                         stand-in is allowed for it), so nothing runs
+//   lastShellArgv()       the words the last of those was queued with (pkexec still by name)
 // All of them do nothing outside test mode.
 Singleton {
     function holdLookup(on) {
@@ -50,6 +51,10 @@ Singleton {
             Qt.callLater(() => PrivilegedRuns.startShell(request, done));
         else
             PrivilegedRuns.startShell(request, done);
+    }
+
+    function lastShellArgv() {
+        return Modules.host.testMode ? Array.from(PrivilegedRuns._lastShellArgv) : [];
     }
 
     function waitingCount() {

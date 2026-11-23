@@ -61,9 +61,10 @@ The interface modules are written against (`qs.api`), versioned on its own
   "Remembered, 4 min left" with "Forget now"; it is also forgotten at lock and when the shell
   restarts. Arch: Install / Install again / Remove / Undo, one password prompt each, with
   backups in `/var/lib/h2s-shell/polkit-backup`; a file changed outside the shell is shown
-  and replaced only through "Replace…". NixOS: the module's option, with Copy. The shell's
-  prompt says "Remembered for N min" under the field for its own runs while the rule is
-  installed; "Try the prompt" says no prompt will show while a password is kept.
+  and replaced only through "Replace…", which names every file it touches. NixOS: the
+  module's option, with Copy. The shell's prompt says "Remembered for N min" under the field
+  for its own and its modules' runs while the rule is installed; "Try the prompt" says no
+  prompt will show while a password is kept.
 - NixOS: the module's `programs.h2s-shell.polkit.rememberAdmin = { enable; users; minutes; }`
   remembers the administrator password for the shell's own root runs, for the listed users:
   a polkit rule keeps a typed password for the shell's process; `minutes` (1–60, default 5)
@@ -71,6 +72,10 @@ The interface modules are written against (`qs.api`), versioned on its own
   reloads when it changes.
 
 ### Changed
+- The shell's own runs as administrator (the sign-in rules' Apply, the Hibernate section's
+  Apply, "Remember the password"'s Install / Remove / Undo) run inside the shell's
+  `timeout`, as modules' runs do: ended after 5 minutes at most, and covered by a
+  remembered password.
 - NixOS: `programs.h2s-shell.polkit.passwordFirst` is deprecated (a warning when set): a
   password row above the fingerprint row in `programs.h2s-shell.pam.rules` does the same.
   Without polkit rules it works as before; set to true beside them, it stops the build.

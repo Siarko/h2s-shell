@@ -17,12 +17,12 @@ import qs.singletons.io
 ColumnLayout {
     id: root
 
-    // The I/O, handed in by a suite as stand-ins: what is read and kept (RememberedAdmin's
-    // installed, system, facts, files, kept, remembered, forget outcome, refresh, forget,
-    // showCountdown, hideCountdown) and the runs (RememberInstall's install, remove, undo,
-    // busy, paths, finished)
-    property var admin: RememberedAdmin
-    property var installer: _ownInstaller
+    // The I/O, handed in by a suite as stand-ins: the runs and what the last one left
+    // (RememberActions: RememberedAdmin.actions), and what is read and kept (its admin:
+    // RememberedAdmin's installed, system, facts, files, kept, remembered, forget outcome,
+    // refresh, forget, showCountdown, hideCountdown)
+    property var actions: RememberedAdmin.actions
+    readonly property var admin: actions?.admin ?? null
     // Where questions are asked (SettingsModalHost)
     property var modalHost: null
     property var copyText: text => {
@@ -35,132 +35,96 @@ ColumnLayout {
     Layout.fillWidth: true
     spacing: 0
 
-    RememberInstall {
-        id: _ownInstaller
-    }
-
     readonly property var _installed: admin?.installed ?? null
     readonly property string _system: admin?.system ?? ""
     readonly property var _files: admin?.files ?? null
     readonly property var _facts: admin?.facts ?? null
     readonly property var _remembered: admin?.remembered ?? null
-    readonly property string _backups: installer?.paths?.backups ?? RememberInstallRules.livePaths.backups
-    readonly property bool _busy: installer?.busy === true
-    readonly property var _actions: RememberViewRules.actions(_installed, _system, _files, minutes, _busy, lastWrite)
-
-    // What the last Install or Remove left for Undo (RememberViewRules.lastWriteOf), null for none
-    property var lastWrite: null
-    // What the last run said, under the buttons
-    property string note: ""
+    readonly property var _paths: actions?.installer?.paths ?? RememberInstallRules.livePaths
+    readonly property string _backups: _paths?.backups ?? RememberInstallRules.livePaths.backups
+    readonly property var lastWrite: actions?.lastWrite ?? null
+    readonly property var _actions: RememberViewRules.actions(_installed, _system, _files, minutes, actions?.busy === true, lastWrite)
+    // Hand-made files: the rule changed outside the shell, a polkitd.conf not the shell's
+    readonly property var _handMade: ({ rule: _installed?.rule === "changed", conf: _installed?.conf === "changed" })
+    // What the page says beside the last run's note
+    property string _pageNote: ""
+    readonly property string note: _pageNote !== "" ? _pageNote : (actions?.note ?? "")
     property bool copied: false
-    // The run under way: { mode, files (the texts it was asked with) }
-    property var _pending: null
 
-    Component.onCompleted: admin?.refresh()
-
-    function _request(replace) {
-        return { facts: _facts, minutes: minutes, rule: _files?.rule, confs: _files?.confs ?? {}, replace: replace === true };
+    Component.onCompleted: {
+        admin?.refresh();
+        _syncCountdown();
     }
 
-    function _started(mode, started, files) {
-        if (started?.started === true) {
-            note = "";
-            _pending = { mode, files };
-        } else {
-            note = started?.refusal?.text ?? "";
-        }
-    }
-
-    function install(replace) {
-        if (_busy || !_files || !_facts)
-            return;
-        const files = _files;
-        _started("install", installer.install(_request(replace)), files);
-    }
-
-    function remove(replace) {
-        if (_busy || !_files || !_facts)
-            return;
-        const files = _files;
-        _started("remove", installer.remove(_request(replace)), files);
+    function install() {
+        _pageNote = "";
+        actions?.install(minutes, null);
     }
 
     function undo() {
-        if (_busy || !lastWrite)
-            return;
-        _started("undo", installer.undo({ stamp: lastWrite.stamp, rule: lastWrite.after.rule, conf: lastWrite.after.conf }), _files);
+        _pageNote = "";
+        actions?.undo();
     }
 
     function _ask(spec, onAnswer) {
         return !!modalHost && modalHost.ask(spec, onAnswer) === "";
     }
 
-    // Replace…: the files changed by hand that the page shows, keyed by their sha256
+    // Replace…: the files changed by hand the page shows (the conf only where the setting
+    // needs the shell's), keyed by the sha256 of both files as shown
     function askReplace() {
-        const shown = {
-            rule: _installed?.rule === "changed" ? RememberViewRules.currentOf(_files?.rule) : null,
-            conf: RememberViewRules.confInTheWay(_installed, _files, minutes) ? RememberViewRules.currentOf(_files?.confs?.[RememberRules.confPath]) : null
-        };
-        if (!shown.rule && !shown.conf)
+        const replace = { rule: _handMade.rule, conf: RememberViewRules.confInTheWay(_installed, _files, minutes) };
+        if (!replace.rule && !replace.conf)
             return;
-        _ask(RememberViewRules.replaceSpec(shown, _backups), answer => {
+        _pageNote = "";
+        const plan = actions.plan("install", minutes, replace);
+        _ask(RememberViewRules.replaceSpec(replace, plan, _handMade, _files, _backups), answer => {
             if (answer.cancelled || answer.button !== "replace")
                 return;
             if (RememberViewRules.subjectHolds(answer.subject, root._files))
-                root.install(true);
+                root.actions.install(root.minutes, answer.subject.replace);
             else
-                root.note = "The file changed since it was shown: nothing replaced.";
+                root._pageNote = "The file changed since it was shown: nothing replaced.";
         });
     }
 
     function askRemove() {
+        _pageNote = "";
         if (!_actions.remove.asks) {
-            remove(false);
+            actions?.remove(null);
             return;
         }
-        _ask(RememberViewRules.removeSpec(RememberViewRules.currentOf(_files?.rule), _backups), answer => {
+        const plan = actions.plan("remove", minutes, { rule: true, conf: false });
+        _ask(RememberViewRules.removeSpec(plan, _handMade, _files, _backups), answer => {
             if (answer.cancelled || answer.button !== "remove")
                 return;
             if (RememberViewRules.subjectHolds(answer.subject, root._files))
-                root.remove(true);
+                root.actions.remove(answer.subject.replace);
             else
-                root.note = "The file changed since it was shown: nothing removed.";
+                root._pageNote = "The file changed since it was shown: nothing removed.";
         });
     }
 
-    Connections {
-        target: root.installer
-        ignoreUnknownSignals: true
-        function onFinished(outcome) {
-            const pending = root._pending;
-            if (!pending)
-                return;
-            root._pending = null;
-            if (pending.mode === "undo") {
-                if (outcome.ok)
-                    root.lastWrite = null;
-            } else if (outcome.ok) {
-                root.lastWrite = RememberViewRules.lastWriteOf(pending.mode, outcome, pending.files);
-            }
-            root.note = RememberViewRules.runNote(outcome);
-            // Done or not, the files are read again: a run cut short may have changed them
-            root.admin?.refresh();
-        }
-    }
-
-    // The countdown: once a second while something is kept and the section shows
-    readonly property bool _counting: _remembered?.kept === true && root.visible && (root.Window.window?.visible ?? false)
-    property bool _countdownShown: false
     property real _now: Date.now()
+    readonly property var _kept: RememberViewRules.keptRow(_remembered, admin?.kept ?? null,
+        { outcome: admin?.forgetOutcome ?? "", reason: admin?.forgetReason ?? "", atMs: admin?.forgetAtMs ?? 0 },
+        admin?.lastObtainedMs ?? 0, _now, Qt.formatTime(new Date(admin?.forgetAtMs ?? 0), "hh:mm"))
+
+    // The countdown: once a second while the kept row counts down and the section shows
+    readonly property bool _counting: _kept.kept && root.visible && (root.Window.window?.visible ?? false)
+    property bool _countdownShown: false
+    function _syncCountdown() {
+        if (_counting === _countdownShown)
+            return;
+        _countdownShown = _counting;
+        if (_counting)
+            admin?.showCountdown();
+        else
+            admin?.hideCountdown();
+    }
     on_CountingChanged: {
         _now = Date.now();
-        if (_counting !== _countdownShown) {
-            _countdownShown = _counting;
-            if (_counting)
-                admin?.showCountdown();
-            else
-                admin?.hideCountdown();
-        }
+        _syncCountdown();
     }
     on_RememberedChanged: _now = Date.now()
     Component.onDestruction: {
@@ -173,10 +137,6 @@ ColumnLayout {
         running: root._counting
         onTriggered: root._now = Date.now()
     }
-
-    readonly property var _kept: RememberViewRules.keptRow(_remembered, admin?.kept ?? null,
-        { outcome: admin?.forgetOutcome ?? "", reason: admin?.forgetReason ?? "", atMs: admin?.forgetAtMs ?? 0 },
-        admin?.lastObtainedMs ?? 0, _now, Qt.formatTime(new Date(admin?.forgetAtMs ?? 0), "hh:mm"))
 
     function _tone(tone) {
         return tone === "success" ? Theme.success : tone === "warning" ? Theme.warning : tone === "error" ? Theme.error : Theme.textMuted;
@@ -226,7 +186,7 @@ ColumnLayout {
             kind: "save"
             available: root._actions.available
             tooltip: "Asks the administrator password"
-            onClicked: root.install(false)
+            onClicked: root.install()
         }
         SmallButton {
             objectName: "remember:remove"
@@ -257,7 +217,7 @@ ColumnLayout {
         visible: root._system === "arch"
         Layout.fillWidth: true
         Layout.topMargin: 4
-        text: RememberViewRules.backupCaption(root.lastWrite, root.installer?.paths ?? RememberInstallRules.livePaths)
+        text: RememberViewRules.backupCaption(root.lastWrite, root._paths)
     }
     Caption {
         objectName: "remember:note"
@@ -492,7 +452,7 @@ ColumnLayout {
                                 Layout.fillWidth: true
                                 spacing: 8
                                 Text {
-                                    objectName: _fileLine.line.marked ? "remember:marked" : "remember:line"
+                                    objectName: _fileLine.line.marked ? "remember:marked" : _fileLine.line.more ? "remember:more" : "remember:line"
                                     Layout.fillWidth: true
                                     text: _fileLine.line.text
                                     textFormat: Text.PlainText
@@ -500,7 +460,7 @@ ColumnLayout {
                                     maximumLineCount: 1
                                     font.family: Theme.fontFamily
                                     font.pixelSize: Theme.fontSizeSmall
-                                    color: _fileLine.line.marked ? Theme.error : Theme.textSecondary
+                                    color: _fileLine.line.marked ? Theme.error : _fileLine.line.more ? Theme.textMuted : Theme.textSecondary
                                 }
                                 Caption { visible: _fileLine.line.marked; text: "not the shell's"; color: Theme.error; wrapMode: Text.NoWrap }
                             }

@@ -196,6 +196,14 @@ Singleton {
         });
     }
 
+    // Whether an announced run (announcement()'s) went under the shell's `timeout` — a
+    // module's run or the shell's own command —, which the remembered authorization's rule
+    // covers; an old PrivilegedAction's run (no purpose, no module named) runs its own words
+    function timeoutRun(announcement) {
+        return announcement !== null && typeof announcement === "object" && String(announcement.authorization ?? "") !== ""
+            && String(announcement.moduleName ?? "") !== unnamedModule;
+    }
+
     // What the polkit prompt shows where. `announcement`: announcement()'s, or null for a
     // request that is not a run of the shell's queue; `identityCount`: how many accounts can
     // answer → frozen { identity ("name": the "As user" row with the one account's name,

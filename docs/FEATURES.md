@@ -761,7 +761,7 @@ is kept, "Remembered, 4 min left", counting down, with "Forget now". It is also 
 when the screen locks and when the shell restarts. While kept, "Try the prompt" says no
 prompt will show, and a module's lock marks show an open, dimmed lock. The shell's prompt
 says "Remembered for 5 min" under the password field for its own runs while the rule is
-installed.
+installed (not for an old module's runs, which do not go through the shell's `timeout`).
 
 #### NixOS
 
@@ -775,7 +775,8 @@ and, when the setting is longer than the system's length, `/etc/polkit-1/polkitd
 "Install again" follows a longer setting or a moved `timeout`; Remove takes them away. Each is
 one password prompt (none while a password is kept). The old files go to
 `/var/lib/h2s-shell/polkit-backup` first; Undo puts them back. A file changed outside the
-shell is shown with the lines that are not the shell's marked: "Read again", or "Replace…".
+shell is shown with the lines that are not the shell's marked: "Read again", or "Replace…",
+whose question names every file it touches; a hand-made file it does not name stays as it is.
 
 ## Settings
 

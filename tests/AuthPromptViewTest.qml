@@ -326,6 +326,11 @@ TestCase {
         assertEqual(_rememberedLine(first, { rule: "none", seconds: 300 }, 5), "", "the rule not installed: no line");
         assertEqual(_rememberedLine(first, { rule: "ours", seconds: -1 }, 5), "", "the system's length not known: no line");
         assertEqual(_rememberedLine(null, ours, 5), "", "a request not of the shell's queue: no line");
+        const shellRun = PolkitRules.announcement({ shell: true, what: "Remember the administrator password",
+                                                    pkexecArgv: ["/usr/bin/timeout", "-k", "3", "300", "/bin/sh", "-c", "x", "sh"] });
+        assertEqual(_rememberedLine(shellRun, ours, 5), "Remembered for 5 min", "the shell's own command: the line (it runs under the timeout too)");
+        const legacyRun = PolkitRules.announcement({ legacy: true, moduleId: "tailscale", what: "Connect", pkexecArgv: ["/usr/bin/tailscale", "up"] });
+        assertEqual(_rememberedLine(legacyRun, ours, 5), "", "an old PrivilegedAction's run (its own words, no timeout): no line");
         assertEqual(_rememberedLine(first, null, 5), "", "nothing read: no line");
         finish();
     }

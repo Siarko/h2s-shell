@@ -216,6 +216,15 @@ TestCase {
                     JSON.stringify(["/run/wrappers/bin/pkexec", "/usr/bin/timeout", "-k", "3", "30", "/usr/bin/tailscale", "file", "cp", "--", "-x"]),
                     "pkexec, then the shell's timeout with its kill-after and the limit, then the command as given");
         assertEqual(rules.pkexecArgv("/p", "/t", 2500, 0, ["/c"]).slice(2, 5).join(" "), "-k 0.001 2.5", "seconds with decimals; a kill-after of 0 is 1 ms");
+        assertEqual(JSON.stringify(rules.shellArgv("/usr/bin/timeout", ["/bin/sh", "-c", "x", "sh", "a"])),
+                    JSON.stringify(["pkexec", "/usr/bin/timeout", "-k", "3", "300", "/bin/sh", "-c", "x", "sh", "a"]),
+                    "shellArgv: the shell's own command under the timeout, its limit, pkexec by name");
+        assertEqual([rules.shellArgv("", ["/bin/sh"]), rules.shellArgv("timeout", ["/bin/sh"]), rules.shellArgv("/t", ["sh"]), rules.shellArgv("/t", [])].join(","),
+                    ",,,", "… no trusted timeout or no absolute command: null");
+        assertEqual([rules.shellArgv("/t", "/bin/sh"), rules.shellArgv("/t", [5]), rules.shellArgv("/t", ["sh", "/x"]), rules.shellArgv(null, ["/bin/sh"])].join(","),
+                    ",,,", "… a command that is not a list of words, a first word not text, a relative first word: null");
+        assertEqual(JSON.stringify(rules.shellArgv("/t", ["/bin/true"])), JSON.stringify(["pkexec", "/t", "-k", "3", "300", "/bin/true"]),
+                    "… a command of one word");
 
         // --- the old PrivilegedAction: its default "pkexec" is the shell's trusted one ---
         assert(rules.legacySystemPkexec(["pkexec"], false), "\"pkexec\" by name outside test mode: the trusted pkexec");
