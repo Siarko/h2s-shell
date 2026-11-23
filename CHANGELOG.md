@@ -958,7 +958,8 @@ The interface modules are written against (`qs.api`), versioned on its own
   `pam.sudo.rules` and `pam.polkit.rules`, one list per service — set sudo's and polkit's
   `auth` rules as an ordered list of rows: fingerprint (`timeout`, `tries`), security key
   (`pin`), password (`counted`), a raw line (`module`, `args`), and `{ method = "system"; }`
-  for NixOS's own rules below them; without that row the list ends with a closing line.
+  for NixOS's own rules below them; without that row the list ends with closing lines
+  that keep NixOS's own rules from being reached.
   `control` is PAM's word (`sufficient` by default). NixOS's own fingerprint and key rules
   are off for a service with rules. A list nobody could get in with, a required reader the
   machine does not have, both services without a password, a raw line that lets anyone in

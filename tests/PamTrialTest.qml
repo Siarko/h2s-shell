@@ -94,6 +94,42 @@ TestCase {
 
     property CommandRunner _runner: CommandRunner {}
 
+    // Waits (a deadline only) for the directory $1 to be gone: "gone" or "there"
+    readonly property string _goneScript: "for i in $(seq 300); do [ -e \"$1\" ] || break; sleep 0.05; done; [ -e \"$1\" ] && echo there || echo gone"
+
+    // scripts/pam-trial-stage.sh ($1) under the scratch directory ($2): each case "ok <what>"
+    // or "bad <what>"
+    readonly property string _refusalScript: [
+        "stage=$1 s=$2 p=$2/run",
+        "check() { label=$1; shift; if \"$@\"; then echo \"ok $label\"; else echo \"bad $label\"; fi; }",
+        "refused() { \"$stage\" \"$@\" 2> /dev/null && return 1; return 0; }",
+        "mkdir -p \"$s/other/h2s-pam-trial.ABCDEFGH\"; ln -s \"$s/other/h2s-pam-trial.ABCDEFGH\" \"$p/h2s-pam-trial.Linked12\"; ln -s \"$p\" \"$s/runlink\"",
+        "check 'staged' \"$stage\" stage \"$p\" \"$p/h2s-pam-trial.Okay1234\" a 'x' > /dev/null",
+        "check '… its file, 0600, in a 0700 directory' test \"$(stat -c %a \"$p/h2s-pam-trial.Okay1234\") $(stat -c %a \"$p/h2s-pam-trial.Okay1234/a\") $(cat \"$p/h2s-pam-trial.Okay1234/a\")\" = '700 600 x'",
+        "check 'a directory already there: refused' refused stage \"$p\" \"$p/h2s-pam-trial.Okay1234\" b 'y'",
+        "check '… and left as it was' test -e \"$p/h2s-pam-trial.Okay1234/a\" -a ! -e \"$p/h2s-pam-trial.Okay1234/b\"",
+        "check 'remove through .. into another directory: refused' refused remove \"$p\" \"$p/../other/h2s-pam-trial.ABCDEFGH\"",
+        "check 'remove of a directory elsewhere: refused' refused remove \"$p\" \"$s/other/h2s-pam-trial.ABCDEFGH\"",
+        "check 'remove through a link: refused' refused remove \"$p\" \"$p/h2s-pam-trial.Linked12\"",
+        "check '… the other directory still there' test -d \"$s/other/h2s-pam-trial.ABCDEFGH\" -a -L \"$p/h2s-pam-trial.Linked12\"",
+        "check 'a parent with a trailing slash: refused' refused remove \"$p/\" \"$p//h2s-pam-trial.Okay1234\"",
+        "check 'a parent with //: refused' refused remove \"$s//run\" \"$s//run/h2s-pam-trial.Okay1234\"",
+        "check 'a parent with /./: refused' refused remove \"$s/./run\" \"$s/./run/h2s-pam-trial.Okay1234\"",
+        "check 'a parent with /..: refused' refused remove \"$s/other/../run\" \"$s/other/../run/h2s-pam-trial.Okay1234\"",
+        "check 'a relative parent: refused' refused remove run run/h2s-pam-trial.Okay1234",
+        "check 'a parent that is a link: refused' refused stage \"$s/runlink\" \"$s/runlink/h2s-pam-trial.Viaa1234\" a 'x'",
+        "check 'a name with a slash: refused' refused stage \"$p\" \"$p/h2s-pam-trial.Name1234\" '../x' 'x'",
+        "check 'a dot-file name: refused' refused stage \"$p\" \"$p/h2s-pam-trial.Name1234\" '.x' 'x'",
+        "check 'a name given twice: refused' refused stage \"$p\" \"$p/h2s-pam-trial.Name1234\" a 'x' a 'y'",
+        "check 'a control character in a text: refused' refused stage \"$p\" \"$p/h2s-pam-trial.Name1234\" a \"$(printf 'x\\001')\"",
+        "check 'a directory name not the staging one: refused' refused stage \"$p\" \"$p/h2s-pam-trial.short\" a 'x'",
+        "check '… none of the refused made a directory' test ! -e \"$p/h2s-pam-trial.Name1234\" -a ! -e \"$s/runlink/h2s-pam-trial.Viaa1234\" -a ! -e \"$p/h2s-pam-trial.short\"",
+        "check 'removed' \"$stage\" remove \"$p\" \"$p/h2s-pam-trial.Okay1234\"",
+        "check '… gone' test ! -e \"$p/h2s-pam-trial.Okay1234\"",
+        "check 'removed again: no error' \"$stage\" remove \"$p\" \"$p/h2s-pam-trial.Okay1234\"",
+        "rm -f \"$p/h2s-pam-trial.Linked12\" \"$s/runlink\""
+    ].join("\n")
+
     // ---- Candidates ----
 
     readonly property string _sudo: "#%PAM-1.0\nauth\t\tinclude\t\tsystem-auth\naccount\t\tinclude\t\tsystem-auth\nsession\t\tinclude\t\tsystem-auth\n"
@@ -161,7 +197,12 @@ TestCase {
             assertEqual(_trial.state.prompt.visible, false, spec.label + ": the password is asked hidden");
             const act = () => {
                 if (spec.cancel === true)
-                    suite._trial.cancel(suite._trial.state.trial);
+                {
+                    const trial = suite._trial.state.trial;
+                    suite._trial.cancel(trial);
+                    // A late answer to the question cancelled: goes nowhere
+                    suite._trial.respond(trial, suite._password);
+                }
                 else
                     suite._trial.respond(suite._trial.state.trial, spec.answer ?? "");
             };
@@ -252,8 +293,75 @@ TestCase {
             label: "cancel", text: () => fingerFirst, finger: "no", cancel: true,
             check: (state, after) => {
                 outcome(state, "cancelled at the question", "cancelled");
-                assert(!after.log.includes("right") && !after.log.includes("wrong"), "… no password checked");
+                assert(!after.log.includes("right") && !after.log.includes("wrong"), "… no password checked, the answer given after the cancel included");
             }
+        });
+
+        // The staging script's refusals, run as it is
+        _then("the staging script's refusals", () => _ready, () => {
+            _ready = false;
+            _sh(_refusalScript, [Quickshell.shellDir + "/scripts/pam-trial-stage.sh", _scratch], result => {
+                const lines = result.stdout.split("\n").filter(line => line !== "");
+                suite.assert(lines.length >= 15, "the staging script's cases ran: " + lines.length);
+                for (const line of lines)
+                    suite.assert(line.startsWith("ok "), "the staging script: " + line);
+                suite._ready = true;
+            });
+        });
+
+        // Destroyed mid-trial: while PAM asks, and while the staging run is held
+        let doomed = null, doomedDirectory = "";
+        _then("a trial to destroy, at its question", () => _ready, () => {
+            doomed = _trialComponent.createObject(suite, {
+                filesCommand: [_scratch + "/tree/scripts/pam-files.sh"],
+                stageCommand: [_scratch + "/held-stage"],
+                stagingParent: _scratch + "/run",
+                environment: _trial.environment
+            });
+            _ready = false;
+            _sh("printf 'no\\n' > \"$1/finger\"; printf '0\\n' > \"$1/count\"", [_scratch], () => {
+                doomed.start("sudo", fingerFirst);
+                suite._ready = true;
+            });
+        });
+        _then("the doomed trial asks", () => _ready && doomed.state.phase === "running" && doomed.state.prompt !== null, () => {
+            doomedDirectory = doomed.state.staging;
+            assert(doomedDirectory.startsWith(_scratch + "/run/h2s-pam-trial."), "the doomed trial's staging directory: " + doomedDirectory);
+            doomed.destroy();
+            doomed = null;
+            _ready = false;
+            _sh(_goneScript, [doomedDirectory], result => {
+                suite.assertEqual(result.stdout.trim(), "gone", "destroyed while PAM asks: the staging directory removed");
+                suite._ready = true;
+            });
+        });
+        _then("a trial to destroy while staging", () => _ready, () => {
+            doomed = _trialComponent.createObject(suite, {
+                filesCommand: [_scratch + "/tree/scripts/pam-files.sh"],
+                stageCommand: [_scratch + "/held-stage"],
+                stagingParent: _scratch + "/run",
+                environment: _trial.environment
+            });
+            _ready = false;
+            _sh("touch \"$1/hold\"", [_scratch], () => {
+                doomed.start("sudo", fingerFirst);
+                suite._ready = true;
+            });
+        });
+        _then("the doomed trial staging", () => _ready && doomed.state.phase === "staging", () => {
+            doomedDirectory = doomed.state.staging;
+            _ready = false;
+            // The directory is made; the reply is held
+            _sh("for i in $(seq 400); do [ -d \"$1\" ] && break; sleep 0.05; done; [ -d \"$1\" ] && echo made", [doomedDirectory], result => {
+                suite.assertEqual(result.stdout.trim(), "made", "the held staging run made its directory");
+                suite.assertEqual(doomed.state.phase, "staging", "… its reply not taken yet");
+                doomed.destroy();
+                doomed = null;
+                suite._sh("rm -f \"$2/hold\"; " + suite._goneScript, [doomedDirectory, suite._scratch], gone => {
+                    suite.assertEqual(gone.stdout.trim(), "gone", "destroyed while staging: the staging directory removed");
+                    suite._ready = true;
+                });
+            });
         });
 
         // The counted pattern
@@ -404,6 +512,8 @@ TestCase {
         _sh([
             "set -e; s=$1; repo=$2; mkdir -p \"$s/tree/scripts\" \"$s/bin\" \"$s/etc\" \"$s/usr\"; mkdir -m 700 \"$s/run\"",
             "cp \"$repo/scripts/pam-files.sh\" \"$s/tree/scripts/\"; cp \"$repo/tests/lock/seams/seams.sh\" \"$s/tree/scripts/seams.sh\"",
+            // The staging script, its reply held while the file "hold" exists (staging only)
+            "printf '#!/bin/sh\\n\"%s/scripts/pam-trial-stage.sh\" \"$@\"\\ncode=$?\\n[ \"$1\" = stage ] && while [ -e \"%s/hold\" ]; do sleep 0.05; done\\nexit $code\\n' \"$repo\" \"$s\" > \"$s/held-stage\"; chmod +x \"$s/held-stage\"",
             // The libpam this Quickshell loaded, from the maps of the nearest ancestor that has it
             "m=${LOCKTEST_PAM_MODULES:-}; pid=$$",
             "while [ -z \"$m\" ] && [ \"$pid\" -gt 1 ]; do lib=$(sed -n 's|.* \\(/.*/libpam\\.so\\.0[.0-9]*\\)$|\\1|p' \"/proc/$pid/maps\" 2> /dev/null | head -n 1);"

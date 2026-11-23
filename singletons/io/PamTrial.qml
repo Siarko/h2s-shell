@@ -37,7 +37,7 @@ Scope {
 
     // A new trial of `text` as the service's file; ignored while one runs
     function start(service, text) {
-        _dispatch({ type: "start", service: service, text: text, parent: stagingParent });
+        _dispatch({ type: "start", service: service, text: text, parent: stagingParent, token: _token() });
     }
 
     // The user's answer to the question PAM asks in trial `trial`; `text` is used, not kept
@@ -50,6 +50,16 @@ Scope {
     }
 
     property var _state: PamTrialRules.initialState()
+
+    // The staging directory's eight letters or digits: a new name for each trial (one that
+    // is already there makes the staging fail, never reused)
+    function _token() {
+        const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+        let token = "";
+        for (let i = 0; i < 8; i++)
+            token += letters[Math.floor(Math.random() * letters.length)];
+        return token;
+    }
     // Set when a completion was reported from inside PamContext.start(): its fork failed
     property bool _completedInStart: false
     // The trial whose conversation runs, or 0
@@ -75,7 +85,7 @@ Scope {
             break;
         }
         case "stage": {
-            const argv = Array.from(stageCommand).concat(["stage", effect.parent]);
+            const argv = Array.from(stageCommand).concat(["stage", effect.parent, effect.directory]);
             for (const file of effect.files)
                 argv.push(file.name, file.text);
             _run(argv, (lines, result) => _dispatch({ type: "staged", trial: effect.trial, lines: lines, result: result }));
@@ -95,7 +105,7 @@ Scope {
             }
             break;
         case "removeStaging":
-            _run(Array.from(stageCommand).concat(["remove", effect.directory]), (lines, result) => {
+            _run(Array.from(stageCommand).concat(["remove", effect.parent, effect.directory]), (lines, result) => {
                 if (!result.ok)
                     root.logLine("warning", "PAM trial: the staging directory " + effect.directory + " was not removed");
             });
@@ -178,10 +188,11 @@ Scope {
         }
     }
 
-    // Destroyed mid-trial (the page closed): the runner's runs end with it, so the staging
-    // directory is removed by a command of its own
+    // Destroyed mid-trial (the page closed): the runner's runs end with it (a staging run
+    // among them, killed), so the staging directory — made or being made — is removed by a
+    // command of its own
     Component.onDestruction: {
         if (_state.staging !== "")
-            Quickshell.execDetached(Array.from(stageCommand).concat(["remove", _state.staging]));
+            Quickshell.execDetached(Array.from(stageCommand).concat(["remove", _state.parent, _state.staging]));
     }
 }

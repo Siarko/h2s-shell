@@ -10,7 +10,7 @@ import QtQuick
 // its first line `# Written by h2s-shell <sha256>` (the hash of the rest), then the vendor
 // file with the same block at the top of its auth lines; removing the rules removes the file.
 // Here: how each row is written (`-auth` for an optional reader or key, the counted
-// pattern, the closing line), reading the block back into rows, taking in a hand-made file
+// pattern, the closing lines), reading the block back into rows, taking in a hand-made file
 // (`adopt`: lines the editor writes become rows, everything else a raw row in its place,
 // non-auth lines kept), noticing a file changed by hand, and the NixOS module options for
 // the same rows. Pure: texts are handed in, nothing is read or written. No text is made for
@@ -373,7 +373,7 @@ Singleton {
 
     // The rows of a file the shell wrote, from its block: sudo's text, or polkit's (null /
     // undefined = no /etc/pam.d/polkit-1: the vendor file in force). The fixed row closes
-    // the list unless the block ends with a closing line. null when the text was not read
+    // the list unless the block ends with closing lines. null when the text was not read
     // or the block is broken; whether it was changed by hand is changes()'s.
     function rows(text, service, facts) {
         if (service === "polkit-1" && (text === null || text === undefined))

@@ -207,12 +207,12 @@ let
           # A name that refuses is believed wherever the file is
           denies = row.method == "raw" && rawName row == "pam_deny.so" && fails row;
           # A raw line that can let the user in (sufficient; required or requisite where the
-          # closing line keeps its result) with a module that asks for no credential
+          # permit closing keeps its result) with a module that asks for no credential
           letsAnyone = row.method == "raw" && credentialOf row == "no" && rawName row != "pam_deny.so"
             && (row.control == "sufficient" || (fails row && closing != "system"));
           nullok = row.method == "raw" && methodOf row == "password" && lib.elem "nullok" row.args;
           unknown = row.method == "raw" && methodOf row == "unknown" && credentialOf row != "no" && rawName row != "pam_deny.so";
-          # An own optional row: another row decides, or the closing line does
+          # An own optional row: another row decides, or the closing lines do
           idle = row.method != "raw" && row.method != "system" && row.control == "optional"
             && (closing != "system"
               || lib.any (other: other.method == "system" || other.control != "optional") (lib.take index rows ++ lib.drop (index + 1) rows));

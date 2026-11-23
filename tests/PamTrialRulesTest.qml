@@ -103,6 +103,15 @@ TestCase {
         const inline = trial.stagingStep("polkit-1", "-auth sufficient pam_fprintd.so\nauth substack system-auth\n", files, dirs, false).stack;
         assertEqual(trial.sameAuthLines(sudoStack, inline), false, "the same lines in a substack: two trials");
         assertEqual(trial.sameAuthLines(sudoStack, { known: false, lines: sudoStack.lines }), false, "a stack not known: two trials");
+        assertEqual(trial.sameAuthLines(sudoStack, Object.assign({}, sudoStack, { atInclude: undefined })), false, "a stack not stagingStep's: two trials");
+        const unknownStack = Object.assign({}, polkitStack, { known: false });
+        assertEqual(trial.sameAuthLines(sudoStack, unknownStack) + " " + trial.sameAuthLines(unknownStack, sudoStack), "false false",
+                    "either stack not known, without @include: two trials");
+        const atFiles = { "/etc/pam.d/common-auth": text(systemAuth) };
+        const atSudo = trial.stagingStep("sudo", "-auth sufficient pam_fprintd.so\n@include common-auth\n", atFiles, dirs, false).stack;
+        const atPolkit = trial.stagingStep("polkit-1", "-auth sufficient pam_fprintd.so\n@include common-auth\n", atFiles, dirs, false).stack;
+        assertEqual(atSudo.lines.length + " " + atSudo.atInclude + " " + trial.sameAuthLines(atSudo, atPolkit), "5 true false",
+                    "the same lines through @include: two trials, each run by its libpam");
 
         // ── step ──
         let state = trial.initialState();
@@ -115,9 +124,10 @@ TestCase {
         const types = effects => effects.map(effect => effect.type).join(" ");
         const places = ["directory\t/etc/pam.d", "directory\t/usr/lib/pam.d", "faillock\t/etc/security/faillock.conf"];
         const fileLines = (path, body) => ["file\t" + path + "\ttext"].concat(body.split("\n").filter(line => line !== "").map(line => "|" + line), ["end\t" + path]);
-        const dir = parent + "/h2s-pam-trial.AbC12345";
+        const token = "AbC12345";
+        const dir = parent + "/h2s-pam-trial." + token;
 
-        let effects = go({ type: "start", service: "sudo", text: sudo, parent });
+        let effects = go({ type: "start", service: "sudo", text: sudo, parent, token });
         assertEqual(state.phase + " " + state.trial + " " + types(effects), "reading 1 readFiles", "start: the places read first");
         assertEqual(effects[0].paths.length + " " + effects[0].trial, "0 1", "… no paths, keyed to trial 1");
         assertEqual(types(go({ type: "start", service: "sudo", text: sudo, parent })) + " " + state.trial, " 1", "a start while one runs: ignored");
@@ -146,7 +156,7 @@ TestCase {
         assertEqual(types(go({ type: "pamCompleted", trial: 1, result: "failed" })) + state.phase, "passed", "a completion after the end: nothing");
 
         // A failure, PAM's reason, and try again
-        effects = go({ type: "start", service: "sudo", text: sudo, parent });
+        effects = go({ type: "start", service: "sudo", text: sudo, parent, token });
         assertEqual(state.trial + " " + state.phase + " " + state.messages.length + " " + state.reason, "2 reading 0 ", "start again: a new trial, a clean state");
         go({ type: "filesRead", trial: 2, lines: places, result: ok, paths: [] });
         go({ type: "filesRead", trial: 2, lines: fileLines("/etc/pam.d/system-auth", systemAuth), result: ok, paths: ["/etc/pam.d/system-auth"] });
@@ -165,7 +175,7 @@ TestCase {
         assertEqual(state.reasonText, trial.texts.failed, "… its text");
         const resultOf = result => {
             state = trial.initialState();
-            go({ type: "start", service: "sudo", text: "auth required pam_unix.so\n", parent });
+            go({ type: "start", service: "sudo", text: "auth required pam_unix.so\n", parent, token });
             go({ type: "filesRead", trial: 1, lines: places, result: ok, paths: [] });
             go({ type: "staged", trial: 1, lines: ["staged\t" + dir], result: ok });
             go({ type: "pamCompleted", trial: 1, result });
@@ -177,56 +187,57 @@ TestCase {
 
         // Refusals before PAM
         state = trial.initialState();
-        go({ type: "start", service: "sudo", text: sudo, parent });
+        go({ type: "start", service: "sudo", text: sudo, parent, token });
         effects = go({ type: "filesRead", trial: 1, lines: places, result: { ok: false }, paths: [] });
         assertEqual(state.phase + " " + state.reason + " " + types(effects), "failed unread ", "pam-files.sh failed: not tried, nothing staged");
         state = trial.initialState();
-        go({ type: "start", service: "sudo", text: sudo, parent });
+        go({ type: "start", service: "sudo", text: sudo, parent, token });
         go({ type: "filesRead", trial: 1, lines: places, result: ok, paths: [] });
         go({ type: "filesRead", trial: 1, lines: ["file\t/etc/pam.d/system-auth\tunreadable"], result: ok, paths: ["/etc/pam.d/system-auth"] });
         assertEqual(state.phase + " " + state.reason, "failed unread", "an included file unreadable: not tried");
         state = trial.initialState();
-        go({ type: "start", service: "sudo", text: sudo, parent });
+        go({ type: "start", service: "sudo", text: sudo, parent, token });
         go({ type: "filesRead", trial: 1, lines: places, result: ok, paths: [] });
         go({ type: "filesRead", trial: 1, lines: [], result: { ok: false }, paths: ["/etc/pam.d/system-auth"] });
         assertEqual(state.phase + " " + state.reason, "failed unread", "a read of the included file that failed: unreadable, not tried");
         state = trial.initialState();
-        go({ type: "start", service: "sudo", text: sudo, parent: "" });
+        go({ type: "start", service: "sudo", text: sudo, parent: "", token });
         assertEqual(state.phase + " " + state.reason, "failed staging", "no private place to stage in: not tried");
         state = trial.initialState();
-        go({ type: "start", service: "../etc", text: sudo, parent });
+        go({ type: "start", service: "../etc", text: sudo, parent, token });
         assertEqual(state.phase + " " + state.reason, "failed service", "a service that is no name");
         state = trial.initialState();
-        go({ type: "start", service: "sudo", text: "auth required pam_unix.so\n", parent });
+        go({ type: "start", service: "sudo", text: "auth required pam_unix.so\n", parent, token });
         go({ type: "filesRead", trial: 1, lines: places, result: ok, paths: [] });
         effects = go({ type: "staged", trial: 1, lines: ["staged\t/elsewhere/h2s-pam-trial.AbC12345"], result: ok });
-        assertEqual(state.phase + " " + state.reason + " " + types(effects), "failed staging ", "staged somewhere else: failed, that directory not touched");
+        assertEqual(state.phase + " " + state.reason + " " + types(effects) + " " + effects[0].directory, "failed staging removeStaging " + dir,
+                    "staged somewhere else: failed, that directory not touched, the one asked for removed");
         state = trial.initialState();
-        go({ type: "start", service: "sudo", text: "auth required pam_unix.so\n", parent });
+        go({ type: "start", service: "sudo", text: "auth required pam_unix.so\n", parent, token });
         go({ type: "filesRead", trial: 1, lines: places, result: ok, paths: [] });
         go({ type: "staged", trial: 1, lines: ["staged\t" + dir], result: ok });
         effects = go({ type: "pamStartFailed", trial: 1 });
         assertEqual(state.phase + " " + state.reason + " " + types(effects), "failed startFailed removeStaging", "PAM refused to start: failed, removed");
         state = trial.initialState();
-        go({ type: "start", service: "sudo", text: "auth required pam_unix.so\n", parent });
+        go({ type: "start", service: "sudo", text: "auth required pam_unix.so\n", parent, token });
         go({ type: "filesRead", trial: 1, lines: places, result: ok, paths: [] });
         go({ type: "staged", trial: 1, lines: ["staged\t" + dir], result: ok });
         assertEqual(types(go({ type: "pamStartFailed", trial: 0 })) + " " + state.phase, " running", "a start failure of another trial: nothing");
         state = trial.initialState();
-        go({ type: "start", service: "sudo", text: "auth required pam_unix.so\n", parent });
+        go({ type: "start", service: "sudo", text: "auth required pam_unix.so\n", parent, token });
         go({ type: "filesRead", trial: 1, lines: ["faillock\t/etc/security/faillock.conf"], result: ok, paths: [] });
         assertEqual(state.phase + " " + state.reason, "failed unread", "no PAM directory named: not tried");
         state = trial.initialState();
-        go({ type: "start", service: "sudo", text: "auth required pam_unix.so\n", parent });
+        go({ type: "start", service: "sudo", text: "auth required pam_unix.so\n", parent, token });
         effects = go({ type: "filesRead", trial: 1, lines: ["directory\t/etc/pam.d"], result: ok, paths: [] });
         assertEqual(state.phase + " " + types(effects), "staging stage", "one directory (NixOS' shape) is enough");
-        out = trial.step(null, { type: "start", service: "sudo", text: "x", parent });
+        out = trial.step(null, { type: "start", service: "sudo", text: "x", parent, token });
         assertEqual(out.state.phase + " " + out.state.trial, "reading 1", "no state yet: the initial one");
 
         // Cancels
         const toPhase = phase => {
             state = trial.initialState();
-            go({ type: "start", service: "sudo", text: "auth required pam_unix.so\n", parent });
+            go({ type: "start", service: "sudo", text: "auth required pam_unix.so\n", parent, token });
             if (phase === "reading")
                 return;
             go({ type: "filesRead", trial: 1, lines: places, result: ok, paths: [] });
@@ -239,7 +250,9 @@ TestCase {
         assertEqual(types(go({ type: "cancel", trial: 1 })) + " " + state.phase, " cancelled", "cancel while reading: nothing to undo");
         assertEqual(types(go({ type: "filesRead", trial: 1, lines: places, result: ok, paths: [] })) + " " + state.phase, " cancelled", "… the read's answer after it: nothing");
         toPhase("staging");
-        assertEqual(types(go({ type: "cancel", trial: 1 })) + " " + state.phase, " cancelled", "cancel while staging");
+        effects = go({ type: "cancel", trial: 1 });
+        assertEqual(types(effects) + " " + effects[0]?.directory + " " + state.phase, "removeStaging " + dir + " cancelled",
+                    "cancel while staging: the directory asked for removed (if made)");
         effects = go({ type: "staged", trial: 1, lines: ["staged\t" + dir], result: ok });
         assertEqual(types(effects) + " " + effects[0].directory + " " + state.phase, "removeStaging " + dir + " cancelled",
                     "… the directory made after it: removed, no conversation");
@@ -254,10 +267,34 @@ TestCase {
         // A staging reply of an earlier trial, after a new one started
         toPhase("staging");
         go({ type: "cancel", trial: 1 });
-        go({ type: "start", service: "sudo", text: "auth required pam_unix.so\n", parent });
+        go({ type: "start", service: "sudo", text: "auth required pam_unix.so\n", parent, token: "Second22" });
         go({ type: "filesRead", trial: 2, lines: places, result: ok, paths: [] });
         effects = go({ type: "staged", trial: 1, lines: ["staged\t" + dir], result: ok });
-        assertEqual(types(effects) + " " + effects[0].trial + " " + state.phase + " " + state.staging, "removeStaging 1 staging ",
+        assertEqual(types(effects) + " " + effects[0].trial + " " + effects[0].parent + " " + state.phase + " " + state.staging,
+                    "removeStaging 1 " + parent + " staging " + parent + "/h2s-pam-trial.Second22",
                     "trial 1's directory arriving during trial 2: removed, trial 2 still waits for its own");
+        effects = go({ type: "staged", trial: 1, lines: ["staged\t" + parent + "/h2s-pam-trial.Second22"], result: ok });
+        assertEqual(types(effects) + " " + state.phase, " staging", "a late reply naming the current trial's directory: never removed");
+        effects = go({ type: "staged", trial: 2, lines: ["staged\t" + dir], result: ok });
+        assertEqual(state.phase + " " + state.reason + " " + types(effects) + " " + effects[0].directory, "failed staging removeStaging " + parent + "/h2s-pam-trial.Second22",
+                    "a reply naming another directory than the one asked for: failed, the one asked for removed");
+
+        // The staging directory's name
+        assertEqual(trial.stagingDirectory("/run/user/1000", "AbC12345"), dir, "the prefix and the token in the parent");
+        for (const bad of ["", "run", "/run/", "/run//user", "/run/./user", "/run/../tmp", "/run/user/.."])
+            assertEqual(trial.stagingDirectory(bad, "AbC12345"), "", "not a plain absolute parent: " + JSON.stringify(bad));
+        for (const bad of ["", "AbC1234", "AbC123456", "AbC-1234", "../x1234"])
+            assertEqual(trial.stagingDirectory("/run", bad), "", "not eight letters or digits: " + JSON.stringify(bad));
+        state = trial.initialState();
+        go({ type: "start", service: "sudo", text: sudo, parent, token: "bad" });
+        assertEqual(state.phase + " " + state.reason, "failed staging", "a start without a usable token: not tried");
+
+        // Control characters
+        assertEqual(["a\tb\n", "a\u0000b", "a\rb", "a\u001bb", "a\u007fb", "a\u000bb"].map(value => trial.hasControl(value)).join(" "),
+                    "false true true true true true", "control characters: all but a line break and a tab");
+        assertEqual(code(trial.stagingStep("sudo", "auth required pam_unix.so\u0000\nauth required pam_deny.so\n", {}, dirs, false)), "control",
+                    "a NUL in the candidate: not tried");
+        assertEqual(code(trial.stagingStep("sudo", sudo, { "/etc/pam.d/system-auth": text("auth required pam_unix.so\r\n") }, dirs, false)), "control",
+                    "a control character in an included file: not tried");
     }
 }

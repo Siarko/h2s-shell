@@ -19,7 +19,19 @@ import QtQuick
 // copied under that name, since libpam resolves every name in the one configuration
 // directory it is given. An absolute include is read where it is, as it would be. A stack
 // that cannot be followed completely (a file missing, unreadable or not parsable) is not
-// tried: what PAM would run is not known.
+// tried: what PAM would run is not known. Nor is a text holding a control character other
+// than a line break or a tab: the texts reach the staging script on its command line, where
+// a NUL would cut a file short, and PAM reads no such character in a line.
+//
+// What the trial does not show:
+// - It runs as the user, for the current user, `auth` lines only: the account and session
+//   lines sudo or polkit run after it are not tried.
+// - A module that keeps its state as root behaves as for any user: pam_faillock reads and
+//   writes no tally, so a lockout or a count is not tried (only that the lines run).
+// - An absolute include of the service's own installed path (`include /etc/pam.d/sudo`)
+//   reads the file in force, not the candidate.
+// - libpam's `@include` is not every libpam's: two stacks that use it are never taken as
+//   one trial (`sameAuthLines`), so each is run by the libpam that will run it.
 Singleton {
     id: root
 
@@ -39,6 +51,7 @@ Singleton {
         startFailed: "PAM could not start the new rules.",
         unread: "A file the new rules include could not be read.",
         unparsable: "A line PAM cannot read.",
+        control: "A character PAM cannot read.",
         tooLarge: "The new rules are too long.",
         staging: "The new rules could not be put in place for the trial.",
         service: "Unknown service."
@@ -49,6 +62,20 @@ Singleton {
     function validName(name) {
         const value = String(name ?? "");
         return /^[A-Za-z0-9_][A-Za-z0-9._@+-]*$/.test(value) && value.length <= 255;
+    }
+
+    // A control character other than a line break or a tab (NUL included)
+    function hasControl(text) {
+        return /[\u0000-\u0008\u000b-\u001f\u007f]/.test(String(text ?? ""));
+    }
+
+    // A staging directory's name: the prefix and eight letters or digits (`token`)
+    function stagingDirectory(parent, token) {
+        const base = String(parent ?? "");
+        if (!/^(\/[^/]+)+$/.test(base) || base.split("/").some(part => part === "." || part === "..")
+                || !/^[A-Za-z0-9]{8}$/.test(String(token ?? "")))
+            return "";
+        return base + "/" + stagingPrefix + token;
     }
 
     // UTF-8 length of a text, as the file will hold it
@@ -82,6 +109,8 @@ Singleton {
             return _refusal("unread");
         if (byteLength(candidate) > maxFileBytes)
             return _refusal("tooLarge");
+        if (hasControl(candidate))
+            return _refusal("control");
         const dirs = (Array.isArray(directories) ? directories : []).map(String).filter(dir => dir.startsWith("/"));
         if (dirs.length === 0)
             return _refusal("unread");
@@ -111,11 +140,14 @@ Singleton {
         }
         // The names the stack's auth lines include, in every file it reached
         const names = [];
+        let atInclude = false;
         for (const path of stack.files) {
             for (const logical of PamStackRules.logicalLines(reader(path))) {
                 const parsed = PamStackRules.parseLine(logical.text);
                 const including = parsed.directive === "@include"
                     || (parsed.type === "auth" && (parsed.controlKind === "include" || parsed.controlKind === "substack"));
+                if (parsed.directive === "@include")
+                    atInclude = true;
                 if (including && !String(parsed.target).startsWith("/") && names.indexOf(parsed.target) < 0)
                     names.push(parsed.target);
             }
@@ -130,14 +162,18 @@ Singleton {
             const path = PamStackRules.candidates(included, dirs).find(candidatePath => typeof reader(candidatePath) === "string");
             if (path === undefined)
                 return _refusal("unread");
-            files.push({ name: included, text: reader(path) });
+            const includedText = reader(path);
+            if (hasControl(includedText))
+                return _refusal("control");
+            files.push({ name: included, text: includedText });
         }
+        stack.atInclude = atInclude;
         return { pending: [], files, stack, refusal: null };
     }
 
     // The staging script's reply (CommandRunner's result and its stdout lines) → the
     // directory made, or "" when it failed. Only a directory directly in `parent` with the
-    // staging prefix counts: anything else is not the one asked for.
+    // staging prefix counts: anything else is not one asked for.
     function stageReply(lines, result, parent) {
         if (result === null || typeof result !== "object" || result.ok !== true || result.truncated === true)
             return "";
@@ -154,12 +190,12 @@ Singleton {
             ? directory : "";
     }
 
-    // Whether two candidates' trials would be the same trial: both stacks known, the same
-    // auth lines in the same order (each line's control, module, arguments, and where it
-    // stands: its depth and whether in a substack). A shared list whose two files come out
-    // so is tried once.
+    // Whether two candidates' trials would be the same trial: both stacks stagingStep's,
+    // known, without `@include`, the same auth lines in the same order (each line's control,
+    // module, arguments, and where it stands: its depth and whether in a substack). A shared
+    // list whose two files come out so is tried once.
     function sameAuthLines(first, second) {
-        if (first?.known !== true || second?.known !== true)
+        if (first?.known !== true || second?.known !== true || first.atInclude !== false || second.atInclude !== false)
             return false;
         const shape = stack => JSON.stringify(stack.lines.map(line => [line.optional, line.control, line.module, line.args, line.depth, line.substack]));
         return shape(first) === shape(second);
@@ -175,7 +211,10 @@ Singleton {
     function initialState() {
         return {
             phase: "idle", trial: 0, service: "", candidate: "", parent: "",
-            directories: [], answers: {}, rounds: 0, staging: "", stack: null,
+            directories: [], answers: {}, rounds: 0, stack: null,
+            // The staging directory this trial makes (stagingDirectory), and the one to
+            // remove when it ends: set from the moment it is asked for until it is removed
+            target: "", staging: "",
             // PAM's messages that asked nothing [{ text, error }], the last maxMessages
             messages: [],
             // The question PAM asks now { text, visible } (visible: the answer may be
@@ -207,7 +246,7 @@ Singleton {
         next.reason = code;
         next.reasonText = texts[code] ?? texts.error;
         if (next.staging !== "") {
-            effects.push({ type: "removeStaging", trial: next.trial, directory: next.staging });
+            effects.push({ type: "removeStaging", trial: next.trial, parent: next.parent, directory: next.staging });
             next.staging = "";
         }
     }
@@ -225,13 +264,15 @@ Singleton {
         }
         next.stack = step.stack;
         next.phase = "staging";
-        effects.push({ type: "stage", trial: next.trial, parent: next.parent, files: step.files });
+        next.staging = next.target;
+        effects.push({ type: "stage", trial: next.trial, parent: next.parent, directory: next.target, files: step.files });
     }
 
     // One event → { state (a new object), effects [...] }. Events:
-    //   { type: "start", service, text, parent }   a new trial of `text` as `service`,
-    //                                              staged under `parent` (ignored while one
-    //                                              runs)
+    //   { type: "start", service, text, parent, token }   a new trial of `text` as
+    //                                              `service`, staged under `parent` in the
+    //                                              directory `token` names (eight letters or
+    //                                              digits; ignored while one runs)
     //   { type: "filesRead", trial, lines, result, paths }   a pam-files.sh run
     //   { type: "staged", trial, lines, result }    the staging script's reply
     //   { type: "pamStartFailed", trial }           PamContext.start() refused
@@ -241,11 +282,11 @@ Singleton {
     //   { type: "cancel", trial }                   the user cancelled
     // Effects, each with the trial it belongs to:
     //   { type: "readFiles", paths }                run pam-files.sh (no paths: the places)
-    //   { type: "stage", parent, files }            make the staging directory
+    //   { type: "stage", parent, directory, files } make the staging directory
     //   { type: "startPam", configDirectory, config }
     //   { type: "respondPam", text }                the answer, passed on; never kept here
     //   { type: "abortPam" }
-    //   { type: "removeStaging", directory }
+    //   { type: "removeStaging", parent, directory }
     // An event of another trial than the current one, or of a phase it no longer is in, acts
     // on nothing — except that a staging directory made for it is removed.
     function step(state, event) {
@@ -263,11 +304,12 @@ Singleton {
                 candidate: typeof event.text === "string" ? event.text : null,
                 parent: String(event.parent ?? "")
             });
+            next.target = stagingDirectory(next.parent, event.token);
             if (!validName(next.service)) {
                 _fail(next, effects, "service");
                 break;
             }
-            if (!next.parent.startsWith("/")) {
+            if (next.target === "") {
                 _fail(next, effects, "staging");
                 break;
             }
@@ -295,15 +337,15 @@ Singleton {
         case "staged": {
             const directory = stageReply(event.lines, event.result, next.parent);
             if (!current || next.phase !== "staging") {
-                if (directory !== "")
-                    effects.push({ type: "removeStaging", trial: event.trial, directory });
+                // Never the current trial's own directory, whoever answers for it
+                if (directory !== "" && directory !== next.staging)
+                    effects.push({ type: "removeStaging", trial: event.trial, parent: next.parent, directory });
                 break;
             }
-            if (directory === "") {
+            if (directory === "" || directory !== next.target) {
                 _fail(next, effects, "staging");
                 break;
             }
-            next.staging = directory;
             next.phase = "running";
             effects.push({ type: "startPam", trial: next.trial, configDirectory: directory, config: next.service });
             break;
@@ -341,7 +383,7 @@ Singleton {
             if (result === "success") {
                 next.phase = "passed";
                 next.prompt = null;
-                effects.push({ type: "removeStaging", trial: next.trial, directory: next.staging });
+                effects.push({ type: "removeStaging", trial: next.trial, parent: next.parent, directory: next.staging });
                 next.staging = "";
                 break;
             }
@@ -354,7 +396,7 @@ Singleton {
             if (next.phase === "running")
                 effects.push({ type: "abortPam", trial: next.trial });
             if (next.staging !== "")
-                effects.push({ type: "removeStaging", trial: next.trial, directory: next.staging });
+                effects.push({ type: "removeStaging", trial: next.trial, parent: next.parent, directory: next.staging });
             next.staging = "";
             next.prompt = null;
             next.phase = "cancelled";

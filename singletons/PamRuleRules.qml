@@ -454,7 +454,7 @@ Singleton {
     // What a row is to the checks: { method ("password" / "fingerprint" / "securityKey" /
     // "system" / "unknown"), raw, atOnce (passing lets the user in at once: sufficient, a
     // bracketed done on success), okOnSuccess (a bracketed ok on success: in only when the
-    // closing line keeps the result), fails (failing fails the stack: required, requisite, a
+    // permit closing keeps the result), fails (failing fails the stack: required, requisite, a
     // bracketed bad/die), optional, credential (raw: credentialOf's), denies (a raw pam_deny
     // that fails), firstPass (a raw pam_unix use_first_pass: only checks a password asked
     // above), nullok, refusals }
@@ -532,7 +532,7 @@ Singleton {
 
     // The rows' roles, each with `decides`: whether it can decide that the user is in — the
     // fixed row always; a row that lets in at once or fails the stack; a bracketed ok on
-    // success unless the closing line is the deny; an own optional row only beside the fixed
+    // success unless the closing is the deny; an own optional row only beside the fixed
     // row; a raw pam_unix use_first_pass only below a row that asks for the password
     function _analyse(list, service, facts) {
         const roles = list.map(row => _role(row, service, facts));
@@ -601,8 +601,8 @@ Singleton {
         });
 
         // R9: a raw line that can let the user in (sufficient, a bracketed done or ok on
-        // success; required or requisite without the fixed row, where the closing line can
-        // keep its result) with a module that asks for no credential, or made by its
+        // success; required or requisite without the fixed row, where the permit closing
+        // keeps its result) with a module that asks for no credential, or made by its
         // arguments to pass without one. Jumps are refused (R8), so no row is skipped between.
         const fixedPresent = fixedIndex >= 0;
         roles.forEach((role, i) => {
@@ -672,7 +672,7 @@ Singleton {
                 warn("W10", i, texts.W10);
         });
 
-        // W5: an own optional row: another row decides, or the closing line does
+        // W5: an own optional row: another row decides, or the closing lines do
         roles.forEach((role, i) => {
             if (role.raw || !role.optional)
                 return;
