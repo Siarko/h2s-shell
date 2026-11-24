@@ -49,8 +49,9 @@
 # passes on, on stderr as it comes (activities started and stopped, without their texts, and
 # their counts): nix's messages and the builds' lines could quote files only root may read.
 #
-# Wherever root evaluates a flake in git, nix's git is told the folder is safe only when its
-# .git is a real folder (not a link, not a gitdir: file) of root's alone; else refused (owner).
+# Where the configuration's folder is root's, nix's git is told it is safe only when its .git
+# is a real folder (not a link, not a gitdir: file) of root's alone, and its entry file must
+# be root's alone too; else refused (owner). A folder of the user's is the user's throughout.
 #
 # The last line, on stdout and stderr:
 #   created <sha256> <backup>                       exit 0
@@ -180,12 +181,17 @@ safe_file() {
   [ $((0${facts#* } & 022)) -eq 0 ] || refuse owner
 }
 
-# trust_git: the folder named a safe directory for nix's git, in root's scratch HOME — where
-# it holds a .git, only when that is a real folder of the owner's that nobody else may write
-# in (a link or a gitdir: file could lead to a repository, and a configuration of git, that
-# is not root's)
+# root_folder: whether every folder down to the configuration's is root's alone (folder_safe,
+# answered instead of refused)
+root_folder() { ( folder_safe ) > /dev/null 2>&1; }
+
+# trust_git: the folder named a safe directory for nix's git, in root's scratch HOME. In a
+# folder of root's, where it holds a .git, only when that is a real folder of the owner's
+# that nobody else may write in (a link, a gitdir: file or a .git others may write in would
+# put a repository, and a configuration of git, that is not root's into root's folder). In a
+# folder of the user's the whole configuration is the user's and root runs its code anyway.
 trust_git() {
-  if [ -e "$folder/.git" ] || [ -L "$folder/.git" ]; then safe_dir "$folder/.git"; fi
+  if root_folder && { [ -e "$folder/.git" ] || [ -L "$folder/.git" ]; }; then safe_dir "$folder/.git"; fi
   printf '[safe]\n\tdirectory = %s\n' "$folder" > "$work/home/.gitconfig" || refuse write
 }
 
@@ -206,8 +212,8 @@ evaluate() {
   got=$(hash_of "$work/candidate/$prefix") || refuse write
   [ "$got" = "$eval_sha" ] || refuse hash
   toplevel_inputs "$folder" "$eval_entry" "$eval_host"
-  # A configuration root writes in: its entry file root's alone too
-  if [ "$op" = apply ]; then safe_file "$folder/$eval_entry"; fi
+  # A configuration of root's: its entry file root's alone too
+  if [ "$op" = apply ] || root_folder; then safe_file "$folder/$eval_entry"; fi
   if [ -n "$flake" ]; then
     # nix's git opens a repository only of the one running, unless it is a safe directory
     trust_git

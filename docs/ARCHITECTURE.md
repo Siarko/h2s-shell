@@ -230,7 +230,13 @@ folder under `$XDG_RUNTIME_DIR`; nix's `internal-json` progress becomes the phas
 last lines; Cancel ends nix's process group. A repository root owns is built with a scratch
 `HOME` whose git configuration names it safe. A configuration the user cannot build (a file
 only root may read) is built by the root step's `build`, asked only by the click that starts
-the build. `tests/system/nixos/build.sh` checks, evaluating only, that the user's build, the
+the build, for a configuration of root's alone: of nix's output it passes on only the
+progress (no message or build line, which could quote what only root may read), and a GC
+root in root's own place (`/nix/var/nix/gcroots/h2s-shell/build`, replaced by the next one)
+holds what it built until the user's own GC root is made. Where the configuration's folder
+is root's, the root step names it safe for nix's git only when its `.git` is a real folder of
+root's alone, and takes its entry file only when that is root's alone too; a folder of the
+user's is the user's throughout. `tests/system/nixos/build.sh` checks, evaluating only, that the user's build, the
 root step's evaluation and the real configuration give the same drvPath.
 
 #### NixOS

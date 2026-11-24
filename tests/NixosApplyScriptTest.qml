@@ -356,6 +356,20 @@ TestCase {
             assertEqual(JSON.stringify(state.listing), JSON.stringify(["flake.nix", "h2s-shell.json"]), "switch: nothing written in the folder");
             assertEqual(_names(state.calls), "nix,nix-vars,nix-home,nix-candidate,nix-store,systemctl,nix-env,systemd-run,switch", "switch: evaluated, set, switched");
         }, { folder: S + "/home/cfg" });
+        // A .git not root's alone: trusted in a folder of the user's (root runs the user's code
+        // there anyway), refused in a folder of root's (it would put the user's repository there)
+        _case("switch, a git folder of the user's", "mkdir home/cfg/.git; chmod 775 home/cfg/.git; printf '%s %s-x\\n' \"$2\" \"$3\" > ctl/eval.out",
+              ["switch", S + "/home/cfg", "flake.nix", "laptop", _sha(_second), _drv, _out, _second], (run, state) => {
+            assertEqual(run.code + " " + run.last, "3 refused changed", "switch, the user's folder and .git: evaluated (here as changed), not refused for the .git");
+            assertEqual(state.calls[2], "nix-home [safe]  directory = " + S + "/home/cfg ", "switch, the user's folder: named safe");
+        }, { folder: S + "/home/cfg" });
+        _case("switch, a .git not root's in a folder of root's", "rmdir home/cfg/.git; mkdir etc/nixos/.git; chmod 775 etc/nixos/.git; put '" + _second + "'",
+              ["switch", _folder, "flake.nix", "laptop", _sha(_second), _drv, _out, _second], _refused("owner", "switch, root's folder, a .git others may write in"));
+        _case("switch, an entry not root's in a folder of root's", "rmdir etc/nixos/.git; chmod 664 etc/nixos/flake.nix",
+              ["switch", _folder, "flake.nix", "laptop", _sha(_second), _drv, _out, _second], _refused("owner", "switch, root's folder, flake.nix others may write in"));
+        _case("switch, the entry put back", "chmod 644 etc/nixos/flake.nix", ["create", _folder], (run, state) => {
+            assertEqual(run.last, "refused changed", "switch cases: root's folder as it was (create refuses: a file is there)");
+        });
         _case("switch, the activation not started", "echo 1 > ctl/systemd-run.code",
               ["switch", S + "/home/cfg", "flake.nix", "laptop", _sha(_second), _drv, _out, _second], (run, state) => {
             assertEqual(run.code + " " + run.last, "5 not-activated 9 - -", "switch: not activated, the generation before back, nothing written");
