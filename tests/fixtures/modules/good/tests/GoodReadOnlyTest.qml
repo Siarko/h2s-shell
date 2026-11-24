@@ -34,10 +34,10 @@ TestCase {
 
     function run() {
         ModuleTestKit.setNetworks({ vpnsUp: [{ name: "Office", type: "vpn", fullTunnel: false, setsDns: true, routes: ["10.1.2.3/8", "192.168.5.0/24"] }] });
-        const anchor = Api.anchors.findIndex(row => row.placements.length > 0);
+        const anchor = Api.listAnchors().findIndex(row => row.placements.length > 0);
         _check([
-            ["Api.vpnsUp's routes", () => Api.vpnsUp[0].routes],
-            ["Api.anchors' placements", () => Api.anchors[anchor].placements],
+            ["listVpnsUp()'s routes", () => Api.listVpnsUp()[0].routes],
+            ["listAnchors()' placements", () => Api.listAnchors()[anchor].placements],
             ["module.manifest's optionalPrograms", () => module.manifest.optionalPrograms],
             ["module.manifest's widgets", () => module.manifest.widgets],
             ["module.manifest's privileged programs", () => module.manifest.privileged.programs]

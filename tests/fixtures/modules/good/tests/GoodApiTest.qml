@@ -309,7 +309,7 @@ TestCase {
         dataRunner.start(["stat", "-c", "%a %U", module.dataDirectory], { done: result => suite._dataMode = result });
 
         // --- network facts (API 1.16): in test mode the test kit's, never NetworkManager's ---
-        assertEqual([Api.networksReady, Api.networks.length, Api.localNetworksReady, Api.localNetworks.length, Api.vpnsUp.length].join(" "),
+        assertEqual([Api.networksReady, Api.listNetworks().length, Api.localNetworksReady, Api.listLocalNetworks().length, Api.listVpnsUp().length].join(" "),
                     "true 0 true 0 0", "network facts in test mode: the defaults — read, no network, no VPN");
         assertEqual(JSON.stringify(ModuleTestKit.setNetworks({
             networks: [{ id: "u-home", name: "Home\nWi-Fi", kind: "wifi", active: true }],
@@ -318,40 +318,34 @@ TestCase {
             vpnsUp: [{ name: "Office", type: "vpn", fullTunnel: false, setsDns: true, routes: ["10.1.2.3/8"] },
                      { name: "Mesh", type: "provider", provider: "mesh" }]
         })), "[]", "setNetworks: every row taken");
-        assertEqual(JSON.stringify(Api.networks), JSON.stringify([{ id: "u-home", name: "Home Wi-Fi", kind: "wifi", active: true }]),
-                    "Api.networks follows; a name on one line");
-        assertEqual(JSON.stringify(Api.localNetworks), JSON.stringify([
+        assertEqual(JSON.stringify(Api.listNetworks()), JSON.stringify([{ id: "u-home", name: "Home Wi-Fi", kind: "wifi", active: true }]),
+                    "listNetworks() follows; a name on one line");
+        assertEqual(JSON.stringify(Api.listLocalNetworks()), JSON.stringify([
             { device: "wlan0", kind: "wifi", family: 4, address: "192.168.1.23", network: "192.168.1.0/24" },
             { device: "wlan0", kind: "wifi", family: 6, address: "2001:db8::17", network: "2001:db8::/64" }]),
-            "Api.localNetworks: family, address and network derived as the shell does");
-        assertEqual(JSON.stringify(Api.vpnsUp), JSON.stringify([
+            "listLocalNetworks(): family, address and network derived as the shell does");
+        assertEqual(JSON.stringify(Api.listVpnsUp()), JSON.stringify([
             { name: "Office", type: "vpn", provider: "", fullTunnel: false, setsDns: true, routes: ["10.0.0.0/8"] },
             { name: "Mesh", type: "provider", provider: "mesh", fullTunnel: null, setsDns: null, routes: null }]),
-            "Api.vpnsUp: fullTunnel, setsDns, routes; not reported is null");
-        assert(Object.isFrozen(Api.vpnsUp) && Object.isFrozen(Api.vpnsUp[0]) && Object.isFrozen(Api.vpnsUp[0].routes) && Object.isFrozen(Api.localNetworks[0]),
-               "… frozen, the routes too");
-        // (1.42) The list functions: the test kit's rows too, a new copy at each call
-        for (const [name, shared] of [["listNetworks", Api.networks], ["listLocalNetworks", Api.localNetworks], ["listVpnsUp", Api.vpnsUp],
-                                      ["listSlots", Api.slots], ["listAnchors", Api.anchors]]) {
+            "listVpnsUp(): fullTunnel, setsDns, routes; not reported is null");
+        // (1.42) Each list function: a new, unfrozen copy at each call (what a change to one
+        // does not reach: GoodListsTest)
+        for (const name of ["listNetworks", "listLocalNetworks", "listVpnsUp", "listSlots", "listAnchors"]) {
             const first = Api[name]();
             const second = Api[name]();
-            assert(Array.isArray(first) && first.length > 0 && JSON.stringify(first) === JSON.stringify(shared),
-                   name + "() in test mode: the rows the property shows (" + JSON.stringify(first).slice(0, 80) + ")");
+            assert(Array.isArray(first) && first.length > 0 && JSON.stringify(first) === JSON.stringify(second),
+                   name + "() in test mode: rows (" + JSON.stringify(first).slice(0, 80) + ")");
             assert(first !== second && first[0] !== second[0] && !Object.isFrozen(first), name + "(): a new, unfrozen copy at each call");
-            first.push({ name: "made-up" });
-            first[0] = "changed";
-            assertEqual(JSON.stringify(Api[name]()), JSON.stringify(shared), name + "(): a change to one copy not in the next call");
         }
         ModuleTestKit.setNetworks({ networksReady: false, localNetworksReady: false });
-        assertEqual([Api.networksReady, Api.networks.length, Api.localNetworksReady].join(" "), "false 0 false", "… not read: ready false; each call from the defaults");
+        assertEqual([Api.networksReady, Api.listNetworks().length, Api.localNetworksReady].join(" "), "false 0 false", "… not read: ready false; each call from the defaults");
         const networkProblems = ModuleTestKit.setNetworks({ localNetworks: [{ device: "lo", kind: "other", address: "127.0.0.1/8" }],
                                                             vpnsUp: [{ name: "X", type: "vpn", fullTunnel: "yes" }], colour: "red" });
         assertEqual(networkProblems.length, 3, "setNetworks: a loopback address, a wrong fullTunnel and an unknown field named: " + networkProblems.join("; "));
-        assertEqual(Api.localNetworks.length + " " + Api.vpnsUp[0].fullTunnel, "0 null", "… a loopback address left out, a wrong fullTunnel unknown");
+        assertEqual(Api.listLocalNetworks().length + " " + Api.listVpnsUp()[0].fullTunnel, "0 null", "… a loopback address left out, a wrong fullTunnel unknown");
         ModuleTestKit.clearRecords();
-        assertEqual([Api.networksReady, Api.vpnsUp.length].join(" "), "true 0", "clearRecords(): the default network facts again");
-        assertEqual([Api.listNetworks().length, Api.listLocalNetworks().length, Api.listVpnsUp().length].join(" "), "0 0 0",
-                    "… and the list functions follow");
+        assertEqual([Api.networksReady, Api.listNetworks().length, Api.listLocalNetworks().length, Api.listVpnsUp().length].join(" "), "true 0 0 0",
+                    "clearRecords(): the default network facts again");
 
         // --- its widget's presets (API 1.3) ---
         assertEqual(module.presetValue("good", "", "label"), "G", "presetValue: no preset, the manifest's presetDefaults");
@@ -362,7 +356,7 @@ TestCase {
         assertEqual(module.presetValue("good", "No such preset", "label"), "G", "… nothing written: still the default");
         assert(module.setPresetValue("good", "__proto__", "label", "x") !== "", "… refused for the name __proto__");
         // Writing to a preset the section editor made: tests/ModuleRegistriesTest.qml
-        assert(Api.slots.some(slot => slot.name === "network.popup.sections"), "the slot table names the slots offered");
+        assert(Api.listSlots().some(slot => slot.name === "network.popup.sections"), "the slot table names the slots offered");
 
         // --- the theme, read-only ---
         assert(String(Api.theme.accent).startsWith("#"), "a colour token");
