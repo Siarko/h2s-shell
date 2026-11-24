@@ -22,8 +22,9 @@ let
 in
 {
   # sudo's and polkit's auth rules (programs.h2s-shell.pam, polkit.passwordFirst); the
-  # remembered administrator authorization (polkit.rememberAdmin)
-  imports = [ ./pam.nix ./remember.nix ];
+  # remembered administrator authorization (polkit.rememberAdmin); the shell's settings
+  # file, which sets these options (settingsFile)
+  imports = [ ./pam.nix ./remember.nix ./settings.nix ];
 
   options.programs.h2s-shell = {
     enable = lib.mkEnableOption "h2s-shell, a desktop shell for Hyprland";

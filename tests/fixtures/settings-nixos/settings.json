@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "idle": { "hibernateDelay": "3h" },
+  "pam": {
+    "rules": [
+      { "method": "fingerprint", "control": "sufficient", "timeout": 10, "tries": 3 },
+      { "method": "system" }
+    ],
+    "polkit": {
+      "rules": [
+        { "method": "password", "control": "sufficient" },
+        { "method": "fingerprint", "control": "sufficient", "timeout": -1 },
+        { "method": "system" }
+      ]
+    }
+  },
+  "polkit": {
+    "rememberAdmin": { "enable": true, "users": ["alex"], "minutes": 15 }
+  }
+}

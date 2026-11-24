@@ -135,6 +135,8 @@ tests/fixtures/pam-nixos/* unit:PamNixosModuleTest self:tests/run-system.sh
 # The remembered authorization's ranges against the setting's, and its case set, as for PAM
 +nix/remember.nix unit:RememberNixosModuleTest
 tests/fixtures/remember-nixos/* unit:RememberNixosModuleTest self:tests/run-system.sh
+# The settings file the NixOS evaluation reads
+tests/fixtures/settings-nixos/* self:tests/run-system.sh
 # The distributions' facts and the os-release fixtures, read as data by the distribution suites
 distributions/*/distribution.* unit:DistributionRulesTest unit:DistributionReadingTest self:tests/distribution-selftest.sh
 tests/fixtures/distribution/* unit:DistributionRulesTest unit:DistributionReadingTest self:tests/distribution-selftest.sh
