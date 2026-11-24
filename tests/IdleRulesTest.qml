@@ -995,6 +995,12 @@ TestCase {
         assertEqual(IdleRules.lockRetryDelay(30), IdleRules.lockRetry.maximum, "… up to its longest");
         machine.input(1000000);
         assertEqual(machine.state.lockAsks, 0, "input: a new idle period, no asks counted");
+        // Forced soon after the shell started: the moments counted back from the force fall
+        // before the monotonic clock's zero, and still count
+        const early = _machine(_with(values, { screensaverTimeout: 700, lockAfter: 600 }), ["lcd"], true)
+            .at(50000, { type: "force" });
+        assertEqual(early.actions, "showSaver:lcd,go:d,lock,active:true",
+                    "forced 50 s after the start, the screensaver at 700 s and the lock at 600 s: the lock asked");
         machine.idle(1005000, 1000000);
         assertEqual(machine.next(), 1300000, "a new idle period: the stages again");
         machine.deadline();

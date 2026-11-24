@@ -1310,7 +1310,8 @@ Singleton {
         const sleepAfter = machineAfter(config);
         if (next.sleepAfterSeen !== null && next.sleepAfterSeen !== sleepAfter) {
             // (the old time as the whole computer's stage, the rest as now: a forced
-            // screensaver's sleep counts from the force less the screensaver's time either way)
+            // screensaver's sleep counts from the force less the screensaver's time either way;
+            // a switch that changes the screensaver's time too is approximated with the new one)
             const before = _sleepAt(next, Object.assign({}, config, { sleepAfter: next.sleepAfterSeen, hibernateAfter: 0 }), true);
             const after = _sleepAt(next, config, true);
             if (after !== null && after <= now && !(before !== null && before <= now))

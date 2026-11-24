@@ -166,6 +166,8 @@ The interface modules are written against (`qs.api`), versioned on its own
   Without polkit rules it works as before; set to true beside them, it stops the build.
 
 ### Fixed
+- The screensaver started by hand (or by an app) soon after the shell started now locks the
+  session at "Lock after" as it does later on; before, no idle lock came in that idle period.
 - With the screensaver started by hand (or by an app), changing the sleep time while an app
   was blocking the sleep no longer puts the sleep off by the whole new time: it comes once the
   block goes.
