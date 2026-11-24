@@ -21,7 +21,7 @@
 #   the full set on the other machine
 #                             tests/remote-run.sh (it runs tests/run-all.sh --keep-going there)
 #   the full set here         tests/run-all.sh --keep-going
-#   mutants of <file>         tests/mutate.sh <file>, for each *Rules.qml outside tests/
+#   mutants of <file>         tests/mutate.sh <file>, for each *Rules.qml outside tests/ and mockups/
 #                             changed between the release and HEAD
 #   soak of <suite>           tests/soak.sh <suite> <n>, for each suite in tests/flaky-suites.txt
 #   soak of module <dir>      tests/soak.sh <dir> <n>, for each module whose own
@@ -80,7 +80,7 @@ done
 # ---- The tree: HEAD, as the other machine gets it ----------------------------------------
 changes=$(git -C "$REPO" status --porcelain --untracked-files=no) || fail "cannot read the tree's status (git)"
 [ -z "$changes" ] || fail "uncommitted changes to tracked files: commit them first (the other machine checks HEAD)"
-untracked=$(git -C "$REPO" ls-files --others --exclude-standard -- '*Rules.qml' ':!tests/*') || fail "cannot list untracked files (git)"
+untracked=$(git -C "$REPO" ls-files --others --exclude-standard -- '*Rules.qml' ':!tests/*' ':!mockups/*') || fail "cannot list untracked files (git)"
 [ -z "$untracked" ] || fail "untracked Rules files ($(echo $untracked)): commit them first"
 
 # The module directories, canonical; an empty entry (a stray ":") is dropped
@@ -121,11 +121,11 @@ if [ -z "$since" ] && git -C "$REPO" rev-parse --verify --quiet 'HEAD^' > /dev/n
 fi
 if [ -n "$since" ]; then
     git -C "$REPO" rev-parse --verify --quiet "$since^{commit}" > /dev/null || fail "--since: '$since' is no commit"
-    listing=$(git -C "$REPO" diff --name-only --diff-filter=d "$since" HEAD -- '*Rules.qml' ':!tests/*') \
+    listing=$(git -C "$REPO" diff --name-only --diff-filter=d "$since" HEAD -- '*Rules.qml' ':!tests/*' ':!mockups/*') \
         || fail "cannot list the Rules files changed since $since (git)"
     rules_note="changed since $since"
 else
-    listing=$(git -C "$REPO" ls-files -- '*Rules.qml' ':!tests/*') || fail "cannot list the Rules files (git)"
+    listing=$(git -C "$REPO" ls-files -- '*Rules.qml' ':!tests/*' ':!mockups/*') || fail "cannot list the Rules files (git)"
     rules_note="every one: no minor or major release tag before HEAD"
 fi
 mapfile -t rules < <(printf '%s\n' "$listing" | grep -v '^$' | sort)

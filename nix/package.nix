@@ -100,6 +100,13 @@ stdenvNoCC.mkDerivation {
       ../helper
       # The lock test bed: runs against a checkout, with tools of its own
       ../tests/lock
+      # The mockups and their tools: development only, never installed
+      ../mockup.qml
+      ../mockups
+      ../tests/run-mockups.sh
+      ../tests/run-mockups-selftest.sh
+      ../tests/mockup.sh
+      ../tests/fixtures/mockups
       # A local `nix build` leaves this link; building from a checkout would copy it in
       ../result
     ]));

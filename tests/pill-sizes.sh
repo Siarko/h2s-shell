@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # What the tree's pills say about their height, for PillSizesTest: every `Pill { … }` in a
-# QML file under <tree> (tests/ and components/Pill.qml itself left out).
+# QML file under <tree> (tests/, components/Pill.qml itself and the mockups left out: a
+# mockup may set a pill's height to show a state).
 #
 #   tests/pill-sizes.sh <tree>
 #
@@ -12,7 +13,8 @@
 set -uo pipefail
 
 cd "$1" || exit 2
-find . -name '*.qml' -not -path './tests/*' -not -path './.git/*' -not -path './components/Pill.qml' | sort | {
+find . -name '*.qml' -not -path './tests/*' -not -path './.git/*' -not -path './components/Pill.qml' \
+    -not -path './mockups/*' -not -path './mockup.qml' | sort | {
     count=0
     while IFS= read -r file; do
         count=$((count + 1))

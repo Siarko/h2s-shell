@@ -35,7 +35,7 @@
 #              twice keeps the first limits with a warning, the results standing; --only
 #              runs just the mutants it names, and one naming none is status 2
 #   unjudged   a suite that fails unmutated: status 2, no mutant run
-#   refused    a file outside the tree, a test file, a wrong option: status 2
+#   refused    a file outside the tree, a test file, a mockup's, a wrong option: status 2
 #
 # Runs the real Quickshell in tests/run-unit.sh's headless compositor (nothing shows), with
 # its tools taken as that runner takes them. Never in the checkout: the copy is this run's,
@@ -296,6 +296,10 @@ mutate --list /etc/hostname > /dev/null 2>&1
 check "a file outside the tree: status 2" test $? = 2
 mutate --list tests/MutateFixtureRulesTest.qml > /dev/null 2>&1
 check "a test file: status 2" test $? = 2
+mutate --list mockups/kit/MockupWindow.qml > /dev/null 2>&1
+check "a mockup's file: status 2" test $? = 2
+mutate --list mockup.qml > /dev/null 2>&1
+check "the mockups' entry: status 2" test $? = 2
 mutate --bogus "$subject" > /dev/null 2>&1
 check "a wrong option: status 2" test $? = 2
 

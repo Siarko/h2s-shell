@@ -65,6 +65,8 @@ touch "$tree/tests/FlakyTest.qml" "$tree/tests/OtherTest.qml"
 printf '# a comment\n\nFlakyTest   # why\n' > "$tree/tests/flaky-suites.txt"
 for file in SameRules ChangedRules GoneRules; do echo "// $file" > "$tree/singletons/$file.qml"; done
 echo "// a suite's own" > "$tree/tests/SuiteRules.qml"
+mkdir -p "$tree/mockups/kit"
+echo "// a mockup's own" > "$tree/mockups/kit/KitRules.qml"
 # Modules: one with a flaky list, one without
 mkdir -p "$work/mod-a/tests" "$work/mod-b"
 echo '{"id": "a", "tests": ["tests/LiveTest.qml", "tests/OtherTest.qml"]}' > "$work/mod-a/module.json"
@@ -77,6 +79,7 @@ git -C "$tree" -c user.name=t -c user.email=t@t commit -q -m one
 git -C "$tree" tag v1.0.0
 echo "// changed" >> "$tree/singletons/ChangedRules.qml"
 echo "// changed" >> "$tree/tests/SuiteRules.qml"
+echo "// changed" >> "$tree/mockups/kit/KitRules.qml"
 git -C "$tree" rm -q singletons/GoneRules.qml
 commit() { git -C "$tree" -c user.name=t -c user.email=t@t commit -q "$@"; }
 commit -am two
@@ -132,6 +135,7 @@ check "--dry-run: a Rules file added since" says "mutate.sh singletons/NewRules.
 check "--dry-run: not one unchanged since the tag" silent_on "SameRules"
 check "--dry-run: not one deleted" silent_on "GoneRules"
 check "--dry-run: not one under tests/" silent_on "SuiteRules"
+check "--dry-run: not one under mockups/" silent_on "KitRules"
 check "--dry-run: since the last minor release before HEAD, not a patch one or one at HEAD" says "Rules files: changed since v1.0.0; 2 of them"
 check "--dry-run: a soak of the listed suite, 20 runs" says "tests/soak.sh FlakyTest 20$"
 check "--dry-run: not of a suite left unlisted" silent_on "soak.sh OtherTest"
@@ -183,6 +187,10 @@ run --dry-run --remote box --module "$work/mod-b"
 check "an untracked Rules file: status 2, named" \
     bash -c '[ "$1" = 2 ] && grep -q "untracked Rules files (singletons/LooseRules.qml)" <<< "$2"' _ "$STATUS" "$OUTPUT"
 rm "$tree/singletons/LooseRules.qml"
+echo "// untracked" > "$tree/mockups/kit/LooseRules.qml"
+run --dry-run --remote box --module "$work/mod-b"
+check "an untracked Rules file under mockups/: not refused" status_is 0
+rm "$tree/mockups/kit/LooseRules.qml"
 
 # ---- Running it -----------------------------------------------------------------------------
 reset

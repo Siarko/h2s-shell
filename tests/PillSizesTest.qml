@@ -49,6 +49,17 @@ TestCase {
         onExited: suite._scanned(lines)
     }
 
+    // A tree with pills only under mockups/ and in mockup.qml, setting their own heights,
+    // besides one plain pill: the mockups are not read
+    property Process _fixtureScan: Process {
+        property var lines: []
+        stdout: SplitParser {
+            splitMarker: "\n"
+            onRead: line => { if (line.trim() !== "") suite._fixtureScan.lines.push(line.trim()); }
+        }
+        onExited: suite._fixtureScanned(lines)
+    }
+
     function runAsync() {
         assertEqual(_small.height, 22, "a small pill is 22 px");
         assertEqual(_medium.height, 26, "a medium pill is 26 px");
@@ -61,6 +72,13 @@ TestCase {
         _medium.size = "l";
         assertEqual(_medium.height, _large.height, "a pill follows its size when that changes");
 
+        _fixtureScan.command = ["bash", Quickshell.shellDir + "/tests/pill-sizes.sh", Quickshell.shellDir + "/tests/fixtures/pill-sizes"];
+        _fixtureScan.running = true;
+    }
+
+    function _fixtureScanned(lines) {
+        assertEqual(lines.join(" "), "PILL:panels/Plain.qml:m FILES:1",
+                    "the mockups and mockup.qml are left out: their pills and heights not read, the plain one read");
         _scan.command = ["bash", Quickshell.shellDir + "/tests/pill-sizes.sh", Quickshell.shellDir];
         _scan.running = true;
     }

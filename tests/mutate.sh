@@ -155,6 +155,7 @@ file=${absolute#"$REPO"/}
 [ -f "$REPO/$file" ] || fail "no file $file in the tree"
 case "$file" in *.qml) ;; *) fail "$file is not a QML file" ;; esac
 case "$file" in tests/*) fail "$file is a test: mutate what it tests" ;; esac
+case "$file" in mockups/* | mockup.qml) fail "$file is a mockup: development only, nothing ships or tests it" ;; esac
 
 # ---- The accepted survivors -------------------------------------------------------------
 [ -n "$accepted_list" ] || accepted_list=$REPO/tests/mutants-accepted.txt
