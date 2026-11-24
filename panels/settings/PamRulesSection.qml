@@ -22,7 +22,8 @@ ColumnLayout {
 
     // The I/O, handed in by a suite as stand-ins: PamStacks (reading, facts, sudo, polkit,
     // faillock, directories, files, refresh), a trial (start, respond, cancel, state) and the
-    // distribution's integration (capability, details, plan, apply, undo, busy)
+    // distribution's integration (capability, details, plan, apply, undo, busy; facts, where it
+    // has them, for how this system gets a missing package)
     property var stacks: PamStacks
     property var trial: _ownTrial
     property var integration: Distribution
@@ -972,7 +973,7 @@ ColumnLayout {
             readonly property var row: PamRuleViewRules.unlockRows(root._base, {
                 "lockscreen.offerFingerprint": root.settingValue("lockscreen.offerFingerprint"),
                 "lockscreen.offerSecurityKey": root.settingValue("lockscreen.offerSecurityKey")
-            }).find(item => item.key === modelData)
+            }, root.integration?.facts ?? null).find(item => item.key === modelData)
             Layout.fillWidth: true
             spacing: 0
             SwitchRow {

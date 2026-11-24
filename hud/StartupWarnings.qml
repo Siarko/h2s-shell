@@ -15,12 +15,16 @@ Column {
     // Opens a settings page by its id (a suite gives a stand-in: the real one reaches every
     // listener of Shell.openSettings)
     property var openSettings: pageId => Shell.openSettings(pageId)
+    // The distribution's facts, for how this system gets a missing package (a suite gives
+    // stand-ins; null while not known: the neutral hint)
+    property var distributionFacts: Distribution.facts
     // What the window's input mask takes: the column while a banner shows, else nothing. A
     // Region takes its item's geometry whether the item is shown or not, and the banners stay
     // where they are, hidden — in the mask while hidden, the launch warning took every click
     // in a 640 px band under the bar's middle, over the popups there (the calendar's top half).
     readonly property Item maskItem: height > 0 ? root : null
     readonly property alias safeModeBanner: safeModeBanner
+    readonly property alias fontWarning: fontWarning
 
     spacing: Theme.osdToast.screenGap
 
@@ -49,16 +53,16 @@ Column {
         onDismissed: IconThemes.launchWarningDismissed = true
     }
 
-    // No Nerd Font: the bar's icons are its glyphs
+    // No Nerd Font: the bar's icons are its glyphs. The package is named as this system gets
+    // it (DistributionRules.packageHint), never as a command
     StartupWarning {
+        id: fontWarning
         width: parent.width
         visible: !Theme.nerdFontInstalled && !Theme.nerdFontWarningDismissed
         title: "No Nerd Font installed: icons show as empty boxes"
         body: "The shell's icons are Nerd Font glyphs, and no font on this system has them. Install "
             + "JetBrainsMono Nerd Font (any Nerd Font works), then restart the shell.\n"
-            + "Arch: sudo pacman -S ttf-jetbrains-mono-nerd\n"
-            + "NixOS: programs.h2s-shell.enable = true; (the module adds it), or "
-            + "fonts.packages = [ pkgs.nerd-fonts.jetbrains-mono ];"
+            + DistributionRules.packageHint(root.distributionFacts, "nerdFont").text
         onDismissed: Theme.nerdFontWarningDismissed = true
     }
 }

@@ -1,5 +1,7 @@
 # shellcheck shell=bash
-# Every package install.sh installs or names, and the font the HUD's hint names, exists in
+# Every package the Arch installer (distributions/arch/install.sh) installs or names, and
+# every one Arch's facts name to the user (distributions/arch/distribution.json, its
+# "packages": the shell's hints about a missing package), exists in
 # the repositories this machine's pacman knows (`pacman -Si`: reads the sync database,
 # changes nothing). A name that pacman dropped or renamed fails here, not on a new machine.
 # Without a sync database (a machine never synced, one whose database was removed) no name
@@ -10,13 +12,15 @@ listed=$(pacman -Sl 2> /dev/null | head -n 1)
 [ -n "$listed" ] \
     || cannot_run "pacman's sync database is missing or empty (pacman -Sl lists no package): no name can be looked up"
 
-# The names in install.sh's `packages=( … )`, comments dropped
-mapfile -t installed < <(sed -n '/^packages=(/,/^)/p' "$REPO/install.sh" | sed '1d;$d;s/#.*//' | tr -s ' \t' '\n' | grep .)
-# The names after "pacman -S" in what install.sh and the HUD print
-mapfile -t named < <(grep -ho 'pacman -S [a-z0-9][a-z0-9-]*' "$REPO/install.sh" "$REPO/Hud.qml" | sed 's/^pacman -S //' | grep . | sort -u)
+# The names in the Arch installer's `packages=( … )`, comments dropped
+mapfile -t installed < <(sed -n '/^packages=(/,/^)/p' "$REPO/distributions/arch/install.sh" | sed '1d;$d;s/#.*//' | tr -s ' \t' '\n' | grep .)
+# The names after "pacman -S" in what the installer prints, and the "package" names of
+# Arch's hints
+mapfile -t named < <({ grep -ho 'pacman -S [a-z0-9][a-z0-9-]*' "$REPO/distributions/arch/install.sh" | sed 's/^pacman -S //'
+                       grep -o '"package": *"[^"]*"' "$REPO/distributions/arch/distribution.json" | sed 's/.*: *"//; s/"$//'; } | grep . | sort -u)
 
 check "install.sh's package list is read (some names)" test "${#installed[@]}" -ge 10
-check "the names install.sh and the HUD print are read (some names)" test "${#named[@]}" -ge 3
+check "the names the installer prints and Arch's hints name are read (some names)" test "${#named[@]}" -ge 3
 # "--": a name is never read as an option (pacman -Si without a name lists everything)
 in_repositories() { [ -n "$1" ] && pacman -Si -- "$1" > /dev/null 2>&1; }
 for package in "${installed[@]}"; do

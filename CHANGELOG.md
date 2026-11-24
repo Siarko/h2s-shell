@@ -97,6 +97,15 @@ The interface modules are written against (`qs.api`), versioned on its own
   reloads when it changes.
 
 ### Changed
+- A missing package is named as this system gets it, never as a command to type: the
+  warning about a missing Nerd Font names Arch's package or NixOS's option and package (and,
+  on another system, the font's upstream name), and the lock screen's fingerprint and
+  security key switches, while the computer lacks one, say what they need (fprintd or
+  pam_u2f, as Arch's package or NixOS's option, and an enrolled finger or a registered key).
+- `install.sh` runs the Arch installer, now `distributions/arch/install.sh`, on Arch and
+  systems based on it (EndeavourOS, …), and on any other system says it does not support it
+  and changes nothing (before, it went on wherever pacman was found). The README's
+  `curl … | bash` line and `install.sh --update` work as before.
 - Settings → When away → Hibernate: Apply of the system's delay keeps the file it replaces
   as a backup, and Undo puts it back. A delay set in another file is shown as "Set in
   <file>: <value>": one read after the shell's file wins and no Apply is offered; one read

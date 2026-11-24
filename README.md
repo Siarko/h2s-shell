@@ -39,7 +39,9 @@ The installers below bring all of these.
 curl -fsSL https://raw.githubusercontent.com/Siarko/h2s-shell/master/install.sh | bash
 ```
 
-It installs the packages with pacman (asking first), clones the shell into
+On Arch and systems based on it (EndeavourOS, …) it runs the Arch installer,
+`distributions/arch/install.sh`; on any other system it says so and changes nothing. It
+installs the packages with pacman (asking first), clones the shell into
 `~/.config/quickshell/default` and copies its built-in modules to
 `~/.local/share/h2s-shell/builtin`, then prints the two things left to you: enabling the
 services, and the autostart line for Hyprland. Update with `git pull` in that folder, then

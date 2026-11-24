@@ -1,18 +1,21 @@
 #!/usr/bin/env bash
-# Runs install.sh without letting it change the machine, and checks what it would have
-# done: which packages it asks for and how, where the shell goes, where its built-in modules
+# Runs install.sh — the top-level one, which runs distributions/arch/install.sh on Arch and
+# systems based on it and refuses every other — without letting it change the machine, and
+# checks what it would have done: which system it takes itself to be on (made-up
+# os-release files), that given on standard input it fetches the Arch installer (a stand-in
+# curl) and removes it after, which packages it asks for and how, where the shell goes, where its built-in modules
 # are copied (and `--update`, which copies them again), that it builds the helper as the user
 # (and goes on when that fails), that nothing runs as root but what it hands to sudo, that a second run changes nothing, and what it does when a step fails. The same on NixOS and on Arch: install.sh is for Arch, the test is not.
 #
 # How install.sh is kept from the machine:
 #   - an empty environment (env -i) with a private HOME and a PATH of one directory, made
-#     here: recording stand-ins for sudo, pacman, git, fc-list and for every program that
+#     here: recording stand-ins for sudo, pacman, git, fc-list, curl and for every program that
 #     could change the system (below), and links to the plain tools install.sh uses
 #     (bash, mkdir, dirname, grep, cat, and cp, mv, rm, mktemp for the built-in modules, which work
 #     only inside the private HOME). No stand-in runs anything real;
 #   - no new privileges (setpriv): even a sudo reached by another way could not become root;
 #   - before anything runs: every privileged name must resolve to a stand-in written here,
-#     and install.sh is read for the ways around a PATH of stand-ins that reading can find
+#     and both scripts are read for the ways around a PATH of stand-ins that reading can find
 #     (guard_lines below: a program named by its path, `command -p`, an assignment to
 #     PATH, `exec`, `eval`, `source` and `.`, a variable as the command, a command
 #     substitution in a here-document) — else the test stops, status 2. That reading is no
@@ -28,7 +31,8 @@
 set -uo pipefail
 
 REPO=$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)
-INSTALL=$REPO/install.sh
+DISPATCHER=$REPO/install.sh
+ARCH_INSTALL=$REPO/distributions/arch/install.sh
 setup_error() { echo "install-test.sh: $*" >&2; exit 2; }
 
 missing=()
@@ -49,6 +53,17 @@ BASH_PATH=$(type -P bash)
 
 work=$(mktemp -d "${TMPDIR:-/tmp}/install-test.XXXXXX") || setup_error "cannot create a temp dir"
 trap 'rm -rf "$work"' EXIT
+# The scripts as a checkout holds them, the top-level one reading os-release under a made-up
+# tree ($work/os-root, which each case fills) in place of the system's: the one line that
+# names that folder, changed in the copy alone
+OS_ROOT=$work/os-root
+CHECKOUT=$work/checkout
+mkdir -p "$CHECKOUT/distributions/arch" "$OS_ROOT/etc"
+grep -qx 'os_release_root=""' "$DISPATCHER" || setup_error "install.sh has no line os_release_root=\"\" for the test to point at a made-up tree"
+sed "s|^os_release_root=\"\"\$|os_release_root=\"$OS_ROOT\"|" "$DISPATCHER" > "$CHECKOUT/install.sh"
+cp "$ARCH_INSTALL" "$CHECKOUT/distributions/arch/install.sh"
+INSTALL=$CHECKOUT/install.sh
+FIXTURES=$REPO/tests/fixtures/distribution
 failed=0
 check() {
     local description=$1
@@ -59,14 +74,15 @@ check() {
 # What must never be the real thing on the private PATH. The first four are install.sh's
 # own; the rest are not expected at all and only say that they were called (status 97).
 PRIVILEGED=(sudo pacman pkexec su doas systemctl yay paru)
-UNEXPECTED=(pkexec su doas systemctl yay paru ln chmod chown install tee curl wget)
+UNEXPECTED=(pkexec su doas systemctl yay paru ln chmod chown install tee wget)
 MARK="# a stand-in written by tests/install-test.sh"
 
 # make_bin <directory>: the private PATH of one run, and its control directory beside it
 # (<directory>/../control): `log` (one line per stand-in call), and files a case puts
 # there: sudo-status, git-clone-fails, git-remote-fails, git-clone-no-builtin (a clone
 # without builtin-modules/), git-clone-no-helper (a clone without scripts/build-helper.sh),
-# build-fails (the clone's stand-in build-helper.sh fails), fonts (what fc-list prints).
+# build-fails (the clone's stand-in build-helper.sh fails), fonts (what fc-list prints),
+# curl-fails (the fetch of the Arch installer fails).
 make_bin() {
     local bin=$1 control name
     control=$(dirname "$bin")/control
@@ -120,6 +136,18 @@ case "$*" in
         ;;
     *) exit 97 ;;
 esac
+STANDIN
+    # The fetch of the Arch installer: this checkout's, written where -o says
+    standin curl << STANDIN
+echo "curl: \$*" >> "\$control/log"
+[ -e "\$control/curl-fails" ] && { echo "curl: (22) The requested URL returned error: 404" >&2; exit 22; }
+output=""
+while [ \$# -gt 0 ]; do
+    [ "\$1" = -o ] && { output=\$2; shift; }
+    shift
+done
+[ -n "\$output" ] || exit 2
+cat '$ARCH_INSTALL' > "\$output"
 STANDIN
     standin fc-list << 'STANDIN'
 echo "fc-list: $*" >> "$control/log"
@@ -195,14 +223,15 @@ guard_install() {
     printf '%s\n' "$refused" >&2
     setup_error "$(basename "$1") could reach a program around the stand-ins (above). Nothing was run"
 }
-guard_install "$INSTALL"
+guard_install "$DISPATCHER"
+guard_install "$ARCH_INSTALL"
 # The guard itself: install.sh with one such line more stops it, status 2 — each line a
 # way that ran the real program when the guard did not know it, or one of the same kind
 guard_copies=0
 guard_stops_at() {
     guard_copies=$((guard_copies + 1))
     local copy=$work/guard-install-$guard_copies.sh
-    { cat "$INSTALL"; printf '%s\n' "$@"; } > "$copy"
+    { cat "$ARCH_INSTALL"; printf '%s\n' "$@"; } > "$copy"
     (guard_install "$copy") 2> /dev/null
     [ $? = 2 ]
 }
@@ -241,6 +270,13 @@ start_case() {
     make_bin "$BIN"
     echo "JetBrainsMono Nerd Font" > "$CONTROL/fonts"
     EXTRA_ENV=()
+    mkdir -p "$CASE/tmp"
+    os_release arch
+}
+# os_release <fixture | none>: the made-up system's os-release, from tests/fixtures/distribution/
+os_release() {
+    rm -f "$OS_ROOT/etc/os-release"
+    [ "$1" = none ] || cp "$FIXTURES/$1.os-release" "$OS_ROOT/etc/os-release"
 }
 # run_install [piped | <arguments>…]: runs install.sh once in the case's surroundings — from
 # the file (given those arguments), or given to bash on its standard input, as
@@ -250,7 +286,7 @@ run_install() {
     : > "$CONTROL/log"
     {
         echo "#!$BASH_PATH"
-        printf 'exec env -i PATH=%q HOME=%q' "$BIN" "$HOME_DIR"
+        printf 'exec env -i PATH=%q HOME=%q TMPDIR=%q' "$BIN" "$HOME_DIR" "$CASE/tmp"
         [ ${#EXTRA_ENV[@]} -gt 0 ] && printf ' %q' "${EXTRA_ENV[@]}"
         if [ "${1:-}" = piped ]; then
             printf ' %q --no-new-privs %q < %q\n' "$SETPRIV" "$BIN/bash" "$INSTALL"
@@ -275,8 +311,8 @@ none_logged() { ! grep -q -- "$1" "$CONTROL/log"; }
 # Everything under the private HOME, one path per line
 home_tree() { (cd "$HOME_DIR" && find . | LC_ALL=C sort); }
 
-# The package list, read from install.sh a second way than it reads it itself
-mapfile -t packages < <(sed -n '/^packages=(/,/^)/p' "$INSTALL" | sed '1d;$d;s/#.*//' | tr -s ' \t' '\n' | grep .)
+# The package list, read from the Arch installer a second way than it reads it itself
+mapfile -t packages < <(sed -n '/^packages=(/,/^)/p' "$ARCH_INSTALL" | sed '1d;$d;s/#.*//' | tr -s ' \t' '\n' | grep .)
 sudo_line="sudo stdin-terminal=yes no-new-privs=1: pacman -S --needed ${packages[*]}"
 repository="https://github.com/Siarko/h2s-shell"
 
@@ -292,6 +328,15 @@ check "first run: pacman -S --needed with exactly that list, through sudo, on th
 check "first run: sudo is asked once" test "$(log_count '^sudo ')" = 1
 check "first run: pacman is never run directly" none_logged '^pacman:'
 check "first run: nothing else that changes a system is run" none_logged '^unexpected '
+fetched_from_repository() {
+    grep -qx -- "curl: -fsSL --proto =https -o $CASE/tmp/[^ ]* https://raw.githubusercontent.com/Siarko/h2s-shell/master/distributions/arch/install.sh" "$CONTROL/log"
+}
+check "first run, given on standard input: the Arch installer is fetched from the repository, over https only, into the temp folder" \
+    fetched_from_repository
+fetched_once() { [ "$(log_count '^curl: ')" = 1 ]; }
+check "… once" fetched_once
+tmp_empty() { [ -z "$(ls -A "$CASE/tmp")" ]; }
+check "… and removed when done (nothing left in the temp folder)" tmp_empty
 check "first run: the shell is cloned from its repository into ~/.config/quickshell/default" \
     logged "git: clone $repository $target"
 check "first run: the clone is there" test -f "$target/shell.qml"
@@ -321,6 +366,7 @@ check "second run: no second clone" none_logged '^git: clone'
 check "second run: the packages are asked for the same way (pacman's --needed skips what is there)" logged "$sudo_line"
 check "second run: the home directory is as it was" test "$(home_tree)" = "$tree_before"
 check "second run: nothing else that changes a system is run" none_logged '^unexpected '
+check "second run, from the checkout: the installer beside it, nothing fetched" none_logged '^curl: '
 
 # ---- --update: the built-in modules again, nothing else -----------------------------------
 # What the checkout no longer holds goes; what it gained comes; no packages, no sudo
@@ -413,6 +459,49 @@ run_install
 check "git cannot say where the config comes from: exit 1, not 'already installed'" status_is 1
 check "git cannot say where the config comes from: left alone" says "leaving it alone"
 check "git cannot say where the config comes from: no clone" none_logged '^git: clone'
+
+# ---- Which system ------------------------------------------------------------------------
+for system in nixos fedora linuxmint none; do
+    for how in file piped; do
+        start_case "system-$system-$how"
+        os_release "$system"
+        if [ "$how" = piped ]; then run_install piped; else run_install; fi
+        check "$system ($how): exit 1" status_is 1
+        check "$system ($how): nothing is run at all, nothing fetched" test ! -s "$CONTROL/log"
+        check "$system ($how): nothing is put in the home directory" test "$(home_tree)" = .
+        case $system in
+            nixos) check "NixOS ($how): says this installer is not for NixOS, and the module instead" \
+                says "This installer is not for NixOS: there the shell comes with its flake's NixOS module (programs.h2s-shell.enable)" ;;
+            fedora) check "Fedora ($how): says only Arch and systems based on it are supported, naming this one" \
+                says "This installer supports only Arch Linux and systems based on it, not Fedora Linux 43 (Workstation Edition)." ;;
+            linuxmint) check "Linux Mint ($how): not supported, the README named" says "The README says what the shell needs" ;;
+            none) check "no os-release ($how): not supported, without a name" says "systems based on it, not this system." ;;
+        esac
+    done
+done
+start_case system-endeavouros
+os_release endeavouros
+run_install piped
+check "EndeavourOS (ID_LIKE=arch): the Arch installer runs" status_is 0
+check "… it installs" logged "$sudo_line"
+start_case system-endeavouros-update
+os_release endeavouros
+run_install --update
+check "EndeavourOS, an argument: handed to the Arch installer (--update without an install)" says "run this without --update first"
+
+start_case no-curl
+rm "$BIN/curl"
+run_install piped
+check "given on standard input without curl: exit 1" status_is 1
+check "… says the fetch needs curl" says "Fetching the Arch installer needs curl"
+check "… nothing is run at all" test ! -s "$CONTROL/log"
+start_case curl-fails
+: > "$CONTROL/curl-fails"
+run_install piped
+check "the fetch fails: a non-zero exit" status_nonzero
+check "… nothing but the fetch is run" test "$(grep -vc '^curl: ' "$CONTROL/log")" = 0
+check "… nothing is put in the home directory" test "$(home_tree)" = .
+check "… nothing left in the temp folder" tmp_empty
 
 # ---- A step fails ------------------------------------------------------------------------
 start_case no-pacman

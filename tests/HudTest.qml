@@ -223,5 +223,21 @@ TestCase {
         const other = () => hud.warnings.children.find(child => child !== banner && child.visible && child.height > 0) ?? null;
         assert(_until(() => other() !== null && hud.warnings.maskItem !== null), "another warning shown: in the mask");
         assertEqual(_rect(hud.warnings.maskItem), _rect(other()), "… the mask is that warning's rectangle, not the banner's");
+
+        // The font warning names the package as this system gets it, never as a command
+        const font = hud.warnings.fontWarning;
+        const saidFacts = hud.warnings.distributionFacts;
+        const lastLine = () => font.body.split("\n").slice(-1)[0];
+        try {
+            hud.warnings.distributionFacts = { label: "Arch Linux", packages: { nerdFont: { package: "ttf-jetbrains-mono-nerd" } } };
+            assertEqual(lastLine(), "On Arch Linux: the package ttf-jetbrains-mono-nerd.", "the font warning on Arch: the package's name");
+            hud.warnings.distributionFacts = { label: "NixOS", packages: { nerdFont: { option: "programs.h2s-shell.enable", package: "nerd-fonts.jetbrains-mono" } } };
+            assertEqual(lastLine(), "On NixOS: the option programs.h2s-shell.enable, or the package nerd-fonts.jetbrains-mono.", "… on NixOS: the option, or the package");
+            hud.warnings.distributionFacts = null;
+            assertEqual(lastLine(), "From this system's packages: JetBrainsMono Nerd Font, for the shell's icons.", "… the system not known: the neutral hint");
+            assert(font.body.startsWith("The shell's icons are Nerd Font glyphs"), "… after what is missing and why");
+        } finally {
+            hud.warnings.distributionFacts = saidFacts;
+        }
     }
 }

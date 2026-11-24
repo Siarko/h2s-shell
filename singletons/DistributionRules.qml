@@ -30,6 +30,12 @@ import Quickshell
 //   networkManagerVpnDirectories   where NetworkManager's VPN plugins' .name files are
 //   polkitRulesDirectory      where polkit's rules are read from, for the shell's own
 //   polkitRulesInstallable    whether the shell may install a rule file there
+//   packages                  how this system gets a package the shell names to the user:
+//                             { <one of `packages`' names>: { option, package } }, each of
+//                             the two a plain name (an option of the system's configuration,
+//                             a package of its repositories; no spaces, so never a command
+//                             line), at least one given; a name left out has the neutral
+//                             hint (packageHint)
 //
 // Detection, one reading at start: H2S_DISTRIBUTION (a test seam, TestSeams.distribution)
 // names one and wins; else a distribution whose marker exists (one that cannot be read
@@ -52,7 +58,7 @@ Singleton {
 
     readonly property var _keys: ["id", "label", "matches", "markers", "etcManaged", "helper", "builtinModules",
         "programDirectories", "setuidWrapperDirectory", "pamDirectories", "pamModuleDirectories",
-        "networkManagerVpnDirectories", "polkitRulesDirectory", "polkitRulesInstallable"]
+        "networkManagerVpnDirectories", "polkitRulesDirectory", "polkitRulesInstallable", "packages"]
     readonly property var _directoryLists: ["programDirectories", "pamDirectories", "pamModuleDirectories", "networkManagerVpnDirectories"]
 
     function _hasControl(text) {
@@ -158,15 +164,66 @@ Singleton {
             && parsed.pamModuleDirectories.every(path => path.endsWith("/"))
             && (parsed.setuidWrapperDirectory === "" || _isPath(parsed.setuidWrapperDirectory))
             && _isPath(parsed.polkitRulesDirectory)
-            && typeof parsed.polkitRulesInstallable === "boolean";
+            && typeof parsed.polkitRulesInstallable === "boolean"
+            && _isPackages(parsed.packages);
         if (!valid)
             return null;
-        // Read-only, each list a new copy at each read (ReadOnlyRules.copy): a frozen list
-        // would still take push and index writes, and every reader holds the same facts
+        // Read-only, each list (and the package hints) a new copy at each read
+        // (ReadOnlyRules.copy): a frozen list would still take push and index writes, and
+        // every reader holds the same facts
         const facts = {};
         for (const key of _keys)
             facts[key] = parsed[key];
         return ReadOnlyRules.copy(facts);
+    }
+
+    // ── Packages the shell names to the user ──
+
+    // Each package the shell may name, with its upstream name and what it is for in the
+    // shell: the neutral hint on a system whose facts do not say how it gets it (and while
+    // the system is not known)
+    readonly property var packages: ({
+        nerdFont: { upstream: "JetBrainsMono Nerd Font", purpose: "for the shell's icons" },
+        fprintd: { upstream: "fprintd", purpose: "for the fingerprint reader" },
+        pamU2f: { upstream: "pam_u2f", purpose: "for security keys" }
+    })
+
+    // An option or package name: a plain word with dots, "+", "_" or "-", never a command
+    function _isPackageName(text) {
+        return typeof text === "string" && /^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$/.test(text);
+    }
+
+    function _isPackages(value) {
+        if (value === null || typeof value !== "object" || Array.isArray(value))
+            return false;
+        return Object.keys(value).every(name => {
+            const entry = value[name];
+            if (!Object.prototype.hasOwnProperty.call(packages, name) || entry === null || typeof entry !== "object" || Array.isArray(entry))
+                return false;
+            const keys = Object.keys(entry);
+            return keys.length > 0 && keys.every(key => (key === "option" || key === "package") && _isPackageName(entry[key]));
+        });
+    }
+
+    // How this system gets package `name` (one of `packages`' names), for a hint to the user
+    // → frozen { name, upstream, purpose, option, package (each "" when not given), text },
+    // or null for a name the shell does not know. `text` is one sentence: "On <label>: the
+    // option <option>, or the package <package>." where the facts say it (an option on NixOS,
+    // a package name on Arch); else, as on a system the shell has no distribution for or one
+    // not known yet, the neutral "From this system's packages: <upstream>, <purpose>." Never
+    // a command line.
+    function packageHint(facts, name) {
+        if (typeof name !== "string" || !Object.prototype.hasOwnProperty.call(packages, name))
+            return null;
+        const known = packages[name];
+        const given = facts?.packages?.[name] ?? null;
+        const option = typeof given?.option === "string" ? given.option : "";
+        const packageName = typeof given?.package === "string" ? given.package : "";
+        const ways = (option !== "" ? ["the option " + option] : []).concat(packageName !== "" ? ["the package " + packageName] : []);
+        const label = typeof facts?.label === "string" ? facts.label : "";
+        const text = ways.length > 0 && label !== "" ? "On " + label + ": " + ways.join(", or ") + "."
+            : "From this system's packages: " + known.upstream + ", " + known.purpose + ".";
+        return Object.freeze({ name, upstream: known.upstream, purpose: known.purpose, option, package: packageName, text });
     }
 
     // What was read → frozen { ready, id, facts, how, problem, shipped }:

@@ -788,7 +788,9 @@ the editor does not make itself as raw lines) and replaces it at the next Apply.
 
 Under the sign-in rules, which ways the lock screen offers: the password always, the
 fingerprint and the security key each with a switch (`lockscreen.offerFingerprint`,
-`lockscreen.offerSecurityKey`), off and dimmed with the reason while the computer lacks one.
+`lockscreen.offerSecurityKey`), off and dimmed with the reason while the computer lacks one,
+and what it needs: fprintd or pam_u2f, named as the system gets it (Arch: the package;
+NixOS: the option), and an enrolled finger or a registered key.
 Changed at once, without a password. Under the security key a warning when the system's
 pam_u2f settings let it unlock without a key (`alwaysok`) or a touch (`userpresence=0`),
 hold `interactive` (the key will not work: the lock screen cannot answer its Enter prompt),
@@ -953,4 +955,6 @@ Beyond Quickshell and Qt 6, the shell shells out to:
 | `pttd` / `ptt` | dictation (optional) |
 | sysfs | CPU, RAM, disk, temperatures, GPU, network throughput |
 
-A JetBrainsMono Nerd Font is assumed for the glyphs (`Theme.fontFamily`).
+A JetBrainsMono Nerd Font is assumed for the glyphs (`Theme.fontFamily`); without any Nerd Font a
+warning under the bar says so and names the font as this system gets it (Arch: the package;
+NixOS: the module's option, or the package).

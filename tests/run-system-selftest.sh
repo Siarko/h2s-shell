@@ -137,12 +137,12 @@ run tree "$work/arch" hollow
 check "a check file that checks nothing: status 2, not a pass" status_is 2
 rm "$work/tree/tests/system/arch/hollow.sh"
 
-# Arch's package names (the real check file, this checkout's install.sh and Hud.qml)
+# Arch's package names (the real check file, this checkout's Arch installer and facts)
 # against a stand-in pacman, first on PATH: it knows every name once `synced` is there,
 # but those in `dropped`
-mkdir -p "$work/pacman-tree/tests/system/arch" "$work/pacman-bin"
+mkdir -p "$work/pacman-tree/tests/system/arch" "$work/pacman-tree/distributions/arch" "$work/pacman-bin"
 cp "$REPO/tests/system/arch/packages.sh" "$work/pacman-tree/tests/system/arch/"
-cp "$REPO/install.sh" "$REPO/Hud.qml" "$work/pacman-tree/"
+cp "$REPO/distributions/arch/install.sh" "$REPO/distributions/arch/distribution.json" "$work/pacman-tree/distributions/arch/"
 cat > "$work/pacman-bin/pacman" << STANDIN
 #!$(type -P bash)
 [ -f "$work/synced" ] || { echo "error: database not found" >&2; exit 1; }
@@ -171,6 +171,9 @@ echo quickshell > "$work/dropped"
 run_packages
 check "package names, one dropped from the repositories: status 1" status_is 1
 check "package names, one dropped: that name is the FAIL" says "FAIL installed by install.sh: quickshell is in the repositories"
+echo pam-u2f > "$work/dropped"
+run_packages
+check "package names, a hint's package dropped (Arch's facts): that name is the FAIL" says "FAIL named to the user: pam-u2f is in the repositories"
 
 # The real sets: each system's directory holds a check, and every check file parses — on
 # this machine too, where only one of the sets runs

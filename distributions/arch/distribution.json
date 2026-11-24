@@ -14,5 +14,10 @@
         "/usr/lib/aarch64-linux-gnu/security/", "/lib/aarch64-linux-gnu/security/"],
     "networkManagerVpnDirectories": ["/usr/lib/NetworkManager/VPN", "/etc/NetworkManager/VPN"],
     "polkitRulesDirectory": "/usr/share/polkit-1/rules.d",
-    "polkitRulesInstallable": true
+    "polkitRulesInstallable": true,
+    "packages": {
+        "nerdFont": { "package": "ttf-jetbrains-mono-nerd" },
+        "fprintd": { "package": "fprintd" },
+        "pamU2f": { "package": "pam-u2f" }
+    }
 }

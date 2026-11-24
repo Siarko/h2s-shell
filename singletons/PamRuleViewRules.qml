@@ -529,8 +529,14 @@ Singleton {
     // `facts.u2f.lock`: what the system's pam_u2f settings let the lock's key check do
     // (PamStackRules.u2fOptions'). Its one line must pass, so `nouserok` (PAM_IGNORE for a
     // user without a key) leaves no result and the check fails: only alwaysok and a touch
-    // turned off are said
-    function unlockRows(facts, values) {
+    // turned off are said. A way that is not there says what it needs: its package as this
+    // system gets it (`distributionFacts`: Distribution's facts, DistributionRules.packageHint;
+    // null while not known: the neutral hint), never as a command
+    function unlockRows(facts, values, distributionFacts) {
+        const needs = (what, name, then) => {
+            const hint = DistributionRules.packageHint(distributionFacts ?? null, name);
+            return what + " — it needs " + hint.upstream + " and " + then + ". " + hint.text;
+        };
         const row = (key, method, label, state, readyHint, absentHint, warning) => ({
             key, method, label,
             hint: state === "ready" ? readyHint : state === "absent" ? absentHint : "Not known on this computer",
@@ -540,8 +546,10 @@ Singleton {
         });
         return [
             { key: "", method: "password", label: "Password", hint: "Always offered", checked: true, available: false },
-            row("lockscreen.offerFingerprint", "fingerprint", "Fingerprint", facts?.fingerprint, "A finger is enrolled", "No finger enrolled", ""),
-            row("lockscreen.offerSecurityKey", "securityKey", "Security key", facts?.securityKey, "A key is registered", "No key registered",
+            row("lockscreen.offerFingerprint", "fingerprint", "Fingerprint", facts?.fingerprint, "A finger is enrolled",
+                needs("No finger enrolled", "fprintd", "an enrolled finger"), ""),
+            row("lockscreen.offerSecurityKey", "securityKey", "Security key", facts?.securityKey, "A key is registered",
+                needs("No key registered", "pamU2f", "a registered key"),
                 keyUnlockWarning(facts?.u2f?.lock))
         ];
     }

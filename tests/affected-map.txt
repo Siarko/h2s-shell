@@ -116,6 +116,7 @@ tests/flaky-suites.txt self:tests/release-check-selftest.sh
 # ---- The shell's entry, install and packaging ------------------------------------------
 shell.qml unit:all lock:all
 install.sh self:tests/install-test.sh
+distributions/arch/install.sh self:tests/install-test.sh self:tests/run-system.sh self:tests/run-system-selftest.sh
 helper/* self:tests/run-helper.sh
 scripts/build-helper.sh self:tests/run-helper.sh
 tests/run-helper.sh self:tests/run-helper.sh
@@ -143,6 +144,8 @@ tests/fixtures/distribution/* unit:DistributionRulesTest unit:DistributionReadin
 # The scripts' detection, from the generated distribution.env files: the methods script,
 # the launcher and the system runner read it
 +distributions/*/distribution.* lock:methods-* self:tests/run-system-selftest.sh self:tests/launcher-selftest.sh
+# The package hints' names, looked up in this system's repositories or options
++distributions/*/distribution.json self:tests/run-system.sh
 scripts/distribution.sh self:tests/distribution-selftest.sh self:tests/run-system-selftest.sh self:tests/launcher-selftest.sh self:tests/run-helper.sh lock:methods-* unit:PamStacksReadingTest
 scripts/distribution-env.py self:tests/distribution-selftest.sh
 tests/distribution-selftest.sh self:tests/distribution-selftest.sh

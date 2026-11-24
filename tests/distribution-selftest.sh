@@ -60,6 +60,8 @@ check "… written again, it holds the new value" grep -qx "polkitRulesDirectory
     "$work/copy/distributions/arch/distribution.env"
 check "… and the lists joined with \":\"" grep -qx "pamDirectories=/etc/pam.d:/usr/lib/pam.d" \
     "$work/copy/distributions/arch/distribution.env"
+no_packages_line() { ! grep -q '^packages=' "$work/copy/distributions/arch/distribution.env"; }
+check "… and the package hints left out (an object no line carries; no script reads them)" no_packages_line
 OUTPUT=$("$LOCKTEST_PYTHON" -I "$REPO/scripts/distribution-env.py" --check "$work/copy" 2>&1)
 STATUS=$?
 check "… then --check passes" status_is 0
@@ -73,6 +75,7 @@ refused() {
 check "the generator refuses a list entry with \":\"" refused '{"id": "x", "markers": ["/a:b"]}'
 check "… a value with a line break" refused '{"id": "x", "label": "a\nb"}'
 check "… a value that is no text, boolean or list" refused '{"id": "x", "count": 3}'
+check "… an object under a key other than packages" refused '{"id": "x", "other": {"a": "b"}}'
 check "… a key that is no plain word" refused '{"id": "x", "a=b": "c"}'
 
 # ---- Detection --------------------------------------------------------------------------

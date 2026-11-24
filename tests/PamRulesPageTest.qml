@@ -469,7 +469,21 @@ TestCase {
         const unlock = rules.unlockRows({ fingerprint: "ready", securityKey: "absent" }, { "lockscreen.offerFingerprint": false });
         assertEqual(unlock.map(row => row.method + ":" + row.checked + ":" + row.available).join(" "),
                     "password:true:false fingerprint:false:true securityKey:false:false", "unlockRows: the password always, a missing key off");
-        assertEqual(unlock[2].hint, "No key registered", "… with its reason");
+        assertEqual(unlock[2].hint, "No key registered — it needs pam_u2f and a registered key. From this system's packages: pam_u2f, for security keys.",
+                    "… with its reason and what it needs: the system not known, the neutral hint");
+        const arch = { label: "Arch Linux", packages: { fprintd: { package: "fprintd" }, pamU2f: { package: "pam-u2f" } } };
+        const none = { fingerprint: "absent", securityKey: "absent" };
+        assertEqual(rules.unlockRows(none, {}, arch).slice(1).map(row => row.hint).join(" | "),
+                    "No finger enrolled — it needs fprintd and an enrolled finger. On Arch Linux: the package fprintd. | "
+                    + "No key registered — it needs pam_u2f and a registered key. On Arch Linux: the package pam-u2f.",
+                    "… on Arch: the package names");
+        const nixos = { label: "NixOS", packages: { fprintd: { option: "services.fprintd.enable" }, pamU2f: { option: "security.pam.u2f.enable" } } };
+        assertEqual(rules.unlockRows(none, {}, nixos).slice(1).map(row => row.hint).join(" | "),
+                    "No finger enrolled — it needs fprintd and an enrolled finger. On NixOS: the option services.fprintd.enable. | "
+                    + "No key registered — it needs pam_u2f and a registered key. On NixOS: the option security.pam.u2f.enable.",
+                    "… on NixOS: the options");
+        assertEqual(rules.unlockRows({ fingerprint: "ready", securityKey: "unknown" }, {}, arch).slice(1).map(row => row.hint).join(" | "),
+                    "A finger is enrolled | Not known on this computer", "… there, or not known: no package named");
         const u2fRead = { rows: { known: true, alwaysok: true, nouserok: false, touchOff: false }, conf: null, lock: null };
         const sudoFacts = rules.serviceFacts({ writes: false, fingerprint: "ready", securityKey: "ready", u2f: u2fRead }, "sudo", null, null, [], undefined, false);
         assertEqual(sudoFacts.u2f, u2fRead, "serviceFacts: the system's pam_u2f settings handed to the checks");

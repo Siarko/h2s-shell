@@ -55,6 +55,7 @@ TestCase {
         _manifests();
         _detection();
         _todaysValues();
+        _packageHints();
     }
 
     function _parsing() {
@@ -142,6 +143,17 @@ TestCase {
         assertEqual(changed(copy => copy.polkitRulesDirectory = ""), null, "no polkit directory: refused");
         assertEqual(changed(copy => copy.label = "Arch\nLinux"), null, "a label of two lines: refused");
         assertEqual(changed(copy => copy.label = ""), null, "an empty label: refused");
+        assertEqual(changed(copy => delete copy.packages), null, "no packages: refused");
+        assertEqual(changed(copy => copy.packages = []), null, "packages a list: refused");
+        assertEqual(changed(copy => copy.packages.other = { package: "x" }), null, "a package the shell does not name: refused");
+        assertEqual(changed(copy => copy.packages.fprintd = {}), null, "a package with neither option nor package: refused");
+        assertEqual(changed(copy => copy.packages.fprintd = { package: "fprintd", command: "x" }), null, "a key other than option and package: refused");
+        assertEqual(changed(copy => copy.packages.fprintd = { package: "sudo pacman -S fprintd" }), null, "a command line as the name: refused");
+        assertEqual(changed(copy => copy.packages.fprintd = { option: "" }), null, "an empty name: refused");
+        assertEqual(changed(copy => copy.packages.fprintd = { package: 3 }), null, "a name that is no text: refused");
+        const packed = changed(copy => copy.packages = { fprintd: { option: "services.fprintd.enable", package: "fprintd" } });
+        assert(packed !== null && Object.isFrozen(packed.packages) && Object.isFrozen(packed.packages.fprintd), "both given: valid, frozen to the entries");
+        assert(changed(copy => copy.packages = {}) !== null, "no package hints at all: valid");
         assertEqual(rules.manifest("{oops", "arch"), null, "not JSON: refused");
         assertEqual(rules.manifest("[]", "arch"), null, "a list: refused");
         assertEqual(rules.manifest(undefined, "arch"), null, "no text: refused");
@@ -275,8 +287,37 @@ TestCase {
         assertEqual([facts.nixos.builtinModules, facts.arch.builtinModules, facts.generic.builtinModules].join(","), "package,dataHome,dataHome",
                     "the built-in modules: the package's on NixOS, the data home's copy elsewhere (launch.sh)");
         // A system the shell has no distribution for gets today's answers for "not NixOS"
-        const withoutNames = record => Object.assign({}, record, { id: "", label: "", matches: [] });
+        const withoutNames = record => Object.assign({}, record, { id: "", label: "", matches: [], packages: {} });
         same(withoutNames(facts.generic), withoutNames(facts.arch), "generic: Arch's facts (what a system that is not NixOS gets today)");
+        assertEqual(Object.keys(facts.generic.packages).length, 0, "… but its package hints: none (the neutral hint, not Arch's names)");
         assertEqual(facts.generic.matches.length + facts.generic.markers.length, 0, "generic matches nothing: it is the fallback");
+    }
+
+    // The hints about a missing package: the shipped facts' names, or the neutral hint
+    function _packageHints() {
+        const facts = rules.detect({ override: "", manifests: _shipped(), markers: { "/etc/NIXOS": "absent" }, osRelease: _osRelease("arch") }).shipped;
+        const text = (id, name) => rules.packageHint(id === null ? null : facts[id], name).text;
+        assertEqual(text("arch", "nerdFont"), "On Arch Linux: the package ttf-jetbrains-mono-nerd.", "Arch's font: its package name");
+        assertEqual(text("arch", "fprintd"), "On Arch Linux: the package fprintd.", "Arch's fingerprint: fprintd");
+        assertEqual(text("arch", "pamU2f"), "On Arch Linux: the package pam-u2f.", "Arch's security key: pam-u2f");
+        assertEqual(text("nixos", "nerdFont"), "On NixOS: the option programs.h2s-shell.enable, or the package nerd-fonts.jetbrains-mono.",
+                    "NixOS's font: the module's option (it adds the font), or the package");
+        assertEqual(text("nixos", "fprintd"), "On NixOS: the option services.fprintd.enable.", "NixOS's fingerprint: an option");
+        assertEqual(text("nixos", "pamU2f"), "On NixOS: the option security.pam.u2f.enable.", "NixOS's security key: an option");
+        assertEqual(text("generic", "fprintd"), "From this system's packages: fprintd, for the fingerprint reader.",
+                    "a system the shell has no distribution for: the upstream name and its purpose");
+        assertEqual(text(null, "nerdFont"), "From this system's packages: JetBrainsMono Nerd Font, for the shell's icons.",
+                    "the system not known yet: the neutral hint, never another system's names");
+        for (const id of rules.ids) {
+            for (const name of Object.keys(rules.packages)) {
+                const hint = rules.packageHint(facts[id], name);
+                assert(Object.isFrozen(hint) && hint.name === name && hint.upstream !== "" && hint.purpose !== "", id + "/" + name + ": a frozen hint");
+                assert(!/sudo|pacman|nix-env|apt|dnf|=|;|\$/.test(hint.text), id + "/" + name + ": no command line: " + hint.text);
+            }
+        }
+        const nixos = rules.packageHint(facts.nixos, "nerdFont");
+        assertEqual(nixos.option + " | " + nixos.package, "programs.h2s-shell.enable | nerd-fonts.jetbrains-mono", "the parts on their own too");
+        assertEqual(rules.packageHint(facts.arch, "other"), null, "a package the shell does not name: no hint");
+        assertEqual(rules.packageHint(facts.arch, undefined), null, "… no name: none");
     }
 }

@@ -7,7 +7,8 @@ key=value lines, which scripts/distribution.sh parses without running anything �
 no JSON parser, and the lock's methods script must not need one. A string is written as it
 is, a boolean as true or false, a list joined with ":" (as PATH is). A value holding a
 control character, or a list entry holding ":", is refused: the line format could not carry
-it back.
+it back. The `packages` hints are left out: they are words for the shell's views, which
+no script reads (an object, which the line format cannot carry).
 
 The files are generated here, by a developer, after distribution.json changes, and checked
 in: the scripts read them in a read-only package too, and without this program.
@@ -27,6 +28,8 @@ import sys
 
 HEADER = "# Generated from distribution.json by scripts/distribution-env.py: edit that, then run it.\n"
 KEY = re.compile(r"^[A-Za-z][A-Za-z0-9]{0,63}$")
+# Keys the scripts have no use for, left out of the lines
+LEFT_OUT = {"packages"}
 CONTROL = re.compile(r"[\x00-\x1f\x7f-\x9f  ]")
 
 
@@ -58,6 +61,8 @@ def env_text(json_text):
         raise Refused("no JSON object")
     lines = [HEADER]
     for key, value in facts.items():
+        if key in LEFT_OUT:
+            continue
         if not KEY.match(key):
             raise Refused(f"a key that is no plain word: {key!r}")
         lines.append(f"{key}={line_value(key, value)}\n")

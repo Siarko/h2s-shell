@@ -12,5 +12,10 @@
     "pamModuleDirectories": ["/run/current-system/sw/lib/security/"],
     "networkManagerVpnDirectories": ["/run/current-system/sw/lib/NetworkManager/VPN", "/etc/NetworkManager/VPN"],
     "polkitRulesDirectory": "/etc/polkit-1/rules.d",
-    "polkitRulesInstallable": false
+    "polkitRulesInstallable": false,
+    "packages": {
+        "nerdFont": { "option": "programs.h2s-shell.enable", "package": "nerd-fonts.jetbrains-mono" },
+        "fprintd": { "option": "services.fprintd.enable" },
+        "pamU2f": { "option": "security.pam.u2f.enable" }
+    }
 }
