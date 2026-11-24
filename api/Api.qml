@@ -385,7 +385,13 @@ import qs.singletons.network
 //                                               polkitRulesDirectory, polkitRulesInstallable,
 //                                               helper and builtinModules ("package": the
 //                                               system's package ships them), matches and
-//                                               markers (how it is detected); the keys and
+//                                               markers (how it is detected), packages
+//                                               (how the system gets a package the shell
+//                                               names to the user: { nerdFont | fprintd |
+//                                               pamU2f: { option, package, in } }, plain
+//                                               names — an option of its configuration on
+//                                               NixOS, a package on Arch, `in` the option a
+//                                               package goes in; {} for generic); the keys and
 //                                               kinds are distributions/<id>/
 //                                               distribution.json's (DistributionRules
 //                                               .manifest). Read-only facts: nothing that

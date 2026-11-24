@@ -33,6 +33,11 @@ The interface modules are written against (`qs.api`), versioned on its own
   read-only copy. A module that behaves differently per system reads this instead of
   looking for `/etc/NIXOS` itself. In module test mode
   `ModuleTestKit.setDistribution(id)` names it.
+- 1.40: `Api.system.distribution.facts.packages`: how the system gets a package the shell
+  names to the user (`nerdFont`, `fprintd`, `pamU2f`), each `{ option, package, in }` as
+  plain names — the option of its configuration on NixOS (`services.fprintd.enable`), the
+  package on Arch (`fprintd`), `in` where a package goes (`fonts.packages`); `{}` for a
+  system the shell has no distribution for. A frozen copy at each read.
 - 1.39: `module.privileged.remembered`, frozen `{ kept, untilMs }`: while the shell's
   process holds a remembered administrator password, a run through
   `module.privileged.start` asks for none until `untilMs`; a new object when it changes and
