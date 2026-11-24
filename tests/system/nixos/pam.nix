@@ -102,10 +102,10 @@ let
   pkgs = flake.inputs.nixpkgs.legacyPackages.x86_64-linux;
 
   checks = [
-    (expect "an empty list: a warning, nobody would get in" { programs.h2s-shell.pam.rules = [ ]; } { warnings = [ "programs.h2s-shell.pam.rules is empty" ]; })
+    (expect "an empty list: a warning, nobody would get in" { programs.h2s-shell.pam.rules = [ ]; } { warnings = [ "Nobody will get in with this config: programs.h2s-shell.pam.rules has no rows" ]; })
     (expect "a required reader without fprintd: a warning, nobody would get in"
       { programs.h2s-shell.pam.rules = [ (fingerprint // { control = "required"; }) system ]; }
-      { warnings = [ "row 1 (fingerprint): this row must pass, but services.fprintd.enable is off" ]; })
+      { warnings = [ "Nobody will get in with this config: programs.h2s-shell.pam.rules, row 1 (fingerprint): a row must pass, but its reader is not ready (services.fprintd.enable is off)" ]; })
     (expect "… with fprintd: a warning, both needed"
       { programs.h2s-shell.pam.rules = [ (fingerprint // { control = "required"; }) system ]; services.fprintd.enable = true; }
       { warnings = [ "both needed" ]; })
@@ -114,10 +114,10 @@ let
       { warnings = [ "programs.h2s-shell.pam.sudo.rules: only the reader lets you in" ]; })
     (expect "only a reader for both: a warning, one keeps a password"
       { programs.h2s-shell.pam.rules = [ fingerprint ]; services.fprintd.enable = true; }
-      { warnings = [ "neither sudo's nor polkit's rules keep a password: if the reader breaks, both are closed. sudo may become unreachable, and the shell cannot fix it" ]; })
+      { warnings = [ "You could lose access: programs.h2s-shell.pam: neither sudo nor polkit keep a password, so if the reader breaks, both are closed. sudo may become unreachable, and the shell cannot fix it" ]; })
     (expect "a reader that is not there and no password: a warning, no way in"
       { programs.h2s-shell.pam.sudo.rules = [ fingerprint ]; }
-      { warnings = [ "programs.h2s-shell.pam.sudo.rules: no row can let you in" ]; })
+      { warnings = [ "Nobody will get in with this config: programs.h2s-shell.pam.sudo.rules: no row can let you in" ]; })
     (expect "the system row not last: refused"
       { programs.h2s-shell.pam.rules = [ system { method = "password"; } ]; }
       { refusals = [ "can only be last, and only once" ]; })
@@ -135,7 +135,7 @@ let
       { refusals = [ "go on one line" ]; })
     (expect "a raw pam_deny that fails: a warning"
       { programs.h2s-shell.pam.rules = [ (raw "pam_deny.so" // { control = "required"; }) system ]; }
-      { warnings = [ "this line refuses everyone" ]; })
+      { warnings = [ "a line refuses everyone" ]; })
     (expect "a module from the home: a warning, not a refusal"
       { programs.h2s-shell.pam.rules = [ (raw "/home/someone/pam_x.so") system ]; }
       { warnings = [ "/home/someone/pam_x.so is not in the Nix store" ]; })
@@ -156,13 +156,13 @@ let
       { warnings = [ "programs.h2s-shell.polkit.passwordFirst is deprecated" ]; })
     (expect "a raw libpam module that asks nothing, required, without the system row: a warning, anyone gets in"
       { programs.h2s-shell.pam.sudo.rules = [ { method = "password"; } { method = "raw"; module = "pam_env.so"; control = "required"; } ]; }
-      { warnings = [ "row 2 (raw): this line lets anyone in without a password: pam_env.so" ]; })
+      { warnings = [ "Authorization config is unsafe: programs.h2s-shell.pam.sudo.rules, row 2 (raw): a line lets anyone in without a password (pam_env.so asks for no password" ]; })
     (expect "… the same beside the system row: allowed (the system's rules still decide)"
       { programs.h2s-shell.pam.sudo.rules = [ { method = "raw"; module = "pam_env.so"; control = "required"; } system ]; }
       { })
     (expect "a sufficient pam_permit above the system row: a warning"
       { programs.h2s-shell.pam.rules = [ { method = "raw"; module = "pam_permit.so"; } system ]; }
-      { warnings = [ "this line lets anyone in without a password: pam_permit.so" ]; })
+      { warnings = [ "Authorization config is unsafe: programs.h2s-shell.pam.rules, row 1 (raw): a line lets anyone in without a password (pam_permit.so asks for no password" ]; })
     (expect "a sufficient pam_u2f with nouserok: allowed (a user without a key goes on to the next row)"
       { programs.h2s-shell.pam.rules = [ { method = "raw"; module = "${pkgs.pam_u2f}/lib/security/pam_u2f.so"; args = [ "nouserok" ]; } system ];
         security.pam.u2f.enable = true; }
@@ -170,13 +170,13 @@ let
     (expect "a required pam_u2f with nouserok beside a sufficient password, without the system row: a warning (the permit lets a user without a key in)"
       { programs.h2s-shell.pam.rules = [ { method = "raw"; module = "${pkgs.pam_u2f}/lib/security/pam_u2f.so"; args = [ "nouserok" ]; control = "required"; } { method = "password"; } ];
         security.pam.u2f.enable = true; }
-      { warnings = [ "this line lets anyone in without a password: pam_u2f.so" ]; })
+      { warnings = [ "a line lets anyone in without a password (pam_u2f.so asks for no password" ]; })
     (expect "a required pam_permit beside a required password row: a warning, not refused (the password still asks)"
       { programs.h2s-shell.pam.rules = [ { method = "raw"; module = "pam_permit.so"; control = "required"; } { method = "password"; control = "required"; } ]; }
       { warnings = [ "row 1 (raw): pam_permit.so asks for nothing: only the other rows decide" ]; })
     (expect "a sufficient pam_userdb with its database outside /etc: a warning"
       { programs.h2s-shell.pam.rules = [ { method = "raw"; module = "pam_userdb.so"; args = [ "db=/tmp/users" ]; } system ]; }
-      { warnings = [ "this line lets anyone in without a password: pam_userdb.so" ]; })
+      { warnings = [ "a line lets anyone in without a password (pam_userdb.so asks for no password" ]; })
     (expect "… under /etc: allowed"
       { programs.h2s-shell.pam.rules = [ { method = "raw"; module = "pam_userdb.so"; args = [ "db=/etc/users" ]; } system ]; }
       { })
@@ -188,7 +188,7 @@ let
       { refusals = [ "no backslash or # in the module or its arguments" ]; })
     (expect "polkit off: it keeps no password, so a reader-only sudo is warned of"
       { programs.h2s-shell.pam.sudo.rules = [ fingerprint ]; services.fprintd.enable = true; security.polkit.enable = lib.mkForce false; }
-      { warnings = [ "neither sudo's nor polkit's rules keep a password" ]; })
+      { warnings = [ "You could lose access: programs.h2s-shell.pam: neither sudo nor polkit keep a password" ]; })
     (expect "a raw pam_unix with nullok: a warning"
       { programs.h2s-shell.pam.rules = [ { method = "raw"; module = "pam_unix.so"; args = [ "nullok" ]; } system ]; }
       { warnings = [ "nullok: an account with an empty password gets in" ]; })
@@ -215,29 +215,29 @@ let
     (expect "pam_u2f with alwaysok: a warning"
       { programs.h2s-shell.pam.rules = [ { method = "raw"; module = "${pkgs.pam_u2f}/lib/security/pam_u2f.so"; args = [ "alwaysok" ]; } system ];
         security.pam.u2f.enable = true; }
-      { warnings = [ "this line lets anyone in without a password: pam_u2f.so" ]; })
+      { warnings = [ "a line lets anyone in without a password (pam_u2f.so asks for no password" ]; })
     (expect "pam_u2f with userpresence=00: a warning"
       { programs.h2s-shell.pam.rules = [ { method = "raw"; module = "${pkgs.pam_u2f}/lib/security/pam_u2f.so"; args = [ "userpresence=00" ]; } system ];
         security.pam.u2f.enable = true; }
-      { warnings = [ "this line lets anyone in without a password: pam_u2f.so" ]; })
+      { warnings = [ "a line lets anyone in without a password (pam_u2f.so asks for no password" ]; })
     (expect "pam_userdb with unknown_ok, required, without the system row: a warning"
       { programs.h2s-shell.pam.sudo.rules = [ { method = "password"; } { method = "raw"; module = "pam_userdb.so"; control = "required"; args = [ "db=/etc/users" "unknown_ok" ]; } ]; }
-      { warnings = [ "this line lets anyone in without a password: pam_userdb.so" ]; })
+      { warnings = [ "a line lets anyone in without a password (pam_userdb.so asks for no password" ]; })
     (expect "pam_userdb with UNKNOWN_OK in capitals: a warning"
       { programs.h2s-shell.pam.rules = [ { method = "raw"; module = "pam_userdb.so"; args = [ "db=/etc/users" "UNKNOWN_OK" ]; } system ]; }
-      { warnings = [ "this line lets anyone in without a password: pam_userdb.so" ]; })
+      { warnings = [ "a line lets anyone in without a password (pam_userdb.so asks for no password" ]; })
     (expect "pam_userdb with a second DB= outside /etc: a warning"
       { programs.h2s-shell.pam.rules = [ { method = "raw"; module = "pam_userdb.so"; args = [ "db=/etc/users" "DB=/tmp/users" ]; } system ]; }
-      { warnings = [ "this line lets anyone in without a password: pam_userdb.so" ]; })
+      { warnings = [ "a line lets anyone in without a password (pam_userdb.so asks for no password" ]; })
     (expect "pam_permit by a store path written out: a warning, judged by its name"
       { programs.h2s-shell.pam.rules = [ { method = "raw"; module = "/nix/store/0123456789abcdfghijklmnpqrsvwxyz-linux-pam-1.7.2/lib/security/pam_permit.so"; } system ]; }
-      { warnings = [ "this line lets anyone in without a password: pam_permit.so" ]; })
+      { warnings = [ "a line lets anyone in without a password (pam_permit.so asks for no password" ]; })
     (expect "a copy of pam_permit in /etc: a warning, judged by its name"
       { programs.h2s-shell.pam.rules = [ { method = "raw"; module = "/etc/pam_permit.so"; } system ]; }
-      { warnings = [ "this line lets anyone in without a password: pam_permit.so" ]; })
+      { warnings = [ "a line lets anyone in without a password (pam_permit.so asks for no password" ]; })
     (expect "a copy of pam_deny in /etc, required: a warning, nobody gets in"
       { programs.h2s-shell.pam.rules = [ { method = "raw"; module = "/etc/pam_deny.so"; control = "required"; } system ]; }
-      { warnings = [ "this line refuses everyone" ]; })
+      { warnings = [ "a line refuses everyone" ]; })
     (expect "a module the shell does not know: a warning"
       { programs.h2s-shell.pam.rules = [ { method = "raw"; module = "/run/current-system/sw/lib/security/pam_ldap.so"; } system ]; }
       { warnings = [ "the shell does not know pam_ldap.so" ]; })

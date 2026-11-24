@@ -101,6 +101,12 @@ TestCase {
             assert(text.includes(kind + " = [ " + lines.join(" ") + " ];"), "the " + kind + " closing lines are the editor's");
         }
 
+        // --- the risks' headings: the editor's, and each risk said under its own ---
+        for (const kind of Object.keys(PamRuleRules.riskHeadings))
+            assert(text.includes("    " + kind + " = \"" + PamRuleRules.riskHeadings[kind] + "\";"), "the module's heading for " + kind + " is the editor's");
+        assertEqual(["lockout", "unsafe", "loss"].map(kind => (text.match(new RegExp("\\$\\{headings\\." + kind + "\\}: ", "g")) ?? []).length).join(" "),
+                    "4 1 1", "… lockouts (no rows, a line refusing everyone, a reader not ready, no way in), a line letting anyone in, both without a password");
+
         // --- the case set ---
         let cases = [];
         try {

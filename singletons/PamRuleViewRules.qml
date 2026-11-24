@@ -388,36 +388,35 @@ Singleton {
 
     // ── The risk question ──
 
-    // What each risk means, in the question before Apply writes it
-    readonly property var riskTexts: ({
-        R1: "No row can let you in: nobody would get in.",
-        R1row: "A line refuses everyone: nobody would get in.",
-        R2: "A row must pass with a reader that is not ready: nobody would get in.",
-        R3: "There are no rows: nobody would get in.",
-        R5: "Neither sudo nor administrator prompts keep a password: if the reader breaks, both are closed.",
-        R9: "A line lets anyone in without a password."
-    })
-    readonly property var lockoutCodes: ["R1", "R2", "R3", "R5"]
+    // What a "Save anyway?" answer stands for (applyQueue's queue): the files to write and the
+    // risks named — an answer acts only while both are the same
+    function queueKey(queue) {
+        return JSON.stringify([(queue?.items ?? []).map(item => [item.service, item.text]),
+                               (queue?.risks ?? []).map(item => [item.service, item.code, item.row])]);
+    }
+
     readonly property string lockoutText: "sudo may become unreachable, and the shell cannot fix it: that takes su or a root console."
 
     // The Settings modal's question before Apply writes rows with risks (applyQueue's
     // `risks`, each with its service; `subject` what the answer acts on): null when there is
-    // none. One line per risk — named by its service when only one of the two has it — then,
-    // for a lockout, that sudo may become unreachable
+    // none. One line per risk, PamRuleRules.riskText's — the service after the reason when
+    // only one of the two has it (not R5, which is about both) — then, for a lockout, that
+    // sudo may become unreachable
     function riskQuestion(risks, subject) {
         const list = Array.isArray(risks) ? risks : [];
         if (list.length === 0)
             return null;
-        const keyOf = found => found.code === "R1" && found.row >= 0 ? "R1row" : found.code;
+        const keyOf = found => found.code === "R1" && found.row >= 0 ? "R1deny" : found.code;
         const keys = list.map(keyOf).filter((key, i, all) => all.indexOf(key) === i);
         const body = keys.map(key => {
             const services = list.filter(found => keyOf(found) === key).map(found => found.service)
                 .filter((service, i, all) => all.indexOf(service) === i);
-            const text = riskTexts[key] ?? list.find(found => keyOf(found) === key).text;
-            return services.length === 1 && PamRuleRules.services.includes(services[0])
-                ? (services[0] === "sudo" ? "sudo" : "Administrator prompts") + ": " + text : text;
+            const where = services.length === 1 && key !== "R5" && PamRuleRules.services.includes(services[0])
+                ? serviceName(services[0]) : "";
+            return PamRuleRules.riskText(key, where) || list.find(found => keyOf(found) === key).text;
         });
-        if (list.some(found => lockoutCodes.includes(found.code)))
+        // Where the user may end up shut out: a lockout, or a lost way to repair
+        if (keys.some(key => ["lockout", "loss"].includes(PamRuleRules.risks[key]?.kind)))
             body.push({ text: lockoutText, strong: true });
         return { kind: "danger", title: "Save anyway?", body, buttons: [{ id: "save", label: "Save anyway", kind: "delete" }], subject: subject ?? {} };
     }

@@ -330,17 +330,17 @@ let
       # Risks: written as asked, said at every rebuild (the editor asks before it writes them)
       risks =
         lib.optional (rows == [ ])
-          "${where} is empty: nobody would get in. Give it rows, or leave it null for NixOS's own rules. ${lockout}"
+          "${headings.lockout}: ${where} has no rows. Give it rows, or leave it null for NixOS's own rules. ${lockout}"
         ++ lib.concatLists (lib.imap0 (index: role:
           lib.optional role.denies
-            "${at index (lib.elemAt rows index)}: this line refuses everyone: nobody would get in. ${lockout}"
+            "${headings.lockout}: ${at index (lib.elemAt rows index)}: a line refuses everyone. ${lockout}"
           ++ lib.optional role.letsAnyone
-            "${at index (lib.elemAt rows index)}: this line lets anyone in without a password: ${rawName (lib.elemAt rows index)} asks for no password, key or finger."
+            "${headings.unsafe}: ${at index (lib.elemAt rows index)}: a line lets anyone in without a password (${rawName (lib.elemAt rows index)} asks for no password, key or finger)."
           ++ lib.optional (role.reader && role.fails && !ready role.method)
-            "${at index (lib.elemAt rows index)}: this row must pass, but ${readyOption role.method} is off: nobody would get in. ${lockout}")
+            "${headings.lockout}: ${at index (lib.elemAt rows index)}: a row must pass, but its reader is not ready (${readyOption role.method} is off). ${lockout}")
           analysis.roles)
         ++ lib.optional (rows != [ ] && !analysis.wayIn)
-          "${where}: no row can let you in: keep a password row, or a fingerprint or security key row with services.fprintd.enable or security.pam.u2f.enable. ${lockout}";
+          "${headings.lockout}: ${where}: no row can let you in. Keep a password row, or a fingerprint or security key row with services.fprintd.enable or security.pam.u2f.enable. ${lockout}";
       warnings =
         lib.optional (rows != [ ] && analysis.wayIn && !analysis.hasPassword)
           "${where}: only the reader lets you in. If it breaks, use the other of sudo and polkit, su or a root console."
@@ -378,6 +378,12 @@ let
           ++ lib.optional (row.method == "raw" && placeOf row == "place")
             "${at index row}: ${toString row.module} is not in the Nix store or ${systemModules}: if a user can write this file, any of that user's programs can replace it without a password, and it runs as root at the next sudo or administrator prompt.");
     };
+  # The risks' headings, PamRuleRules.riskHeadings' (tests/PamNixosModuleTest.qml): "<heading>: <reason>"
+  headings = {
+    lockout = "Nobody will get in with this config";
+    unsafe = "Authorization config is unsafe";
+    loss = "You could lose access";
+  };
   # What a lockout risk adds: the shell's editor cannot repair what the rebuild puts in force
   lockout = "sudo may become unreachable, and the shell cannot fix it: that takes su, a root console or booting an earlier generation.";
   spaced = text: lib.any (character: lib.hasInfix character text) [ " " "\t" "\n" "\r" ];
@@ -540,7 +546,7 @@ in
     warnings = lib.unique (
       lib.concatMap (found: found.risks) allProblems
       ++ lib.optional (ruled != { } && !(keepsPassword services.sudo || keepsPassword services.polkit-1))
-        "programs.h2s-shell.pam: neither sudo's nor polkit's rules keep a password: if the reader breaks, both are closed. ${lockout}"
+        "${headings.loss}: programs.h2s-shell.pam: neither sudo nor polkit keep a password, so if the reader breaks, both are closed. ${lockout}"
       ++ lib.concatMap (found: found.warnings) allProblems
       ++ lib.optional (u2f.conf != null && (config.security.pam.u2f.enable
           || lib.any (service: lib.any (row: row.method == "securityKey") service.rows) (lib.attrValues ruled)))

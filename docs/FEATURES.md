@@ -781,7 +781,9 @@ lists the methods, those the computer lacks off with the reason. Under each list
 refusals in red (rows that cannot be written as they are — a value out of range, a line that is
 not an `auth` line, a file changed outside the shell —: nothing is saved while one stands),
 risks in red too (no row that can let you in, a required reader the computer does not have,
-no rows, neither service keeping a password, a line that lets anyone in: Apply first asks
+no rows, neither service keeping a password, a line that lets anyone in — each said as
+"Nobody will get in with this config: …", "You could lose access: …" or "Authorization config
+is unsafe: …", on the page and at `nixos-rebuild` alike: Apply first asks
 "Save anyway?", naming each risk and, where you could be locked out, that sudo may become
 unreachable and the shell cannot fix it; the trial still runs after it), warnings in the
 warning colour. A raw line that asks for nothing is a risk where it lets anyone in on its own (at once, or a line
@@ -817,7 +819,10 @@ with an assertion).
 
 Apply first tries the new rules as you, in the shell's own prompt, on a private copy (nothing
 is written yet); only when they let you in is each file written, as administrator (sudo,
-then administrator prompts: "1 of 2"). The old file goes to `/var/lib/h2s-shell/pam-backup`
+then administrator prompts: "1 of 2"). So after "Save anyway" a list nobody could get in with
+(no way in, a required reader not there, no rows) usually stops at the trial and nothing is
+written; both services without a password, or a line that lets anyone in, can pass it and be
+saved. The old file goes to `/var/lib/h2s-shell/pam-backup`
 first; Undo puts it back. When the second write stops, the page says which file was
 written ("Saved in part"), Undo puts that one back, and the list warns that the two services
 now differ. A file changed outside the shell is shown read-only with the

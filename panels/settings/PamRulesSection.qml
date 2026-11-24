@@ -280,7 +280,7 @@ ColumnLayout {
             return;
         // Rows that may let anyone in or lock the user out are written only once confirmed;
         // the answer acts on the files it was asked about, and the trial still comes first
-        const question = PamRuleViewRules.riskQuestion(queue.risks, { files: _queueKey(queue) });
+        const question = PamRuleViewRules.riskQuestion(queue.risks, { files: PamRuleViewRules.queueKey(queue) });
         if (question === null) {
             _startApply(queue);
             return;
@@ -288,9 +288,12 @@ ColumnLayout {
         if (!_ask(question, answer => {
             if (answer.cancelled || answer.button !== "save" || root._busy || !root.editor || root.mode !== "apply")
                 return;
+            // What was confirmed must be what is written: other files or other risks are not
             const now = root._applyQueue();
-            if (now.refusals.length === 0 && root._queueKey(now) === answer.subject.files)
+            if (now.refusals.length === 0 && PamRuleViewRules.queueKey(now) === answer.subject.files)
                 root._startApply(now);
+            else
+                root.notice = "Not saved: the rules changed while the question was open.";
         }))
             notice = "Not saved: another question is open.";
     }
@@ -300,10 +303,6 @@ ColumnLayout {
         for (const service of PamRuleRules.services)
             inputs[service] = { rows: _lists[service], currentText: service === "sudo" ? _files.sudo : _files.polkit, facts: factsFor(service) };
         return PamRuleViewRules.applyQueue(inputs);
-    }
-
-    function _queueKey(queue) {
-        return JSON.stringify(queue.items.map(item => [item.service, item.text]));
     }
 
     function _startApply(queue) {

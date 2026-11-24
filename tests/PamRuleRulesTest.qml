@@ -448,6 +448,22 @@ TestCase {
         assertEqual(kinds([raw("r1", "account required pam_unix.so"), fixed], arch()), "refused: R8 / risks: ", "R8: still refused");
         assertEqual(kinds([], arch({ changedByHand: true })), "refused: R6 / risks: R3", "an empty list changed by hand: both");
         assert(rules.codes({ refusals: [], risks: [{ code: "R9" }], warnings: [{ code: "W1" }] }).join(" ") === "R9 W1", "codes take the risks too");
+        // Every risk text in one format, "<heading>: <reason>.", its heading by its kind
+        const headings = Object.keys(rules.riskHeadings).map(kind => rules.riskHeadings[kind]);
+        const format = new RegExp("^(" + headings.join("|") + "): [a-z][^:]*\\.$");
+        for (const key of Object.keys(rules.risks))
+            assert(format.test(rules.riskText(key)) && rules.riskText(key).startsWith(rules.riskHeadings[rules.risks[key].kind] + ": "),
+                   "the risk text's format: " + rules.riskText(key));
+        assertEqual(Object.keys(rules.risks).map(key => key + ":" + rules.risks[key].kind).join(" "),
+                    "R1:lockout R1deny:lockout R2:lockout R3:lockout R5:loss R9:unsafe", "the risks by kind");
+        const madeRisks = [rules.check([], arch()), rules.check([fingerprint("r1")], arch({ fingerprint: "absent", otherService: [] })),
+                      rules.check([raw("r1", "auth required pam_deny.so"), fingerprint("r2", "required"), fixed], arch({ fingerprint: "absent" })),
+                      rules.check([raw("r1", "auth sufficient pam_permit.so"), fixed], arch())]
+            .reduce((all, result) => all.concat(result.risks), []);
+        assertEqual(madeRisks.map(found => found.code).filter((code, i, all) => all.indexOf(code) === i).sort().join(" "), "R1 R2 R3 R5 R9", "(each risk made)");
+        assert(madeRisks.every(found => format.test(found.text)), "every risk check() makes is in the format: " + madeRisks.map(found => found.text).join(" | "));
+        assertEqual(rules.riskText("R2", "sudo"), "Nobody will get in with this config: a row must pass, but its reader is not ready (sudo).", "a risk text with its service");
+        assertEqual(rules.riskText("nothing"), "", "… none for an unknown key");
         assertEqual(rules.rawLine("-auth [success=done default=ignore] pam_ldap.so", {}).reads, "-auth · [success=done default=ignore] · pam_ldap.so",
                     "what a raw line reads as");
         assertEqual(codes([fingerprint("r1"), fixed], arch()).length, 0, "a reader above the system's password: nothing to say");

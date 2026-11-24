@@ -453,21 +453,43 @@ Singleton {
 
     // ── Checks ──
 
+    // ── Risks: one format, "<heading>: <reason>." ──
+
+    // What kind of risk a code is, and its heading: a lockout (nobody gets in), an opening
+    // (anyone gets in), a lost repair path (in until a reader breaks). nix/pam.nix says the
+    // same headings at nixos-rebuild (tests/PamNixosModuleTest.qml)
+    readonly property var riskHeadings: ({
+        lockout: "Nobody will get in with this config",
+        unsafe: "Authorization config is unsafe",
+        loss: "You could lose access"
+    })
+    // Each risk's kind and reason: `R1deny` is R1 for a line, the others by their code
+    readonly property var risks: ({
+        R1: { kind: "lockout", reason: "no row can let you in" },
+        R1deny: { kind: "lockout", reason: "a line refuses everyone" },
+        R2: { kind: "lockout", reason: "a row must pass, but its reader is not ready" },
+        R3: { kind: "lockout", reason: "there are no rows" },
+        R5: { kind: "loss", reason: "neither sudo nor administrator prompts keep a password, so if the reader breaks, both are closed" },
+        R9: { kind: "unsafe", reason: "a line lets anyone in without a password" }
+    })
+
+    // A risk's text: "<heading>: <reason>.", `where` ("sudo") put after the reason when given
+    function riskText(key, where) {
+        const found = risks[key];
+        if (!found)
+            return "";
+        return riskHeadings[found.kind] + ": " + found.reason + (where ? " (" + where + ")" : "") + ".";
+    }
+
     readonly property var texts: ({
-        R1: "No row can let you in now: keep a password row or a ready reader.",
-        R2: "This row must pass, but the method is not ready: nobody would get in.",
-        R3: "No rows.",
         R4method: "Unknown kind of row.",
         R4control: "Unknown control word.",
         R4fixed: "The system's password row can only be last, and only once.",
         R4counted: "Failures cannot count here: the system's rules do not count them.",
         R4optional: "Optional is only for a raw line: this row's result would be ignored.",
-        R5: "Keep a password in sudo or in administrator prompts: one is the way to repair the other.",
         R6: "Changed outside the shell. Replace it to edit here.",
         R8: "Not a PAM line.",
         R8path: "Needs the module's full path.",
-        R9: "This line lets anyone in.",
-        R1deny: "This line refuses everyone: nobody would get in.",
         W1: "Only the reader lets you in. If it breaks, use the other service, su or a root console.",
         W2: "Both needed: without the reader nobody gets in.",
         W3: "An empty Enter to reach the reader counts as a wrong password.",
@@ -654,7 +676,7 @@ Singleton {
     // services) }. → { refusals, risks, warnings }, each item { code, row (index, −1 for
     // the list), id ("" for the list), text }. Refusals: what cannot be written as it is
     // (R4 out of range, R6 changed by hand, R8 not a line). Risks: what the user may write
-    // after confirming it (riskTexts' question) — R1 no way in, R2 a required reader not
+    // after confirming it (riskText's words, the view's question) — R1 no way in, R2 a required reader not
     // ready, R3 no rows, R5 both services without a password (lockouts), R9 a line that lets
     // anyone in: what they could write with sudoedit, the shell lets them write too.
     function check(rows, facts) {
@@ -670,7 +692,7 @@ Singleton {
         if (known.changedByHand === true)
             refuse("R6", -1, texts.R6);
         if (list.length === 0) {
-            risk("R3", -1, texts.R3);
+            risk("R3", -1, riskText("R3"));
             return { refusals, risks, warnings };
         }
 
@@ -713,7 +735,7 @@ Singleton {
             if (!role.raw || role.credential !== "no" || role.refusals.length > 0 || role.denies)
                 return;
             if (alone(role, i, asks)) {
-                risk("R9", i, texts.R9);
+                risk("R9", i, riskText("R9"));
                 letsInR9.push(i);
             } else if (decides(role) && !role.key) {
                 warn("W22", i, texts.W22);
@@ -756,14 +778,14 @@ Singleton {
         // R1: a raw pam_deny that fails refuses everyone
         roles.forEach((role, i) => {
             if (role.denies && role.refusals.length === 0)
-                risk("R1", i, texts.R1deny);
+                risk("R1", i, riskText("R1deny"));
         });
 
         // R1: some row can let the user in with what the machine has now
         const hasPassword = roles.some(role => (role.method === "password" || role.method === "system") && role.decides);
         const wayIn = hasPassword || roles.some(role => isReader(role) && ready(role.method) && role.decides);
         if (!wayIn)
-            risk("R1", -1, texts.R1);
+            risk("R1", -1, riskText("R1"));
 
         // R2 / W2: a reader or key that must pass
         roles.forEach((role, i) => {
@@ -771,13 +793,13 @@ Singleton {
                 if (ready(role.method))
                     warn("W2", i, texts.W2);
                 else
-                    risk("R2", i, texts.R2);
+                    risk("R2", i, riskText("R2"));
             }
         });
 
         // R5: one of the two services keeps a password
         if (!hasPassword && !(Array.isArray(known.otherService) && _hasPassword(known.otherService, otherService(service), known)))
-            risk("R5", -1, texts.R5);
+            risk("R5", -1, riskText("R5"));
 
         // W1: the way in is a reader only
         if (wayIn && !hasPassword)
