@@ -239,6 +239,16 @@ root's alone, and takes its entry file only when that is root's alone too; a fol
 user's is the user's throughout. `tests/system/nixos/build.sh` checks, evaluating only, that the user's build, the
 root step's evaluation and the real configuration give the same drvPath.
 
+One run at a time goes from the Apply to its outcome (`distributions/nixos/NixosRebuild.qml`,
+held by the `Nixos` singleton so that closing a page or panel does not stop it; its lifetime
+is `NixosRebuildRules.step`): announced, building, built and waiting for Apply now (a
+notification says so; its action only opens the page and panel), the root run, and applied,
+applied with errors, failed, changed or cancelled. Only two clicks lead to a password prompt:
+the Build click of a configuration only root can build, and Apply now, which acts on the
+candidate it built (the value, the file's sha256 read, the drvPath), never on what is current
+at the click. A screen lock changes nothing: a build goes on to built. Undo of the last Apply
+goes through the same chain with the file as it was before.
+
 #### NixOS
 
 `/etc/NIXOS` makes it `nixos`, whatever os-release says. `/etc` is generated: the integration

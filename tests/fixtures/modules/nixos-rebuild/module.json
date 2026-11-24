@@ -1,0 +1,11 @@
+{
+    "id": "nixos-rebuild",
+    "name": "NixOS rebuild fixture",
+    "version": "0.1.0",
+    "api": "1.41",
+    "description": "Runs the shell's NixOS rebuild (distributions/nixos/NixosRebuild.qml) with the real build and root step on a stand-in nix and pkexec, in module test mode (tests/fixtures/modules)",
+    "main": "Main.qml",
+    "optionalPrograms": ["pkexec", "dismiss"],
+    "testPrograms": "tests/programs",
+    "tests": ["tests/NixosRebuildTest.qml"]
+}

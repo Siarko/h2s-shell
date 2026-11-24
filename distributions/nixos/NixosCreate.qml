@@ -13,9 +13,11 @@ QtObject {
 
     // The root step's writer (NixosApply; a suite's stand-in)
     property var writer: null
+    // The rebuild run (NixosRebuild): while one is on its way, Create waits too
+    property var rebuild: null
     property var userCommand: [Quickshell.shellDir + "/scripts/nixos-create.sh"]
 
-    readonly property bool busy: _busy || writer?.busy === true
+    readonly property bool busy: _busy || writer?.busy === true || rebuild?.busy === true
 
     property bool _busy: false
 

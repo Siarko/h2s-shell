@@ -49,7 +49,7 @@ check "a file that needs no test selects nothing" is ""
 check "… but the notes guard, as every file does" [ "$GUARDED" = 1 ]
 run "$REPO" --files tests/TestCase.qml
 check "TestCase selects every unit suite" has_line "tests/run-unit.sh"
-check "… and every module fixture part" [ "$(grep -c '^tests/run-modules.sh ' <<< "$OUTPUT")" = 4 ]
+check "… and every module fixture part" [ "$(grep -c '^tests/run-modules.sh ' <<< "$OUTPUT")" = 5 ]
 run "$REPO" --files singletons/Theme.qml
 check "Theme selects the suites that read it" bash -c 'grep -q "^tests/run-unit.sh .*ThemeTest" <<< "$1" && grep -q "ButtonKindsTest" <<< "$1"' _ "$OUTPUT"
 check "… and not a pure rules suite" bash -c '! grep -qw FormatTest <<< "$1"' _ "$OUTPUT"
@@ -74,7 +74,7 @@ check "the methods script selects the methods scenarios" has_line "tests/lock/ru
 run "$REPO" --files tests/run-all.sh
 check "a runner selects its self-test" is "tests/run-all-selftest.sh"
 run "$REPO" --files nowhere/new-file.txt
-check "a file placed nowhere selects everything" bash -c '[ "$(head -n 1 <<< "$1")" = tests/run-unit.sh ] && [ "$(grep -c "^tests/run-modules.sh" <<< "$1")" = 4 ] && [ "$(tail -n 1 <<< "$1")" = tests/lock/run.sh ]' _ "$OUTPUT"
+check "a file placed nowhere selects everything" bash -c '[ "$(head -n 1 <<< "$1")" = tests/run-unit.sh ] && [ "$(grep -c "^tests/run-modules.sh" <<< "$1")" = 5 ] && [ "$(tail -n 1 <<< "$1")" = tests/lock/run.sh ]' _ "$OUTPUT"
 check "… and is named" grep -q "nowhere/new-file.txt is placed nowhere" <<< "$ERRORS"
 
 # ---- A made-up repository --------------------------------------------------------------

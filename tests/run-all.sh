@@ -40,6 +40,10 @@
 #   tests/run-modules.sh tests/fixtures/modules/nixos-build
 #                                                       the shell's NixOS build, on a stand-in
 #                                                       nix and the fixture's stand-in pkexec
+#   tests/run-modules.sh tests/fixtures/modules/nixos-rebuild
+#                                                       the shell's NixOS rebuild run, with the
+#                                                       build and root step on stand-ins (a run
+#                                                       of its own: it locks the session)
 #   tests/resolve-selftest.sh                           where the runners take their tools
 #   tests/launcher-selftest.sh                          the supervisor in scripts/launch.sh
 #   tests/deploy-check-selftest.sh                      the deploy check, on canned answers
@@ -122,6 +126,7 @@ parts=(
     "privileged runs fixture|tests/run-modules.sh tests/fixtures/modules/privileged tests/fixtures/modules/privileged-undeclared"
     "NixOS root step fixture|tests/run-modules.sh tests/fixtures/modules/nixos-apply"
     "NixOS build fixture|tests/run-modules.sh tests/fixtures/modules/nixos-build"
+    "NixOS rebuild fixture|tests/run-modules.sh tests/fixtures/modules/nixos-rebuild"
     "tool lookup self-test|tests/resolve-selftest.sh"
     "supervisor self-test|tests/launcher-selftest.sh"
     "deploy check self-test|tests/deploy-check-selftest.sh"
