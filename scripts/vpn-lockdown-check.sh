@@ -7,9 +7,13 @@
 #   script <version>     the version of the shell's own copy (scripts/h2s-vpn-lockdown)
 #   installed <version>  the installed script is a regular executable file that the owner
 #                        (root: 0; a suite's stand-in: the user) owns and nobody else may
-#                        change, in a folder the same holds for — the only one VpnLockdown
-#                        runs, through pkexec
+#                        change, and every folder above it — as given and with its links
+#                        followed — is root's or the owner's and nobody else may change it
+#                        (a sticky folder of theirs counts: nobody else may replace what is
+#                        in it, such as NixOS's store) — the only one VpnLockdown runs,
+#                        through pkexec
 #   unsafe <version>     a script is there, but not so: never run
+#   folder               a folder at the script's place (an older install's layout): never run
 #   rule yes             a polkit rule file in the rule folder names the installed script and
 #                        the user
 #   nft                  one of the nft places is an executable
@@ -32,9 +36,31 @@ held() {
     [ $((0${facts#* } & 022)) -eq 0 ]
 }
 
+# A folder root or the owner holds: nobody else may change it, or only in a sticky folder
+held_folder() {
+    local facts mode
+    facts=$(stat -L -c '%u %a' -- "$1" 2> /dev/null) || return 1
+    [ "${facts%% *}" = "$owner" ] || [ "${facts%% *}" = 0 ] || return 1
+    mode=$((0${facts#* }))
+    [ $((mode & 022)) -eq 0 ] || [ $((mode & 01000)) -ne 0 ]
+}
+
+# Every folder above a path held
+ancestors_held() {
+    local path=$1
+    while [ "$path" != / ] && [ -n "$path" ]; do
+        path=$(dirname -- "$path")
+        held_folder "$path" || return 1
+    done
+}
+
 echo "script $(version "$script")"
-if [ -n "$installed" ] && [ -e "$installed" ]; then
-    if [ -f "$installed" ] && [ -x "$installed" ] && held "$installed" && held "$(dirname -- "$(readlink -f -- "$installed")")"; then
+if [ -n "$installed" ] && [ -d "$installed" ]; then
+    echo "folder"
+elif [ -n "$installed" ] && [ -e "$installed" ]; then
+    resolved=$(readlink -f -- "$installed") || resolved=
+    if [ -n "$resolved" ] && [ -f "$installed" ] && [ -x "$installed" ] && held "$installed" \
+        && ancestors_held "$installed" && ancestors_held "$resolved"; then
         echo "installed $(version "$installed")"
     else
         echo "unsafe $(version "$installed")"

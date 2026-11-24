@@ -656,13 +656,15 @@ unless its interface matches those names; its card says so while blocking, and a
 editor that links one to a blocking network, or the VPN page with "always" on, says it
 cannot connect.
 Only the installed script runs — a copy root owns (`scripts/vpn-lockdown-check.sh` checks it
-is a regular file nobody else may change), with a polkit rule letting this user run it
+is a regular file nobody else may change, in folders nobody else may change), with a polkit rule letting this user run it
 without a password; never the shell's own copy in its tree. Installed so, it switches by
 itself, and its `status` is checked at the start, after network events and every 5 minutes
 to mend a firewall reload. Without it nothing switches and nothing asks for a password by
 itself: the page says the blocking needs its script installed. When the installed script
 still asks (its rule does not apply), a question opened by an automatic run is closed at
-once and nothing runs by itself; "Apply again" runs it on a click, with its question. What
+once and nothing runs by itself; with another polkit agent, whose question the shell cannot
+see, an automatic run that pkexec ends refused or unanswered stops the automatic runs the
+same way. "Apply again" runs it on a click, with its question. What
 was switched on in which boot is kept in Config. "Password-free blocking" shows the state,
 the script and the rule in full; how it is installed is the distribution's
 (`network.vpnLockdown`; elsewhere "Not supported on this distribution.").
@@ -689,7 +691,10 @@ Install… writes the script to `/usr/local/libexec/h2s-vpn-lockdown` and the ru
 `/usr/share/polkit-1/rules.d/49-h2s-vpn-lockdown.rules` with one password; Remove… takes the
 shell's away; each keeps both files as they were in `/var/lib/h2s-shell/vpn-lockdown-backup`
 for Undo. A script or rule there that the shell did not write is shown ("Show what is there")
-and replaced only after "Replace…" asks; Remove leaves it.
+and replaced only after "Replace…" asks; Remove leaves it. polkit also reads
+`/etc/polkit-1/rules.d`, which the user cannot read: a rule of the same name there takes the
+shell's place (the page says so). A folder at the script's place (an older install's layout)
+is never run; the page names it.
 
 #### The connectivity check's address: Arch
 

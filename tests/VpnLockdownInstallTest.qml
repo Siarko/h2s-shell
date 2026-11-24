@@ -44,6 +44,8 @@ TestCase {
     property var _installed: null
     property var _removed: null
     property int _uid: -1
+    property bool _holderEnded: true
+    property bool _heldSeen: false
 
     property Component _installComponent: Component {
         VpnLockdownInstall {}
@@ -117,9 +119,9 @@ TestCase {
         });
     }
 
-    function _runCheck(owner, user) {
+    function _runCheck(owner, user, path) {
         _check = null;
-        _exec([Quickshell.shellDir + "/scripts/vpn-lockdown-check.sh", String(owner), Quickshell.shellDir + "/scripts/h2s-vpn-lockdown", _paths.script,
+        _exec([Quickshell.shellDir + "/scripts/vpn-lockdown-check.sh", String(owner), Quickshell.shellDir + "/scripts/h2s-vpn-lockdown", path ?? _paths.script,
                _scratch + "/usr/share/polkit-1/rules.d", user, _scratch + "/no/nft", _scratch + "/usr/bin/nft"],
               (code, stdout) => suite._check = VpnLockdownRules.checkReply(stdout.split("\n")));
     }
@@ -184,7 +186,7 @@ TestCase {
             _runCheck(_uid, "alex");
         });
         _then("checked as installed", () => _check !== null, () => {
-            assertEqual(JSON.stringify(_check), JSON.stringify({ script: _check.script, installed: _check.script, installedFound: true, unsafe: false, rule: true, nft: true }),
+            assertEqual(JSON.stringify(_check), JSON.stringify({ script: _check.script, installed: _check.script, installedFound: true, unsafe: false, folder: false, rule: true, nft: true }),
                         "the check: installed (held by its owner), the rule for this user, nft at its second place");
             assert(_check.script > 0, "… the shell's copy's version read: " + _check.script);
             _runCheck(_uid, "bob");
@@ -275,6 +277,47 @@ TestCase {
         });
         _then("nothing left behind", () => _look !== null, () => {
             assertEqual(_look.listing.join(" "), "h2s-vpn-lockdown 49-h2s-vpn-lockdown.rules", "the refusals left no temporary file");
+            _runDirect(["undo", "20000101T000000Z", sha(_shellScript), sha(_rule)]);
+        });
+        _then("an Undo without its backup", () => _direct !== null, () => {
+            assertEqual(_direct.code + " " + _direct.stderr, "3 refused nobackup", "Undo of a stamp with no backup: refused");
+            _runDirect(["undo", _removed.stamp, sha(_shellScript), sha(_rule)]);
+        });
+        _then("an Undo after the files changed", () => _direct !== null, () => {
+            assertEqual(_direct.code + " " + _direct.stderr, "3 refused changed", "Undo of a run whose record says other files: refused");
+            // Another run holding the backups' lock
+            _holderEnded = false;
+            _exec(["flock", _paths.backups + "/.lock", "sh", "-c", "touch \"$1/held\"; while [ ! -e \"$1/release\" ]; do sleep 0.05; done", "sh", _scratch],
+                  () => suite._holderEnded = true);
+            _heldSeen = false;
+            _exec(["sh", "-c", "while [ ! -e \"$1/held\" ]; do sleep 0.05; done", "sh", _scratch], () => suite._heldSeen = true);
+        });
+        _then("the lock held by another run", () => _heldSeen, () => _runDirect(["undo", "20000101T000000Z", "absent", "absent"]));
+        _then("refused while the lock is held", () => _direct !== null, () => {
+            assertEqual(_direct.code + " " + _direct.stderr, "3 refused busy", "another run holding the lock: refused, never waited for");
+            _exec(["touch", "--", _scratch + "/release"]);
+        });
+        _then("the holder ended", () => _holderEnded, () => {
+            // The check on links and folders others may write in
+            _shell("set -e; umask 022; mkdir -p \"$1/open\" \"$1/old/h2s-vpn-lockdown\"; chmod 775 \"$1/open\"; "
+                   + "cp \"$1/usr/local/libexec/h2s-vpn-lockdown\" \"$1/open/h2s-vpn-lockdown\"; chmod 755 \"$1/open/h2s-vpn-lockdown\"; "
+                   + "ln -s \"$1/open/h2s-vpn-lockdown\" \"$1/to-open\"; ln -s \"$1/usr/local/libexec/h2s-vpn-lockdown\" \"$1/to-held\"",
+                   () => suite._runCheck(suite._uid, "alex", suite._scratch + "/open/h2s-vpn-lockdown"));
+        });
+        _then("checked in a folder others may write in", () => _check !== null && _ready, () => {
+            assertEqual(_check.installedFound + " " + _check.unsafe, "false true", "the check: a script in a group-writable folder — unsafe");
+            _runCheck(_uid, "alex", _scratch + "/to-open");
+        });
+        _then("checked through a link into it", () => _check !== null, () => {
+            assertEqual(_check.installedFound + " " + _check.unsafe, "false true", "the check: a link to a script in such a folder — unsafe");
+            _runCheck(_uid, "alex", _scratch + "/to-held");
+        });
+        _then("checked through a link to a held script", () => _check !== null, () => {
+            assertEqual(_check.installedFound + " " + _check.unsafe, "true false", "the check: a link to a held script, in held folders — installed");
+            _runCheck(_uid, "alex", _scratch + "/old/h2s-vpn-lockdown");
+        });
+        _then("checked an older install's folder", () => _check !== null, () => {
+            assertEqual(_check.folder + " " + _check.installedFound + " " + _check.unsafe, "true false false", "the check: a folder at the place — an older install, never run");
         });
         _clock.start();
         _exec(["id", "-u"], (code, stdout) => {
@@ -336,7 +379,8 @@ TestCase {
 
     function _end() {
         _install?.destroy();
-        _exec(["rm", "-rf", "--", _scratch], () => suite.finish());
+        // A holder still waiting is let go before the folder goes
+        _exec(["sh", "-c", "touch \"$1/release\" 2> /dev/null; rm -rf -- \"$1\"", "sh", _scratch], () => suite.finish());
     }
 
     function _exec(command, done) {

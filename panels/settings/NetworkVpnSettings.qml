@@ -536,6 +536,7 @@ Item {
                         : VpnLockdown.helperState === "asks" ? "Installed, but a password was still asked for: its polkit rule does not apply."
                         : VpnLockdown.helperState === "norule" ? "The script is there (" + VpnLockdown.installedAt + "), but no polkit rule for "
                             + VpnLockdown.user + ": it does not run by itself."
+                        : VpnLockdown.helperState === "folder" ? "An older install is at " + VpnLockdown.installedAt + ": it is not used. Remove that folder as administrator to install this one."
                         : VpnLockdown.helperState === "unsafe" ? "The file at " + VpnLockdown.installedAt + " is not root's alone: it is never run."
                         : "Not installed: the blocking does not run."
                     font.family: Theme.fontFamily
@@ -554,6 +555,12 @@ Item {
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeSmall
                 color: Theme.warning
+            }
+            // polkit reads /etc's rules folder too; a rule of the same name there, which the user
+            // cannot read, stands in for the shell's
+            Hint {
+                visible: VpnLockdown.mode === "apply"
+                text: "A rule of the same name in /etc/polkit-1/rules.d takes the place of the shell's."
             }
             Text {
                 visible: VpnLockdown.installFailure !== ""

@@ -12,8 +12,9 @@
 # (checked by a fixed pattern) and this script's own template, naming the script's fixed
 # place, so a run can grant nothing but running that file; the script is written from the
 # text given — the shell's scripts/h2s-vpn-lockdown as the shell read it, shown with the
-# command — only when it starts as that script does and has the sha256 the shell computed.
-# Each file built must have the sha256 the shell computed for it. Each run records what it
+# command — only when it starts as that script does. Each file built must have the sha256 the
+# shell computed for it: a check that the bytes arrived whole, not a security check (the
+# script's text comes from the same caller as its sha256). Each run records what it
 # left (`run.<stamp>`: the two sha256s or `absent`); Undo of a stamp needs the files to be
 # exactly that. Its last line on success, on stdout and stderr: `applied|restored <script
 # sha256 | absent> <rule sha256 | absent> <stamp>`; a refusal: `refused <code>` on stderr,
@@ -26,8 +27,8 @@ script_name='h2s-vpn-lockdown'; rule_name='49-h2s-vpn-lockdown.rules'; max_bytes
 rule_marker='// Written by h2s-shell (Settings > System > Network > VPN > Password-free blocking).'
 script_start='#!/bin/sh
 # h2s-vpn-lockdown '
-script_temporary=; rule_temporary=; backup_temporary=
-trap 'for leftover in "$script_temporary" "$rule_temporary" "$backup_temporary"; do [ -z "$leftover" ] || rm -f -- "$leftover"; done' EXIT
+script_temporary=; rule_temporary=; backup_temporary=; restored_temporary=
+trap 'for leftover in "$script_temporary" "$rule_temporary" "$backup_temporary" "$restored_temporary"; do [ -z "$leftover" ] || rm -f -- "$leftover"; done' EXIT
 # One file's request: op, current, sha256
 check_request() {
   case "$1" in
@@ -112,10 +113,11 @@ put() {
   sync -- "$4" 2> /dev/null || :
 }
 # The backup of a stamp put back into a new file beside its target: name, target, folder,
-# mode, current; sets the op and the sha256 after
+# mode, current; sets the op, the sha256 after and the new file ($restored_temporary, in the
+# cleanup from the moment it exists)
 restore() {
   copy=$backups/$1.$stamp_given
-  restored_op=keep; restored_after=$5; restored_temporary=
+  restored_op=keep; restored_after=$5
   if [ -f "$copy" ] && [ ! -L "$copy" ]; then
     restored_temporary=$(mktemp -- "$3/.h2s-shell.XXXXXX") || refuse write
     cat -- "$copy" > "$restored_temporary" || refuse write
@@ -178,9 +180,9 @@ undo)
   check_current "$script_target" "$script_current"
   check_current "$rule_target" "$rule_current"
   restore "$script_name" "$script_target" "$libexec" 0755 "$script_current"
-  script_op=$restored_op; script_after=$restored_after; script_temporary=$restored_temporary
+  script_op=$restored_op; script_after=$restored_after; script_temporary=$restored_temporary; restored_temporary=
   restore "$rule_name" "$rule_target" "$rules" 0644 "$rule_current"
-  rule_op=$restored_op; rule_after=$restored_after; rule_temporary=$restored_temporary
+  rule_op=$restored_op; rule_after=$restored_after; rule_temporary=$restored_temporary; restored_temporary=
   kind=restored;;
 *) refuse arguments;;
 esac

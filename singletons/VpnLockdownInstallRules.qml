@@ -18,7 +18,7 @@ import qs.singletons.network
 // handed in, by a fixed pattern) naming the script's fixed place, and writes the script only
 // from a text that starts as the shell's script does. It refuses before changing anything when
 // either file changed since the shell read it (its sha256, or that there was none), is a link,
-// a file it built has not the sha256 the shell computed, a folder it writes in is missing, a
+// a file it built has not the sha256 the shell computed (the bytes did not arrive whole), a folder it writes in is missing, a
 // link, not the owner's or writable by others, or another run holds the backups' lock. Both
 // files as they were are kept under one stamp, and Undo of a stamp puts them back while both
 // are what that run left.
@@ -98,9 +98,19 @@ Singleton {
         return validUser(user) ? VpnLockdownRules.lockdownPolkitRule(user, ['"' + path + '"']) : "";
     }
 
-    // A script text the root step takes: the shell's script, within the size
+    // A script text the root step takes: the shell's script, within the size (in bytes, as
+    // the root step counts them)
     function validScript(text) {
-        return typeof text === "string" && text.startsWith(scriptStart) && text.length <= maxBytes && /\nVERSION=[0-9]+\n/.test(text);
+        return typeof text === "string" && text.startsWith(scriptStart) && byteLength(text) <= maxBytes && /\nVERSION=[0-9]+\n/.test(text);
+    }
+
+    // A text's length in UTF-8 bytes (a text that is not valid Unicode: no length it takes)
+    function byteLength(text) {
+        try {
+            return unescape(encodeURIComponent(String(text))).length;
+        } catch (error) {
+            return Infinity;
+        }
     }
 
     // A file as read (a text; undefined: none; null or anything else: not read) against what

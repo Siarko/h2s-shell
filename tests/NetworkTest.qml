@@ -659,18 +659,45 @@ TestCase {
             assert(VpnLockdownRules.lockdownCurrent("on 1 - -", undefined, "on 1 - -", 1) === false && VpnLockdownRules.lockdownCurrent("on 1 - -", 0, "on 1 - -", undefined) === true,
                    "lockdown: current — a version not known counts as 0");
             assertEqual(JSON.stringify(VpnLockdownRules.checkReply([])),
-                        JSON.stringify({ script: 0, installed: 0, installedFound: false, unsafe: false, rule: false, nft: false }), "lockdown check: nothing read — nothing found");
+                        JSON.stringify({ script: 0, installed: 0, installedFound: false, unsafe: false, folder: false, rule: false, nft: false }), "lockdown check: nothing read — nothing found");
             assertEqual(JSON.stringify(VpnLockdownRules.checkReply(["script 4 x", "unsafe 4 x", "installed 4"])),
-                        JSON.stringify({ script: 0, installed: 4, installedFound: true, unsafe: false, rule: false, nft: false }), "lockdown check: lines with more words — not taken");
+                        JSON.stringify({ script: 0, installed: 4, installedFound: true, unsafe: false, folder: false, rule: false, nft: false }), "lockdown check: lines with more words — not taken");
             // The check's lines
             assertEqual(JSON.stringify(VpnLockdownRules.checkReply(["script 4", "installed 3", "rule yes", "nft"])),
-                        JSON.stringify({ script: 4, installed: 3, installedFound: true, unsafe: false, rule: true, nft: true }), "lockdown check: all found");
+                        JSON.stringify({ script: 4, installed: 3, installedFound: true, unsafe: false, folder: false, rule: true, nft: true }), "lockdown check: all found");
             assertEqual(JSON.stringify(VpnLockdownRules.checkReply(["script 4", "installed 4", "unsafe 4", "rule yes"])),
-                        JSON.stringify({ script: 4, installed: 0, installedFound: false, unsafe: true, rule: true, nft: false }), "lockdown check: a file not root's alone — never counted installed");
+                        JSON.stringify({ script: 4, installed: 0, installedFound: false, unsafe: true, folder: false, rule: true, nft: false }), "lockdown check: a file not root's alone — never counted installed");
             assertEqual(JSON.stringify(VpnLockdownRules.checkReply(["script x", "installed 4 extra", "rule no", "nft x"])),
-                        JSON.stringify({ script: 0, installed: 0, installedFound: false, unsafe: false, rule: false, nft: false }), "lockdown check: garbage — nothing found");
+                        JSON.stringify({ script: 0, installed: 0, installedFound: false, unsafe: false, folder: false, rule: false, nft: false }), "lockdown check: garbage — nothing found");
             assertEqual(JSON.stringify(VpnLockdownRules.checkReply(["script 4", "installed "])),
-                        JSON.stringify({ script: 4, installed: 0, installedFound: true, unsafe: false, rule: false, nft: false }), "lockdown check: installed, its version not read — 0");
+                        JSON.stringify({ script: 4, installed: 0, installedFound: true, unsafe: false, folder: false, rule: false, nft: false }), "lockdown check: installed, its version not read — 0");
+            assertEqual(JSON.stringify(VpnLockdownRules.checkReply(["script 4", "folder", "installed 2", "rule yes"])),
+                        JSON.stringify({ script: 4, installed: 0, installedFound: false, unsafe: false, folder: true, rule: true, nft: false }),
+                        "lockdown check: a folder at the script's place (an older install) — never counted installed");
+            assertEqual(VpnLockdownRules.checkReply(["folder x"]).folder, false, "lockdown check: … said so exactly");
+            // Whose run it is: the status only ever by itself; a switch by itself unless Apply again decided it
+            assert(VpnLockdownRules.runByItself("status", false) === true && VpnLockdownRules.runByItself("status", true) === true,
+                   "lockdown runs: the status — always by itself, even right after a click");
+            assert(VpnLockdownRules.runByItself("on", false) === true && VpnLockdownRules.runByItself("off", false) === true
+                   && VpnLockdownRules.runByItself("on", true) === false && VpnLockdownRules.runByItself("off", true) === false
+                   && VpnLockdownRules.runByItself("on", 1) === true, "lockdown runs: on and off — the user's only when Apply again decided them");
+            // The question a run raises: closed when the run started by itself, left to the user on a click
+            const execFlow = command => ({ actionId: "org.freedesktop.policykit.exec", message: "Authentication is needed to run `" + command + "' as the super user" });
+            const statusRun = ["/usr/local/libexec/h2s-vpn-lockdown", "status"];
+            assertEqual(VpnLockdownRules.promptAnswer(execFlow("/usr/local/libexec/h2s-vpn-lockdown status"), statusRun, true), "close",
+                        "lockdown prompt: this run's question, started by itself — closed");
+            assertEqual(VpnLockdownRules.promptAnswer(execFlow("/usr/local/libexec/h2s-vpn-lockdown status"), statusRun, false), "note",
+                        "lockdown prompt: … the user's click — left open, the script counted as asking");
+            assertEqual(VpnLockdownRules.promptAnswer(execFlow("/usr/bin/tailscale up"), statusRun, true), "", "lockdown prompt: another program's question — never touched");
+            assertEqual(VpnLockdownRules.promptAnswer({ actionId: "org.example.other", message: "Authentication is needed to run `/usr/local/libexec/h2s-vpn-lockdown status' as the super user" },
+                                                      statusRun, true), "", "lockdown prompt: another action — never touched");
+            assert(VpnLockdownRules.promptAnswer(execFlow("/usr/local/libexec/h2s-vpn-lockdown status"), [], true) === ""
+                   && VpnLockdownRules.promptAnswer(null, statusRun, true) === "", "lockdown prompt: no run under way, or no question — nothing");
+            // A run's end: refused or unanswered by itself — the script counted as asking
+            assert(VpnLockdownRules.asksAfter({ code: 126 }, true) && VpnLockdownRules.asksAfter({ code: 127 }, true)
+                   && !VpnLockdownRules.asksAfter({ code: 126 }, false) && !VpnLockdownRules.asksAfter({ code: 2 }, true)
+                   && !VpnLockdownRules.asksAfter({ code: 0 }, true) && !VpnLockdownRules.asksAfter(null, true),
+                   "lockdown runs: pkexec 126 or 127 on a run by itself — counted as asking; a click's, or another failure — not");
             assertEqual(JSON.stringify(VpnLockdownRules.filesRead({ text: "a\n" }, { absent: true })), JSON.stringify({ script: "a\n" }), "lockdown files: a text, none (undefined)");
             assertEqual(JSON.stringify(VpnLockdownRules.filesRead({ unreadable: true }, undefined)), JSON.stringify({ script: null, rule: null }), "lockdown files: unreadable, no answer — not read");
             const rule = VpnLockdownRules.lockdownPolkitRule("h2s", ['"/usr/local/libexec/h2s-vpn-lockdown/h2s-vpn-lockdown"']);

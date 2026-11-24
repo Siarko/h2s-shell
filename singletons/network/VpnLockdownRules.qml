@@ -1,6 +1,7 @@
 pragma Singleton
 
 import Quickshell
+import qs.singletons
 
 // Only through the VPN (a kill switch) — pure, tested in tests/NetworkTest.qml: what
 // VpnLockdown blocks, the arguments it hands scripts/h2s-vpn-lockdown, how it reads the
@@ -123,10 +124,11 @@ Singleton {
 
     // scripts/vpn-lockdown-check.sh's lines → { script (the shell's copy's version), installed
     // (the installed one's; 0 none), installedFound (one there, root's alone: the only one run),
-    // unsafe (one there, not root's alone: never run), rule (a polkit rule for this user names
-    // it), nft }. Nothing read: nothing found
+    // unsafe (one there, not root's alone: never run), folder (a folder at its place: an older
+    // install's layout, never run), rule (a polkit rule for this user names it), nft }. Nothing
+    // read: nothing found
     function checkReply(lines) {
-        const found = { script: 0, installed: 0, installedFound: false, unsafe: false, rule: false, nft: false };
+        const found = { script: 0, installed: 0, installedFound: false, unsafe: false, folder: false, rule: false, nft: false };
         for (const line of lines ?? []) {
             const parts = String(line).trim().split(" ");
             const version = /^[0-9]{1,6}$/.test(parts[1] ?? "") ? parseInt(parts[1]) : 0;
@@ -137,17 +139,48 @@ Singleton {
                 found.installedFound = true;
             } else if (parts[0] === "unsafe" && parts.length <= 2)
                 found.unsafe = true;
+            else if (parts[0] === "folder" && parts.length === 1)
+                found.folder = true;
             else if (parts[0] === "rule" && parts[1] === "yes" && parts.length === 2)
                 found.rule = true;
             else if (parts[0] === "nft" && parts.length === 1)
                 found.nft = true;
         }
-        // A file there that is not root's alone is never run, whatever else was said
-        if (found.unsafe) {
+        // A file there that is not root's alone, or a folder, is never run, whatever else was said
+        if (found.unsafe || found.folder) {
             found.installed = 0;
             found.installedFound = false;
         }
         return found;
+    }
+
+    // Whether a run of the installed script started by itself — not by the user's click — and
+    // so must never leave a password question open: `kind` "status" (only ever asked by
+    // itself: at the start, on network events, every 5 minutes), "on" or "off" (by itself
+    // unless the decision came from "Apply again": `force`)
+    function runByItself(kind, force) {
+        return kind === "status" ? true : force !== true;
+    }
+
+    // A polkit question that opened while the installed script runs: `running` the words
+    // handed to pkexec ([] none), `byItself` the run's → "" (not this run's: never touched),
+    // "close" (this run's, started by itself: closed at once — nothing asks without a click —
+    // and the script counted as asking), "note" (this run's, the user's click: left to the
+    // user, the script counted as asking). PolkitRules.announces ties a question to a run.
+    function promptAnswer(flow, running, byItself) {
+        if (!flow || !Array.isArray(running) || running.length === 0)
+            return "";
+        if (!PolkitRules.announces(flow, { pkexecArgv: running, announced: false }))
+            return "";
+        return byItself === true ? "close" : "note";
+    }
+
+    // Whether a run's end says the installed script asks for a password where the shell could
+    // not see the question (another polkit agent's, or none): a run started by itself that
+    // pkexec ended as refused or cancelled (126) or with no agent to ask (127). Nothing runs by
+    // itself after it, so the other agent's question is not raised again and again.
+    function asksAfter(result, byItself) {
+        return byItself === true && (result?.code === 126 || result?.code === 127);
     }
 
     // The install's two files as pam-files.sh answered (PamStackRules.filesAnswer's each) →

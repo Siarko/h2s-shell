@@ -73,7 +73,9 @@ Singleton {
     readonly property var nftPaths: Array.isArray(_facts.nftPaths) ? _facts.nftPaths.map(path => String(path)) : []
     // The shell's own copy: shown on the page, and what Install puts in place — never run
     readonly property string scriptPath: Quickshell.shellDir + "/scripts/h2s-vpn-lockdown"
-    readonly property string user: Quickshell.env("USER") ?? ""
+    // The user the rule is for, as the system names this process's user (`id -un`), not the
+    // environment's USER, which anyone may set; "" until read
+    property string user: ""
     readonly property string scriptText: _scriptFile.text()
     // The rule as Install would write it (Arch), and NixOS's module (the integration's plan)
     readonly property string polkitRule: VpnLockdownInstallRules.ruleText(user, installedAt)
@@ -95,15 +97,17 @@ Singleton {
     property int installedVersion: 0
     property bool installedFound: false
     property bool unsafeFound: false
+    property bool folderFound: false
     property bool ruleInstalled: false
     property bool nftFound: false
     property bool checked: false
     // A password was asked for while running the installed script: its rule does not apply
     property bool installedAsks: false
 
-    // "none", "unsafe" (a file there not root's alone), "norule", "asks", "outdated" (runs,
+    // "none", "folder" (an older install's layout: a folder at the script's place), "unsafe"
+    // (a file there not root's alone), "norule", "asks", "outdated" (runs,
     // but older than the shell's), "ready"
-    readonly property string helperState: unsafeFound ? "unsafe" : !installedFound ? "none" : !ruleInstalled ? "norule"
+    readonly property string helperState: folderFound ? "folder" : unsafeFound ? "unsafe" : !installedFound ? "none" : !ruleInstalled ? "norule"
         : installedAsks ? "asks" : installedVersion < scriptVersion ? "outdated" : "ready"
     readonly property bool passwordFree: installedFound && ruleInstalled && !installedAsks
 
@@ -182,11 +186,20 @@ Singleton {
     // ── Looking at the script ──
     // Once the distribution is known (its places); the page asks again when shown
     function checkScript(): void {
-        Distribution.whenReady(() => {
+        Distribution.whenReady(() => _userRead.request());
+    }
+
+    CommandQuery {
+        id: _userRead
+        command: ["id", "-un"]
+        onDone: lines => {
+            const name = String(lines[0] ?? "").trim();
+            if (name !== root.user)
+                root.user = name;
             _scriptCheck.request();
             if (root.mode === "apply")
                 root._readFiles();
-        });
+        }
     }
 
     CommandQuery {
@@ -200,6 +213,7 @@ Singleton {
             root.installedVersion = found.installed;
             root.installedFound = found.installedFound;
             root.unsafeFound = found.unsafe;
+            root.folderFound = found.folder;
             root.ruleInstalled = found.rule;
             root.nftFound = found.nft;
             root.checked = true;
@@ -252,15 +266,13 @@ Singleton {
     Connections {
         target: Authentication
         function onFlowChanged() {
-            const flow = Authentication.flow;
-            if (flow === null || root._running.length === 0)
-                return;
-            if (!PolkitRules.announces(flow, { pkexecArgv: root._running, announced: false }))
+            const answer = VpnLockdownRules.promptAnswer(Authentication.flow, root._running, root._runningByItself);
+            if (answer === "")
                 return;
             root.installedAsks = true;
-            if (root._runningByItself) {
+            if (answer === "close") {
                 console.warn("[VpnLockdown] the installed script asked for a password: its polkit rule does not apply; the question is closed");
-                flow.cancelAuthenticationRequest();
+                Authentication.flow.cancelAuthenticationRequest();
             }
         }
     }
@@ -366,7 +378,7 @@ Singleton {
     function _askStatus() {
         if (_action.busy || !passwordFree)
             return;
-        _runScript(["status"], false, result => {
+        _runScript(["status"], VpnLockdownRules.runByItself("status", false), result => {
             if (result.ok) {
                 const reply = VpnLockdownRules.lockdownStatusReply(result.lines);
                 root._status = reply.status;
@@ -397,7 +409,6 @@ Singleton {
             wanted: wanted, nftFound: nftFound, status: _status, rulesVersion: _rulesVersion,
             expectedStatus: expectedStatus, scriptVersion: installedVersion, refused: _refused, hosts: _hosts
         });
-        _forced = force === true;
         if (step === "ask") {
             _askedAtStart = true;
             _askStatus();
@@ -411,9 +422,9 @@ Singleton {
         } else if (step === "refused") {
             state = "failed";
         } else if (step === "on") {
-            _findServersThenSwitchOn();
+            _findServersThenSwitchOn(VpnLockdownRules.runByItself("on", force === true));
         } else if (step === "off") {
-            _switchOff();
+            _switchOff(VpnLockdownRules.runByItself("off", force === true));
         } else if (step === "idle") {
             // Nothing to do: a refusal from before is not carried to the next time
             _refused = "";
@@ -422,21 +433,22 @@ Singleton {
         }
     }
 
-    // The last decision came from the user's click ("Apply again"): its run may ask
-    property bool _forced: false
-
     // Whether what is loaded differs from what is wanted (the page offers "Apply again")
     readonly property bool mismatched: checked && state !== "asking" && state !== "working"
         && (state === "failed" || state === "missing" || wanted !== _status.startsWith("on"))
 
     // The servers by their names, each found through the system's resolver; those not
     // found keep their last addresses
-    function _findServersThenSwitchOn() {
+    // `byItself` decided with the switch (VpnLockdownRules.runByItself) and carried through
+    // the lookup: a decision made meanwhile does not change whose run it is
+    property bool _resolveByItself: true
+    function _findServersThenSwitchOn(byItself) {
         const names = _hostList.filter(host => !NetworkRules.isIpAddress(host));
         if (names.length === 0) {
-            _switchOn();
+            _switchOn(byItself);
             return;
         }
+        _resolveByItself = byItself;
         _resolve.command = ["sh", "-c", 'for host in "$@"; do getent ahosts "$host" | while read -r address rest; do echo "$host $address"; done; done; true',
             "sh"].concat(names);
         _resolve.request();
@@ -448,7 +460,8 @@ Singleton {
             const map = Object.assign({}, root._serverMap, VpnLockdownRules.addressesByHost(lines));
             if (JSON.stringify(map) !== JSON.stringify(root._serverMap))
                 root._serverMap = map;
-            Qt.callLater(root._switchOn);
+            const byItself = root._resolveByItself;
+            Qt.callLater(() => root._switchOn(byItself));
         }
     }
 
@@ -465,18 +478,22 @@ Singleton {
         _action.run(command, result => {
             root._running = [];
             root._runningByItself = false;
+            // A question this shell could not see (another agent's): nothing more by itself
+            if (VpnLockdownRules.asksAfter(result, byItself) && !root.installedAsks) {
+                console.warn("[VpnLockdown] the installed script asked for a password (pkexec " + result.code + "): nothing runs by itself until it is checked again");
+                root.installedAsks = true;
+            }
             done(result);
         });
     }
 
-    function _switchOn() {
+    function _switchOn(byItself) {
         if (_action.busy)
             return;
         const scriptArguments = switchArguments.slice();
         const status = expectedStatus;
         const hosts = _hosts;
         const version = installedVersion;
-        const byItself = !_forced;
         state = passwordFree ? "working" : "asking";
         _runScript(scriptArguments, byItself, result => {
             if (result.ok) {
@@ -493,9 +510,9 @@ Singleton {
         });
     }
 
-    function _switchOff() {
+    function _switchOff(byItself) {
         state = passwordFree ? "working" : "asking";
-        _runScript(["off"], !_forced, result => {
+        _runScript(["off"], byItself, result => {
             if (result.ok) {
                 root._status = "off";
                 root._rulesVersion = 0;
