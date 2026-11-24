@@ -1,6 +1,8 @@
 import QtQuick
 import Quickshell
+import Quickshell.Io
 import Quickshell.Services.Pam
+import qs.singletons
 
 // The PAM adapter of one method (password, fingerprint, u2f): one PamContext, turned into
 // the rules' events, and the rules' effects turned into calls on it. No decisions: what to
@@ -19,6 +21,9 @@ import Quickshell.Services.Pam
 // - At most one respond() per prompt: PamContext hands a second one to the next prompt.
 // - config / configDirectory are set only while the context is inactive; set while
 //   active, PamContext drops the new value silently.
+// - A start that went through is reported as pamStarted, with whether the config starts
+//   with the marker line (LockIoRules.pamMarked; read here just before the start, which is
+//   when the PAM child reads it too) — the rules watch only such a conversation's silence.
 //
 // The typed password passes through respond() only, as an argument: nothing here keeps
 // it. Created with the lock's scope (LockScope) and destroyed with it, which kills a
@@ -59,7 +64,10 @@ Scope {
         _context.config = config;
         _conversation = conversation;
         _completedInStart = false;
+        const marked = LockIoRules.pamMarked(_configText(configDirectory + "/" + config));
         const started = _context.start();
+        if (started && _conversation === conversation)
+            root.event({ type: "pamStarted", method: method, conversation: conversation, marked: marked });
         if (started || _completedInStart)
             return;
         _conversation = null;
@@ -85,6 +93,20 @@ Scope {
         }
         _awaitingResponse = false;
         _context.respond(text);
+    }
+
+    // The config's text; "" when it cannot be read (then PAM cannot read it either)
+    function _configText(path) {
+        _configFile.path = "";
+        _configFile.path = path;
+        return _configFile.text();
+    }
+
+    // Read on demand, blocking: a PAM config is a small file in a local directory
+    FileView {
+        id: _configFile
+        blockLoading: true
+        printErrors: false
     }
 
     function _resultName(result) {

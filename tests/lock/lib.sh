@@ -466,7 +466,8 @@ _write_pam_stacks() {
     esac
     bash_path=$(command -v bash)
     coreutils=$(dirname "$(dirname "$(readlink -f "$(command -v rm)")")")
-    for file in password password-question fingerprint check-password.sh check-answer.sh wait-finger.sh finger-error.sh; do
+    mkdir -p "$WORK/pam/stall" "$WORK/pam/marker"
+    for file in password password-question password-stall fingerprint check-password.sh check-answer.sh wait-finger.sh finger-error.sh stall.sh; do
         sed -e "s|@PAM_MODULES@|$LOCKTEST_PAM_MODULES|g" -e "s|@WORK@|$WORK|g" \
             -e "s|@BASH@|$bash_path|g" -e "s|@COREUTILS@|$coreutils/bin|g" \
             -e "s|@FINGER_DIR@|$WORK/finger|g" -e "s|@PASSWORD@|$LOCKTEST_PASSWORD|g" \
@@ -1282,7 +1283,7 @@ _password_stack_is_ours_and_safe() { _password_stack_is_ours && _password_stack_
 _password_stack_is_ours() {
     local config
     config=$(state_field password_config) || return 1
-    [ "$config" = "$WORK/pam/password" ] || [ "$config" = "$WORK/pam/password-question" ]
+    [ "$config" = "$WORK/pam/password" ] || [ "$config" = "$WORK/pam/password-question" ] || [ "$config" = "$WORK/pam/password-stall" ]
 }
 # Typed text may reach the password config the shell uses now, and — the next attempt after
 # a config that cannot be used, or a detection that fails — its password FALLBACK. Both must
@@ -1304,7 +1305,7 @@ _password_stack_is_safe() {
 _config_is_safe() {
     local config=$1
     case "$config" in
-        "$WORK/pam/password" | "$WORK/pam/password-question") return 0 ;;
+        "$WORK/pam/password" | "$WORK/pam/password-question" | "$WORK/pam/password-stall") return 0 ;;
         "$WORK/system-pam/h2s-shell-password")
             cmp -s "$config" "$WORK/pam/password" && return 0
             _denies_everything "$config"

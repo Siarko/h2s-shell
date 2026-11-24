@@ -1,4 +1,6 @@
 import QtQuick
+import Quickshell
+import Quickshell.Io
 import qs.singletons
 
 // The lock screen's I/O-side helpers (singletons/LockIoRules.qml): the driver's queue, key
@@ -76,6 +78,36 @@ TestCase {
                 commit: () => {}, prepare: () => { throw new Error("x"); }, execute: effect => throwingPrepare.push(effect.type)
             });
             assertEqual(throwingPrepare.join(","), "lockCompositor", "runStep: a failing prepare (the adapters) does not stop the effects either, even without onError");
+        }
+
+        // --- the marker line: a PAM config whose first auth module is the lock's pam_echo ---
+        {
+            const marker = "auth [default=ignore] pam_echo.so " + LockStepRules.pamMarker;
+            const marked = text => rules.pamMarked(text);
+            assert(marked(marker + "\nauth required pam_unix.so\n"), "marker: first auth line, pam_echo by name");
+            assert(marked("# a comment\n\naccount required pam_permit.so\n  auth   [default=ignore]   /nix/store/x-linux-pam/lib/security/pam_echo.so  "
+                          + LockStepRules.pamMarker + "  # why\nauth required pam_unix.so"),
+                   "marker: by absolute path, other types and comments before it, white space as libpam takes it");
+            assert(marked("auth [default=ignore] pam_echo.so \\\n " + LockStepRules.pamMarker + "\n"), "marker: on a continued line");
+            assert(!marked("auth required pam_unix.so\n" + marker + "\n"), "marker: not first: a module before it may wait silently");
+            assert(!marked("auth [default=ignore] pam_echo.so h2s-shell-lock.started.x\n"), "marker: another text");
+            assert(!marked("auth [default=ignore] pam_echo.so " + LockStepRules.pamMarker + " more\n"), "marker: more words");
+            assert(!marked("auth optional pam_echo.so " + LockStepRules.pamMarker + "\n"), "marker: a simple control");
+            assert(!marked("auth [default=ignore success=ok] pam_echo.so " + LockStepRules.pamMarker + "\n"), "marker: a control that can change the result");
+            assert(!marked("-auth [default=ignore] pam_echo.so " + LockStepRules.pamMarker + "\n"), "marker: a dashed line");
+            assert(!marked("auth [default=ignore] pam_exec.so " + LockStepRules.pamMarker + "\n"), "marker: another module");
+            assert(!marked("auth [default=ignore] /x/pam_echo.so.1 " + LockStepRules.pamMarker + "\n"), "marker: not pam_echo.so");
+            assert(!marked("@include common-auth\n" + marker + "\n"), "marker: an @include before it");
+            assert(!marked("auth include system-auth\n" + marker + "\n"), "marker: an include before it");
+            assert(!marked("auth bogus pam_unix.so\n" + marker + "\n"), "marker: a line libpam would not take before it");
+            assert(!marked("account required pam_permit.so \\"), "marker: an unfinished line");
+            assert(!marked("") && !marked(null) && !marked(undefined) && !marked(7) && !marked("account required pam_permit.so\n"),
+                   "marker: no text, or no auth line");
+            // The configs the shell ships start with it
+            for (const name of ["password", "fingerprint", "u2f"]) {
+                _shipped.path = Quickshell.shellDir + "/pam/" + name;
+                assert(marked(_shipped.text()), "marker: the shipped pam/" + name + " starts with it");
+            }
         }
 
         // --- the password fallback ---
@@ -372,5 +404,10 @@ TestCase {
                     "the remembered notice state read back");
         for (const other of ["", "none", "both:GNOME Shell", "[1]", "null", "{", null, 7])
             assertEqual(rules.sleepNoticeSaved(other), null, "anything else (an older version's key too): none (" + JSON.stringify(other) + ")");
+    }
+
+    readonly property FileView _shipped: FileView {
+        blockLoading: true
+        printErrors: false
     }
 }

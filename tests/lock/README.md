@@ -273,6 +273,14 @@ typed string can only ever reach a test stack or nothing.
   above, then a second question (libpam's own `pam_stress` asks "STRESS Password:" with
   the answer hidden and stores the answer as the auth token), checked against
   `LOCKTEST_ANSWER` (`answer-right` / `answer-wrong` in `pam/check.log`).
+- **password-stall** (`pam/password-stall`, `pam/stall.sh`): the password as above behind
+  the lock's marker line (`auth [default=ignore] pam_echo.so h2s-shell-lock.started`, named
+  through `pam/marker/pam_echo.so`) and a module that can stay silent. `pam/stall/mode`
+  `before`: at a start without the marker module (the link missing: libpam goes on without
+  it, so that start says nothing, as a child stuck inside pam_start) it links the marker in
+  for the next start and waits silently until its helper is killed; `after`: the first run
+  waits `pam/stall/seconds` after the marker. Each run notes `start <pid> marker|nomarker`
+  in `pam/stall/log` (`pam-silent-start.sh`).
 - **fingerprint** (`pam/fingerprint`, `pam/wait-finger.sh`): a stand-in for the reader. A
   conversation announces itself as `finger/waiting.<pid>` and waits for
   `finger/result.<pid>`; `finger ok` / `finger fail` in a test answers the one waiting

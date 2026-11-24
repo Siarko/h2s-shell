@@ -253,6 +253,7 @@ TestCase {
         _behaviour15LockedHint();
         _behaviour16ForeignLock();
         _behaviour17Offered();
+        _behaviour18SilentStart();
         _secrets();
         _totality();
         _livenessCases();
@@ -1740,6 +1741,130 @@ TestCase {
 
     // ---- 11. Nothing hangs for good ----
 
+    // ---- 18. A conversation stuck before its first module (the PAM child forked from the
+    // multi-threaded shell can wait for good on a loader lock inside pam_start) ----
+
+    function pamStarted(method, marked) {
+        return state => ({ type: "pamStarted", method: method, conversation: conversationOf(state, method), marked: marked });
+    }
+
+    function markerMessage(method) {
+        return pamMessage(method, { message: LockRules.pamMarker });
+    }
+
+    function _behaviour18SilentStart() {
+        // The password: started, marked, nothing said
+        const stuck = locked(passwordOnly).sendAll(enter("pw"));
+        const first = conversationOf(stuck.state, "password");
+        stuck.send(pamStarted("password", true));
+        assert(has(stuck.effects, "startTimer", { name: "silent:password", ms: 8000 }) && stuck.state.password.watch === first,
+               "18: a marked password conversation is watched for its first word (8 s)");
+        stuck.send(timer("silent:password"), 8000);
+        assert(has(stuck.effects, "abortPam", { method: "password", conversation: first }) && stuck.state.password.status === "pending"
+               && stuck.state.secret === "pw" && stuck.state.password.silentStarts === 1 && !has(stuck.effects, "startPam")
+               && has(stuck.effects, "log", { level: "warning" }),
+               "18: silent for 8 s: aborted, the secret kept (no prompt took it), started again only after the settle");
+        assert("verify" in stuck.state.timers && !has(stuck.effects, "startTimer", { name: "verify" }),
+               "18: … the verify timer keeps running from the submit (the 90 s bound holds)");
+        stuck.send(timer("settle:password"), 1000);
+        const second = conversationOf(stuck.state, "password");
+        assert(has(stuck.effects, "startPam", { method: "password", conversation: second }) && second !== first
+               && stuck.state.password.status === "verifying",
+               "18: … a fresh conversation with the same config");
+        stuck.sendAll([pamStarted("password", true), markerMessage("password")]);
+        assert(stuck.state.password.watch === null && !("silent:password" in stuck.state.timers) && stuck.state.password.silentStarts === 0,
+               "18: the marker ends the watch");
+        assert(stuck.state.password.status === "verifying" && stuck.state.password.pamError === "" && LockRules.view(stuck.state).busy,
+               "18: … and is never shown");
+        stuck.send(passwordPrompt());
+        assert(has(stuck.effects, "respondPam", { method: "password", conversation: second, text: "pw" }) && stuck.state.secret === null,
+               "18: the restarted conversation's prompt takes the password (once)");
+        assert(of(stuck.all, "respondPam").length === 1, "18: … the only answer given in the whole check");
+        stuck.send(pamCompleted("password", "success"));
+        assert(stuck.state.phase.lastEnd === "authenticated", "18: … and the right password unlocks");
+
+        // After any word, never again
+        for (const [what, word] of [["the marker", markerMessage("password")],
+                                    ["an info message", pamMessage("password", { message: "Checking..." })],
+                                    ["an error message", pamMessage("password", { message: "Account locked", messageIsError: true })]]) {
+            const heard = locked(passwordOnly).sendAll(enter("pw"));
+            heard.sendAll([pamStarted("password", true), word]);
+            heard.send(timer("silent:password"), 60000);
+            assert(!has(heard.all, "abortPam") && heard.state.password.status === "verifying" && heard.ignored !== "",
+                   "18: after " + what + " a silence is never a restart (a module waiting is left to wait)");
+        }
+        const prompted = locked(passwordOnly).sendAll(enter("pw"));
+        prompted.sendAll([pamStarted("password", true), passwordPrompt()]);
+        prompted.send(timer("silent:password"), 60000);
+        assert(!has(prompted.all, "abortPam") && prompted.state.secret === null && of(prompted.all, "respondPam").length === 1,
+               "18: after the prompt took the password: never restarted, never asked again");
+
+        // Unmarked: never watched
+        const unmarked = locked(passwordOnly).sendAll(enter("pw"));
+        unmarked.send(pamStarted("password", false));
+        assert(!("silent:password" in unmarked.state.timers) && unmarked.state.password.watch === null && unmarked.ignored === "not marked",
+               "18: a config without the marker line is not watched: its first module may wait without a word");
+        unmarked.send(timer("verify"), 90000);
+        assert(unmarked.state.password.error === "Password check timed out", "18: … the verify timer still bounds it");
+
+        // A stale start report, or one for a conversation already aborted
+        const stale = locked(passwordOnly).sendAll(enter("pw"));
+        stale.send(state => ({ type: "pamStarted", method: "password", conversation: conversationOf(state, "password") - 1, marked: true }));
+        assert(stale.ignored === "stale conversation" && !("silent:password" in stale.state.timers), "18: a stale pamStarted watches nothing");
+
+        // Three starts at most: the last is left to run, until verify
+        const never = locked(passwordOnly).sendAll(enter("pw"));
+        for (let start = 1; start <= 3; start++) {
+            never.send(pamStarted("password", true));
+            never.send(timer("silent:password"), 8000);
+            if (start < 3)
+                never.send(timer("settle:password"), 1000);
+        }
+        assert(of(never.all, "startPam", { method: "password" }).length === 3 && of(never.all, "abortPam").length === 2
+               && never.state.password.status === "verifying" && never.state.password.watch === null && never.state.secret === "pw",
+               "18: silent at every start: three starts, then the last left running");
+        never.send(timer("verify"), 90000);
+        assert(never.state.password.status === "failed" && never.state.secret === null && never.state.password.error === "Password check timed out",
+               "18: … and the verify timer ends it: the field usable again");
+        never.sendAll(enter("pw"));
+        never.send(timer("settle:password"), 1000);
+        never.send(pamStarted("password", true));
+        never.send(timer("silent:password"), 8000);
+        assert(never.state.password.status === "pending" && never.state.password.silentStarts === 1,
+               "18: a new submit gets its own three starts");
+
+        // A completion is a word too
+        const completed = locked(passwordOnly).sendAll(enter("pw"));
+        completed.sendAll([pamStarted("password", true), pamCompleted("password", "failed")]);
+        assert(!("silent:password" in completed.state.timers) && completed.state.password.watch === null,
+               "18: a result ends the watch");
+
+        // A passive method: started again as a new round, its message never the marker
+        const passive = locked();
+        const round = conversationOf(passive.state, "fingerprint");
+        passive.send(pamStarted("fingerprint", true));
+        passive.send(timer("silent:fingerprint"), 8000);
+        assert(has(passive.effects, "abortPam", { method: "fingerprint", conversation: round }) && passive.state.passive.fingerprint.status === "idle"
+               && passive.state.passive.fingerprint.silentStarts === 1,
+               "18: a silent passive round is aborted");
+        passive.send(timer("settle:fingerprint"), 1000);
+        assert(has(passive.effects, "startPam", { method: "fingerprint" }) && passive.state.passive.fingerprint.status === "running",
+               "18: … and started again after the settle");
+        passive.sendAll([pamStarted("fingerprint", true), markerMessage("fingerprint")]);
+        assert(passive.state.passive.fingerprint.message === "" && LockRules.view(passive.state).methods.every(row => row.text !== LockRules.pamMarker),
+               "18: the marker is never a passive method's line");
+        passive.send(timer("silent:fingerprint"), 60000);
+        assert(passive.state.passive.fingerprint.status === "running" && !has(passive.effects, "abortPam"),
+               "18: a passive round that said the marker waits for a finger as long as it takes");
+
+        // An abort (the prompt, sleep, the end of the lock) ends the watch
+        const asleep = locked();
+        asleep.send(pamStarted("fingerprint", true));
+        asleep.send({ type: "prepareForSleep" });
+        assert(!("silent:fingerprint" in asleep.state.timers) && asleep.state.passive.fingerprint.watch === null,
+               "18: an aborted round is no longer watched");
+    }
+
     function _behaviour11Hangs() {
         // A PAM conversation that never answers
         const hung = locked(passwordOnly).sendAll(enter("pw"));
@@ -2421,9 +2546,11 @@ TestCase {
                              message: pick(["Password: ", "Code:", "", "Place your finger", "Account locked"]),
                              messageIsError: chance(0.3), responseRequired: chance(conversation.method === "password" ? (answered ? 0.85 : 0.6) : 0.1),
                              responseVisible: chance(0.2) };
-                if (kind < 0.95)
+                if (kind < 0.85)
                     return { type: "pamCompleted", method: conversation.method, conversation: id,
                              result: chance(0.05) ? "success" : pick(["failed", "failed", "error", "maxTries", "bogus"]) };
+                if (kind < 0.95)
+                    return { type: "pamStarted", method: conversation.method, conversation: id, marked: chance(0.8) };
                 return { type: "pamStartFailed", method: conversation.method, conversation: id };
             }
             if (roll < 0.5)

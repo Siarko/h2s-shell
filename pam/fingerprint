@@ -16,4 +16,8 @@
 # not match, then MaxTries; the shell waits a moment and starts again).
 #
 # Quickshell runs pam_authenticate and nothing else: only `auth` lines mean anything.
+# The first line only says that PAM got going (pam_echo's message, never shown, changes no
+# result): libpam loads every module before it runs, and a check that has not said it
+# within a few seconds is stuck before any module ran, and is started again. Keep it first.
+auth     [default=ignore] pam_echo.so h2s-shell-lock.started
 auth     required pam_fprintd.so timeout=-1

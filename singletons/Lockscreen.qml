@@ -188,7 +188,7 @@ Singleton {
 
     // The events each source may raise: a child object's signal emitted by other QML can
     // raise no other kind
-    readonly property var _adapterEvents: ["pamMessage", "pamCompleted", "pamStartFailed", "methodsDetected", "methodsFailed"]
+    readonly property var _adapterEvents: ["pamMessage", "pamCompleted", "pamStartFailed", "pamStarted", "methodsDetected", "methodsFailed"]
     readonly property var _logindEvents: ["lockRequested", "unlockRequested", "prepareForSleep", "resumed"]
 
     // The events whose handling goes to the log, taken or not: everything about
@@ -196,7 +196,7 @@ Singleton {
     // them; what those cause shows in the rules' own log effects.
     readonly property var _loggedEvents: ["started", "restored", "lockRequested", "unlockRequested", "compositorLocked",
         "compositorFinished", "foreignLocked", "surfaceAdded", "surfaceRemoved", "submit", "methodsDetected", "methodsFailed",
-        "pamMessage", "pamCompleted", "pamStartFailed", "prepareForSleep", "resumed", "settings"]
+        "pamMessage", "pamCompleted", "pamStartFailed", "pamStarted", "prepareForSleep", "resumed", "settings"]
     readonly property var _loggedEffects: ["lockCompositor", "adoptCompositorLock", "unlockCompositor", "announceLocked",
         "reportLockedHint", "detectMethods", "startPam", "abortPam", "respondPam", "holdInhibitor", "releaseInhibitor"]
 

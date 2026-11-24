@@ -58,6 +58,7 @@ Singleton {
     readonly property var namedKeys: LockStepRules.namedKeys
     readonly property var sleepTimers: LockStepRules.sleepTimers
     readonly property var timerNames: LockStepRules.timerNames
+    readonly property string pamMarker: LockStepRules.pamMarker
 
     // The unlocks by request, not by authentication — the owner's decision:
     // logind's Unlock signal (`loginctl unlock-session`), the way in from another
@@ -195,6 +196,7 @@ Singleton {
         pamMessage: (transaction, event) => root._pamMessage(transaction, event),
         pamCompleted: (transaction, event) => root._pamCompleted(transaction, event),
         pamStartFailed: (transaction, event) => root._pamStartFailed(transaction, event),
+        pamStarted: (transaction, event) => root._pamStarted(transaction, event),
         prepareForSleep: (transaction, event) => root._prepareForSleep(transaction, event),
         resumed: (transaction, event) => root._resumed(transaction, event),
         timer: (transaction, event) => root._timer(transaction, event),
@@ -690,7 +692,7 @@ Singleton {
         // Held until PAM asks for it — the conversation may not be startable yet (methods
         // unknown, an abort settling); _reconcilePassword starts it
         LockStepRules.setTop(transaction, { secret: text });
-        LockStepRules.setRegion(transaction, "password", { status: "pending", error: "", pamError: "", refusal: "" });
+        LockStepRules.setRegion(transaction, "password", { status: "pending", error: "", pamError: "", refusal: "", silentStarts: 0 });
         _takeInput(transaction);
         // No password config known: the script is asked again before saying so (a config
         // that appeared since, or a detection that came back empty)
@@ -831,7 +833,11 @@ Singleton {
         const refused = _checkConversation(transaction.state, event);
         if (refused !== "")
             return refused;
+        _heard(transaction, event.method);
         const message = typeof event.message === "string" ? event.message.trim() : "";
+        // The marker line's message only says that PAM got going: never shown
+        if (message === LockStepRules.pamMarker && event.responseRequired !== true && event.messageIsError !== true)
+            return;
         if (event.method === "password") {
             _passwordMessage(transaction, event, message);
             return;
@@ -879,6 +885,7 @@ Singleton {
         const refused = _checkConversation(transaction.state, event);
         if (refused !== "")
             return refused;
+        _heard(transaction, event.method);
         const result = pamResults.includes(event.result) ? event.result : "error";
         const method = event.method;
         if (result === "success") {
@@ -969,6 +976,64 @@ Singleton {
         } else {
             LockStepRules.setPassive(transaction, event.method, { status: "broken", brokenBy: "start", conversation: null });
         }
+    }
+
+    // The driver started the conversation; `marked`: its config starts with the marker line
+    // (LockIoRules.pamMarked). Only then is its silence watched: without the marker, a
+    // first module that waits without a word (a key without `cue`, a face, a slow network)
+    // cannot be told from a child stuck inside pam_start, and such a module must never be
+    // started again — so an unmarked conversation is left to its own end, or `verify`'s.
+    function _pamStarted(transaction, event) {
+        const refused = _checkConversation(transaction.state, event);
+        if (refused !== "")
+            return refused;
+        if (event.marked !== true)
+            return "not marked";
+        _setRegionOf(transaction, event.method, { watch: event.conversation });
+        LockStepRules.startTimer(transaction, "silent:" + event.method, transaction.state.settings.timings.firstWord);
+    }
+
+    // A word from the current conversation (the marker, any message, its result): its
+    // silence is no longer watched, and its silent starts are over
+    function _heard(transaction, method) {
+        const region = method === "password" ? transaction.state.password : transaction.state.passive[method];
+        if (region.watch === null && region.silentStarts === 0)
+            return;
+        _setRegionOf(transaction, method, { watch: null, silentStarts: 0 });
+        LockStepRules.stopTimer(transaction, "silent:" + method);
+    }
+
+    function _setRegionOf(transaction, method, changes) {
+        if (method === "password")
+            LockStepRules.setRegion(transaction, "password", changes);
+        else
+            LockStepRules.setPassive(transaction, method, changes);
+    }
+
+    // The watched conversation said nothing in `timings.firstWord`: no module has run, so
+    // nothing was asked, typed or counted. It is aborted and started again after the
+    // settle — the password with the secret it still holds (no prompt took it), a passive
+    // method as a new round — at most `limits.silentStarts` starts; the last is left to run.
+    function _silentTimedOut(transaction, method) {
+        const region = method === "password" ? transaction.state.password : transaction.state.passive[method];
+        if (!region || region.watch === null || region.conversation === null || region.conversation.id !== region.watch)
+            return;
+        const starts = region.silentStarts + 1;
+        const seconds = Math.round(transaction.state.settings.timings.firstWord / 100) / 10;
+        const config = LockStepRules.where(region.config);
+        const restartable = method === "password"
+            ? region.status === "verifying" && transaction.state.secret !== null
+            : region.status === "running";
+        if (!restartable || starts >= limits.silentStarts) {
+            _setRegionOf(transaction, method, { watch: null });
+            LockStepRules.log(transaction, "warning", method + ": PAM said nothing in " + seconds + " s, start " + starts
+                + " of " + limits.silentStarts + ", PAM config " + config + ": left running");
+            return;
+        }
+        LockStepRules.log(transaction, "warning", method + ": PAM said nothing in " + seconds + " s (stuck before its first module), PAM config "
+            + config + ": started again (" + (starts + 1) + " of " + limits.silentStarts + ")");
+        _abort(transaction, method);
+        _setRegionOf(transaction, method, { status: method === "password" ? "pending" : "idle", watch: null, silentStarts: starts });
     }
 
     // A PAM event counts only for the conversation that is running now, for this method,
@@ -1159,6 +1224,7 @@ Singleton {
                 root._detectionFailed(transaction, "timed out");
         },
         verify: transaction => root._verifyTimedOut(transaction),
+        silent: (transaction, method) => root._silentTimedOut(transaction, method),
         prompt: transaction => {
             const prompt = transaction.state.prompt;
             if (prompt.owner === null)
@@ -1347,10 +1413,8 @@ Singleton {
         if (region.conversation === null)
             return;
         LockStepRules.emit(transaction, "abortPam", { method: method, conversation: region.conversation.id });
-        if (method === "password")
-            LockStepRules.setRegion(transaction, "password", { conversation: null, settling: true });
-        else
-            LockStepRules.setPassive(transaction, method, { conversation: null, settling: true });
+        _setRegionOf(transaction, method, { conversation: null, settling: true, watch: null });
+        LockStepRules.stopTimer(transaction, "silent:" + method);
         LockStepRules.startTimer(transaction, "settle:" + method, transaction.state.settings.timings.settle);
     }
 

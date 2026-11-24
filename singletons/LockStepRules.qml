@@ -38,6 +38,14 @@ Singleton {
         // aborted pam_fprintd may hold the reader a little longer: an aborted method is
         // started again only after this
         settle: 1000,
+        // A conversation whose config starts with the marker line (pamMarker) and that says
+        // nothing at all — not the marker, no message, no result — this long after its
+        // start is taken to be stuck inside pam_start: the PAM child is forked from the
+        // multi-threaded shell, and a dlopen there can wait for good on a loader lock
+        // another thread held at the fork. It is aborted and started again (a new fork).
+        // The marker comes from the config's first module, so once it has come no module
+        // can have been skipped: after any word nothing is ever started again
+        firstWord: 8000,
         // After waking: once this has passed, a lock still without a passive method asks
         // again — the reader's service may not answer in the first moments
         resumeGrace: 4000,
@@ -77,8 +85,16 @@ Singleton {
         // An EAGER method broken by Errors is given one more round when somebody comes back
         // to the prompt (a security key plugged in when they sit down) — at most this many
         // times per lock and wake; another Error breaks it again at once
-        revivals: 3
+        revivals: 3,
+        // The starts a conversation that stays silent (timings.firstWord) gets: after the
+        // last one it is left to run — a submitted password still ends at `timings.verify`
+        silentStarts: 3
     })
+
+    // The message of the line a lock config may start with, `auth [default=ignore]
+    // pam_echo.so h2s-shell-lock.started` (the shipped configs do): it proves that pam_start
+    // returned, since libpam loads every module there. Never shown
+    readonly property string pamMarker: "h2s-shell-lock.started"
 
     // The methods that need nothing typed, run side by side with the password for as long
     // as the screen is locked. `name` is the methods script's; `eager` ones are tried again
@@ -105,6 +121,8 @@ Singleton {
         .concat(sleepTimers)
         .concat(passiveMethods.map(method => "retry:" + method.name))
         .concat(passiveMethods.map(method => "settle:" + method.name))
+        .concat(["silent:password"])
+        .concat(passiveMethods.map(method => "silent:" + method.name))
 
     // ------------------------------------------------------------------------------------
     // Read from a state
@@ -278,7 +296,7 @@ Singleton {
             passive[method.name] = {
                 status: "unavailable", config: null, conversation: null, startedAt: null,
                 delay: 0, lastResult: "", errors: 0, revivals: 0, brokenBy: "", message: "", messageIsError: false,
-                settling: false
+                settling: false, watch: null, silentStarts: 0
             };
         }
         return {
@@ -286,7 +304,7 @@ Singleton {
                        passwordSource: "none", lastResult: "", askedAt: null },
             password: {
                 status: "idle", conversation: null, config: null, question: "", answerVisible: false,
-                error: "", pamError: "", refusal: "", settling: false, avoid: null
+                error: "", pamError: "", refusal: "", settling: false, avoid: null, watch: null, silentStarts: 0
             },
             passive: passive,
             prompt: { owner: null, awakeUntil: null, surfaces: [], fieldEpoch: 0 },

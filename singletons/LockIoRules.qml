@@ -8,8 +8,10 @@ import QtQuick
 // step, the password fallback, how a Qt key is named for the rules, how a forwarded key
 // edits the prompt's field, how a methods-script run is reported, how long a helper
 // process waits before it is started again, and how the lock state at sleep is read
-// (SleepLockNotice). Pure: no clock, no process, no
-// other singleton. The rules themselves are in LockRules; the driver is Lockscreen.
+// (SleepLockNotice), and whether a PAM config starts with the lock's marker line. Pure: no
+// clock, no process; of the other singletons only the pure PamStackRules (a config's lines)
+// and LockStepRules (the marker's text). The rules themselves are in LockRules; the driver
+// is Lockscreen.
 Singleton {
     id: root
 
@@ -69,6 +71,35 @@ Singleton {
             guarded("effect", () => hooks.execute(effect), effect);
         if (hooks.finish)
             guarded("finish", () => hooks.finish());
+    }
+
+    // ---- The marker line ----
+
+    // Whether a lock config's text (`text`: the file as read; anything else is no text)
+    // starts its auth stack with the marker line, `auth [default=ignore] <dir/>pam_echo.so
+    // h2s-shell-lock.started` (LockStepRules.pamMarker): then the marker's message is the
+    // first word any of its modules can say, and a conversation silent without it has run
+    // no module (LockRules._pamStarted). Lines of other types before it are fine; a line
+    // libpam would not take, an @include or an unfinished line before it is not: either
+    // could put a module ahead of the marker.
+    function pamMarked(text) {
+        if (typeof text !== "string")
+            return false;
+        for (const line of PamStackRules.logicalLines(text)) {
+            if (line.unfinished === true)
+                return false;
+            const parsed = PamStackRules.parseLine(line.text);
+            if (parsed.error !== undefined || parsed.directive !== undefined)
+                return false;
+            if (parsed.type !== "auth")
+                continue;
+            const actions = parsed.actions ?? {};
+            return parsed.optional === false && parsed.controlKind === "bracketed"
+                && Object.keys(actions).length === 1 && actions.default === "ignore"
+                && parsed.moduleName === "pam_echo.so"
+                && parsed.args.length === 1 && parsed.args[0] === LockStepRules.pamMarker;
+        }
+        return false;
     }
 
     // ---- The password fallback ----
