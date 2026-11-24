@@ -21,10 +21,13 @@
 # <NN>-<scene>.png into
 #   ${H2S_MOCKUP_SHOTS:-${XDG_CACHE_HOME:-~/.cache}/h2s-shell-mockups}/[fixtures/]<kind>/<name>/<run>/
 # (<run>: the UTC date and time and this runner's pid). Of each mockup's runs the newest 20
-# are kept and any younger than a day; then, while the folder holds more than 500 MB
-# (H2S_MOCKUP_SHOTS_LIMIT_MB), the oldest runs go, this run's never.
+# are kept and any younger than a day; then, while the runs together hold more than 500 MB
+# (H2S_MOCKUP_SHOTS_LIMIT_MB), the oldest go; never this run or another runner's still going
+# (the pid in its name a live run-mockups.sh). A mockup that is NOT RUN leaves no shot.
 #
-# The environment is fixed, so that a scene draws the same each time:
+# The environment is fixed, so that a scene draws the same each time, given a mockup that
+# keeps no time of its own (checked in its Mockup.qml, for components and views: no Timer,
+# no read of the clock, no literal duration; mockups/kit/MockupWindow.qml):
 #   - the renderer: Mesa's llvmpipe (software OpenGL) under Qt Quick's normal renderer
 #     (QSG_RHI_BACKEND=opengl, LIBGL_ALWAYS_SOFTWARE=1, GALLIUM_DRIVER=llvmpipe), which draws
 #     ShaderEffect, MultiEffect and layer.effect, and needs no GPU; a run whose log does not
@@ -102,9 +105,50 @@ if [ -n "$one_mark" ] && [ "${one_mark%%:*}" = "$PPID" ]; then
     source "$REPO/tests/headless.sh"
     started=$SECONDS
 
-    # not_run <reason>, failed <reason>…: the verdict line, and the status
-    not_run() { echo "NOT RUN  $name — $*"; exit 2; }
+    # not_run <reason>: the verdict line, and the status. What it shot goes: a picture from a
+    # run that is not a test's must never be taken for one
+    not_run() {
+        [ -n "$shots" ] && rm -rf -- "$shots"
+        echo "NOT RUN  $name — $*"
+        exit 2
+    }
     reasons=()
+
+    # complete_log: the entry's log up to its last full line (a line still being written is
+    # left for the next look)
+    complete_log() {
+        local text
+        text=$(cat -- "$log"; echo .)
+        text=${text%.}
+        case "$text" in
+            *$'\n') ;;
+            *$'\n'*) text=${text%$'\n'*}$'\n' ;;
+            *) text="" ;;
+        esac
+        printf '%s' "$text"
+    }
+    # renderer_ok: the entry's OpenGL renderer is llvmpipe (QSG_INFO's line: "OpenGL VENDOR:
+    # Mesa RENDERER: llvmpipe (LLVM …, 256 bits) VERSION: …"), or the renderer is the
+    # software backend; asked once a window was drawn, before its first shot is taken
+    renderer_ok() { [ "$renderer" != llvmpipe ] || grep -q 'RENDERER: llvmpipe' "$log"; }
+    renderer_not_ok() {
+        local gl
+        gl=$(sed 's/\x1b\[[0-9;]*m//g' "$log" | grep -o 'OpenGL VENDOR: .*' | head -n 1)
+        not_run "the renderer is not llvmpipe (${gl:-no OpenGL renderer named in the log}): Mesa's llvmpipe is not there, or another OpenGL driver was taken"
+    }
+
+    # The mockup keeps no time of its own (components and views): what its scene shows must
+    # not depend on when the shot is taken. Its own file only; the shell's components take
+    # their durations from Theme, which the entry makes instant
+    if [[ "$name" != planning/* ]]; then
+        source_file=$REPO/$base/$name/Mockup.qml
+        code=$(sed 's|//.*$||' "$source_file")
+        grep -q -E '(^|[^A-Za-z0-9_.])Timer[[:space:]]*\{' <<< "$code" && reasons+=("Mockup.qml has a Timer: a scene is set by the kit, never by time")
+        grep -q -E 'Date\.now[[:space:]]*\(|new[[:space:]]+Date[[:space:]]*\([[:space:]]*\)' <<< "$code" \
+            && reasons+=("Mockup.qml reads the clock (Date.now(), new Date()): a time shown is a fixed value (MockupWindow.now)")
+        grep -q -E '(duration|interval)[[:space:]]*:[[:space:]]*[0-9]' <<< "$code" \
+            && reasons+=("Mockup.qml has a literal duration: animations take Theme's durations, which the entry makes instant")
+    fi
 
     headless_setup
     # The output's size and scale, pinned: the window must fit, and a scale other than 1
@@ -122,7 +166,7 @@ if [ -n "$one_mark" ] && [ "${one_mark%%:*}" = "$PPID" ]; then
     "${MEMORY_CAP_PREFIX[@]}" "${isolated[@]}" "${renderer_env[@]}" QT_SCALE_FACTOR=1 QT_ENABLE_HIGHDPI_SCALING=0 \
         QT_FONT_DPI=96 QT_HASH_SEED=0 TZ=UTC H2S_MOCKUP="$name" H2S_MOCKUP_BASE="$base" H2S_MOCKUP_SHOT=1 \
         WAYLAND_DISPLAY=wayland-0 QT_QPA_PLATFORM=wayland \
-        "$SETPRIV" --no-new-privs timeout 120 "$LOCKTEST_QS" -p "$REPO/mockup.qml" > "$log" 2>&1 < /dev/null &
+        "$SETPRIV" --no-new-privs timeout -k 5 120 "$LOCKTEST_QS" -p "$REPO/mockup.qml" > "$log" 2>&1 < /dev/null &
     # (headless_cleanup ends it when this is interrupted)
     quickshell_pid=$!
 
@@ -133,13 +177,24 @@ if [ -n "$one_mark" ] && [ "${one_mark%%:*}" = "$PPID" ]; then
     instance=""
     deadline=$((SECONDS + 150))
     while kill -0 "$quickshell_pid" 2> /dev/null && [ $SECONDS -lt $deadline ]; do
-        mapfile -t lines < <(grep -o 'MOCKUP-SHOT .*' "$log")
+        mapfile -t lines < <(complete_log | grep -o 'MOCKUP-SHOT .*')
         if [ ${#lines[@]} -gt "$answered" ]; then
             [ -n "$instance" ] || instance=$(sed -n 's|.*/by-id/\([a-z0-9]*\)/log\.qslog.*|\1|p' "$log" | head -n 1)
             if [ -z "$instance" ]; then
                 # The instance id comes in the log's first lines, before any shot
                 sleep 0.05
                 continue
+            fi
+            if [ "$answered" = 0 ] && ! renderer_ok; then
+                kill -TERM "$quickshell_pid" 2> /dev/null
+                wait "$quickshell_pid" 2> /dev/null
+                quickshell_pid=""
+                memory_cap_hit "$headless_cap_unit" 1 > /dev/null 2>&1
+                renderer_not_ok
+            fi
+            if ! [[ "${lines[$answered]}" =~ ^MOCKUP-SHOT\ [0-9]+\ [^\ ]+\ [0-9]+,[0-9]+\ [0-9]+x[0-9]+$ ]]; then
+                reasons+=("a shot line the runner cannot read: ${lines[$answered]}")
+                break
             fi
             read -r _ index scene position size <<< "${lines[$answered]}"
             if [ -n "$shots" ]; then
@@ -160,7 +215,11 @@ if [ -n "$one_mark" ] && [ "${one_mark%%:*}" = "$PPID" ]; then
         # A condition polled (a new line in the log, the entry ending), not a fixed wait
         sleep 0.05
     done
-    kill -0 "$quickshell_pid" 2> /dev/null && { kill -TERM "$quickshell_pid"; reasons+=("the entry did not end within 150 s"); }
+    if kill -0 "$quickshell_pid" 2> /dev/null; then
+        kill -TERM "$quickshell_pid"
+        reasons+=("the entry did not end within 150 s")
+        # (timeout -k: killed if it does not end on TERM)
+    fi
     wait "$quickshell_pid"
     status=$?
     quickshell_pid=""
@@ -170,12 +229,8 @@ if [ -n "$one_mark" ] && [ "${one_mark%%:*}" = "$PPID" ]; then
     sed -i 's/\x1b\[[0-9;]*m//g' "$log"
     headless_cap_unit=""
 
-    # QSG_INFO's line: "OpenGL VENDOR: Mesa RENDERER: llvmpipe (LLVM …, 256 bits) VERSION: …";
-    # looked for once a window was drawn (a shot line), not after a load error
-    if [ "$renderer" = llvmpipe ] && grep -q 'MOCKUP-SHOT ' "$log" && ! grep -q 'RENDERER: llvmpipe' "$log"; then
-        gl=$(grep -o 'OpenGL VENDOR: .*' "$log" | head -n 1)
-        not_run "the renderer is not llvmpipe (${gl:-no OpenGL renderer named in the log}): Mesa's llvmpipe is not there, or another OpenGL driver was taken"
-    fi
+    # (A window drawn and no shot answered, the entry ended first: the renderer still counts)
+    grep -q 'MOCKUP-SHOT ' "$log" && ! renderer_ok && renderer_not_ok
     [ -n "$capped" ] && reasons+=("quickshell: $(memory_cap_note)")
     [ "$status" = 0 ] || reasons+=("quickshell exited with status $status")
     grep -q 'MOCKUP-ERROR' "$log" && reasons+=("$(grep -o 'MOCKUP-ERROR.*' "$log" | head -n 1)")
@@ -315,24 +370,47 @@ if [ -n "$shots_root" ]; then
     for name in "${names[@]}"; do rmdir -- "$(shots_of "$name")" "$shots_root/$name" 2> /dev/null; done
 fi
 
-# prune_shots: of each mockup's runs the newest 20 and any younger than a day; then the
-# oldest runs while the folder is over its limit, never this run's
+# The run folders of every mockup (<kind>/<name>/<run>), one per line, "<run> <path>"; the
+# set both the size and what goes are reckoned over
+run_folders() {
+    find "$shots_root" -mindepth 3 -maxdepth 3 -type d \( -path "$shots_root/components/*" \
+        -o -path "$shots_root/views/*" -o -path "$shots_root/planning/*" \) -printf '%f %p\n' 2> /dev/null
+}
+# going <run>: the run is this one, or another runner's still going (the pid at the end of
+# its name is a live run-mockups.sh): it is never pruned
+going() {
+    local pid=${1##*-} command
+    [ "$1" = "$run_id" ] && return 0
+    [[ "$pid" =~ ^[0-9]+$ ]] && kill -0 "$pid" 2> /dev/null || return 1
+    command=$(tr '\0' ' ' < "/proc/$pid/cmdline" 2> /dev/null)
+    [[ "$command" == *run-mockups.sh* ]]
+}
+# prune_shots: of each mockup's runs the newest 20 and any younger than a day; then, while
+# the runs together are over the limit, the oldest; never a run still going
 prune_shots() {
-    local limit_mb=${H2S_MOCKUP_SHOTS_LIMIT_MB:-500} folder old size
+    local limit_mb=${H2S_MOCKUP_SHOTS_LIMIT_MB:-500} folder run path size
+    local -a paths
     [[ "$limit_mb" =~ ^[0-9]+$ ]] || { echo "  (shots not pruned: H2S_MOCKUP_SHOTS_LIMIT_MB is '$limit_mb', not a number of MB)"; return; }
     while IFS= read -r folder; do
-        for old in $(find "$folder" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | LC_ALL=C sort -r | tail -n +21); do
-            [ -z "$(find "$folder/$old" -maxdepth 0 -mmin +1440)" ] || rm -rf -- "${folder:?}/$old"
+        for run in $(find "$folder" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | LC_ALL=C sort -r | tail -n +21); do
+            going "$run" && continue
+            [ -z "$(find "$folder/$run" -maxdepth 0 -mmin +1440)" ] || rm -rf -- "${folder:?}/$run"
         done
-    done < <(find "$shots_root" -mindepth 2 -maxdepth 2 -type d \( -path "$shots_root/components/*" -o -path "$shots_root/views/*" -o -path "$shots_root/planning/*" \))
+    done < <(run_folders | cut -d ' ' -f 2- | sed 's|/[^/]*$||' | LC_ALL=C sort -u)
     while :; do
-        size=$(du -s -B1M -- "$shots_root" 2> /dev/null | awk '{ print $1 }')
+        mapfile -t paths < <(run_folders | cut -d ' ' -f 2-)
+        [ ${#paths[@]} -gt 0 ] || break
+        size=$(du -c -s -B1M -- "${paths[@]}" 2> /dev/null | awk 'END { print $1 }')
         [ -n "$size" ] && [ "$size" -gt "$limit_mb" ] || break
-        # The oldest run of any mockup: run folders are named by their time
-        old=$(find "$shots_root" -mindepth 3 -maxdepth 3 -type d \( -path "$shots_root/components/*" -o -path "$shots_root/views/*" -o -path "$shots_root/planning/*" \) \
-            ! -name "$run_id" -printf '%f %p\n' | LC_ALL=C sort | head -n 1 | cut -d ' ' -f 2-)
-        [ -n "$old" ] || break
-        rm -rf -- "$old"
+        # The oldest run of any mockup that is not still going: run folders are named by
+        # their time
+        path=""
+        while read -r run path; do
+            going "$run" || break
+            path=""
+        done < <(run_folders | LC_ALL=C sort)
+        [ -n "$path" ] || break
+        rm -rf -- "$path"
     done
 }
 [ -n "$shots_root" ] && prune_shots
@@ -341,8 +419,8 @@ failed=0 not_run=0
 for index in "${!names[@]}"; do
     case "${statuses[$index]}" in
         0) ;;
-        1) failed=1 ;;
-        *) not_run=1 ;;
+        2) not_run=1 ;;
+        *) failed=1 ;;
     esac
 done
 echo
@@ -352,9 +430,15 @@ for index in "${!names[@]}"; do
     if grep -q -E '^(PASS|FAIL|NOT RUN) ' <<< "$output"; then
         sed -n '/^\(PASS\|FAIL\|NOT RUN\) /,$p' <<< "$output" | sed 's/^/  /'
     else
-        # No verdict: it could not be set up (a set-up error names why) or was ended
-        echo "  NOT RUN  ${names[$index]} — status ${statuses[$index]}: $(tail -n 5 <<< "$output" | tr '\n' ' ')"
-        [ "${statuses[$index]}" = 1 ] || not_run=1
+        # No verdict: it could not be set up (status 2, a set-up error names why), or it
+        # ended otherwise (a bash error, a signal): a failure, never a pass
+        if [ "${statuses[$index]}" = 2 ]; then
+            echo "  NOT RUN  ${names[$index]} — $(tail -n 5 <<< "$output" | tr '\n' ' ')"
+            not_run=1
+        else
+            echo "  FAIL     ${names[$index]} — ended with status ${statuses[$index]} and no verdict: $(tail -n 5 <<< "$output" | tr '\n' ' ')"
+            failed=1
+        fi
     fi
 done
 [ "$failed" = 1 ] && exit 1

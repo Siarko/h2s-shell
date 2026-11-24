@@ -193,7 +193,10 @@ Mockup code:
 
 - It uses the real components, views and theme, with stand-in data passed in through
   properties. It never reads the system, the clock or the network; a time shown is a fixed
-  value, and a looping animation is off in a scene through the component's own property.
+  value (the kit's `now`), and a looping animation is off in a scene through the
+  component's own property. It keeps no time of its own: no `Timer`, no `Date.now()` or
+  `new Date()`, no animation of a literal duration (the runner fails one in `Mockup.qml`);
+  animations take Theme's durations, which the entry makes instant.
   A picture is loaded before the scene that shows it (its asynchronous `Image` made from the
   start, hidden): the shot is taken three frames after the scene is set.
 - It never changes a shell file for its own sake. If a view cannot take stand-in data, that

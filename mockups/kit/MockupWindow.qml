@@ -19,6 +19,14 @@ import qs.components
 //   subject       the item a shot is cropped to; the content by default
 //   subjectRect   overrides the crop, in window coordinates, for a subject spread over
 //                 several items (a side panel and a modal); ignored while it has no size
+//   now           the time every mockup shows (2026-01-15 10:30 UTC), handed to what shows
+//                 a time or a date: a scene must not depend on when it is drawn
+//
+// A mockup keeps no time of its own: no Timer, no read of the clock, no animation of a
+// literal duration (tests/run-mockups.sh fails a component or view mockup that has one in
+// its Mockup.qml). Animations take Theme's durations, which the entry makes instant; a
+// looping one is off through the component's own property. A text field shows no cursor
+// while shooting: the panel never takes the keyboard focus.
 //
 // Shooting (shooting, set by the entry): each scene in turn is set, three frames are
 // waited for once the window is mapped (the first frame after a change can still show the
@@ -44,6 +52,7 @@ PanelWindow {
     property string scene: ""
     property Item subject: content
     property rect subjectRect: Qt.rect(0, 0, 0, 0)
+    readonly property date now: new Date(Date.UTC(2026, 0, 15, 10, 30, 0))
 
     property int contentWidth: 480
     property int contentHeight: 320

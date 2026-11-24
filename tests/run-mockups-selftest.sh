@@ -26,8 +26,11 @@
 #   - with no name it runs every component and view fixture, never the planning one, which
 #     runs when named; a name that is not <kind>/<name> or not a mockup runs nothing;
 #   - a missing tool (grim) is a set-up error naming it, status 2, nothing run;
+#   - two fresh runs of the effects fixture write the same files;
+#   - a Quickshell whose OpenGL renderer is not llvmpipe is NOT RUN, and leaves no shot;
+#   - a mockup with a Timer, a read of the clock and a literal duration FAILs;
 #   - old shots go: of a mockup's runs the newest 20 and those younger than a day stay, and
-#     over the size limit the oldest run goes, this run's never.
+#     over the size limit the oldest run goes, never this run's or one still going.
 #
 #   tests/run-mockups-selftest.sh
 #
@@ -41,6 +44,10 @@ set -uo pipefail
 REPO=$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd -P)
 # shellcheck disable=SC2034  # read by headless.sh
 HEADLESS_NAME=run-mockups-selftest.sh
+# The runner's tools, magick among them (the shots are read with it, the pinned one where
+# there is nix)
+# shellcheck disable=SC2034  # read by headless.sh
+HEADLESS_NEED=mockups
 # shellcheck source=headless.sh
 source "$REPO/tests/headless.sh"
 
@@ -278,19 +285,60 @@ effects_run=$(run_of shoot components/effects)
 check "$([ "$(cd "$good_run" 2> /dev/null && ls)" = "$(printf '00-normal.png\n01-checked.png')" ]; echo $?)" "components/good: 00-normal.png and 01-checked.png"
 check "$(grep -q -F "shots: $good_run" "${out[shoot]}"; echo $?)" "the verdict names the shots' folder"
 # The button's size is the theme's: the shot is the subject's, not the window's 200x80
-size=$(magick identify -format '%wx%h' "$good_run/00-normal.png" 2> /dev/null)
+size=$("$LOCKTEST_MAGICK" identify -format '%wx%h' "$good_run/00-normal.png" 2> /dev/null)
 check "$([[ "$size" =~ ^[1-9][0-9]*x[1-9][0-9]*$ ]] && [ "$size" != 200x80 ]; echo $?)" "the shot is cropped to the subject ($size)"
 check "$(cmp -s "$good_run/00-normal.png" "$good_run/01-checked.png"; [ $? = 1 ]; echo $?)" "the two scenes differ"
 check "$([ "$(find "$effects_run" -name '*.png' | wc -l)" = 8 ]; echo $?)" "components/effects: eight shots"
 for scene in rounded-image shadow-blur layer-effect; do
     # Drawn: the effect's item is there, more than the background's one colour
-    colours=$(magick identify -format '%k' "$effects_run"/*-"$scene".png 2> /dev/null)
+    colours=$("$LOCKTEST_MAGICK" identify -format '%k' "$effects_run"/*-"$scene".png 2> /dev/null)
     check "$([ "${colours:-0}" -gt 1 ]; echo $?)" "the $scene effect is drawn ($colours colours)"
 done
 for scene in text rounded-image shadow-blur layer-effect; do
     check "$(cmp -s "$effects_run"/0[0-3]-"$scene".png "$effects_run"/0[4-7]-"$scene"-again.png; echo $?)" "$scene drawn twice in one process: the same file"
 done
 show_on_failure "$before" shoot
+
+echo "runner: the same shots from another process"
+before=$failures
+runner shoot-again -- --shoot components/effects
+again_run=$(run_of shoot-again components/effects)
+same=0 compared=0
+for file in "$effects_run"/*.png; do
+    compared=$((compared + 1))
+    cmp -s "$file" "$again_run/${file##*/}" && same=$((same + 1))
+done
+check "$([ "${runner_status[shoot-again]}" = 0 ] && [ "$compared" = 8 ] && [ "$same" = 8 ]; echo $?)" "two fresh runs of components/effects: the same eight files ($same of $compared)"
+show_on_failure "$before" shoot-again
+
+echo "runner: a renderer that is not llvmpipe"
+before=$failures
+# A Quickshell that takes another Gallium driver whatever it is given: the GL renderer it
+# reports is not llvmpipe
+mkdir -p "$work/other-gl"
+printf '#!%s\nexport GALLIUM_DRIVER=softpipe\nexec %q "$@"\n' "$(type -P bash)" "$LOCKTEST_QS" > "$work/other-gl/qs"
+chmod +x "$work/other-gl/qs"
+# With the system's tools, a grim first on PATH that writes down that it was called: the
+# renderer is checked before the first shot, so it never is (the pinned set has its own grim)
+grim_noted=""
+if [ "$LOCKTEST_TOOL_SOURCE" = system ]; then
+    printf '#!%s\necho called >> %q\nexec %q "$@"\n' "$(type -P bash)" "$work/grim.calls" "$LOCKTEST_GRIM" > "$work/other-gl/grim"
+    chmod +x "$work/other-gl/grim"
+    grim_noted=1
+fi
+runner other-gl LOCKTEST_QS="$work/other-gl/qs" PATH="$work/other-gl:$PATH" H2S_TEST_TOOLS="$LOCKTEST_TOOL_SOURCE" -- --shoot components/good
+check "$([ "${runner_status[other-gl]}" = 2 ]; echo $?)" "exits 2 (was ${runner_status[other-gl]})"
+check "$([ "$(verdict_of other-gl components/good)" = "NOT RUN" ] && grep -q -F 'the renderer is not llvmpipe' "${out[other-gl]}"; echo $?)" "components/good NOT RUN: the renderer is not llvmpipe"
+check "$([ -z "$(find "$work/shots-other-gl" -name '*.png' 2> /dev/null)" ]; echo $?)" "no shot is left of it"
+[ -n "$grim_noted" ] && check "$([ ! -e "$work/grim.calls" ]; echo $?)" "no shot was taken: the renderer was checked first"
+show_on_failure "$before" other-gl
+
+echo "runner: a mockup that keeps time of its own"
+before=$failures
+runner clock -- --load-only components/clock
+check "$([ "${runner_status[clock]}" = 1 ] && [ "$(verdict_of clock components/clock)" = FAIL ]; echo $?)" "components/clock FAIL"
+check "$(grep -q -F "Mockup.qml has a Timer" "${out[clock]}" && grep -q -F "reads the clock" "${out[clock]}" && grep -q -F "a literal duration" "${out[clock]}"; echo $?)" "the Timer, the clock and the literal duration are named"
+show_on_failure "$before" clock
 
 echo "runner: what fails, beside what passes"
 before=$failures
@@ -351,14 +399,24 @@ for i in $(seq -w 1 22); do mkdir -p "$shots/components/good/20200101-0000$i-1";
 touch -d '2 days ago' "$shots"/components/good/2020*
 mkdir -p "$shots/components/good/20190101-000001-1" "$shots/components/good/20190101-000002-1" "$shots/components/effects/20180101-000000-1"
 head -c 2097152 /dev/zero > "$shots/components/effects/20180101-000000-1/00-text.png"
+# … and an older one still, of a run that is still going (its pid, in its name, is a live
+# run-mockups.sh): it stays
+bash -c 'exec -a run-mockups.sh sleep 60' &
+live=$!
+mkdir -p "$shots/components/effects/20170101-000000-$live"
+touch "$shots/components/effects/20170101-000000-$live/00-text.png"
 runner prune H2S_MOCKUP_SHOTS_LIMIT_MB=1 -- --shoot components/good
+kill "$live" 2> /dev/null
+wait "$live" 2> /dev/null
 check "$([ "${runner_status[prune]}" = 0 ]; echo $?)" "exits 0 (was ${runner_status[prune]})"
 kept=$(cd "$shots/components/good" && ls | LC_ALL=C sort)
 check "$([ "$(grep -c . <<< "$kept")" = 22 ]; echo $?)" "22 runs of components/good stay ($(grep -c . <<< "$kept"))"
 check "$(grep -q -x '20200101-000004-1' <<< "$kept" && ! grep -q -x '20200101-000003-1' <<< "$kept"; echo $?)" "the three oldest of the two-day-old runs went, the 19 newer stayed"
 check "$(grep -q -x '20190101-000001-1' <<< "$kept" && grep -q -x '20190101-000002-1' <<< "$kept"; echo $?)" "the runs younger than a day stayed"
-check "$([ -n "$(run_of prune components/good)" ] && [ -s "$(ls -d "$shots"/components/good/2026* 2> /dev/null | head -n 1)/00-normal.png" ]; echo $?)" "this run's shots stayed"
+this_run=$(sed -n 's|^  PASS *components/good .*; shots: \(.*\)$|\1|p' "${out[prune]}")
+check "$([ -n "$this_run" ] && [ -s "$this_run/00-normal.png" ]; echo $?)" "this run's shots stayed ($this_run)"
 check "$([ ! -e "$shots/components/effects/20180101-000000-1" ]; echo $?)" "over the size limit, the oldest run went"
+check "$([ -e "$shots/components/effects/20170101-000000-$live" ]; echo $?)" "a run still going stayed, older though it is"
 show_on_failure "$before" prune
 
 echo
