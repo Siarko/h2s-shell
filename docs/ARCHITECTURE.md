@@ -2433,8 +2433,9 @@ The deploy check (`tests/device/deploy-check.sh`) and its self-test take only a 
 (for the shell's JSON answers) from the same source: the pinned set's where there is `nix`,
 else the one on `PATH`; none is a set-up error, status 2.
 
-The mockup runner (`tests/run-mockups.sh`) takes labwc, `setpriv`, grim, wlr-randr and
-`magick` (ImageMagick) from the same source, and draws with Mesa's llvmpipe, software
+The mockup runner (`tests/run-mockups.sh`) takes labwc, `setpriv`, grim, wlr-randr,
+`magick` (ImageMagick) and `fc-match` from the same source (`cmp` and `sha256sum` from
+`PATH`), and draws with Mesa's llvmpipe, software
 OpenGL under Qt Quick's normal renderer, which draws shader effects and needs no GPU; a run
 whose log does not name llvmpipe as the OpenGL renderer is NOT RUN for that mockup.
 
@@ -2486,7 +2487,9 @@ does not install them. The packages, each with what the tests use it for
 | `quickshell` | runs the suites and the shell under test |
 | `labwc` | the headless compositor the suites' windows open in |
 | `util-linux` | `setpriv`, `setsid`, `flock`, `script`: the test processes' isolation, the bed's lock, a terminal for `install.sh` |
-| `coreutils` | `timeout`: ends a compositor or a Quickshell that hangs |
+| `coreutils` | `timeout`: ends a compositor or a Quickshell that hangs; `sha256sum`: the checksums of the mockups' baselines and fonts |
+| `diffutils` | `cmp`: compares the mockups' shots with their baselines |
+| `fontconfig` | `fc-match`: the characters of the theme's font (the glyphs suite), its font files (the mockups' environment) |
 | `hyprland` | the compositor the lock screen is tested in |
 | `grim` | screenshots of the lock screen, the mockups' shots |
 | `wlr-randr` | sets the headless output's size |
@@ -2495,7 +2498,7 @@ does not install them. The packages, each with what the tests use it for
 | `dbus`, `glib2` | `dbus-daemon`, `gdbus`: a private session bus for the notification tests |
 | `python`, `python-pywayland` | the virtual keyboard and pointer, and the scanner their bindings are made with; `python` also reads the shell's answers in the deploy check |
 | `pkgconf`, `wayland`, `wayland-protocols` | finding the protocol files those bindings are made from |
-| `imagemagick` | `magick`: makes the mockups' shots smaller, losslessly |
+| `imagemagick` | `magick`: makes the mockups' shots smaller, losslessly, and draws their review images |
 | `mesa` | llvmpipe: the software OpenGL the mockups are drawn with |
 
 `tests/run-helper.sh` builds the helper with `cmake`, `base-devel` (the compiler) and

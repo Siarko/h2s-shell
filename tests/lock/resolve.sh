@@ -6,9 +6,11 @@
 # setup_error to remove) and LOCKTEST_NEED, what it uses:
 #
 #   unit   labwc, setpriv, setsid, timeout, fc-match
-#   mockups labwc, setpriv, setsid, timeout, grim, wlr-randr, magick (tests/run-mockups.sh:
-#          the compositor, the shots, the output's size, the shots made smaller). Sets
-#          LOCKTEST_GRIM, LOCKTEST_WLR_RANDR, LOCKTEST_MAGICK
+#   mockups labwc, setpriv, setsid, timeout, grim, wlr-randr, magick, fc-match, cmp,
+#          sha256sum (tests/run-mockups.sh: the compositor, the shots, the output's size, the
+#          shots made smaller and compared, the fonts and checksums of the baselines'
+#          environment). Sets LOCKTEST_GRIM, LOCKTEST_WLR_RANDR, LOCKTEST_MAGICK,
+#          LOCKTEST_FC_MATCH
 #   lock   the lock test bed's whole set (below), setsid, timeout, and a launcher
 #   python python3 and timeout only (tests/device/deploy-check.sh reads JSON with it): the
 #          pinned set's bin/python3, or the one on PATH; no launcher, no Quickshell. Sets
@@ -21,7 +23,8 @@
 #   H2S_TEST_TOOLS=system   every tool from PATH, whatever version is installed
 #   (not set)               nix when a `nix` command exists, else system
 #
-# setsid and timeout are taken from PATH with either source (tools.nix does not hold them).
+# setsid and timeout (and the mockups' cmp and sha256sum) are taken from PATH with either
+# source (tools.nix does not hold them).
 #
 # With nix, the store path it built is remembered, so that a later start does not have nix
 # evaluate tools.nix again (seconds, at every runner's start): a file in
@@ -75,7 +78,9 @@ tool_use() {
         setpriv) echo "starts every test process with no new privileges" ;;
         setsid) echo "puts the compositor in a process group of its own, to be stopped whole" ;;
         timeout) echo "ends a compositor or a Quickshell that hangs" ;;
-        fc-match) echo "the characters of the theme's font, for the glyphs suite" ;;
+        fc-match) if [ "${LOCKTEST_NEED:-}" = mockups ]; then echo "the theme's font files, for the mockups' environment"; else echo "the characters of the theme's font, for the glyphs suite"; fi ;;
+        cmp) echo "compares the mockups' shots with their baselines" ;;
+        sha256sum) echo "the checksums of the mockups' baselines and fonts" ;;
         Hyprland | hyprctl) echo "the compositor the lock screen is tested in" ;;
         grim) if [ "${LOCKTEST_NEED:-}" = mockups ]; then echo "the mockups' shots"; else echo "screenshots of the lock screen"; fi ;;
         magick) echo "makes the mockups' shots smaller, losslessly" ;;
@@ -167,7 +172,7 @@ pinned_parts() {
     elif [ "$LOCKTEST_NEED" = python ]; then
         echo bin/python3
     elif [ "$LOCKTEST_NEED" = mockups ]; then
-        printf '%s\n' bin/labwc bin/setpriv bin/grim bin/wlr-randr bin/magick
+        printf '%s\n' bin/labwc bin/setpriv bin/grim bin/wlr-randr bin/magick bin/fc-match
     else
         printf '%s\n' bin/labwc bin/setpriv bin/fc-match
     fi
@@ -232,7 +237,14 @@ if [ "$LOCKTEST_TOOL_SOURCE" = nix ]; then
     LOCKTEST_GRIM=$LOCKTEST_TOOLS/bin/grim
     LOCKTEST_WLR_RANDR=$LOCKTEST_TOOLS/bin/wlr-randr
     LOCKTEST_MAGICK=$LOCKTEST_TOOLS/bin/magick
-    if [ "$LOCKTEST_NEED" = python ]; then needed_tools=(timeout); else needed_tools=(setsid timeout); fi
+    LOCKTEST_FC_MATCH=$LOCKTEST_TOOLS/bin/fc-match
+    if [ "$LOCKTEST_NEED" = python ]; then
+        needed_tools=(timeout)
+    elif [ "$LOCKTEST_NEED" = mockups ]; then
+        needed_tools=(setsid timeout cmp sha256sum)
+    else
+        needed_tools=(setsid timeout)
+    fi
 else
     LOCKTEST_TOOLS=""
     LOCKTEST_LABWC=$(type -P labwc)
@@ -241,10 +253,11 @@ else
     LOCKTEST_GRIM=$(type -P grim)
     LOCKTEST_WLR_RANDR=$(type -P wlr-randr)
     LOCKTEST_MAGICK=$(type -P magick)
+    LOCKTEST_FC_MATCH=$(type -P fc-match)
     if [ "$LOCKTEST_NEED" = python ]; then
         needed_tools=(python3 timeout)
     elif [ "$LOCKTEST_NEED" = mockups ]; then
-        needed_tools=(labwc setpriv setsid timeout grim wlr-randr magick)
+        needed_tools=(labwc setpriv setsid timeout grim wlr-randr magick fc-match cmp sha256sum)
     elif [ "$LOCKTEST_NEED" = lock ]; then
         needed_tools=("${lock_programs[@]}" pkg-config setsid timeout)
     else

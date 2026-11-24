@@ -5,6 +5,10 @@
 #
 #   tests/run-mockups.sh --load-only [<kind>/<name>…]   every scene is reached and nothing errs
 #   tests/run-mockups.sh --shoot [<kind>/<name>…]       the same, and a PNG of each scene
+#   tests/run-mockups.sh --compare [<kind>/<name>…]     the same, each PNG compared with the
+#                                                       mockup's baseline
+#   tests/run-mockups.sh --approve <kind>/<name>…       the newest run's shots become the
+#                                                       mockup's baseline
 #   tests/run-mockups.sh -j <n> …                       at most <n> mockups at once (default:
 #                                                       half the processors, at most 16, and
 #                                                       no more than memory allows)
@@ -23,7 +27,39 @@
 # (<run>: the UTC date and time and this runner's pid). Of each mockup's runs the newest 20
 # are kept and any younger than a day; then, while the runs together hold more than 500 MB
 # (H2S_MOCKUP_SHOTS_LIMIT_MB), the oldest go; never this run or another runner's still going
-# (the pid in its name a live run-mockups.sh). A mockup that is NOT RUN leaves no shot.
+# (the pid in its name a live run-mockups.sh). A mockup that is NOT RUN for its renderer, a
+# missing font or an unreadable process leaves no shot. Each run folder of a mockup that
+# passed also holds run.txt: the environment it was drawn in and a line per scene (below).
+#
+# --compare, the baseline: mockups/<kind>/<name>/baseline/ (H2S_MOCKUP_BASELINES=<dir> reads
+# and writes <dir>/<kind>/<name>/baseline/ instead: the self-test's), holding <NN>-<scene>.png
+# per scene and manifest.txt:
+#   environment <key> <value>          what the scenes were drawn with: quickshell (its
+#                                      --version), renderer (the OpenGL renderer line: Mesa's
+#                                      and LLVM's versions, the processor's vector width),
+#                                      backend, qt, freetype, fontconfig and harfbuzz (the
+#                                      library files Quickshell's process maps), font-theme,
+#                                      font-theme-bold and font-sans-serif (the sha256 and
+#                                      path of the file fontconfig gives for the theme's family,
+#                                      in the private HOME, and for sans-serif)
+#   scene <NN> <scene> <w>x<h> <sha256> one per scene, in order
+# A scene matches when its PNG decodes to the same RGBA, pixel for pixel, as the baseline's
+# (exact: there is no tolerance; byte-identical files are not decoded). A scene that does not
+# gets, in the run folder, <NN>-<scene>/old.png, new.png and diff.png (the changed pixels red
+# over a faded old) and <NN>-<scene>-review.png (old | new | diff, side by side; small shots
+# enlarged, pixel for pixel), and the verdict names its count of differing pixels and that
+# file. The verdict per mockup: PASS; FAIL with each differing scene, its count and review
+# file, or a scene list not the baseline's, a baseline file that is not the manifest's (its
+# sha256), a baseline PNG over 300 KB or more than 30 scenes; NOT RUN (status 2) with the
+# reason for a mockup without a baseline, or one whose environment is not the baseline's
+# ("environment changed since the baseline: qt: … → …"): its shots are kept, to be looked at
+# and approved. The baselines together over 15 MB FAIL the run.
+#
+# --approve takes, of each named mockup, the run folder whose run.txt is newest (of --shoot or
+# --compare, with the same H2S_MOCKUP_BASE and H2S_MOCKUP_SHOTS), checks its PNGs against
+# run.txt and the limits, and replaces the baseline with them: its PNGs and manifest.txt.
+# It refuses a run not drawn with llvmpipe. It changes files in the tree, to be committed with
+# the code change that changed the look, once the review images were looked at.
 #
 # The environment is fixed, so that a scene draws the same each time, given a mockup that
 # keeps no time of its own (checked in its Mockup.qml, for components and views: no Timer,
@@ -58,12 +94,16 @@ HEADLESS_NAME=run-mockups.sh
 # shellcheck disable=SC2034  # read by tests/headless.sh
 HEADLESS_NEED=mockups
 
-usage() { echo "usage: tests/run-mockups.sh --load-only | --shoot [-j <mockups at once>] [<kind>/<name>…]" >&2; exit 2; }
+usage() {
+    echo "usage: tests/run-mockups.sh --load-only | --shoot | --compare [-j <mockups at once>] [<kind>/<name>…]" >&2
+    echo "       tests/run-mockups.sh --approve <kind>/<name>…" >&2
+    exit 2
+}
 mode=""
 jobs=""
 while [ $# -gt 0 ]; do
     case "$1" in
-        --load-only | --shoot)
+        --load-only | --shoot | --compare | --approve)
             [ -z "$mode" ] || usage
             mode=${1#--}
             shift
@@ -84,12 +124,47 @@ case "$base" in
     mockups | tests/fixtures/mockups) ;;
     *) echo "run-mockups.sh: H2S_MOCKUP_BASE is '$base': mockups or tests/fixtures/mockups" >&2; exit 2 ;;
 esac
+baselines_root=${H2S_MOCKUP_BASELINES:-$REPO/$base}
+[[ "$baselines_root" == /* ]] || { echo "run-mockups.sh: H2S_MOCKUP_BASELINES is '$baselines_root': an absolute path" >&2; exit 2; }
+# The limits on a baseline: a PNG (KB), a mockup's scenes, all baselines together (MB)
+limit_png_kb=300
+limit_scenes=30
+limit_total_mb=15
 renderer=${H2S_MOCKUP_RENDERER:-llvmpipe}
 case "$renderer" in
     llvmpipe) renderer_env=(QSG_RHI_BACKEND=opengl LIBGL_ALWAYS_SOFTWARE=1 GALLIUM_DRIVER=llvmpipe QSG_INFO=1) ;;
     software) renderer_env=(QT_QUICK_BACKEND=software) ;;
     *) echo "run-mockups.sh: H2S_MOCKUP_RENDERER is '$renderer': software or llvmpipe" >&2; exit 2 ;;
 esac
+
+# scenes_of <manifest or run.txt>: its scene lines, "<NN> <scene> <w>x<h> <sha256>"
+scenes_of() { awk '$1 == "scene" { print $2, $3, $4, $5 }' "$1"; }
+# sha256_of <file>
+sha256_of() {
+    local sum
+    sum=$(sha256sum < "$1") || return 1
+    echo "${sum%% *}"
+}
+# environment_changes <baseline's manifest> <run.txt>: each environment key whose value differs,
+# "<key>: <old> → <new>", joined with "; " (nothing when they agree)
+environment_changes() {
+    awk 'FNR == 1 { file++ }
+        $1 == "environment" {
+            key = $2
+            value = $0
+            sub(/^environment [^ ]+ ?/, "", value)
+            values[file, key] = value
+            if (!(key in seen)) { seen[key] = 1; keys[++count] = key }
+        }
+        END {
+            for (i = 1; i <= count; i++) {
+                key = keys[i]
+                old = ((1, key) in values) ? values[1, key] : "(none)"
+                new = ((2, key) in values) ? values[2, key] : "(none)"
+                if (old != new) printf "%s%s: %s → %s", (said++ ? "; " : ""), key, old, new
+            }
+        }' "$1" "$2"
+}
 
 # ---- One mockup, here (started by the runner below, which printed the tools) ------------
 # Only when this runner's parent is the runner that started it (H2S_MOCKUP_ONE is
@@ -112,7 +187,14 @@ if [ -n "$one_mark" ] && [ "${one_mark%%:*}" = "$PPID" ]; then
         echo "NOT RUN  $name — $*"
         exit 2
     }
+    # not_run_keeping <reason>: the same, its shots kept (no baseline yet, or another
+    # environment's: they are what a new baseline is approved from)
+    not_run_keeping() {
+        echo "NOT RUN  $name — $*${shots:+; shots: $shots}"
+        exit 2
+    }
     reasons=()
+    differences=()
 
     # complete_log: the entry's log up to its last full line (a line still being written is
     # left for the next look)
@@ -158,6 +240,63 @@ if [ -n "$one_mark" ] && [ "${one_mark%%:*}" = "$PPID" ]; then
     "${isolated[@]}" WAYLAND_DISPLAY=wayland-0 timeout 10 "$LOCKTEST_WLR_RANDR" --output "$output" --custom-mode 1920x1200 --scale 1 \
         > "$work/wlr-randr.log" 2>&1 || not_run "wlr-randr could not pin the output to 1920x1200 at scale 1: $(head -c 300 "$work/wlr-randr.log")"
 
+    # What the scenes are drawn with, for the baseline's manifest (shots only): Quickshell, and
+    # the font files fontconfig gives in the private HOME; the renderer and the libraries are
+    # added once the window is drawn
+    environment=$work/environment.txt
+    if [ -n "$shots" ]; then
+        {
+            echo "environment backend $renderer"
+            echo "environment quickshell $("${isolated[@]}" timeout 10 "$LOCKTEST_QS" --version 2> /dev/null | head -n 1)"
+        } > "$environment"
+        family=$(sed -n 's/^.*"family": *"\([^"]*\)".*$/\1/p' "$REPO/singletons/ThemeBuiltin.qml" | head -n 1)
+        [ -n "$family" ] || not_run "the theme's font family is not in singletons/ThemeBuiltin.qml"
+        for entry in "font-theme|$family" "font-theme-bold|$family:bold" "font-sans-serif|sans-serif"; do
+            key=${entry%%|*}
+            pattern=${entry#*|}
+            answer=$("${isolated[@]}" timeout 10 "$LOCKTEST_FC_MATCH" -f '%{family}|%{file}' "$pattern" 2> /dev/null)
+            families=${answer%%|*}
+            font_file=${answer#*|}
+            # fontconfig always answers with some font: the theme's must be the one
+            [ "$key" = font-sans-serif ] || [[ ",$families," == *",$family,"* ]] \
+                || not_run "the theme's font '$family' is not installed (fontconfig gives '${families:-nothing}' for '$pattern')"
+            [ -f "$font_file" ] || not_run "fontconfig names no font file for '$pattern' (${font_file:-nothing})"
+            echo "environment $key $(sha256_of "$font_file") $font_file" >> "$environment"
+        done
+    fi
+    # The library files Quickshell's process maps (its pid: the one under the started chain,
+    # cap, env, setpriv, timeout, that maps Qt Core); while it runs
+    children_of() {
+        local stat line parent
+        local -A wanted=()
+        for parent in "$@"; do wanted[$parent]=1; done
+        for stat in /proc/[0-9]*/stat; do
+            { read -r line < "$stat"; } 2> /dev/null || continue
+            read -r _ parent _ <<< "${line##*) }"
+            [ -n "${wanted[$parent]:-}" ] || continue
+            stat=${stat#/proc/}
+            echo "${stat%/stat}"
+        done
+    }
+    libraries_environment() {
+        local -a level=("$1") next
+        local depth pid found="" maps entry path
+        for depth in 1 2 3 4 5 6 7 8; do
+            for pid in "${level[@]}"; do
+                grep -q '/libQt6Core\.so' "/proc/$pid/maps" 2> /dev/null && { found=$pid; break 2; }
+            done
+            mapfile -t next < <(children_of "${level[@]}")
+            [ ${#next[@]} -gt 0 ] || break
+            level=("${next[@]}")
+        done
+        [ -n "$found" ] || return 1
+        maps=$(awk '{ print $6 }' "/proc/$found/maps" 2> /dev/null | LC_ALL=C sort -u)
+        for entry in qt:libQt6Core freetype:libfreetype fontconfig:libfontconfig harfbuzz:libharfbuzz; do
+            path=$(grep -m 1 "/${entry#*:}\.so" <<< "$maps")
+            echo "environment ${entry%%:*} ${path:-(not loaded)}"
+        done
+    }
+
     log=$work/mockup.log
     : > "$log"
     memory_cap_wrap quickshell
@@ -191,6 +330,11 @@ if [ -n "$one_mark" ] && [ "${one_mark%%:*}" = "$PPID" ]; then
                 quickshell_pid=""
                 memory_cap_hit "$headless_cap_unit" 1 > /dev/null 2>&1
                 renderer_not_ok
+            fi
+            if [ "$answered" = 0 ] && [ -n "$shots" ]; then
+                libraries=$(libraries_environment "$quickshell_pid") \
+                    || not_run "cannot tell which libraries Quickshell draws with: no process under it maps Qt Core"
+                echo "$libraries" >> "$environment"
             fi
             if ! [[ "${lines[$answered]}" =~ ^MOCKUP-SHOT\ [0-9]+\ [^\ ]+\ [0-9]+,[0-9]+\ [0-9]+x[0-9]+$ ]]; then
                 reasons+=("a shot line the runner cannot read: ${lines[$answered]}")
@@ -263,6 +407,111 @@ if [ -n "$one_mark" ] && [ "${one_mark%%:*}" = "$PPID" ]; then
         sed 's/^/             /' "$log" | tail -n 30
         exit 1
     fi
+
+    # The run's record (run.txt): the environment, then each scene's size and checksum
+    if [ -n "$shots" ]; then
+        record=$shots/run.txt
+        {
+            echo "# $name: the shots of this run and what they were drawn with (tests/run-mockups.sh)"
+            if [ "$renderer" = llvmpipe ]; then
+                echo "environment renderer $(grep -o 'OpenGL VENDOR: .*' "$log" | head -n 1)"
+            else
+                echo "environment renderer Qt Quick's software backend"
+            fi
+            cat "$environment"
+            for line in "${lines[@]}"; do
+                read -r _ index scene _ size <<< "$line"
+                number=$(printf '%02d' "$index")
+                echo "scene $number $scene $size $(sha256_of "$shots/$number-$scene.png")"
+            done
+        } > "$record"
+    fi
+
+    # pixels_differing <old> <new> <width> <height>: how many pixels differ, the two decoded
+    # to 16-bit RGBA on a transparent canvas of that size (the larger of the two's)
+    pixels_differing() {
+        local side file
+        for side in old new; do
+            [ "$side" = old ] && file=$1 || file=$2
+            "${isolated[@]}" timeout 60 "$LOCKTEST_MAGICK" "$file" -alpha set -background none -gravity NorthWest \
+                -extent "$3x$4" -depth 16 "RGBA:$work/$side.rgba" 2> "$work/magick.log" || return 1
+        done
+        # cmp -l: a line per differing byte, by offset; 8 bytes a pixel
+        cmp -l "$work/old.rgba" "$work/new.rgba" | awk 'BEGIN { last = -1 } { pixel = int(($1 - 1) / 8); if (pixel != last) { count++; last = pixel } } END { print count + 0 }'
+    }
+    # review_images <old> <new> <width> <height> <folder> <review file>: old.png, new.png and
+    # diff.png in the folder, and old | new | diff side by side, enlarged pixel for pixel
+    # while a panel is narrower than 240 px (at most 8 times)
+    review_images() {
+        local old=$1 new=$2 width=$3 height=$4 folder=$5 review=$6 scale
+        mkdir -p "$folder" && cp -- "$old" "$folder/old.png" && cp -- "$new" "$folder/new.png" || return 1
+        "${isolated[@]}" timeout 60 "$LOCKTEST_MAGICK" "$old" -alpha set -background none -gravity NorthWest -extent "${width}x$height" "$work/old-canvas.png" \
+            && "${isolated[@]}" timeout 60 "$LOCKTEST_MAGICK" "$new" -alpha set -background none -gravity NorthWest -extent "${width}x$height" "$work/new-canvas.png" \
+            && "${isolated[@]}" timeout 60 "$LOCKTEST_MAGICK" "$work/old-canvas.png" "$work/new-canvas.png" \
+                -fx '(u.r != v.r || u.g != v.g || u.b != v.b || u.a != v.a) ? 1 : 0' -alpha off "$work/mask.png" \
+            && "${isolated[@]}" timeout 60 "$LOCKTEST_MAGICK" "$work/old-canvas.png" -background white -alpha remove -alpha off \
+                -fill white -colorize 70% \( -size "${width}x$height" xc:red \) "$work/mask.png" -composite "$folder/diff.png" \
+            || return 1
+        scale=$((240 / width))
+        [ "$scale" -ge 1 ] || scale=1
+        [ "$scale" -le 8 ] || scale=8
+        "${isolated[@]}" timeout 60 "$LOCKTEST_MAGICK" "$work/old-canvas.png" "$work/new-canvas.png" "$folder/diff.png" \
+            -background gray50 -alpha remove -alpha off -scale "$((scale * 100))%" \
+            -bordercolor gray50 -border 4 +append +repage "$review"
+    }
+
+    # --compare: each scene against the baseline's
+    if [ "$mode" = compare ]; then
+        baseline=$baselines_root/$name/baseline
+        manifest=$baseline/manifest.txt
+        [ -f "$manifest" ] || not_run_keeping "no baseline ($manifest): look at the shots, then tests/run-mockups.sh --approve $name"
+        changes=$(environment_changes "$manifest" "$record")
+        [ -z "$changes" ] || not_run_keeping "environment changed since the baseline: $changes"
+        mapfile -t old_scenes < <(scenes_of "$manifest")
+        mapfile -t new_scenes < <(scenes_of "$record")
+        [ ${#old_scenes[@]} -le "$limit_scenes" ] || differences+=("the baseline has ${#old_scenes[@]} scenes, over the limit of $limit_scenes")
+        [ ${#new_scenes[@]} -le "$limit_scenes" ] || differences+=("the mockup has ${#new_scenes[@]} scenes, over the limit of $limit_scenes")
+        old_names=$(printf '%s\n' "${old_scenes[@]}" | awk '{ print $2 }' | paste -s -d ' ')
+        new_names=$(printf '%s\n' "${new_scenes[@]}" | awk '{ print $2 }' | paste -s -d ' ')
+        [ "$old_names" = "$new_names" ] || differences+=("the scenes are not the baseline's: baseline '$old_names', now '$new_names'")
+        for entry in "${old_scenes[@]}"; do
+            read -r number scene old_size sum <<< "$entry"
+            file=$baseline/$number-$scene.png
+            [ -f "$file" ] || { differences+=("baseline/$number-$scene.png is missing"); continue; }
+            bytes=$(stat -c %s -- "$file")
+            [ "$bytes" -le $((limit_png_kb * 1024)) ] \
+                || differences+=("baseline/$number-$scene.png is $((bytes / 1024)) KB, over the limit of $limit_png_kb KB: crop the scene to its subject")
+            [ "$(sha256_of "$file")" = "$sum" ] || differences+=("baseline/$number-$scene.png is not the approved file: its sha256 is not the manifest's")
+            shot=$shots/$number-$scene.png
+            # (A scene the mockup no longer has: the scene lists above)
+            [ -f "$shot" ] || continue
+            cmp -s -- "$file" "$shot" && continue
+            new_size=$("${isolated[@]}" "$LOCKTEST_MAGICK" identify -format '%wx%h' "$shot" 2> /dev/null)
+            old_size=$("${isolated[@]}" "$LOCKTEST_MAGICK" identify -format '%wx%h' "$file" 2> /dev/null)
+            if ! [[ "$old_size" =~ ^[0-9]+x[0-9]+$ && "$new_size" =~ ^[0-9]+x[0-9]+$ ]]; then
+                differences+=("scene '$scene': the baseline's PNG or the shot cannot be read (${old_size:-?} and ${new_size:-?})")
+                continue
+            fi
+            width=$(( ${old_size%x*} > ${new_size%x*} ? ${old_size%x*} : ${new_size%x*} ))
+            height=$(( ${old_size#*x} > ${new_size#*x} ? ${old_size#*x} : ${new_size#*x} ))
+            count=$(pixels_differing "$file" "$shot" "$width" "$height") \
+                || { differences+=("scene '$scene': cannot be compared: $(head -c 300 "$work/magick.log")"); continue; }
+            [ "$count" = 0 ] && continue
+            review=$shots/$number-$scene-review.png
+            review_images "$file" "$shot" "$width" "$height" "$shots/$number-$scene" "$review" > "$work/review.log" 2>&1 \
+                || review="(none: $(head -c 300 "$work/review.log"))"
+            [ "$count" = 1 ] && pixels="1 pixel differs" || pixels="$count pixels differ"
+            [ "$old_size" = "$new_size" ] || pixels="$pixels (the size was $old_size, is $new_size)"
+            differences+=("scene '$scene': $pixels; review: $review")
+        done
+        if [ ${#differences[@]} -gt 0 ]; then
+            echo "FAIL     $name ($((SECONDS - started)) s; shots: $shots)"
+            printf '           %s\n' "${differences[@]}"
+            exit 1
+        fi
+        echo "PASS     $name (${#lines[@]} scenes, the same as the baseline, $((SECONDS - started)) s)"
+        exit 0
+    fi
     echo "PASS     $name (${#lines[@]} scenes, $((SECONDS - started)) s)${shots:+; shots: $shots}"
     exit 0
 fi
@@ -276,6 +525,72 @@ for name in "$@"; do
         || { echo "run-mockups.sh: no mockup $name ($base/$name/Mockup.qml); nothing was run" >&2; exit 2; }
     names+=("$name")
 done
+# shots_root: where the runs' shots are (--shoot, --compare, --approve)
+shots_root=${H2S_MOCKUP_SHOTS:-${XDG_CACHE_HOME:-${HOME:?}/.cache}/h2s-shell-mockups}
+[[ "$shots_root" == /* ]] || { echo "run-mockups.sh: H2S_MOCKUP_SHOTS is '$shots_root': an absolute path" >&2; exit 2; }
+[ "$base" = mockups ] || shots_root=$shots_root/fixtures
+
+# ---- --approve: the newest run's shots become the baseline ---------------------------
+# approve <kind>/<name>: its line, and the status (0 approved, 1 refused, 2 no run to take)
+approve() {
+    local name=$1 run record baseline entry number scene size sum file bytes
+    local -a scenes problems=()
+    run=$(find "$shots_root/$name" -mindepth 2 -maxdepth 2 -name run.txt -printf '%T@ %h\n' 2> /dev/null | LC_ALL=C sort -n | tail -n 1 | cut -d ' ' -f 2-)
+    if [ -z "$run" ]; then
+        echo "NOT DONE $name — no run that passed with shots in $shots_root/$name: tests/run-mockups.sh --shoot $name first"
+        return 2
+    fi
+    record=$run/run.txt
+    grep -q -x 'environment backend llvmpipe' "$record" \
+        || problems+=("it was not drawn with llvmpipe ($(sed -n 's/^environment backend //p' "$record")): a baseline is drawn with the baseline renderer")
+    mapfile -t scenes < <(scenes_of "$record")
+    [ ${#scenes[@]} -gt 0 ] || problems+=("its run.txt names no scene")
+    [ ${#scenes[@]} -le "$limit_scenes" ] || problems+=("it has ${#scenes[@]} scenes, over the limit of $limit_scenes")
+    for entry in "${scenes[@]}"; do
+        read -r number scene size sum <<< "$entry"
+        file=$run/$number-$scene.png
+        if [ ! -f "$file" ]; then problems+=("$number-$scene.png is missing"); continue; fi
+        [ "$(sha256_of "$file")" = "$sum" ] || problems+=("$number-$scene.png is not the file run.txt names (its sha256)")
+        bytes=$(stat -c %s -- "$file")
+        [ "$bytes" -le $((limit_png_kb * 1024)) ] \
+            || problems+=("$number-$scene.png is $((bytes / 1024)) KB, over the limit of $limit_png_kb KB: crop the scene to its subject")
+    done
+    if [ ${#problems[@]} -gt 0 ]; then
+        echo "REFUSED  $name — the run $run:"
+        printf '           %s\n' "${problems[@]}"
+        return 1
+    fi
+    baseline=$baselines_root/$name/baseline
+    mkdir -p -- "$baseline" || { echo "REFUSED  $name — cannot create $baseline"; return 1; }
+    find "$baseline" -maxdepth 1 -type f \( -name '*.png' -o -name manifest.txt \) -delete
+    for entry in "${scenes[@]}"; do
+        read -r number scene _ <<< "$entry"
+        cp -- "$run/$number-$scene.png" "$baseline/" || { echo "REFUSED  $name — cannot copy into $baseline"; return 1; }
+    done
+    {
+        echo "# The approved baseline of $name: a PNG per scene (<NN>-<scene>.png), compared pixel"
+        echo "# for pixel by tests/run-mockups.sh --compare, and what it was drawn with (a run drawn"
+        echo "# otherwise is NOT RUN). Written by tests/run-mockups.sh --approve; never by hand."
+        grep -v '^#' "$record"
+    } > "$baseline/manifest.txt"
+    echo "APPROVED $name — ${#scenes[@]} scenes from $run into $baseline"
+}
+if [ "$mode" = approve ]; then
+    [ ${#names[@]} -gt 0 ] || { echo "run-mockups.sh: --approve needs the mockups' names; nothing was approved" >&2; exit 2; }
+    refused=0 no_run=0
+    for name in "${names[@]}"; do
+        approve "$name"
+        case $? in
+            0) ;;
+            2) no_run=1 ;;
+            *) refused=1 ;;
+        esac
+    done
+    [ "$refused" = 1 ] && exit 1
+    [ "$no_run" = 1 ] && exit 2
+    exit 0
+fi
+
 if [ ${#names[@]} = 0 ]; then
     # Planning mockups only by name: no test run includes them
     mapfile -t names < <(cd "$REPO/$base" 2> /dev/null && find components views -mindepth 2 -maxdepth 2 -name Mockup.qml -printf '%h\n' 2> /dev/null \
@@ -303,13 +618,8 @@ if [ -z "$jobs" ]; then
     [ "$memory_jobs" -lt "$jobs" ] && jobs=$memory_jobs
 fi
 
-shots_root=""
 run_id=$(date -u +%Y%m%d-%H%M%S)-$$
-if [ "$mode" = shoot ]; then
-    shots_root=${H2S_MOCKUP_SHOTS:-${XDG_CACHE_HOME:-${HOME:?}/.cache}/h2s-shell-mockups}
-    [[ "$shots_root" == /* ]] || setup_error "H2S_MOCKUP_SHOTS is '$shots_root': an absolute path"
-    [ "$base" = mockups ] || shots_root=$shots_root/fixtures
-fi
+[ "$mode" != load-only ] || shots_root=""
 # shots_of <name>: the mockup's folder for this run
 shots_of() { echo "$shots_root/$1/$run_id"; }
 
@@ -441,6 +751,14 @@ for index in "${!names[@]}"; do
         fi
     fi
 done
+# The baselines together, within their limit (--compare)
+if [ "$mode" = compare ]; then
+    total=$(find "$baselines_root" -path '*/baseline/*.png' -type f -printf '%s\n' 2> /dev/null | awk '{ sum += $1 } END { print sum + 0 }')
+    if [ "$total" -gt $((limit_total_mb * 1024 * 1024)) ]; then
+        echo "  FAIL     the baselines in $baselines_root: $((total / 1024 / 1024)) MB together, over the limit of $limit_total_mb MB"
+        failed=1
+    fi
+fi
 [ "$failed" = 1 ] && exit 1
 [ "$not_run" = 1 ] && exit 2
 exit 0

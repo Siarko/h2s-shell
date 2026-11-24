@@ -9,8 +9,9 @@ tools=(
     "quickshell|runs the suites and the shell under test"
     "labwc|the headless compositor the suites' windows open in"
     "util-linux|setpriv, setsid, unshare, flock, script: the test processes' isolation, the bed's lock, a terminal for install.sh (or none, or a namespace's root)"
-    "coreutils|timeout: ends a compositor or a Quickshell that hangs"
-    "fontconfig|fc-match: the characters of the theme's font, for the glyphs suite"
+    "coreutils|timeout: ends a compositor or a Quickshell that hangs; sha256sum: the checksums of the mockups' baselines and fonts"
+    "diffutils|cmp: compares the mockups' shots with their baselines"
+    "fontconfig|fc-match: the characters of the theme's font, for the glyphs suite; its font files, for the mockups' environment"
     "hyprland|the compositor the lock screen is tested in"
     "grim|screenshots of the lock screen, the mockups' shots"
     "wlr-randr|sets the headless output's size"
@@ -23,7 +24,7 @@ tools=(
     "pkgconf|pkg-config: finds the Wayland protocol files the input bindings are generated from"
     "wayland|wayland.xml, one of those protocol files"
     "wayland-protocols|xdg-shell.xml, another"
-    "imagemagick|magick: makes the mockups' shots smaller, losslessly"
+    "imagemagick|magick: makes the mockups' shots smaller, losslessly, and draws their review images"
     "mesa|llvmpipe: the software OpenGL the mockups are drawn with"
 )
 in_repositories() { [ -n "$1" ] && pacman -Si -- "$1" > /dev/null 2>&1; }

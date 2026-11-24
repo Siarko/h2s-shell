@@ -30,7 +30,20 @@
 #   - a Quickshell whose OpenGL renderer is not llvmpipe is NOT RUN, and leaves no shot;
 #   - a mockup with a Timer, a read of the clock and a literal duration FAILs;
 #   - old shots go: of a mockup's runs the newest 20 and those younger than a day stay, and
-#     over the size limit the oldest run goes, never this run's or one still going.
+#     over the size limit the oldest run goes, never this run's or one still going;
+#   - --compare without a baseline is NOT RUN and keeps its shots; --approve with no run to
+#     take does nothing (status 2); --approve writes the baseline (the PNGs, a manifest with
+#     the environment and a checksummed line per scene); a fresh run then compares the same
+#     (0 differing pixels: the drawing is deterministic across processes);
+#   - a baseline one pixel off FAILs, naming the scene, "1 pixel differs" and its review
+#     image (old | new | diff; diff.png red at that pixel), the other scene not named;
+#   - a baseline PNG that is not the manifest's file, one over 300 KB, a manifest of more
+#     than 30 scenes and the baselines together over 15 MB FAIL;
+#   - a changed environment line is NOT RUN, "environment changed since the baseline",
+#     naming the old and new value, and compares nothing;
+#   - --approve refuses a run drawn with the software backend, and leaves the baseline;
+#   - the theme's font not installed (a stand-in fc-match, with the system's tools) is NOT
+#     RUN, naming the font.
 #
 #   tests/run-mockups-selftest.sh
 #
@@ -282,7 +295,7 @@ runner shoot -- --shoot components/good components/effects
 check "$([ "${runner_status[shoot]}" = 0 ]; echo $?)" "exits 0 (was ${runner_status[shoot]})"
 good_run=$(run_of shoot components/good)
 effects_run=$(run_of shoot components/effects)
-check "$([ "$(cd "$good_run" 2> /dev/null && ls)" = "$(printf '00-normal.png\n01-checked.png')" ]; echo $?)" "components/good: 00-normal.png and 01-checked.png"
+check "$([ "$(cd "$good_run" 2> /dev/null && ls)" = "$(printf '00-normal.png\n01-checked.png\nrun.txt')" ]; echo $?)" "components/good: 00-normal.png, 01-checked.png and run.txt"
 check "$(grep -q -F "shots: $good_run" "${out[shoot]}"; echo $?)" "the verdict names the shots' folder"
 # The button's size is the theme's: the shot is the subject's, not the window's 200x80
 size=$("$LOCKTEST_MAGICK" identify -format '%wx%h' "$good_run/00-normal.png" 2> /dev/null)
@@ -418,6 +431,130 @@ check "$([ -n "$this_run" ] && [ -s "$this_run/00-normal.png" ]; echo $?)" "this
 check "$([ ! -e "$shots/components/effects/20180101-000000-1" ]; echo $?)" "over the size limit, the oldest run went"
 check "$([ -e "$shots/components/effects/20170101-000000-$live" ]; echo $?)" "a run still going stayed, older though it is"
 show_on_failure "$before" prune
+
+echo "runner: --compare and --approve"
+before=$failures
+compare_vars=(H2S_MOCKUP_SHOTS="$work/shots-compare" H2S_MOCKUP_BASELINES="$work/baselines")
+baseline=$work/baselines/components/good/baseline
+# shots_named <case>: the run folder the verdict names
+shots_named() { sed -n 's|^.*shots: \([^);]*\).*$|\1|p' "${out[$1]}" | head -n 1; }
+# set_baseline_png <file> <scene line's number and name>: the file becomes that scene's
+# baseline PNG, with its checksum in the manifest (a baseline approved so)
+set_baseline_png() {
+    local sum
+    cp -- "$1" "$baseline/$2.png"
+    sum=$(sha256sum < "$baseline/$2.png")
+    sed -i "s/^\(scene ${2%%-*} ${2#*-} [0-9x]* \).*\$/\1${sum%% *}/" "$baseline/manifest.txt"
+}
+
+runner approve-none "${compare_vars[@]}" -- --approve components/good
+check "$([ "${runner_status[approve-none]}" = 2 ] && grep -q '^NOT DONE components/good — no run that passed with shots' "${out[approve-none]}" && [ ! -e "$baseline" ]; echo $?)" "--approve with no run: status 2, nothing written (was ${runner_status[approve-none]})"
+
+runner compare-none "${compare_vars[@]}" -- --compare components/good
+check "$([ "${runner_status[compare-none]}" = 2 ] && [ "$(verdict_of compare-none components/good)" = "NOT RUN" ] && grep -q -F "no baseline ($baseline/manifest.txt)" "${out[compare-none]}"; echo $?)" "--compare without a baseline: NOT RUN, 'no baseline' (status ${runner_status[compare-none]})"
+first_run=$(shots_named compare-none)
+check "$([ -s "$first_run/00-normal.png" ] && [ -s "$first_run/run.txt" ]; echo $?)" "its shots and run.txt are kept ($first_run)"
+
+runner approve "${compare_vars[@]}" -- --approve components/good
+manifest=$baseline/manifest.txt
+check "$([ "${runner_status[approve]}" = 0 ] && grep -q -F "APPROVED components/good — 2 scenes from $first_run" "${out[approve]}"; echo $?)" "--approve takes the newest run (status ${runner_status[approve]})"
+check "$([ "$(cd "$baseline" 2> /dev/null && ls | paste -s -d ' ')" = "00-normal.png 01-checked.png manifest.txt" ]; echo $?)" "the baseline: two PNGs and manifest.txt"
+check "$(cmp -s "$first_run/01-checked.png" "$baseline/01-checked.png"; echo $?)" "the PNGs are the run's"
+check "$(grep -q -E '^environment renderer OpenGL VENDOR: .*RENDERER: llvmpipe \(LLVM [^,]+, [0-9]+ bits\)' "$manifest" \
+    && grep -q -x 'environment backend llvmpipe' "$manifest" && grep -q -E '^environment quickshell .*[0-9]+\.[0-9]+' "$manifest" \
+    && grep -q -E '^environment qt /.*/libQt6Core\.so' "$manifest" && grep -q -E '^environment freetype /.*/libfreetype\.so' "$manifest" \
+    && grep -q -E '^environment fontconfig /.*/libfontconfig\.so' "$manifest" && grep -q -E '^environment harfbuzz ' "$manifest" \
+    && grep -q -E '^environment font-theme [0-9a-f]{64} /' "$manifest" && grep -q -E '^environment font-theme-bold [0-9a-f]{64} /' "$manifest" \
+    && grep -q -E '^environment font-sans-serif [0-9a-f]{64} /' "$manifest"; echo $?)" "the manifest's environment: renderer line with the vector width, backend, quickshell, Qt, freetype, fontconfig, harfbuzz, the fonts' checksums"
+normal_sum=$(sha256sum < "$baseline/00-normal.png")
+check "$(grep -q -x -E "scene 00 normal [0-9]+x[0-9]+ ${normal_sum%% *}" "$manifest" && grep -q -E '^scene 01 checked [0-9]+x[0-9]+ [0-9a-f]{64}$' "$manifest"; echo $?)" "a scene line per scene, with its size and checksum"
+show_on_failure "$before" approve
+cp -a "$baseline" "$work/baseline-approved"
+
+before=$failures
+runner compare-same "${compare_vars[@]}" -- --compare components/good
+check "$([ "${runner_status[compare-same]}" = 0 ] && grep -q '^  PASS     components/good (2 scenes, the same as the baseline' "${out[compare-same]}"; echo $?)" "a fresh run compares the same: PASS, 0 differing pixels (status ${runner_status[compare-same]})"
+show_on_failure "$before" compare-same
+
+before=$failures
+"$LOCKTEST_MAGICK" "$baseline/01-checked.png" -fill red -draw 'point 5,5' "$work/checked-one-pixel.png"
+set_baseline_png "$work/checked-one-pixel.png" 01-checked
+runner compare-pixel "${compare_vars[@]}" -- --compare components/good
+pixel_run=$(shots_named compare-pixel)
+check "$([ "${runner_status[compare-pixel]}" = 1 ] && [ "$(verdict_of compare-pixel components/good)" = FAIL ]; echo $?)" "a baseline one pixel off: FAIL (status ${runner_status[compare-pixel]})"
+check "$(grep -q -F "scene 'checked': 1 pixel differs; review: $pixel_run/01-checked-review.png" "${out[compare-pixel]}"; echo $?)" "names the scene, '1 pixel differs' and the review image"
+check "$(! grep -q "scene 'normal'" "${out[compare-pixel]}"; echo $?)" "the unchanged scene is not named"
+check "$([ -s "$pixel_run/01-checked-review.png" ] && cmp -s "$pixel_run/01-checked/old.png" "$baseline/01-checked.png" \
+    && cmp -s "$pixel_run/01-checked/new.png" "$pixel_run/01-checked.png" && [ -s "$pixel_run/01-checked/diff.png" ] && [ ! -e "$pixel_run/00-normal" ]; echo $?)" "old.png, new.png, diff.png and the review image written, for that scene only"
+check "$([ "$("$LOCKTEST_MAGICK" "$pixel_run/01-checked/diff.png" -format '%[pixel:p{5,5}]' info: 2> /dev/null)" = "srgb(255,0,0)" ] \
+    && [ "$("$LOCKTEST_MAGICK" "$pixel_run/01-checked/diff.png" -format '%[pixel:p{6,5}]' info: 2> /dev/null)" != "srgb(255,0,0)" ]; echo $?)" "diff.png is red at the pixel, and only there"
+shot_width=$("$LOCKTEST_MAGICK" identify -format '%w' "$pixel_run/01-checked.png" 2> /dev/null)
+review_width=$("$LOCKTEST_MAGICK" identify -format '%w' "$pixel_run/01-checked-review.png" 2> /dev/null)
+check "$([ "${review_width:-0}" -ge $((3 * ${shot_width:-1})) ]; echo $?)" "the review image is old | new | diff side by side ($review_width px for a $shot_width px shot)"
+show_on_failure "$before" compare-pixel
+
+before=$failures
+rm -rf "$baseline" && cp -a "$work/baseline-approved" "$baseline"
+"$LOCKTEST_MAGICK" "$baseline/00-normal.png" -fill red -draw 'point 1,1' "$baseline/00-normal.png"
+runner compare-tampered "${compare_vars[@]}" -- --compare components/good
+check "$([ "${runner_status[compare-tampered]}" = 1 ] && grep -q -F "baseline/00-normal.png is not the approved file" "${out[compare-tampered]}"; echo $?)" "a baseline PNG that is not the manifest's file: FAIL (status ${runner_status[compare-tampered]})"
+show_on_failure "$before" compare-tampered
+
+before=$failures
+rm -rf "$baseline" && cp -a "$work/baseline-approved" "$baseline"
+"$LOCKTEST_MAGICK" -size 400x400 xc: +noise Random "$work/noise.png"
+set_baseline_png "$work/noise.png" 00-normal
+runner compare-oversize "${compare_vars[@]}" -- --compare components/good
+check "$([ "${runner_status[compare-oversize]}" = 1 ] && grep -q -E "baseline/00-normal.png is [0-9]+ KB, over the limit of 300 KB" "${out[compare-oversize]}"; echo $?)" "a baseline PNG over 300 KB: FAIL (status ${runner_status[compare-oversize]})"
+show_on_failure "$before" compare-oversize
+
+before=$failures
+rm -rf "$baseline" && cp -a "$work/baseline-approved" "$baseline"
+for i in $(seq 2 30); do echo "scene $i extra-$i 1x1 0000000000000000000000000000000000000000000000000000000000000000" >> "$baseline/manifest.txt"; done
+runner compare-scenes "${compare_vars[@]}" -- --compare components/good
+check "$([ "${runner_status[compare-scenes]}" = 1 ] && grep -q -F "the baseline has 31 scenes, over the limit of 30" "${out[compare-scenes]}"; echo $?)" "a baseline of 31 scenes: FAIL (status ${runner_status[compare-scenes]})"
+show_on_failure "$before" compare-scenes
+
+before=$failures
+rm -rf "$baseline" && cp -a "$work/baseline-approved" "$baseline"
+mkdir -p "$work/baselines/components/large/baseline"
+truncate -s 16M "$work/baselines/components/large/baseline/00-large.png"
+runner compare-total "${compare_vars[@]}" -- --compare components/good
+rm -rf "$work/baselines/components/large"
+check "$([ "${runner_status[compare-total]}" = 1 ] && [ "$(verdict_of compare-total components/good)" = PASS ] \
+    && grep -q -F "the baselines in $work/baselines: 16 MB together, over the limit of 15 MB" "${out[compare-total]}"; echo $?)" "the baselines together over 15 MB: the run FAILs (status ${runner_status[compare-total]})"
+show_on_failure "$before" compare-total
+
+before=$failures
+qt_line=$(grep '^environment qt ' "$baseline/manifest.txt")
+sed -i 's|^environment qt .*$|environment qt /usr/lib/libQt6Core.so.6.0.0|' "$baseline/manifest.txt"
+runner compare-environment "${compare_vars[@]}" -- --compare components/good
+check "$([ "${runner_status[compare-environment]}" = 2 ] && [ "$(verdict_of compare-environment components/good)" = "NOT RUN" ]; echo $?)" "a changed environment: NOT RUN, not FAIL (status ${runner_status[compare-environment]})"
+check "$(grep -q -F "environment changed since the baseline: qt: /usr/lib/libQt6Core.so.6.0.0 → ${qt_line#environment qt }" "${out[compare-environment]}"; echo $?)" "names what changed, from and to"
+environment_run=$(shots_named compare-environment)
+check "$(! grep -q 'differ' "${out[compare-environment]}" && [ -s "$environment_run/00-normal.png" ] && [ ! -e "$environment_run/00-normal" ]; echo $?)" "compares nothing, keeps the shots"
+show_on_failure "$before" compare-environment
+
+before=$failures
+rm -rf "$baseline" && cp -a "$work/baseline-approved" "$baseline"
+runner software-shoot "${compare_vars[@]}" H2S_MOCKUP_RENDERER=software -- --shoot components/good
+runner approve-software "${compare_vars[@]}" -- --approve components/good
+check "$([ "${runner_status[software-shoot]}" = 0 ] && [ "${runner_status[approve-software]}" = 1 ] && grep -q -F "it was not drawn with llvmpipe (software)" "${out[approve-software]}"; echo $?)" "--approve refuses a run drawn with the software backend (status ${runner_status[approve-software]})"
+check "$(cmp -s "$baseline/manifest.txt" "$work/baseline-approved/manifest.txt"; echo $?)" "and leaves the baseline as it was"
+show_on_failure "$before" approve-software
+
+# With the system's tools: an fc-match first on PATH that gives another font for every family
+if [ "$LOCKTEST_TOOL_SOURCE" = system ]; then
+    before=$failures
+    mkdir -p "$work/no-theme-font"
+    touch "$work/other-font.ttf"
+    printf '#!%s\necho "Other Sans|%s"\n' "$(type -P bash)" "$work/other-font.ttf" > "$work/no-theme-font/fc-match"
+    chmod +x "$work/no-theme-font/fc-match"
+    runner no-theme-font "${compare_vars[@]}" PATH="$work/no-theme-font:$PATH" H2S_TEST_TOOLS=system -- --compare components/good
+    check "$([ "${runner_status[no-theme-font]}" = 2 ] && [ "$(verdict_of no-theme-font components/good)" = "NOT RUN" ] \
+        && grep -q -F "the theme's font 'JetBrainsMono Nerd Font' is not installed (fontconfig gives 'Other Sans'" "${out[no-theme-font]}"; echo $?)" "the theme's font missing: NOT RUN, the font named (status ${runner_status[no-theme-font]})"
+    show_on_failure "$before" no-theme-font
+fi
 
 echo
 if [ "$failures" = 0 ]; then

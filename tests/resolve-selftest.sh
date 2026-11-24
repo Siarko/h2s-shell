@@ -48,7 +48,7 @@ link_real() {
         ln -s "$real" "$work/$directory/$name"
     done
 }
-link_real base env mktemp tail head grep wc cat rm mkdir chmod sleep ln touch cp bash sha256sum uname mv find sort
+link_real base env mktemp tail head grep wc cat rm mkdir chmod sleep ln touch cp bash sha256sum uname mv find sort cmp
 link_real session setsid timeout
 # What tests/lock/run.sh calls before its first set-up check
 mkdir -p "$work/bed"
@@ -191,6 +191,7 @@ echo "python=${LOCKTEST_PYTHON:-}"
 echo "grim=${LOCKTEST_GRIM:-}"
 echo "wlr_randr=${LOCKTEST_WLR_RANDR:-}"
 echo "magick=${LOCKTEST_MAGICK:-}"
+echo "fc_match=${LOCKTEST_FC_MATCH:-}"
 # The lock bed's set from the system's tools, as run.sh has it made (MAKE_ANYWAY: a caller
 # that asks for it where it is not for)
 if { [ "$LOCKTEST_NEED" = lock ] && [ "$LOCKTEST_TOOL_SOURCE" = system ]; } || [ -n "${MAKE_ANYWAY:-}" ]; then
@@ -1038,13 +1039,14 @@ prints out "  FAIL  no-check — ended well without a PASS line: it checked noth
 artifacts=$(sed -n 's|^artifacts (logs, screenshots): \(.*\)$|\1|p' "$work/$case_name.out")
 case "$artifacts" in "$work"/temp/h2s-locktest.*) rm -rf "$artifacts" ;; esac
 
-# ---- The mockups need: grim, wlr-randr and magick besides the compositor ---
+# ---- The mockups need: grim, wlr-randr, magick and fc-match besides the compositor ---
 resolve mockups-system mockups "base session system lockset wlr-randr magick qs"
 exits 0
 prints out "tools: system (PATH, not pinned) — labwc 7.8.9, setpriv 6.5.4, magick 6.9.0-1"
 prints out "grim=$work/lockset/grim"
 prints out "wlr_randr=$work/wlr-randr/wlr-randr"
 prints out "magick=$work/magick/magick"
+prints out "fc_match=$work/system/fc-match"
 
 resolve mockups-system-missing mockups "base session system qs" H2S_TEST_TOOLS=system
 exits 2
@@ -1062,6 +1064,7 @@ prints out "tools: nix (tests/lock/tools.nix, pinned: $mockups_store) — labwc 
 prints out "grim=$mockups_store/bin/grim"
 prints out "wlr_randr=$mockups_store/bin/wlr-randr"
 prints out "magick=$mockups_store/bin/magick"
+prints out "fc_match=$mockups_store/bin/fc-match"
 
 # A pinned set without magick (built from a tools.nix before it held one)
 resolve mockups-nix-no-magick mockups "base session nix qs"

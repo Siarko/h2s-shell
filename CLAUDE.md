@@ -171,7 +171,7 @@ ticks, cells respond to clicks, and popups toggle.
 `scene`, `subject`, `subjectRect` — and the shot protocol (`mockups/kit/MockupWindow.qml`). The entry isolates the process from
 the session it runs in (`singletons/Isolation.qml`): no module loads, no notification server
 is registered, nothing is sent, whatever environment it inherited.
-`tests/run-mockups.sh --load-only | --shoot [<kind>/<name>…]` runs them headless, each in a
+`tests/run-mockups.sh --load-only | --shoot | --compare [<kind>/<name>…]` runs them headless, each in a
 compositor of its own, side by side, in a fixed environment (Mesa's llvmpipe, which draws
 shader effects; scale 1, 96 DPI, `QT_HASH_SEED=0`, UTC); `--shoot` writes a PNG per scene,
 cropped to the subject, into `$H2S_MOCKUP_SHOTS` (else `~/.cache/h2s-shell-mockups/`).
@@ -186,8 +186,15 @@ importable folder. Three kinds:
   tested; deleted a longer while after the feature is merged.
 
 Components and views have a baseline under `baseline/`, compared exactly (on Arch; NixOS
-runs them load-only). A baseline changes only in the commit of the code change that causes
-it, after the maintainer approved the review images.
+runs them load-only): `tests/run-mockups.sh --compare` decodes each shot and the baseline's
+PNG and counts the pixels that differ (no tolerance), writes an old | new | diff
+`<NN>-<scene>-review.png` beside the shots for each scene that does, and is NOT RUN, never
+FAIL, when the environment in `baseline/manifest.txt` (Quickshell, the renderer line, Qt,
+freetype, fontconfig, harfbuzz, the theme's font files) is not the run's, or there is no
+baseline. `tests/run-mockups.sh --approve <kind>/<name>` makes the newest run's shots the
+baseline. Limits: 300 KB a PNG, 30 scenes a mockup, 15 MB all baselines. A baseline changes
+only in the commit of the code change that causes it, after the maintainer approved the
+review images.
 
 Mockup code:
 
