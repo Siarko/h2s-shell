@@ -66,6 +66,8 @@ QtObject {
     property var _nixosApplyRules: NixosApplyRulesTest {}
     property var _nixosApplyLive: NixosApplyLiveTest {}
     property var _nixosApplyScript: NixosApplyScriptTest {}
+    property var _nixosViewRules: NixosViewRulesTest {}
+    property var _nixosPage: NixosPageTest {}
     property var _etcFiles: EtcFilesTest {}
     property var _integrationChange: IntegrationChangeTest {}
     property var _distributionContract: DistributionContractTest {}

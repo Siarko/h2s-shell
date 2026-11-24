@@ -45,6 +45,8 @@ The interface modules are written against (`qs.api`), versioned on its own
 - 1.42: on a VPN card's name's line (`settings.network_vpn.vpns.card.title`, every module's
   elements) `context.provider` is null for an element of another module than the VPN's
   provider: a module's live provider object goes only to its own module's elements.
+- 1.42: the id `nixos` is reserved (the core's Settings page of that id): a module can no
+  longer take it.
 - 1.41: a list or object inside the plain data the API hands out is a new frozen copy at
   each read (the routes in `Api.vpnsUp`'s rows, `Api.anchors`' placements,
   `Api.system.distribution`'s facts, `module.manifest`'s lists and objects, a list in an
@@ -73,6 +75,13 @@ The interface modules are written against (`qs.api`), versioned on its own
   for 4 min"). In module test mode `ModuleTestKit.setRemembered(untilMs)` sets it.
 
 ### Added
+- Settings → System → NixOS, listed only on NixOS: the system's NixOS configuration as the
+  shell finds it (a flake or a classic configuration.nix, in any folder; Change… picks
+  another), its facts one per line, and whether it is connected — the shell's file
+  `h2s-shell.json` in force. The one-time setup: Create the file (a root-owned
+  configuration asks the administrator password at that click; one of yours is written
+  without), then the line `programs.h2s-shell.settingsFile = ./h2s-shell.json;` to add once,
+  with Copy. A configuration in your own folder is warned about once.
 - Settings → System → Authentication: "Sign-in rules" for sudo and administrator prompts
   (polkit) — what is in force as steps, rows of methods (fingerprint, security key,
   password, a raw PAM line) tried from the top with their control words and details, one list

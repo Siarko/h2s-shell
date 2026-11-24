@@ -883,7 +883,7 @@ A separate floating window, reachable from the Settings widget, from
 the bar: `qs ipc call settings open`, `openPage <id>` (a page's id, e.g. `openPage profiles`,
 `openPage bar_appearance`), `currentPage` (the open page's id), `itemRect <objectName>` (where a shown item is in the window, for tests), `toggle`, `close`. Three tabs: **Behaviour**, whose pages edit
 a profile; **Appearance**, whose pages edit a theme; and **System** (Authentication,
-Network), whose pages change this computer's settings, at once and in every profile. The sidebar shows which profiles
+Network, NixOS on NixOS), whose pages change this computer's settings, at once and in every profile. The sidebar shows which profiles
 are active right now, and picks what the tab's pages edit — the profile (with the theme it
 uses, a click away) or the theme (with the profiles that use it, and Preview to show it
 on the whole shell while editing).
@@ -923,6 +923,27 @@ Changes are drafts (`~/.config/h2s_shell/theme-drafts/`), kept until saved, also
 restarts: each page has Save and Cancel, a banner saves or throws away all of the theme's
 changes, and ✎ marks pages and themes with unsaved changes. Themes are files in
 `~/.config/h2s_shell/themes/`.
+
+### A page for the distribution
+
+#### NixOS
+
+Settings → System → NixOS shows the system's NixOS configuration as the shell finds it, read
+as you when the page shows and on "Look again": the folder you chose with "Change…", else
+`/etc/nixos/flake.nix`, else the classic `configuration.nix` (`NIX_PATH`'s `nixos-config=`,
+or `/etc/nixos`). One fact per line: Configuration, Type, Git, Host, The shell's file, File
+status and, once connected, Generations. "Not connected" when no configuration imports the
+shell's NixOS module: every setting keeps its lines to copy. "Found, not connected yet" leads
+through the one-time setup: Create the shell's file `h2s-shell.json` beside the configuration
+(a root-owned configuration asks the administrator password at that click; one of yours is
+written as you, without), then add `programs.h2s-shell.settingsFile = ./h2s-shell.json;` once
+(Copy) and run `nixos-rebuild switch`; the page notices when it is in force. A configuration
+in a folder that is yours (or behind a link into one) is warned about once: any program you
+run can change what NixOS builds as root.
+
+#### Arch
+
+The page is not listed (nor on any other system).
 
 ### Profiles
 

@@ -69,6 +69,8 @@ FloatingWindow {
         { id: "network_ethernet", label: "Ethernet", tab: "system", parent: "network", component: networkEthernetComp,
           shown: () => NetworkManager.ethernetDevice !== "" },
         { id: "network_vpn", label: "VPN", tab: "system", parent: "network", component: networkVpnComp },
+        // Only on NixOS: the system's configuration the shell's settings can go into
+        { id: "nixos", label: "NixOS", tab: "system", component: nixosComp, shown: () => NixosViewRules.pageShown(Distribution.detection.id) },
         // Every module, then the modules' own pages under the group
         { id: "modules", label: "Modules", tab: "system", group: true },
         { id: "modules_installed", label: "Installed", tab: "system", parent: "modules", component: modulesComp }
@@ -656,6 +658,7 @@ FloatingWindow {
     Component { id: networkWifiComp; NetworkWifiSettings {} }
     Component { id: networkEthernetComp; NetworkEthernetSettings {} }
     Component { id: networkVpnComp; NetworkVpnSettings {} }
+    Component { id: nixosComp; NixosSettings {} }
     Component { id: modulesComp; ModulesSettings { modalHost: root.modalHost } }
     Component { id: sttComp;           SttSettings           { editIndex: root.editIndex } }
     Component { id: curvesComp;        CurvesSettings {} }
