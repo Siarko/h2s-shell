@@ -166,6 +166,12 @@ shipped in `pam/`.
   unlock without a key or a touch). Enroll a finger with `fprintd-enroll`; register a key with `pamu2fcfg`
   (into `~/.config/Yubico/u2f_keys`, or the `authfile` your settings name — the forms
   below).
+  Each of the three starts with the lock's marker line, as the shipped configs do
+  (`auth [default=ignore] pam_echo.so h2s-shell-lock.started`, above NixOS's own rules in
+  `h2s-shell-password`): with it, a check stuck before its first module is started again
+  after 8 s instead of costing the whole 90 s. It takes effect at the next
+  `nixos-rebuild switch`; a `text` of your own for one of these services replaces the line
+  with the rest, and that service is then not watched.
 - **Arch and others**: nothing to set up for the password — the shipped `pam/password`
   checks the local password (`pam_unix`, accounts in `/etc/shadow`). For the fingerprint,
   install `fprintd` and enroll a finger (`fprintd-enroll`); for a security key, install

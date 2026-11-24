@@ -12,6 +12,19 @@ let
   u2f = import ./u2f.nix lib config.security.pam.u2f.settings;
   u2fArguments = u2f.arguments { cue = true; interactive = false; };
 
+  # The lock's marker: the word pam_echo says first in each of the lock's stacks, and its
+  # line as the shipped pam/ configs have it (pam_echo is libpam's own module, found by
+  # name)
+  lockMarker = "h2s-shell-lock.started";
+  lockMarkerLine = "auth [default=ignore] pam_echo.so ${lockMarker}";
+  # The lowest order of the password service's other enabled auth rules
+  passwordFirstOrder =
+    let
+      others = lib.filterAttrs (name: rule: name != "h2s-lock-started" && rule.enable)
+        config.security.pam.services.h2s-shell-password.rules.auth;
+      orders = map (rule: rule.order) (lib.attrValues others);
+    in if orders == [ ] then 10000 else lib.foldl' lib.min (lib.head orders) orders;
+
   # The system's delay before a sleep the shell starts turns into hibernation: sleep.conf's
   # HibernateDelaySec, through whichever option this NixOS has for it
   hibernateDelay = toString cfg.idle.hibernateDelay;
@@ -69,6 +82,12 @@ in
     #
     # Quickshell runs pam_authenticate and nothing else: only the `auth` lines matter (the
     # account, password and session lines NixOS writes into every service never run).
+    #
+    # Each stack starts with the lock's marker, the same line as the shipped pam/ configs:
+    # pam_echo says its word before any other module can run, so a conversation that stays
+    # silent past it is stuck before its first module and the lock starts it again
+    # (LockIoRules.pamMarked tells a config with the line). LockStepRules.pamMarker is the
+    # word; the line has to stay the first auth rule for the lock to watch the stack.
     security.pam.services = {
       # The password: NixOS's usual stack — pam_unix, and whatever the machine keeps its
       # accounts in that checks the same password (systemd-homed, SSSD, LDAP, Kerberos,
@@ -92,6 +111,14 @@ in
         sshAgentAuth = lib.mkDefault false;
         rssh = lib.mkDefault false;
         usshAuth = lib.mkDefault false;
+        # The marker, just above the first of NixOS's own auth rules, whatever their
+        # orders become
+        rules.auth.h2s-lock-started = {
+          order = passwordFirstOrder - 10;
+          control = "[default=ignore]";
+          modulePath = "${config.security.pam.package}/lib/security/pam_echo.so";
+          args = [ lockMarker ];
+        };
       };
 
       # The passive ones are written out whole rather than built from NixOS's options: a
@@ -108,6 +135,7 @@ in
       h2s-shell-fingerprint = lib.mkIf config.services.fprintd.enable {
         text = lib.mkOverride 900 ''
           # The lock screen's fingerprint check (h2s-shell's NixOS module)
+          ${lockMarkerLine}
           auth required ${config.services.fprintd.package}/lib/security/pam_fprintd.so timeout=-1
         '';
       };
@@ -120,6 +148,7 @@ in
       h2s-shell-u2f = lib.mkIf config.security.pam.u2f.enable {
         text = lib.mkOverride 900 ''
           # The lock screen's security key check (h2s-shell's NixOS module)
+          ${lockMarkerLine}
           ${lib.optionalString u2f.interactive "# interactive is left out here: the lock screen cannot answer its Enter prompt"}
           auth required ${lib.concatStringsSep " " ([ "${pkgs.pam_u2f}/lib/security/pam_u2f.so" ] ++ u2fArguments)}
         '';

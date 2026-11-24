@@ -407,7 +407,9 @@ sleep (`sleepEnabled`, `sleepTimeout`) and hibernation (`hibernateEnabled`,
   to start it or reports an error), the next attempt takes the other of the two. A check
   that cannot start or never answers (90 s) shows an error, never a lasting "Verifying…".
   A config whose first auth line is `auth [default=ignore] pam_echo.so h2s-shell-lock.started`
-  (the shipped ones) is watched: a check that says nothing at all within 8 s is stuck
+  is watched — Arch: the shipped `pam/` configs have it; NixOS: the services the module
+  writes have it, from the next `nixos-rebuild switch` (one whose `text` the machine sets
+  itself does not): a check that says nothing at all within 8 s is stuck
   before any module ran, and is started again (three starts at most); after that line or
   any other word it is never started again. Configs without the line are not watched.
 - **The compositor's confirmation** — the screen counts as locked once the compositor says

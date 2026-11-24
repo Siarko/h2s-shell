@@ -166,6 +166,11 @@ The interface modules are written against (`qs.api`), versioned on its own
   Without polkit rules it works as before; set to true beside them, it stops the build.
 
 ### Fixed
+- NixOS: the lock screen's PAM services the module writes (`h2s-shell-password`,
+  `h2s-shell-fingerprint`, `h2s-shell-u2f`) start with the lock's marker line, as the
+  shipped Arch configs do, so a check stuck before its first module is started again after
+  8 s there too, instead of the right password doing nothing for 90 s. It takes effect at
+  the next `nixos-rebuild switch`.
 - The screensaver started by hand (or by an app) soon after the shell started now locks the
   session at "Lock after" as it does later on; before, no idle lock came in that idle period.
 - With the screensaver started by hand (or by an app), changing the sleep time while an app
