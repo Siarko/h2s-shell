@@ -64,7 +64,29 @@ packages=(
     ttf-jetbrains-mono-nerd
 )
 
-ours() { git -C "$target" remote get-url origin 2> /dev/null | grep -q "Siarko/h2s-shell"; }
+# Where the checkout in $target comes from (empty when git cannot say)
+origin() { git -C "$target" remote get-url origin 2> /dev/null || true; }
+
+# ours <origin>: this repository, in any spelling git gives it (https or ssh, with or without
+# .git, any case: GitHub's names ignore it); nothing else, so a fork, or another repository
+# whose address merely contains this one's name, is somebody else's config, left alone
+ours() {
+    local url=${1,,}
+    url=${url%/}
+    url=${url%.git}
+    case $url in
+        https://github.com/siarko/h2s-shell | git@github.com:siarko/h2s-shell | ssh://git@github.com/siarko/h2s-shell) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+# Somebody else's config in $target: said, and the script ends
+leave_other() {
+    echo "$target already holds another Quickshell config; leaving it alone." >&2
+    [ -z "$1" ] || echo "It comes from $1, not from $repository." >&2
+    echo "Move it away and run this again." >&2
+    exit 1
+}
 
 # The checkout's built-in modules into $builtin_target, replacing what was there: copied into
 # a new directory beside it first (mktemp: only what this run made is ever deleted), so a copy
@@ -115,10 +137,12 @@ if [ $# -gt 1 ] || { [ $# = 1 ] && [ "$1" != --update ]; }; then
 fi
 
 if [ "${1:-}" = --update ]; then
-    if [ ! -e "$target/shell.qml" ] || ! ours; then
+    if [ ! -e "$target/shell.qml" ]; then
         echo "h2s-shell is not installed in $target; run this without --update first." >&2
         exit 1
     fi
+    from=$(origin)
+    ours "$from" || leave_other "$from"
     copy_builtin
     build_helper
     echo "==> Done. Restart the shell to load the built-in modules and the helper again: $target/scripts/launch.sh --restart"
@@ -130,6 +154,18 @@ if ! command -v pacman > /dev/null || [ ! -e "$pacman_conf" ]; then
     exit 1
 fi
 
+# What the packages step needs, checked first so that the script, not bash, says what is missing
+if ! command -v sudo > /dev/null; then
+    echo "Installing the packages needs sudo (the package sudo), to run pacman as root, and there is none." >&2
+    echo "Install it as root, or install the packages listed in this script by hand, then run this again." >&2
+    exit 1
+fi
+if ! { : < /dev/tty; } 2> /dev/null; then
+    echo "Installing the packages needs a terminal, for pacman's questions and sudo's password, and there is none." >&2
+    echo "Run this from a terminal." >&2
+    exit 1
+fi
+
 echo "==> Packages"
 # From the terminal, not stdin: run as `curl ... | bash`, stdin is this script, and
 # pacman's question would read its next lines as the answer
@@ -137,23 +173,32 @@ sudo pacman -S --needed "${packages[@]}" < /dev/tty
 
 # The icons are Nerd Font glyphs: say so now rather than leave empty boxes to puzzle over
 # (the list read whole, not piped into grep -q: grep ends at the first match, and under
-# pipefail the fc-list still writing then would fail the test and warn wrongly)
-fonts=""
-command -v fc-list > /dev/null && fonts=$(fc-list : family 2> /dev/null)
-if command -v fc-list > /dev/null && [[ "$fonts" != *"Nerd Font"* ]]; then
+# pipefail the fc-list still writing then would fail the test and warn wrongly). Without
+# fc-list, or when it fails, nothing is said: it cannot tell.
+if command -v fc-list > /dev/null && fonts=$(fc-list : family 2> /dev/null) && [[ "$fonts" != *"Nerd Font"* ]]; then
     echo "Warning: no Nerd Font found (fc-list); the shell's icons would show as empty boxes." >&2
     echo "Install one: sudo pacman -S ttf-jetbrains-mono-nerd" >&2
 fi
 
 echo "==> The shell, in $target"
+# whether the target folder holds anything (git clones only into an empty one)
+shopt -s nullglob dotglob
+target_empty=yes
+for entry in "$target"/*; do
+    target_empty=no
+    break
+done
 if [ -e "$target/shell.qml" ]; then
-    if ours; then
-        echo "Already installed; update it with: git -C \"$target\" pull && \"$target/install.sh\" --update"
-    else
-        echo "$target already holds another Quickshell config; leaving it alone." >&2
-        echo "Move it away and run this again." >&2
-        exit 1
-    fi
+    from=$(origin)
+    ours "$from" || leave_other "$from"
+    echo "Already installed; update it with: git -C \"$target\" pull && \"$target/install.sh\" --update"
+elif { [ -e "$target" ] || [ -L "$target" ]; } && [ ! -d "$target" ]; then
+    echo "$target is not a folder; leaving it alone. Move it away and run this again." >&2
+    exit 1
+elif [ "$target_empty" = no ]; then
+    echo "$target holds no Quickshell config (no shell.qml), but it is not empty; leaving it alone." >&2
+    echo "Move it away, or empty it, and run this again." >&2
+    exit 1
 else
     mkdir -p "$(dirname "$target")"
     git clone "$repository" "$target"

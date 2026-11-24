@@ -24,7 +24,8 @@
 #     environment, the one-directory PATH, the private HOME, no new privileges.
 #
 # install.sh gives pacman the terminal (/dev/tty), so each run gets a terminal of its own
-# (script, util-linux); the test needs none.
+# (script, util-linux); the test needs none. The case of no terminal runs in a session
+# without one (setsid).
 #
 # Exit status: 0 when every check passed, 1 when one failed, 2 when the test could not be
 # set up (a missing tool is named with its use) or would not be safe to start.
@@ -40,6 +41,7 @@ need() { type -P "$1" > /dev/null || missing+=("$1 not found on PATH ($2)"); }
 need script "gives each run of install.sh a terminal of its own, as it hands pacman one"
 need setpriv "runs install.sh with no new privileges, so that nothing in it could become root"
 need timeout "ends a run that hangs"
+need setsid "runs install.sh without a terminal, for the case of none"
 need awk "reads install.sh for ways around the stand-ins before it is run"
 need sed "makes the stand-in curl's other installer"
 for tool in bash mkdir dirname grep cat cp mv rm mktemp readlink; do need "$tool" "install.sh uses it; linked into the private PATH"; done
@@ -50,6 +52,7 @@ fi
 SCRIPT=$(type -P script)
 SETPRIV=$(type -P setpriv)
 TIMEOUT=$(type -P timeout)
+SETSID=$(type -P setsid)
 BASH_PATH=$(type -P bash)
 SED_PATH=$(type -P sed)
 
@@ -85,6 +88,7 @@ MARK="# a stand-in written by tests/install-test.sh"
 # there: sudo-status, git-clone-fails, git-remote-fails, git-clone-no-builtin (a clone
 # without builtin-modules/), git-clone-no-helper (a clone without scripts/build-helper.sh),
 # build-fails (the clone's stand-in build-helper.sh fails), fonts (what fc-list prints),
+# fc-list-fails (fc-list ends with an error),
 # curl-fails (the fetch of the Arch installer fails), curl-other-dispatch (the installer
 # fetched expects another hand-over version than the top-level script's).
 make_bin() {
@@ -116,7 +120,13 @@ case "$*" in
         ;;
     "clone "*)
         [ -e "$control/git-clone-fails" ] && { echo "fatal: unable to access '$2'" >&2; exit 128; }
-        mkdir "$3" || exit 128
+        shopt -s nullglob dotglob
+        if [ -d "$3" ]; then
+            entries=("$3"/*)
+            [ ${#entries[@]} = 0 ] || { echo "fatal: destination path '$3' already exists and is not an empty directory." >&2; exit 128; }
+        else
+            mkdir "$3" || exit 128
+        fi
         echo "$2" > "$3/.standin-origin"
         : > "$3/shell.qml"
         if [ ! -e "$control/git-clone-no-builtin" ]; then
@@ -159,7 +169,9 @@ fi
 STANDIN
     standin fc-list << 'STANDIN'
 echo "fc-list: $*" >> "$control/log"
-[ -f "$control/fonts" ] && cat "$control/fonts"
+[ -e "$control/fc-list-fails" ] && { echo "Fontconfig error: cannot load default config file" >&2; exit 1; }
+# as fc-list itself: a reader that leaves early ends it (SIGPIPE), seen in its status
+[ -f "$control/fonts" ] && exec cat "$control/fonts"
 exit 0
 STANDIN
     for name in "${UNEXPECTED[@]}"; do
@@ -282,6 +294,7 @@ start_case() {
     os_release arch
     : > "$OS_ROOT/etc/pacman.conf"
     RUN_SCRIPT=$INSTALL
+    NO_TERMINAL=""
 }
 # os_release <fixture | none>: the made-up system's os-release, from tests/fixtures/distribution/
 os_release() {
@@ -314,7 +327,12 @@ run_install() {
         fi
     } > "$CASE/run.sh"
     chmod +x "$CASE/run.sh"
-    "$TIMEOUT" 60 "$SCRIPT" -qec "$CASE/run.sh" "$CASE/output" < /dev/null > /dev/null 2>&1
+    if [ -n "${NO_TERMINAL:-}" ]; then
+        # a session of its own without a controlling terminal: /dev/tty cannot be opened
+        "$TIMEOUT" 60 "$SETSID" -w "$CASE/run.sh" < /dev/null > "$CASE/output" 2>&1
+    else
+        "$TIMEOUT" 60 "$SCRIPT" -qec "$CASE/run.sh" "$CASE/output" < /dev/null > /dev/null 2>&1
+    fi
     STATUS=$?
     OUTPUT=$(tr -d '\r' < "$CASE/output" | grep -v '^Script \(started\|done\) on ')
 }
@@ -322,6 +340,8 @@ status_is() { [ "$STATUS" = "$1" ]; }
 status_nonzero() { [ "$STATUS" != 0 ] && [ "$STATUS" != 124 ]; }
 says() { grep -qF -- "$1" <<< "$OUTPUT"; }
 silent_on() { ! grep -qF -- "$1" <<< "$OUTPUT"; }
+# none of bash's own error messages (they name the script and a line, or a missing command)
+no_bash_error() { ! grep -q -- 'line [0-9]*:\|command not found\|No such device or address' <<< "$OUTPUT"; }
 logged() { grep -qxF -- "$1" "$CONTROL/log"; }
 log_count() { grep -c -- "$1" "$CONTROL/log"; }
 none_logged() { ! grep -q -- "$1" "$CONTROL/log"; }
@@ -476,6 +496,65 @@ run_install
 check "git cannot say where the config comes from: exit 1, not 'already installed'" status_is 1
 check "git cannot say where the config comes from: left alone" says "leaving it alone"
 check "git cannot say where the config comes from: no clone" none_logged '^git: clone'
+
+# Only this repository is ours: a fork, or another repository whose address merely contains
+# its name, is somebody else's config
+for origin in "https://github.com/someone/h2s-shell" "https://github.com/Siarko/h2s-shell-tailscale" \
+              "https://example.org/mirror/Siarko/h2s-shell"; do
+    start_case "fork-$(echo "$origin" | tr -c 'a-zA-Z0-9\n' '-')"
+    mkdir -p "$HOME_DIR/.config/quickshell/default"
+    : > "$HOME_DIR/.config/quickshell/default/shell.qml"
+    echo "$origin" > "$HOME_DIR/.config/quickshell/default/.standin-origin"
+    run_install
+    check "a checkout of $origin: exit 1, not 'already installed'" status_is 1
+    check "… says it leaves it alone, naming where it comes from" says "It comes from $origin, not from $repository."
+    check "… no clone" none_logged '^git: clone'
+    run_install --update
+    check "--update on a checkout of $origin: exit 1" status_is 1
+    check "… says it leaves it alone" says "already holds another Quickshell config; leaving it alone."
+    check "… no build, no copy" test "$(log_count '^build-helper ')" = 0 -a ! -e "$HOME_DIR/.local"
+done
+# The same repository in its other spellings is ours
+for origin in "$repository.git" "$repository/" "git@github.com:Siarko/h2s-shell.git" \
+              "ssh://git@github.com/Siarko/h2s-shell" "https://github.com/siarko/H2S-shell"; do
+    start_case "ours-$(echo "$origin" | tr -c 'a-zA-Z0-9\n' '-')"
+    mkdir -p "$HOME_DIR/.config/quickshell/default"
+    : > "$HOME_DIR/.config/quickshell/default/shell.qml"
+    echo "$origin" > "$HOME_DIR/.config/quickshell/default/.standin-origin"
+    run_install
+    check "a checkout of $origin: already installed" says "Already installed; update it with:"
+    check "… exit 0" status_is 0
+done
+
+# ---- The target is there, without shell.qml ------------------------------------------------
+start_case target-no-shell
+mkdir -p "$HOME_DIR/.config/quickshell/default"
+echo "notes" > "$HOME_DIR/.config/quickshell/default/notes.txt"
+run_install
+check "a target folder with files but no shell.qml: exit 1" status_is 1
+check "… install.sh's own message" says "holds no Quickshell config (no shell.qml), but it is not empty; leaving it alone."
+check "… no clone tried" none_logged '^git: clone'
+check "… not git's error" silent_on "fatal:"
+check "… the folder is as it was" test "$(cat "$HOME_DIR/.config/quickshell/default/notes.txt")" = notes
+check "… it does not say it is done" silent_on "==> Done"
+start_case target-file
+mkdir -p "$HOME_DIR/.config/quickshell"
+echo "a file" > "$HOME_DIR/.config/quickshell/default"
+run_install
+check "a file where the target goes: exit 1, install.sh's own message" says "is not a folder; leaving it alone."
+check "… no clone tried" none_logged '^git: clone'
+check "… exit 1" status_is 1
+start_case target-dangling
+mkdir -p "$HOME_DIR/.config/quickshell"
+ln -s "$HOME_DIR/nowhere" "$HOME_DIR/.config/quickshell/default"
+run_install
+check "a link to nothing where the target goes: exit 1, install.sh's own message" says "is not a folder; leaving it alone."
+check "… no clone tried" none_logged '^git: clone'
+start_case target-empty
+mkdir -p "$HOME_DIR/.config/quickshell/default"
+run_install
+check "an empty target folder: the shell is cloned into it" logged "git: clone $repository $HOME_DIR/.config/quickshell/default"
+check "… exit 0" status_is 0
 
 # ---- Which system ------------------------------------------------------------------------
 for system in nixos fedora linuxmint none; do
@@ -649,6 +728,38 @@ rm "$BIN/fc-list"
 run_install
 check "no fc-list: exit 0" status_is 0
 check "no fc-list: no warning (it cannot tell)" silent_on "no Nerd Font found"
+
+# Under pipefail a pipe into grep -q fails when grep has its match and leaves while fc-list
+# is still writing: a long list with the Nerd Font early must give no warning
+start_case many-fonts
+# (megabytes after it: far more than a pipe holds, so fc-list is surely still writing)
+{ echo "JetBrainsMono Nerd Font"; seq -f "Filler Sans %g" 1 500000; } > "$CONTROL/fonts"
+run_install
+check "a long font list with a Nerd Font early: no warning" silent_on "no Nerd Font found"
+check "… exit 0" status_is 0
+start_case fc-list-fails
+: > "$CONTROL/fc-list-fails"
+run_install
+check "fc-list fails: no warning (it cannot tell)" silent_on "no Nerd Font found"
+check "… exit 0" status_is 0
+
+# ---- No terminal, no sudo -----------------------------------------------------------------
+for how in file piped; do
+    start_case "no-terminal-$how"
+    NO_TERMINAL=1
+    if [ "$how" = piped ]; then run_install piped; else run_install; fi
+    check "no terminal ($how): exit 1" status_is 1
+    check "… install.sh's own message, naming the terminal" says "Installing the packages needs a terminal, for pacman's questions and sudo's password, and there is none."
+    check "… not bash's" no_bash_error
+    check "… nothing run, nothing put in the home directory" test "$(grep -vc '^curl: ' "$CONTROL/log")" = 0 -a "$(home_tree)" = .
+done
+start_case no-sudo
+rm "$BIN/sudo"
+run_install
+check "no sudo: exit 1" status_is 1
+check "… install.sh's own message, naming sudo and its use" says "Installing the packages needs sudo (the package sudo), to run pacman as root, and there is none."
+check "… not bash's" no_bash_error
+check "… nothing run, nothing put in the home directory" test ! -s "$CONTROL/log" -a "$(home_tree)" = .
 
 echo
 if [ "$failed" = 0 ]; then echo "install.sh under stand-ins: passed"; else echo "install.sh under stand-ins: FAILED"; fi
