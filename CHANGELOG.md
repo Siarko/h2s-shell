@@ -37,8 +37,9 @@ The interface modules are written against (`qs.api`), versioned on its own
 - NixOS: the module's `programs.h2s-shell.settingsFile = ./h2s-shell.json;` reads the
   shell's settings file, JSON whose keys are the module's options with a `version` (now 1):
   `idle.hibernateDelay`, `pam.rules`, `pam.sudo.rules`, `pam.polkit.rules`,
-  `polkit.rememberAdmin.{enable,users,minutes}`. Each value is a default, so the same option
-  in the configuration wins; a wrong value (type, range, a hibernation delay that is no
+  `polkit.rememberAdmin.{enable,users,minutes}`. Each value is taken just below `mkDefault`, so
+  the same option in the configuration wins, even at `mkDefault`; when the configuration sets
+  any of the three PAM rule lists, none of the file's are taken (a warning); a wrong value (type, range, a hibernation delay that is no
   systemd time span, a PAM row with a field the rows do not have) or schema version stops
   the build with an assertion naming the key; an unknown key is a warning and is ignored.
   What was taken in and what is in force is published as `/etc/h2s-shell/settings.json`.

@@ -86,8 +86,10 @@ Its keys are the module's own options, with the file's schema version:
 ```
 
 `idle.hibernateDelay`, `pam.rules`, `pam.sudo.rules`, `pam.polkit.rules` and
-`polkit.rememberAdmin.{enable,users,minutes}` are read. Each value is only a default: the
-same option set in your configuration wins. A wrong value or version stops the build with
+`polkit.rememberAdmin.{enable,users,minutes}` are read. Each value is taken just below
+`mkDefault`: the same option set in your configuration wins, even at `mkDefault`. The PAM
+rules are one unit: when your configuration sets any of `pam.rules`, `pam.sudo.rules` or
+`pam.polkit.rules`, none of the file's are taken (a build warning names them). A wrong value or version stops the build with
 an assertion naming the key; a key this version of the module does not know is a warning
 and is ignored. What was taken in, and what is in force, is in
 `/etc/h2s-shell/settings.json`. Without `settingsFile` nothing is read. (On Arch there is

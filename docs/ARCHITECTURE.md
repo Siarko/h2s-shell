@@ -2205,7 +2205,8 @@ trees, on either system.
   evaluated, not built: the fixture `tests/fixtures/settings-nixos/settings.json` gives
   the same options and `/etc` files as the same values written as options, and
   `/etc/h2s-shell/settings.json` holds what it took in and what is in force; a
-  hand-written option wins over the file's value; a wrong schema version or value is an
+  hand-written option, plain or at `mkDefault`, wins alone over the file's value, and the
+  file's PAM rules are not taken beside any of the configuration's own; a wrong schema version or value is an
   assertion naming it, an unknown key a warning.
 
 #### Arch
