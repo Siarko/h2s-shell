@@ -17,13 +17,15 @@ import qs.singletons
 //                         test-mode check (ModuleRules.testRunProblem) refuses it at launch
 //                         and nothing runs: answer({ kind: "refused" }). → its owner key
 //   waitingCount()        how many runs wait in their check for the look-up
-//   startShell(what, argv, done, detached)
+//   startShell(what, argv, done, detached, extra)
 //                         asks for one of the shell's own fixed commands (PrivilegedRuns
 //                         .startShell, a setting's Apply). Called straight from a suite's code
 //                         (a module's directory on the stack) it is refused before the queue;
 //                         `detached`, it is asked from the event loop, as the shell's own code
 //                         asks — then queued, and in test mode refused at its launch (no
-//                         stand-in is allowed for it), so nothing runs
+//                         stand-in is allowed for it), so nothing runs. `extra`: more of the
+//                         request (timeoutMs, onLine, and testPkexec: a module's stand-in
+//                         pkexec, which then runs in the trusted one's place)
 //   lastShellArgv()       the words the last of those was queued with (pkexec still by name)
 // All of them do nothing outside test mode.
 Singleton {
@@ -43,10 +45,10 @@ Singleton {
         return owner;
     }
 
-    function startShell(what, argv, done, detached) {
+    function startShell(what, argv, done, detached, extra) {
         if (!Modules.host.testMode)
             return;
-        const request = { what: String(what), argv: argv };
+        const request = Object.assign({}, extra ?? {}, { what: String(what), argv: argv });
         if (detached === true)
             Qt.callLater(() => PrivilegedRuns.startShell(request, done));
         else

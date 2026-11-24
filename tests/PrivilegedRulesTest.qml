@@ -253,6 +253,50 @@ TestCase {
         assertEqual(JSON.stringify(rules.shellArgv("/t", ["/bin/true"])), JSON.stringify(["pkexec", "/t", "-k", "3", "300", "/bin/true"]),
                     "… a command of one word");
 
+        // --- a command of the shell's own asking for its own limit and lines ---
+        assertEqual(JSON.stringify(rules.shellArgv("/t", ["/bin/true"], 1800000)), JSON.stringify(["pkexec", "/t", "-k", "3", "1800", "/bin/true"]),
+                    "shellArgv with a longer limit: the limit among the words the prompt shows");
+        assertEqual(JSON.stringify(rules.shellArgv("/t", ["/bin/true"], 3600000)), JSON.stringify(["pkexec", "/t", "-k", "3", "3600", "/bin/true"]),
+                    "… the longest allowed, an hour");
+        assertEqual(JSON.stringify(rules.shellArgv("/t", ["/bin/true"], 1000)), JSON.stringify(["pkexec", "/t", "-k", "3", "1", "/bin/true"]),
+                    "… the shortest allowed, a second");
+        assertEqual(rules.shellArgv("/t", ["/bin/true"], 1500.4)[4], "1.5", "… rounded to whole ms");
+        assertEqual([rules.shellArgv("/t", ["/bin/true"], 3600001), rules.shellArgv("/t", ["/bin/true"], 999), rules.shellArgv("/t", ["/bin/true"], 0),
+                     rules.shellArgv("/t", ["/bin/true"], NaN), rules.shellArgv("/t", ["/bin/true"], Infinity), rules.shellArgv("/t", ["/bin/true"], "600000"),
+                     rules.shellArgv("/t", ["/bin/true"], null)].join(","),
+                    ",,,,,,", "… a limit past an hour, under a second, not a number: null, never clamped");
+        assertEqual(rules.shellMaxRunMs, 3600000, "the longest limit of the shell's own commands: an hour");
+        const lineCallback = () => {};
+        assertEqual(JSON.stringify(rules.shellOptions({ what: "x", argv: ["/bin/true"] })), JSON.stringify({ problem: "", timeoutMs: 300000, onLine: null }),
+                    "shellOptions: none asked: today's limit, no line callback");
+        assertEqual(JSON.stringify([rules.shellOptions(undefined), rules.shellOptions(null)]),
+                    JSON.stringify([{ problem: "", timeoutMs: 300000, onLine: null }, { problem: "", timeoutMs: 300000, onLine: null }]),
+                    "… no request: the same (startShell refuses it for its words)");
+        assertEqual(JSON.stringify(rules.shellOptions({ timeoutMs: null, onLine: null })), JSON.stringify({ problem: "", timeoutMs: 300000, onLine: null }),
+                    "… null for either: not given");
+        const longer = rules.shellOptions({ timeoutMs: 1800000.4, onLine: lineCallback });
+        assert(longer.problem === "" && longer.timeoutMs === 1800000 && longer.onLine === lineCallback, "… a longer limit and a callback taken: " + JSON.stringify(longer));
+        assertEqual(rules.shellOptions({ timeoutMs: 1000 }).timeoutMs, 1000, "… a second, the shortest");
+        assertEqual(rules.shellOptions({ timeoutMs: 3600000 }).timeoutMs, 3600000, "… an hour, the longest");
+        for (const wrong of [3600001, 999, 0, -1, NaN, Infinity, "600000", true]) {
+            const refused = rules.shellOptions({ timeoutMs: wrong, onLine: lineCallback });
+            assert(refused.problem === "timeoutMs must be 1000 to 3600000 ms (1 s to 1 h)" && refused.timeoutMs === 300000,
+                   "… a limit of " + String(wrong) + " refused, the default kept: " + JSON.stringify(refused));
+        }
+        const notCallback = rules.shellOptions({ timeoutMs: 1000, onLine: "line" });
+        assert(notCallback.problem === "onLine is not a function" && notCallback.onLine === null, "… an onLine that is no function refused: " + JSON.stringify(notCallback));
+        let limitReads = 0;
+        const getter = { get timeoutMs() { limitReads++; return limitReads === 1 ? 2000 : 7200000; } };
+        const readOnce = rules.shellOptions(getter);
+        assert(limitReads === 1 && readOnce.timeoutMs === 2000, "… each field read once: what is checked is what is used");
+        assertEqual(rules.shellOptions({ get timeoutMs() { throw new Error("x"); } }).timeoutMs, 300000, "… a read that throws: not given");
+        assertEqual(rules.shellStandIn(true, "/f/tests/programs/pkexec", ["/f/tests/programs/pkexec"]), "/f/tests/programs/pkexec",
+                    "shellStandIn: test mode, a module's stand-in pkexec asked: that one");
+        assertEqual([rules.shellStandIn(false, "/f/tests/programs/pkexec", ["/f/tests/programs/pkexec"]),
+                     rules.shellStandIn(true, "/usr/bin/pkexec", ["/f/tests/programs/pkexec"]),
+                     rules.shellStandIn(true, "", [""]), rules.shellStandIn(true, "/f/pkexec", null), rules.shellStandIn(true, 5, [5])].join(","),
+                    ",,,,", "… outside test mode, a path no module's stand-in, nothing asked, no list, not text: the trusted pkexec (\"\")");
+
         // --- the old PrivilegedAction: its default "pkexec" is the shell's trusted one ---
         assert(rules.legacySystemPkexec(["pkexec"], false), "\"pkexec\" by name outside test mode: the trusted pkexec");
         assert(rules.legacySystemPkexec(["pkexec", "--disable-internal-agent"], false), "… with words of its own too");
@@ -334,6 +378,10 @@ TestCase {
         assert(ran(127).refused && !ran(127).dismissed, "127: refused");
         assert(ran(124, { durationMs: 30000 }).timedOut && ran(137, { durationMs: 31000 }).timedOut, "124 or 137 after the limit: timedOut");
         assert(!ran(124, { durationMs: 500 }).timedOut, "124 before the limit: the command's own status");
+        assert(ran(-1, { durationMs: 30000 }).timedOut && !ran(-1, { durationMs: 30000 }).ok, "no status after the limit (timeout ended by its KILL): timedOut");
+        assert(!ran(-1, { durationMs: 500 }).timedOut, "… no status before the limit: a crash, not the limit");
+        assert(!ran(-1, { durationMs: 30000, failedToStart: true }).timedOut, "… pkexec never started: not timed out");
+        assert(!ran(-1, { durationMs: 30000, cancelled: true }).timedOut, "… cancelled: not timed out");
         assert(!ran(126, { cancelled: true, code: 126 }).dismissed && ran(-1, { cancelled: true }).cancelled, "cancelled: nothing else");
         assertEqual(ran(-1, { failedToStart: true }).error, "pkexec could not be started", "pkexec not started: said so");
         assert(!ran(0).notFound && !ran(1).notFound && !rules.cancelledResult().notFound && rules.notFoundResult("/usr/bin/x").notFound,

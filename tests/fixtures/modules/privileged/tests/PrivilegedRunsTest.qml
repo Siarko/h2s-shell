@@ -868,6 +868,106 @@ TestCase {
             assertEqual(ModuleTestKit.notified.filter(entry => entry.summary.startsWith("Shell: ")).length, 0,
                         "… and nothing announced as the shell's: it never launched");
             assert(_runs["behind the shell's"].result.ok, "the run behind it has run");
+            _shellLines();
+        });
+    }
+
+    // A command of the shell's own run end to end on the fixture's stand-in pkexec (the
+    // request's testPkexec, test mode only), records what it hands over: its lines through
+    // the request's onLine, its answer, the words the stand-in was given
+    function _shell(name, argv, extra) {
+        const record = { lines: [], firstLineAt: 0, doneAt: 0, result: null };
+        _runs[name] = record;
+        PrivilegedLookupSeam.startShell(name, argv, result => {
+            record.result = result;
+            record.doneAt = Date.now();
+        }, true, Object.assign({
+            testPkexec: _path("pkexec"),
+            onLine: (line, stream) => {
+                if (stream !== "stdout")
+                    return;
+                if (record.firstLineAt === 0)
+                    record.firstLineAt = Date.now();
+                record.lines.push(line);
+            }
+        }, extra ?? {}));
+        return record;
+    }
+
+    // The shell's own command: its lines as they come, in order, before its answer, under a
+    // longer limit the stand-in pkexec is handed (so the prompt shows it); one that asks for
+    // none keeps the five minutes
+    function _shellLines() {
+        _runs = {};
+        ModuleTestKit.clearRecords();
+        ModuleTestKit.setPolkitAgent("other");
+        const talk = _path("talk");
+        _shell("Switch", [talk, "lines", "3", "0.3"], { timeoutMs: 1800000 });
+        _shell("Plain", [talk, "lines", "1", "0"], { onLine: undefined });
+        _then("the shell's two runs end", () => _done("Switch", "Plain") && _idle(), () => {
+            const record = _runs.Switch;
+            const result = record.result;
+            assert(result.ok && result.code === 0 && !result.timedOut, "it ran on the stand-in and exited 0: " + JSON.stringify(result));
+            assertEqual(record.lines.join(","), "line 1,line 2,line 3", "every line through onLine, in order");
+            assert(record.firstLineAt > 0 && record.doneAt - record.firstLineAt >= 400,
+                   "the first line came while it ran, before its answer (" + (record.doneAt - record.firstLineAt) + " ms)");
+            assertEqual(result.stdout, "line 1\nline 2\nline 3", "the answer's stdout keeps the lines too");
+            const words = _pkexecWords(result);
+            assert(words[0].startsWith("/") && words[0].endsWith("/timeout"), "the stand-in pkexec runs the shell's timeout: " + words[0]);
+            assertEqual(JSON.stringify(words.slice(1)), JSON.stringify(["-k", "3", "1800", talk, "lines", "3", "0.3"]),
+                        "… with the longer limit asked for, among the words the prompt shows");
+            assertEqual(PrivilegedLookupSeam.lastShellArgv()[0], "pkexec", "… queued with pkexec by name, the stand-in put in at its launch");
+            const plain = _runs.Plain.result;
+            assert(plain.ok && _runs.Plain.lines.length === 0, "a run without onLine runs as before: " + JSON.stringify(plain));
+            assertEqual(_pkexecWords(plain).slice(1, 4).join(" "), "-k 3 300", "… under today's five minutes");
+            assertEqual(ModuleTestKit.notified.filter(entry => entry.summary.startsWith("Shell: ")).length, 2,
+                        "each announced as the shell's (another polkit agent)");
+            _shellKilled();
+        });
+    }
+
+    // Past its limit, a command that ignores TERM is killed by the timeout inside pkexec
+    // (TERM at the limit, KILL 3 s later); the user is told it did not end in time
+    function _shellKilled() {
+        _runs = {};
+        ModuleTestKit.clearRecords();
+        _shell("Hold", [_path("talk"), "hold", "20"], { timeoutMs: 1000 });
+        _then("the run past its limit ends", () => _done("Hold") && _idle(), () => {
+            const record = _runs.Hold;
+            const result = record.result;
+            assert(result.timedOut && result.code === -1 && !result.ok && !result.cancelled,
+                   "TERM ignored: the timeout's KILL ended it after its limit (no status: the timeout ends itself with it): " + JSON.stringify(result));
+            assertEqual(record.lines.join(","), "started", "its line came through onLine");
+            const told = ModuleTestKit.notified.filter(entry => entry.summary === "Hold failed");
+            assert(told.length === 1 && told[0].body === "It did not end within 1 s", "one notification: " + JSON.stringify(ModuleTestKit.notified));
+            _shellRefused();
+        });
+    }
+
+    // While locked a command of the shell's own is refused and nothing runs; a limit past
+    // the longest or an onLine that is no function is refused before the queue
+    function _shellRefused() {
+        _runs = {};
+        ModuleTestKit.clearRecords();
+        const talk = _path("talk");
+        ModuleTestKit.setSessionLocked(true);
+        _shell("Locked", [talk, "lines", "1", "0"], { timeoutMs: 1800000 });
+        _then("the locked run is answered", () => _done("Locked"), () => {
+            ModuleTestKit.setSessionLocked(false);
+            const locked = _runs.Locked.result;
+            assert(!locked.ok && locked.dismissed && locked.blocked === "locked" && _runs.Locked.lines.length === 0,
+                   "while locked: dismissed, blocked locked, no line: " + JSON.stringify(locked));
+            _shell("Too long", [talk, "lines", "1", "0"], { timeoutMs: 3600001 });
+            _shell("No callback", [talk, "lines", "1", "0"], { onLine: "line" });
+        });
+        _then("the wrong requests are answered", () => _done("Too long", "No callback") && _idle(), () => {
+            const tooLong = _runs["Too long"].result;
+            assert(!tooLong.ok && tooLong.error.startsWith("timeoutMs must be") && tooLong.stderr === "", "a limit past an hour: refused, nothing run: " + JSON.stringify(tooLong));
+            const noCallback = _runs["No callback"].result;
+            assert(!noCallback.ok && noCallback.error === "onLine is not a function" && noCallback.stderr === "", "onLine no function: refused: " + JSON.stringify(noCallback));
+            assertEqual(JSON.stringify(ModuleTestKit.notified.map(entry => [entry.summary, entry.body])),
+                        JSON.stringify([["Too long failed", tooLong.error], ["No callback failed", "onLine is not a function"]]),
+                        "each told as a failure of the shell's own, with its reason (as a command without an absolute program)");
         });
     }
 }

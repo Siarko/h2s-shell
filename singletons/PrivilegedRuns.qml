@@ -194,20 +194,25 @@ Singleton {
 
     // A fixed command of the shell's own, started by the user's click (a setting's Apply):
     // `request` { what (for the log and a failure's notice), argv (an absolute program and
-    // its words, from the shell's code) }; `done(result)` once, never inside this call, with
-    // PrivilegedRules' result (ok, code, stdout, stderr, dismissed, refused, notFound,
-    // cancelled, blocked, error). It runs under the trusted, setuid pkexec found by the
-    // look-up (none: refused, not available), inside the shell's trusted `timeout` with the
-    // limit PrivilegedRules.shellRunMs (waiting, checking, for its look-up; none found:
-    // refused at the launch); its prompt says who asks
+    // its words, from the shell's code), timeoutMs (optional: a longer limit, at most
+    // PrivilegedRules.shellMaxRunMs), onLine (optional: (line, stream) for each line of its
+    // output as it comes, as a module's run gets) }; `done(result)` once, never inside this
+    // call, with PrivilegedRules' result (ok, code, stdout, stderr, dismissed, refused,
+    // notFound, timedOut, cancelled, blocked, error). It runs under the trusted, setuid pkexec
+    // found by the look-up (none: refused, not available), inside the shell's trusted
+    // `timeout` with its limit, PrivilegedRules.shellRunMs when it asks for none (waiting,
+    // checking, for its look-up; none found: refused at the launch); its prompt says who asks
     // ("Shell: h2s-shell", PolkitRules.announcement) and what, the command collapsed, as a
     // module's run. Never from a module's code (the call's stack names a module directory:
     // refused before the queue, so no module is announced as the shell). A refusal is told
     // once, as for every run (reportDenied); another failure as "<what> failed". In module
-    // test mode it is refused at its launch: no stand-in is allowed for it, so nothing runs.
+    // test mode it is refused at its launch — no stand-in is allowed for it, so nothing runs —
+    // unless `request.testPkexec` names a module's stand-in pkexec (PrivilegedRules
+    // .shellStandIn: the shell's fixture suites), which then runs in the trusted one's place.
     function startShell(request, done) {
         const fromModule = ModuleRules.stackDirectories(new Error().stack, Modules.host.directories).length > 0;
         const words = CommandRules.argvSnapshot(request?.argv, true).argv;
+        const options = PrivilegedRules.shellOptions(request);
         const job = {
             id: ++_lastId, kind: "shell", owner: "shell", handle: null, moduleId: "shell",
             what: PrivilegedRules.cleanWhat(String(request?.what ?? "")), timeoutMs: 0, notifyFailures: true,
@@ -224,6 +229,10 @@ Singleton {
             _refuse(job, PrivilegedRules.refusedResult({ blocked: "", error: "not a command with an absolute program" }));
             return;
         }
+        if (options.problem !== "") {
+            _refuse(job, PrivilegedRules.refusedResult({ blocked: "", error: options.problem }));
+            return;
+        }
         if (locked) {
             _refuse(job, PrivilegedRules.lockedResult());
             return;
@@ -231,8 +240,14 @@ Singleton {
         // Its words under the shell's trusted timeout are made at its launch (_launch), once
         // the look-up of the timeout has answered: it waits for it while checking
         job.words = words;
-        job.timeoutMs = PrivilegedRules.shellRunMs;
+        job.timeoutMs = options.timeoutMs;
+        job.onLine = options.onLine;
         job.program = String(words[0]);
+        const standIn = _testMode ? PrivilegedRules.shellStandIn(true, String(request?.testPkexec ?? ""), Modules.host.testStandIns) : "";
+        if (standIn !== "") {
+            job.systemPkexec = false;
+            job.standIns = [standIn];
+        }
         _jobs.set(job.id, job);
         _dispatch({ type: "add", id: job.id, owner: job.owner });
     }
@@ -453,13 +468,14 @@ Singleton {
         // A command of the shell's own: under the shell's trusted timeout, as a module's run,
         // so that the remembered authorization's rule covers it (PrivilegedRules.shellArgv)
         if (job.kind === "shell") {
-            const argv = PrivilegedRules.shellArgv(CommandTools.timeout, job.words);
+            const argv = PrivilegedRules.shellArgv(CommandTools.timeout, job.words, job.timeoutMs);
             if (argv === null) {
                 job.result = { refusal: "running as administrator is not available: no trusted timeout (coreutils) on PATH" };
                 Qt.callLater(() => root._dispatch({ type: "exited", id: job.id }));
                 return;
             }
-            job.argv = argv;
+            // A suite's stand-in pkexec (test mode only) in place of pkexec by name
+            job.argv = job.systemPkexec === true ? argv : [job.standIns[0]].concat(argv.slice(1));
             _lastShellArgv = argv;
         }
         // The old type's default "pkexec": the trusted one, once the look-up has answered

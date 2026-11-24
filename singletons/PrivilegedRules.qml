@@ -313,16 +313,66 @@ Singleton {
     // few small files, flush them and signal a service, in well under a second; five minutes
     // leave room for a slow or busy disk and still end one that hangs
     readonly property int shellRunMs: 300000
+    // The longest limit a command of the shell's own may ask for (startShell's `timeoutMs`):
+    // a system switch that evaluates and, when the user could not build it first, builds the
+    // whole system as root. An hour still ends one that hangs
+    readonly property int shellMaxRunMs: 3600000
+
+    // A command of the shell's own: its limit and its line callback, from startShell's
+    // request, each read once (CommandRules.readOnce). `timeoutMs` not given: shellRunMs;
+    // given, a number of minTimeoutMs to shellMaxRunMs (rounded to whole ms), never clamped.
+    // `onLine` not given: none; given, a function. → { problem ("" when both are usable),
+    // timeoutMs, onLine (a function or null) }
+    function shellOptions(request) {
+        const result = { problem: "", timeoutMs: shellRunMs, onLine: null };
+        if (request === undefined || request === null || typeof request !== "object")
+            return result;
+        const read = CommandRules.readOnce(request, ["timeoutMs", "onLine"]);
+        const limit = read.timeoutMs;
+        if (limit !== undefined && limit !== null) {
+            if (!shellLimitAllowed(limit))
+                result.problem = "timeoutMs must be " + minTimeoutMs + " to " + shellMaxRunMs + " ms (1 s to 1 h)";
+            else
+                result.timeoutMs = Math.round(limit);
+        }
+        if (read.onLine !== undefined && read.onLine !== null) {
+            if (typeof read.onLine !== "function")
+                result.problem = "onLine is not a function";
+            else
+                result.onLine = read.onLine;
+        }
+        return result;
+    }
+
+    // Whether a command of the shell's own may run under this limit (ms)
+    function shellLimitAllowed(timeoutMs) {
+        return typeof timeoutMs === "number" && isFinite(timeoutMs) && timeoutMs >= minTimeoutMs && timeoutMs <= shellMaxRunMs;
+    }
 
     // The words of a command of the shell's own, before the trusted pkexec takes argv[0]
     // (legacyLaunch): under the shell's `timeout`, as a module's run — the same program the
     // remembered authorization's rule names (RememberRules.ruleText), so that a kept
-    // password covers the shell's own runs too. null without a usable timeout or command.
-    function shellArgv(timeout, argv) {
+    // password covers the shell's own runs too. Its limit: `timeoutMs` (shellLimitAllowed),
+    // shellRunMs when not given; the prompt shows it, as it is among the words. null without
+    // a usable timeout, command or limit.
+    function shellArgv(timeout, argv, timeoutMs) {
         if (typeof timeout !== "string" || !timeout.startsWith("/") || !Array.isArray(argv) || argv.length === 0
                 || typeof argv[0] !== "string" || !argv[0].startsWith("/"))
             return null;
-        return pkexecArgv("pkexec", timeout, shellRunMs, killAfterMs, argv);
+        const limit = timeoutMs === undefined ? shellRunMs : timeoutMs;
+        if (!shellLimitAllowed(limit))
+            return null;
+        return pkexecArgv("pkexec", timeout, Math.round(limit), killAfterMs, argv);
+    }
+
+    // The pkexec a command of the shell's own runs under in module test mode: the stand-in a
+    // suite asked for (`asked`) when it is one of the modules' stand-ins (ModuleHost
+    // .testStandIns), else "" — the trusted pkexec, which test mode then refuses at the
+    // launch. Outside test mode always "".
+    function shellStandIn(testMode, asked, standIns) {
+        if (testMode !== true || typeof asked !== "string" || asked === "" || !Array.isArray(standIns))
+            return "";
+        return standIns.includes(asked) ? asked : "";
     }
 
     // A real file's mode (octal text, as the probe prints it) with the setuid bit, owned by
@@ -464,8 +514,9 @@ Singleton {
     // A run that pkexec started, from the command runner's result (`run`) and the run's limit:
     //   dismissed  pkexec exited 126: the prompt dismissed or the password not accepted
     //   refused    pkexec exited 127: not authorised, or no agent answered
-    //   timedOut   the shell's `timeout` ended it (124; 137 after its KILL) after at least the
-    //              limit
+    //   timedOut   the shell's `timeout` ended it after at least the limit: 124, or after its
+    //              KILL 137 — or no status at all (code -1), as pkexec execs `timeout`, which
+    //              then ends itself with the KILL its command got
     // A command that itself exits 124, 126, 127 or 137 reads the same (pkexec and `timeout`
     // pass the command's status through), and so does `timeout`'s own status: 125 (it
     // failed: a plain failure), 126 (the command could not be run: read as dismissed), 127
@@ -475,7 +526,8 @@ Singleton {
     function runResult(run, timeoutMs) {
         const code = typeof run?.code === "number" ? run.code : -1;
         const cancelled = run?.cancelled === true;
-        const timedOut = !cancelled && (code === 124 || code === 137) && (run?.durationMs ?? 0) >= timeoutMs;
+        const killed = code === -1 && run?.failedToStart !== true;
+        const timedOut = !cancelled && (code === 124 || code === 137 || killed) && (run?.durationMs ?? 0) >= timeoutMs;
         return _result({
             ok: run?.ok === true && code === 0 && !cancelled,
             code: code,

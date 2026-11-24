@@ -1590,8 +1590,10 @@ and a trusted `timeout` are found.
   own prompt.
 - **The words pkexec gets**: `<pkexec> <timeout> -k 3 <limit> <argv…>`, for a module's run
   and for a command of the shell's own (`startShell`: its fixed `/bin/sh` scripts, the
-  limit `PrivilegedRules.shellRunMs`, 5 minutes; refused while no trusted `timeout` is
-  found). Only an old `PrivilegedAction` run is handed to pkexec as it is. The shell's own
+  limit `PrivilegedRules.shellRunMs`, 5 minutes, or a longer one the request asks for as
+  `timeoutMs`, at most `PrivilegedRules.shellMaxRunMs`, an hour — the prompt shows it among
+  the words; its output line by line through the request's `onLine`, as a module's run;
+  refused while no trusted `timeout` is found). Only an old `PrivilegedAction` run is handed to pkexec as it is. The shell's own
   trusted `timeout` runs inside pkexec, as root, and ends the command at its limit whatever
   happens to the shell. Nothing is put around pkexec: once the command runs as root the
   shell cannot signal it, and the kernel drops `setpriv --pdeathsig` at the exec of a setuid
