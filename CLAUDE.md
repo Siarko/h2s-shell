@@ -175,7 +175,9 @@ is registered, nothing is sent, whatever environment it inherited.
 compositor of its own, side by side, in a fixed environment (Mesa's llvmpipe, which draws
 shader effects; scale 1, 96 DPI, `QT_HASH_SEED=0`, UTC); `--shoot` writes a PNG per scene,
 cropped to the subject, into `$H2S_MOCKUP_SHOTS` (else `~/.cache/h2s-shell-mockups/`).
-With no name it runs every component and view mockup, never a planning one. Folder names are lowercase with hyphens, so no `import qs.…` reaches them; `kit/` is the only
+With no name it runs every component and view mockup, never a planning one; `--by-system`,
+the part `tests/run-all.sh` runs and the command `tests/affected.sh` gives (a mockup covers its
+folder's closure), is `--compare` on Arch and `--load-only` elsewhere. Folder names are lowercase with hyphens, so no `import qs.…` reaches them; `kit/` is the only
 importable folder. Three kinds:
 
 - `components/<name>`: one component in all its states (the component's file name in kebab

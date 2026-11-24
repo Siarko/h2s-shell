@@ -9,11 +9,20 @@
 #                                                       mockup's baseline
 #   tests/run-mockups.sh --approve <kind>/<name>…       this tree's last run's shots become
 #                                                       the mockup's baseline
+#   tests/run-mockups.sh --by-system [<kind>/<name>…]   --compare on Arch, --load-only on
+#                                                       any other system (tests/run-all.sh's
+#                                                       part, tests/affected.sh's command)
 #   tests/run-mockups.sh -j <n> …                       at most <n> mockups at once (default:
 #                                                       half the processors, at most 16, and
 #                                                       no more than memory allows)
 #
 # With no name: every component and view mockup (mockups/components/*, mockups/views/*).
+# --by-system takes the system as tests/run-system.sh does (scripts/distribution.sh,
+# H2S_DISTRIBUTION_ROOT before the paths it reads), and says which mode it took: the
+# baselines are drawn on Arch, and another system's libraries and fonts draw other pixels,
+# so elsewhere every scene is only reached; a system that cannot be told is load-only too.
+# With no name and no component or view mockup in the tree it has nothing to check, and
+# says so with status 0 (the other modes: status 2).
 # A planning mockup (mockups/planning/*) runs only when it is named. H2S_MOCKUP_BASE=
 # tests/fixtures/mockups takes the runners' fixture mockups instead (the self-test's).
 #
@@ -110,13 +119,14 @@ HEADLESS_NEED=mockups
 usage() {
     echo "usage: tests/run-mockups.sh --load-only | --shoot | --compare [-j <mockups at once>] [<kind>/<name>…]" >&2
     echo "       tests/run-mockups.sh --approve <kind>/<name>…" >&2
+    echo "       tests/run-mockups.sh --by-system [-j <mockups at once>] [<kind>/<name>…]" >&2
     exit 2
 }
 mode=""
 jobs=""
 while [ $# -gt 0 ]; do
     case "$1" in
-        --load-only | --shoot | --compare | --approve)
+        --load-only | --shoot | --compare | --approve | --by-system)
             [ -z "$mode" ] || usage
             mode=${1#--}
             shift
@@ -131,6 +141,19 @@ while [ $# -gt 0 ]; do
     esac
 done
 [ -n "$mode" ] || usage
+by_system=0
+if [ "$mode" = by-system ]; then
+    by_system=1
+    # shellcheck source=../scripts/distribution.sh
+    source "$REPO/scripts/distribution.sh" || { echo "run-mockups.sh: cannot read scripts/distribution.sh; nothing was run" >&2; exit 2; }
+    if distribution_detect "$REPO" "" "${H2S_DISTRIBUTION_ROOT:-}"; then
+        system=$distribution_id
+    else
+        system="unknown ($distribution_problem)"
+    fi
+    if [ "$system" = arch ]; then mode=compare; else mode=load-only; fi
+    echo "run-mockups.sh: the system is $system: --$mode"
+fi
 
 base=${H2S_MOCKUP_BASE:-mockups}
 case "$base" in
@@ -694,7 +717,10 @@ if [ ${#names[@]} = 0 ]; then
     # Planning mockups only by name: no test run includes them
     mapfile -t names < <(cd "$REPO/$base" 2> /dev/null && find components views -mindepth 2 -maxdepth 2 -name Mockup.qml -printf '%h\n' 2> /dev/null \
         | grep -E '^(components|views)/[a-z0-9-]+$' | LC_ALL=C sort)
-    [ ${#names[@]} -gt 0 ] || { echo "run-mockups.sh: no component or view mockup in $base/: nothing to run"; exit 2; }
+    if [ ${#names[@]} = 0 ]; then
+        echo "run-mockups.sh: no component or view mockup in $base/: nothing to run"
+        exit $((by_system ? 0 : 2))
+    fi
 fi
 
 # Waited for as each ends (wait -n -p: bash 5.1)

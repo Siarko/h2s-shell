@@ -2193,8 +2193,10 @@ suite covers its closure: every type and singleton its file names, every path qu
 transitively; a module fixture part covers `tests-modules.qml`'s closure and its directories;
 a self-test covers itself; a lock scenario covers its file and runs on any change in the lock
 closure. `tests/affected-map.txt` places what a closure cannot see — scripts, the runners, the
-lock scenarios' subjects — and lists what needs no test (`none`). A changed file nothing
-places selects everything. `tests/affected-selftest.sh` runs `affected.sh --check` (every
+lock scenarios' subjects — and lists what needs no test (`none`). A component or view mockup
+covers the closure of its folder (its `Mockup.qml`, its baseline's files), and a change there
+runs it through `tests/run-mockups.sh --by-system`; `mockup.qml` and `mockups/kit/` run every
+mockup, and a planning mockup needs no test. A changed file nothing places selects everything. `tests/affected-selftest.sh` runs `affected.sh --check` (every
 tracked file placed, every map line true) and checks the selection on made-up repositories.
 
 ### Finding checks that cannot fail, and flakes
@@ -2329,6 +2331,26 @@ trees, on either system.
 - `test-tools`: the packages the test tools come from (the list under "Where the test
   tools come from", Arch) are in the repositories; one that is not installed is noted
   with its use.
+
+### The mockups
+
+`tests/run-all.sh` (`--quick` too) runs the component and view mockups
+(`mockups/components/`, `mockups/views/`) through `tests/run-mockups.sh --by-system`, which
+takes the system as `tests/run-system.sh` does and says which mode it took. A planning
+mockup is never run by a test. With no component or view mockup in the tree there is
+nothing to check, and the part passes saying so.
+
+#### NixOS
+
+The mockups run `--load-only`: each reaches every scene with no error, and nothing is
+compared. The baselines are drawn on Arch, and another system's libraries and fonts give
+other pixels. Any system other than Arch runs them the same way.
+
+#### Arch
+
+The mockups run `--compare`: each scene's shot is compared, pixel for pixel, with the
+mockup's baseline. A mockup without a baseline, or whose baseline was drawn in another
+environment, is NOT RUN, which makes the run NOT RUN (status 2), never a pass.
 
 `tests/manual/` holds checks no suite runs because they touch the real system — the one
 there runs a single PAM conversation with the real password against the shipped

@@ -3,7 +3,8 @@
 # true (affected.sh --check), what a few changes of this tree select, and — in made-up
 # repositories with a copy of the script — the closure (a suite covers what it uses,
 # transitively), the map's targets, the lock closure, the default range (the nearest
-# segment-* or master merge-base, working tree and untracked files included), explicit
+# segment-* or master merge-base, working tree and untracked files included), the mockups
+# (a mockup covers its folder's closure, the kit and the entry all, planning none), explicit
 # ranges, the fallback for a file placed nowhere, --check's findings and --run's verdict.
 # Nothing is run but stand-in runners.
 #
@@ -119,6 +120,18 @@ printf 'import qs.singletons\nItem { Shared {} Old {} }\n' > "$tree/screensaver/
 echo 'module' > "$tree/fixtures/mod/main.qml"
 echo 'echo run' > "$tree/scripts/run.sh"
 echo 'page' > "$tree/site/page.md"
+# Mockups: a component one that draws a pill (with its baseline), a view one that does not,
+# a planning one that does, the kit and the entry
+mkdir -p "$tree/components" "$tree/mockups/kit" "$tree/mockups/components/pill/baseline" "$tree/mockups/views/panel" "$tree/mockups/planning/idea"
+echo 'Item {}' > "$tree/components/Pill.qml"
+echo 'Item {}' > "$tree/mockups/kit/MockupWindow.qml"
+echo 'Item {}' > "$tree/mockup.qml"
+printf 'import qs.components\nimport qs.mockups.kit\nMockupWindow { Pill {} }\n' > "$tree/mockups/components/pill/Mockup.qml"
+echo 'scene 00 normal 10x10 0' > "$tree/mockups/components/pill/baseline/manifest.txt"
+echo 'png' > "$tree/mockups/components/pill/baseline/00-normal.png"
+printf 'import qs.mockups.kit\nMockupWindow {}\n' > "$tree/mockups/views/panel/Mockup.qml"
+printf 'import qs.components\nimport qs.mockups.kit\nMockupWindow { Pill {} }\n' > "$tree/mockups/planning/idea/Mockup.qml"
+echo 'notes' > "$tree/mockups/planning/idea/MOCKUP.md"
 for name in one two three; do echo 'echo PASS' > "$tree/tests/lock/tests/$name.sh"; done
 cat > "$tree/tests/run-all.sh" << 'EOF'
 parts=(
@@ -128,7 +141,7 @@ parts=(
 )
 EOF
 # Stand-in runners: they record how they were called; a file "fail" makes the unit one fail
-for runner in tests/run-unit.sh tests/run-modules.sh tests/lock/run.sh tests/x-selftest.sh; do
+for runner in tests/run-unit.sh tests/run-modules.sh tests/lock/run.sh tests/x-selftest.sh tests/run-mockups.sh; do
     printf '#!/usr/bin/env bash\necho "%s $*" >> calls\n[ "%s" != tests/run-unit.sh ] || [ ! -e fail ]\n' "$runner" "$runner" > "$tree/$runner"
     chmod +x "$tree/$runner"
 done
@@ -146,6 +159,9 @@ tests/run-unit.sh unit:all
 tests/run-modules.sh modules:all
 tests/lock/run.sh lock:all
 tests/x-selftest.sh none
+tests/run-mockups.sh none
+mockup.qml mockup:all
+mockups/kit/* mockup:all
 scripts/run.sh lock:two
 @not-lock three
 @lazy singletons/Reg.qml
@@ -188,6 +204,19 @@ run "$tree" --files site/page.md
 check "a none file selects nothing" bash -c '[ -z "$1" ] && [ "$2" = 0 ]' _ "$OUTPUT" "$STATUS"
 run "$tree" --files tests/lock/tests/three.sh tests/x-selftest.sh
 check "a scenario and a self-test select themselves" is "$(printf 'tests/x-selftest.sh\ntests/lock/run.sh three')"
+run "$tree" --files components/Pill.qml
+check "a component selects the mockups that draw it, not a planning one" is "tests/run-mockups.sh --by-system components/pill"
+run "$tree" --files mockups/components/pill/baseline/00-normal.png mockups/components/pill/baseline/manifest.txt
+check "a mockup's baseline files select their mockup" is "tests/run-mockups.sh --by-system components/pill"
+run "$tree" --files mockups/views/panel/Mockup.qml components/Pill.qml
+check "two mockups, in one command" is "tests/run-mockups.sh --by-system components/pill views/panel"
+run "$tree" --files mockups/kit/MockupWindow.qml
+check "the kit selects every mockup" is "tests/run-mockups.sh --by-system"
+run "$tree" --files mockup.qml
+check "the entry selects every mockup" is "tests/run-mockups.sh --by-system"
+run "$tree" --why --files mockups/planning/idea/Mockup.qml mockups/planning/idea/MOCKUP.md
+check "a planning mockup is placed with none, and selects nothing" \
+    is "$(printf 'mockups/planning/idea/MOCKUP.md\tnone\nmockups/planning/idea/Mockup.qml\tnone')"
 
 # The default range: from the nearest segment-* or master merge-base, plus the working tree
 git -C "$tree" checkout -q -b segment-a
@@ -254,7 +283,11 @@ git -C "$tree" rm -q singletons/Orphan.qml
 commit "Orphan gone"
 run "$tree" "HEAD^!"
 check "a deleted QML file nothing names selects everything" \
-    is "$(printf 'tests/run-unit.sh\ntests/run-modules.sh fixtures/mod\ntests/lock/run.sh')"
+    is "$(printf 'tests/run-unit.sh\ntests/run-modules.sh fixtures/mod\ntests/run-mockups.sh --by-system\ntests/lock/run.sh')"
+git -C "$tree" rm -q -r mockups/views/panel
+commit "the panel mockup gone"
+run "$tree" "HEAD^!"
+check "a deleted mockup has nothing to run" is ""
 git -C "$tree" checkout -q work
 git -C "$tree" branch -q -D deletions
 git -C "$tree" checkout -q master
@@ -284,7 +317,7 @@ echo 'gone/* none' >> "$tree/tests/affected-map.txt"
 echo 'Item {}' > "$tree/singletons/Loose.qml"
 git -C "$tree" add singletons/Loose.qml
 echo '@not-lock nobody*' >> "$tree/tests/affected-map.txt"
-echo 'site/* unit:NoSuchTest lock:nothing* self:tests/missing.sh' >> "$tree/tests/affected-map.txt"
+echo 'site/* unit:NoSuchTest lock:nothing* self:tests/missing.sh mockup:views/gone' >> "$tree/tests/affected-map.txt"
 run "$tree" --check
 check "--check fails" [ "$STATUS" = 1 ]
 check "… naming a tracked file placed nowhere" has "not placed: stray.txt"
@@ -294,6 +327,7 @@ check "… a pattern that matches no file" has "'gone/*' matches no file"
 check "… a suite tests.qml does not register" has "unit:NoSuchTest is no suite"
 check "… a scenario glob that names none" has "lock:nothing* names no scenario"
 check "… a self-test that is not there" has "self:tests/missing.sh is not an executable"
+check "… a mockup that is not there" has "mockup:views/gone is no component or view mockup"
 
 echo
 if [ "$failed" = 0 ]; then echo "affected-selftest.sh: passed"; else echo "affected-selftest.sh: FAILED"; fi

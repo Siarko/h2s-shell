@@ -267,10 +267,14 @@ for entry in "${real[@]}"; do
     command=${entry#*|}
     check "${entry%%|*}: ${command%% *} is there and executable" test -x "$REPO/${command%% *}"
     for word in ${command#* }; do
-        [ "$word" = "${command%% *}" ] || check "${entry%%|*}: $word is there" test -e "$REPO/$word"
+        [ "$word" = "${command%% *}" ] || [ "${word#-}" != "$word" ] || check "${entry%%|*}: $word is there" test -e "$REPO/$word"
     done
 done
 check "the last part is the lock bed (tests/lock/run.sh)" test "${real[-1]}" = "lock bed|tests/lock/run.sh"
+# The mockups: one part, the runner choosing --compare or --load-only by the system, in
+# --quick too (only the lock bed is left out)
+check "the mockups are a part (tests/run-mockups.sh --by-system)" \
+    bash -c 'printf "%s\n" "${@}" | grep -qx "mockups|tests/run-mockups.sh --by-system"' _ "${real[@]}"
 
 echo
 if [ "$failed" = 0 ]; then echo "run-all self-test: passed"; else echo "run-all self-test: FAILED"; fi

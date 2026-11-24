@@ -14,6 +14,10 @@
 #                                lock scenarios (tests/lock/run.sh), besides those a change
 #                                in the lock closure runs
 #   self:<script>                a self-test or a runner, run as it is
+#   mockup:<kind>/<name>  mockup:all
+#                                component and view mockups (tests/run-mockups.sh
+#                                --by-system); each covers its own folder's closure by
+#                                itself, planning mockups are placed with none
 #   none                         no test needed (a decision, written down)
 # A line whose pattern starts with "+" only adds its targets: it places nothing, so a file
 # it matches still needs a closure or a line of its own (`--check`).
@@ -131,8 +135,8 @@ singletons/helper/ScreenSaverClient.qml self:tests/run-helper.sh
 tests/fixtures/helper/* unit:HelperTest
 # The mockups' runner, root entry, window and the runners' fixture mockups
 tests/run-mockups.sh self:tests/run-mockups-selftest.sh
-mockup.qml self:tests/run-mockups-selftest.sh
-mockups/kit/* self:tests/run-mockups-selftest.sh
+mockup.qml self:tests/run-mockups-selftest.sh mockup:all
+mockups/kit/* self:tests/run-mockups-selftest.sh mockup:all
 tests/fixtures/mockups/* self:tests/run-mockups-selftest.sh
 flake.nix self:tests/run-system.sh
 flake.lock self:tests/run-system.sh unit:QuickshellPinTest

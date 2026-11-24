@@ -32,11 +32,17 @@
 #     change in the lock closure (the map's `@lock-roots` and their closure) unless the
 #     map's `@not-lock` names it;
 #   - a self-test (tests/*-selftest.sh, tests/install-test.sh, tests/lock/selftest.sh)
-#     covers itself.
+#     covers itself;
+#   - a component or view mockup (mockups/components/<name>, mockups/views/<name>) covers
+#     the closure of every file in its folder, as a unit suite does (its Mockup.qml, its
+#     baseline's PNGs and manifest); its command is `tests/run-mockups.sh --by-system
+#     <kind>/<name>…` (--compare on Arch, --load-only elsewhere), the map's `mockup:all` runs
+#     every one; a planning mockup (mockups/planning/*) is placed with none: it is not
+#     tested, and no closure starts from it.
 # A changed path the tree no longer has is scanned as present, so that the files still
 # naming it select their tests. A changed file none of these places (deleted with nothing
 # naming it, or new: --check fails on a tracked one) selects everything — every unit
-# suite, module part and lock scenario — and is named on stderr.
+# suite, module part, mockup and lock scenario — and is named on stderr.
 #
 # Exit status: 0 (with --run: every command passed); 1 when a command run failed, or
 # --check found a file not placed or a map line that is not true; 2 for a wrong option or
@@ -176,6 +182,14 @@ for index in "${!part_commands[@]}"; do
         grep "^$dir/" "$work/tree" | sed "s|^|modules:$index\t|" >> "$work/roots"
     done
 done
+
+# The component and view mockups: every file in the mockup's folder
+grep -E '^mockups/(components|views)/[a-z0-9-]+/' "$work/scantree" |
+    sed -E 's#^(mockups/(components|views)/[a-z0-9-]+)/.*$#mockup:\1\t&#; s#^mockup:mockups/#mockup:#' >> "$work/roots"
+# The mockups that are there now (a deleted one selects nothing to run)
+grep -E '^mockups/(components|views)/[a-z0-9-]+/Mockup\.qml$' "$work/tree" | while read -r file; do
+    [ -f "$file" ] && dirname "${file#mockups/}"
+done | LC_ALL=C sort > "$work/mockups"
 
 while read -r file; do
     for pattern in "${lock_roots[@]}"; do
@@ -350,7 +364,7 @@ done < "$work/scenarios" > "$work/lock-closure-scenarios"
 # placed. With "placing", only what places it: a closure, a line of the map without "+",
 # being a scenario or a self-test.
 # Targets: unit:<Suite>|unit:all, modules:<index>|modules:all, lock:<glob>|lock:all,
-# self:<script>, none
+# self:<script>, mockup:<kind>/<name>|mockup:all, none
 place() {
     local file=$1 placing=${2:-} pattern target places
     while IFS=$'\t' read -r pattern target places; do
@@ -367,6 +381,7 @@ place() {
     case "$file" in
         tests/lock/tests/*.sh) echo "lock:$(basename "$file" .sh)" ;;
         tests/*-selftest.sh | tests/install-test.sh | tests/lock/selftest.sh) echo "self:$file" ;;
+        mockups/planning/*) echo none ;;
     esac
 }
 
@@ -391,7 +406,9 @@ if [ "$mode" = check ]; then
             problems=$((problems + 1))
         fi
         case "$target" in
-            none | unit:all | lock:all | modules:all) ;;
+            none | unit:all | lock:all | modules:all | mockup:all) ;;
+            mockup:*)
+                grep -qxF "${target#mockup:}" "$work/mockups" || { echo "map: $target is no component or view mockup in mockups/"; problems=$((problems + 1)); } ;;
             unit:*)
                 grep -qx "${target#unit:}" "$work/suites" || { echo "map: $target is no suite tests.qml registers"; problems=$((problems + 1)); } ;;
             lock:*)
@@ -441,7 +458,7 @@ while read -r file; do
     if [ -z "$(place "$file" placing)" ] || { grep -qxF "$file" "$work/gone" &&
         [[ $file =~ \.(qml|js)$ ]] && ! awk -F'\t' -v file="$file" '$1 == file { found = 1 } END { exit !found }' "$work/reach"; }; then
         echo "affected.sh: $file is placed nowhere (tests/affected-map.txt): everything" >&2
-        targets=$(printf '%s\nunit:all\nmodules:all\nlock:all' "$targets" | sed '/^$/d' | sort -u)
+        targets=$(printf '%s\nunit:all\nmodules:all\nmockup:all\nlock:all' "$targets" | sed '/^$/d' | sort -u)
     fi
     if [ "$mode" = why ]; then
         printf '%s\t%s\n' "$file" "$(echo "$targets" | tr '\n' ' ' | sed 's/ $//')"
@@ -466,6 +483,14 @@ for index in $(sed -n 's/^modules:\([0-9]*\)$/\1/p' "$work/selected" | sort -nu)
     commands+=("${part_commands[index]}")
 done
 while read -r script; do commands+=("$script"); done < <(sed -n 's/^self://p' "$work/selected")
+if [ -s "$work/mockups" ]; then
+    if grep -qx 'mockup:all' "$work/selected"; then
+        commands+=("tests/run-mockups.sh --by-system")
+    else
+        mockups=$(sed -n 's/^mockup://p' "$work/selected" | grep -xF -f "$work/mockups" | tr '\n' ' ' | sed 's/ $//')
+        [ -z "$mockups" ] || commands+=("tests/run-mockups.sh --by-system $mockups")
+    fi
+fi
 if grep -qx 'lock:all' "$work/selected"; then
     commands+=("tests/lock/run.sh")
 else

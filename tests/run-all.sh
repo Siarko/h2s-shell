@@ -50,6 +50,9 @@
 #   tests/release-check-selftest.sh                     the release check, on stand-in runners
 #                                                       (tests/release-check.sh is run by hand)
 #   tests/lock/selftest.sh                              the lock bed's runner: its lint, FLAKY reruns
+#   tests/run-mockups.sh --by-system                    the component and view mockups:
+#                                                       compared with their baselines on
+#                                                       Arch, every scene reached elsewhere
 #   tests/run-system.sh                                 this system's set (NixOS or Arch)
 #   tests/lock/run.sh                                   the lock screen, end to end
 #
@@ -120,6 +123,7 @@ parts=(
     "mutation runner self-test|tests/mutate-selftest.sh"
     "release check self-test|tests/release-check-selftest.sh"
     "lock bed self-test|tests/lock/selftest.sh"
+    "mockups|tests/run-mockups.sh --by-system"
     "system set|tests/run-system.sh"
     "lock bed|tests/lock/run.sh"
 )
