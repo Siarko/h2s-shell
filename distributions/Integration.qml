@@ -21,6 +21,9 @@ QtObject {
 
     // The distribution's id (distributions/<id>/)
     property string distribution: ""
+    // The folder the system's places are under: "" for the system's (a suite: a scratch
+    // folder); the plan's places name it
+    property string base: ""
     property var table: ({})
     property EtcFiles files: null
     property var writers: ({})
@@ -39,7 +42,7 @@ QtObject {
     }
 
     function plan(kind, value) {
-        return IntegrationRules.plan(table, kind, value);
+        return IntegrationRules.plan(table, kind, value, base);
     }
 
     // `handlers` { current (readInForce's `file` as the user saw it: its text decides; left

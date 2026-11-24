@@ -81,8 +81,13 @@ ColumnLayout {
     }
 
     // The system's way changed (known at last): an editor the user has not touched follows
-    // what is in force as this way reads it
-    onModeChanged: if (editor !== null && !_edited) _reset()
+    // what is in force as this way reads it — once the bindings that read it under the new
+    // way (_base, _machine, _inForce) have settled, which the change notice may come before
+    onModeChanged: Qt.callLater(root._followMode)
+    function _followMode() {
+        if (editor !== null && !_edited && !_busy)
+            _reset();
+    }
 
     // What the change would be (the integration's plan): the files to write where the shell
     // applies the rules, the options to copy where the system's configuration sets them
@@ -333,7 +338,7 @@ ColumnLayout {
         status = "Saving " + PamRuleViewRules.progress(_flow.index, _flow.items.length, item.service) + "…";
         const started = integration.apply("pam.rules", { service: item.service, built: item.built, currentText: item.currentText,
                                                          vendorText: item.vendorText, trial: _flow.passed },
-                                          { done: outcome => root._written(outcome) });
+                                          { done: outcome => root?._written(outcome) });
         if (!started.started)
             _stop(started.refusal?.text ?? "", item.service, "", true);
     }
@@ -417,7 +422,7 @@ ColumnLayout {
             return;
         }
         status = "Undoing " + PamRuleViewRules.progress(_flow.index, _flow.items.length, outcome.service) + "…";
-        const started = integration.undo("pam.rules", { from: outcome, done: answer => root._written(answer) });
+        const started = integration.undo("pam.rules", { from: outcome, done: answer => root?._written(answer) });
         if (!started.started)
             _undoStopped(started.refusal?.text ?? "");
     }

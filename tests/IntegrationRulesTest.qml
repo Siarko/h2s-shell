@@ -218,6 +218,12 @@ TestCase {
         assertEqual(rules.plan({ [pam]: { mode: "apply" } }, pam, value([ldap, fixed], { bareModules: "libpam" })).preview.files.map(file => file.text).join(","),
                     ",", "… rows a check refuses: no files (null)");
         assertEqual(rules.plan({ [kind]: { mode: "apply" } }, kind, 600).preview.backups, "/var/lib/h2s-shell/backup/" + kind, "… an EtcFiles kind: its backups' folder");
+        const underBase = rules.plan({ [pam]: { mode: "apply" } }, pam, value([fixed]), "/s");
+        assertEqual(underBase.preview.files[0].path + " " + underBase.preview.backups, "/s/etc/pam.d/sudo /s/var/lib/h2s-shell/pam-backup",
+                    "… under the integration's base: its places there");
+        const etcUnderBase = rules.plan({ [kind]: { mode: "apply" } }, kind, 600, "/s").preview;
+        assertEqual(etcUnderBase.files[0].path + " " + etcUnderBase.backups, "/s/etc/systemd/sleep.conf.d/h2s-shell.conf /s/var/lib/h2s-shell/backup/" + kind,
+                    "… an EtcFiles kind too");
         const pamCopied = rules.plan({ [pam]: entry }, pam, value([fixed], { bareModules: "libpam" }));
         assertEqual(pamCopied.preview.snippet, PamEditRules.optionsSnippet("programs.h2s-shell.pam", [fixed], false, pamFacts("sudo", { bareModules: "libpam" })).text,
                     "plan, copied: the module's options under the integration's option");

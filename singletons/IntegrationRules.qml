@@ -24,7 +24,7 @@ import QtQuick
 //   details(kind) → { texts, facts }: what a feature's view says and decides by on this
 //     system, from the integration's table (its words, e.g. where the setting is made and
 //     when it takes effect; facts the feature's checks need); both {} where unavailable
-//   plan(kind, value) → { preview, refusal }
+//   plan(kind, value) → { preview, refusal } (its places under the integration's base)
 //     preview  "apply": { files: [{ path, text ("" removes the file; null: no file while
 //              the value's checks refuse) }], backups (the folder each change is kept in) };
 //              "copy", "declare": { option, snippet ("" while the value's checks refuse),
@@ -150,24 +150,27 @@ Singleton {
         return "";
     }
 
-    // The files an applied kind writes: [{ path, text ("" removes it; null: none while the
-    // value's checks refuse) }]
-    function filesOf(kind, value) {
+    // The files an applied kind writes: [{ path (under `base`, "" for the system's), text (""
+    // removes it; null: none while the value's checks refuse) }]
+    function filesOf(kind, value, base) {
+        const under = String(base ?? "");
         if (kind !== "pam.rules")
-            return [{ path: EtcFilesRules.files[kind] ?? "", text: textOf(kind, value) }];
+            return [{ path: EtcFilesRules.fileOf(kind, under), text: textOf(kind, value) }];
         // One file per service, as PamEditRules builds it: our polkit-1 removed when polkit's
         // own file would be in force again
         return PamRuleRules.services.map(service => {
             const entry = value[service];
             const built = PamEditRules.build(entry.currentText, entry.rows, entry.facts);
             const text = built.ok !== true ? null : built.remove === true ? "" : typeof built.text === "string" ? built.text : null;
-            return { path: PamApplyRules.livePaths.system + "/" + service, text };
+            return { path: under + PamApplyRules.livePaths.system + "/" + service, text };
         });
     }
 
-    // The folder an applied kind's changes are kept in, each a backup Undo puts back
-    function backupsOf(kind) {
-        return kind === "pam.rules" ? PamApplyRules.livePaths.backups : EtcFilesRules.backupsOf(kind, "");
+    // The folder an applied kind's changes are kept in, each a backup Undo puts back (under
+    // `base`)
+    function backupsOf(kind, base) {
+        const under = String(base ?? "");
+        return kind === "pam.rules" ? under + PamApplyRules.livePaths.backups : EtcFilesRules.backupsOf(kind, under);
     }
 
     // The line to copy for a kind set by an option: `option` its name ("" while the value's
@@ -185,15 +188,16 @@ Singleton {
         return "";
     }
 
-    // What the change would be: `table` the integration's, `kind`, `value` → { preview, refusal }
-    function plan(table, kind, value) {
+    // What the change would be: `table` the integration's, `kind`, `value`, `base` the folder
+    // its places are under ("" or left out: the system's) → { preview, refusal }
+    function plan(table, kind, value, base) {
         const answer = capability(table, kind);
         if (answer.mode === "unavailable")
             return { preview: null, refusal: refusal("unavailable", answer.reason) };
         if (!validValue(kind, value))
             return { preview: null, refusal: refusal("value") };
         if (answer.mode === "apply")
-            return { preview: { files: filesOf(kind, value), backups: backupsOf(kind) }, refusal: null };
+            return { preview: { files: filesOf(kind, value, base), backups: backupsOf(kind, base) }, refusal: null };
         const option = String(table[kind].option ?? "");
         return { preview: { option, snippet: snippetOf(kind, option, value), hint: String(table[kind].hint ?? "") }, refusal: null };
     }

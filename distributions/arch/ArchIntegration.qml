@@ -9,10 +9,9 @@ import qs.singletons
 Integration {
     id: root
 
-    // EtcFiles' `start` and `base`: the shell's runs as administrator and the system's places,
-    // or a suite's stand-in under a scratch folder
+    // EtcFiles' `start` (and Integration's `base`): the shell's runs as administrator and the
+    // system's places, or a suite's stand-in under a scratch folder
     property var start: null
-    property string base: ""
 
     distribution: "arch"
     table: ({

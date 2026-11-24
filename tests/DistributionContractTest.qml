@@ -132,7 +132,8 @@ TestCase {
                            label + "… the files it writes: " + JSON.stringify(planned.preview.files));
                     assert(typeof planned.preview.backups === "string" && planned.preview.backups.startsWith("/"), label + "… where it keeps them: " + planned.preview.backups);
                     if (EtcFilesRules.knows(kind)) {
-                        assertEqual(planned.preview.files[0].path, EtcFilesRules.files[kind], label + "… the file EtcFiles writes");
+                        assertEqual(planned.preview.files[0].path, EtcFilesRules.fileOf(kind, integration.base), label + "… the file EtcFiles writes, under the base");
+                        assertEqual(planned.preview.backups, EtcFilesRules.backupsOf(kind, integration.base), label + "… its backups' folder, under the base");
                         assert(EtcFilesRules.validText(planned.preview.files[0].text), label + "… a text EtcFiles writes");
                     }
                 } else if (capability.mode === "copy") {

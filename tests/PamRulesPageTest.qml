@@ -124,8 +124,20 @@ TestCase {
     // How the next run ends: "" (it runs), "refuse" (the root step refuses: the file changed),
     // "refuse2" (the next but one refuses)
     property string _failNext: ""
+    // The next run held until `_held` is called (a write under way)
+    property bool _holdNext: false
+    property var _held: null
     function _start(request, done) {
         _runs = _runs.concat([request.what]);
+        if (_holdNext) {
+            _holdNext = false;
+            _held = () => {
+                suite._held = null;
+                suite._start(request, done);
+                suite._runs = suite._runs.slice(0, -1);
+            };
+            return;
+        }
         if (_failNext === "refuse2") {
             _failNext = "refuse";
         } else if (_failNext === "refuse") {
@@ -581,9 +593,14 @@ TestCase {
 
         // --- … and one that passes: both services written ---
         assert(_until(() => _modalTitle() === "Try the new rules" && _find(host.modal, "trialField")?.editing === true), "the trial again");
+        _holdNext = true;
         _type(_password);
         driver.keyClick(Qt.Key_Return);
+        assert(_until(() => _held !== null), "passed: sudo's write under way");
+        assert(_archIntegration.busy && section._busy, "… the integration busy while it runs (its writer's run), the page too");
+        _held();
         assert(_until(() => _modalTitle() === "Saved", 15000), "passed: written, said");
+        assert(_until(() => !_archIntegration.busy), "… the integration no longer busy");
         assertEqual(_trial.starts, 2, "… one trial stood for both services");
         assertEqual(_runs.join(" | "), "Change the sign-in rules for sudo | Change the sign-in rules for administrator prompts", "… sudo, then administrator prompts");
         assert(_readFile(_paths.system + "/sudo").indexOf("pam_fprintd.so") > 0, "… sudo's file has the fingerprint");
@@ -615,7 +632,7 @@ TestCase {
         assert(_until(() => _modalTitle() === "Saved in part", 15000), "polkit refused after sudo: saved in part");
         const partial = _all(host.modal, "modalLine").map(line => line.text);
         assert(partial.some(text => text === "Written: sudo. Not written: administrator prompts."), "… what was written and what not: " + partial.join(" | "));
-        assert(partial.some(text => text.startsWith("Undo puts back " + PamApplyRules.livePaths.backups + "/sudo.")), "… what Undo puts back");
+        assert(partial.some(text => text.startsWith("Undo puts back " + _paths.backups + "/sudo.")), "… what Undo puts back");
         assert(_modalClick("modalButton:0") && _until(() => !host.open), "OK");
         assert(_until(() => _visible(_item("undo")) && section.lastWrite.length === 1), "Undo offered for sudo");
         assert(_until(() => section.editor.split && _texts("warning").some(text => text === PamRuleRules.texts.W8)), "… the lists left different: said");
@@ -629,6 +646,9 @@ TestCase {
         assert(_until(() => !_visible(_item("undo")) && section.lastWrite.length === 0, 15000), "… undone");
         assertEqual(_readFile(_paths.system + "/sudo"), _sudo, "… sudo's old file back");
         assert(_until(() => !_texts("warning").some(text => text === PamRuleRules.texts.W8)), "… the lists' warning gone");
+        // The reading after Undo taken, its editor (one list again) built: a click before it
+        // could land on a list about to be replaced
+        assert(_until(() => !section._resetOnReading && section.editor?.split === false && _item("list:shared") !== null), "… the editor from what is in force again");
 
         // --- the trial's modal refused: another question open ---
         assert(_click("addRow") && _until(() => _visible(_item("add:fingerprint"))) && _click("add:fingerprint"), "the fingerprint added again");
@@ -684,6 +704,14 @@ TestCase {
         assertEqual(_item("copy").label, "Copied", "… said");
         assert(_texts("pendingLine")[0].indexOf("nixos-rebuild") >= 0, "… in force after a rebuild");
         assertEqual(_item("writtenTo").text, "the NixOS module", "… set through the module");
+        const nixosList = _item("list:shared");
+        assertEqual(nixosList.facts.texts?.systemRow, "NixOS's rules", "… the list handed the integration's words for the system's row");
+        assertEqual(PamRuleViewRules.chips(PamRuleRules.fixedRow(), Object.assign({}, nixosList.facts, { faillockPresent: false })).join(","), "NixOS's rules",
+                    "… its chip where the system's rules do not count (here they do: faillock's numbers)");
+        section._setRows("shared", [{ id: "r9", method: "raw", control: "", details: { text: "auth sufficient pam_ldap.so" } }].concat(section.editor.shared));
+        assert(_until(() => _texts("refusal").includes("Needs the module's full path on NixOS.")), "… a bare module libpam would not find: the integration's refusal");
+        assert(_until(() => _item("snippetText").text === "No snippet while a check refuses the rows."), "… nothing to copy");
+        section._reset();
 
         // --- a distribution the shell has no integration for ---
         _nixos = false;
@@ -697,6 +725,15 @@ TestCase {
         const startsGeneric = _trial.starts;
         section.apply();
         assertEqual(_trial.starts, startsGeneric, "… nor does apply() try anything");
+
+        // --- back on Arch: the editor follows what is in force as Arch reads it ---
+        const fingerSudo = PamEditRules.build(_sudo, [{ id: "r1", method: "fingerprint", control: "sufficient", details: { timeout: 10, tries: 3 } },
+                                                      PamRuleRules.fixedRow()], Object.assign(section.factsFor("sudo"), { writes: true }));
+        assert(fingerSudo.ok && _write(_paths.system + "/sudo", fingerSudo.text) && _reread(), "the shell's fingerprint rules in sudo's file, read on the other distribution");
+        assert(_until(() => section.editor !== null && section.editor.shared.length === 1), "… there: the fixed row alone");
+        _integration = _archIntegration;
+        assert(_until(() => section.editor.sudo?.some(row => row.method === "fingerprint") === true), "Arch again: the fingerprint row in force in the editor");
+        assert(!section.changed && _texts("pendingLine").length === 0, "… nothing pending (Apply would not drop it)");
 
         // --- the lock screen's switches ---
         const fingerprint = _item("unlock:fingerprint");
