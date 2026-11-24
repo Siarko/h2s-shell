@@ -47,6 +47,8 @@
 #                                                       placed, on made-up repositories
 #   tests/mutate-selftest.sh                            the mutation runner, on a fixture
 #                                                       (tests/mutate.sh itself is run by hand)
+#   tests/release-check-selftest.sh                     the release check, on stand-in runners
+#                                                       (tests/release-check.sh is run by hand)
 #   tests/lock/selftest.sh                              the lock bed's runner: its lint, FLAKY reruns
 #   tests/run-system.sh                                 this system's set (NixOS or Arch)
 #   tests/lock/run.sh                                   the lock screen, end to end
@@ -114,6 +116,7 @@ parts=(
     "remote run self-test|tests/remote-run-selftest.sh"
     "affected tests self-test|tests/affected-selftest.sh"
     "mutation runner self-test|tests/mutate-selftest.sh"
+    "release check self-test|tests/release-check-selftest.sh"
     "lock bed self-test|tests/lock/selftest.sh"
     "system set|tests/run-system.sh"
     "lock bed|tests/lock/run.sh"

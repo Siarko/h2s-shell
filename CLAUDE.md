@@ -49,6 +49,7 @@ tests/run-all.sh           # before merging to master: everything, both machines
 tests/remote-run.sh        # … run on the other machine over SSH (H2S_REMOTE=<destination>)
 tests/mutate.sh <file>     # a security-deciding Rules file changed, or before a release: which mutants no suite notices
 tests/soak.sh <suite> 20   # a suite suspected of flaking: 20 runs in a row under CPU load
+tests/release-check.sh     # before a minor or major release: all of the above, one summary (--dry-run: the plan)
 ```
 
 **While iterating** run `tests/affected.sh --run`: it runs the unit suites, module fixture
@@ -100,6 +101,12 @@ survivor gets a check, or a reason in the slice's report why it cannot be told a
 equivalent mutant). Before a minor or major release it runs on every Rules file changed since
 the last release, with the full set on both machines and soaks of suites known to flake.
 `run-all.sh` runs only its self-test.
+`tests/release-check.sh` runs all of that before a release: the full set here and through
+`remote-run.sh` (`H2S_REMOTE` or `--remote`), `mutate.sh` on each `*Rules.qml` changed since
+the last tag, `soak.sh` on the suites in `tests/flaky-suites.txt` (and a module's own
+`tests/flaky-suites.txt`), and each module's suites (`H2S_MODULE_DIRS`, `:`-separated, or
+`--module <dir>`); one summary, non-zero on any failure, NOT RUN (status 2) for a part it had
+nothing to run on. A suite found flaking gets a line in `tests/flaky-suites.txt`.
 `tests/soak.sh <suite | module dir> <n>` runs a suite n times in a row under busy loops:
 a check that depends on timing fails there in minutes.
 

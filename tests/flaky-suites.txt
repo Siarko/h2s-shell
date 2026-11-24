@@ -1,0 +1,13 @@
+# Unit suites known to flake: tests/release-check.sh soaks each before a minor or major
+# release (tests/soak.sh <suite> <runs>). One suite per line, by its file in tests/ without
+# ".qml"; a name that is no suite stops the release check before it runs anything.
+#
+# A module keeps its own list in the same form, as tests/flaky-suites.txt in its module
+# directory; when it names any suite, the release check soaks that module's suites.
+#
+# Lock scenarios are not listed here: the lock bed reruns a failed scenario itself and
+# names it FLAKY (tests/lock/run.sh), and soak.sh runs unit and module suites only.
+# Remove a line once the suite's cause is fixed and it has passed a soak.
+
+FileChooserTest
+AnchorsTest

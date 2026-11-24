@@ -2239,6 +2239,24 @@ runs the remote half locally in a temp directory: a pass and a failure status, a
 connection and the time limit each picked up with `--attach`, an unreachable remote, a
 missing repository, and the destination in no file written.
 
+### Before a release
+
+`tests/release-check.sh` runs every check due before a minor or major release and ends with
+one summary: the full `tests/run-all.sh --keep-going` here and, through
+`tests/remote-run.sh`, on the other machine (its destination from `H2S_REMOTE` or
+`--remote`; `HEAD` is what goes there, so commit first); `tests/mutate.sh` on each
+`*Rules.qml` outside `tests/` changed since the last tag (`--since <ref>` names another; with
+no tag, every one); `tests/soak.sh` on each suite in `tests/flaky-suites.txt`, and on each
+module whose own `tests/flaky-suites.txt` names a suite; and `tests/run-modules.sh` on each
+module directory given (`H2S_MODULE_DIRS`, separated by `:`, or `--module <dir>`). The remote
+run goes on beside the rest; the parts here run one after another, since the lock bed needs
+the machine to itself, a soak loads every processor and the runners each size their work to
+the whole memory budget. Every part runs whatever another's verdict; a mutation run with
+survivors counts as failed. It exits 1 when a part failed, 2 when none failed but one did not
+run (no destination, no module directory, a part that could not be set up), and `--dry-run`
+prints the plan. `tests/release-check-selftest.sh`, a part of `--quick`, checks it on stand-in
+runners in a made-up repository.
+
 ### Where the test tools come from
 
 The unit and module suites need Quickshell, labwc, `setpriv` and `setsid` (util-linux),
