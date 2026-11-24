@@ -20,7 +20,8 @@
 # --by-system takes the system as tests/run-system.sh does (scripts/distribution.sh,
 # H2S_DISTRIBUTION_ROOT before the paths it reads), and says which mode it took: the
 # baselines are drawn on Arch, and another system's libraries and fonts draw other pixels,
-# so elsewhere every scene is only reached; a system that cannot be told is load-only too.
+# so elsewhere every scene is only reached; a system that cannot be told runs nothing
+# (status 2).
 # With no name and no component or view mockup in the tree it has nothing to check, and
 # says so with status 0 (the other modes: status 2).
 # A planning mockup (mockups/planning/*) runs only when it is named. H2S_MOCKUP_BASE=
@@ -146,11 +147,10 @@ if [ "$mode" = by-system ]; then
     by_system=1
     # shellcheck source=../scripts/distribution.sh
     source "$REPO/scripts/distribution.sh" || { echo "run-mockups.sh: cannot read scripts/distribution.sh; nothing was run" >&2; exit 2; }
-    if distribution_detect "$REPO" "" "${H2S_DISTRIBUTION_ROOT:-}"; then
-        system=$distribution_id
-    else
-        system="unknown ($distribution_problem)"
-    fi
+    # A system that cannot be told is not taken for one that only loads: nothing is run
+    distribution_detect "$REPO" "" "${H2S_DISTRIBUTION_ROOT:-}" \
+        || { echo "run-mockups.sh: which distribution this is cannot be told: $distribution_problem; nothing was run" >&2; exit 2; }
+    system=$distribution_id
     if [ "$system" = arch ]; then mode=compare; else mode=load-only; fi
     echo "run-mockups.sh: the system is $system: --$mode"
 fi

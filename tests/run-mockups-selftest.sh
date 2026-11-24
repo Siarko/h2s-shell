@@ -26,7 +26,8 @@
 #   - with no name it runs every component and view fixture, never the planning one, which
 #     runs when named; a name that is not <kind>/<name> or not a mockup runs nothing;
 #   - --by-system takes --compare on Arch and --load-only on NixOS and any other system,
-#     saying which (made-up systems' os-release); with no component or view mockup in the
+#     saying which (made-up systems' os-release), and runs nothing (status 2) on a system
+#     that cannot be told; with no component or view mockup in the
 #     tree it says nothing to run, status 0, where --load-only is status 2;
 #   - a missing tool (grim) is a set-up error naming it, status 2, nothing run;
 #   - two fresh runs of the effects fixture write the same files;
@@ -406,6 +407,11 @@ for entry in "arch|arch|compare" "nixos|nixos|load-only" "fedora|generic|load-on
     runner by-system-$system H2S_DISTRIBUTION_ROOT="$work/system-$system" -- --by-system Bad_Name
     check "$([ "${runner_status[by-system-$system]}" = 2 ] && grep -q -x -F -- "run-mockups.sh: the system is $detected: --$expected" "${out[by-system-$system]}"; echo $?)" "$system: says the system is $detected, --$expected"
 done
+# A system that cannot be told (an os-release that cannot be read) runs nothing: NOT RUN,
+# never load-only
+mkdir -p "$work/system-unknown/etc/os-release"
+runner by-system-unknown H2S_DISTRIBUTION_ROOT="$work/system-unknown" -- --by-system components/good
+check "$([ "${runner_status[by-system-unknown]}" = 2 ] && grep -q -F 'cannot be told' "${out[by-system-unknown]}" && ! grep -q -E '^ *PASS ' "${out[by-system-unknown]}"; echo $?)" "unknown system: status 2, nothing run (status ${runner_status[by-system-unknown]})"
 runner by-system-run H2S_DISTRIBUTION_ROOT="$work/system-nixos" -- --by-system components/good
 check "$([ "${runner_status[by-system-run]}" = 0 ] && [ "$(verdict_of by-system-run components/good)" = PASS ] && [ ! -e "$work/shots-by-system-run" ]; echo $?)" "nixos: components/good PASS, load-only (no shot; status ${runner_status[by-system-run]})"
 show_on_failure "$before" by-system-run

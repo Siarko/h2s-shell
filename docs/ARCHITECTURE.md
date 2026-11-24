@@ -2344,7 +2344,8 @@ nothing to check, and the part passes saying so.
 
 The mockups run `--load-only`: each reaches every scene with no error, and nothing is
 compared. The baselines are drawn on Arch, and another system's libraries and fonts give
-other pixels. Any system other than Arch runs them the same way.
+other pixels. Any system other than Arch runs them the same way; one whose distribution
+cannot be told runs nothing (NOT RUN, status 2).
 
 #### Arch
 
