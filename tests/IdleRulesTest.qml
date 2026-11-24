@@ -51,8 +51,17 @@ TestCase {
             return self.at(ms, { type: "config" });
         };
         self.next = () => rules.nextDeadline(self.state, self.config, self.now);
-        // The Timer fires at the next deadline
-        self.deadline = () => self.at(self.next(), { type: "deadline" });
+        // The Timer fires at the next deadline, as Idle takes it: where logind's idle block is
+        // due to be read, its answer (none held) first, then the deadline — the actions of both
+        self.deadline = () => {
+            const at = self.next();
+            if (!rules.logindReadDue(self.state, self.config, at))
+                return self.at(at, { type: "deadline" });
+            const read = self.at(at, { type: "logindIdleBlock", held: false }).actions;
+            self.at(at, { type: "deadline" });
+            self.actions = [read, self.actions].filter(list => list !== "").join(",");
+            return self;
+        };
         // … as Idle takes it: where logind's inhibitors are due to be read, their answer
         // (no idle block; the sleep block `sleepHeld`, none by default) is the step
         self.sleepDeadline = sleepHeld => {
@@ -61,6 +70,8 @@ TestCase {
                 return self.at(at, { type: "deadline" });
             return self.at(at, { type: "logindIdleBlock", held: false, sleepHeld: sleepHeld === undefined ? false : sleepHeld });
         };
+        // A read of logind's idle block at `ms` found none held
+        self.read = ms => self.at(ms, { type: "logindIdleBlock", held: false });
         // Nobody touched anything since `since` (ms)
         self.idle = (ms, since) => {
             self.at(ms, { type: "inputIdle", idle: true, since: since });
@@ -108,6 +119,7 @@ TestCase {
         _input();
         _lockScreen();
         _inhibitors();
+        _readBeforeStage();
         _profiles();
         _monitors();
         _sleep();
@@ -355,6 +367,61 @@ TestCase {
         assertEqual(rules.retiredKeys(null).length, 0, "no profile values: nothing");
     }
 
+    // A stage or the idle lock only on a read of logind's idle block ended at or after its
+    // time: a timer that fires early has Idle read just before, and any step after the time
+    // (the deadline itself, an unrelated event) must not take it on that read
+    function _readBeforeStage() {
+        const rules = IdleRules;
+        const lockOnly = { lockscreenEnabled: true, lockAfter: 60 };
+        const early = _machine(lockOnly, ["lcd"], true).idle(5000, 0);
+        early.read(59989);
+        assertEqual(early.actions, "", "a read 11 ms before the lock is due: no lock yet");
+        early.at(60000, { type: "deadline" });
+        assertEqual(early.actions, "", "… the deadline stepped at the lock's time on that read: no lock");
+        assertEqual(early.state.lockAsks, 0, "… not counted as asked");
+        assertEqual(early.next(), 60000, "… due at once");
+        assert(rules.logindReadDue(early.state, early.config, 60000), "… with logind's block to read");
+        early.read(60000);
+        assertEqual(early.actions, "lock", "the read at its time: the lock asked");
+
+        const other = _machine(lockOnly, ["lcd"], true).idle(5000, 0).read(59000);
+        other.at(61000, { type: "busInhibitors", count: 0 });
+        assertEqual(other.actions, "", "an unrelated event after the lock's time: no lock without a read since");
+        const held = _machine(lockOnly, ["lcd"], true).idle(5000, 0);
+        held.at(60000, { type: "logindIdleBlock", held: true });
+        assertEqual(held.actions, "", "the read at its time finds an app keeping the screen on: no lock");
+
+        const again = _machine(lockOnly, ["lcd"], true).idle(5000, 0).read(60000);
+        const retryAt = 60000 + rules.lockRetryDelay(1);
+        assertEqual(again.next(), retryAt, "a lock asked, not taken: asked again after the pause");
+        again.at(retryAt, { type: "deadline" });
+        assertEqual(again.actions, "", "… not without a read since the pause ended");
+        again.deadline();
+        assertEqual(again.actions, "lock", "… then after it");
+        assertEqual(again.state.lockAsks, 2, "… the second ask");
+
+        const values = { screensaverEnabled: true, screensaverTimeout: 60, screenOffEnabled: true, screenOffTimeout: 120 };
+        const stages = _machine(values, ["lcd"], true).idle(5000, 0);
+        stages.read(59990).at(60000, { type: "deadline" });
+        assertEqual(stages.actions, "", "the screensaver due, the read just before it: not shown");
+        stages.read(60001);
+        assertEqual(stages.actions, "showSaver:lcd,active:true", "… shown on the read after it");
+        stages.read(119000).at(120000, { type: "deadline" });
+        assertEqual(stages.actions, "", "the screen-off due, the read before it: on");
+        stages.read(120000);
+        assertEqual(stages.actions, "powerOff:lcd", "… off on the read at its time");
+        assertEqual(rules.stage(_machine(values, ["lcd"], true).idle(100000, 0).state, rules.config(values, ["lcd"], true), 100000).lcd, 0,
+                    "an idle event with an old since: no stage before a read");
+
+        const gaveUp = _machine(lockOnly, ["lcd"], true).idle(5000, 0);
+        gaveUp.at(61000, { type: "deadline", readGaveUp: true });
+        assertEqual(gaveUp.actions, "lock", "a read not answered, given up on: the deadline goes on what is known");
+        const gaveUpHeld = _machine(values, ["lcd"], true).idle(5000, 0);
+        gaveUpHeld.at(30000, { type: "logindIdleBlock", held: true });
+        gaveUpHeld.at(330000, { type: "deadline", readGaveUp: true });
+        assertEqual(gaveUpHeld.actions, "", "… a block last read as held still holds");
+    }
+
     // What tests/mutate.sh found no check for
     function _edges() {
         const rules = IdleRules;
@@ -367,13 +434,13 @@ TestCase {
                                  fadeInDuration: 100 }, ["oled"], true);
         quick.idle(500, 0);
         assertEqual(quick.next(), 1000, "a time of one second: due after it");
-        assertEqual([900, 1000, 2000].map(ms => rules.stage(quick.state, quick.config, ms).oled).join(" "), "0 1 1",
+        assertEqual([900, 1000, 2000].map(ms => rules.stage(quick.state, quick.config, ms, true).oled).join(" "), "0 1 1",
                     "times of one and two seconds: the screensaver at 1 s, and first, even asked late");
         quick.deadline();
-        assertEqual([1999, 2000].map(ms => rules.stage(quick.state, quick.config, ms).oled).join(" "), "1 2",
+        assertEqual([1999, 2000].map(ms => rules.stage(quick.state, quick.config, ms, true).oled).join(" "), "1 2",
                     "… the screens off at 2 s");
         const offQuick = _machine({ screenOffEnabled: true, screenOffTimeout: 1 }, ["oled"], true).idle(500, 0);
-        assert(offQuick.next() === 1000 && rules.stage(offQuick.state, offQuick.config, 1000).oled === 2, "screens off after one second");
+        assert(offQuick.next() === 1000 && rules.stage(offQuick.state, offQuick.config, 1000, true).oled === 2, "screens off after one second");
         offQuick.deadline().at(1500, { type: "busInhibitors", count: 1 });
         assertEqual(rules.stage(offQuick.state, offQuick.config, 2000).oled, 2, "… an inhibitor then holds them off");
         offQuick.at(2500, { type: "sleep" });
@@ -385,7 +452,7 @@ TestCase {
             .at(700000, { type: "force" });
         assert(first.actions.split(",").includes("lock"), "the first step: a lock already due is asked, no switch to count from: " + first.actions);
         const dueAlready = _machine({ lockscreenEnabled: true, lockAfter: 60 }, ["lcd"], true).idle(5000, 0);
-        dueAlready.reconfigure(60000, { lockscreenEnabled: true, lockAfter: 30 });
+        dueAlready.reconfigure(60000, { lockscreenEnabled: true, lockAfter: 30 }).read(60000);
         assertEqual(dueAlready.actions, "lock", "Lock after shortened just as the lock fell due: it is asked, not put off");
         const full = {};
         for (let i = 0; i < IdleRules.maxMonitorEntries; i++)
@@ -896,7 +963,7 @@ TestCase {
                          fadeInDuration: 2000 };
 
         const old = _machine(values, ["oled"], true);
-        old.idle(100000, 0);
+        old.idle(100000, 0).read(100000);
         assertEqual(old.shown(), "oled=saver", "an old since: the screensaver first, not off at once");
         assertEqual(old.next(), 100000 + fade, "… off once it has faded in, counted from when it appeared");
         old.at(100000 + fade - 1, { type: "deadline" });
@@ -905,7 +972,7 @@ TestCase {
         assertEqual(old.actions, "powerOff:oled", "… then off");
 
         const gap = _machine(_with(values, { screenOffTimeout: 61 }), ["lcd"], true);
-        gap.idle(100000, 0);
+        gap.idle(100000, 0).read(100000);
         assertEqual(gap.shown(), "lcd=saver", "an old since, the screen-off a second after: the screensaver only");
         assertEqual(gap.next(), 100000 + fade, "… off after its fade in");
 
@@ -920,7 +987,7 @@ TestCase {
         const switched = _machine({ screensaverEnabled: true, screensaverTimeout: 300, screenOffEnabled: true, screenOffTimeout: 300,
                                      fadeInDuration: 2000 }, ["oled"], true);
         switched.idle(5000, 0);
-        switched.reconfigure(100000, values);
+        switched.reconfigure(100000, values).read(100000);
         assertEqual(switched.actions, "showSaver:oled,active:true", "a profile switched while away, both times past: the screensaver only");
         assertEqual(switched.next(), 100000 + fade, "… off once it has faded in");
         switched.deadline();
@@ -938,7 +1005,7 @@ TestCase {
         assertEqual(pair.actions, "powerOff:oled", "… then the OLED off");
         pair.input(80000);
         assertEqual(pair.shown(), "lcd=on oled=on", "input: both on");
-        pair.idle(200000, 80000);
+        pair.idle(200000, 80000).read(200000);
         assertEqual(pair.shown(), "lcd=saver oled=saver", "a new period with an old since: both their screensavers, the last period's moment forgotten");
         assertEqual(pair.next(), 200000 + fade, "… both off after the fade in");
 
@@ -965,7 +1032,7 @@ TestCase {
         // Nothing to wait for: the screen-off before the screensaver, or no screensaver on
         // that monitor
         const offFirst = _machine(_with(values, { screensaverTimeout: 120 }), ["oled"], true);
-        offFirst.idle(100000, 0);
+        offFirst.idle(100000, 0).read(100000);
         assertEqual(offFirst.shown(), "oled=off", "an old since, the screen-off before the screensaver: off at once");
         const mixed = _machine(_own({ fadeInDuration: 2000 }, { lcd: _entry(60, 60), oled: _entry(0, 60) }), ["lcd", "oled"], true);
         mixed.idle(5000, 0);
@@ -1197,7 +1264,7 @@ TestCase {
         assertEqual(logind.next(), 630000, "released: counted from the read that saw it gone");
         assert(!readDue(logind, 629999), "… free: not read again until the next stage is due");
         assert(readDue(logind, 630000), "… read then");
-        logind.at(630000, { type: "deadline" });
+        logind.read(630000);
         assert(!readDue(logind, 640000), "the screensaver reached: not read until screen-off is due");
         assert(readDue(logind, 680000), "… read at screen-off");
         logind.at(631000, { type: "logindIdleBlock", held: true });
@@ -1841,7 +1908,7 @@ TestCase {
 
         // The stage on the clock: from the lock at 20 min, 2 h later; once; locked first
         const machine = _machine(lockAt20, ["lcd"], true, "yes", "yes", "yes").idle(5000, 0);
-        machine.at(1200000, { type: "deadline" });
+        machine.read(1200000);
         assertEqual(machine.actions, "showSaver:lcd,lock,active:true", "the lock at 20 min (the screensaver's deadline taken late)");
         machine.at(1201000, { type: "locked" });
         assertEqual(machine.next(), 8400000, "… hibernation due 2 h after the lock");

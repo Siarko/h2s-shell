@@ -214,15 +214,18 @@ Singleton {
 
     // Events are taken one at a time, in order, also when an action leads to another (the
     // idle lock sets Lockscreen.locked at once)
-    function _dispatch(event) {
-        _events.push(event);
+    // `now`: the clock reading the event was decided on (the deadline's), used when nothing
+    // is queued before it; otherwise each event is stepped at the time it is taken
+    function _dispatch(event, now) {
+        _events.push({ event: event, now: _dispatching ? undefined : now });
         if (_dispatching)
             return;
         _dispatching = true;
         try {
             while (_events.length > 0) {
-                const next = _events.shift();
-                const result = IdleRules.step(_state, next, _config(), _now());
+                const queued = _events.shift();
+                const next = queued.event;
+                const result = IdleRules.step(_state, next, _config(), typeof queued.now === "number" ? queued.now : _now());
                 if (result.ignored !== "") {
                     _log("warning", "event " + JSON.stringify(next) + " ignored: " + result.ignored);
                     continue;
@@ -510,21 +513,24 @@ Singleton {
     function _deadlineReached() {
         if (_deadlineAfterRead)
             return;
-        if (IdleRules.logindReadDue(_state, _config(), _now())) {
+        // One clock reading for the check and the step: a timer fires up to milliseconds
+        // early, and a later reading could find a stage due that the check did not
+        const now = _now();
+        if (IdleRules.logindReadDue(_state, _config(), now)) {
             _deadlineAfterRead = true;
             _readGuard.restart();
             _logindIdle.start();
             return;
         }
-        _dispatch({ type: "deadline" });
+        _dispatch({ type: "deadline" }, now);
     }
 
-    function _deadlineAfterAnswer() {
+    function _deadlineAfterAnswer(gaveUp) {
         if (!_deadlineAfterRead)
             return;
         _deadlineAfterRead = false;
         _readGuard.stop();
-        _dispatch({ type: "deadline" });
+        _dispatch(gaveUp === true ? { type: "deadline", readGaveUp: true } : { type: "deadline" });
     }
 
     Timer {
@@ -533,7 +539,7 @@ Singleton {
         repeat: false
         onTriggered: {
             root._log("warning", "logind's idle inhibitors not answered: the deadline taken without them");
-            root._deadlineAfterAnswer();
+            root._deadlineAfterAnswer(true);
         }
     }
 

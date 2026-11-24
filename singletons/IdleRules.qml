@@ -463,6 +463,7 @@ Singleton {
             busInhibitors: 0,        // org.freedesktop.ScreenSaver inhibits held
             logindIdleBlock: false,  // true, false or "unknown" (a failed read)
             logindSleepBlock: "unknown", // logind's `sleep` block: true, false or "unknown"
+            idleReadAt: null,        // monotonic ms the last read of logind's idle block ended (answered, failed or given up on)
             sleepReadAt: null,       // monotonic ms of the last read of it (null: none in this period)
             sleepReadFails: 0,       // reads in a row that could not tell
             locked: false,
@@ -583,7 +584,7 @@ Singleton {
 
     // The stage one monitor has reached now: what was reached stays unless switched off;
     // held, nothing further; else from the time since the last input, on its own times
-    function _monitorStage(state, config, id, now) {
+    function _monitorStage(state, config, id, now, unread) {
         let reached = state.stage[id] ?? 0;
         if (state.sleeping)
             return reached;
@@ -600,14 +601,24 @@ Singleton {
             if (_offOn(times) && now - state.forcedAt >= _forcedOffAfter(config, times))
                 timeline = 2;
         } else {
-            const idleFor = now - state.idleSince;
-            if (times.saverAfter > 0 && idleFor >= times.saverAfter * 1000)
+            // Unlocked, each stage only on a read of logind's idle block ended at or after its
+            // time (_idleReadSince); `unread`: as if read (logindReadDue asks whether one is due)
+            const read = at => unread === true || state.locked || _idleReadSince(state, at);
+            const saverAt = times.saverAfter > 0 ? state.idleSince + times.saverAfter * 1000 : null;
+            if (saverAt !== null && now >= saverAt && read(saverAt))
                 timeline = 1;
             const offTime = times.screenOffAfter > 0 ? _offTime(state, config, id, times) : null;
-            if (offTime !== null && now >= offTime)
+            if (offTime !== null && now >= offTime && read(offTime))
                 timeline = 2;
         }
         return Math.max(reached, timeline);
+    }
+
+    // A read of logind's idle block ended at or after `at`: what lets a stage or the idle
+    // lock that fell due at `at` go while unlocked and not forced — an event stepped after
+    // the deadline (an early timer, any event at all) never takes one without the read
+    function _idleReadSince(state, at) {
+        return typeof state.idleReadAt === "number" && state.idleReadAt >= at;
     }
 
     // A forced screensaver shows on every monitor; a monitor's screen-off then comes as long
@@ -620,10 +631,11 @@ Singleton {
     }
 
     // → { monitorId: 0 | 1 | 2 } for every connected monitor: the stage each has reached now
-    function stage(state, config, now) {
+    // (`unread`: the stages due, logind's idle block read or not)
+    function stage(state, config, now, unread) {
         const result = {};
         for (const id of config.monitors)
-            result[id] = _monitorStage(state, config, id, now);
+            result[id] = _monitorStage(state, config, id, now, unread);
         return result;
     }
 
@@ -740,10 +752,12 @@ Singleton {
     }
 
     // The idle lock is due: unlocked, not locked yet in this idle period, not held, from the
-    // last input (or a profile switch that made it due), and asked again only after the pause
-    function lockDue(state, config, now) {
+    // last input (or a profile switch that made it due), and asked again only after the pause;
+    // not forced, only once a read of logind's idle block ended at or after that time
+    // (`unread`: due, read or not)
+    function lockDue(state, config, now, unread) {
         const at = _lockAt(state, config.lockAfter);
-        return at !== null && now >= at;
+        return at !== null && now >= at && (unread === true || state.forced || _idleReadSince(state, at));
     }
 
     // The apps keeping the screen on hold the sleep while unlocked — a forced screensaver
@@ -841,7 +855,8 @@ Singleton {
     // when one appears): unlocked and not forced, when a stage or the idle lock is due now,
     // and while a block holds (its re-read, logindRecheck). Its sleep block likewise, locked
     // or not: when the sleep is due but for it. Idle reads, steps the answers
-    // (logindIdleBlock, logindSleepBlock), then the deadline.
+    // (logindIdleBlock, logindSleepBlock), then the deadline. A stage or the idle lock never
+    // goes without a read ended at or after its time (_idleReadSince).
     function logindReadDue(state, config, now) {
         if (state.sleeping)
             return false;
@@ -852,8 +867,8 @@ Singleton {
             return false;
         if (state.logindIdleBlock === true)
             return true;
-        const reached = stage(state, config, now);
-        return config.monitors.some(id => reached[id] > (state.stage[id] ?? 0)) || lockDue(state, config, now);
+        const reached = stage(state, config, now, true);
+        return config.monitors.some(id => reached[id] > (state.stage[id] ?? 0)) || lockDue(state, config, now, true);
     }
 
     // → the next moment `wanted`, `lockDue` or `lockBlack` changes (monotonic ms, never
@@ -1024,7 +1039,8 @@ Singleton {
     // in this period — but a refused SuspendThenHibernate, which logind judges at the call
     // (swap against the memory in use then), is asked once more as a plain Suspend, after a
     // fresh read of its inhibitors), power
-    // { power: { id: "on" | "off" | other } }, deadline, config, monitors, locked,
+    // { power: { id: "on" | "off" | other } }, deadline { readGaveUp? } (`readGaveUp`: a read of
+    // logind's idle block not answered, taken as ended), config, monitors, locked,
     // unlocked, sleep, resumed, force (IPC), busForce (D-Bus SetActive(true): as force, never
     // while locked or going to sleep — busForceTakes), activity (D-Bus SimulateUserActivity, and input on a
     // forced screensaver's surface: before baseTime has passed no inputIdle(true) came, so
@@ -1087,6 +1103,7 @@ Singleton {
             if (next.logindIdleBlock === true && value !== true)
                 _released(next, now);
             next.logindIdleBlock = value;
+            next.idleReadAt = now;
             // The same read's sleep block, in the same step: the sleep is never asked on one
             // half of a read
             if ("sleepHeld" in event)
@@ -1161,6 +1178,11 @@ Singleton {
             break;
         }
         case "deadline":
+            // Idle gave up waiting for a read's answer: taken as a read that could not tell,
+            // the block as last known — a read never holds a stage for good
+            if (event.readGaveUp === true)
+                next.idleReadAt = now;
+            break;
         case "config":
         case "monitors":
             break;
