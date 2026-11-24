@@ -36,6 +36,8 @@ TestCase {
     // The module directory (found at the start) and the last scenario's readings
     property string _modules: ""
     property var _after: ({})
+    // What the sweeping trial logged
+    property var _sweepLog: []
 
     property Component _trialComponent: Component {
         PamTrial {}
@@ -104,9 +106,9 @@ TestCase {
         "check() { label=$1; shift; if \"$@\"; then echo \"ok $label\"; else echo \"bad $label\"; fi; }",
         "refused() { \"$stage\" \"$@\" 2> /dev/null && return 1; return 0; }",
         "mkdir -p \"$s/other/h2s-pam-trial.ABCDEFGH\"; ln -s \"$s/other/h2s-pam-trial.ABCDEFGH\" \"$p/h2s-pam-trial.Linked12\"; ln -s \"$p\" \"$s/runlink\"",
-        "check 'staged' \"$stage\" stage \"$p\" \"$p/h2s-pam-trial.Okay1234\" a 'x' > /dev/null",
+        "check 'staged' \"$stage\" stage \"$p\" \"$p/h2s-pam-trial.Okay1234\" $$ a 'x' > /dev/null",
         "check '… its file, 0600, in a 0700 directory' test \"$(stat -c %a \"$p/h2s-pam-trial.Okay1234\") $(stat -c %a \"$p/h2s-pam-trial.Okay1234/a\") $(cat \"$p/h2s-pam-trial.Okay1234/a\")\" = '700 600 x'",
-        "check 'a directory already there: refused' refused stage \"$p\" \"$p/h2s-pam-trial.Okay1234\" b 'y'",
+        "check 'a directory already there: refused' refused stage \"$p\" \"$p/h2s-pam-trial.Okay1234\" $$ b 'y'",
         "check '… and left as it was' test -e \"$p/h2s-pam-trial.Okay1234/a\" -a ! -e \"$p/h2s-pam-trial.Okay1234/b\"",
         "check 'remove through .. into another directory: refused' refused remove \"$p\" \"$p/../other/h2s-pam-trial.ABCDEFGH\"",
         "check 'remove of a directory elsewhere: refused' refused remove \"$p\" \"$s/other/h2s-pam-trial.ABCDEFGH\"",
@@ -117,13 +119,25 @@ TestCase {
         "check 'a parent with /./: refused' refused remove \"$s/./run\" \"$s/./run/h2s-pam-trial.Okay1234\"",
         "check 'a parent with /..: refused' refused remove \"$s/other/../run\" \"$s/other/../run/h2s-pam-trial.Okay1234\"",
         "check 'a relative parent: refused' refused remove run run/h2s-pam-trial.Okay1234",
-        "check 'a parent that is a link: refused' refused stage \"$s/runlink\" \"$s/runlink/h2s-pam-trial.Viaa1234\" a 'x'",
-        "check 'a name with a slash: refused' refused stage \"$p\" \"$p/h2s-pam-trial.Name1234\" '../x' 'x'",
-        "check 'a dot-file name: refused' refused stage \"$p\" \"$p/h2s-pam-trial.Name1234\" '.x' 'x'",
-        "check 'a name given twice: refused' refused stage \"$p\" \"$p/h2s-pam-trial.Name1234\" a 'x' a 'y'",
-        "check 'a control character in a text: refused' refused stage \"$p\" \"$p/h2s-pam-trial.Name1234\" a \"$(printf 'x\\001')\"",
-        "check 'a directory name not the staging one: refused' refused stage \"$p\" \"$p/h2s-pam-trial.short\" a 'x'",
+        "check 'a parent that is a link: refused' refused stage \"$s/runlink\" \"$s/runlink/h2s-pam-trial.Viaa1234\" $$ a 'x'",
+        "check 'a name with a slash: refused' refused stage \"$p\" \"$p/h2s-pam-trial.Name1234\" $$ '../x' 'x'",
+        "check 'a dot-file name: refused' refused stage \"$p\" \"$p/h2s-pam-trial.Name1234\" $$ '.x' 'x'",
+        "check 'a name given twice: refused' refused stage \"$p\" \"$p/h2s-pam-trial.Name1234\" $$ a 'x' a 'y'",
+        "check 'a control character in a text: refused' refused stage \"$p\" \"$p/h2s-pam-trial.Name1234\" $$ a \"$(printf 'x\\001')\"",
+        "check 'a directory name not the staging one: refused' refused stage \"$p\" \"$p/h2s-pam-trial.short\" $$ a 'x'",
         "check '… none of the refused made a directory' test ! -e \"$p/h2s-pam-trial.Name1234\" -a ! -e \"$s/runlink/h2s-pam-trial.Viaa1234\" -a ! -e \"$p/h2s-pam-trial.short\"",
+        "check '… the shell it is for recorded first: its pid and start time' test \"$(cat \"$p/h2s-pam-trial.Okay1234/.owner\")\" = \"$$ $(sed 's/.*) //' /proc/$$/stat | cut -d ' ' -f 20)\"",
+        "check 'an owner not running: refused' refused stage \"$p\" \"$p/h2s-pam-trial.Name1234\" 999999999 a 'x'",
+        "check 'an owner not a pid: refused' refused stage \"$p\" \"$p/h2s-pam-trial.Name1234\" '1 2' a 'x'",
+        // The sweep: a directory of a pid not running, of a reused pid (another start time),
+        // of a running shell (this script), without a record, with a record not of its form
+        "w=$s/sweep; mkdir -m 700 \"$w\"; mkdir \"$w/h2s-pam-trial.Stale123\" \"$w/h2s-pam-trial.Reuse123\" \"$w/h2s-pam-trial.NoRec123\" \"$w/h2s-pam-trial.Odd12345\"",
+        "echo '999999999 5' > \"$w/h2s-pam-trial.Stale123/.owner\"; echo \"$$ 1\" > \"$w/h2s-pam-trial.Reuse123/.owner\"; echo 'not a record' > \"$w/h2s-pam-trial.Odd12345/.owner\"",
+        "\"$stage\" stage \"$w\" \"$w/h2s-pam-trial.Live1234\" $$ a 'x' > /dev/null",
+        "check 'swept: the two whose shell is gone reported' test \"$(\"$stage\" sweep \"$w\" | sort | tr '\\t\\n' ' |')\" = \"removed $w/h2s-pam-trial.Reuse123|removed $w/h2s-pam-trial.Stale123|\"",
+        "check '… and removed; the running shell one, the one without a record and the odd one left' test \"$(ls -A \"$w\" | tr '\\n' ' ')\" = 'h2s-pam-trial.Live1234 h2s-pam-trial.NoRec123 h2s-pam-trial.Odd12345 '",
+        "check 'a sweep of a relative parent: refused' refused sweep sweep",
+        "rm -rf \"$w\"",
         "check 'removed' \"$stage\" remove \"$p\" \"$p/h2s-pam-trial.Okay1234\"",
         "check '… gone' test ! -e \"$p/h2s-pam-trial.Okay1234\"",
         "check 'removed again: no error' \"$stage\" remove \"$p\" \"$p/h2s-pam-trial.Okay1234\"",
@@ -305,6 +319,33 @@ TestCase {
                 suite.assert(lines.length >= 15, "the staging script's cases ran: " + lines.length);
                 for (const line of lines)
                     suite.assert(line.startsWith("ok "), "the staging script: " + line);
+                suite._ready = true;
+            });
+        });
+
+        // Made: the staging directories a shell no longer running left behind are removed;
+        // the running shell's (this one's) and one without a record are left
+        let sweeper = null;
+        _then("staging directories left behind", () => _ready, () => {
+            _ready = false;
+            _sh("w=$2/swept; mkdir -m 700 \"$w\" && mkdir \"$w/h2s-pam-trial.Gone1234\" \"$w/h2s-pam-trial.NoRec123\" "
+                + "&& echo '999999999 5' > \"$w/h2s-pam-trial.Gone1234/.owner\" && \"$1\" stage \"$w\" \"$w/h2s-pam-trial.Ours1234\" \"$3\" a x",
+                [Quickshell.shellDir + "/scripts/pam-trial-stage.sh", _scratch, String(Quickshell.processId)], result => {
+                suite.assert(result.ok, "three staging directories made: " + result.stderr);
+                suite._sweepLog = [];
+                sweeper = suite._trialComponent.createObject(suite, { stagingParent: suite._scratch + "/swept" });
+                sweeper.logLine.connect((level, message) => suite._sweepLog.push(message));
+                suite._ready = true;
+            });
+        });
+        _then("the sweep at the start", () => _ready && _sweepLog.length > 0, () => {
+            assertEqual(JSON.stringify(_sweepLog), JSON.stringify(["PAM trial: removed the staging directory a shell left behind: " + _scratch + "/swept/h2s-pam-trial.Gone1234"]),
+                        "made: the directory of a shell no longer running removed, said in the log");
+            sweeper.destroy();
+            sweeper = null;
+            _ready = false;
+            _sh("ls -A \"$1/swept\" | tr '\\n' ' '; rm -rf \"$1/swept\"", [_scratch], result => {
+                suite.assertEqual(result.stdout, "h2s-pam-trial.NoRec123 h2s-pam-trial.Ours1234 ", "… this shell's own and the one without a record left");
                 suite._ready = true;
             });
         });

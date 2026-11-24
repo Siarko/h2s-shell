@@ -11,8 +11,9 @@ import qs.singletons
 // - scripts/pam-files.sh in rounds for the files the candidate includes (as PamStackReader
 //   reads stacks), its answers handed back as they come;
 // - scripts/pam-trial-stage.sh to make the staging directory under `stagingParent` (the
-//   runtime directory) and to remove it when the trial ends — also when this object is
-//   destroyed mid-trial;
+//   runtime directory), the shell's pid in it, and to remove it when the trial ends — also
+//   when this object is destroyed mid-trial; and, when this object is made, to remove the
+//   staging directories a shell no longer running left behind (`sweep`);
 // - one PamContext with the staging directory as its configDirectory, its messages and
 //   result handed back, the user's answer passed to it — never kept.
 //
@@ -85,7 +86,7 @@ Scope {
             break;
         }
         case "stage": {
-            const argv = Array.from(stageCommand).concat(["stage", effect.parent, effect.directory]);
+            const argv = Array.from(stageCommand).concat(["stage", effect.parent, effect.directory, String(Quickshell.processId)]);
             for (const file of effect.files)
                 argv.push(file.name, file.text);
             _run(argv, (lines, result) => _dispatch({ type: "staged", trial: effect.trial, lines: lines, result: result }));
@@ -160,6 +161,19 @@ Scope {
     }
 
     property CommandRunner _runner: CommandRunner {}
+
+    // Staging directories whose shell is gone (killed mid-trial) are removed; a running
+    // shell's — another instance's, a test run's — and one without the shell's record are not
+    Component.onCompleted: {
+        if (stagingParent === "")
+            return;
+        _run(Array.from(stageCommand).concat(["sweep", stagingParent]), (lines, result) => {
+            for (const line of lines.filter(line => line.startsWith("removed\t")))
+                root.logLine("info", "PAM trial: removed the staging directory a shell left behind: " + line.slice(8));
+            if (!result.ok)
+                root.logLine("warning", "PAM trial: the staging directories left behind could not be swept");
+        });
+    }
 
     PamContext {
         id: _context
