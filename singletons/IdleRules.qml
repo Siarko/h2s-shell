@@ -472,9 +472,8 @@ Singleton {
             forced: false,           // the screensaver asked for (IPC, SetActive(true))
             forcedAt: null,          // monotonic ms it was asked for
             dark: false,             // every monitor that goes dark has, in this period (allDark)
-            lockedThisPeriod: false, // locked in this idle period: the idle lock is not asked again
             lockAsks: 0,             // the idle lock asked this many times in this period, not taken
-            lockAskedAt: -1,         // monotonic ms of the last ask, -1 none
+            lockAskedAt: null,       // monotonic ms of the last ask, null none
             lockSince: null,         // a profile switch made the lock due: it counts from then (ms)
             lockAfterSeen: null,     // the config's lockAfter at the last step (null: none yet)
             sleepAsked: false,       // the sleep asked in this period: not asked again
@@ -694,11 +693,11 @@ Singleton {
         return Math.min(powerRetry.maximum, powerRetry.minimum * Math.pow(2, tries - 1));
     }
 
-    // When a pending power action is asked again, or -1: only once a reading since the last
+    // When a pending power action is asked again, or null: only once a reading since the last
     // ask said otherwise
     function _powerRetryAt(pending) {
         if (pending.gaveUp === true || pending.read === null || pending.read === (pending.on ? "on" : "off"))
-            return -1;
+            return null;
         return pending.at + powerRetryDelay(pending.tries);
     }
 
@@ -728,22 +727,23 @@ Singleton {
         return Math.min(lockRetry.maximum, lockRetry.minimum * Math.pow(2, asks - 1));
     }
 
-    // When the idle lock is next due (monotonic ms), or -1: from where it counts, and after an
-    // ask not taken, the retry pause
+    // When the idle lock is next due (monotonic ms), or null: from where it counts, and after an
+    // ask not taken, the retry pause. Locked once, never again in the same period: the unlock
+    // is input, a new period (a sleep's resume for an unlock while going to sleep)
     function _lockAt(state, lockAfter) {
-        if (state.sleeping || state.locked || state.lockedThisPeriod || lockAfter <= 0)
-            return -1;
+        if (state.sleeping || state.locked || lockAfter <= 0)
+            return null;
         if (held(state) || !_counting(state))
-            return -1;
+            return null;
         const due = _lockStart(state) + lockAfter * 1000;
-        return state.lockAskedAt < 0 ? due : Math.max(due, state.lockAskedAt + lockRetryDelay(state.lockAsks));
+        return state.lockAskedAt === null ? due : Math.max(due, state.lockAskedAt + lockRetryDelay(state.lockAsks));
     }
 
     // The idle lock is due: unlocked, not locked yet in this idle period, not held, from the
     // last input (or a profile switch that made it due), and asked again only after the pause
     function lockDue(state, config, now) {
         const at = _lockAt(state, config.lockAfter);
-        return at >= 0 && now >= at;
+        return at !== null && now >= at;
     }
 
     // The apps keeping the screen on hold the sleep while unlocked — a forced screensaver
@@ -754,7 +754,7 @@ Singleton {
         return waylandHeld(state) || state.busInhibitors > 0 || state.logindIdleBlock === true;
     }
 
-    // When the sleep falls due (monotonic ms), or -1: from the last input (or a later profile
+    // When the sleep falls due (monotonic ms), or null: from the last input (or a later profile
     // switch that made it due), once per period, unless held (_sleepHeld). After a forced
     // screensaver it comes as long after the force as it would after the screensaver's own
     // time (`sleepAfter − saverAfter`), or its whole time where that is not positive — never at
@@ -764,9 +764,9 @@ Singleton {
     function _sleepAt(state, config, ignoreBlock) {
         const sleepAfter = machineAfter(config);
         if (state.sleeping || state.sleepAsked || sleepAfter <= 0)
-            return -1;
+            return null;
         if (_sleepHeld(state) || !_counting(state))
-            return -1;
+            return null;
         let due;
         if (state.forced) {
             const gap = sleepAfter - (config.saverAfter ?? 0);
@@ -776,13 +776,13 @@ Singleton {
         }
         if (state.sleepSince !== null)
             due = Math.max(due, state.sleepSince + sleepAfter * 1000);
-        if (config.lockAfter > 0 && !state.locked && !state.lockedThisPeriod) {
+        if (config.lockAfter > 0 && !state.locked) {
             const lockAt = _lockStart(state) + config.lockAfter * 1000;
             if (lockAt <= due)
                 due = Math.max(due, lockAt + sleepLockWait);
         }
         if (ignoreBlock !== true && !(state.logindSleepBlock === false && _sleepReadSince(state, due)))
-            return -1;
+            return null;
         return due;
     }
 
@@ -799,20 +799,20 @@ Singleton {
         return Math.min(sleepReadRetry.maximum, sleepReadRetry.minimum * Math.pow(2, fails - 1));
     }
 
-    // When logind's inhibitors are next read for the sleep (monotonic ms), or -1: at the time
+    // When logind's inhibitors are next read for the sleep (monotonic ms), or null: at the time
     // it falls due; while a sleep block holds, again after logindRecheck; after a read that
     // could not tell, again after a growing pause; none once a fresh read found it free
     function _sleepReadAt(state, config) {
         const due = _sleepAt(state, config, true);
-        if (due < 0)
-            return -1;
+        if (due === null)
+            return null;
         if (!_sleepReadSince(state, due))
             return due;
         if (state.logindSleepBlock === true)
             return state.sleepReadAt + logindRecheck;
         if (state.logindSleepBlock !== false)
             return state.sleepReadAt + sleepReadRetryDelay(state.sleepReadFails ?? 0);
-        return -1;
+        return null;
     }
 
     // The pause before reading logind's sleep support again while it could not be read: the
@@ -827,7 +827,7 @@ Singleton {
     // logindReadDue)
     function sleepDue(state, config, now) {
         const at = _sleepAt(state, config, false);
-        return at >= 0 && now >= at;
+        return at !== null && now >= at;
     }
 
     // The settings leave a sleep unlocked: neither "Lock before the computer sleeps" nor an
@@ -846,7 +846,7 @@ Singleton {
         if (state.sleeping)
             return false;
         const sleepReadAt = _sleepReadAt(state, config);
-        if (sleepReadAt >= 0 && now >= sleepReadAt)
+        if (sleepReadAt !== null && now >= sleepReadAt)
             return true;
         if (state.locked || state.forced)
             return false;
@@ -879,21 +879,21 @@ Singleton {
             }
         }
         const lockAt = _lockAt(state, config.lockAfter);
-        if (lockAt >= 0)
+        if (lockAt !== null)
             due.push(lockAt);
         if (state.locked && state.inputIdle && !state.lockAttended && config.lockedScreenOffAfter > 0 && !state.lockedDark)
             due.push(state.lockQuietSince + config.lockedScreenOffAfter * 1000);
         if (!state.locked && state.logindIdleBlock === true)
             due.push(now + logindRecheck);
         const sleepAt = _sleepAt(state, config, false);
-        if (sleepAt >= 0)
+        if (sleepAt !== null)
             due.push(sleepAt);
         const sleepReadAt = _sleepReadAt(state, config);
-        if (sleepReadAt >= 0)
+        if (sleepReadAt !== null)
             due.push(sleepReadAt);
         for (const id of Object.keys(state.pendingPower)) {
             const at = _powerRetryAt(state.pendingPower[id]);
-            if (at >= 0)
+            if (at !== null)
                 due.push(at);
         }
         return due.length === 0 ? -1 : Math.max(now, Math.min(...due));
@@ -935,9 +935,8 @@ Singleton {
         next.dark = false;
         next.gone = {};
         next.offAsks = {};
-        next.lockedThisPeriod = next.locked;
         next.lockAsks = 0;
-        next.lockAskedAt = -1;
+        next.lockAskedAt = null;
         next.lockSince = null;
         next.sleepAsked = false;
         next.sleepPlain = false;
@@ -986,12 +985,13 @@ Singleton {
     }
 
     // A "screens dark" entry's moment: every monitor it waits for has gone dark — naming
-    // none, the period's own dark (every monitor that goes dark has, kept until input)
+    // none, the period's own dark (every monitor that goes dark has, kept until input).
+    // Called after the step's stage(), which gave every connected monitor its stage
     function _commandDark(next, config, entry) {
         if (entry.monitors === null)
             return next.dark;
         const waited = commandWaits(entry, config, next.forced);
-        return waited.length > 0 && waited.every(id => (next.stage[id] ?? 0) >= 1);
+        return waited.length > 0 && waited.every(id => next.stage[id] >= 1);
     }
 
     // A read of logind's sleep block answered at `now`
@@ -1171,9 +1171,8 @@ Singleton {
                 _commandsGo(next, config, "lock", actions);
                 next.locked = true;
                 next.lockQuietSince = now;
-                next.lockedThisPeriod = true;
                 next.lockAsks = 0;
-                next.lockAskedAt = -1;
+                next.lockAskedAt = null;
             }
             break;
         case "unlocked":
@@ -1304,7 +1303,7 @@ Singleton {
         if (next.lockAfterSeen !== null && next.lockAfterSeen !== config.lockAfter) {
             const before = _lockAt(next, next.lockAfterSeen);
             const after = _lockAt(next, config.lockAfter);
-            if (after >= 0 && after <= now && !(before >= 0 && before <= now))
+            if (after !== null && after <= now && !(before !== null && before <= now))
                 next.lockSince = now;
         }
         next.lockAfterSeen = config.lockAfter;
@@ -1314,7 +1313,7 @@ Singleton {
         if (next.sleepAfterSeen !== null && next.sleepAfterSeen !== sleepAfter) {
             const before = _sleepAt(next, { sleepAfter: next.sleepAfterSeen, lockAfter: config.lockAfter }, true);
             const after = _sleepAt(next, config, true);
-            if (after >= 0 && after <= now && !(before >= 0 && before <= now))
+            if (after !== null && after <= now && !(before !== null && before <= now))
                 next.sleepSince = now;
         }
         next.sleepAfterSeen = sleepAfter;
@@ -1393,7 +1392,7 @@ Singleton {
             for (const id of Object.keys(next.pendingPower)) {
                 const pending = next.pendingPower[id];
                 const at = _powerRetryAt(pending);
-                if (at < 0 || now < at)
+                if (at === null || now < at)
                     continue;
                 // Asked often enough: given up, said once (Idle logs it)
                 if (pending.tries >= powerRetry.tries) {
