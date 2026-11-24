@@ -26,8 +26,12 @@ Item {
     PageShown {
         id: _onScreen
         onShownChanged: root._hold(shown)
-        // The VPN plugins installed, read each time the page shows (one installed meanwhile)
-        onBecameShown: VpnManager.readPlugins()
+        // The VPN plugins installed, and the blocking's script, read each time the page shows
+        // (one installed meanwhile)
+        onBecameShown: {
+            VpnManager.readPlugins();
+            VpnLockdown.checkScript();
+        }
     }
     Component.onCompleted: _hold(_onScreen.shown)
     Component.onDestruction: _hold(false)
@@ -45,10 +49,18 @@ Item {
     // The VPN open for its settings, by UUID
     property string _open: ""
 
-    // The blocking script shown in full (and its polkit rule)
+    // The blocking script shown in full (and its polkit rule, or what is at their places)
     property bool _showScript: false
     property bool _showRule: false
+    property bool _showFound: false
     readonly property string _nixosModule: VpnLockdown.nixosModule
+    // What Install, Replace and Remove do for the files as read (VpnLockdownInstallRules.offer)
+    readonly property var _offer: VpnLockdownInstallRules.offer(VpnLockdown.installState)
+    // The files at the install's places not written by the shell, by path
+    readonly property var _foreign: [
+        VpnLockdown.installState.script === "changed" ? VpnLockdown.installedAt : "",
+        VpnLockdown.installState.rule === "changed" ? VpnLockdown.rulePath : ""
+    ].filter(path => path !== "")
 
     // A file picked to import, and the kind it is imported as ("" until chosen)
     property string _importPath: ""
@@ -432,30 +444,26 @@ Item {
                         : VpnLockdown.state === "asking" ? "Waiting for the administrator's password…"
                         : VpnLockdown.state === "working" ? "Switching…"
                         : VpnLockdown.state === "failed" ? VpnLockdown.failure
+                        : VpnLockdown.state === "missing"
+                            ? (VpnLockdown.helperState === "asks" ? "Not switched: the script asked for a password, and nothing asks by itself. Apply again to give it."
+                               : VpnLockdown.mode === "unavailable" ? VpnLockdown.capability.reason
+                               : VpnLockdown.loaded && !VpnLockdown.wanted
+                                   ? "Still blocking from before: the script must be installed to switch it off."
+                               : "Not blocking: the blocking needs its script installed.")
                         : VpnLockdown.wanted ? "About to block…" : "Not blocking."
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.fontSizeBody
-                    color: VpnLockdown.state === "failed" ? Theme.warning : Theme.textPrimary
+                    color: VpnLockdown.state === "failed" || VpnLockdown.state === "missing" ? Theme.warning : Theme.textPrimary
                 }
                 SmallButton {
                     // Whenever what is loaded differs from what is wanted — a refused
-                    // password, either way — or to find the servers anew while blocking
-                    visible: VpnLockdown.mismatched || (VpnLockdown.wanted && VpnLockdown.state === "on")
+                    // password, either way — or to find the servers anew while blocking; only
+                    // the installed script runs
+                    visible: VpnLockdown.installedFound && (VpnLockdown.mismatched || (VpnLockdown.wanted && VpnLockdown.state === "on"))
                     label: "Apply again"
                     tooltip: "Load the rules anew: the VPN servers' addresses found again"
                     onClicked: VpnLockdown.apply()
                 }
-            }
-            // Rules an older script loaded, kept until applied again (VpnLockdown.staleRules)
-            Text {
-                // Password-free, they are switched on again by themselves: nothing to say
-                visible: VpnLockdown.wanted && VpnLockdown.staleRules && VpnLockdown.state === "on" && !VpnLockdown.passwordFree
-                Layout.fillWidth: true
-                wrapMode: Text.WordWrap
-                text: "These rules are from an older script. Apply them again."
-                font.family: Theme.fontFamily
-                font.pixelSize: Theme.fontSizeSmall
-                color: Theme.warning
             }
             // Servers of VPNs NetworkManager does not know (wg-quick's…): by address
             ColumnLayout {
@@ -490,7 +498,7 @@ Item {
                 readonly property var _names: VpnLockdown.networks.filter(uuid => NetworkProfiles.profiles.some(profile => profile.uuid === uuid))
                     .map(uuid => NetworkProfiles.nameOf(uuid))
                 text: (_names.length > 0 ? "Also on " + _names.join(", ") + ": " : "Or only on some networks (set in a Wi-Fi or wired profile's editor): ")
-                    + "there it starts a few seconds after the network is up and the password is given; only \"always\" leaves no gap. "
+                    + "there it starts a few seconds after the network is up; only \"always\" leaves no gap. "
                     + "Name lookups (DNS) still go outside the VPN. "
                     + (VpnLockdown.tooManyServers ? "Over " + VpnLockdownRules.lockdownMostAddresses + " VPN server addresses: the rest are left out. " : "")
                     + "A network's sign-in page (a hotel's) cannot be used while blocking."
@@ -499,9 +507,9 @@ Item {
             // ── Password-free blocking: the script, installed in the open ──
             SectionTitle { text: "Password-free blocking" }
             Hint {
-                text: "The blocking changes the firewall as root: each switch asks for the administrator's password, again after every reboot. "
-                    + "Installed, the script h2s-vpn-lockdown, which only switches this blocking, runs without it through a polkit rule for "
-                    + VpnLockdown.user + " alone; the shell then also reloads the blocking if it is dropped (checked on network changes and every 5 minutes)."
+                text: "The blocking changes the firewall as root, through the script h2s-vpn-lockdown, which only switches it. "
+                    + "Installed with a polkit rule for " + VpnLockdown.user + " alone, it runs without a password; the shell then also reloads "
+                    + "the blocking if it is dropped (checked on network changes and every 5 minutes). Nothing asks for a password by itself."
             }
             RowLayout {
                 Layout.fillWidth: true
@@ -519,51 +527,96 @@ Item {
                 Text {
                     Layout.fillWidth: true
                     wrapMode: Text.WordWrap
-                    text: !VpnLockdown.checked ? "Looking…"
+                    text: VpnLockdown.mode === "unavailable" ? VpnLockdown.capability.reason
+                        : !VpnLockdown.checked ? "Looking…"
                         : VpnLockdown.helperState === "ready" ? "Installed (version " + VpnLockdown.installedVersion + ", " + VpnLockdown.installedAt
                             + ") with its polkit rule: no password needed."
                         : VpnLockdown.helperState === "outdated" ? "Older than the shell's (version " + VpnLockdown.installedVersion
-                            + ", the shell's " + VpnLockdown.scriptVersion + "): install it again. Until then the password is asked for."
+                            + ", the shell's " + VpnLockdown.scriptVersion + "): install it again."
                         : VpnLockdown.helperState === "asks" ? "Installed, but a password was still asked for: its polkit rule does not apply."
-                        : VpnLockdown.installedVersion > 0 ? "The script is there (" + VpnLockdown.installedAt + "), but not its polkit rule for "
-                            + VpnLockdown.user + ": the password is asked for."
-                        : "Not installed: each switch asks for the password."
+                        : VpnLockdown.helperState === "norule" ? "The script is there (" + VpnLockdown.installedAt + "), but no polkit rule for "
+                            + VpnLockdown.user + ": it does not run by itself."
+                        : VpnLockdown.helperState === "unsafe" ? "The file at " + VpnLockdown.installedAt + " is not root's alone: it is never run."
+                        : "Not installed: the blocking does not run."
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.fontSizeBody
                     color: Theme.textPrimary
                 }
             }
+            // A script or rule at the install's places that the shell did not write: shown, and
+            // replaced only after the question
+            Text {
+                visible: VpnLockdown.mode === "apply" && root._foreign.length > 0
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                textFormat: Text.PlainText
+                text: "Not written by the shell: " + root._foreign.join(", ") + ". Replace puts the shell's in its place, kept as a backup."
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.fontSizeSmall
+                color: Theme.warning
+            }
             Text {
                 visible: VpnLockdown.installFailure !== ""
                 Layout.fillWidth: true
                 wrapMode: Text.WordWrap
+                textFormat: Text.PlainText
                 text: VpnLockdown.installFailure
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeSmall
                 color: Theme.warning
             }
-            // Installing: one password, here — or, on NixOS, a module for its configuration
+            // Installing: one password, at the click (the distribution's integration)
             RowLayout {
-                visible: !VpnLockdown.isNixos
+                visible: VpnLockdown.mode === "apply"
                 Layout.fillWidth: true
                 Layout.topMargin: 4
                 spacing: 8
                 SmallButton {
-                    label: VpnLockdown.helperState === "none" ? "Install…" : "Install again…"
-                    kind: VpnLockdown.helperState === "ready" ? "normal" : "save"
-                    tooltip: "Copies the script to " + VpnLockdown.installFolder + " and its polkit rule to " + VpnLockdown.polkitRulePath
+                    visible: root._offer.install !== null && !root._offer.install.asks
+                    available: VpnLockdown.installBusy === ""
+                    label: root._offer.install?.label ?? ""
+                    kind: "save"
+                    tooltip: "Copies the script to " + VpnLockdown.installedAt + " and its polkit rule to " + VpnLockdown.rulePath
                         + " — asks for the password once"
-                    onClicked: VpnLockdown.install()
+                    onClicked: VpnLockdown.install(root._offer.install?.replace ?? {})
                 }
                 DeleteButton {
-                    visible: VpnLockdown.installedVersion > 0 || VpnLockdown.ruleInstalled
+                    // Keyed to the files it was offered for: a new reading asks afresh
+                    readonly property string _subject: root._foreign.join(" ")
+                    on_SubjectChanged: asking = false
+                    visible: root._offer.install !== null && root._offer.install.asks
+                    available: VpnLockdown.installBusy === ""
+                    kind: "save"
+                    label: root._offer.install?.label ?? ""
+                    fontSize: Theme.fontSizeBody
+                    confirmLabel: "Replace it?"
+                    cancelTip: "Keep it"
+                    property var _replace: root._offer.install?.replace ?? {}
+                    onAskingStarted: _replace = root._offer.install?.replace ?? {}
+                    onConfirmed: VpnLockdown.install(_replace)
+                }
+                DeleteButton {
+                    visible: root._offer.remove
+                    available: VpnLockdown.installBusy === ""
                     label: "Remove…"
                     fontSize: Theme.fontSizeBody
                     confirmLabel: "Remove the script and its rule?"
                     cancelTip: "Keep them"
                     onConfirmed: VpnLockdown.uninstall()
                 }
+                SmallButton {
+                    visible: VpnLockdown.undoable
+                    available: VpnLockdown.installBusy === ""
+                    label: "Undo"
+                    tooltip: "Puts back what the last change replaced"
+                    onClicked: VpnLockdown.undoInstall()
+                }
                 Item { Layout.fillWidth: true }
+                SmallButton {
+                    visible: root._foreign.length > 0
+                    label: root._showFound ? "Hide what is there" : "Show what is there"
+                    onClicked: root._showFound = !root._showFound
+                }
                 SmallButton {
                     label: root._showScript ? "Hide the script" : "Show the script"
                     onClicked: root._showScript = !root._showScript
@@ -574,13 +627,12 @@ Item {
                 }
             }
             ColumnLayout {
-                visible: VpnLockdown.isNixos
+                visible: VpnLockdown.mode === "copy"
                 Layout.fillWidth: true
                 Layout.topMargin: 4
                 spacing: 4
                 Hint {
-                    text: "Save this module as /etc/nixos/h2s-vpn-lockdown.nix, add it to imports and rebuild; it holds the script, nftables and the polkit rule. "
-                        + "To remove it, take it out of imports and rebuild."
+                    text: VpnLockdown.moduleHint
                 }
                 RowLayout {
                     Layout.fillWidth: true
@@ -589,7 +641,7 @@ Item {
                         label: "Copy the module"
                         onClicked: {
                             Quickshell.clipboardText = root._nixosModule;
-                            Notifier.send("Module copied", { body: "Save it as /etc/nixos/h2s-vpn-lockdown.nix", urgency: "low", category: "x-qs-shell" });
+                            Notifier.send("Module copied", { body: "Save it as " + VpnLockdown.moduleFile, urgency: "low", category: "x-qs-shell" });
                         }
                     }
                     SmallButton {
@@ -604,7 +656,7 @@ Item {
             }
             // What would run as root, in full
             Rectangle {
-                visible: root._showScript || root._showRule
+                visible: VpnLockdown.mode !== "unavailable" && (root._showScript || root._showRule || (root._showFound && root._foreign.length > 0))
                 Layout.fillWidth: true
                 Layout.topMargin: 6
                 implicitHeight: _code.implicitHeight + 16
@@ -618,9 +670,13 @@ Item {
                     readOnly: true
                     selectByMouse: true
                     wrapMode: TextEdit.WrapAnywhere
-                    text: VpnLockdown.isNixos ? root._nixosModule
-                        : (root._showScript ? VpnLockdown.scriptText : "") + (root._showScript && root._showRule ? "\n" : "")
-                          + (root._showRule ? VpnLockdown.polkitRule : "")
+                    // What is at the places may be anyone's text
+                    textFormat: TextEdit.PlainText
+                    text: VpnLockdown.mode === "copy" ? root._nixosModule
+                        : [root._showFound && VpnLockdown.installState.script === "changed" ? String(VpnLockdown.current.script) : "",
+                           root._showFound && VpnLockdown.installState.rule === "changed" ? String(VpnLockdown.current.rule) : "",
+                           root._showScript ? VpnLockdown.scriptText : "", root._showRule ? VpnLockdown.polkitRule : ""]
+                          .filter(part => part !== "").join("\n")
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.fontSizeSmall
                     color: Theme.textSecondary

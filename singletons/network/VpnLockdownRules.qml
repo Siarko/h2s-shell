@@ -79,44 +79,82 @@ Singleton {
     }
 
     // The rules loaded are the ones wanted: the same arguments, switched on by a script at
-    // least as new as the shell's copy (older rules are switched on again by themselves only
-    // when no password is needed: lockdownNextStep)
+    // least as new as the one that runs (the installed one)
     function lockdownCurrent(status, rulesVersion, expectedStatus, scriptVersion) {
         return status === expectedStatus && (rulesVersion ?? 0) >= (scriptVersion ?? 0);
     }
 
     // What the blocking does next (VpnLockdown._follow), from `facts` { ready (the settings,
     // the script check, the boot and the VPNs' details read), busy (a switch or a lookup
-    // running), passwordFree, askedAtStart, force ("Apply again"), wanted, nftFound, status,
-    // rulesVersion, expectedStatus, scriptVersion, refused, hosts }:
+    // running), installed (the installed script is there, root's alone — the only one ever
+    // run), passwordFree (installed, with its polkit rule for this user, and no password seen
+    // asked), askedAtStart, force ("Apply again": the user's click), wanted, nftFound, status,
+    // rulesVersion, expectedStatus, scriptVersion (the installed script's), refused, hosts }:
     //   "wait"    not ready, or busy: asked again when that ends (nothing is used up)
+    //   "missing" a switch is due but nothing may run by itself: no installed script, or one
+    //             that would ask for a password — nothing runs, nothing asks (a click on
+    //             "Apply again" may run the installed script and its password question)
     //   "ask"     the installed script's status first (once, after it became password-free)
     //   "no-nft"  wanted, but nftables is missing
-    //   "keep"    nothing to switch (rules from an older script with the same arguments
-    //             included while a password would be needed: never asked for by itself)
+    //   "keep"    nothing to switch
     //   "refused" refused before for these very rules: said, not asked again by itself
     //   "on", "off" switch; "idle" off and not wanted
     function lockdownNextStep(facts) {
         if (!facts.ready || facts.busy)
             return "wait";
-        if (facts.passwordFree && !facts.askedAtStart && !facts.force)
+        const on = String(facts.status ?? "").startsWith("on");
+        if (facts.installed !== true || (facts.passwordFree !== true && facts.force !== true))
+            return facts.wanted || on ? "missing" : "idle";
+        if (facts.passwordFree === true && !facts.askedAtStart && !facts.force)
             return "ask";
         if (facts.wanted) {
             if (!facts.nftFound)
                 return "no-nft";
             if (!facts.force && lockdownCurrent(facts.status, facts.rulesVersion, facts.expectedStatus, facts.scriptVersion))
                 return "keep";
-            // The same arguments, loaded by an older script: switched on again only without a
-            // password; with one they stay until the user asks ("Apply again", "Install again…")
-            if (!facts.force && !facts.passwordFree && facts.status === facts.expectedStatus)
-                return "keep";
             if (!facts.force && facts.refused === facts.expectedStatus + facts.hosts)
                 return "refused";
             return "on";
         }
-        if (String(facts.status ?? "").startsWith("on"))
+        if (on)
             return !facts.force && facts.refused === "off" ? "keep" : "off";
         return "idle";
+    }
+
+    // scripts/vpn-lockdown-check.sh's lines → { script (the shell's copy's version), installed
+    // (the installed one's; 0 none), installedFound (one there, root's alone: the only one run),
+    // unsafe (one there, not root's alone: never run), rule (a polkit rule for this user names
+    // it), nft }. Nothing read: nothing found
+    function checkReply(lines) {
+        const found = { script: 0, installed: 0, installedFound: false, unsafe: false, rule: false, nft: false };
+        for (const line of lines ?? []) {
+            const parts = String(line).trim().split(" ");
+            const version = /^[0-9]{1,6}$/.test(parts[1] ?? "") ? parseInt(parts[1]) : 0;
+            if (parts[0] === "script" && parts.length <= 2)
+                found.script = version;
+            else if (parts[0] === "installed" && parts.length <= 2) {
+                found.installed = version;
+                found.installedFound = true;
+            } else if (parts[0] === "unsafe" && parts.length <= 2)
+                found.unsafe = true;
+            else if (parts[0] === "rule" && parts[1] === "yes" && parts.length === 2)
+                found.rule = true;
+            else if (parts[0] === "nft" && parts.length === 1)
+                found.nft = true;
+        }
+        // A file there that is not root's alone is never run, whatever else was said
+        if (found.unsafe) {
+            found.installed = 0;
+            found.installedFound = false;
+        }
+        return found;
+    }
+
+    // The install's two files as pam-files.sh answered (PamStackRules.filesAnswer's each) →
+    // { script, rule }: a text, undefined for none, null when not read
+    function filesRead(scriptAnswer, ruleAnswer) {
+        const textOf = answer => typeof answer?.text === "string" ? answer.text : answer?.absent === true ? undefined : null;
+        return { script: textOf(scriptAnswer), rule: textOf(ruleAnswer) };
     }
 
     // The polkit rule letting `user` run the script at `programs` (quoted paths, or Nix

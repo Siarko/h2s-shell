@@ -181,7 +181,14 @@ the remembered authorization queue their own root steps. A kind changed in steps
 writer in the integration's `writers` in place of `EtcFiles`' files: the sign-in rules
 (`pam.rules`) on Arch are tried first and written one service per run by
 `distributions/arch/PamApply.qml`, `apply` handing it one service's step and `undo` the
-outcome of the write it puts back. `details(kind)` gives a feature the integration's words
+outcome of the write it puts back. The VPN blocking's script and polkit rule
+(`network.vpnLockdown`) on Arch are installed and removed by
+`distributions/arch/VpnLockdownInstall.qml` (`scripts/root/vpn-lockdown-install.sh`; its
+words and reply `VpnLockdownInstallRules`), the script's text handed to it as an argument
+and the rule built from its own template; NixOS's plan is the module to import. The
+integration's facts for the kind name where the installed script is run from, where rules
+granting it are looked for and nft's places, which `VpnLockdown` reads instead of asking
+which system it is on; it runs only the installed script, never the copy in the tree. `details(kind)` gives a feature the integration's words
 and facts for a kind (NixOS's for `pam.rules`: where the rules are set, when they take
 effect, that its libpam finds only its own modules by bare name). A feature reaches a kind through
 `singletons/io/IntegrationChange.qml` (the capability, what is in force, the user's Apply and

@@ -9,26 +9,26 @@ import qs.singletons.network
 
 // Only through the VPN (a kill switch): the nftables
 // table built by scripts/h2s-vpn-lockdown, switched on while the blocking is wanted —
-// always, or while a network it is set for is up — and off when it is not. The script runs
-// as root through pkexec:
-//   - installed (a copy root owns, and a polkit rule letting this user run it without a
-//     password — "Password-free blocking" on the VPN page): no password, and its `status`
-//     is asked at the start, after network events and every 5 minutes, so a firewall
-//     reload that dropped the table is mended;
-//   - not installed: the shell's own copy, asking for the password at each switch; what
-//     was switched on, in which boot, is remembered in Config (root's to read back).
+// always, or while a network it is set for is up — and off when it is not. Only the
+// installed script runs, through pkexec: a copy root owns (checked before each start of the
+// check: scripts/vpn-lockdown-check.sh), with a polkit rule letting this user run it without
+// a password. Installing it is the distribution's ("network.vpnLockdown": Arch installs it,
+// one password at the user's click, with Undo; NixOS gives a module to import). Never the
+// shell's own copy in its tree, which the user can write.
+//   - installed with its rule: its `status` is asked at the start, after network events and
+//     every 5 minutes, so a firewall reload that dropped the table is mended; switched by
+//     itself as the blocking is wanted, without a password;
+//   - not installed, or installed but a password was asked for (its rule does not apply):
+//     nothing runs and nothing asks by itself ("missing"); the page says so. A click on
+//     "Apply again" may run the installed script and its password question; a prompt that
+//     opens for a run started by itself is closed at once.
 // Switched again only when its arguments change (a VPN's interface or server, the local
-// network), a moment after the last change. Rules loaded by a script older than the
-// shell's copy (the script records its VERSION with them; `status` reports it) are switched
-// on again by themselves only when no password is needed; otherwise they stay, and the page
-// says so (staleRules) until the user applies them again or installs the script. A
-// refused password is not asked again by itself: the page offers "Apply again"; installing
-// the script, so that none is needed, lifts a refusal to switch on (never one to switch
-// off). Started with the shell (shell.qml).
+// network), a moment after the last change. A refused switch is not tried again by itself:
+// the page offers "Apply again". What was switched on, in which boot, is remembered in Config.
+// Started with the shell (shell.qml).
 //
-// Per network, the blocking comes a moment after the network is up (and, without the
-// installed script, after the password): until then nothing is blocked. "Always" has no
-// such gap.
+// Per network, the blocking comes a moment after the network is up: until then nothing is
+// blocked. "Always" has no such gap.
 Singleton {
     id: root
 
@@ -45,6 +45,8 @@ Singleton {
 
     // Blocking is on, or about to be: what the provider VPNs' note goes by
     readonly property bool blocking: wanted || state === "on"
+    // The blocking's rules are loaded, as last reported or remembered for this boot
+    readonly property bool loaded: _status.startsWith("on")
 
     // What to say on a provider VPN's row and card while blocking: the blocking does not let
     // it through (VpnProviderRules.lockdownProviderNote; the provider's own lockdownNote if it
@@ -58,18 +60,27 @@ Singleton {
     }
 
     // ── The script ──
-    // The shell's own copy (shown on the page; run with a password when not installed)
+    readonly property string kind: "network.vpnLockdown"
+    // How this system installs it, and its places (the integration's facts for the kind):
+    // the installed script, its rule (Arch), the folder rules granting it are looked for in,
+    // and nft's places. Nothing known (a distribution without an integration): nothing runs.
+    readonly property var capability: Distribution.capability(kind)
+    readonly property string mode: capability.mode
+    readonly property var _facts: Distribution.details(kind).facts
+    readonly property string installedAt: String(_facts.scriptPath ?? "")
+    readonly property string rulePath: String(_facts.rulePath ?? "")
+    readonly property string ruleDirectory: String(_facts.ruleDirectory ?? "")
+    readonly property var nftPaths: Array.isArray(_facts.nftPaths) ? _facts.nftPaths.map(path => String(path)) : []
+    // The shell's own copy: shown on the page, and what Install puts in place — never run
     readonly property string scriptPath: Quickshell.shellDir + "/scripts/h2s-vpn-lockdown"
-    // Where "Install" puts it (root's, with a copy of its polkit rule beside it to read),
-    // and where a NixOS module puts it
-    readonly property string installFolder: "/usr/local/libexec/h2s-vpn-lockdown"
-    readonly property string installedPath: installFolder + "/h2s-vpn-lockdown"
-    readonly property string polkitRulePath: "/etc/polkit-1/rules.d/49-h2s-vpn-lockdown.rules"
-    readonly property string nixosPath: "/run/current-system/sw/bin/h2s-vpn-lockdown"
     readonly property string user: Quickshell.env("USER") ?? ""
-    // Its text, shown in full on the page, and NixOS's module made from it
     readonly property string scriptText: _scriptFile.text()
-    readonly property string nixosModule: VpnLockdownRules.lockdownNixosModule(scriptText, user)
+    // The rule as Install would write it (Arch), and NixOS's module (the integration's plan)
+    readonly property string polkitRule: VpnLockdownInstallRules.ruleText(user, installedAt)
+    readonly property var _modulePlan: mode === "copy" ? Distribution.plan(kind, { op: "install", user: user, script: scriptText }) : null
+    readonly property string nixosModule: _modulePlan?.preview?.snippet ?? ""
+    readonly property string moduleHint: _modulePlan?.preview?.hint ?? ""
+    readonly property string moduleFile: _modulePlan?.preview?.option ?? ""
     FileView {
         id: _scriptFile
         path: root.scriptPath
@@ -77,28 +88,33 @@ Singleton {
         onFileChanged: reload()
     }
 
-    // The version of the shell's copy, and of the one installed (0 none); where that is;
-    // whether its polkit rule is there for this user (as installed: the rules' folder is
-    // root's to read on most systems, NixOS's is open); NixOS
+    // The version of the shell's copy, and of the one installed (0 none); whether one is there
+    // that root owns alone (the only one run), or one that is not (`unsafeFound`, never run);
+    // whether a polkit rule for this user names it
     property int scriptVersion: 0
     property int installedVersion: 0
-    property string installedAt: ""
+    property bool installedFound: false
+    property bool unsafeFound: false
     property bool ruleInstalled: false
-    // NixOS (Distribution: false until it has answered)
-    readonly property bool isNixos: Distribution.detection.id === "nixos"
     property bool nftFound: false
     property bool checked: false
     // A password was asked for while running the installed script: its rule does not apply
     property bool installedAsks: false
 
-    // "none", "outdated", "asks", "ready"
-    readonly property string helperState: installedVersion === 0 || !ruleInstalled ? "none"
-        : installedVersion < scriptVersion ? "outdated"
-        : installedAsks ? "asks" : "ready"
-    readonly property bool passwordFree: helperState === "ready"
+    // "none", "unsafe" (a file there not root's alone), "norule", "asks", "outdated" (runs,
+    // but older than the shell's), "ready"
+    readonly property string helperState: unsafeFound ? "unsafe" : !installedFound ? "none" : !ruleInstalled ? "norule"
+        : installedAsks ? "asks" : installedVersion < scriptVersion ? "outdated" : "ready"
+    readonly property bool passwordFree: installedFound && ruleInstalled && !installedAsks
+
+    // Arch: the two files as read (each a text, undefined for none, null not read), and what
+    // they are against what Install would write (VpnLockdownInstallRules.states)
+    property var current: ({ script: null, rule: null })
+    readonly property var installState: VpnLockdownInstallRules.states({ user: user, script: scriptText, current: current }, { script: installedAt })
 
     // ── The blocking ──
-    // "off", "on", "asking" (the password is being asked for), "working", "failed"
+    // "off", "on", "asking" (the password is being asked for, after a click), "working",
+    // "failed", "missing" (a switch is due, but nothing may run by itself)
     property string state: "off"
     property string failure: ""
 
@@ -140,8 +156,7 @@ Singleton {
     // The status the script last reported, or the one remembered for this boot
     property string _status: ""
     // The version of the script that switched the loaded rules on (0 unknown: from before
-    // version 4); rules older than the shell's copy are switched on again by themselves only
-    // when the script is password-free, otherwise kept until the user asks (staleRules)
+    // version 4); rules older than the installed script are switched on again
     property int _rulesVersion: 0
     // A refused or failed switch (its status, or "off"): not tried again by itself until
     // something changes, or "Apply again"
@@ -165,41 +180,28 @@ Singleton {
     }
 
     // ── Looking at the script ──
+    // Once the distribution is known (its places); the page asks again when shown
     function checkScript(): void {
-        _scriptCheck.request();
+        Distribution.whenReady(() => {
+            _scriptCheck.request();
+            if (root.mode === "apply")
+                root._readFiles();
+        });
     }
 
     CommandQuery {
         id: _scriptCheck
-        command: ["sh", "-c",
-            'version() { sed -n "s/^VERSION=\\([0-9]*\\).*/\\1/p" "$1" 2>/dev/null | head -n1; }; '
-            + 'echo "script $(version "$1")"; '
-            + 'if [ -x "$2" ]; then echo "installed $(version "$2") $2"; elif [ -x "$4" ]; then echo "installed $(version "$4") $4"; fi; '
-            + 'if grep -qs "h2s-vpn-lockdown" "$3" && grep -qs "subject.user == \\"$5\\"" "$3"; then echo "rule yes"; '
-            + 'elif cat /etc/static/polkit-1/rules.d/*.rules 2>/dev/null | grep -q "h2s-vpn-lockdown"; then '
-            + '  if cat /etc/static/polkit-1/rules.d/*.rules | grep -q "subject.user == \\"$5\\""; then echo "rule yes"; fi; fi; '
-            + 'for place in /usr/sbin/nft /usr/bin/nft /sbin/nft /bin/nft /run/current-system/sw/bin/nft; do [ -x "$place" ] && echo "nft" && break; done; true',
-            "sh", root.scriptPath, root.installedPath, root.installFolder + "/polkit.rules", root.nixosPath, root.user]
+        command: [Quickshell.shellDir + "/scripts/vpn-lockdown-check.sh", "0", root.scriptPath, root.installedAt, root.ruleDirectory, root.user]
+            .concat(root.nftPaths)
         onDone: lines => {
-            let script = 0, installed = 0, at = "", rule = false, nft = false;
-            for (const line of lines) {
-                const parts = line.trim().split(" ");
-                if (parts[0] === "script")
-                    script = parseInt(parts[1]) || 0;
-                else if (parts[0] === "installed") {
-                    installed = parseInt(parts[1]) || 0;
-                    at = parts[2] ?? "";
-                } else if (parts[0] === "rule")
-                    rule = true;
-                else if (parts[0] === "nft")
-                    nft = true;
-            }
-            const changed = installed !== root.installedVersion || at !== root.installedAt;
-            root.scriptVersion = script;
-            root.installedVersion = installed;
-            root.installedAt = at;
-            root.ruleInstalled = rule;
-            root.nftFound = nft;
+            const found = VpnLockdownRules.checkReply(lines);
+            const changed = found.installed !== root.installedVersion || found.installedFound !== root.installedFound;
+            root.scriptVersion = found.script;
+            root.installedVersion = found.installed;
+            root.installedFound = found.installedFound;
+            root.unsafeFound = found.unsafe;
+            root.ruleInstalled = found.rule;
+            root.nftFound = found.nft;
             root.checked = true;
             if (changed)
                 root.installedAsks = false;
@@ -216,19 +218,56 @@ Singleton {
         }
     }
 
-    // A password asked for while the installed script runs: its rule does not apply
+    // As the user: what is at the install's two places now; an answer from before a later
+    // reading was asked is not taken
+    property int _reads: 0
+    function _readFiles() {
+        const number = ++_reads;
+        const asked = [installedAt, rulePath];
+        const lines = [];
+        _filesRunner.start([Quickshell.shellDir + "/scripts/pam-files.sh"].concat(asked), {
+            timeoutMs: 6000,
+            killAfterMs: 1000,
+            maxOutputBytes: 1048576,
+            keepOutput: false,
+            onLine: (line, stream) => {
+                if (stream === "stdout")
+                    lines.push(line);
+            },
+            done: result => {
+                if (number !== root._reads)
+                    return;
+                const answers = PamStackRules.filesAnswer(lines, result, asked).answers;
+                root.current = VpnLockdownRules.filesRead(answers[asked[0]], answers[asked[1]]);
+            }
+        });
+    }
+    property CommandRunner _filesRunner: CommandRunner {}
+
+    // A password asked for while the installed script runs: its rule does not apply. The
+    // question that is this run's (PolkitRules.announces: pkexec's, quoting its command) is
+    // closed at once when the run started by itself — nothing asks without a click — and
+    // nothing runs by itself after that until the script is checked again. Another polkit
+    // agent's question cannot be closed from here; it is still told apart afterwards.
     Connections {
         target: Authentication
         function onFlowChanged() {
-            // Only pkexec's own question, while the installed script switches (not its
-            // status check, which another program's prompt could fall on)
-            if (Authentication.flow !== null && root._switchingInstalled
-                    && (Authentication.flow.actionId ?? "") === "org.freedesktop.policykit.exec")
-                root.installedAsks = true;
+            const flow = Authentication.flow;
+            if (flow === null || root._running.length === 0)
+                return;
+            if (!PolkitRules.announces(flow, { pkexecArgv: root._running, announced: false }))
+                return;
+            root.installedAsks = true;
+            if (root._runningByItself) {
+                console.warn("[VpnLockdown] the installed script asked for a password: its polkit rule does not apply; the question is closed");
+                flow.cancelAuthenticationRequest();
+            }
         }
     }
-    property bool _runningInstalled: false
-    property bool _switchingInstalled: false
+    // The words handed to pkexec by the run under way ([] none), and whether it started by
+    // itself (not the user's click)
+    property var _running: []
+    property bool _runningByItself: false
 
     // A refusal is for the moment it was given: wanted or not again, it is asked afresh
     onWantedChanged: {
@@ -238,8 +277,8 @@ Singleton {
     onExpectedStatusChanged: _schedule()
     on_HostsChanged: _schedule()
     // A password refused for switching on is no reason to hold back once none is needed (the
-    // script installed): its status is asked, and stale or changed rules switched on again. A
-    // refused switch-off stays refused: installing never takes the blocking down by itself.
+    // script installed): its status is asked, and changed rules switched on again. A refused
+    // switch-off stays refused: installing never takes the blocking down by itself.
     onPasswordFreeChanged: {
         if (passwordFree) {
             if (_refused !== "off")
@@ -293,11 +332,10 @@ Singleton {
         _settle.restart();
     }
 
-    // A moment's wait after the last change, so changes in a row switch once: longer when
-    // each switch asks for the password
+    // A moment's wait after the last change, so changes in a row switch once
     Timer {
         id: _settle
-        interval: root.passwordFree ? 800 : 3000
+        interval: 800
         onTriggered: root._follow(false)
     }
 
@@ -328,7 +366,7 @@ Singleton {
     function _askStatus() {
         if (_action.busy || !passwordFree)
             return;
-        _runScript(["status"], result => {
+        _runScript(["status"], false, result => {
             if (result.ok) {
                 const reply = VpnLockdownRules.lockdownStatusReply(result.lines);
                 root._status = reply.status;
@@ -355,13 +393,18 @@ Singleton {
         if (ready && !busy && !_memoryRead)
             _readMemory();
         const step = VpnLockdownRules.lockdownNextStep({
-            ready: ready, busy: busy, passwordFree: passwordFree, askedAtStart: _askedAtStart, force: force === true,
+            ready: ready, busy: busy, installed: installedFound, passwordFree: passwordFree, askedAtStart: _askedAtStart, force: force === true,
             wanted: wanted, nftFound: nftFound, status: _status, rulesVersion: _rulesVersion,
-            expectedStatus: expectedStatus, scriptVersion: scriptVersion, refused: _refused, hosts: _hosts
+            expectedStatus: expectedStatus, scriptVersion: installedVersion, refused: _refused, hosts: _hosts
         });
+        _forced = force === true;
         if (step === "ask") {
             _askedAtStart = true;
             _askStatus();
+        } else if (step === "missing") {
+            // Nothing may run by itself: said on the page, nothing asked
+            state = "missing";
+            failure = "";
         } else if (step === "no-nft") {
             state = "failed";
             failure = "nftables is not installed: the blocking needs it.";
@@ -379,15 +422,12 @@ Singleton {
         }
     }
 
-    // Rules loaded by a script older than the shell's copy: switched on again by themselves
-    // only when no password is needed; else kept, and said on the page until the user
-    // applies them again or installs the script
-    readonly property bool staleRules: checked && _status.startsWith("on") && _rulesVersion < scriptVersion
+    // The last decision came from the user's click ("Apply again"): its run may ask
+    property bool _forced: false
 
-    // Whether what is loaded differs from what is wanted (the page offers "Apply again"):
-    // stale rules included
+    // Whether what is loaded differs from what is wanted (the page offers "Apply again")
     readonly property bool mismatched: checked && state !== "asking" && state !== "working"
-        && (state === "failed" || wanted !== _status.startsWith("on") || (wanted && staleRules))
+        && (state === "failed" || state === "missing" || wanted !== _status.startsWith("on"))
 
     // The servers by their names, each found through the system's resolver; those not
     // found keep their last addresses
@@ -416,17 +456,15 @@ Singleton {
         id: _action
     }
 
-    // The installed script without a password; else the shell's own copy, through sh,
-    // with one
-    function _runScript(scriptArguments, done) {
-        const installed = passwordFree;
-        const command = installed ? ["pkexec", installedAt].concat(scriptArguments)
-            : ["pkexec", "sh", scriptPath].concat(scriptArguments);
-        _runningInstalled = installed;
-        _switchingInstalled = installed && scriptArguments[0] !== "status";
+    // The installed script — never the shell's own copy. `byItself`: not the user's click,
+    // so a password question this run raises is closed at once
+    function _runScript(scriptArguments, byItself, done) {
+        const command = ["pkexec", installedAt].concat(scriptArguments);
+        _running = command.slice(1);
+        _runningByItself = byItself;
         _action.run(command, result => {
-            root._runningInstalled = false;
-            root._switchingInstalled = false;
+            root._running = [];
+            root._runningByItself = false;
             done(result);
         });
     }
@@ -437,10 +475,10 @@ Singleton {
         const scriptArguments = switchArguments.slice();
         const status = expectedStatus;
         const hosts = _hosts;
-        // The script that runs: the installed one without a password, else the shell's copy
-        const version = passwordFree ? installedVersion : scriptVersion;
+        const version = installedVersion;
+        const byItself = !_forced;
         state = passwordFree ? "working" : "asking";
-        _runScript(scriptArguments, result => {
+        _runScript(scriptArguments, byItself, result => {
             if (result.ok) {
                 root._status = status;
                 root._rulesVersion = version;
@@ -457,7 +495,7 @@ Singleton {
 
     function _switchOff() {
         state = passwordFree ? "working" : "asking";
-        _runScript(["off"], result => {
+        _runScript(["off"], !_forced, result => {
             if (result.ok) {
                 root._status = "off";
                 root._rulesVersion = 0;
@@ -485,38 +523,37 @@ Singleton {
             Notifier.send(what + " failed", { body: failure });
     }
 
-    // ── Installing and removing the script ── each once, with the password: the script
-    // copied where root owns it, its polkit rule into polkit's rules (and a copy beside the
-    // script, which anyone may read). NixOS keeps /etc itself: its module is shown instead.
-    readonly property string polkitRule: VpnLockdownRules.lockdownPolkitRule(user, ['"' + installedPath + '"'])
+    // ── Installing and removing the script ── through the distribution's integration
+    // ("network.vpnLockdown"), each the user's click: on Arch one password, the files written
+    // as root with a backup Undo puts back; elsewhere nothing to install from here (NixOS: the
+    // module, `nixosModule`). What Install acts on is what the page last read (`current`); a
+    // file there not written by the shell is replaced only with `replace` naming it.
+    readonly property string installBusy: _change.busy
+    readonly property bool undoable: _change.undoable
     property string installFailure: ""
 
-    function install(): void {
-        installFailure = "";
-        _install.run(["pkexec", "sh", "-c",
-            'set -e; install -d -m 0755 -o root -g root "$2"; install -m 0755 -o root -g root "$1" "$2/h2s-vpn-lockdown"; '
-            + 'printf "%s" "$3" > "$2/polkit.rules"; chmod 0644 "$2/polkit.rules"; '
-            // polkit's rules folder kept as it is (root's to read on Arch: 0750 root:polkitd)
-            + '[ -d "$(dirname "$4")" ] || install -d -m 0750 "$(dirname "$4")"; install -m 0644 -o root -g root "$2/polkit.rules" "$4"',
-            "sh", scriptPath, installFolder, polkitRule, polkitRulePath], result => root._installed(result, "Installing the blocking script"));
+    function install(replace): void {
+        _start(_change.apply({ op: "install", user: user, script: scriptText, current: current, replace: replace ?? {} }));
     }
 
     function uninstall(): void {
-        installFailure = "";
-        _install.run(["pkexec", "sh", "-c", 'rm -f "$2"; rm -rf "$1"', "sh", installFolder, polkitRulePath],
-            result => root._installed(result, "Removing the blocking script"));
+        _start(_change.apply({ op: "remove", user: user, script: scriptText, current: current, replace: {} }));
     }
 
-    function _installed(result, what) {
-        if (!result.ok)
-            installFailure = result.code === 126 ? "Not done: the password was not given." : (result.error || ("Exit code " + result.code));
-        if (!result.ok && result.code !== 126)
-            Notifier.send(what + " failed", { body: installFailure });
-        installedAsks = false;
-        checkScript();
+    function undoInstall(): void {
+        _start(_change.undo());
     }
 
-    CommandAction {
-        id: _install
+    function _start(started) {
+        installFailure = started.started ? "" : (started.refusal?.text ?? "");
+    }
+
+    property IntegrationChange _change: IntegrationChange {
+        kind: root.kind
+        onFinished: (mode, outcome) => {
+            root.installFailure = outcome?.ok === true || outcome?.quiet === true ? "" : String(outcome?.error ?? "");
+            root.installedAsks = false;
+            root.checkScript();
+        }
     }
 }

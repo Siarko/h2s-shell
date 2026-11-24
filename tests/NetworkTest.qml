@@ -621,31 +621,49 @@ TestCase {
                    && !VpnLockdownRules.lockdownCurrent("on 1 - -", 0, "on 1 - -", 4) && !VpnLockdownRules.lockdownCurrent("on 0 - -", 4, "on 1 - -", 4),
                    "lockdown: current — the same arguments from a script at least as new");
 
-            // The upgrade: blocking on with rules of script 3, the installed script outdated
-            const lockFacts = changes => Object.assign({ ready: true, busy: false, passwordFree: false, askedAtStart: false, force: false,
+            // Only the installed script ever runs; nothing asks for a password by itself
+            const lockFacts = changes => Object.assign({ ready: true, busy: false, installed: true, passwordFree: true, askedAtStart: true, force: false,
                 wanted: true, nftFound: true, status: "on 1 - -", rulesVersion: 0, expectedStatus: "on 1 - -", scriptVersion: 4,
                 refused: "", hosts: "" }, changes);
-            assertEqual(VpnLockdownRules.lockdownNextStep(lockFacts({})), "keep", "lockdown upgrade: the old rules at the start, a password needed — kept, nothing asked");
-            assertEqual(VpnLockdownRules.lockdownNextStep(lockFacts({ force: true })), "on", "lockdown upgrade: Apply again — switched on again");
-            assertEqual(VpnLockdownRules.lockdownNextStep(lockFacts({ expectedStatus: "on 0 - -" })), "on", "lockdown upgrade: the arguments changed — switched, as before");
-            // Installed: password-free now, the first status ask reset
-            assertEqual(VpnLockdownRules.lockdownNextStep(lockFacts({ passwordFree: true })), "ask", "lockdown upgrade: installed — its status asked first");
-            const afterInstall = lockFacts({ passwordFree: true, askedAtStart: true, rulesVersion: VpnLockdownRules.lockdownStatusReply(["on 1 - -"]).rules });
-            assertEqual(VpnLockdownRules.lockdownNextStep(afterInstall), "on", "lockdown upgrade: installed, the status says old rules — switched on again");
-            assertEqual(VpnLockdownRules.lockdownNextStep(Object.assign({}, afterInstall, { busy: true })), "wait", "lockdown upgrade: busy — waits");
-            assertEqual(VpnLockdownRules.lockdownNextStep(Object.assign({}, afterInstall, { rulesVersion: 4 })), "keep", "lockdown upgrade: the new rules on — kept");
-            assertEqual(VpnLockdownRules.lockdownNextStep(Object.assign({}, afterInstall, { refused: "on 1 - -" })), "refused",
-                        "lockdown: a refusal still standing — not switched by itself");
-            assertEqual(VpnLockdownRules.lockdownNextStep(lockFacts({ passwordFree: true, rulesVersion: 4, force: true })), "on",
+            const missing = lockFacts({ installed: false, passwordFree: false });
+            assertEqual(VpnLockdownRules.lockdownNextStep(Object.assign({}, missing, { status: "off" })), "missing",
+                        "lockdown: wanted, nothing installed — nothing runs, nothing asks");
+            assertEqual(VpnLockdownRules.lockdownNextStep(Object.assign({}, missing, { status: "off", force: true })), "missing",
+                        "lockdown: … not even on a click: the shell's own copy is never run");
+            assertEqual(VpnLockdownRules.lockdownNextStep(Object.assign({}, missing, { wanted: false })), "missing", "lockdown: on from before, not wanted, nothing installed — said, nothing run");
+            assertEqual(VpnLockdownRules.lockdownNextStep(Object.assign({}, missing, { wanted: false, status: "off" })), "idle", "lockdown: … off and not wanted — idle");
+            // Installed, but its rule does not apply (a password was asked, or no rule)
+            const asks = lockFacts({ passwordFree: false, askedAtStart: false, status: "off" });
+            assertEqual(VpnLockdownRules.lockdownNextStep(asks), "missing", "lockdown: installed, a password would be asked — not run by itself");
+            assertEqual(VpnLockdownRules.lockdownNextStep(Object.assign({}, asks, { wanted: false, status: "on 1 - -" })), "missing", "lockdown: … nor switched off by itself");
+            assertEqual(VpnLockdownRules.lockdownNextStep(Object.assign({}, asks, { force: true })), "on", "lockdown: … Apply again (a click) runs it, its question with it");
+            assertEqual(VpnLockdownRules.lockdownNextStep(Object.assign({}, asks, { force: true, wanted: false, status: "on 1 - -" })), "off", "lockdown: … and switches off on a click");
+            // Password-free: the status asked first, once
+            assertEqual(VpnLockdownRules.lockdownNextStep(lockFacts({ askedAtStart: false })), "ask", "lockdown: password-free — its status asked first");
+            assertEqual(VpnLockdownRules.lockdownNextStep(lockFacts({})), "on", "lockdown: the status says rules older than the installed script — switched on again");
+            assertEqual(VpnLockdownRules.lockdownNextStep(lockFacts({ busy: true })), "wait", "lockdown: busy — waits");
+            assertEqual(VpnLockdownRules.lockdownNextStep(lockFacts({ rulesVersion: 4 })), "keep", "lockdown: the installed script's rules on — kept");
+            assertEqual(VpnLockdownRules.lockdownNextStep(lockFacts({ rulesVersion: 3, scriptVersion: 3 })), "keep", "lockdown: an older installed script's own rules — kept, not switched again and again");
+            assertEqual(VpnLockdownRules.lockdownNextStep(lockFacts({ refused: "on 1 - -" })), "refused", "lockdown: a refusal still standing — not switched by itself");
+            assertEqual(VpnLockdownRules.lockdownNextStep(lockFacts({ askedAtStart: false, rulesVersion: 4, force: true })), "on",
                         "lockdown: Apply again before the first status ask — switches, not only asks");
             assert(VpnLockdownRules.lockdownNextStep(lockFacts({ ready: false })) === "wait" && VpnLockdownRules.lockdownNextStep(lockFacts({ nftFound: false })) === "no-nft"
                    && VpnLockdownRules.lockdownNextStep(lockFacts({ wanted: false })) === "off" && VpnLockdownRules.lockdownNextStep(lockFacts({ wanted: false, refused: "off" })) === "keep"
                    && VpnLockdownRules.lockdownNextStep(lockFacts({ wanted: false, status: "off" })) === "idle",
                    "lockdown: not ready, no nftables, not wanted while on (refused before), off");
-            assertEqual(VpnLockdownRules.lockdownNextStep(lockFacts({ status: "off", rulesVersion: 0 })), "on", "lockdown: wanted and off, a password needed — switched on");
-            assertEqual(VpnLockdownRules.lockdownNextStep(lockFacts({ status: "on 0 - -", rulesVersion: 4, refused: "on 1 - -" })), "refused",
-                        "lockdown: changed arguments refused before, a password needed — not asked again");
+            assertEqual(VpnLockdownRules.lockdownNextStep(lockFacts({ status: "off" })), "on", "lockdown: wanted and off — switched on");
             assertEqual(VpnLockdownRules.lockdownNextStep(lockFacts({ wanted: false, refused: "off", force: true })), "off", "lockdown: Apply again while not wanted, off refused before — switched off");
+            // The check's lines
+            assertEqual(JSON.stringify(VpnLockdownRules.checkReply(["script 4", "installed 3", "rule yes", "nft"])),
+                        JSON.stringify({ script: 4, installed: 3, installedFound: true, unsafe: false, rule: true, nft: true }), "lockdown check: all found");
+            assertEqual(JSON.stringify(VpnLockdownRules.checkReply(["script 4", "installed 4", "unsafe 4", "rule yes"])),
+                        JSON.stringify({ script: 4, installed: 0, installedFound: false, unsafe: true, rule: true, nft: false }), "lockdown check: a file not root's alone — never counted installed");
+            assertEqual(JSON.stringify(VpnLockdownRules.checkReply(["script x", "installed 4 extra", "rule no", "nft x"])),
+                        JSON.stringify({ script: 0, installed: 0, installedFound: false, unsafe: false, rule: false, nft: false }), "lockdown check: garbage — nothing found");
+            assertEqual(JSON.stringify(VpnLockdownRules.checkReply(["script 4", "installed "])),
+                        JSON.stringify({ script: 4, installed: 0, installedFound: true, unsafe: false, rule: false, nft: false }), "lockdown check: installed, its version not read — 0");
+            assertEqual(JSON.stringify(VpnLockdownRules.filesRead({ text: "a\n" }, { absent: true })), JSON.stringify({ script: "a\n" }), "lockdown files: a text, none (undefined)");
+            assertEqual(JSON.stringify(VpnLockdownRules.filesRead({ unreadable: true }, undefined)), JSON.stringify({ script: null, rule: null }), "lockdown files: unreadable, no answer — not read");
             const rule = VpnLockdownRules.lockdownPolkitRule("h2s", ['"/usr/local/libexec/h2s-vpn-lockdown/h2s-vpn-lockdown"']);
             assert(rule.indexOf('subject.user == "h2s" && subject.local && subject.active') > 0
                    && rule.indexOf('action.lookup("program") == "/usr/local/libexec/h2s-vpn-lockdown/h2s-vpn-lockdown"') > 0

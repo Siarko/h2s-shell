@@ -1,5 +1,6 @@
 import QtQuick
 import qs.singletons
+import qs.singletons.network
 
 // IntegrationRules: an integration's table read as capabilities (a kind not defined, not
 // named or named wrongly is unavailable with a reason; only an applied kind is tried or
@@ -15,7 +16,28 @@ TestCase {
         const show = answer => JSON.stringify(answer);
         const unavailable = reason => show({ mode: "unavailable", trial: false, undo: false, inForce: false, anyway: false, reason, known: true });
 
-        assertEqual(show(rules.kinds), show(["sleep.hibernateDelay", "network.connectivityUri", "pam.rules"]), "the change kinds the shell defines");
+        assertEqual(show(rules.kinds), show(["sleep.hibernateDelay", "network.connectivityUri", "pam.rules", "network.vpnLockdown"]), "the change kinds the shell defines");
+
+        // ── the VPN blocking's script and rule ──
+        const vpn = "network.vpnLockdown";
+        const script = "#!/bin/sh\n# h2s-vpn-lockdown — test\nVERSION=4\n";
+        const install = { op: "install", user: "alex", script, current: {}, replace: {} };
+        assert(rules.validValue(vpn, install) && rules.validValue(vpn, Object.assign({}, install, { op: "remove" })), "vpn: install and remove are values");
+        assert(!rules.validValue(vpn, Object.assign({}, install, { op: "enable" })) && !rules.validValue(vpn, "install")
+               && !rules.validValue(vpn, Object.assign({}, install, { script: null })), "vpn: … another op, a bare word, no script text: not");
+        const vpnTable = { [vpn]: { mode: "apply", undo: true } };
+        const vpnPlan = rules.plan(vpnTable, vpn, install, "/scratch");
+        assertEqual(show(vpnPlan.preview), show({ files: [{ path: "/scratch/usr/local/libexec/h2s-vpn-lockdown", text: script },
+                                                          { path: "/scratch/usr/share/polkit-1/rules.d/49-h2s-vpn-lockdown.rules",
+                                                            text: VpnLockdownInstallRules.ruleText("alex", "/scratch/usr/local/libexec/h2s-vpn-lockdown") }],
+                                                  backups: "/scratch/var/lib/h2s-shell/vpn-lockdown-backup" }), "vpn: install's plan: the script and the rule naming it, under the base");
+        assertEqual(show(rules.plan(vpnTable, vpn, Object.assign({}, install, { op: "remove" }), "").preview.files.map(file => file.text)), show(["", ""]), "vpn: remove's plan: both go");
+        assertEqual(show(rules.plan(vpnTable, vpn, Object.assign({}, install, { user: "a b", script: "#!/bin/bash\n" }), "").preview.files.map(file => file.text)), show([null, null]),
+                    "vpn: a user or script the root step refuses: no text");
+        const vpnCopy = rules.plan({ [vpn]: { mode: "copy", option: "/etc/nixos/h2s-vpn-lockdown.nix", hint: "Save it." } }, vpn, install, "");
+        assertEqual(vpnCopy.preview.snippet, VpnLockdownRules.lockdownNixosModule(script, "alex"), "vpn: copied: the NixOS module, as before");
+        assertEqual(rules.plan({ [vpn]: { mode: "copy", option: "x" } }, vpn, Object.assign({}, install, { user: "a b" }), "").preview.snippet, "",
+                    "vpn: … none for a user the rule cannot name");
         assertEqual(show(rules.modes), show(["apply", "declare", "copy", "unavailable"]), "the modes");
 
         // ── capability ──

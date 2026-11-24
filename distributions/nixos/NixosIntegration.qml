@@ -7,7 +7,8 @@ import qs.singletons
 // it, the option named in its hint. NetworkManager's connectivity check address may still be
 // written to its file when the user asks ("anyway": outside the system's configuration, which
 // the page says), by EtcFiles, without Undo. The PAM rules are the shell's module options
-// to copy; NixOS's libpam finds only its own modules by bare name.
+// to copy; NixOS's libpam finds only its own modules by bare name. The VPN blocking's script
+// and polkit rule are a module to save and import.
 Integration {
     id: root
 
@@ -30,7 +31,11 @@ Integration {
                            after: "After nixos-rebuild switch this page shows the new rules.",
                            systemRow: "NixOS's rules",
                            modulePath: "Needs the module's full path on NixOS."
-                       } }
+                       } },
+        "network.vpnLockdown": { mode: "copy", option: "/etc/nixos/h2s-vpn-lockdown.nix",
+                                 hint: "Save this module as /etc/nixos/h2s-vpn-lockdown.nix, add it to imports and rebuild; it holds the script, nftables and the polkit rule. To remove it, take it out of imports and rebuild.",
+                                 facts: { scriptPath: "/run/current-system/sw/bin/h2s-vpn-lockdown", rulePath: "",
+                                          ruleDirectory: "/etc/static/polkit-1/rules.d", nftPaths: ["/run/current-system/sw/bin/nft"] } }
     })
     files: EtcFiles {
         start: root.start

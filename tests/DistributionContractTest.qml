@@ -31,7 +31,10 @@ TestCase {
     readonly property var _kinds: IntegrationRules.kinds.concat(["no.such.kind", "toString"])
     // A value each defined kind takes
     readonly property var _values: ({ "sleep.hibernateDelay": 10800, "network.connectivityUri": "http://nmcheck.gnome.org/check_network_status.txt",
-                                      "pam.rules": _pamValue })
+                                      "pam.rules": _pamValue, "network.vpnLockdown": _vpnValue })
+    // The VPN blocking's install, nothing at its places yet
+    readonly property var _vpnValue: ({ op: "install", user: "alex", script: "#!/bin/sh\n# h2s-vpn-lockdown — a stand-in\nVERSION=4\n",
+                                        current: { script: undefined, rule: undefined }, replace: {} })
     // The sign-in rules as the editor holds them: the system's row alone, Arch's files
     readonly property string _vendorPolkit: "#%PAM-1.0\n\nauth       include      system-auth\naccount    include      system-auth\n"
     readonly property var _pamValue: {
@@ -51,9 +54,12 @@ TestCase {
     })
     // What each shipped integration answers per defined kind (mode, undo, inForce)
     readonly property var _expectedModes: ({
-        arch: { "sleep.hibernateDelay": "apply undo inForce", "network.connectivityUri": "apply undo inForce", "pam.rules": "apply undo -" },
-        nixos: { "sleep.hibernateDelay": "copy - inForce", "network.connectivityUri": "copy - inForce", "pam.rules": "copy - -" },
-        generic: { "sleep.hibernateDelay": "unavailable - -", "network.connectivityUri": "unavailable - -", "pam.rules": "unavailable - -" }
+        arch: { "sleep.hibernateDelay": "apply undo inForce", "network.connectivityUri": "apply undo inForce", "pam.rules": "apply undo -",
+                "network.vpnLockdown": "apply undo -" },
+        nixos: { "sleep.hibernateDelay": "copy - inForce", "network.connectivityUri": "copy - inForce", "pam.rules": "copy - -",
+                 "network.vpnLockdown": "copy - -" },
+        generic: { "sleep.hibernateDelay": "unavailable - -", "network.connectivityUri": "unavailable - -", "pam.rules": "unavailable - -",
+                   "network.vpnLockdown": "unavailable - -" }
     })
 
     property var _integrations: []
@@ -136,6 +142,11 @@ TestCase {
                         assertEqual(planned.preview.backups, EtcFilesRules.backupsOf(kind, integration.base), label + "… its backups' folder, under the base");
                         assert(EtcFilesRules.validText(planned.preview.files[0].text), label + "… a text EtcFiles writes");
                     }
+                } else if (capability.mode === "copy" && kind === "network.vpnLockdown") {
+                    // A whole module, to save as the file `option` names
+                    assert(planned.preview.option.startsWith("/") && planned.preview.snippet.includes("{ pkgs, ... }:")
+                           && planned.preview.snippet.includes(planned.preview.option), label + "… the file and the module to save in it: " + planned.preview.option);
+                    assert(planned.preview.hint.includes(planned.preview.option), label + "… a hint naming the file: " + planned.preview.hint);
                 } else if (capability.mode === "copy") {
                     assert(planned.preview.option !== "" && planned.preview.snippet.startsWith(planned.preview.option + " "), label + "… the option and the line to copy: "
                            + planned.preview.snippet);
@@ -229,7 +240,8 @@ TestCase {
                         "arch: the delay in force, set elsewhere (read before the shell's file), and the shell's own file (none in the scratch tree)");
             const nixosDelay = (_answers["nixos readInForce sleep.hibernateDelay"] ?? [])[0];
             assertEqual(nixosDelay?.elsewhere + " " + nixosDelay?.value + " " + nixosDelay?.file, "/etc/systemd/sleep.conf 7200 null", "nixos: the delay in force, no file of the shell's");
-            assertEqual(JSON.stringify(_runs), JSON.stringify({ arch: ["Change the time before hibernating", "Change the connectivity check's address"] }),
+            assertEqual(JSON.stringify(Object.assign({}, _runs, { arch: (_runs.arch ?? []).slice().sort() })),
+                        JSON.stringify({ arch: ["Change the connectivity check's address", "Change the time before hibernating", "Install the VPN blocking's script"] }),
                         "runs as administrator: only arch's applied kinds, once each; none from nixos or generic");
             assertEqual(JSON.stringify((_answers["arch readInForce network.connectivityUri"] ?? [])[0]),
                         JSON.stringify({ state: "set", value: "http://mine/", from: "/etc/NetworkManager/NetworkManager.conf", elsewhere: "/etc/NetworkManager/NetworkManager.conf",
@@ -241,6 +253,14 @@ TestCase {
             const nixosPam = _integrations[1].details("pam.rules");
             assertEqual(nixosPam.facts.bareModules + " " + ["where", "pending", "copyTitle", "after", "systemRow", "modulePath"].every(name => (nixosPam.texts[name] ?? "") !== ""),
                         "libpam true", "nixos: the sign-in rules' words, and only libpam's own modules by bare name");
+            assertEqual((_answers["arch apply network.vpnLockdown"] ?? [])[0]?.quiet, true, "arch: the VPN blocking's install ran (its prompt dismissed)");
+            for (const id of ["arch", "nixos"]) {
+                const facts = _integrations.find(integration => integration.distribution === id).details("network.vpnLockdown").facts;
+                assert(String(facts.scriptPath).startsWith("/") && String(facts.ruleDirectory).startsWith("/") && facts.nftPaths.length > 0
+                       && facts.nftPaths.every(path => path.startsWith("/")), id + ": the VPN blocking's places: " + JSON.stringify(facts));
+            }
+            assertEqual(_integrations[0].details("network.vpnLockdown").facts.scriptPath + " " + _integrations[1].details("network.vpnLockdown").facts.scriptPath,
+                        "/usr/local/libexec/h2s-vpn-lockdown /run/current-system/sw/bin/h2s-vpn-lockdown", "the installed script's place: Arch's, NixOS's");
             assertEqual(_integrations[0].busy, false, "arch: nothing runs any more");
             // Distribution forwards to the integration of the system it answered
             Distribution.whenReady(() => suite._facade = true);

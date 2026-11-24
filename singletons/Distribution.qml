@@ -96,8 +96,14 @@ Singleton {
             return;
         const waiting = _waiting;
         _waiting = [];
-        for (const callback of waiting)
-            callback();
+        // One caller's error must not keep the others waiting for good
+        for (const callback of waiting) {
+            try {
+                callback();
+            } catch (error) {
+                console.warn("[Distribution] a caller waiting for the distribution threw: " + error);
+            }
+        }
     }
 
     property DistributionReader _reader: DistributionReader {

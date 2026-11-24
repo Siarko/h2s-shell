@@ -114,6 +114,14 @@ The interface modules are written against (`qs.api`), versioned on its own
   pacman are told it does not support them, and nothing changes. The README's
   `curl … | bash` line and `install.sh --update` (from a checkout, on any system but NixOS)
   work as before.
+- Only through the VPN: the blocking runs only the installed script, never the shell's own
+  copy. Without it installed nothing switches and nothing asks for a password by itself;
+  the page says the blocking needs its script. A password question raised by an automatic
+  run of the installed script is closed at once; "Apply again" runs it on a click.
+- Arch: "Password-free blocking" installs the script to /usr/local/libexec/h2s-vpn-lockdown
+  and its polkit rule to /usr/share/polkit-1/rules.d (readable, so the page shows what is
+  there), with Undo; a script or rule there not written by the shell is shown and replaced
+  only after "Replace…" asks.
 - Settings → When away → Hibernate: Apply of the system's delay keeps the file it replaces
   as a backup, and Undo puts it back. A delay set in another file is shown as "Set in
   <file>: <value>": one read after the shell's file wins and no Apply is offered; one read

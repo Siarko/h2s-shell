@@ -2,6 +2,7 @@ pragma Singleton
 
 import Quickshell
 import QtQuick
+import qs.singletons.network
 
 // What a distribution integration answers for each change kind (tests/IntegrationRulesTest.qml,
 // tests/DistributionContractTest.qml): how the system makes the change, what the change
@@ -51,7 +52,7 @@ Singleton {
     id: root
 
     // The change kinds the shell defines, each with how its value is checked
-    readonly property var kinds: ["sleep.hibernateDelay", "network.connectivityUri", "pam.rules"]
+    readonly property var kinds: ["sleep.hibernateDelay", "network.connectivityUri", "pam.rules", "network.vpnLockdown"]
     readonly property var modes: ["apply", "declare", "copy", "unavailable"]
 
     // The reason of a kind the integration does not offer
@@ -138,6 +139,11 @@ Singleton {
                 && PamRuleRules.services.every(service => value[service] !== null && typeof value[service] === "object"
                                                && Array.isArray(value[service].rows) && value[service].facts !== null
                                                && typeof value[service].facts === "object");
+        // The VPN blocking's script and rule: { op ("install" | "remove"), user, script (the
+        // shell's script text), current { script, rule } (the files as read), replace }
+        if (kind === "network.vpnLockdown")
+            return value !== null && typeof value === "object" && ["install", "remove"].includes(value.op)
+                && typeof value.user === "string" && typeof value.script === "string";
         return false;
     }
 
@@ -154,6 +160,12 @@ Singleton {
     // removes it; null: none while the value's checks refuse) }]
     function filesOf(kind, value, base) {
         const under = String(base ?? "");
+        if (kind === "network.vpnLockdown") {
+            const paths = VpnLockdownInstallRules.livePaths, install = value.op === "install";
+            const rule = VpnLockdownInstallRules.ruleText(value.user, under + paths.script);
+            return [{ path: under + paths.script, text: install ? (VpnLockdownInstallRules.validScript(value.script) ? value.script : null) : "" },
+                    { path: under + paths.rule, text: install ? (rule !== "" ? rule : null) : "" }];
+        }
         if (kind !== "pam.rules")
             return [{ path: EtcFilesRules.fileOf(kind, under), text: textOf(kind, value) }];
         // One file per service, as PamEditRules builds it: our polkit-1 removed when polkit's
@@ -170,6 +182,8 @@ Singleton {
     // `base`)
     function backupsOf(kind, base) {
         const under = String(base ?? "");
+        if (kind === "network.vpnLockdown")
+            return under + VpnLockdownInstallRules.livePaths.backups;
         return kind === "pam.rules" ? under + PamApplyRules.livePaths.backups : EtcFilesRules.backupsOf(kind, under);
     }
 
@@ -185,6 +199,11 @@ Singleton {
             const made = PamEditRules.optionsSnippet(option, rows, value.split, value["sudo"].facts);
             return made.ok === true ? made.text : "";
         }
+        // A NixOS module holding the script, nftables and the rule: `option` the file to save
+        // it as
+        if (kind === "network.vpnLockdown")
+            return value.op === "install" && VpnLockdownInstallRules.validUser(value.user) && VpnLockdownInstallRules.validScript(value.script)
+                ? VpnLockdownRules.lockdownNixosModule(value.script, value.user) : "";
         return "";
     }
 

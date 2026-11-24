@@ -6,6 +6,8 @@ import qs.singletons
 // kept as a backup that Undo puts back. The PAM rules are tried first (a PAM conversation
 // as the user against the new file) and written one service per run by PamApply, through
 // EtcFiles' run, their backups in /var/lib/h2s-shell/pam-backup.
+// The VPN blocking's script and its polkit rule are installed by VpnLockdownInstall, their
+// backups in /var/lib/h2s-shell/vpn-lockdown-backup.
 Integration {
     id: root
 
@@ -17,18 +19,27 @@ Integration {
     table: ({
         "sleep.hibernateDelay": { mode: "apply", trial: false, undo: true, inForce: true },
         "network.connectivityUri": { mode: "apply", trial: false, undo: true, inForce: true },
-        "pam.rules": { mode: "apply", trial: true, undo: true, inForce: false }
+        "pam.rules": { mode: "apply", trial: true, undo: true, inForce: false },
+        "network.vpnLockdown": { mode: "apply", trial: false, undo: true, inForce: false,
+                                 facts: { scriptPath: VpnLockdownInstallRules.livePaths.script, rulePath: VpnLockdownInstallRules.livePaths.rule,
+                                          ruleDirectory: "/usr/share/polkit-1/rules.d", nftPaths: ["/usr/bin/nft", "/usr/sbin/nft"] } }
     })
     files: EtcFiles {
         start: root.start
         base: root.base
     }
-    writers: ({ "pam.rules": _pam })
+    writers: ({ "pam.rules": _pam, "network.vpnLockdown": _vpnLockdown })
 
     property PamApply _pam: PamApply {
         start: root.start
         paths: root.base === "" ? PamApplyRules.livePaths
             : { system: root.base + PamApplyRules.livePaths.system, vendor: root.base + PamApplyRules.livePaths.vendor,
                 backups: root.base + PamApplyRules.livePaths.backups }
+    }
+    property VpnLockdownInstall _vpnLockdown: VpnLockdownInstall {
+        start: root.start
+        paths: root.base === "" ? VpnLockdownInstallRules.livePaths
+            : { script: root.base + VpnLockdownInstallRules.livePaths.script, rule: root.base + VpnLockdownInstallRules.livePaths.rule,
+                backups: root.base + VpnLockdownInstallRules.livePaths.backups }
     }
 }

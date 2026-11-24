@@ -655,12 +655,17 @@ and IPv6 ND, and the local network when allowed; passed-on traffic only through 
 unless its interface matches those names; its card says so while blocking, and a network
 editor that links one to a blocking network, or the VPN page with "always" on, says it
 cannot connect.
-"Password-free blocking" installs that script to /usr/local/libexec/h2s-vpn-lockdown with
-a polkit rule for this user (Install… / Remove…, its state on the page, the script and the
-rule shown in full; on NixOS a module to import); then no password is asked, and its
-`status` is checked at the start, after network events and every 5 minutes to mend a
-firewall reload. Without it each switch asks, and
-what was switched on in which boot is kept in Config.
+Only the installed script runs — a copy root owns (`scripts/vpn-lockdown-check.sh` checks it
+is a regular file nobody else may change), with a polkit rule letting this user run it
+without a password; never the shell's own copy in its tree. Installed so, it switches by
+itself, and its `status` is checked at the start, after network events and every 5 minutes
+to mend a firewall reload. Without it nothing switches and nothing asks for a password by
+itself: the page says the blocking needs its script installed. When the installed script
+still asks (its rule does not apply), a question opened by an automatic run is closed at
+once and nothing runs by itself; "Apply again" runs it on a click, with its question. What
+was switched on in which boot is kept in Config. "Password-free blocking" shows the state,
+the script and the rule in full; how it is installed is the distribution's
+(`network.vpnLockdown`; elsewhere "Not supported on this distribution.").
 "Files you can import" lists each kind (`NetworkRules.vpnImportKinds`) with its
 files and whether it can be imported now — a missing plugin named with what it is for,
 other installed plugins after. Modem follows.
@@ -670,6 +675,21 @@ other installed plugins after. Modem follows.
 The address is the option `networking.networkmanager.settings.connectivity.uri`: "Copy for
 configuration.nix" copies the line; "Write anyway" writes NetworkManager's file outside the
 system's configuration, without Undo.
+
+#### The VPN blocking's script: NixOS
+
+A module to save as `/etc/nixos/h2s-vpn-lockdown.nix` and import holds the script, nftables
+and the polkit rule ("Copy the module", "Show the module", "Check again"); the script is
+looked for at `/run/current-system/sw/bin/h2s-vpn-lockdown`, the rule in
+`/etc/static/polkit-1/rules.d`.
+
+#### The VPN blocking's script: Arch
+
+Install… writes the script to `/usr/local/libexec/h2s-vpn-lockdown` and the rule to
+`/usr/share/polkit-1/rules.d/49-h2s-vpn-lockdown.rules` with one password; Remove… takes the
+shell's away; each keeps both files as they were in `/var/lib/h2s-shell/vpn-lockdown-backup`
+for Undo. A script or rule there that the shell did not write is shown ("Show what is there")
+and replaced only after "Replace…" asks; Remove leaves it.
 
 #### The connectivity check's address: Arch
 
