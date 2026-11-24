@@ -295,7 +295,7 @@ runner shoot -- --shoot components/good components/effects
 check "$([ "${runner_status[shoot]}" = 0 ]; echo $?)" "exits 0 (was ${runner_status[shoot]})"
 good_run=$(run_of shoot components/good)
 effects_run=$(run_of shoot components/effects)
-check "$([ "$(cd "$good_run" 2> /dev/null && ls)" = "$(printf '00-normal.png\n01-checked.png\nrun.txt')" ]; echo $?)" "components/good: 00-normal.png, 01-checked.png and run.txt"
+check "$([ "$(cd "$good_run" 2> /dev/null && ls)" = "$(printf '00-normal.png\n01-checked.png\norigin.txt\nrun.txt')" ]; echo $?)" "components/good: 00-normal.png, 01-checked.png, origin.txt and run.txt"
 check "$(grep -q -F "shots: $good_run" "${out[shoot]}"; echo $?)" "the verdict names the shots' folder"
 # The button's size is the theme's: the shot is the subject's, not the window's 200x80
 size=$("$LOCKTEST_MAGICK" identify -format '%wx%h' "$good_run/00-normal.png" 2> /dev/null)
@@ -422,7 +422,7 @@ runner prune H2S_MOCKUP_SHOTS_LIMIT_MB=1 -- --shoot components/good
 kill "$live" 2> /dev/null
 wait "$live" 2> /dev/null
 check "$([ "${runner_status[prune]}" = 0 ]; echo $?)" "exits 0 (was ${runner_status[prune]})"
-kept=$(cd "$shots/components/good" && ls | LC_ALL=C sort)
+kept=$(find "$shots/components/good" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | LC_ALL=C sort)
 check "$([ "$(grep -c . <<< "$kept")" = 22 ]; echo $?)" "22 runs of components/good stay ($(grep -c . <<< "$kept"))"
 check "$(grep -q -x '20200101-000004-1' <<< "$kept" && ! grep -q -x '20200101-000003-1' <<< "$kept"; echo $?)" "the three oldest of the two-day-old runs went, the 19 newer stayed"
 check "$(grep -q -x '20190101-000001-1' <<< "$kept" && grep -q -x '20190101-000002-1' <<< "$kept"; echo $?)" "the runs younger than a day stayed"
@@ -448,13 +448,46 @@ set_baseline_png() {
 }
 
 runner approve-none "${compare_vars[@]}" -- --approve components/good
-check "$([ "${runner_status[approve-none]}" = 2 ] && grep -q '^NOT DONE components/good — no run that passed with shots' "${out[approve-none]}" && [ ! -e "$baseline" ]; echo $?)" "--approve with no run: status 2, nothing written (was ${runner_status[approve-none]})"
+check "$([ "${runner_status[approve-none]}" = 2 ] && grep -q '^NOT DONE components/good — no run of it from this tree' "${out[approve-none]}" && [ ! -e "$baseline" ]; echo $?)" "--approve with no run: status 2, nothing written (was ${runner_status[approve-none]})"
 
 runner compare-none "${compare_vars[@]}" -- --compare components/good
 check "$([ "${runner_status[compare-none]}" = 2 ] && [ "$(verdict_of compare-none components/good)" = "NOT RUN" ] && grep -q -F "no baseline ($baseline/manifest.txt)" "${out[compare-none]}"; echo $?)" "--compare without a baseline: NOT RUN, 'no baseline' (status ${runner_status[compare-none]})"
 first_run=$(shots_named compare-none)
 check "$([ -s "$first_run/00-normal.png" ] && [ -s "$first_run/run.txt" ]; echo $?)" "its shots and run.txt are kept ($first_run)"
 
+check "$(grep -q -x "tree $REPO" "$first_run/origin.txt" && grep -q -E '^commit [0-9a-f]{40}$' "$first_run/origin.txt" \
+    && grep -q -E '^changes [0-9a-f]{64}$' "$first_run/origin.txt" && grep -q -E '^mockup [0-9a-f]{64}$' "$first_run/origin.txt"; echo $?)" "origin.txt names the tree, its commit, its uncommitted changes and the mockup's file"
+
+# approve_refuses <case> <text>: --approve refuses, saying the text, and writes no baseline
+approve_refuses() {
+    runner "$1" "${compare_vars[@]}" -- --approve components/good
+    check "$([ "${runner_status[$1]}" = 1 ] && grep -q -F -- "$2" "${out[$1]}" && [ ! -e "$baseline" ]; echo $?)" "--approve refuses: $2 (status ${runner_status[$1]})"
+}
+cp "$first_run/origin.txt" "$work/origin-saved.txt"
+sed -i "s|^tree .*|tree /elsewhere/h2s-shell|" "$first_run/origin.txt"
+approve_refuses approve-other-tree "it was made from another tree (/elsewhere/h2s-shell)"
+cp "$work/origin-saved.txt" "$first_run/origin.txt"
+sed -i "s|^commit .*|commit 0000000000000000000000000000000000000000|" "$first_run/origin.txt"
+approve_refuses approve-other-commit "it was made at commit 0000000000000000000000000000000000000000"
+cp "$work/origin-saved.txt" "$first_run/origin.txt"
+sed -i "s|^changes .*|changes 0000000000000000000000000000000000000000000000000000000000000000|" "$first_run/origin.txt"
+approve_refuses approve-other-changes "this tree's uncommitted changes are not the ones it was made with"
+cp "$work/origin-saved.txt" "$first_run/origin.txt"
+sed -i "s|^mockup .*|mockup 0000000000000000000000000000000000000000000000000000000000000000|" "$first_run/origin.txt"
+approve_refuses approve-other-mockup "its Mockup.qml is not the current one"
+cp "$work/origin-saved.txt" "$first_run/origin.txt"
+mv "$first_run/run.txt" "$work/run-saved.txt"
+approve_refuses approve-no-record "did not pass (no run.txt)"
+mv "$work/run-saved.txt" "$first_run/run.txt"
+# A newer run that was NOT RUN (its renderer) and left no shots: never an older run instead
+runner other-gl-newer "${compare_vars[@]}" LOCKTEST_QS="$work/other-gl/qs" H2S_TEST_TOOLS="$LOCKTEST_TOOL_SOURCE" -- --shoot components/good
+approve_refuses approve-newer-not-run "left no shots"
+runner shoot-again-good "${compare_vars[@]}" -- --shoot components/good
+first_run=$(shots_named shoot-again-good)
+
+# An old baseline's PNG the new one does not have goes
+mkdir -p "$baseline"
+touch "$baseline/05-gone.png"
 runner approve "${compare_vars[@]}" -- --approve components/good
 manifest=$baseline/manifest.txt
 check "$([ "${runner_status[approve]}" = 0 ] && grep -q -F "APPROVED components/good — 2 scenes from $first_run" "${out[approve]}"; echo $?)" "--approve takes the newest run (status ${runner_status[approve]})"
@@ -462,10 +495,14 @@ check "$([ "$(cd "$baseline" 2> /dev/null && ls | paste -s -d ' ')" = "00-normal
 check "$(cmp -s "$first_run/01-checked.png" "$baseline/01-checked.png"; echo $?)" "the PNGs are the run's"
 check "$(grep -q -E '^environment renderer OpenGL VENDOR: .*RENDERER: llvmpipe \(LLVM [^,]+, [0-9]+ bits\)' "$manifest" \
     && grep -q -x 'environment backend llvmpipe' "$manifest" && grep -q -E '^environment quickshell .*[0-9]+\.[0-9]+' "$manifest" \
-    && grep -q -E '^environment qt /.*/libQt6Core\.so' "$manifest" && grep -q -E '^environment freetype /.*/libfreetype\.so' "$manifest" \
-    && grep -q -E '^environment fontconfig /.*/libfontconfig\.so' "$manifest" && grep -q -E '^environment harfbuzz ' "$manifest" \
-    && grep -q -E '^environment font-theme [0-9a-f]{64} /' "$manifest" && grep -q -E '^environment font-theme-bold [0-9a-f]{64} /' "$manifest" \
-    && grep -q -E '^environment font-sans-serif [0-9a-f]{64} /' "$manifest"; echo $?)" "the manifest's environment: renderer line with the vector width, backend, quickshell, Qt, freetype, fontconfig, harfbuzz, the fonts' checksums"
+    && grep -q -E '^environment qt-core [0-9a-f]{64} /.*/libQt6Core\.so' "$manifest" && grep -q -E '^environment qt-gui [0-9a-f]{64} /.*/libQt6Gui\.so' "$manifest" \
+    && grep -q -E '^environment qt-quick [0-9a-f]{64} /.*/libQt6Quick\.so' "$manifest" && grep -q -E '^environment qt-svg ' "$manifest" \
+    && grep -q -E '^environment freetype [0-9a-f]{64} /.*/libfreetype\.so' "$manifest" \
+    && grep -q -E '^environment fontconfig [0-9a-f]{64} /.*/libfontconfig\.so' "$manifest" && grep -q -E '^environment harfbuzz ' "$manifest" \
+    && grep -q -E '^environment font:JetBrainsMono-Nerd-Font [0-9a-f]{64} /' "$manifest" && grep -q -E '^environment font:JetBrainsMono-Nerd-Font:bold [0-9a-f]{64} /' "$manifest" \
+    && grep -q -E '^environment font:sans-serif [0-9a-f]{64} /' "$manifest" && grep -q -E '^environment font:monospace [0-9a-f]{64} /' "$manifest" \
+    && grep -q -E '^environment font:emoji [0-9a-f]{64} /' "$manifest" \
+    && grep -q -E '^environment font-rendering hinting=[^ ]+ hintstyle=[^ ]* antialias=[^ ]+ rgba=[^ ]* lcdfilter=[^ ]*' "$manifest"; echo $?)" "the manifest's environment: renderer line with the vector width, backend, quickshell, Qt Core/Gui/Quick/Svg, freetype, fontconfig, harfbuzz (by checksum), the fonts' checksums, fontconfig's rendering settings"
 normal_sum=$(sha256sum < "$baseline/00-normal.png")
 check "$(grep -q -x -E "scene 00 normal [0-9]+x[0-9]+ ${normal_sum%% *}" "$manifest" && grep -q -E '^scene 01 checked [0-9]+x[0-9]+ [0-9a-f]{64}$' "$manifest"; echo $?)" "a scene line per scene, with its size and checksum"
 show_on_failure "$before" approve
@@ -526,14 +563,54 @@ check "$([ "${runner_status[compare-total]}" = 1 ] && [ "$(verdict_of compare-to
 show_on_failure "$before" compare-total
 
 before=$failures
-qt_line=$(grep '^environment qt ' "$baseline/manifest.txt")
-sed -i 's|^environment qt .*$|environment qt /usr/lib/libQt6Core.so.6.0.0|' "$baseline/manifest.txt"
+qt_line=$(grep '^environment qt-core ' "$baseline/manifest.txt")
+sed -i 's|^environment qt-core .*$|environment qt-core /usr/lib/libQt6Core.so.6.0.0|' "$baseline/manifest.txt"
 runner compare-environment "${compare_vars[@]}" -- --compare components/good
 check "$([ "${runner_status[compare-environment]}" = 2 ] && [ "$(verdict_of compare-environment components/good)" = "NOT RUN" ]; echo $?)" "a changed environment: NOT RUN, not FAIL (status ${runner_status[compare-environment]})"
-check "$(grep -q -F "environment changed since the baseline: qt: /usr/lib/libQt6Core.so.6.0.0 → ${qt_line#environment qt }" "${out[compare-environment]}"; echo $?)" "names what changed, from and to"
+check "$(grep -q -F "environment changed since the baseline: qt-core: /usr/lib/libQt6Core.so.6.0.0 → ${qt_line#environment qt-core }" "${out[compare-environment]}"; echo $?)" "names what changed, from and to"
 environment_run=$(shots_named compare-environment)
 check "$(! grep -q 'differ' "${out[compare-environment]}" && [ -s "$environment_run/00-normal.png" ] && [ ! -e "$environment_run/00-normal" ]; echo $?)" "compares nothing, keeps the shots"
 show_on_failure "$before" compare-environment
+
+before=$failures
+"$LOCKTEST_MAGICK" "$baseline/00-normal.png" -fill red -draw 'point 1,1' "$baseline/00-normal.png"
+runner compare-environment-tampered "${compare_vars[@]}" -- --compare components/good
+check "$([ "${runner_status[compare-environment-tampered]}" = 1 ] && grep -q -F "baseline/00-normal.png is not the approved file" "${out[compare-environment-tampered]}"; echo $?)" "a tampered baseline FAILs even when the environment changed too (status ${runner_status[compare-environment-tampered]})"
+show_on_failure "$before" compare-environment-tampered
+
+# A scene whose size changed, with no pixel of the shot different: the baseline one transparent
+# column wider
+before=$failures
+rm -rf "$baseline" && cp -a "$work/baseline-approved" "$baseline"
+normal_size=$("$LOCKTEST_MAGICK" identify -format '%wx%h' "$baseline/00-normal.png")
+wider=$(( ${normal_size%x*} + 1 ))x${normal_size#*x}
+"$LOCKTEST_MAGICK" "$baseline/00-normal.png" -alpha set -background none -gravity West -extent "$wider" "$work/wider.png"
+set_baseline_png "$work/wider.png" 00-normal
+sed -i "s/^scene 00 normal $normal_size /scene 00 normal $wider /" "$baseline/manifest.txt"
+runner compare-size "${compare_vars[@]}" -- --compare components/good
+check "$([ "${runner_status[compare-size]}" = 1 ] && grep -q -F "scene 'normal': 0 pixels differ (the size was $wider, is $normal_size)" "${out[compare-size]}"; echo $?)" "a scene whose size changed FAILs with no pixel different (status ${runner_status[compare-size]})"
+show_on_failure "$before" compare-size
+
+# Scenes renamed, added and removed
+# scenes_case <case> <expected baseline names>: the scene lists named
+scenes_case() {
+    runner "$1" "${compare_vars[@]}" -- --compare components/good
+    check "$([ "${runner_status[$1]}" = 1 ] && grep -q -F "the scenes are not the baseline's: baseline '$2', now 'normal checked'" "${out[$1]}"; echo $?)" "$1: FAIL, the scene lists named (status ${runner_status[$1]})"
+    show_on_failure "$before" "$1"
+}
+before=$failures
+rm -rf "$baseline" && cp -a "$work/baseline-approved" "$baseline"
+mv "$baseline/01-checked.png" "$baseline/01-pressed.png"
+sed -i 's/^scene 01 checked /scene 01 pressed /' "$baseline/manifest.txt"
+scenes_case scene-renamed "normal pressed"
+rm -rf "$baseline" && cp -a "$work/baseline-approved" "$baseline"
+cp "$baseline/01-checked.png" "$baseline/02-extra.png"
+echo "$(grep '^scene 01 ' "$baseline/manifest.txt" | sed 's/^scene 01 checked /scene 02 extra /')" >> "$baseline/manifest.txt"
+scenes_case scene-removed-since "normal checked extra"
+rm -rf "$baseline" && cp -a "$work/baseline-approved" "$baseline"
+rm "$baseline/01-checked.png"
+sed -i '/^scene 01 /d' "$baseline/manifest.txt"
+scenes_case scene-added-since "normal"
 
 before=$failures
 rm -rf "$baseline" && cp -a "$work/baseline-approved" "$baseline"
@@ -542,6 +619,15 @@ runner approve-software "${compare_vars[@]}" -- --approve components/good
 check "$([ "${runner_status[software-shoot]}" = 0 ] && [ "${runner_status[approve-software]}" = 1 ] && grep -q -F "it was not drawn with llvmpipe (software)" "${out[approve-software]}"; echo $?)" "--approve refuses a run drawn with the software backend (status ${runner_status[approve-software]})"
 check "$(cmp -s "$baseline/manifest.txt" "$work/baseline-approved/manifest.txt"; echo $?)" "and leaves the baseline as it was"
 show_on_failure "$before" approve-software
+
+# A Quickshell that names no version: what drew the scenes cannot be told
+before=$failures
+mkdir -p "$work/mute-qs"
+printf '#!%s\n[ "${1:-}" = --version ] && exit 0\nexec %q "$@"\n' "$(type -P bash)" "$LOCKTEST_QS" > "$work/mute-qs/qs"
+chmod +x "$work/mute-qs/qs"
+runner mute-qs "${compare_vars[@]}" LOCKTEST_QS="$work/mute-qs/qs" H2S_TEST_TOOLS="$LOCKTEST_TOOL_SOURCE" -- --compare components/good
+check "$([ "${runner_status[mute-qs]}" = 2 ] && [ "$(verdict_of mute-qs components/good)" = "NOT RUN" ] && grep -q -F "Quickshell names no version" "${out[mute-qs]}"; echo $?)" "a Quickshell that names no version: NOT RUN (status ${runner_status[mute-qs]})"
+show_on_failure "$before" mute-qs
 
 # With the system's tools: an fc-match first on PATH that gives another font for every family
 if [ "$LOCKTEST_TOOL_SOURCE" = system ]; then

@@ -190,11 +190,12 @@ runs them load-only): `tests/run-mockups.sh --compare` decodes each shot and the
 PNG and counts the pixels that differ (no tolerance), writes an old | new | diff
 `<NN>-<scene>-review.png` beside the shots for each scene that does, and is NOT RUN, never
 FAIL, when the environment in `baseline/manifest.txt` (Quickshell, the renderer line, Qt,
-freetype, fontconfig, harfbuzz, the theme's font files) is not the run's, or there is no
-baseline. `tests/run-mockups.sh --approve <kind>/<name>` makes the newest run's shots the
-baseline. Limits: 300 KB a PNG, 30 scenes a mockup, 15 MB all baselines. A baseline changes
-only in the commit of the code change that causes it, after the maintainer approved the
-review images.
+freetype, fontconfig, harfbuzz, the fonts and fontconfig's rendering settings) is not the
+run's, or there is no baseline. `tests/run-mockups.sh --approve <kind>/<name>` makes the
+baseline from the last run this tree made of the mockup, when it passed and the tree is still
+at its commit and uncommitted changes. Limits: 300 KB a PNG, 30 scenes a mockup, 15 MB all
+baselines. A baseline changes only in the commit of the code change that causes it, after the
+maintainer approved the review images.
 
 Mockup code:
 

@@ -7,8 +7,8 @@
 #   tests/run-mockups.sh --shoot [<kind>/<name>…]       the same, and a PNG of each scene
 #   tests/run-mockups.sh --compare [<kind>/<name>…]     the same, each PNG compared with the
 #                                                       mockup's baseline
-#   tests/run-mockups.sh --approve <kind>/<name>…       the newest run's shots become the
-#                                                       mockup's baseline
+#   tests/run-mockups.sh --approve <kind>/<name>…       this tree's last run's shots become
+#                                                       the mockup's baseline
 #   tests/run-mockups.sh -j <n> …                       at most <n> mockups at once (default:
 #                                                       half the processors, at most 16, and
 #                                                       no more than memory allows)
@@ -28,38 +28,49 @@
 # are kept and any younger than a day; then, while the runs together hold more than 500 MB
 # (H2S_MOCKUP_SHOTS_LIMIT_MB), the oldest go; never this run or another runner's still going
 # (the pid in its name a live run-mockups.sh). A mockup that is NOT RUN for its renderer, a
-# missing font or an unreadable process leaves no shot. Each run folder of a mockup that
-# passed also holds run.txt: the environment it was drawn in and a line per scene (below).
+# missing font or an unreadable process leaves no shot. Each run folder holds origin.txt (the
+# tree that made it, its commit, a checksum of its uncommitted changes and of the mockup's
+# file), and, when the mockup passed, run.txt: the environment it was drawn in and a line per
+# scene (below). <kind>/<name>/last-run-<hash of the tree's path> names the last run this
+# tree made of the mockup, whatever came of it: the shots folder may be shared by checkouts.
 #
 # --compare, the baseline: mockups/<kind>/<name>/baseline/ (H2S_MOCKUP_BASELINES=<dir> reads
 # and writes <dir>/<kind>/<name>/baseline/ instead: the self-test's), holding <NN>-<scene>.png
 # per scene and manifest.txt:
 #   environment <key> <value>          what the scenes were drawn with: quickshell (its
-#                                      --version), renderer (the OpenGL renderer line: Mesa's
-#                                      and LLVM's versions, the processor's vector width),
-#                                      backend, qt, freetype, fontconfig and harfbuzz (the
-#                                      library files Quickshell's process maps), font-theme,
-#                                      font-theme-bold and font-sans-serif (the sha256 and
-#                                      path of the file fontconfig gives for the theme's family,
-#                                      in the private HOME, and for sans-serif)
+#                                      --version; none is NOT RUN), renderer (the OpenGL
+#                                      renderer line: Mesa's and LLVM's versions, the
+#                                      processor's vector width), backend, qt-core, qt-gui,
+#                                      qt-quick, qt-svg, freetype, fontconfig and harfbuzz (the
+#                                      sha256 and path of the library files Quickshell's
+#                                      process maps), font:<family>[:bold] for each family of
+#                                      the built-in theme and font:sans-serif, font:monospace,
+#                                      font:emoji (the sha256 and path of the file fontconfig
+#                                      gives, in the private HOME), font-rendering
+#                                      (fontconfig's hinting, antialiasing, subpixel order and
+#                                      LCD filter for the theme's family)
 #   scene <NN> <scene> <w>x<h> <sha256> one per scene, in order
 # A scene matches when its PNG decodes to the same RGBA, pixel for pixel, as the baseline's
 # (exact: there is no tolerance; byte-identical files are not decoded). A scene that does not
 # gets, in the run folder, <NN>-<scene>/old.png, new.png and diff.png (the changed pixels red
 # over a faded old) and <NN>-<scene>-review.png (old | new | diff, side by side; small shots
 # enlarged, pixel for pixel), and the verdict names its count of differing pixels and that
-# file. The verdict per mockup: PASS; FAIL with each differing scene, its count and review
-# file, or a scene list not the baseline's, a baseline file that is not the manifest's (its
-# sha256), a baseline PNG over 300 KB or more than 30 scenes; NOT RUN (status 2) with the
-# reason for a mockup without a baseline, or one whose environment is not the baseline's
-# ("environment changed since the baseline: qt: … → …"): its shots are kept, to be looked at
-# and approved. The baselines together over 15 MB FAIL the run.
+# file (a scene whose size changed differs, whatever its count). The verdict per mockup:
+# PASS; FAIL with each differing scene, its count and review file, or a scene list not the
+# baseline's, a baseline file that is not the manifest's (its sha256), a baseline PNG over
+# 300 KB or more than 30 scenes (the baseline's files are looked at before the environment);
+# NOT RUN (status 2) with the reason for a mockup without a baseline, or one whose
+# environment is not the baseline's ("environment changed since the baseline: qt-core: … →
+# …"): its shots are kept, to be looked at and approved. The baselines together over 15 MB
+# FAIL the run.
 #
-# --approve takes, of each named mockup, the run folder whose run.txt is newest (of --shoot or
+# --approve takes, of each named mockup, the last run this tree made of it (--shoot or
 # --compare, with the same H2S_MOCKUP_BASE and H2S_MOCKUP_SHOTS), checks its PNGs against
 # run.txt and the limits, and replaces the baseline with them: its PNGs and manifest.txt.
-# It refuses a run not drawn with llvmpipe. It changes files in the tree, to be committed with
-# the code change that changed the look, once the review images were looked at.
+# It refuses that run when it did not pass or left no shots (never taking an older one), was
+# made at another commit or with other uncommitted changes or another Mockup.qml than the
+# tree has now, or was not drawn with llvmpipe. It changes files in the tree, to be committed
+# with the code change that changed the look, once the review images were looked at.
 #
 # The environment is fixed, so that a scene draws the same each time, given a mockup that
 # keeps no time of its own (checked in its Mockup.qml, for components and views: no Timer,
@@ -245,24 +256,36 @@ if [ -n "$one_mark" ] && [ "${one_mark%%:*}" = "$PPID" ]; then
     # added once the window is drawn
     environment=$work/environment.txt
     if [ -n "$shots" ]; then
+        # (Some builds say their version on standard error)
+        quickshell_version=$("${isolated[@]}" timeout 10 "$LOCKTEST_QS" --version 2>&1 < /dev/null | grep -m 1 .)
+        [ -n "$quickshell_version" ] || not_run "Quickshell names no version ($LOCKTEST_QS --version): what draws the scenes cannot be told"
         {
             echo "environment backend $renderer"
-            echo "environment quickshell $("${isolated[@]}" timeout 10 "$LOCKTEST_QS" --version 2> /dev/null | head -n 1)"
+            echo "environment quickshell $quickshell_version"
         } > "$environment"
-        family=$(sed -n 's/^.*"family": *"\([^"]*\)".*$/\1/p' "$REPO/singletons/ThemeBuiltin.qml" | head -n 1)
-        [ -n "$family" ] || not_run "the theme's font family is not in singletons/ThemeBuiltin.qml"
-        for entry in "font-theme|$family" "font-theme-bold|$family:bold" "font-sans-serif|sans-serif"; do
-            key=${entry%%|*}
+        # Every family the built-in theme names, regular and bold, each of which must be
+        # installed; then the fallbacks Qt draws from where those lack a glyph
+        mapfile -t theme_families < <(sed -n 's/^.*"family": *"\([^"]*\)".*$/\1/p' "$REPO/singletons/ThemeBuiltin.qml" | LC_ALL=C sort -u)
+        [ ${#theme_families[@]} -gt 0 ] || not_run "the theme's font family is not in singletons/ThemeBuiltin.qml"
+        font_patterns=()
+        for family in "${theme_families[@]}"; do font_patterns+=("theme|$family" "theme|$family:bold"); done
+        font_patterns+=("fallback|sans-serif" "fallback|monospace" "fallback|emoji")
+        for entry in "${font_patterns[@]}"; do
             pattern=${entry#*|}
+            family=${pattern%:bold}
             answer=$("${isolated[@]}" timeout 10 "$LOCKTEST_FC_MATCH" -f '%{family}|%{file}' "$pattern" 2> /dev/null)
             families=${answer%%|*}
             font_file=${answer#*|}
             # fontconfig always answers with some font: the theme's must be the one
-            [ "$key" = font-sans-serif ] || [[ ",$families," == *",$family,"* ]] \
+            [ "${entry%%|*}" = fallback ] || [[ ",$families," == *",$family,"* ]] \
                 || not_run "the theme's font '$family' is not installed (fontconfig gives '${families:-nothing}' for '$pattern')"
             [ -f "$font_file" ] || not_run "fontconfig names no font file for '$pattern' (${font_file:-nothing})"
-            echo "environment $key $(sha256_of "$font_file") $font_file" >> "$environment"
+            echo "environment font:${pattern// /-} $(sha256_of "$font_file") $font_file" >> "$environment"
         done
+        # How fontconfig has text drawn (hinting, antialiasing, subpixel order, LCD filter)
+        echo "environment font-rendering $("${isolated[@]}" timeout 10 "$LOCKTEST_FC_MATCH" \
+            -f 'hinting=%{hinting} hintstyle=%{hintstyle} antialias=%{antialias} rgba=%{rgba} lcdfilter=%{lcdfilter} autohint=%{autohint} embeddedbitmap=%{embeddedbitmap}' \
+            "${theme_families[0]}" 2> /dev/null)" >> "$environment"
     fi
     # The library files Quickshell's process maps (its pid: the one under the started chain,
     # cap, env, setpriv, timeout, that maps Qt Core); while it runs
@@ -291,9 +314,15 @@ if [ -n "$one_mark" ] && [ "${one_mark%%:*}" = "$PPID" ]; then
         done
         [ -n "$found" ] || return 1
         maps=$(awk '{ print $6 }' "/proc/$found/maps" 2> /dev/null | LC_ALL=C sort -u)
-        for entry in qt:libQt6Core freetype:libfreetype fontconfig:libfontconfig harfbuzz:libharfbuzz; do
+        # By content: a rebuild of the same version counts
+        for entry in qt-core:libQt6Core qt-gui:libQt6Gui qt-quick:libQt6Quick qt-svg:libQt6Svg freetype:libfreetype \
+            fontconfig:libfontconfig harfbuzz:libharfbuzz; do
             path=$(grep -m 1 "/${entry#*:}\.so" <<< "$maps")
-            echo "environment ${entry%%:*} ${path:-(not loaded)}"
+            if [ -n "$path" ] && [ -f "$path" ]; then
+                echo "environment ${entry%%:*} $(sha256_of "$path") $path"
+            else
+                echo "environment ${entry%%:*} (not loaded)"
+            fi
         done
     }
 
@@ -465,9 +494,27 @@ if [ -n "$one_mark" ] && [ "${one_mark%%:*}" = "$PPID" ]; then
         baseline=$baselines_root/$name/baseline
         manifest=$baseline/manifest.txt
         [ -f "$manifest" ] || not_run_keeping "no baseline ($manifest): look at the shots, then tests/run-mockups.sh --approve $name"
-        changes=$(environment_changes "$manifest" "$record")
-        [ -z "$changes" ] || not_run_keeping "environment changed since the baseline: $changes"
         mapfile -t old_scenes < <(scenes_of "$manifest")
+        # The baseline's own files first: a baseline that is not what was approved fails
+        # whatever the environment
+        for entry in "${old_scenes[@]}"; do
+            read -r number scene _ sum <<< "$entry"
+            file=$baseline/$number-$scene.png
+            [ -f "$file" ] || { differences+=("baseline/$number-$scene.png is missing"); continue; }
+            bytes=$(stat -c %s -- "$file")
+            [ "$bytes" -le $((limit_png_kb * 1024)) ] \
+                || differences+=("baseline/$number-$scene.png is $((bytes / 1024)) KB, over the limit of $limit_png_kb KB: crop the scene to its subject")
+            [ "$(sha256_of "$file")" = "$sum" ] || differences+=("baseline/$number-$scene.png is not the approved file: its sha256 is not the manifest's")
+        done
+        changes=$(environment_changes "$manifest" "$record")
+        if [ -n "$changes" ]; then
+            [ ${#differences[@]} -eq 0 ] || {
+                echo "FAIL     $name ($((SECONDS - started)) s; shots: $shots)"
+                printf '           %s\n' "${differences[@]}" "(and the environment changed since the baseline: $changes)"
+                exit 1
+            }
+            not_run_keeping "environment changed since the baseline: $changes"
+        fi
         mapfile -t new_scenes < <(scenes_of "$record")
         [ ${#old_scenes[@]} -le "$limit_scenes" ] || differences+=("the baseline has ${#old_scenes[@]} scenes, over the limit of $limit_scenes")
         [ ${#new_scenes[@]} -le "$limit_scenes" ] || differences+=("the mockup has ${#new_scenes[@]} scenes, over the limit of $limit_scenes")
@@ -475,13 +522,9 @@ if [ -n "$one_mark" ] && [ "${one_mark%%:*}" = "$PPID" ]; then
         new_names=$(printf '%s\n' "${new_scenes[@]}" | awk '{ print $2 }' | paste -s -d ' ')
         [ "$old_names" = "$new_names" ] || differences+=("the scenes are not the baseline's: baseline '$old_names', now '$new_names'")
         for entry in "${old_scenes[@]}"; do
-            read -r number scene old_size sum <<< "$entry"
+            read -r number scene _ <<< "$entry"
             file=$baseline/$number-$scene.png
-            [ -f "$file" ] || { differences+=("baseline/$number-$scene.png is missing"); continue; }
-            bytes=$(stat -c %s -- "$file")
-            [ "$bytes" -le $((limit_png_kb * 1024)) ] \
-                || differences+=("baseline/$number-$scene.png is $((bytes / 1024)) KB, over the limit of $limit_png_kb KB: crop the scene to its subject")
-            [ "$(sha256_of "$file")" = "$sum" ] || differences+=("baseline/$number-$scene.png is not the approved file: its sha256 is not the manifest's")
+            [ -f "$file" ] || continue
             shot=$shots/$number-$scene.png
             # (A scene the mockup no longer has: the scene lists above)
             [ -f "$shot" ] || continue
@@ -496,11 +539,15 @@ if [ -n "$one_mark" ] && [ "${one_mark%%:*}" = "$PPID" ]; then
             height=$(( ${old_size#*x} > ${new_size#*x} ? ${old_size#*x} : ${new_size#*x} ))
             count=$(pixels_differing "$file" "$shot" "$width" "$height") \
                 || { differences+=("scene '$scene': cannot be compared: $(head -c 300 "$work/magick.log")"); continue; }
-            [ "$count" = 0 ] && continue
+            # (A size that changed fails on its own: the canvas can hide it, transparent on both)
+            [ "$count" = 0 ] && [ "$old_size" = "$new_size" ] && continue
             review=$shots/$number-$scene-review.png
             review_images "$file" "$shot" "$width" "$height" "$shots/$number-$scene" "$review" > "$work/review.log" 2>&1 \
                 || review="(none: $(head -c 300 "$work/review.log"))"
-            [ "$count" = 1 ] && pixels="1 pixel differs" || pixels="$count pixels differ"
+            case $count in
+                1) pixels="1 pixel differs" ;;
+                *) pixels="$count pixels differ" ;;
+            esac
             [ "$old_size" = "$new_size" ] || pixels="$pixels (the size was $old_size, is $new_size)"
             differences+=("scene '$scene': $pixels; review: $review")
         done
@@ -530,17 +577,60 @@ shots_root=${H2S_MOCKUP_SHOTS:-${XDG_CACHE_HOME:-${HOME:?}/.cache}/h2s-shell-moc
 [[ "$shots_root" == /* ]] || { echo "run-mockups.sh: H2S_MOCKUP_SHOTS is '$shots_root': an absolute path" >&2; exit 2; }
 [ "$base" = mockups ] || shots_root=$shots_root/fixtures
 
-# ---- --approve: the newest run's shots become the baseline ---------------------------
+# The shots root is shared by every checkout that uses it: each run folder says which tree,
+# at which commit and with which uncommitted changes, made it (origin.txt), and each mockup's
+# folder names the last run this tree made of it (last-run-<a hash of the tree's path>),
+# whatever came of it. --approve takes only that run, and only while the tree is as it was
+tree_key=$(printf '%s' "$REPO" | sha256sum | cut -c 1-16)
+# tree_origin: this tree's path, its commit and a checksum of its uncommitted changes (the
+# diff against HEAD and each untracked file's checksum)
+tree_origin() {
+    local commit changes
+    commit=$(git -C "$REPO" rev-parse --verify -q HEAD 2> /dev/null) || commit="(none)"
+    changes=$({
+        git -C "$REPO" diff HEAD --binary 2> /dev/null
+        (cd "$REPO" && git ls-files -z -o --exclude-standard 2> /dev/null | xargs -0 -r sha256sum --)
+    } | sha256sum)
+    echo "tree $REPO"
+    echo "commit $commit"
+    echo "changes ${changes%% *}"
+}
+
+# ---- --approve: the last run's shots become the baseline -----------------------------
 # approve <kind>/<name>: its line, and the status (0 approved, 1 refused, 2 no run to take)
 approve() {
-    local name=$1 run record baseline entry number scene size sum file bytes
+    local name=$1 run run_id record baseline entry number scene size sum file bytes key value now
     local -a scenes problems=()
-    run=$(find "$shots_root/$name" -mindepth 2 -maxdepth 2 -name run.txt -printf '%T@ %h\n' 2> /dev/null | LC_ALL=C sort -n | tail -n 1 | cut -d ' ' -f 2-)
-    if [ -z "$run" ]; then
-        echo "NOT DONE $name — no run that passed with shots in $shots_root/$name: tests/run-mockups.sh --shoot $name first"
+    if ! { read -r run_id < "$shots_root/$name/last-run-$tree_key"; } 2> /dev/null; then
+        echo "NOT DONE $name — no run of it from this tree in $shots_root/$name: tests/run-mockups.sh --shoot $name first"
         return 2
     fi
+    if ! [[ "$run_id" =~ ^[0-9]{8}-[0-9]{6}-[0-9]+$ ]]; then
+        echo "REFUSED  $name — $shots_root/$name/last-run-$tree_key does not name a run ('$run_id')"
+        return 1
+    fi
+    run=$shots_root/$name/$run_id
+    if [ ! -d "$run" ]; then
+        echo "REFUSED  $name — the last run from this tree ($run_id) left no shots: it was NOT RUN, or its shots were pruned; run it again"
+        return 1
+    fi
     record=$run/run.txt
+    if [ ! -f "$record" ]; then
+        echo "REFUSED  $name — the last run from this tree ($run) did not pass (no run.txt): look at its verdict, run it again"
+        return 1
+    fi
+    now=$(tree_origin; echo "mockup $(sha256_of "$REPO/$base/$name/Mockup.qml")")
+    [ "$(sed -n 's/^commit //p' <<< "$now")" != "(none)" ] || problems+=("this tree's commit cannot be told (git): which code drew the shots cannot be checked")
+    for key in tree commit changes mockup; do
+        value=$(sed -n "s/^$key //p" "$run/origin.txt" 2> /dev/null)
+        [ "$value" = "$(sed -n "s/^$key //p" <<< "$now")" ] && continue
+        case $key in
+            tree) problems+=("it was made from another tree (${value:-unknown}), not this one ($REPO)") ;;
+            commit) problems+=("it was made at commit ${value:-unknown}; this tree is at $(sed -n 's/^commit //p' <<< "$now")") ;;
+            changes) problems+=("this tree's uncommitted changes are not the ones it was made with") ;;
+            mockup) problems+=("its Mockup.qml is not the current one") ;;
+        esac
+    done
     grep -q -x 'environment backend llvmpipe' "$record" \
         || problems+=("it was not drawn with llvmpipe ($(sed -n 's/^environment backend //p' "$record")): a baseline is drawn with the baseline renderer")
     mapfile -t scenes < <(scenes_of "$record")
@@ -619,7 +709,7 @@ if [ -z "$jobs" ]; then
 fi
 
 run_id=$(date -u +%Y%m%d-%H%M%S)-$$
-[ "$mode" != load-only ] || shots_root=""
+if [ "$mode" = load-only ]; then shots_root=""; else origin=$(tree_origin); fi
 # shots_of <name>: the mockup's folder for this run
 shots_of() { echo "$shots_root/$1/$run_id"; }
 
@@ -650,6 +740,8 @@ start_mockup() {
     if [ -n "$shots_root" ]; then
         shots=$(shots_of "$name")
         mkdir -p "$shots" || setup_error "cannot create the shots folder $shots"
+        { printf '%s\n' "$origin"; echo "mockup $(sha256_of "$REPO/$base/$name/Mockup.qml")"; } > "$shots/origin.txt"
+        echo "${shots##*/}" > "$shots_root/$name/last-run-$tree_key"
     fi
     H2S_MOCKUP_ONE=$$:$name:$shots HEADLESS_QUIET_RESOLVE=1 LOCKTEST_QS=$LOCKTEST_QS H2S_TEST_TOOLS=$LOCKTEST_TOOL_SOURCE \
         H2S_MOCKUP_BASE=$base H2S_MOCKUP_RENDERER=$renderer "$REPO/tests/run-mockups.sh" "--$mode" \
