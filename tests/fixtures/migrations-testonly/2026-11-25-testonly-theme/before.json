@@ -1,0 +1,8 @@
+{
+    "profiles": "[{\"name\":\"Full\",\"enabled\":true,\"when\":{},\"set\":{\"testonly.old\":\"a\",\"bar.height\":30}},{\"name\":\"Quiet\",\"enabled\":true,\"when\":{},\"set\":{\"testonly.old\":\"b\",\"testonly.new\":\"set later\"}}]",
+    "globals": "{\"testonly.old\":\"g\",\"theme.name\":\"dark\"}",
+    "widgetPresets": "{\"clock\":{\"Default\":{\"format\":\"hh:mm\"}}}",
+    "migratedKeys": ["bar.height"],
+    "writtenBy": "2.1.0",
+    "gcal": { "viewMode": "day" }
+}

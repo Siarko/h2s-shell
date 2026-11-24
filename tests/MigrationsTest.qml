@@ -63,8 +63,16 @@ TestCase {
             return [id + ": no fixture in " + dir];
         if (before === undefined || after === undefined)
             return [id + ": its fixture is not JSON"];
-        const input = rules.documentOf(before, {});
-        const expected = rules.documentOf(after, {});
+        // Side files, when the migration reads or writes them: files-before.json and
+        // files-after.json (path → content), both or neither
+        const filesBefore = _json(dir + "/files-before.json");
+        const filesAfter = _json(dir + "/files-after.json");
+        if ((filesBefore === null) !== (filesAfter === null))
+            return [id + ": its fixture has side files on one side only"];
+        if (filesBefore === undefined || filesAfter === undefined)
+            return [id + ": its side files are not JSON"];
+        const input = rules.documentOf(before, filesBefore ?? {});
+        const expected = rules.documentOf(after, filesAfter ?? {});
         if (!input.ok || !expected.ok)
             return [id + ": its fixture is not a config: " + (input.problem || expected.problem)];
         const problems = [];
@@ -85,13 +93,15 @@ TestCase {
             profile.set = Object.assign({}, profile.set ?? {}, { "zz.migrations-test.unknown": 1 });
         marked.globals["zz.migrations-test.unknown"] = 1;
         marked.presets.zzMigrationsTestUnknown = { Default: { kept: true } };
+        marked.files["zz-migrations-test/unknown.json"] = { kept: true };
         const withUnknown = rules.applyOne(migration, marked, context);
         if (!withUnknown.ok)
             problems.push(id + ": fails with unknown keys present: " + withUnknown.error);
         else if (withUnknown.document.raw.zzMigrationsTestUnknown?.kept !== true
                  || withUnknown.document.profiles.some(profile => profile.set?.["zz.migrations-test.unknown"] !== 1)
                  || withUnknown.document.globals["zz.migrations-test.unknown"] !== 1
-                 || withUnknown.document.presets.zzMigrationsTestUnknown?.Default?.kept !== true)
+                 || withUnknown.document.presets.zzMigrationsTestUnknown?.Default?.kept !== true
+                 || withUnknown.document.files["zz-migrations-test/unknown.json"]?.kept !== true)
             problems.push(id + ": an unknown key did not survive");
 
         // A target already set (a key the output has where the input had none) is kept
@@ -182,6 +192,26 @@ TestCase {
         refused([variant({ scope: ["*"], wholeScopeReason: "test" , migrate: doc => { const result = testOnly.migrate(doc); delete result.raw.zzMigrationsTestUnknown; return result; } })],
                 dir, "unknown key did not survive", "a migration that drops an unknown key");
         refused([variant({ scope: ["*"] })], dir, "wholeScopeReason", "a \"*\" scope without its reason");
+
+        // Side files: a test-only migration over theme files, its fixture with files-before/-after.json
+        const renameInThemes = (doc, extra) => {
+            for (const path of Object.keys(doc.files)) {
+                const theme = doc.files[path];
+                if ("barHeight" in theme && !("height" in theme))
+                    theme.height = theme.barHeight;
+                delete theme.barHeight;
+                extra?.(theme);
+            }
+            return doc;
+        };
+        const themes = { migrationId: "2026-11-25-testonly-theme", since: "2.2.0", summary: "A theme key renamed", scope: ["file:themes/*"], migrate: doc => renameInThemes(doc) };
+        assertEqual(_all([themes], dir).join("\n"), "", "harness: a side-file migration passes on its fixture's files");
+        refused([Object.assign({}, themes, { migrate: doc => renameInThemes(doc, theme => { theme.runs = (theme.runs ?? 0) + 1; }) })], dir,
+                "not idempotent", "a side-file migration that is not idempotent");
+        refused([Object.assign({}, themes, { migrate: doc => doc })], dir, "differs from after.json", "a side-file migration whose files differ");
+        refused([Object.assign({}, themes, { migrate: doc => { delete doc.files["zz-migrations-test/unknown.json"]; return renameInThemes(doc); }, scope: ["*"], wholeScopeReason: "test" })],
+                dir, "unknown key did not survive", "a migration that drops a side file it does not know");
+        refused([Object.assign({}, themes, { migrationId: "2026-11-25-testonly-half" })], dir, "side files on one side only", "a fixture with side files on one side only");
         refused([variant({ since: "2.2.1" })], dir, "x.y.0", "since a patch release");
         refused([variant({ since: "2.3.0" }), variant({ migrationId: "2026-11-25-testonly-second", since: "2.2.0" })], dir, "older than the migration before it",
                 "since older than the migration before");

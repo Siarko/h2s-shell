@@ -121,20 +121,28 @@ Singleton {
         return kept;
     }
 
-    // Whether config.json is new: no file (null), or a file with no profiles, no pinned or
-    // preset values and none of the top-level keys a registered migration reads (raw: paths)
-    function isNewConfig(raw, registry) {
-        if (!_object(raw))
-            return true;
-        const parsed = documentOf(raw, {});
-        if (!parsed.ok)
-            return false;
-        const document = parsed.document;
+    // Whether there is nothing to migrate, so the baseline is recorded instead: config.json
+    // absent (null) or holding no profiles, no pinned or preset values and none of the
+    // top-level keys a registered migration reads (raw: paths), and none of the side files
+    // present (`files`, path → content, as for documentOf) in a registered migration's scope
+    // (file: paths) — old theme files beside a missing config are still migrated
+    function isNewConfig(raw, registry, files) {
+        let document = { raw: {}, profiles: [], globals: {}, presets: {}, files: {} };
+        if (_object(raw)) {
+            const parsed = documentOf(raw, {});
+            if (!parsed.ok)
+                return false;
+            document = parsed.document;
+        }
         if (document.profiles.length > 0 || Object.keys(document.globals).length > 0 || Object.keys(document.presets).length > 0)
             return false;
+        const present = Object.keys(_object(files) ? files : {});
         for (const migration of Array.isArray(registry) ? registry : []) {
-            // An unreadable scope has no paths: it reads no key
-            if (parseScope(migration?.scope).paths.some(path => path.kind === "raw" && _own(document.raw, path.key)))
+            // An unreadable scope has no paths: it reads nothing
+            const paths = parseScope(migration?.scope).paths;
+            if (paths.some(path => path.kind === "raw" && _own(document.raw, path.key)))
+                return false;
+            if (present.some(file => _fileIn(file, paths)))
                 return false;
         }
         return true;
@@ -167,8 +175,10 @@ Singleton {
     }
 
     // One scope path → { kind, … } or null. "setting:<key>", "setting:<prefix>.*",
-    // "preset:<type>", "preset:<type>/<name>", "raw:<top-level key>", "file:<path>" (a
-    // relative path; "*" matches within one folder level), "*"
+    // "preset:<type>" (every preset of the type), "preset:<type>/<name>" (one preset),
+    // "preset:<type>/*/<key>" (one key in every preset of the type),
+    // "preset:<type>/<name>/<key>", "raw:<top-level key>", "file:<path>" (a relative path;
+    // "*" matches within one folder level), "*"
     function parsePath(text) {
         if (typeof text !== "string" || text.length > 256)
             return null;
@@ -187,9 +197,11 @@ Singleton {
         if (kind === "preset") {
             const names = rest.split("/");
             if (names.length === 1 && _name(names[0]))
-                return { kind: "preset", type: names[0], name: "" };
-            if (names.length === 2 && _name(names[0]) && _name(names[1]))
-                return { kind: "preset", type: names[0], name: names[1] };
+                return { kind: "preset", type: names[0], name: "", key: "" };
+            if (names.length === 2 && _name(names[0]) && _name(names[1]) && names[1] !== "*")
+                return { kind: "preset", type: names[0], name: names[1], key: "" };
+            if (names.length === 3 && _name(names[0]) && _name(names[1]) && _name(names[2]) && names[2] !== "*")
+                return { kind: "preset", type: names[0], name: names[1] === "*" ? "" : names[1], key: names[2] };
             return null;
         }
         if (kind === "raw")
@@ -234,12 +246,27 @@ Singleton {
         return paths.some(path => path.kind === "file" && _fileMatches(file, path.pattern));
     }
 
+    // A preset path naming preset `name` of `type` (any of its keys)
+    function _presetPath(path, type, name) {
+        return path.kind === "preset" && path.type === type && (path.name === "" || path.name === name);
+    }
+
+    // The whole preset is in scope
     function _presetIn(type, name, paths) {
-        return paths.some(path => path.kind === "preset" && path.type === type && (path.name === "" || path.name === name));
+        return paths.some(path => _presetPath(path, type, name) && path.key === "");
+    }
+
+    // Some of the preset's keys are in scope
+    function _presetTouched(type, name, paths) {
+        return paths.some(path => _presetPath(path, type, name));
+    }
+
+    function _presetKeyIn(type, name, key, paths) {
+        return paths.some(path => _presetPath(path, type, name) && (path.key === "" || path.key === key));
     }
 
     function _wholeTypeIn(type, paths) {
-        return paths.some(path => path.kind === "preset" && path.type === type && path.name === "");
+        return paths.some(path => path.kind === "preset" && path.type === type && path.name === "" && path.key === "");
     }
 
     function _rawIn(key, paths) {
@@ -270,7 +297,8 @@ Singleton {
             return first.prefix.startsWith(second.prefix) || second.prefix.startsWith(first.prefix);
         }
         if (first.kind === "preset")
-            return first.type === second.type && (first.name === "" || second.name === "" || first.name === second.name);
+            return first.type === second.type && (first.name === "" || second.name === "" || first.name === second.name)
+                && (first.key === "" || second.key === "" || first.key === second.key);
         if (first.kind === "raw")
             return first.key === second.key;
         // Two files
@@ -387,13 +415,23 @@ Singleton {
                 _put(projected.presets, type, _copy(document.presets[type]));
                 continue;
             }
-            const names = Object.keys(document.presets[type]).filter(name => _presetIn(type, name, paths));
-            if (names.length === 0)
-                continue;
             const kept = {};
-            for (const name of names)
-                _put(kept, name, _copy(document.presets[type][name]));
-            _put(projected.presets, type, kept);
+            for (const name of Object.keys(document.presets[type])) {
+                const preset = document.presets[type][name];
+                if (_presetIn(type, name, paths)) {
+                    _put(kept, name, _copy(preset));
+                } else if (_presetTouched(type, name, paths) && _object(preset)) {
+                    // Only its keys in scope; the preset itself is not, so it is handed even
+                    // when none of them is set
+                    const keys = {};
+                    for (const key of Object.keys(preset))
+                        if (_presetKeyIn(type, name, key, paths))
+                            _put(keys, key, _copy(preset[key]));
+                    _put(kept, name, keys);
+                }
+            }
+            if (Object.keys(kept).length > 0)
+                _put(projected.presets, type, kept);
         }
         for (const key of Object.keys(document.raw))
             if (_rawIn(key, paths))
@@ -419,6 +457,9 @@ Singleton {
             return "it returned a malformed profile";
         if (Object.keys(result.presets).some(type => !_object(result.presets[type])))
             return "it returned a malformed preset type";
+        const reserved = Object.keys(result.raw).find(key => _reservedRaw.includes(key));
+        if (reserved !== undefined)
+            return "it wrote " + reserved + " as a top-level key, which the runner keeps";
         if (scope.whole)
             return "";
         const paths = scope.paths;
@@ -438,9 +479,17 @@ Singleton {
             if (_wholeTypeIn(type, paths))
                 continue;
             const names = Object.keys(result.presets[type]);
-            const outside = names.find(name => !_presetIn(type, name, paths));
-            if (outside !== undefined)
-                return "it wrote preset " + type + "/" + outside + " outside its scope";
+            for (const name of names) {
+                if (_presetIn(type, name, paths))
+                    continue;
+                const preset = result.presets[type][name];
+                // Only keys of a preset that was handed: the preset itself is outside the scope
+                if (!_presetTouched(type, name, paths) || !_own(handed.presets[type], name) || !_object(preset))
+                    return "it wrote preset " + type + "/" + name + " outside its scope";
+                const outsideKey = Object.keys(preset).find(key => !_presetKeyIn(type, name, key, paths));
+                if (outsideKey !== undefined)
+                    return "it wrote " + outsideKey + " of preset " + type + "/" + name + " outside its scope";
+            }
             if (names.length === 0 && !_own(handed.presets, type))
                 return "it wrote preset type " + type + " outside its scope";
         }
@@ -473,9 +522,15 @@ Singleton {
                 delete result.presets[type];
                 continue;
             }
-            for (const name of Object.keys(result.presets[type]))
+            for (const name of Object.keys(result.presets[type])) {
+                const preset = result.presets[type][name];
                 if (_presetIn(type, name, paths))
                     delete result.presets[type][name];
+                else if (_object(preset))
+                    for (const key of Object.keys(preset))
+                        if (_presetKeyIn(type, name, key, paths))
+                            delete preset[key];
+            }
         }
         for (const key of Object.keys(result.raw))
             if (_rawIn(key, paths))
@@ -515,8 +570,16 @@ Singleton {
                 continue;
             if (!_own(merged.presets, type))
                 _put(merged.presets, type, {});
-            for (const name of names)
-                _put(merged.presets[type], name, result.presets[type][name]);
+            for (const name of names) {
+                if (_presetIn(type, name, scope.paths)) {
+                    _put(merged.presets[type], name, result.presets[type][name]);
+                    continue;
+                }
+                // Keys of a preset that is there (resultProblem checked it was handed)
+                const target = merged.presets[type][name];
+                for (const key of Object.keys(result.presets[type][name]))
+                    _put(target, key, result.presets[type][name][key]);
+            }
         }
         for (const key of Object.keys(result.raw))
             _put(merged.raw, key, result.raw[key]);
@@ -676,23 +739,36 @@ Singleton {
 
     // ---- Backups ----
 
+    // Why a config backup was made, the last part of its name
+    readonly property var backupReasons: ["migration", "restore", "module", "manual"]
+
     // Which config backups stay after a new one: of the names in the config's folder only
-    // "config.json.bak-<stamp>" (and "-<reason>" after it) count; the newest `backupsKept` by
-    // the stamp stay, a protected one (being restored from) always. Every other name is left
-    // alone. → { keep, delete } (newest first)
-    function backupsToKeep(names, protect) {
-        const pattern = /^config\.json\.bak-[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}-[0-9]{2}-[0-9]{2}-[0-9]{3}Z(-[a-z]+)?$/;
+    // "config.json.bak-<stamp>" (and "-<reason>" after it, one of backupReasons) count; every
+    // other name is left alone. `options`: { written (the backup just written: always kept,
+    // whatever its stamp says — the clock may have gone back —, and counted), protect: [names]
+    // (one being restored from: kept, not counted), neverPrune: [names] (kept, not counted) }.
+    // The rest by their stamps, newest first, fill up to `backupsKept`; equal stamps by name.
+    // → { keep, delete } (newest first)
+    function backupsToKeep(names, options) {
+        const pattern = new RegExp("^config\\.json\\.bak-[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}-[0-9]{2}-[0-9]{2}-[0-9]{3}Z(-(" + backupReasons.join("|") + "))?$");
         // The stamp has a fixed width and comes first: the names sort as their stamps do
         const backups = (Array.isArray(names) ? names : []).filter(name => typeof name === "string" && pattern.test(name)).sort().reverse();
-        const protectedNames = Array.isArray(protect) ? protect : (typeof protect === "string" ? [protect] : []);
+        const listed = value => Array.isArray(value) ? value : [];
+        const written = typeof options?.written === "string" ? options.written : "";
+        const kept = listed(options?.protect).concat(listed(options?.neverPrune));
+        let room = backupsKept - (backups.includes(written) ? 1 : 0);
         const keep = [];
         const deleted = [];
-        backups.forEach((name, i) => {
-            if (i < backupsKept || protectedNames.includes(name))
+        for (const name of backups) {
+            if (name === written || kept.includes(name)) {
                 keep.push(name);
-            else
+            } else if (room > 0) {
+                keep.push(name);
+                room--;
+            } else {
                 deleted.push(name);
-        });
+            }
+        }
         return { keep: keep, delete: deleted };
     }
 }

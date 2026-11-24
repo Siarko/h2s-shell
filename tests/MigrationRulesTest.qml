@@ -97,11 +97,14 @@ TestCase {
     function _scopes() {
         assertEqual(JSON.stringify(rules.parsePath("setting:widgets.music.*")), JSON.stringify({ kind: "setting", prefix: "widgets.music.", key: "" }), "path: a setting prefix");
         assertEqual(JSON.stringify(rules.parsePath("setting:bar.height")), JSON.stringify({ kind: "setting", prefix: "", key: "bar.height" }), "path: one setting");
-        assertEqual(JSON.stringify(rules.parsePath("preset:music/compact")), JSON.stringify({ kind: "preset", type: "music", name: "compact" }), "path: one preset");
+        assertEqual(JSON.stringify(rules.parsePath("preset:music/compact")), JSON.stringify({ kind: "preset", type: "music", name: "compact", key: "" }), "path: one preset");
+        assertEqual(JSON.stringify(rules.parsePath("preset:music")), JSON.stringify({ kind: "preset", type: "music", name: "", key: "" }), "path: a preset type");
+        assertEqual(JSON.stringify(rules.parsePath("preset:music/*/popupMode")), JSON.stringify({ kind: "preset", type: "music", name: "", key: "popupMode" }), "path: a key in every preset of a type");
+        assertEqual(JSON.stringify(rules.parsePath("preset:music/compact/popupMode")), JSON.stringify({ kind: "preset", type: "music", name: "compact", key: "popupMode" }), "path: a key of one preset");
         assertEqual(JSON.stringify(rules.parsePath("raw:widgetProfiles")), JSON.stringify({ kind: "raw", key: "widgetProfiles" }), "path: a raw key");
         assertEqual(JSON.stringify(rules.parsePath("file:themes/*")), JSON.stringify({ kind: "file", pattern: "themes/*" }), "path: side files");
         for (const bad of ["raw:migratedKeys", "raw:writtenBy", "raw:profiles", "raw:globals", "raw:widgetPresets", "raw:__proto__", "setting:", "setting:a..b",
-                           "setting:*", "preset:", "preset:a/b/c", "preset:/b", "preset:a/", "preset:__proto__/b", "file:", "file:a/", "rawx", ":raw", "raw", "Raw:x", "preset:__proto__", "file:../x", "file:/etc/passwd", "file:a//b", "other:x", "bar.height", 3])
+                           "setting:*", "preset:", "preset:/b", "preset:a/", "preset:__proto__/b", "preset:a/*", "preset:a/b/*", "preset:a/*/__proto__", "preset:a/b/c/d", "preset:a//k", "preset:/b/k", "file:", "file:a/", "rawx", ":raw", "raw", "Raw:x", "preset:__proto__", "file:../x", "file:/etc/passwd", "file:a//b", "other:x", "bar.height", 3])
             assertEqual(rules.parsePath(bad), null, "path: " + JSON.stringify(bad) + " is not one");
         assert(!rules.parseScope([]).ok && !rules.parseScope("setting:a").ok, "scope: empty or not a list: unreadable");
         assert(rules.parsePath("preset:" + "a".repeat(128)) !== null && rules.parsePath("preset:" + "a".repeat(129)) === null, "path: a name of at most 128 characters");
@@ -118,6 +121,10 @@ TestCase {
         assert(overlap(["setting:a.*"], ["setting:a.b.*"]), "overlap: nested prefixes");
         assert(!overlap(["setting:a.*"], ["setting:ab.c"]) && !overlap(["setting:a.*"], ["setting:a"]), "overlap: a prefix covers only keys under it");
         assert(overlap(["preset:music/compact"], ["preset:music"]), "overlap: a preset under its type, the other way");
+        assert(overlap(["preset:music/*/popupMode"], ["preset:music/compact"]) && overlap(["preset:music/compact/popupMode"], ["preset:music/*/popupMode"]),
+               "overlap: a preset key with its preset, and with the same key in every preset");
+        assert(!overlap(["preset:music/*/popupMode"], ["preset:music/*/bindings"]) && !overlap(["preset:music/a/popupMode"], ["preset:music/b/popupMode"])
+               && !overlap(["preset:music/*/popupMode"], ["preset:clock/*/popupMode"]), "overlap: other keys, presets or types do not");
         assert(overlap(["preset:music"], ["preset:music/compact"]) && !overlap(["preset:music/a"], ["preset:music/b"]) && !overlap(["preset:music"], ["preset:clock"]),
                "overlap: presets by type and name");
         assert(overlap(["raw:a"], ["raw:a"]) && !overlap(["raw:a"], ["raw:b"]), "overlap: raw keys");
@@ -210,6 +217,8 @@ TestCase {
             assert(!apply(["setting:clock.*"], doc => { delete doc[part]; return doc; }).ok, "not a document: " + part + " missing is a failure");
         for (const [profile, what] of [[3, "no object"], [{ set: {} }, "no name"], [{ name: "Full", set: 3 }, "settings no object"]])
             assert(!apply(["setting:clock.*"], doc => { doc.profiles[0] = profile; return doc; }).ok, "not a document: a profile with " + what + " is a failure");
+        for (const reserved of ["profiles", "globals", "widgetPresets", "migratedKeys", "writtenBy"])
+            assert(!apply(["*"], doc => { doc.raw[reserved] = "[]"; return doc; }).ok, "not a document: a \"*\" result with raw." + reserved + " (the runner's)");
         assert(!apply(["*"], doc => { doc.profiles[0] = { set: {} }; return doc; }).ok, "not a document: a \"*\" result with a profile without a name");
         assert(apply(["setting:clock.*"], doc => { delete doc.profiles[1].set; return doc; }).ok, "a profile returned without settings is a document");
         for (const [migrate, what] of [[doc => null, "null"], [doc => [], "a list"], [doc => ({ profiles: [] }), "parts missing"],
@@ -243,6 +252,28 @@ TestCase {
         delete merged.files["themes/new.json"];
         assert(merged.presets.music.compact === "changed" && merged.raw.futureSection === 3 && !("themes/new.json" in merged.files),
                "merged: the caller may change and remove what was merged in");
+
+        const keyScope = rules.parseScope(["preset:music/*/popupMode"]);
+        const keyed = rules.projection(document, keyScope);
+        assertEqual(rules.canonical(keyed.presets), rules.canonical({ music: { Default: { popupMode: "click" }, compact: { popupMode: "hover" } } }),
+                    "preset key: only that key of every preset of the type handed");
+        const withBindings = JSON.parse(JSON.stringify(document));
+        withBindings.presets.music.compact.bindings = ["x"];
+        withBindings.presets.music.bare = {};
+        assert("bare" in rules.projection(withBindings, keyScope).presets.music, "preset key: a preset without the key handed too (to set it)");
+        const keyApply = migrate => rules.applyOne(_migration("2026-11-25-k", "2.2.0", ["preset:music/*/popupMode"], migrate), withBindings, {});
+        const keyMoved = keyApply(doc => { for (const name of Object.keys(doc.presets.music)) doc.presets.music[name].popupMode = "press"; delete doc.presets.music.Default.popupMode; return doc; });
+        assert(keyMoved.ok, "preset key: changing and removing the key is inside the scope");
+        assertEqual(rules.canonical(keyMoved.document.presets.music), rules.canonical({ Default: {}, compact: { popupMode: "press", bindings: ["x"] }, bare: { popupMode: "press" } }),
+                    "preset key: merged into each preset, its other keys kept");
+        assert(!keyApply(doc => { doc.presets.music.compact.bindings = []; return doc; }).ok, "preset key: another key of the preset is outside");
+        assert(!keyApply(doc => { doc.presets.music.made = { popupMode: "x" }; return doc; }).ok, "preset key: a new preset is outside");
+        assert(!keyApply(doc => { doc.presets.music.compact = 3; return doc; }).ok, "preset key: a preset replaced by no object is outside");
+        const keyReset = rules.withoutScope(withBindings, keyScope, true);
+        assertEqual(rules.canonical(keyReset.presets), rules.canonical({ music: { Default: {}, compact: { bindings: ["x"] }, bare: {} }, clock: { Default: { format: "hh:mm:ss" } } }),
+                    "preset key: the reset removes only that key");
+        const keyFailed = rules.run([_migration("2026-11-25-k", "2.2.0", ["preset:music/*/popupMode"], doc => { throw new Error("x"); })], withBindings, { records: [], version: "2.2.0" });
+        assertEqual(rules.canonical(keyFailed.document.presets.music.compact), rules.canonical({ bindings: ["x"] }), "preset key: a failure resets the key, not the presets");
 
         const mutating = rules.applyOne(_migration("2026-11-25-t", "2.2.0", ["setting:clock.*"], doc => { doc.globals["clock.seconds"] = false; return doc; }), document, {});
         assert(mutating.ok && document.globals["clock.seconds"] === true, "a migration changing what it is handed: the document stays");
@@ -376,6 +407,10 @@ TestCase {
         assert(rules.isNewConfig({ bar: { height: 30 } }, _failing), "new: a top-level key no migration reads");
         assert(rules.isNewConfig({ bar: { height: 30 } }, [_migration("2.0.0-bar", "2.0.0", ["setting:bar"], doc => doc)]), "new: a setting of the same name is not a top-level key");
         assert(!rules.isNewConfig({ profiles: "{" }, _failing), "not new: an unreadable config is never taken as new");
+        const themes = [_migration("2.0.0-themes", "2.0.0", ["file:themes/*"], doc => doc)];
+        assert(!rules.isNewConfig(null, themes, { "themes/old.json": { bar: 1 } }), "not new: no config, but a side file a migration reads");
+        assert(!rules.isNewConfig({}, themes, { "themes/old.json": { bar: 1 } }), "not new: an empty config, but a side file a migration reads");
+        assert(rules.isNewConfig(null, themes, { "other/x.json": 1 }) && rules.isNewConfig(null, themes, {}), "new: side files no migration reads, or none");
     }
 
     function _newer() {
@@ -420,18 +455,36 @@ TestCase {
         const names = [];
         for (let day = 1; day <= 12; day++)
             names.push(stamp(day));
-        names.push("config.json.bak-2026-10-13T10-00-00-000Z-migration", "config.json", "config.json.bak-notes", "other.bak-2026-10-01T10-00-00-000Z", "config.json.bak-2026-10-14T10-00-00-000Z.tmp");
-        const plan = rules.backupsToKeep(names, stamp(1));
+        const newest = "config.json.bak-2026-10-13T10-00-00-000Z-migration";
+        names.push(newest, "config.json", "config.json.bak-notes", "other.bak-2026-10-01T10-00-00-000Z", "config.json.bak-2026-10-14T10-00-00-000Z.tmp",
+                   "config.json.bak-2026-10-15T10-00-00-000Z-made-2", "config.json.bak-2026-10-15T10-00-00-000Z-other");
+        const plan = rules.backupsToKeep(names, { written: newest, protect: [stamp(1)] });
         assertEqual(plan.keep.length, 11, "backups: the newest ten and the protected one kept");
-        assertEqual(plan.keep[0], "config.json.bak-2026-10-13T10-00-00-000Z-migration", "backups: newest first, a reason in the name counted");
+        assertEqual(plan.keep[0], newest, "backups: newest first, a reason in the name counted");
         assertEqual(plan.delete.join(","), stamp(3) + "," + stamp(2), "backups: the older ones deleted");
         assert(plan.keep.includes(stamp(1)), "backups: the protected one kept");
-        assert(![...plan.keep, ...plan.delete].some(name => name === "config.json" || name.includes("notes") || name.startsWith("other") || name.endsWith(".tmp")),
-               "backups: only names of the exact pattern, nothing else in the folder");
-        assertEqual(rules.backupsToKeep(names.slice(0, 10), "").delete.length, 0, "backups: ten or fewer: none deleted");
+        assert(![...plan.keep, ...plan.delete].some(name => name === "config.json" || name.includes("notes") || name.startsWith("other") || name.endsWith(".tmp")
+                                                          || name.endsWith("-made-2") || name.endsWith("-other")),
+               "backups: only names of the exact pattern with a known reason, nothing else in the folder");
+        assertEqual(rules.backupsToKeep(names.slice(0, 10), {}).delete.length, 0, "backups: ten or fewer: none deleted");
         assertEqual(rules.backupsToKeep(null, null).keep.length, 0, "backups: no list: nothing");
         assertEqual(rules.backupsToKeep(names, null).delete.length, 3, "backups: no protected one");
+
+        // The clock behind: the backup just written has the oldest stamp
+        const behind = "config.json.bak-2026-09-01T10-00-00-000Z-migration";
+        const skewed = rules.backupsToKeep(names.concat([behind]), { written: behind });
+        assert(skewed.keep.includes(behind), "backups: the one just written kept, whatever its stamp");
+        assertEqual(skewed.keep.length, 10, "backups: … and counted among the ten");
+        assertEqual(skewed.delete.join(","), [stamp(4), stamp(3), stamp(2), stamp(1)].join(","), "backups: … so one more of the others goes");
+        const manual = "config.json.bak-2026-10-01T09-00-00-000Z-manual";
+        const kept = rules.backupsToKeep(names.concat([manual]), { neverPrune: [manual] });
+        assert(kept.keep.includes(manual) && kept.keep.length === 11 && kept.delete.length === 3, "backups: one never to be pruned kept, not counted");
+        const tie = rules.backupsToKeep(["config.json.bak-2026-10-01T10-00-00-000Z-manual", "config.json.bak-2026-10-01T10-00-00-000Z-restore",
+                                         "config.json.bak-2026-10-01T10-00-00-000Z"], {});
+        assertEqual(tie.keep.join(","), "config.json.bak-2026-10-01T10-00-00-000Z-restore,config.json.bak-2026-10-01T10-00-00-000Z-manual,config.json.bak-2026-10-01T10-00-00-000Z",
+                    "backups: equal stamps ordered by name, the same each time");
     }
+
 
     function _helpers() {
         const document = {
@@ -449,6 +502,7 @@ TestCase {
         assertEqual(renamed.globals["new.key"], 5, "rename: a migration can change a renamed key afterwards");
         delete renamed.globals["new.key"];
         assert(!("new.key" in renamed.globals), "rename: … and remove it");
+        assertEqual(rules.canonical(helpers.renameKey(document, "old.key", "old.key", { presets: ["music"] })), rules.canonical(document), "rename: a key to itself changes nothing");
         assertEqual(rules.canonical(helpers.renameKey(document, "old.key", "new.key", { settings: true })), rules.canonical(helpers.renameKey(document, "old.key", "new.key")),
                     "rename: settings: true is the default");
         assertEqual(rules.canonical(renamed.presets), rules.canonical(document.presets), "rename: presets untouched unless asked");

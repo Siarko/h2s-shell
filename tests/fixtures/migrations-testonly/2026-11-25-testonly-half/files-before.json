@@ -1,0 +1,4 @@
+{
+    "themes/dark.json": { "barHeight": 30, "accent": "#88c0d0" },
+    "themes/light.json": { "barHeight": 28, "height": 32 }
+}

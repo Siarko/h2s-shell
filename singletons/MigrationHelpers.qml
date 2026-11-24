@@ -53,6 +53,9 @@ Singleton {
     // `from` renamed to `to` wherever it is set; a `to` already set is kept and `from` only
     // removed
     function renameKey(document, from, to, where) {
+        // A key renamed to itself stays as it is
+        if (from === to)
+            return forEachSetting(document, () => {}, where);
         return forEachSetting(document, values => {
             if (!_own(values, from))
                 return;
