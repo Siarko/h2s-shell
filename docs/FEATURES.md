@@ -722,7 +722,24 @@ asks first. A row opens to its control words (with what each means), the fingerp
 timeout and tries (each may be "No limit"), the key's PIN, whether wrong passwords count
 toward pam_faillock, or a raw line's text. Rows are dragged by their handle; "Add a row"
 lists the methods, those the computer lacks off with the reason. Under each list its checks:
-refusals in red (nothing is saved while one stands), warnings in the warning colour. "Show
+refusals in red (nothing is saved while one stands), warnings in the warning colour. A raw
+line that asks for nothing is refused where it lets anyone in on its own (at once, or a line
+that must pass with no other such row that still asks — a line counts as one that must pass
+only where a wrong credential's code, `auth_err`, else `default`, is `bad` or `die`); beside
+a row that still asks it is a warning: only the other rows decide. A
+security key row whose check pam_u2f's settings void gets a warning, not a refusal — the
+settings are the system's, kept as they are: `alwaysok` (no key), `userpresence=0` (the last
+one, as pam_u2f reads it: no touch), and on a raw line whose word takes PAM_IGNORE as no
+answer `nouserok` (a user without a key). Where the row lets in on its own the warning says
+so; where another row that must pass still asks ("Password (as the system)" among them) it
+says the row no longer asks and only the other rows decide. The shell's own key rows, and
+raw lines whose ignore is not "ignore", treat PAM_IGNORE as a failure, so `nouserok` never
+opens them. The settings read: on NixOS the module's
+`/etc/pam.d/h2s-shell-u2f` (`security.pam.u2f.settings`), elsewhere
+`/etc/security/pam_u2f.conf`; a raw pam_u2f line by its own words (a refusal where it lets
+in on its own) and by `pam_u2f.conf`. Settings that cannot be read — the file, or which
+system this is or where the file is not known — or a settings file a raw line names itself,
+are a warning too. "Show
 file" shows the file that would be written, the shell's lines in the accent colour.
 
 #### NixOS
@@ -746,7 +763,14 @@ the editor does not make itself as raw lines) and replaces it at the next Apply.
 Under the sign-in rules, which ways the lock screen offers: the password always, the
 fingerprint and the security key each with a switch (`lockscreen.offerFingerprint`,
 `lockscreen.offerSecurityKey`), off and dimmed with the reason while the computer lacks one.
-Changed at once, without a password.
+Changed at once, without a password. Under the security key a warning when the system's
+pam_u2f settings let it unlock without a key (`alwaysok`) or a touch (`userpresence=0`),
+hold `interactive` (the key will not work: the lock screen cannot answer its Enter prompt),
+or cannot be read; and a note when the NixOS module left `interactive` out of the lock's
+config. Read: the lock's key config's pam_u2f line and the settings file it reads (its
+`conf=`, else `/etc/security/pam_u2f.conf`; on NixOS pam_u2f's default file lives inside its
+package, where nixpkgs installs none, and is not read). `nouserok` is not said there: the
+lock's one line must pass, so a user without a key is refused.
 
 ### Remember the password
 

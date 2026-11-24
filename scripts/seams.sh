@@ -17,6 +17,9 @@ seam_system_pam_dir=/etc/pam.d
 seam_pam_dirs=
 # pam_faillock's default settings file (pam-files.sh); empty: not read
 seam_faillock_conf=/etc/security/faillock.conf
+# pam_u2f's default settings file, where it is outside the package (pam-files.sh); empty:
+# not said (the shell takes its settings as not known)
+seam_u2f_conf=/etc/security/pam_u2f.conf
 # The distribution the scripts take themselves to be on, by its id (nixos, arch, generic);
 # empty: they detect it (scripts/distribution.sh; lock-auth-methods.sh, launch.sh)
 seam_distribution=

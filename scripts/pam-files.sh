@@ -10,6 +10,7 @@
 #                                   distribution's pamDirectories (scripts/distribution.sh);
 #                                   none when the distribution cannot be told
 #   faillock TAB <path>             pam_faillock's default faillock.conf
+#   u2fconf TAB <path>              pam_u2f's default pam_u2f.conf
 #   file TAB <path> TAB text        the file's lines follow, each after a "|", then
 #   end TAB <path>
 #   file TAB <path> TAB absent      known not to be there (ENOENT, ENOTDIR)
@@ -25,7 +26,7 @@
 # shell takes a path without one as unreadable). Nothing is written, nothing run as root.
 #
 # The test seams (scripts/seams.sh: constants; a test tree has the test bed's in its place):
-# the PAM directories' stand-ins, the distribution, and faillock.conf's place.
+# the PAM directories' stand-ins, the distribution, faillock.conf's and pam_u2f.conf's places.
 script_dir=$(dirname "$(readlink -f "$0")")
 source "$script_dir/seams.sh" || { echo "pam-files: cannot read seams.sh" >&2; exit 1; }
 set -u
@@ -47,6 +48,7 @@ for dir in "${pam_dirs[@]}"; do
     [ -z "$dir" ] || printf 'directory\t%s\n' "$dir"
 done
 [ -z "$seam_faillock_conf" ] || printf 'faillock\t%s\n' "$seam_faillock_conf"
+[ -z "$seam_u2f_conf" ] || printf 'u2fconf\t%s\n' "$seam_u2f_conf"
 
 # absent <path>: the path is known not to be there
 absent() {

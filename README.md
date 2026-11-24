@@ -132,8 +132,10 @@ shipped in `pam/`.
   them) without second factors — a module of those that you do want there is switched on
   with e.g. `security.pam.services.h2s-shell-password.oathAuth = true;`.
   `h2s-shell-fingerprint` exists when `services.fprintd.enable` is set, `h2s-shell-u2f` when
-  `security.pam.u2f.enable` is (with your `security.pam.u2f.settings`, always `cue`, never
-  `interactive`). Enroll a finger with `fprintd-enroll`; register a key with `pamu2fcfg`
+  `security.pam.u2f.enable` is (with your `security.pam.u2f.settings` as they are, always
+  `cue`, and without `interactive`, whose Enter prompt the lock screen cannot answer —
+  Settings says so; `alwaysok` or `userpresence = 0` there is a build warning: the key would
+  unlock without a key or a touch). Enroll a finger with `fprintd-enroll`; register a key with `pamu2fcfg`
   (into `~/.config/Yubico/u2f_keys`, or the `authfile` your settings name — the forms
   below).
 - **Arch and others**: nothing to set up for the password — the shipped `pam/password`
@@ -194,7 +196,11 @@ PAM `auth` stack.
   ```
 
   A row is `fingerprint` (`timeout`, `tries`; -1 for no limit), `securityKey` (`pin`; with
-  your `security.pam.u2f.settings`, as on the lock screen), `password`
+  your `security.pam.u2f.settings` as they are, `interactive` included, always with `cue`
+  — the shell never removes an option there; `alwaysok` or `userpresence = 0` is a build
+  warning: the row lets anyone in, or no longer asks and leaves the other rows to decide;
+  `conf` is one too, as is a raw pam_u2f row's own `conf=`: the options in that file are not
+  checked), `password`
   (`counted`: wrong passwords count toward pam_faillock's lockout, where the service has
   `logFailures`), `raw` (`module`, `args`: another module, by its package's path, e.g.
   `"${pkgs.pam_ldap}/lib/security/pam_ldap.so"`) or `system`. `control` is PAM's word:

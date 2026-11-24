@@ -42,7 +42,9 @@ QtObject {
     // The last complete reading, or null before the first: { services: { name: stack },
     // lock: { method: stack }, faillock: { name: settings or null }, facts: { nixos (true /
     // false / null), moduleDirectories (the distribution's PAM module directories; [] when
-    // not known), fingerprint, securityKey ("ready" / "absent" / "unknown") },
+    // not known), fingerprint, securityKey ("ready" / "absent" / "unknown"), u2f (what the
+    // machine's pam_u2f settings let the lock's and the editor's key lines do:
+    // PamStackRules._u2fOf's { lock, rows, conf }) },
     // directories, files: { path: { text } | { absent: true } | { unreadable: true } } (every
     // file read: the editor builds from the texts) }
     property var reading: null
@@ -119,7 +121,7 @@ QtObject {
             const answer = PamStackRules.filesAnswer(lines, result, paths);
             _state.reading = false;
             if (_state.places === null)
-                _state.places = answer.places ?? { directories: [], faillockPath: "" };
+                _state.places = answer.places ?? { directories: [], faillockPath: "", u2fConfPath: null };
             Object.assign(_state.answers, answer.answers);
             _advance(generation);
         }, generation);
@@ -136,7 +138,11 @@ QtObject {
             services: services,
             lock: _state.methods?.lock ?? {},
             directories: directories,
-            faillockPath: places.faillockPath
+            faillockPath: places.faillockPath,
+            // Not placed: not known (pam_u2f.conf may hold anything)
+            u2fConfPath: typeof places.u2fConfPath === "string" ? places.u2fConfPath : null,
+            // NixOS or not, from the distribution's facts: null while not known
+            nixos: _state.distribution === undefined || _state.distribution === null ? null : _state.distribution.id === "nixos"
         };
     }
 
@@ -161,7 +167,7 @@ QtObject {
             faillock: step.faillock,
             facts: { nixos: distribution === null ? null : distribution.id === "nixos",
                      moduleDirectories: Array.isArray(distribution?.pamModuleDirectories) ? distribution.pamModuleDirectories.slice() : [],
-                     fingerprint: _state.methods.fingerprint, securityKey: _state.methods.securityKey },
+                     fingerprint: _state.methods.fingerprint, securityKey: _state.methods.securityKey, u2f: step.u2f },
             directories: request.directories,
             files: Object.assign({}, _state.answers)
         };

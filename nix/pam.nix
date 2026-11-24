@@ -19,11 +19,6 @@ let
   # row's result whenever another row decides, so for a way in it only misleads
   ownMethods = [ "fingerprint" "securityKey" "password" ];
   u2f = import ./u2f.nix lib config.security.pam.u2f.settings;
-  # The machine's `userpresence`, when it is written as anything but 1: pam_u2f reads it
-  # through sscanf, so any other value may turn the touch off (true and false write no
-  # `userpresence=` and leave pam_u2f's default)
-  userpresence = config.security.pam.u2f.settings.userpresence or null;
-  touchOff = userpresence != null && !(lib.isBool userpresence) && toString userpresence != "1";
   # libpam's own modules: NixOS's libpam finds these, and only these, by bare name
   libpamModules = map (name: name + ".so") [ "pam_access" "pam_canonicalize_user" "pam_debug"
     "pam_deny" "pam_echo" "pam_env" "pam_exec" "pam_faildelay" "pam_faillock" "pam_filter"
@@ -75,10 +70,10 @@ let
         default = false;
         description = ''
           Security key: ask for the key's PIN too (pam_u2f's `pinverification=1`). The
-          row takes the machine's `security.pam.u2f.settings` (where the keys are:
-          `authfile`, `appid`, `origin`…), as the lock screen does, but always says when to
-          touch the key (`cue`), never waits for Enter (no `interactive`), and asks for the
-          PIN only as this says.
+          row takes the machine's `security.pam.u2f.settings` as they are (where the keys
+          are: `authfile`, `appid`, `origin`…; `nouserok`, `alwaysok`, `userpresence` too),
+          always saying when to touch the key (`cue`). A setting that lets the row pass
+          without a key or a touch is a warning.
         '';
       };
       counted = mkOption {
@@ -188,8 +183,9 @@ let
       underEtc = path: lib.hasPrefix "/etc/" path && !(lib.elem ".." (lib.splitString "/" path));
       byName =
         if name == "pam_u2f.so" then
-          (if lib.elem "nouserok" row.args || lib.elem "alwaysok" row.args
-              || lib.any (word: lib.hasPrefix "userpresence=" word && word != "userpresence=1") row.args
+          # nouserok's PAM_IGNORE passes a user without a key only on a line that must pass
+          # (a plain word takes it as no answer; a sufficient line goes on to the next one)
+          (if (lib.elem "nouserok" row.args && fails row) || lib.elem "alwaysok" row.args || u2f.argsTouchOff row.args
            then "no" else "yes")
         else if name == "pam_userdb.so" then
           (if !(lib.elem "unknown_ok" lower) && databases != [ ] && lib.all underEtc databases then "yes" else "no")
@@ -199,6 +195,18 @@ let
     in
     if placeOf row == null || byName == "no" then byName else "unknown";
   firstPass = row: methodOf row == "password" && row.method == "raw" && lib.elem "use_first_pass" row.args;
+  # The settings file a raw row's pam_u2f reads in place of its default (the last conf=), or null
+  rawConfOf = row:
+    let confs = lib.filter (lib.hasPrefix "conf=") row.args;
+    in if confs == [ ] then null else lib.removePrefix "conf=" (lib.last confs);
+  # A row that must pass and asks for something: NixOS's own rules; an own password or
+  # fingerprint row; an own key row unless the machine's alwaysok voids it; a raw line of a
+  # module that may ask (not one made to ask for nothing, not pam_deny)
+  failingAsker = row:
+    row.method == "system"
+    || (fails row && (lib.elem row.method [ "password" "fingerprint" ]
+      || (row.method == "securityKey" && !u2f.alwaysok)
+      || (row.method == "raw" && credentialOf row != "no" && rawName row != "pam_deny.so")));
 
   # The rows' roles and how the rows end: "system" (NixOS's own rules below), "permit" (a
   # row that fails the stack on failure is in the list: `[default=done] pam_permit.so` then
@@ -217,6 +225,12 @@ let
         let
           unasked = firstPass row
             && !(lib.any (above: methodOf above == "password" && !(firstPass above)) (lib.take index rows));
+          # Another row that must pass and asks for something (NixOS's rules among them): with
+          # one, a row that must pass does not let in on its own
+          othersAsk = lib.any (other: other) (lib.imap0 (at: other: at != index && failingAsker other) rows);
+          # … for the touch: a key row with userpresence = 0 does not ask for one
+          othersAskTouch = lib.any (other: other) (lib.imap0 (at: other: at != index && failingAsker other
+            && !(other.method == "securityKey" && u2f.touchOff)) rows);
         in {
           method = methodOf row;
           reader = lib.elem (methodOf row) [ "fingerprint" "securityKey" ];
@@ -225,8 +239,9 @@ let
           denies = row.method == "raw" && rawName row == "pam_deny.so" && fails row;
           # A raw line that can let the user in (sufficient; required or requisite where the
           # permit closing keeps its result) with a module that asks for no credential
+          # (on its own: sufficient, or a row that must pass with no other such row that asks)
           letsAnyone = row.method == "raw" && credentialOf row == "no" && rawName row != "pam_deny.so"
-            && (row.control == "sufficient" || (fails row && closing != "system"));
+            && (row.control == "sufficient" || (fails row && !othersAsk));
           nullok = row.method == "raw" && methodOf row == "password" && lib.elem "nullok" row.args;
           unknown = row.method == "raw" && methodOf row == "unknown" && credentialOf row != "no" && rawName row != "pam_deny.so";
           # A raw required/requisite line of a module the shell does not know, without NixOS's
@@ -237,6 +252,23 @@ let
           # the password waits until the finger is touched or the prompt is cancelled
           endless = row.method == "fingerprint" && row.timeout == -1 && row.control == "sufficient"
             && lib.any (later: lib.elem (methodOf later) [ "password" "system" ]) (lib.drop (index + 1) rows);
+          # A key row whose own check the machine's security.pam.u2f.settings void (alwaysok,
+          # userpresence = 0): `keyOpens` where its pass lets the user in on its own (sufficient,
+          # or a row that must pass with no other such row that asks), else it no longer asks
+          # and only the other rows decide. An own row is written with ignore=bad, so
+          # nouserok's PAM_IGNORE fails it: never a way in.
+          keyOpens = row.method == "securityKey" && (row.control == "sufficient" || (fails row && !othersAsk));
+          keyVoided = row.method == "securityKey" && fails row && othersAsk;
+          keyOpensTouch = row.method == "securityKey" && (row.control == "sufficient" || (fails row && !othersAskTouch));
+          keyVoidedTouch = row.method == "securityKey" && fails row && othersAskTouch;
+          # A raw pam_u2f line that names its own settings file: the checks do not read it
+          rawConf = row.method == "raw" && rawName row == "pam_u2f.so" && rawConfOf row != null
+            && (row.control == "sufficient" || fails row);
+          # A raw line of a module that asks for nothing (or made by its arguments to ask for
+          # nothing) that must pass beside another row that still asks: it lets nobody in on
+          # its own, the other rows decide alone
+          rawVoided = row.method == "raw" && credentialOf row == "no" && rawName row != "pam_deny.so"
+            && fails row && othersAsk;
           decides = !unasked && (row.method == "system" || row.control == "sufficient" || fails row);
         };
       roles = lib.imap0 role rows;
@@ -274,8 +306,6 @@ let
             "${at index row}: counted is a password row's."
           ++ lib.optional (row.method != "raw" && (row.module != null || row.args != [ ]))
             "${at index row}: module and args are a raw row's."
-          ++ lib.optional (row.method == "securityKey" && touchOff)
-            "${at index row}: the machine's security.pam.u2f.settings turn off the touch (userpresence = ${toString userpresence}), so a plugged-in key would let any program use ${name}: set userpresence = 1 or drop the key row."
           ++ lib.optional (lib.elem row.method ownMethods && row.control == "optional")
             "${at index row}: optional is only for a raw row: this row's result would be ignored."
           ++ lib.optional (row.method == "password" && row.counted && !config.security.pam.services.${name}.logFailures)
@@ -321,7 +351,21 @@ let
           ++ lib.optional role.endless
             "${at index (lib.elemAt rows index)}: waits for the finger until it is touched or the prompt is cancelled: the password is asked only after that."
           ++ lib.optional role.nullok
-            "${at index (lib.elemAt rows index)}: nullok: an account with an empty password gets in.")
+            "${at index (lib.elemAt rows index)}: nullok: an account with an empty password gets in."
+          ++ lib.optional (role.keyOpens && u2f.alwaysok)
+            "${at index (lib.elemAt rows index)}: the machine's security.pam.u2f.settings have alwaysok: this row lets anyone in without a key."
+          ++ lib.optional (role.keyVoided && u2f.alwaysok)
+            "${at index (lib.elemAt rows index)}: the machine's security.pam.u2f.settings have alwaysok: this row no longer asks for a key; only the other rows decide."
+          ++ lib.optional (role.keyOpensTouch && u2f.touchOff)
+            "${at index (lib.elemAt rows index)}: the machine's security.pam.u2f.settings have userpresence = 0, which may turn the touch off: while a key is plugged in, any program can pass this row without a touch."
+          ++ lib.optional (role.keyVoidedTouch && u2f.touchOff)
+            "${at index (lib.elemAt rows index)}: the machine's security.pam.u2f.settings have userpresence = 0, which may turn the touch off: this row may no longer ask for a touch; only the other rows decide."
+          ++ lib.optional role.rawConf
+            "${at index (lib.elemAt rows index)}: conf=${toString (rawConfOf (lib.elemAt rows index))}: the options in it are not checked."
+          ++ lib.optional (role.rawVoided && rawName (lib.elemAt rows index) == "pam_u2f.so")
+            "${at index (lib.elemAt rows index)}: with nouserok, alwaysok or userpresence=0 this line may not ask for a key or a touch; only the other rows decide."
+          ++ lib.optional (role.rawVoided && rawName (lib.elemAt rows index) != "pam_u2f.so")
+            "${at index (lib.elemAt rows index)}: ${rawName (lib.elemAt rows index)} asks for nothing: only the other rows decide.")
           analysis.roles)
         ++ lib.optional (rows != [ ] && analysis.closing != "system" && otherAccounts != [ ])
           "${where}: without the { method = \"system\"; } row, a password row checks only local accounts (pam_unix): ${lib.concatStringsSep ", " otherAccounts} accounts are not asked for their password."
@@ -387,12 +431,11 @@ let
       (line (lib.elemAt middle 0) (pamModule "pam_unix.so") [ "try_first_pass" ])
       (line (lib.elemAt middle 1) (pamModule "pam_faillock.so") [ "authfail" ])
     ];
-  # A key row's arguments: the machine's pam_u2f settings with `cue`, without `interactive`
-  # (it would wait for Enter), the PIN as the row says, and never `nouserok` or `alwaysok`
-  # (they let a user without a key, or anyone, in through a row that lets in at once; a
-  # user without a key falls through to the next row anyway)
+  # A key row's arguments: the machine's pam_u2f settings as they are (`interactive` too:
+  # sudo and a polkit agent can answer its Enter prompt), with `cue`, and the PIN where the
+  # row asks for it (a machine's own pinverification stays when it does not)
   u2fArguments = row: u2f.arguments
-    { cue = true; interactive = false; nouserok = false; alwaysok = false; pinverification = if row.pin then 1 else null; };
+    ({ cue = true; } // lib.optionalAttrs row.pin { pinverification = 1; });
   # The lines of one row. The modules come from their packages, so a fingerprint or key row
   # never needs Arch's `-auth` (skip the line when the module is gone).
   rowLines = row:
@@ -493,6 +536,9 @@ in
     ));
     warnings = lib.unique (
       lib.concatMap (found: found.warnings) allProblems
+      ++ lib.optional (u2f.conf != null && (config.security.pam.u2f.enable
+          || lib.any (service: lib.any (row: row.method == "securityKey") service.rows) (lib.attrValues ruled)))
+        "security.pam.u2f.settings.conf names ${u2f.conf}: the options in it are not checked."
       ++ lib.optional (!polkitRuled && passwordFirstSet)
         "programs.h2s-shell.polkit.passwordFirst is deprecated: put a password row above the fingerprint row in programs.h2s-shell.pam.rules (or pam.polkit.rules)."
     );

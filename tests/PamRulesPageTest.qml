@@ -39,6 +39,8 @@ TestCase {
     readonly property string _password: "secret"
 
     property bool _nixos: false
+    // Facts laid over the reading's (the machine's pam_u2f settings)
+    property var _extraFacts: ({})
     // What the stand-in reading says of a security key
     property string _securityKey: "absent"
     property var _settings: ({ "lockscreen.offerFingerprint": true, "lockscreen.offerSecurityKey": true })
@@ -199,7 +201,7 @@ TestCase {
             const step = PamStackRules.readingStep({ services: ["polkit-1", "sudo"], lock: {}, directories, faillockPath: "" }, answers, true);
             suite._stacks.reading = {
                 services: step.services, lock: {}, faillock: step.faillock,
-                facts: { nixos: suite._nixos, fingerprint: "ready", securityKey: suite._securityKey },
+                facts: Object.assign({ nixos: suite._nixos, fingerprint: "ready", securityKey: suite._securityKey }, suite._extraFacts),
                 directories, files: answers
             };
             suite._reads++;
@@ -428,6 +430,30 @@ TestCase {
         assertEqual(unlock.map(row => row.method + ":" + row.checked + ":" + row.available).join(" "),
                     "password:true:false fingerprint:false:true securityKey:false:false", "unlockRows: the password always, a missing key off");
         assertEqual(unlock[2].hint, "No key registered", "… with its reason");
+        const u2fRead = { rows: { known: true, alwaysok: true, nouserok: false, touchOff: false }, conf: null, lock: null };
+        const sudoFacts = rules.serviceFacts({ nixos: true, fingerprint: "ready", securityKey: "ready", u2f: u2fRead }, "sudo", null, null, [], undefined, false);
+        assertEqual(sudoFacts.u2f, u2fRead, "serviceFacts: the system's pam_u2f settings handed to the checks");
+        assert(PamRuleRules.codes(PamRuleRules.check([{ id: "r1", method: "securityKey", control: "sufficient", details: { pin: false, cue: true } }, PamRuleRules.fixedRow()], sudoFacts)).includes("W15"),
+               "… so an own key row with the system's alwaysok is warned about");
+        assertEqual(unlock[2].warning + "|" + unlock[1].warning, "|", "… no warning without a key");
+        const lockWith = more => ({ securityKey: "ready", u2f: { lock: Object.assign({ known: true, alwaysok: false, nouserok: false, touchOff: false }, more) } });
+        const keyWarning = facts => rules.unlockRows(facts, {})[2].warning;
+        assertEqual(keyWarning(lockWith({ alwaysok: true })), "Unlocks without a key: the system's pam_u2f settings have alwaysok.", "unlockRows: alwaysok said");
+        assertEqual(keyWarning(lockWith({ touchOff: true })),
+                    "May unlock without a touch while a key is plugged in: the system's pam_u2f settings have userpresence=0.", "… the touch turned off said");
+        assertEqual(keyWarning(lockWith({ interactive: true })),
+                    "The key will not work here: the system's pam_u2f settings have interactive, and the lock screen cannot answer its Enter prompt.",
+                    "… interactive left in (pam_u2f.conf, which no argument turns off): the key will not work");
+        assertEqual(keyWarning(lockWith({ interactiveDropped: true })), "interactive is off for the lock screen: it cannot answer the Enter prompt.",
+                    "… interactive left out by the module: said");
+        assertEqual(keyWarning(lockWith({ alwaysok: true, interactiveDropped: true })),
+                    "Unlocks without a key: the system's pam_u2f settings have alwaysok. interactive is off for the lock screen: it cannot answer the Enter prompt.",
+                    "… every point at once");
+        assertEqual(keyWarning(lockWith({ known: false })),
+                    "The system's pam_u2f settings could not be read: it may unlock without a key or a touch.", "… settings not read said");
+        assertEqual(keyWarning(lockWith({ nouserok: true })) + "|" + keyWarning(lockWith({})) + "|" + keyWarning({ securityKey: "ready" }), "||",
+                    "… nouserok (the one line must pass), clean settings, nothing read yet: none");
+        assertEqual(rules.unlockRows({ securityKey: "absent", u2f: lockWith({ alwaysok: true }).u2f }, {})[2].warning, "", "… no key registered: none");
         assertEqual(rules.savedSpec([{ service: "sudo", backup: "sudo.1" }, { service: "polkit-1", backup: "polkit-1.1" }], "/b").body[1],
                     "Backups: /b/sudo.1, /b/polkit-1.1", "savedSpec: the backups named");
         const ok = service => ({ ok: true, service, backup: service + ".1" });
@@ -642,6 +668,18 @@ TestCase {
         _item("unlock:securityKey").toggled();
         driver.wait(50);
         assertEqual(_writes.length, 1, "… nothing written");
+        assert(!_visible(_item("unlockWarning:securityKey")), "… no warning under it");
+
+        // --- the key switch's warning: the system's pam_u2f settings ---
+        const lockSettings = more => ({ securityKey: "ready", u2f: { lock: Object.assign({ known: true, alwaysok: false, nouserok: false, touchOff: false }, more), rows: null, conf: null } });
+        _extraFacts = lockSettings({ alwaysok: true });
+        assert(_reread() && _until(() => _item("unlock:securityKey").enabled), "a key registered, the system's settings with alwaysok");
+        assert(_until(() => _visible(_item("unlockWarning:securityKey"))), "… a warning under the key switch");
+        assertEqual(_item("unlockWarning:securityKey").text, "Unlocks without a key: the system's pam_u2f settings have alwaysok.", "… its text");
+        assert(_item("unlockWarning:securityKey").textFormat === Text.PlainText, "… as plain text");
+        _extraFacts = lockSettings({ nouserok: true });
+        assert(_reread() && _until(() => !_visible(_item("unlockWarning:securityKey"))), "nouserok alone: no warning (the lock's one line must pass)");
+        _extraFacts = ({});
 
         // --- the window closed and opened again: what the computer has is read again ---
         const asked = _stacks.methodsAsked;

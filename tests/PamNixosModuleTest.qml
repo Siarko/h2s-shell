@@ -8,12 +8,17 @@ import qs.singletons
 // (tests/fixtures/pam-nixos/cases.json): each case's options are PamEditRules.nixosSnippet's
 // for its rows, and its lines are PamEditRules' lines for the same rows — written as NixOS
 // writes them (no `-auth`: the module comes from its package; a module by its file name) —
-// so the module's lines there are compared with the editor's.
+// so the module's lines there are compared with the editor's. And the comment nix/module.nix
+// writes when it leaves `interactive` out of the lock's key config is the one Settings reads.
 TestCase {
     suiteName: "PamNixosModule"
 
     property var _module: FileView {
         path: Qt.resolvedUrl("../nix/pam.nix")
+        blockLoading: true
+    }
+    property var _lockModule: FileView {
+        path: Qt.resolvedUrl("../nix/module.nix")
         blockLoading: true
     }
     property var _cases: FileView {
@@ -55,6 +60,8 @@ TestCase {
     function run() {
         const text = _module.text();
         assert(text.length > 0, "nix/pam.nix is read");
+        assert(_lockModule.text().includes("\"" + PamStackRules.u2fInteractiveDropped + "\""),
+               "the lock's key config says it left interactive out in the words Settings looks for (nix/module.nix, PamStackRules)");
 
         // --- the module's names and ranges are the editor's ---
         assertEqual(JSON.stringify(_nixList(text, "\\bmethods = ")),

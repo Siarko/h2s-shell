@@ -154,7 +154,7 @@ mkdir -p "$pamtree/scripts"
 cp "$REPO/scripts/pam-files.sh" "$REPO/scripts/distribution.sh" "$pamtree/scripts/"
 cp -r "$REPO/distributions" "$pamtree/"
 pam_dirs_for() {
-    printf 'seam_pam_dirs=%s\nseam_distribution=%s\nseam_faillock_conf=\n' "$2" "$1" > "$pamtree/scripts/seams.sh"
+    printf 'seam_pam_dirs=%s\nseam_distribution=%s\nseam_faillock_conf=\nseam_u2f_conf=\n' "$2" "$1" > "$pamtree/scripts/seams.sh"
     OUTPUT=$("$pamtree/scripts/pam-files.sh" 2> "$work/pam-files.err")
     STATUS=$?
     OUTPUT=$(sed -n 's/^directory\t//p' <<< "$OUTPUT" | tr '\n' ' ')

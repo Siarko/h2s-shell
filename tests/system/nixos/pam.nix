@@ -163,10 +163,17 @@ let
     (expect "a sufficient pam_permit above the system row: refused"
       { programs.h2s-shell.pam.rules = [ { method = "raw"; module = "pam_permit.so"; } system ]; }
       { refusals = [ "this line lets anyone in: pam_permit.so" ]; })
-    (expect "a sufficient pam_u2f with nouserok: refused (no key gets in)"
+    (expect "a sufficient pam_u2f with nouserok: allowed (a user without a key goes on to the next row)"
       { programs.h2s-shell.pam.rules = [ { method = "raw"; module = "${pkgs.pam_u2f}/lib/security/pam_u2f.so"; args = [ "nouserok" ]; } system ];
         security.pam.u2f.enable = true; }
+      { notWarnings = [ "may not ask for a key" ]; })
+    (expect "a required pam_u2f with nouserok beside a sufficient password, without the system row: refused (the permit lets a user without a key in)"
+      { programs.h2s-shell.pam.rules = [ { method = "raw"; module = "${pkgs.pam_u2f}/lib/security/pam_u2f.so"; args = [ "nouserok" ]; control = "required"; } { method = "password"; } ];
+        security.pam.u2f.enable = true; }
       { refusals = [ "this line lets anyone in: pam_u2f.so" ]; })
+    (expect "a required pam_permit beside a required password row: a warning, not refused (the password still asks)"
+      { programs.h2s-shell.pam.rules = [ { method = "raw"; module = "pam_permit.so"; control = "required"; } { method = "password"; control = "required"; } ]; }
+      { warnings = [ "row 1 (raw): pam_permit.so asks for nothing: only the other rows decide" ]; })
     (expect "a sufficient pam_userdb with its database outside /etc: refused"
       { programs.h2s-shell.pam.rules = [ { method = "raw"; module = "pam_userdb.so"; args = [ "db=/tmp/users" ]; } system ]; }
       { refusals = [ "this line lets anyone in: pam_userdb.so" ]; })
@@ -264,23 +271,92 @@ let
       { notWarnings = [ "h2s-shell" ]; })
   ];
 
-  # The machine's settings that would let a key row pass without a key or a touch
+  # The machine's settings that would let a key row pass without a key or a touch: kept as
+  # they are, and warned about where the row's pass can let the user in
   keySafety =
     let
       keyRules = { programs.h2s-shell.pam.rules = [ { method = "securityKey"; } system ]; };
-      keyLine = settings:
-        let config = configOf (keyRules // { security.pam.u2f = { enable = true; inherit settings; }; });
-        in lib.findFirst ours "" (authLines config "sudo");
-      passing = keyLine { nouserok = true; alwaysok = true; authfile = "/etc/u2f-keys"; };
+      withKey = rules: settings: rules // { security.pam.u2f = { enable = true; inherit settings; }; };
+      keyLine = settings: lib.findFirst ours "" (authLines (configOf (withKey keyRules settings)) "sudo");
+      kept = keyLine { nouserok = true; alwaysok = true; userpresence = 0; pinverification = 1; authfile = "/etc/u2f-keys"; };
+      words = lib.splitString " " (normalized kept);
+      requiredKey = { programs.h2s-shell.pam.rules = [ { method = "securityKey"; control = "required"; } { method = "password"; } ]; };
+      requiredKeySystem = { programs.h2s-shell.pam.rules = [ { method = "securityKey"; control = "required"; } system ]; };
+      requiredKeyPassword = { programs.h2s-shell.pam.rules = [ { method = "securityKey"; control = "required"; } { method = "password"; control = "required"; } ]; };
+      lockSays = "the lock screen's security key unlocks without a key";
     in [
-      (result (passing != "" && !(lib.hasInfix "nouserok" passing) && !(lib.hasInfix "alwaysok" passing) && lib.hasInfix "authfile=/etc/u2f-keys" passing)
-        "the machine's nouserok and alwaysok never reach a key row (its other settings do)" passing)
-      (expect "the machine's userpresence = 0 beside a key row: refused"
-        (keyRules // { security.pam.u2f = { enable = true; settings.userpresence = 0; }; })
-        { refusals = [ "row 1 (securityKey): the machine's security.pam.u2f.settings turn off the touch (userpresence = 0)" ]; })
-      (expect "… userpresence = 1: allowed"
-        (keyRules // { security.pam.u2f = { enable = true; settings.userpresence = 1; }; })
-        { })
+      (result (lib.all (word: lib.elem word words) [ "nouserok" "alwaysok" "userpresence=0" "pinverification=1" "authfile=/etc/u2f-keys" ])
+        "the machine's u2f settings reach a key row as they are (nouserok, alwaysok, userpresence, pinverification)" kept)
+      (expect "the machine's alwaysok beside a sufficient key row: a warning, no assertion"
+        (withKey keyRules { alwaysok = true; })
+        { warnings = [ "row 1 (securityKey): the machine's security.pam.u2f.settings have alwaysok: this row lets anyone in without a key" lockSays ]; })
+      (expect "the machine's userpresence = 0 beside a key row: a warning, no assertion"
+        (withKey keyRules { userpresence = 0; })
+        { warnings = [ "row 1 (securityKey): the machine's security.pam.u2f.settings have userpresence = 0, which may turn the touch off: while a key is plugged in, any program can pass this row"
+            "while a key is plugged in, the lock screen may unlock without a touch" ]; })
+      (expect "… userpresence = \"00\": the same (pam_u2f reads 0)"
+        (withKey keyRules { userpresence = "00"; })
+        { warnings = [ "row 1 (securityKey): the machine's security.pam.u2f.settings have userpresence = 0" ]; })
+      (expect "… userpresence = 1: no warning"
+        (withKey keyRules { userpresence = 1; })
+        { notWarnings = [ "may turn the touch off" ]; })
+      (expect "… userpresence = 2: no warning (the authenticator's default, which asks)"
+        (withKey keyRules { userpresence = 2; })
+        { notWarnings = [ "may turn the touch off" ]; })
+      (expect "userpresence = 0 on a required key row above the system row: a warning (the touch may no longer be asked)"
+        (withKey requiredKeySystem { userpresence = 0; })
+        { warnings = [ "row 1 (securityKey): the machine's security.pam.u2f.settings have userpresence = 0, which may turn the touch off: this row may no longer ask for a touch; only the other rows decide" ]; })
+      (expect "the machine's nouserok beside a sufficient key row: no warning (a user without a key goes on to the next row)"
+        (withKey keyRules { nouserok = true; })
+        { notWarnings = [ "nouserok" ]; })
+      (expect "… beside a required key row the permit closes: no warning (the row is written with ignore=bad: nouserok's PAM_IGNORE fails it)"
+        (withKey requiredKey { nouserok = true; })
+        { notWarnings = [ "nouserok" ]; })
+      (expect "… beside a required key row above the system row: no warning"
+        (withKey requiredKeySystem { nouserok = true; })
+        { notWarnings = [ "nouserok" ]; })
+      (expect "alwaysok on a required key row the permit closes: a warning (its pass keeps the result)"
+        (withKey requiredKey { alwaysok = true; })
+        { warnings = [ "row 1 (securityKey): the machine's security.pam.u2f.settings have alwaysok" ]; })
+      (expect "alwaysok on a required key row above the system row: a warning (two factors become one)"
+        (withKey requiredKeySystem { alwaysok = true; })
+        { warnings = [ "row 1 (securityKey): the machine's security.pam.u2f.settings have alwaysok: this row no longer asks for a key; only the other rows decide" lockSays ]; })
+      (expect "userpresence = 0 on two required key rows: each lets any program in without a touch (neither asks for one)"
+        (withKey { programs.h2s-shell.pam.sudo.rules = [ { method = "securityKey"; control = "required"; } { method = "securityKey"; control = "required"; } ]; } { userpresence = 0; })
+        { warnings = [ "row 1 (securityKey): the machine's security.pam.u2f.settings have userpresence = 0, which may turn the touch off: while a key is plugged in, any program can pass this row"
+            "row 2 (securityKey): the machine's security.pam.u2f.settings have userpresence = 0, which may turn the touch off: while a key is plugged in, any program can pass this row" ]; })
+      (expect "alwaysok on a required key row beside a required password row the permit closes: no longer asks (the password still does)"
+        (withKey requiredKeyPassword { alwaysok = true; })
+        { warnings = [ "row 1 (securityKey): the machine's security.pam.u2f.settings have alwaysok: this row no longer asks for a key; only the other rows decide" ];
+          notWarnings = [ "this row lets anyone in" ]; })
+      (expect "a raw pam_u2f line with its own conf=: a warning that the file is not checked"
+        { programs.h2s-shell.pam.rules = [ { method = "raw"; module = "${pkgs.pam_u2f}/lib/security/pam_u2f.so"; args = [ "cue" "conf=/etc/u2f-other.conf" ]; } system ];
+          security.pam.u2f.enable = true; }
+        { warnings = [ "row 1 (raw): conf=/etc/u2f-other.conf: the options in it are not checked" ]; })
+      (expect "… on an optional line (it decides nothing): no such warning"
+        { programs.h2s-shell.pam.rules = [ { method = "raw"; module = "${pkgs.pam_u2f}/lib/security/pam_u2f.so"; args = [ "cue" "conf=/etc/u2f-other.conf" ]; control = "optional"; } system ];
+          security.pam.u2f.enable = true; }
+        { notWarnings = [ "are not checked" ]; })
+      (expect "a raw pam_u2f nouserok line required above the system row: a warning (a user without a key skips it)"
+        { programs.h2s-shell.pam.rules = [ { method = "raw"; module = "${pkgs.pam_u2f}/lib/security/pam_u2f.so"; args = [ "cue" "nouserok" ]; control = "required"; } system ];
+          security.pam.u2f.enable = true; }
+        { warnings = [ "row 1 (raw): with nouserok, alwaysok or userpresence=0 this line may not ask for a key or a touch; only the other rows decide" ]; })
+      (expect "… without nouserok: no such warning"
+        { programs.h2s-shell.pam.rules = [ { method = "raw"; module = "${pkgs.pam_u2f}/lib/security/pam_u2f.so"; args = [ "cue" ]; control = "required"; } system ];
+          security.pam.u2f.enable = true; }
+        { notWarnings = [ "may not ask for a key" ]; })
+      (expect "security.pam.u2f.settings.conf set: a warning that its options are not checked"
+        (withKey keyRules { conf = "/etc/u2f.conf"; })
+        { warnings = [ "security.pam.u2f.settings.conf names /etc/u2f.conf: the options in it are not checked" ]; })
+      (expect "… not set: no such warning"
+        (withKey keyRules { })
+        { notWarnings = [ "are not checked" ]; })
+      (expect "alwaysok without any key row: the lock screen's warning alone"
+        (withKey { } { alwaysok = true; })
+        { warnings = [ lockSays ]; notWarnings = [ "row 1" ]; })
+      (expect "alwaysok with security.pam.u2f off: no lock screen warning (it has no key check)"
+        { security.pam.u2f.settings.alwaysok = true; }
+        { notWarnings = [ lockSays ]; })
       (expect "a u2f setting with a line break: refused"
         (keyRules // { security.pam.u2f = { enable = true; settings.authfile = "/etc/keys\nauth sufficient pam_permit.so"; }; })
         { refusals = [ "security.pam.u2f.settings: authfile is not a plain option name, or holds a tab or a line break" ]; })
@@ -296,7 +372,8 @@ let
     ];
 
   # The machine's pam_u2f settings on a key row, as the lock screen takes them: authfile and
-  # appid there, `cue` always, never `interactive`; with them left out, the editor's line
+  # appid there, `cue` always; `interactive` kept on the row, left out (and said) on the lock
+  # screen; with them left out, the editor's line
   u2fSettings =
     let
       config = configOf {
@@ -306,11 +383,15 @@ let
       line = lib.findFirst ours "" (authLines config "sudo");
       words = lib.filter (word: word != "") (lib.splitString " " (normalized line));
       settings = [ "authfile=/etc/u2f-keys" "appid=pam://machine" ];
-      without = lib.concatStringsSep " " (lib.filter (word: !(lib.elem word settings)) words);
-      lock = lib.filter (text: lib.hasInfix "pam_u2f.so" text) (lib.splitString "\n" config.security.pam.services.h2s-shell-u2f.text);
+      without = lib.concatStringsSep " " (lib.filter (word: !(lib.elem word (settings ++ [ "interactive" ]))) words);
+      lockText = config.security.pam.services.h2s-shell-u2f.text;
+      lock = lib.filter (text: lib.hasInfix "pam_u2f.so" text) (lib.splitString "\n" lockText);
     in [
       (result (lib.all (word: lib.elem word words) settings) "a key row takes the machine's u2f settings (authfile, appid)" line)
-      (result (lib.elem "cue" words && !(lib.elem "interactive" words)) "… always cue, never interactive" line)
+      (result (lib.elem "cue" words && lib.elem "interactive" words) "… always cue, interactive as the machine has it" line)
+      (result (lock != [ ] && !(lib.hasInfix "interactive" (lib.head lock))
+          && lib.hasInfix "# interactive is left out here: the lock screen cannot answer its Enter prompt" lockText)
+        "… the lock screen's leaves interactive out, and says so in the file" (builtins.toJSON lockText))
       (result (without == "auth sufficient pam_u2f.so cue pinverification=1") "… without them, the editor's line" without)
       (result (lock != [ ] && lib.all (word: lib.hasInfix word (lib.head lock)) settings) "… as the lock screen's key check has them" (builtins.toJSON lock))
     ];

@@ -299,12 +299,13 @@ TestCase {
         const names = stack => stack.lines.map(line => line.moduleName).join(" ");
         const ok = { ok: true, truncated: false };
         let answer = rules.filesAnswer(["directory\t/etc/pam.d", "directory\t/usr/lib/pam.d", "faillock\t/etc/security/faillock.conf",
+                                        "u2fconf\t/etc/security/pam_u2f.conf",
                                         "file\t/etc/pam.d/sudo\ttext", "|auth include system-auth", "|", "end\t/etc/pam.d/sudo",
                                         "file\t/usr/lib/pam.d/sudo\tabsent", "file\t/etc/x\tunreadable",
                                         "file\t/etc/not-asked\ttext", "|auth required pam_deny.so", "end\t/etc/not-asked"],
                                        ok, ["/etc/pam.d/sudo", "/usr/lib/pam.d/sudo", "/etc/x", "/etc/never-answered"]);
-        assertEqual(JSON.stringify(answer.places), JSON.stringify({ directories: ["/etc/pam.d", "/usr/lib/pam.d"], faillockPath: "/etc/security/faillock.conf" }),
-                    "pam-files.sh's answer: the directories in order and faillock.conf");
+        assertEqual(JSON.stringify(answer.places), JSON.stringify({ directories: ["/etc/pam.d", "/usr/lib/pam.d"], faillockPath: "/etc/security/faillock.conf", u2fConfPath: "/etc/security/pam_u2f.conf" }),
+                    "pam-files.sh's answer: the directories in order, faillock.conf and pam_u2f.conf");
         assertEqual(JSON.stringify(answer.answers["/etc/pam.d/sudo"]), JSON.stringify({ text: "auth include system-auth\n\n" }), "… a file's text, its blank line kept");
         assertEqual(JSON.stringify(answer.answers["/usr/lib/pam.d/sudo"]) + JSON.stringify(answer.answers["/etc/x"]),
                     "{\"absent\":true}{\"unreadable\":true}", "… absent and unreadable told apart");
@@ -353,6 +354,54 @@ TestCase {
         assertEqual(PamStackRules.candidates("sudo").length, 0, "… no candidates either");
         step = rules.readingStep({ services: [], lock: { password: "/shell/pam/password", bad: "relative" }, directories: ["/e"] }, {}, false);
         assertEqual(step.pending.join(" ") + " " + Object.keys(step.lock).join(","), "/shell/pam/password password", "a lock config read at its own path; a relative one left out");
+
+        // pam_u2f's settings: the line's words over its settings file's
+        const passes = options => options === null ? "null" : !options.known ? "unknown"
+            : ["alwaysok", "nouserok", "touchOff", "interactive"].filter(name => options[name]).join(",") || "none";
+        assertEqual(passes(rules.u2fOptions(["cue", "authfile=/etc/keys"], undefined)), "none", "u2fOptions: a plain line, no settings file");
+        assertEqual(passes(rules.u2fOptions(["cue"], "# alwaysok\n  nouserok  \nuserpresence = 0 # off\n")), "nouserok,touchOff",
+                    "… the file's options, trimmed, comments cut, spaces around = dropped");
+        assertEqual(passes(rules.u2fOptions(["alwaysok", "userpresence=1"], "")), "alwaysok", "… the line's own words; userpresence=1 keeps the touch");
+        assertEqual(passes(rules.u2fOptions(["nouserok=1", "Alwaysok"], "")), "none", "… only the bare words count, as pam_u2f compares them");
+        assertEqual(passes(rules.u2fOptions(["cue"], null)), "unknown", "… a settings file that could not be read: not known");
+        assertEqual(passes(rules.u2fOptions(["userpresence=1"], "userpresence=0\n")) + " " + passes(rules.u2fOptions(["userpresence=0"], "userpresence=1\n")),
+                    "none touchOff", "… the line's userpresence over the file's: the last one decides");
+        assertEqual(["userpresence=2", "userpresence=x", "userpresence=10", "userpresence=-0", "userpresence=0x"].map(word => passes(rules.u2fOptions([word], undefined))).join(" "),
+                    "none none none touchOff touchOff", "… only a value sscanf reads as 0 turns the touch off");
+        assertEqual(passes(rules.u2fOptions(["cue"], "interactive\n")), "interactive", "… interactive, from the file too");
+        assertEqual(rules.u2fConfOf(["cue", "conf=/a", "conf=/b"]) + "|" + rules.u2fConfOf(["cue"]), "/b|", "u2fConfOf: the last conf=, else the default");
+        const u2fRequest = nixos => ({ services: [], lock: { u2f: "/e/h2s-shell-u2f" }, directories: ["/e"], faillockPath: "", u2fConfPath: "/u.conf", nixos });
+        const u2fAnswers = { "/e/h2s-shell-u2f": { text: "auth required /nix/store/x-pam_u2f/lib/security/pam_u2f.so cue alwaysok\n" },
+                             "/u.conf": { text: "userpresence=0\n" } };
+        step = rules.readingStep(u2fRequest(false), u2fAnswers, false);
+        assertEqual([passes(step.u2f.lock), passes(step.u2f.rows), passes(step.u2f.conf)].join(" "), "alwaysok,touchOff touchOff touchOff",
+                    "readingStep (Arch): the lock's line over pam_u2f.conf; the own row and raw lines by pam_u2f.conf alone");
+        step = rules.readingStep(u2fRequest(true), u2fAnswers, false);
+        assertEqual([passes(step.u2f.lock), passes(step.u2f.rows), passes(step.u2f.conf)].join(" "), "alwaysok alwaysok none",
+                    "… (NixOS): the module's h2s-shell-u2f for the own row, no default settings file read");
+        step = rules.readingStep(Object.assign(u2fRequest(true), { lock: {} }), { "/e/h2s-shell-u2f": { absent: true } }, false);
+        assertEqual(step.u2f.lock + " " + passes(step.u2f.rows), "null unknown", "… no key method on the lock: null; no h2s-shell-u2f: not known");
+        step = rules.readingStep(u2fRequest(false), { "/e/h2s-shell-u2f": u2fAnswers["/e/h2s-shell-u2f"], "/u.conf": { unreadable: true } }, false);
+        assertEqual(passes(step.u2f.lock) + " " + passes(step.u2f.conf), "unknown unknown", "… an unreadable pam_u2f.conf: not known");
+        step = rules.readingStep(u2fRequest(false), { "/e/h2s-shell-u2f": u2fAnswers["/e/h2s-shell-u2f"], "/u.conf": { absent: true } }, false);
+        assertEqual([passes(step.u2f.lock), passes(step.u2f.rows), passes(step.u2f.conf)].join(" "), "alwaysok none none",
+                    "… no pam_u2f.conf: the line's words alone, clean for the own row");
+        step = rules.readingStep(Object.assign(u2fRequest(false), { u2fConfPath: null }), u2fAnswers, false);
+        assertEqual([passes(step.u2f.lock), passes(step.u2f.rows), passes(step.u2f.conf)].join(" "), "unknown unknown unknown",
+                    "… pam_u2f.conf's place not said: not known");
+        step = rules.readingStep(Object.assign(u2fRequest(null)), u2fAnswers, false);
+        assertEqual([passes(step.u2f.lock), passes(step.u2f.rows), passes(step.u2f.conf)].join(" "), "unknown unknown unknown",
+                    "… the system not known: not known");
+        step = rules.readingStep(u2fRequest(false), { "/e/h2s-shell-u2f": { text: "auth required pam_u2f.so cue conf=/other.conf\n" },
+                                                     "/u.conf": { text: "alwaysok\n" }, "/other.conf": { text: "nouserok\n" } }, false);
+        assertEqual(passes(step.u2f.lock), "nouserok", "… the lock's line names its own settings file: that one, not pam_u2f.conf");
+        assertEqual(step.pending.length, 0, "… nothing more to read");
+        step = rules.readingStep(u2fRequest(true), { "/e/h2s-shell-u2f": { text: rules.u2fInteractiveDropped + "\nauth required /x/pam_u2f.so cue\n" } }, false);
+        assertEqual(step.u2f.lock.interactiveDropped + " " + passes(step.u2f.lock), "true none", "… the module's note that it left interactive out");
+        step = rules.readingStep(u2fRequest(true), { "/e/h2s-shell-u2f": { text: "auth required /x/pam_u2f.so cue\n" } }, false);
+        assertEqual(step.u2f.lock.interactiveDropped, false, "… without it: nothing left out");
+        answer = rules.filesAnswer(["directory\t/etc/pam.d", "faillock\t/f"], { ok: true, truncated: false }, []);
+        assertEqual(answer.places.u2fConfPath, null, "pam-files.sh's answer without pam_u2f.conf's place: null, not known");
 
         // The methods script
         const exited = code => ({ ok: code === 0, code: code });

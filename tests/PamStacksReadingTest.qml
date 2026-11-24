@@ -101,6 +101,7 @@ TestCase {
             H2S_LOCK_SYSTEM_PAM_DIR: base + "/etc",
             H2S_LOCK_VENDOR_PAM_DIR: base + "/usr",
             H2S_LOCK_FAILLOCK_CONF: base + "/faillock.conf",
+            H2S_LOCK_U2F_CONF: base + "/pam_u2f.conf",
             H2S_LOCK_AUTH_METHODS: _scratch + "/methods"
         };
     }
@@ -144,9 +145,13 @@ TestCase {
             assertEqual(reading.services.sudo.file + " " + reading.services.sudo.known, arch + "/etc/sudo true", "sudo from /etc/pam.d, known");
             assertEqual(reading.faillock["polkit-1"].deny + " " + reading.faillock["polkit-1"].unlockTime, "5 120",
                         "pam_faillock's settings from faillock.conf (the seam's)");
-            assertEqual(JSON.stringify(reading.facts), JSON.stringify({ nixos: false, moduleDirectories: ["/usr/lib/security/", "/lib/security/"],
-                                                                         fingerprint: "ready", securityKey: "absent" }),
+            const facts = reading.facts;
+            assertEqual(JSON.stringify({ nixos: facts.nixos, moduleDirectories: facts.moduleDirectories, fingerprint: facts.fingerprint, securityKey: facts.securityKey }),
+                        JSON.stringify({ nixos: false, moduleDirectories: ["/usr/lib/security/", "/lib/security/"], fingerprint: "ready", securityKey: "absent" }),
                         "facts: not NixOS (as the distribution answered), its PAM module directories, a fingerprint ready, no security key");
+            const u2f = reading.facts.u2f;
+            assertEqual([String(u2f.lock), u2f.rows.known, u2f.rows.alwaysok, u2f.conf.alwaysok, u2f.rows.nouserok].join(" "), "null true true true false",
+                        "pam_u2f.conf read (the seam's): its alwaysok for the own key row and raw lines; no key method on the lock: null");
             assertEqual(reading.directories.length, 2, "… both directories read");
             assertEqual(reading.lock.fingerprint.known + " " + _names(reading.lock.fingerprint), "true pam_fprintd.so",
                         "the lock's fingerprint config, at the path the methods script gave");
@@ -173,6 +178,9 @@ TestCase {
             const polkit = reading.services["polkit-1"];
             assertEqual(reading.facts.nixos, true, "NixOS (as the distribution answered)");
             assertEqual(reading.directories.length, 1, "… /etc/pam.d only");
+            const u2f = reading.facts.u2f;
+            assertEqual([u2f.rows.known, u2f.rows.touchOff, u2f.rows.nouserok, u2f.conf.known, u2f.conf.nouserok].join(" "), "true true false true false",
+                        "NixOS: the own key row by the module's h2s-shell-u2f (userpresence=0); pam_u2f.conf not read there");
             assertEqual(polkit.known + " " + _names(polkit), "true pam_fprintd.so pam_unix.so pam_deny.so", "NixOS' generated polkit-1, store paths");
             assertEqual(_order(reading), "fingerprint-first", "… the reader first");
             assert(PolkitRules.pamStackHint(_order(reading), true).includes("programs.h2s-shell.polkit.passwordFirst"), "… the hint names the module's option");
@@ -230,6 +238,9 @@ TestCase {
             assertEqual(reading.directories.length, 0, "the distribution not known: no PAM directory counts, never a default system's");
             assertEqual(reading.services["polkit-1"].known + " " + reading.services["polkit-1"].file, "false ", "… polkit-1 not found: unknown");
             assertEqual(JSON.stringify([reading.facts.nixos, reading.facts.moduleDirectories]), "[null,[]]", "… not known whether NixOS, no module directories");
+            const u2f = reading.facts.u2f;
+            assertEqual([u2f.rows.known, u2f.conf.known].join(" "), "false false",
+                        "… pam_u2f's settings not known (W18), never clean, though pam_u2f.conf is there");
         });
         _clock.start();
         _sh([
@@ -252,12 +263,15 @@ TestCase {
             + " 'account    required                    pam_unix.so' > \"$s/arch/etc/system-auth\"",
             "printf 'auth required pam_fprintd.so\\n' > \"$s/arch/etc/h2s-shell-fingerprint\"",
             "printf '# faillock.conf\\ndeny = 5\\nunlock_time = 120\\n' > \"$s/arch/faillock.conf\"",
+            "printf '# pam_u2f.conf\\nalwaysok # presentation\\n' > \"$s/arch/pam_u2f.conf\"",
             // NixOS: generated, store paths; a vendor file that must not be read
             "mkdir -p \"$s/nixos/etc\" \"$s/nixos/usr\"",
             "printf '# Account management.\\naccount required /nix/store/aaa-linux-pam/lib/security/pam_unix.so\\n\\n# Authentication management.\\n"
             + "auth sufficient /nix/store/bbb-fprintd/lib/security/pam_fprintd.so\\nauth sufficient /nix/store/aaa-linux-pam/lib/security/pam_unix.so likeauth try_first_pass\\n"
             + "auth required /nix/store/aaa-linux-pam/lib/security/pam_deny.so\\n' > \"$s/nixos/etc/polkit-1\"",
             "printf 'auth sufficient pam_permit.so\\n' > \"$s/nixos/usr/sudo\"",
+            "printf 'auth required /nix/store/ccc-pam_u2f/lib/security/pam_u2f.so cue userpresence=0\\n' > \"$s/nixos/etc/h2s-shell-u2f\"",
+            "printf 'nouserok\\n' > \"$s/nixos/pam_u2f.conf\"",
             // Debian: @include, no vendor directory
             "mkdir -p \"$s/debian/etc\"",
             "printf '#%%PAM-1.0\\n@include common-auth\\n@include common-account\\n' > \"$s/debian/etc/polkit-1\"",

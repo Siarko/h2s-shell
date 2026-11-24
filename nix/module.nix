@@ -7,8 +7,10 @@ self:
 let
   cfg = config.programs.h2s-shell;
 
-  # security.pam.u2f.settings as module arguments, with the two the lock needs forced
-  u2fArguments = (import ./u2f.nix lib config.security.pam.u2f.settings).arguments { cue = true; interactive = false; };
+  # security.pam.u2f.settings as module arguments, as they are but for the two the lock
+  # needs: `cue`, and no `interactive`
+  u2f = import ./u2f.nix lib config.security.pam.u2f.settings;
+  u2fArguments = u2f.arguments { cue = true; interactive = false; };
 
   # The system's delay before a sleep the shell starts turns into hibernation: sleep.conf's
   # HibernateDelaySec, through whichever option this NixOS has for it
@@ -108,16 +110,26 @@ in
           auth required ${config.services.fprintd.package}/lib/security/pam_fprintd.so timeout=-1
         '';
       };
-      # pam_u2f with the machine's settings (where the keys are: authfile, appid, origin…),
-      # but always `cue` (it says when to touch the key) and never `interactive` (it would
-      # wait for Enter). A key that needs a PIN cannot work here.
+      # pam_u2f with the machine's settings as they are (where the keys are: authfile,
+      # appid, origin…), but always `cue` (it says when to touch the key) and never
+      # `interactive` (it would wait for Enter). A key that needs a PIN cannot work here.
+      # The one line must pass, so `nouserok` (PAM_IGNORE for a user without a key) leaves
+      # no result and the check fails; `alwaysok` and a touch turned off are warnings.
+      # `interactive` is the one setting left out; the file says so, where Settings reads it.
       h2s-shell-u2f = lib.mkIf config.security.pam.u2f.enable {
         text = lib.mkOverride 900 ''
           # The lock screen's security key check (h2s-shell's NixOS module)
+          ${lib.optionalString u2f.interactive "# interactive is left out here: the lock screen cannot answer its Enter prompt"}
           auth required ${lib.concatStringsSep " " ([ "${pkgs.pam_u2f}/lib/security/pam_u2f.so" ] ++ u2fArguments)}
         '';
       };
     };
+    warnings = lib.optionals config.security.pam.u2f.enable (
+      lib.optional u2f.alwaysok
+        "security.pam.u2f.settings has alwaysok: the lock screen's security key unlocks without a key."
+      ++ lib.optional u2f.touchOff
+        "security.pam.u2f.settings have userpresence = 0, which may turn the touch off: while a key is plugged in, the lock screen may unlock without a touch."
+    );
   }
   (lib.mkIf (cfg.idle.hibernateDelay != null) sleepConfig)
   ]);

@@ -927,20 +927,37 @@ ColumnLayout {
     }
     Repeater {
         model: ScriptModel { values: ["", "lockscreen.offerFingerprint", "lockscreen.offerSecurityKey"] }
-        SwitchRow {
+        ColumnLayout {
             id: _unlock
             required property string modelData
             readonly property var row: PamRuleViewRules.unlockRows(root._base, {
                 "lockscreen.offerFingerprint": root.settingValue("lockscreen.offerFingerprint"),
                 "lockscreen.offerSecurityKey": root.settingValue("lockscreen.offerSecurityKey")
             }).find(item => item.key === modelData)
-            objectName: "unlock:" + row.method
-            label: PamRuleViewRules.icon(row.method) + "  " + row.label
-            hint: row.hint
-            checked: row.checked
-            enabled: row.available
-            opacity: row.available ? 1 : 0.6
-            onToggled: if (row.available) root.writeSetting(row.key, !row.checked)
+            Layout.fillWidth: true
+            spacing: 0
+            SwitchRow {
+                objectName: "unlock:" + _unlock.row.method
+                label: PamRuleViewRules.icon(_unlock.row.method) + "  " + _unlock.row.label
+                hint: _unlock.row.hint
+                checked: _unlock.row.checked
+                enabled: _unlock.row.available
+                opacity: _unlock.row.available ? 1 : 0.6
+                onToggled: if (_unlock.row.available) root.writeSetting(_unlock.row.key, !_unlock.row.checked)
+            }
+            // What the system's settings let this way do without a key or a touch
+            Text {
+                objectName: "unlockWarning:" + _unlock.row.method
+                visible: _unlock.row.warning !== ""
+                Layout.fillWidth: true
+                Layout.bottomMargin: 6
+                wrapMode: Text.WordWrap
+                text: _unlock.row.warning
+                textFormat: Text.PlainText
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.fontSizeSmall
+                color: Theme.warning
+            }
         }
     }
 }

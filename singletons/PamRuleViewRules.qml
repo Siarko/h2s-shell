@@ -284,7 +284,7 @@ Singleton {
     }
 
     // A service's facts for PamRuleRules.check and PamEditRules.build: the machine's (`base`:
-    // { nixos, moduleDirectories, fingerprint, securityKey }), its faillock (`faillock`: PamStacks' settings or
+    // { nixos, moduleDirectories, fingerprint, securityKey, u2f }), its faillock (`faillock`: PamStacks' settings or
     // null; present: the stack counts), the other service's rows, polkit's vendor text
     function serviceFacts(base, service, stack, faillock, otherRows, vendorText, changedByHand) {
         return {
@@ -293,6 +293,7 @@ Singleton {
             service,
             fingerprint: base?.fingerprint ?? "unknown",
             securityKey: base?.securityKey ?? "unknown",
+            u2f: base?.u2f ?? undefined,
             faillockPresent: stack?.faillock?.present === true,
             faillock: faillock ?? null,
             otherService: otherRows,
@@ -506,18 +507,44 @@ Singleton {
     }
 
     // The lock screen's ways to unlock: [{ key ("" for the password), method, label, hint,
-    // checked, available }]. `values`: { "lockscreen.offerFingerprint", … } as set
+    // warning, checked, available }]. `values`: { "lockscreen.offerFingerprint", … } as set.
+    // `facts.u2f.lock`: what the system's pam_u2f settings let the lock's key check do
+    // (PamStackRules.u2fOptions'). Its one line must pass, so `nouserok` (PAM_IGNORE for a
+    // user without a key) leaves no result and the check fails: only alwaysok and a touch
+    // turned off are said
     function unlockRows(facts, values) {
-        const row = (key, method, label, state, readyHint, absentHint) => ({
+        const row = (key, method, label, state, readyHint, absentHint, warning) => ({
             key, method, label,
             hint: state === "ready" ? readyHint : state === "absent" ? absentHint : "Not known on this computer",
+            warning: state === "ready" ? warning : "",
             checked: state === "ready" && values?.[key] !== false,
             available: state === "ready"
         });
         return [
             { key: "", method: "password", label: "Password", hint: "Always offered", checked: true, available: false },
-            row("lockscreen.offerFingerprint", "fingerprint", "Fingerprint", facts?.fingerprint, "A finger is enrolled", "No finger enrolled"),
-            row("lockscreen.offerSecurityKey", "securityKey", "Security key", facts?.securityKey, "A key is registered", "No key registered")
+            row("lockscreen.offerFingerprint", "fingerprint", "Fingerprint", facts?.fingerprint, "A finger is enrolled", "No finger enrolled", ""),
+            row("lockscreen.offerSecurityKey", "securityKey", "Security key", facts?.securityKey, "A key is registered", "No key registered",
+                keyUnlockWarning(facts?.u2f?.lock))
         ];
+    }
+
+    // The security key switch's warning for the lock's key check, every point that holds in
+    // one text: "" when its settings ask for a key and a touch and nothing is left out, or are
+    // not read yet
+    function keyUnlockWarning(lock) {
+        if (!lock)
+            return "";
+        if (lock.known !== true)
+            return "The system's pam_u2f settings could not be read: it may unlock without a key or a touch.";
+        const said = [];
+        if (lock.interactive)
+            said.push("The key will not work here: the system's pam_u2f settings have interactive, and the lock screen cannot answer its Enter prompt.");
+        if (lock.alwaysok)
+            said.push("Unlocks without a key: the system's pam_u2f settings have alwaysok.");
+        if (lock.touchOff)
+            said.push("May unlock without a touch while a key is plugged in: the system's pam_u2f settings have userpresence=0.");
+        if (lock.interactiveDropped)
+            said.push("interactive is off for the lock screen: it cannot answer the Enter prompt.");
+        return said.join(" ");
     }
 }

@@ -323,14 +323,16 @@ Singleton {
     // without the arguments that let it pass with no key or no touch; pam_userdb with its
     // database under /etc), "no" (another of libpam's modules, or one of those made to pass
     // by its arguments), "unknown" (a module the shell does not know). The arguments as the
-    // modules read them: pam_u2f's words exactly (`nouserok`, `alwaysok`; `userpresence=`
-    // through sscanf, so anything but a plain 1 may be off), pam_userdb's without case (every
+    // modules read them: pam_u2f's words exactly (`nouserok`, `alwaysok`; the last
+    // `userpresence=` read as 0 by sscanf), pam_userdb's without case (every
     // `db=` counts: the last one wins)
     function credentialOf(line) {
         const name = line.moduleName, args = line.args ?? [];
         if (name === "pam_u2f.so") {
-            const passes = args.includes("nouserok") || args.includes("alwaysok")
-                || args.some(word => word.startsWith("userpresence=") && word !== "userpresence=1");
+            const options = PamStackRules.u2fOptions(args, undefined);
+            // nouserok's PAM_IGNORE passes a user without a key only where the line must pass
+            // and takes it as no answer (a sufficient line goes on to the next one)
+            const passes = (options.nouserok && onIgnore(line) === "ignore" && lineFails(line)) || options.alwaysok || options.touchOff;
             return passes ? "no" : "yes";
         }
         if (name === "pam_userdb.so") {
@@ -342,6 +344,29 @@ Singleton {
         if (credentialModules.includes(name))
             return "yes";
         return libpamModules.includes(name) ? "no" : "unknown";
+    }
+
+    // What a line does with a module's PAM_IGNORE: "ignore" (no answer: a plain word, or a
+    // bracketed ignore=ignore) or the bracketed action (libpam sets a bracketed control's
+    // unnamed codes to bad). In auth an ok or done on PAM_IGNORE leaves PAM_IGNORE as the
+    // result, a failure (libpam's pam_dispatch.c: pam_authenticate runs with use_cached_chain
+    // 0, the run that records the chain, so cached_retval is the module's own answer and
+    // PAM_IGNORE passes its `retval != PAM_IGNORE || cached_retval == retval` test), so only
+    // "ignore" lets a later row or the permit closing decide
+    function onIgnore(line) {
+        const actions = line?.actions ?? {};
+        return line?.controlKind === "simple" || line?.actions === undefined ? "ignore" : (actions.ignore ?? actions.default ?? "bad");
+    }
+
+    // Whether a wrong credential fails the stack at a line: a plain required or requisite, or
+    // a bracketed control whose action for the code a wrong credential returns (auth_err,
+    // else default, else libpam's bad) is bad or die
+    function lineFails(line) {
+        if (line?.controlKind === "simple" || line?.actions === undefined)
+            return line?.control === "required" || line?.control === "requisite";
+        const actions = line.actions ?? {};
+        const onWrong = actions.auth_err ?? actions.default ?? "bad";
+        return onWrong === "bad" || onWrong === "die";
     }
 
     // The package a store path comes from, for W11's hint: "pam_ldap" for
@@ -451,7 +476,17 @@ Singleton {
         W12: "Not in the system's module folders: if your user can write this file, any of your programs can replace it without a password, and it runs as root at the next sudo or administrator prompt.",
         // {module}: the line's module, by its file name
         W13: "If {module} answers that it does not apply to someone, the list ends without a refusal and lets them in. Add the row \"Password (as the system)\", or make sure {module} refuses users it does not know.",
-        W14: "Waits for the finger until it is touched or the prompt is cancelled: the password is asked only after that."
+        W14: "Waits for the finger until it is touched or the prompt is cancelled: the password is asked only after that.",
+        // {where}: "the system's pam_u2f settings have" or "this line has"
+        W15: "This row lets anyone in without a key: {where} alwaysok.",
+        W16: "While a key is plugged in, any program may pass this row without a touch: {where} userpresence=0.",
+        W17: "A user without a registered key passes this row and gets in: {where} nouserok.",
+        W18: "The system's pam_u2f settings could not be read: the checks cannot tell whether this row needs a key and a touch.",
+        W18conf: "This line reads its own settings file (conf=), which the checks do not read: they cannot tell whether it needs a key and a touch.",
+        W19: "This row no longer asks for a key: {where} alwaysok. Only the other rows decide.",
+        W20: "This row may no longer ask for a touch: {where} userpresence=0. Only the other rows decide.",
+        W21: "A user without a registered key skips this row: {where} nouserok. Only the other rows decide.",
+        W22: "This line asks for nothing: only the other rows decide."
     })
 
     function _detailProblem(method, name, value) {
@@ -477,11 +512,20 @@ Singleton {
     // that fails), firstPass (a raw pam_unix use_first_pass: only checks a password asked
     // above), nullok, unknownMust (a raw line of a module the shell does not know that
     // fails the stack but lets PAM_IGNORE pass as no answer: plain required/requisite, or a
-    // bracketed control whose ignore — or default, else bad — is neither bad nor die), refusals }
+    // bracketed control whose ignore — or default, else bad — is ignore: an ok or done
+    // leaves PAM_IGNORE as the result, a failure; onIgnore),
+    // ignoreNoAnswer (fails the stack on a wrong credential but takes PAM_IGNORE as no
+    // answer: a raw line's plain required/requisite or bracketed ignore=ignore; an ok or done
+    // leaves PAM_IGNORE as a failure; never an own row, written with ignore=bad), key (a key line: own key row or a raw pam_u2f line from the system's
+    // folders), u2fLine (a raw pam_u2f line's own words, PamStackRules.u2fOptions'), u2f (what
+    // the system's pam_u2f settings let a key line do — the own row facts.u2f.rows, a raw line
+    // facts.u2f.conf, or not known when it names a settings file of its own; null before the
+    // settings were read), refusals }
     function _role(row, service, facts) {
         const role = { method: "unknown", raw: false, atOnce: false, okOnSuccess: false, fails: false,
                        credential: "unknown", denies: false, firstPass: false, nullok: false, unknownMust: false,
-                       moduleName: "", refusals: [], warnings: [] };
+                       moduleName: "", ignoreNoAnswer: false, key: false, ownConf: false, u2fLine: null, u2f: null,
+                       refusals: [], warnings: [] };
         const method = row?.method;
         if (method === "system") {
             role.method = "system";
@@ -503,8 +547,7 @@ Singleton {
                 const onSuccess = actions.success ?? actions.default;
                 role.atOnce = line.control === "sufficient" || onSuccess === "done";
                 role.okOnSuccess = !role.atOnce && onSuccess === "ok";
-                role.fails = line.control === "required" || line.control === "requisite"
-                    || Object.keys(actions).some(key => key !== "success" && (actions[key] === "bad" || actions[key] === "die"));
+                role.fails = lineFails(line);
                 role.credential = judged.credential;
                 // A module from outside the system's folders is judged by nothing its name says
                 const named = judged.warning === null ? line.moduleName : "";
@@ -513,9 +556,18 @@ Singleton {
                 role.firstPass = named === "pam_unix.so" && line.args.includes("use_first_pass");
                 role.nullok = named === "pam_unix.so" && line.args.includes("nullok");
                 role.moduleName = line.moduleName;
-                // libpam sets a bracketed control's unnamed codes to bad
-                const onIgnore = line.controlKind === "simple" ? "ignore" : (actions.ignore ?? actions.default ?? "bad");
-                role.unknownMust = role.fails && onIgnore !== "bad" && onIgnore !== "die" && judged.credential === "unknown";
+                const ignored = onIgnore(line);
+                role.unknownMust = role.fails && ignored === "ignore" && judged.credential === "unknown";
+                role.ignoreNoAnswer = role.fails && ignored === "ignore";
+                if (named === "pam_u2f.so") {
+                    role.key = true;
+                    role.ownConf = PamStackRules.u2fConfOf(line.args) !== "";
+                    role.u2fLine = PamStackRules.u2fOptions(line.args, undefined);
+                    if (facts?.u2f) {
+                        role.u2f = PamStackRules.u2fConfOf(line.args) === ""
+                            ? (facts.u2f.conf ?? null) : PamStackRules.u2fOptions([], null);
+                    }
+                }
             }
             return role;
         }
@@ -537,6 +589,9 @@ Singleton {
             role.refusals.push({ code: "R4", text: texts.R4counted });
         role.atOnce = row.control === "sufficient";
         role.fails = row.control === "required" || row.control === "requisite";
+        role.key = method === "securityKey";
+        if (role.key && facts?.u2f)
+            role.u2f = facts.u2f.rows ?? null;
         return role;
     }
 
@@ -584,7 +639,8 @@ Singleton {
 
     // Every refusal and warning for one service's rows. `facts`: { system ("nixos" / …),
     // moduleDirectories (the distribution's PAM module directories; none: not known), service ("sudo" / "polkit-1"), fingerprint, securityKey ("ready" / "absent" /
-    // "unknown"), faillockPresent (the system's rules count with pam_faillock), faillock
+    // "unknown"), u2f (the system's pam_u2f settings: { rows, conf }, PamStackRules'
+    // u2fOptions each; absent: not read yet, no key line judged by them), faillockPresent (the system's rules count with pam_faillock), faillock
     // (PamStackRules.faillockConfig's numbers, or null), otherService (the other service's
     // rows, in force or pending: the same rows for a shared list; not a list = not known),
     // changedByHand, sharedApplyStopped (a shared Apply stopped between the two
@@ -623,16 +679,66 @@ Singleton {
                 refuse("R4", i, texts.R4fixed);
         });
 
-        // R9: a raw line that can let the user in (sufficient, a bracketed done or ok on
-        // success; required or requisite without the fixed row, where the permit closing
-        // keeps its result) with a module that asks for no credential, or made by its
-        // arguments to pass without one. Jumps are refused (R8), so no row is skipped between.
+        // Whether a row lets the user in on its own once it passes: at once (sufficient, a
+        // bracketed done), or a row that must pass or is ok on success (where the closing
+        // keeps it) with no other row that must pass and still asks. A key row does not ask
+        // when pam_u2f's settings void it: alwaysok, nouserok where it takes PAM_IGNORE as no
+        // answer; for the touch, userpresence=0 too
         const fixedPresent = fixedIndex >= 0;
+        const flagged = (role, flag) => role.key && (role.u2fLine?.[flag] === true || (role.u2f?.known === true && role.u2f[flag] === true));
+        const asks = role => role.fails && !role.denies && (role.method === "system" || !role.raw || role.credential !== "no")
+            && !flagged(role, "alwaysok") && !(role.ignoreNoAnswer && flagged(role, "nouserok"));
+        const asksTouch = role => asks(role) && !flagged(role, "touchOff");
+        const decides = role => role.fails || (role.okOnSuccess && analysed.closing !== "deny");
+        const alone = (role, i, asking) => role.atOnce || (decides(role) && !roles.some((other, j) => j !== i && asking(other)));
+
+        // R9: a raw line that lets the user in on its own with a module that asks for no
+        // credential, or made by its arguments to pass without one. Beside a row that still
+        // asks it no longer checks anything: W22 (a key line: W19–W21 below). Jumps are refused
+        // (R8), so no row is skipped between.
+        const refusedR9 = [];
         roles.forEach((role, i) => {
             if (!role.raw || role.credential !== "no" || role.refusals.length > 0 || role.denies)
                 return;
-            if (role.atOnce || role.okOnSuccess || (role.fails && !fixedPresent))
+            if (alone(role, i, asks)) {
                 refuse("R9", i, texts.R9);
+                refusedR9.push(i);
+            } else if (decides(role) && !role.key) {
+                warn("W22", i, texts.W22);
+            }
+        });
+
+        // W15–W21: a key line whose own check pam_u2f's settings void — the system's, or a raw
+        // line's own words where R9 does not already refuse it. Where its pass lets the user in
+        // on its own: anyone without a key (alwaysok, W15), any program without a touch
+        // (userpresence=0, W16), a user without a key (nouserok where PAM_IGNORE is no answer,
+        // W17). Where another row still asks: it no longer asks, only the other rows decide
+        // (W19, W20, W21). Settings not read: W18. Warnings, not refusals: the settings are the
+        // system's, not the row's
+        roles.forEach((role, i) => {
+            if (!role.key || role.refusals.length > 0 || refusedR9.includes(i))
+                return;
+            const system = role.u2f?.known === true ? role.u2f : null;
+            const say = (code, flag) => {
+                const fromLine = role.u2fLine?.[flag] === true;
+                if (!fromLine && system?.[flag] !== true)
+                    return;
+                const where = fromLine ? "this line has" : "the system's pam_u2f settings have";
+                warn(code, i, texts[code].replace("{where}", () => where));
+            };
+            const byItself = alone(role, i, asks);
+            if (role.u2f !== null && role.u2f.known !== true && (role.atOnce || decides(role)))
+                warn("W18", i, role.ownConf ? texts.W18conf : texts.W18);
+            if (byItself)
+                say("W15", "alwaysok");
+            else if (decides(role))
+                say("W19", "alwaysok");
+            if (alone(role, i, asksTouch))
+                say("W16", "touchOff");
+            else if (decides(role))
+                say("W20", "touchOff");
+            if (role.ignoreNoAnswer)
+                say(byItself ? "W17" : "W21", "nouserok");
         });
 
         // R1: a raw pam_deny that fails refuses everyone

@@ -397,7 +397,8 @@ Singleton {
     // maxDepth deep; faillock.conf one more)
     readonly property int maxRounds: maxDepth + 3
 
-    // One run of the script → { places: { directories, faillockPath } or null (not in this
+    // One run of the script → { places: { directories, faillockPath, u2fConfPath (null: not
+    // said) } or null (not in this
     // run's answer), answers: { path: { text } | { absent: true } | { unreadable: true } } }.
     // `asked`: the paths the run was asked for; each gets an answer, `unreadable` when the
     // run has no complete record of it (a run that failed, was cut short or timed out has
@@ -408,7 +409,8 @@ Singleton {
         const usable = result !== null && typeof result === "object" && result.ok === true && result.truncated !== true;
         const list = usable && Array.isArray(lines) ? lines : [];
         const directories = [];
-        let faillockPath = "", placed = false, open = null, body = [];
+        // pam_u2f.conf's place: null when the answer has none (not known, never "no file")
+        let faillockPath = "", u2fConfPath = null, placed = false, open = null, body = [];
         for (const raw of list) {
             const line = String(raw).replace(/\r$/, "");
             if (open !== null) {
@@ -430,6 +432,9 @@ Singleton {
             } else if (fields[0] === "faillock" && fields.length === 2 && fields[1].startsWith("/")) {
                 faillockPath = fields[1];
                 placed = true;
+            } else if (fields[0] === "u2fconf" && fields.length === 2 && fields[1].startsWith("/")) {
+                u2fConfPath = fields[1];
+                placed = true;
             } else if (fields[0] === "file" && fields.length === 3 && wanted.includes(fields[1])) {
                 if (fields[2] === "text")
                     open = fields[1];
@@ -441,17 +446,20 @@ Singleton {
             if (!(path in answers))
                 answers[path] = { unreadable: true };
         }
-        return { places: usable && placed ? { directories, faillockPath } : null, answers };
+        return { places: usable && placed ? { directories, faillockPath, u2fConfPath } : null, answers };
     }
 
     // What the files read so far give: the stacks of `request.services` (names) and of the
     // lock's configs (`request.lock`: { method: absolute path }), each service's pam_faillock
     // settings, and the paths still to be read. `request.directories` the directories in
-    // order, `request.faillockPath` where faillock.conf is (pam-files.sh's places; "" none).
+    // order, `request.faillockPath` where faillock.conf is and `request.u2fConfPath` where
+    // pam_u2f.conf is (pam-files.sh's places; "" none, null or absent: not known),
+    // `request.nixos` this is NixOS (true / false; anything else: not known).
     // `answers` as filesAnswer gives them, merged. A path not answered yet is `pending`
     // (and counts as unreadable meanwhile). `final`: every pending path is taken as
     // unreadable instead (the rounds ran out). → { services: { name: stack },
-    // lock: { method: stack }, faillock: { name: faillockConfig or null }, pending: [paths] }
+    // lock: { method: stack }, faillock: { name: faillockConfig or null }, u2f: _u2fOf's,
+    // pending: [paths] }
     function readingStep(request, answers, final) {
         const known = answers ?? {};
         const pending = [];
@@ -478,6 +486,9 @@ Singleton {
             if (typeof lock[method] === "string" && lock[method].startsWith("/"))
                 result.lock[method] = stack(lock[method], reader, directoryList);
         }
+        result.u2f = _u2fOf(result.lock.u2f ?? null, reader, directoryList,
+                            typeof request?.nixos === "boolean" ? request.nixos : null,
+                            typeof request?.u2fConfPath === "string" ? request.u2fConfPath : null);
         return result;
     }
 
@@ -513,6 +524,91 @@ Singleton {
             fingerprint: "fingerprint" in found ? "ready" : "absent",
             securityKey: "u2f" in found ? "ready" : "absent",
             lock
+        };
+    }
+
+    // ── pam_u2f's settings ──
+
+    // The comment the NixOS module writes into the lock's key config when it leaves the
+    // machine's `interactive` out (the lock screen cannot answer its Enter prompt)
+    readonly property string u2fInteractiveDropped: "# interactive is left out here: the lock screen cannot answer its Enter prompt"
+
+    // What the machine's pam_u2f settings let a key line do, each u2fOptions' (or null):
+    // `lock` the lock screen's key check (its config's pam_u2f line and the settings file it
+    // reads, and `interactiveDropped`: the config says it left `interactive` out; null when
+    // the lock has no key method), `rows` the editor's own key row (NixOS: the module's
+    // /etc/pam.d/h2s-shell-u2f, which carries security.pam.u2f.settings as the module's key
+    // rows do; elsewhere the row's line has no settings of the machine's, so pam_u2f.conf
+    // alone), `conf` a raw pam_u2f line without `conf=` (pam_u2f.conf). pam_u2f's default
+    // settings file: on NixOS inside its package (none in nixpkgs' build: not read), elsewhere
+    // `u2fConfPath` (pam-files.sh's place; "" none; null: the place is not known). `nixos`
+    // true / false / null (not known): not known leaves every one of them not known.
+    function _u2fOf(lockStack, reader, directoryList, nixos, u2fConfPath) {
+        const unknown = u2fOptions([], null);
+        if (nixos !== true && nixos !== false)
+            return { lock: lockStack === null ? null : unknown, rows: unknown, conf: unknown };
+        // The default file's text: undefined none, null not known
+        const readDefault = () => nixos ? undefined
+            : typeof u2fConfPath !== "string" ? null
+            : u2fConfPath === "" ? undefined : reader(u2fConfPath);
+        const fromStack = read => {
+            if (read === null || read.known !== true)
+                return unknown;
+            // The first pam_u2f line alone: the lock's key configs (the module's, the shipped
+            // one) have one; a hand-made config with more is judged by its first
+            const line = read.lines.find(item => item.moduleName === "pam_u2f.so");
+            if (line === undefined)
+                return unknown;
+            const conf = u2fConfOf(line.args);
+            return u2fOptions(line.args, conf !== "" ? reader(conf) : readDefault());
+        };
+        let lock = null;
+        if (lockStack !== null) {
+            lock = fromStack(lockStack);
+            const text = lockStack.file !== "" ? reader(lockStack.file) : null;
+            lock.interactiveDropped = typeof text === "string" && text.split("\n").some(line => line.trim() === u2fInteractiveDropped);
+        }
+        const conf = u2fOptions([], readDefault());
+        return {
+            lock,
+            rows: nixos ? fromStack(stack("h2s-shell-u2f", reader, directoryList.slice(0, 1))) : conf,
+            conf
+        };
+    }
+
+    // The settings file a pam_u2f line names (`conf=<path>`, the last one), "" for its default
+    function u2fConfOf(args) {
+        const conf = (Array.isArray(args) ? args : []).map(word => String(word)).filter(word => word.startsWith("conf="));
+        return conf.length > 0 ? conf[conf.length - 1].slice(5) : "";
+    }
+
+    // Whether pam_u2f reads a `userpresence=` word as 0 (sscanf "%d": 0 turns the touch off,
+    // 1 asks for it, anything else leaves the authenticator's default, which asks)
+    function u2fPresenceOff(word) {
+        return /^userpresence=\s*[+-]?0+(\D.*)?$/.test(String(word));
+    }
+
+    // What a pam_u2f line does without a key or a touch, or with Enter: its arguments and the
+    // text of the settings file it reads (a string; undefined when there is none; null or
+    // anything else when it could not be read). pam_u2f takes the file's options first, one
+    // per line ("#" starts a comment, spaces around "=" dropped), then the line's; `nouserok`,
+    // `alwaysok` and `interactive` as bare words (no word turns one off again), and the last
+    // `userpresence=` decides. → { known, alwaysok, nouserok, touchOff, interactive }; not
+    // known: all false
+    function u2fOptions(args, text) {
+        if (text !== undefined && typeof text !== "string")
+            return { known: false, alwaysok: false, nouserok: false, touchOff: false, interactive: false };
+        const fileWords = typeof text === "string"
+            ? text.split("\n").map(line => line.replace(/#.*$/, "").trim().replace(/\s*=\s*/, "=")).filter(line => line !== "")
+            : [];
+        const words = fileWords.concat((Array.isArray(args) ? args : []).map(word => String(word)));
+        const presence = words.filter(word => word.startsWith("userpresence="));
+        return {
+            known: true,
+            alwaysok: words.includes("alwaysok"),
+            nouserok: words.includes("nouserok"),
+            touchOff: presence.length > 0 && u2fPresenceOff(presence[presence.length - 1]),
+            interactive: words.includes("interactive")
         };
     }
 

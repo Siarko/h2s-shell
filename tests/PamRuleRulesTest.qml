@@ -176,9 +176,13 @@ TestCase {
                && has([raw("r1", "auth sufficient /etc/pam_permit.so"), fixed], arch(), "R9"), "R9: pam_permit from another place, by its name");
         assert(!has([raw("r1", "auth sufficient /home/u/pam_unix.so")], arch({ otherService: [] }), "R9")
                && has([raw("r1", "auth sufficient /home/u/pam_unix.so")], arch({ otherService: [] }), "R1"), "… while pam_unix from another place is no password");
-        for (const passes of ["nouserok", "[nouserok]", "alwaysok", "userpresence=0", "userpresence=00", "userpresence=-0", "userpresence=2"])
+        for (const passes of ["alwaysok", "userpresence=0", "userpresence=00", "userpresence=-0", "userpresence=1 userpresence=0"])
             assert(has([raw("r1", "auth sufficient pam_u2f.so cue " + passes), fixed], arch(), "R9"), "R9: pam_u2f with " + passes);
-        assert(!has([raw("r1", "auth sufficient pam_u2f.so cue userpresence=1"), fixed], arch(), "R9"), "R9 not: pam_u2f userpresence=1");
+        for (const passes of ["nouserok", "[nouserok]"])
+            assert(has([raw("r1", "auth required pam_u2f.so cue " + passes), password("r2")], arch(), "R9"),
+                   "R9: pam_u2f with " + passes + " on a required line nothing else asks beside (PAM_IGNORE no answer, the permit lets in)");
+        for (const asks of ["userpresence=1", "userpresence=2", "userpresence=0 userpresence=1"])
+            assert(!has([raw("r1", "auth sufficient pam_u2f.so cue " + asks), fixed], arch(), "R9"), "R9 not: pam_u2f " + asks + " (the last one decides; only 0 is off)");
         for (const passes of ["db=/etc/users unknown_ok", "db=/etc/users UNKNOWN_OK", "db=/etc/users DB=/tmp/users", "db=/etc/users [db=/tmp/x]"])
             assert(has([raw("r1", "auth sufficient pam_userdb.so " + passes), fixed], arch(), "R9"), "R9: pam_userdb " + passes);
         assert(!has([raw("r1", "auth sufficient pam_userdb.so DB=/etc/users"), fixed], arch(), "R9"), "R9 not: pam_userdb DB= under /etc");
@@ -196,21 +200,135 @@ TestCase {
         assert(has([raw("r1", "auth sufficient pam_rootok.so"), fixed], arch({ service: "polkit-1" }), "R9"), "R9: pam_rootok for polkit");
         assert(has([raw("r1", "auth sufficient pam_rootok.so"), fixed], arch(), "R9"), "R9: pam_rootok for sudo too: it asks for no credential");
         assert(!has([raw("r1", "auth required pam_permit.so"), fixed], arch(), "R9"), "R9 not: the fixed row decides after it");
-        assert(has([raw("r1", "auth required pam_permit.so"), password("r2", "required")], arch(), "R9"),
-               "R9: required without the fixed row, whatever follows (the closing line keeps its result)");
+        assert(!has([raw("r1", "auth required pam_permit.so"), password("r2", "required")], arch(), "R9")
+               && has([raw("r1", "auth required pam_permit.so"), password("r2", "required")], arch(), "W22"),
+               "W22, not R9: a required line that asks for nothing beside a required password row (the password still asks)");
+        assertEqual(rules.check([raw("r1", "auth required pam_permit.so"), password("r2", "required")], arch()).warnings.find(found => found.code === "W22")?.text,
+                    "This line asks for nothing: only the other rows decide.", "… its text");
+        assert(has([raw("r1", "auth required pam_permit.so"), password("r2")], arch(), "R9"),
+               "R9: required beside only a sufficient password row (nothing else must pass: the permit closing keeps its pass)");
+        assert(!has([raw("r1", "auth [success=ok default=ignore] pam_usertype.so isregular"), fixed], arch(), "R9")
+               && has([raw("r1", "auth [success=ok default=ignore] pam_usertype.so isregular"), fixed], arch(), "W22"),
+               "W22, not R9: ok on success above the fixed row (the system's rules still decide)");
+        assert(!has([raw("r1", "auth optional pam_permit.so"), fixed], arch(), "W22"), "W22 not: an optional line decides nothing");
         for (const lets of ["auth sufficient pam_succeed_if.so uid >= 0", "auth sufficient pam_localuser.so", "auth sufficient pam_shells.so",
-                            "auth [success=ok default=ignore] pam_usertype.so isregular", "auth sufficient pam_wheel.so trust",
+                            "auth sufficient pam_wheel.so trust",
                             "auth sufficient pam_listfile.so sense=allow item=user file=/etc/x onerr=fail", "auth [default=done] pam_access.so"])
             assert(has([raw("r1", lets), fixed], arch(), "R9"), "R9: a module that asks for no credential lets in: " + lets);
         assert(!has([raw("r1", "auth sufficient pam_userdb.so db=/etc/x"), fixed], arch(), "R9"), "R9 not: pam_userdb asks for a credential");
         assert(!has([raw("r1", "auth sufficient pam_ldap.so"), fixed], arch(), "R9"), "R9 not: an unknown module (W4)");
         assert(!has([raw("r1", "auth optional pam_succeed_if.so uid >= 0"), fixed], arch(), "R9"), "R9 not: optional cannot let in");
         // Credential modules made to pass by their arguments
-        assert(has([raw("r1", "auth sufficient pam_u2f.so cue nouserok"), fixed], arch(), "R9"), "R9: pam_u2f nouserok");
+        assert(!has([raw("r1", "auth sufficient pam_u2f.so cue nouserok"), fixed], arch(), "R9")
+               && !has([raw("r1", "auth sufficient pam_u2f.so cue nouserok"), fixed], arch(), "W21"),
+               "R9 not: a sufficient nouserok line (PAM_IGNORE: the next row is tried)");
         assert(has([raw("r1", "auth sufficient pam_u2f.so userpresence=0"), fixed], arch(), "R9"), "R9: pam_u2f userpresence=0");
         assert(!has([raw("r1", "auth sufficient pam_u2f.so cue"), fixed], arch(), "R9"), "R9 not: pam_u2f as it is");
         assert(!has([raw("r1", "auth optional pam_u2f.so nouserok"), fixed], arch(), "R9"), "R9 not: nouserok on a line that cannot let in");
         assert(has([raw("r1", "auth sufficient pam_userdb.so db=/home/user/db"), fixed], arch(), "R9"), "R9: pam_userdb with a database outside /etc");
+
+        // W15–W21: a key line whose own check pam_u2f's settings void
+        const settings = more => Object.assign({ known: true, alwaysok: false, nouserok: false, touchOff: false, interactive: false }, more ?? {});
+        const machine = (rows, conf) => arch({ u2f: { rows: settings(rows), conf: settings(conf) } });
+        const warned = (rows, facts) => rules.check(rows, facts).warnings.filter(found => /^W(1[5-79]|2[01])$/.test(found.code))
+            .map(found => found.code + "@" + found.row).sort().join(" ");
+        const textOf = (rows, facts, code) => rules.check(rows, facts).warnings.find(found => found.code === code)?.text ?? "";
+        assertEqual(warned([key("r1"), fixed], machine({ alwaysok: true })), "W15@0", "W15: an own key row with the system's alwaysok, sufficient");
+        assert(!has([key("r1"), fixed], machine({ alwaysok: true }), "R9"), "… a warning, never a refusal: the setting is the system's");
+        assertEqual(textOf([key("r1"), fixed], machine({ alwaysok: true }), "W15"),
+                    "This row lets anyone in without a key: the system's pam_u2f settings have alwaysok.", "… its text");
+        assertEqual(warned([key("r1", "required"), password("r2")], machine({ alwaysok: true })), "W15@0", "W15: required, the permit closing keeps its pass");
+        assertEqual(warned([key("r1", "required"), fixed], machine({ alwaysok: true })), "W19@0",
+                    "W19: required above the fixed row: no longer asks for a key, the other rows decide");
+        assertEqual(textOf([key("r1", "requisite"), fixed], machine({ alwaysok: true }), "W19"),
+                    "This row no longer asks for a key: the system's pam_u2f settings have alwaysok. Only the other rows decide.", "… requisite too, its text");
+        assertEqual(warned([key("r1"), fixed], machine({ touchOff: true })), "W16@0", "W16: an own key row with userpresence=0");
+        assertEqual(textOf([key("r1"), fixed], machine({ touchOff: true }), "W16"),
+                    "While a key is plugged in, any program may pass this row without a touch: the system's pam_u2f settings have userpresence=0.", "… its text");
+        assertEqual(warned([key("r1", "required"), fixed], machine({ touchOff: true })), "W20@0", "W20: required above the fixed row");
+        assert(!has([row("r1", "securityKey", "sufficient", { pin: "yes", cue: true }), fixed], machine({ alwaysok: true }), "W15"),
+               "W15 not: a row already refused (R4) is not judged further");
+        assertEqual(warned([key("r1"), fixed], machine()) + warned([key("r1", "required"), fixed], machine()), "",
+                    "nothing with settings that ask for a key and a touch");
+        for (const control of ["sufficient", "required", "requisite"]) {
+            assertEqual(warned([key("r1", control), password("r2")], machine({ nouserok: true })) + warned([key("r1", control), fixed], machine({ nouserok: true })), "",
+                        "nouserok on an own " + control + " row: nothing (written with ignore=bad, PAM_IGNORE fails it)");
+        }
+        assert(has([key("r1"), fixed], arch({ u2f: { rows: settings({ known: false }), conf: settings() } }), "W18")
+               && has([key("r1", "required"), fixed], arch({ u2f: { rows: settings({ known: false }), conf: settings() } }), "W18"),
+               "W18: the system's settings could not be read, whatever the control");
+        assertEqual(warned([key("r1"), fixed], arch()) + (has([key("r1"), fixed], arch(), "W18") ? "W18" : ""), "", "no u2f facts yet: nothing said");
+        assertEqual(warned([raw("r1", "auth sufficient pam_u2f.so cue"), fixed], machine({}, { alwaysok: true })), "W15@0",
+                    "W15: a raw pam_u2f line by pam_u2f.conf's alwaysok");
+        assertEqual(warned([raw("r1", "auth required pam_u2f.so cue"), fixed], machine({}, { alwaysok: true })), "W19@0", "W19: … required above the fixed row");
+        assertEqual(warned([raw("r1", "auth sufficient pam_u2f.so cue"), fixed], machine({ alwaysok: true }, {})), "",
+                    "… a raw line is not judged by the own row's settings");
+        assert(has([raw("r1", "auth sufficient pam_u2f.so cue conf=/etc/other.conf"), fixed], machine({}, { alwaysok: true }), "W18")
+               && warned([raw("r1", "auth sufficient pam_u2f.so cue conf=/etc/other.conf"), fixed], machine({}, { alwaysok: true })) === "",
+               "W18: a raw line with a settings file of its own (not read)");
+        assertEqual(warned([raw("r1", "auth sufficient pam_u2f.so cue alwaysok"), fixed], machine({}, { alwaysok: true })), "",
+                    "… a line its own words let in is R9's, not a warning");
+        assertEqual(warned([raw("r1", "auth required pam_u2f.so cue nouserok"), fixed], arch()), "W21@0",
+                    "W21: a raw plain required nouserok above the fixed row (PAM_IGNORE is no answer), without u2f facts too");
+        assertEqual(textOf([raw("r1", "auth required pam_u2f.so cue nouserok"), fixed], arch(), "W21"),
+                    "A user without a registered key skips this row: this line has nouserok. Only the other rows decide.", "… its text names the line");
+        assertEqual(warned([raw("r1", "auth required pam_u2f.so cue alwaysok"), fixed], arch()), "W19@0", "W19: a raw required alwaysok above the fixed row");
+        assertEqual(warned([raw("r1", "auth [success=ok new_authtok_reqd=ok ignore=bad default=bad] pam_u2f.so cue nouserok"), fixed], arch()), "",
+                    "W21 not: ignore=bad fails the line for a user without a key");
+        assertEqual(warned([raw("r1", "auth required pam_u2f.so cue"), password("r2")], machine({}, { nouserok: true })), "W17@0",
+                    "W17: pam_u2f.conf's nouserok on a raw plain required line the permit closes");
+        assertEqual(warned([raw("r1", "auth required pam_u2f.so cue"), fixed], machine({}, { nouserok: true })), "W21@0", "W21: … above the fixed row");
+        assertEqual(warned([raw("r1", "auth optional pam_u2f.so cue"), fixed], machine({}, { alwaysok: true, nouserok: true })), "",
+                    "nothing for a line that decides nothing");
+        assertEqual(warned([key("r1", "required"), password("r2", "required")], machine({ alwaysok: true })), "W19@0",
+                    "W19, not W15: a required password row still asks beside a required key row the permit closes");
+        assertEqual(warned([key("r1", "required"), key("r2", "required")], machine({ alwaysok: true })), "W15@0 W15@1",
+                    "W15: two required key rows both voided: neither still asks, anyone gets in");
+        assertEqual(warned([key("r1", "required"), raw("r2", "auth required pam_permit.so")], machine({ alwaysok: true })), "W15@0",
+                    "W15: a required row that asks for nothing does not count as asking");
+        assertEqual(warned([raw("r1", "auth [success=ok default=ignore] pam_u2f.so cue"), fixed], machine({}, { alwaysok: true })), "W19@0",
+                    "W19: a raw ok-on-success line above the fixed row (the system's rules still decide)");
+        assertEqual(textOf([raw("r1", "auth sufficient pam_u2f.so cue conf=/etc/other.conf"), fixed], machine(), "W18"),
+                    "This line reads its own settings file (conf=), which the checks do not read: they cannot tell whether it needs a key and a touch.",
+                    "W18: its own text for a line with conf=");
+        assert(!has([raw("r1", "auth [success=ok new_authtok_reqd=ok ignore=bad default=bad] pam_u2f.so cue nouserok")], arch({ otherService: [] }), "R9"),
+               "R9 not: nouserok on a line whose ignore=bad fails a user without a key");
+        assertEqual(warned([raw("r1", "auth [success=ok ignore=ok default=bad] pam_u2f.so cue nouserok"), fixed], arch()), "",
+                    "W21 not: ignore=ok (in auth PAM_IGNORE then stays the result, a failure)");
+        assert(!has([raw("r1", "auth [success=ok ignore=done default=bad] pam_u2f.so cue nouserok"), password("r2", "required")], arch(), "R9"),
+               "R9 not: … nor ignore=done");
+        assert(has([raw("r1", "auth required pam_u2f.so cue nouserok"), password("r2", "sufficient")], arch(), "R9"),
+               "R9: a plain required nouserok without the fixed row (PAM_IGNORE no answer, the permit lets in)");
+        assertEqual(textOf([key("r1"), fixed], arch({ u2f: { rows: settings({ known: false }), conf: settings() } }), "W18"), rules.texts.W18,
+                    "W18: an own row's text names the system's settings");
+        const cleanRaw = raw("r2", "auth required pam_u2f.so cue");
+        assertEqual(warned([key("r1", "required"), cleanRaw], machine({ alwaysok: true }, {})), "W19@0",
+                    "W19: a raw key line the settings leave asking still asks beside a voided own key row");
+        assertEqual(warned([raw("r1", "auth required pam_u2f.so cue"), key("r2", "required")], machine({}, { alwaysok: true })), "W19@0",
+                    "… and an own key row the settings leave asking beside a voided raw one");
+        for (const line of ["auth [success=ok default=ignore] pam_u2f.so cue alwaysok", "auth required pam_u2f.so cue alwaysok"]) {
+            const rows = [raw("r1", line), password("r2", "required")];
+            assert(!has(rows, arch(), "R9") && !has(rows, arch(), "W22") && warned(rows, arch()) === "W19@0", "W19, not R9 or W22, beside a required password row: " + line);
+        }
+        const aloneRows = [raw("r1", "auth required pam_u2f.so cue alwaysok"), password("r2")];
+        assert(has(aloneRows, arch(), "R9") && warned(aloneRows, arch()) === "", "R9, not a warning, where nothing else must pass");
+        const okRows = [raw("r1", "auth [success=ok default=ignore] pam_u2f.so cue alwaysok"), password("r2")];
+        assert(!has(okRows, arch(), "R9") && warned(okRows, arch()) === "", "… ok on success before the deny closing decides nothing: neither");
+        // Rows that do not ask for the others
+        const conf = more => arch({ u2f: { rows: settings(), conf: settings(more) } });
+        assertEqual(warned([raw("r1", "auth required pam_u2f.so cue"), raw("r2", "auth required pam_u2f.so cue")], conf({ nouserok: true })), "W17@0 W17@1",
+                    "W17 on both: two raw key lines whose nouserok lets a user without a key past each");
+        assertEqual(warned([raw("r1", "auth required pam_u2f.so cue"), raw("r2", "auth required pam_u2f.so cue")], conf({ touchOff: true })), "W16@0 W16@1",
+                    "W16 on both: neither asks for a touch");
+        assertEqual(warned([key("r1", "required"), password("r2", "required")], machine({ touchOff: true })), "W20@0",
+                    "W20: a required password row still asks");
+        // A wrong credential fails the stack only where its code (auth_err, else default) is bad or die
+        assert(has([raw("r1", "auth [success=ok ignore=bad default=ignore] pam_unix.so")], arch({ fingerprint: "absent", otherService: [] }), "R1"),
+               "R1: a pam_unix line whose wrong password is ignored does not fail the stack: the deny closing, nobody in");
+        assertEqual(rules.closingOf([raw("r1", "auth [success=ok ignore=bad default=ignore] pam_unix.so")], arch()), "deny",
+                    "… its closing is the deny, never the permit that would let a wrong password in");
+        assertEqual(rules.closingOf([raw("r1", "auth [success=ok auth_err=die default=ignore] pam_unix.so")], arch()), "permit",
+                    "… auth_err=die fails it: the permit closing");
         assert(has([raw("r1", "auth sufficient pam_userdb.so"), fixed], arch(), "R9"), "R9: pam_userdb without a database");
         assert(has([raw("r1", "auth sufficient pam_userdb.so db=/etc/../home/u/db"), fixed], arch(), "R9"), "R9: … through ..");
         assert(has([raw("r1", "auth sufficient pam_unix.so nullok"), fixed], arch(), "W9"), "W9: pam_unix nullok");
@@ -274,6 +392,9 @@ TestCase {
                "W13: a bracketed control that fails but lets ignore pass");
         assert(!has([password("r1"), raw("r2", "auth [success=ok auth_err=die] pam_ldap.so")], arch(), "W13"),
                "W13 not: ignore not named and no default is bad in libpam");
+        for (const action of ["ok", "done"])
+            assert(!has([password("r1"), raw("r2", "auth [success=ok ignore=" + action + " default=bad] pam_ldap.so")], arch(), "W13"),
+                   "W13 not: ignore=" + action + " (in auth PAM_IGNORE then stays the result, a failure)");
         assert(!has([password("r1"), raw("r2", "auth required pam_unix.so")], arch(), "W13"), "W13 not: a module the shell knows");
         assert(!has([password("r1"), raw("r2", "auth required pam_ldap.so")], arch({ system: "nixos" }), "W13"), "W13 not: a refused line");
         // W14: no time limit on a reader above a password

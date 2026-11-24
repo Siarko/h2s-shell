@@ -24,7 +24,9 @@ Singleton {
     // { method: stack } of the configs the lock uses
     readonly property var lock: reading?.lock ?? ({})
     // { nixos (true / false / null), moduleDirectories (the distribution's PAM module
-    // directories), fingerprint, securityKey ("ready" / "absent" / "unknown") }
+    // directories), fingerprint, securityKey ("ready" / "absent" / "unknown"), u2f (what the
+    // machine's pam_u2f settings let a key line do: { lock, rows, conf }, each
+    // PamStackRules.u2fOptions' or null; absent before the first reading) }
     readonly property var facts: reading?.facts ?? ({ nixos: null, moduleDirectories: [], fingerprint: "unknown", securityKey: "unknown" })
     // { service: pam_faillock's settings or null }, the PAM folders read in order, and every
     // file read ({ path: { text } | { absent } | { unreadable } })

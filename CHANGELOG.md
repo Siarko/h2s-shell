@@ -38,22 +38,22 @@ The interface modules are written against (`qs.api`), versioned on its own
   `pam.sudo.rules` and `pam.polkit.rules`, one list per service — set sudo's and polkit's
   `auth` rules as an ordered list of rows: fingerprint (`timeout` 1–600 s and `tries`
   1–20, each -1 for no limit), security key (`pin`; the machine's
-  `security.pam.u2f.settings` apply, as on the lock screen, always with `cue` and never
-  `interactive`, `nouserok` or `alwaysok`; a `userpresence` other than 1, or a setting
-  with a line break, stops the build), password (`counted`), a raw line (`module`, `args`), and
+  `security.pam.u2f.settings` apply as they are, always with `cue`; a setting with a tab
+  or a line break stops the build), password (`counted`), a raw line (`module`, `args`), and
   `{ method = "system"; }` for NixOS's own rules below them; without that row the list ends
   with closing lines that keep NixOS's own rules from being reached.
   `control` is PAM's word (`sufficient` by default; `optional` only on a raw row — a
   fingerprint, key or password row's result would be ignored). NixOS's own fingerprint and
   key rules are off for a service with rules. A list nobody could get in with, a required
   reader the machine does not have, both services without a password, a raw line that lets
-  anyone in (a module that asks for nothing), an optional fingerprint, key or password row,
+  anyone in on its own (a module that asks for nothing, with no other row that must pass and
+  still asks), an optional fingerprint, key or password row,
   or a module of another package named without its path stops the build with an assertion;
   a reader as the only way in, a store path written out (`"${pkgs.…}/lib/security/…"` is
   the way), a module from outside the store, a required raw line of a module the shell does
   not know without the `system` row (it lets in a user the module says it does not apply
-  to), and a fingerprint with no time limit above a password (the password waits for the
-  finger) are warnings. null (the default) leaves the service as NixOS makes it.
+  to), a raw line that asks for nothing beside a row that still asks, and a fingerprint with
+  no time limit above a password (the password waits for the finger) are warnings. null (the default) leaves the service as NixOS makes it.
 - Settings → System → Authentication: "Remember the password" — after the administrator
   password is typed for one of the shell's own root runs, the next ones pass without asking
   for "Remember for" minutes (1–60, default 5). One box says whether the rule is installed,
@@ -72,6 +72,17 @@ The interface modules are written against (`qs.api`), versioned on its own
   reloads when it changes.
 
 ### Changed
+- The machine's u2f settings are no longer changed: a security key row of
+  `programs.h2s-shell.pam` keeps `nouserok`, `alwaysok`, `userpresence`, `interactive` and
+  `pinverification` from `security.pam.u2f.settings` instead of stripping them or stopping
+  the build. Where they let someone in without a key or a touch (`alwaysok`,
+  `userpresence = 0`), or turn a row that must pass into one that no longer asks, the build
+  warns (for a key row and for the lock screen), the sign-in rules page warns under the row
+  (for an own key row and a raw pam_u2f line, from `/etc/security/pam_u2f.conf` too on
+  Arch), and the lock screen's security key switch says so. The lock screen alone leaves
+  `interactive` out (it cannot answer the Enter prompt) and says so on its switch; a
+  `security.pam.u2f.settings.conf` file, or a raw pam_u2f row's own `conf=`, is a warning:
+  its options are not checked.
 - The shell's own runs as administrator (the sign-in rules' Apply, the Hibernate section's
   Apply, "Remember the password"'s Install / Remove / Undo) run inside the shell's
   `timeout`, as modules' runs do: ended after 5 minutes at most, and covered by a

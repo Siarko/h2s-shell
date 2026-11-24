@@ -18,6 +18,10 @@ seam_pam_dirs=
 # H2S_LOCK_SYSTEM_PAM_DIR set, none is read
 seam_faillock_conf=${H2S_LOCK_FAILLOCK_CONF:-/etc/security/faillock.conf}
 [ -z "${H2S_LOCK_SYSTEM_PAM_DIR:-}" ] || [ -n "${H2S_LOCK_FAILLOCK_CONF:-}" ] || seam_faillock_conf=
+# H2S_LOCK_U2F_CONF: the test's own pam_u2f.conf (pam-files.sh); with only
+# H2S_LOCK_SYSTEM_PAM_DIR set, none is read (its place not said: not known)
+seam_u2f_conf=${H2S_LOCK_U2F_CONF:-/etc/security/pam_u2f.conf}
+[ -z "${H2S_LOCK_SYSTEM_PAM_DIR:-}" ] || [ -n "${H2S_LOCK_U2F_CONF:-}" ] || seam_u2f_conf=
 # H2S_DISTRIBUTION: the distribution by its id (nixos, arch, generic), counted only together
 # with H2S_LOCK_SYSTEM_PAM_DIR, so that a faked system never chooses among the machine's
 # real PAM configs: both systems' answers are tested on every machine
