@@ -623,17 +623,21 @@ TestCase {
         const reachable = Object.keys(arch).map(key => arch[key]).concat(Object.keys(arch.facts).map(key => arch.facts[key]));
         assert(!reachable.some(value => typeof value === "function") && ["capability", "plan", "apply", "undo", "readInForce", "integration", "details"]
                .every(key => arch[key] === undefined && arch.facts[key] === undefined), "… only facts: no function, nothing of the integration's");
-        // The only functions behind it: the getters that copy a list at each read
+        // The only functions behind it: the getters that copy a list or an object at each read
         const descriptors = [arch, arch.facts].map(object => Object.getOwnPropertyNames(object).map(key => {
             const descriptor = Object.getOwnPropertyDescriptor(object, key);
-            return { key: key, getter: descriptor.get !== undefined, list: descriptor.get !== undefined && Array.isArray(object[key]),
+            const read = descriptor.get !== undefined ? object[key] : undefined;
+            return { key: key, getter: descriptor.get !== undefined, list: read !== null && typeof read === "object" && Object.isFrozen(read),
                      setter: descriptor.set !== undefined, value: typeof descriptor.value };
         }));
         assert(descriptors[0].every(entry => !entry.getter && !entry.setter && entry.value !== "function"),
                "… the object's own properties: plain values, no getter, setter or function");
         assert(descriptors[1].every(entry => !entry.setter && entry.value !== "function" && (!entry.getter || entry.list))
                && descriptors[1].some(entry => entry.getter),
-               "… the facts' properties: values, or getters that hand out a list — no setter, no function");
+               "… the facts' properties: values, or getters that hand out a frozen list or object — no setter, no function");
+        assert(Object.isFrozen(arch.facts.packages) && arch.facts.packages !== arch.facts.packages
+               && Object.isFrozen(arch.facts.packages.fprintd) && arch.facts.packages.fprintd.package === "fprintd",
+               "… the package hints: a new frozen copy at each read, its entries frozen too");
 
         assertEqual(JSON.stringify(ModuleTestKit.setDistribution("nixos")), "[]", "setDistribution(\"nixos\"): taken");
         const nixos = Api.system.distribution;
