@@ -81,7 +81,8 @@ Singleton {
     FileView {
         id: _configFile
         path: Config.path
-        blockLoading: true
+        // Every read, not only the first: oldConfig reloads it for each migration
+        blockAllReads: true
         printErrors: false
     }
 

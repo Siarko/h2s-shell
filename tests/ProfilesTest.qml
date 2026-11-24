@@ -1,4 +1,5 @@
 import QtQuick
+import Quickshell.Io
 import qs.singletons
 
 TestCase {
@@ -321,5 +322,40 @@ TestCase {
         assert(Config.readOnly, "the test run cannot write the user's config");
         const refused = Profiles.save([loops]);
         assert(refused.startsWith("x: "), "save refuses a profile that fails the guard, naming it");
+
+        _oldConfigReadFresh();
+    }
+
+    // The migrations read the config file fresh each time (Profiles.oldConfig): a section
+    // written to the file after the first read is seen. The file is put back as it was; one
+    // that was not there is left empty, which every reader takes as no file (Config is not
+    // read again in a run).
+    property FileView _configOnDisk: FileView {
+        blockAllReads: true
+        blockWrites: true
+        printErrors: false
+    }
+
+    function _oldConfigReadFresh() {
+        _configOnDisk.path = Config.path;
+        _configOnDisk.reload();
+        const before = _configOnDisk.text() ?? "";
+        let parsed = {};
+        try {
+            parsed = JSON.parse(before || "{}");
+        } catch (error) {
+            fail("the suites' config file is not JSON");
+            return;
+        }
+        Profiles.oldConfig();
+        parsed.legacyProbe = { layout: "probe" };
+        _configOnDisk.setText(JSON.stringify(parsed));
+        try {
+            assertEqual(Profiles.oldConfig().legacyProbe?.layout, "probe",
+                        "the old config: read fresh, a section written after the first read seen");
+        } finally {
+            _configOnDisk.setText(before);
+        }
+        assertEqual(Profiles.oldConfig().legacyProbe, undefined, "the old config: the file put back");
     }
 }
