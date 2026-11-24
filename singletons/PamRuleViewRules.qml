@@ -124,15 +124,18 @@ Singleton {
     // ── Adding ──
 
     // The add list: every method in PamRuleRules' order, each { method, label, note,
-    // available }; a reader the machine lacks is listed off, with its reason
-    function addOptions(facts) {
+    // available }; a reader the machine lacks is listed off, with its reason and what it
+    // needs (`distributionFacts` as unlockRows takes them)
+    function addOptions(facts, distributionFacts) {
         const offered = PamRuleRules.offeredMethods(facts);
         const note = method => {
             const state = facts?.[method];
             if (method === "fingerprint")
-                return state === "ready" ? "A finger is enrolled" : state === "absent" ? "No finger enrolled" : "Not known whether a finger is enrolled";
+                return state === "ready" ? "A finger is enrolled" : state === "absent" ? _needs("No finger enrolled", "fprintd", "an enrolled finger", distributionFacts)
+                    : "Not known whether a finger is enrolled";
             if (method === "securityKey")
-                return state === "ready" ? "A key is registered" : state === "absent" ? "No key registered" : "Not known whether a key is registered";
+                return state === "ready" ? "A key is registered" : state === "absent" ? _needs("No key registered", "pamU2f", "a registered key", distributionFacts)
+                    : "Not known whether a key is registered";
             if (method === "raw")
                 return "Any PAM line, as written — not checked";
             return "Only the password, without the system's other rules";
@@ -533,10 +536,7 @@ Singleton {
     // system gets it (`distributionFacts`: Distribution's facts, DistributionRules.packageHint;
     // null while not known: the neutral hint), never as a command
     function unlockRows(facts, values, distributionFacts) {
-        const needs = (what, name, then) => {
-            const hint = DistributionRules.packageHint(distributionFacts ?? null, name);
-            return what + " — it needs " + hint.upstream + " and " + then + ". " + hint.text;
-        };
+        const needs = (what, name, then) => _needs(what, name, then, distributionFacts);
         const row = (key, method, label, state, readyHint, absentHint, warning) => ({
             key, method, label,
             hint: state === "ready" ? readyHint : state === "absent" ? absentHint : "Not known on this computer",
@@ -552,6 +552,13 @@ Singleton {
                 needs("No key registered", "pamU2f", "a registered key"),
                 keyUnlockWarning(facts?.u2f?.lock))
         ];
+    }
+
+    // A reader or key that is not there: what it needs, its package named as this system gets
+    // it (DistributionRules.packageHint), never as a command
+    function _needs(what, name, then, distributionFacts) {
+        const hint = DistributionRules.packageHint(distributionFacts ?? null, name);
+        return what + " — it needs " + hint.upstream + " and " + then + ". " + hint.text;
     }
 
     // The security key switch's warning for the lock's key check, every point that holds in

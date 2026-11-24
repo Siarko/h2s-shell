@@ -109,10 +109,11 @@ The interface modules are written against (`qs.api`), versioned on its own
   security key switches, while the computer lacks one, say what they need (fprintd or
   pam_u2f, as Arch's package or NixOS's option, and an enrolled finger or a registered key).
 - `install.sh` runs the Arch installer, now `distributions/arch/install.sh`, on Arch and
-  systems based on it (EndeavourOS, …); another system with pacman gets a warning and the
-  same installer; NixOS and systems without pacman are told it does not support them, and
-  nothing changes. The README's `curl … | bash` line and `install.sh --update` (on any
-  system, from a checkout) work as before.
+  systems based on it (EndeavourOS, …); another system with pacman (and its
+  `/etc/pacman.conf`) gets a warning and the same installer; NixOS and systems without
+  pacman are told it does not support them, and nothing changes. The README's
+  `curl … | bash` line and `install.sh --update` (from a checkout, on any system but NixOS)
+  work as before.
 - Settings → When away → Hibernate: Apply of the system's delay keeps the file it replaces
   as a backup, and Undo puts it back. A delay set in another file is shown as "Set in
   <file>: <value>": one read after the shell's file wins and no Apply is offered; one read

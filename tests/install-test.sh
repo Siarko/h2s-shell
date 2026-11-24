@@ -42,7 +42,7 @@ need setpriv "runs install.sh with no new privileges, so that nothing in it coul
 need timeout "ends a run that hangs"
 need awk "reads install.sh for ways around the stand-ins before it is run"
 need sed "makes the stand-in curl's other installer"
-for tool in bash mkdir dirname grep cat cp mv rm mktemp; do need "$tool" "install.sh uses it; linked into the private PATH"; done
+for tool in bash mkdir dirname grep cat cp mv rm mktemp readlink; do need "$tool" "install.sh uses it; linked into the private PATH"; done
 if [ ${#missing[@]} -gt 0 ]; then
     printf 'install-test.sh: %s\n' "${missing[@]}" >&2
     exit 2
@@ -55,15 +55,16 @@ SED_PATH=$(type -P sed)
 
 work=$(mktemp -d "${TMPDIR:-/tmp}/install-test.XXXXXX") || setup_error "cannot create a temp dir"
 trap 'rm -rf "$work"' EXIT
-# The scripts as a checkout holds them, the top-level one reading os-release under a made-up
-# tree ($work/os-root, which each case fills) in place of the system's: the one line that
-# names that folder, changed in the copy alone
+# The scripts as a checkout holds them, reading os-release and pacman.conf under a made-up
+# tree ($work/os-root, which each case fills) in place of the system's: the one line in each
+# that names that folder or file, changed in the copies alone
 OS_ROOT=$work/os-root
 CHECKOUT=$work/checkout
 mkdir -p "$CHECKOUT/distributions/arch" "$OS_ROOT/etc"
-grep -qx 'os_release_root=""' "$DISPATCHER" || setup_error "install.sh has no line os_release_root=\"\" for the test to point at a made-up tree"
-sed "s|^os_release_root=\"\"\$|os_release_root=\"$OS_ROOT\"|" "$DISPATCHER" > "$CHECKOUT/install.sh"
-cp "$ARCH_INSTALL" "$CHECKOUT/distributions/arch/install.sh"
+grep -qx 'system_root=""' "$DISPATCHER" || setup_error "install.sh has no line system_root=\"\" for the test to point at a made-up tree"
+grep -qx 'pacman_conf=/etc/pacman.conf' "$ARCH_INSTALL" || setup_error "the Arch installer has no line pacman_conf=/etc/pacman.conf for the test to point at a made-up file"
+sed "s|^system_root=\"\"\$|system_root=\"$OS_ROOT\"|" "$DISPATCHER" > "$CHECKOUT/install.sh"
+sed "s|^pacman_conf=/etc/pacman.conf\$|pacman_conf=$OS_ROOT/etc/pacman.conf|" "$ARCH_INSTALL" > "$CHECKOUT/distributions/arch/install.sh"
 INSTALL=$CHECKOUT/install.sh
 FIXTURES=$REPO/tests/fixtures/distribution
 failed=0
@@ -90,7 +91,7 @@ make_bin() {
     local bin=$1 control name
     control=$(dirname "$bin")/control
     mkdir -p "$bin" "$control"
-    for name in bash mkdir dirname grep cat cp mv rm mktemp; do ln -s "$(type -P "$name")" "$bin/$name"; done
+    for name in bash mkdir dirname grep cat cp mv rm mktemp readlink; do ln -s "$(type -P "$name")" "$bin/$name"; done
     standin() { { echo "#!$BASH_PATH"; echo "$MARK"; echo "control='$control'"; cat; } > "$bin/$1"; chmod +x "$bin/$1"; }
     standin sudo << 'STANDIN'
 terminal=no
@@ -151,9 +152,9 @@ while [ \$# -gt 0 ]; do
 done
 [ -n "\$output" ] || exit 2
 if [ -e "\$control/curl-other-dispatch" ]; then
-    '$SED_PATH' 's/^dispatch_known=1\$/dispatch_known=2/' '$ARCH_INSTALL' > "\$output"
+    '$SED_PATH' 's/^dispatch_known=1\$/dispatch_known=2/' '$CHECKOUT/distributions/arch/install.sh' > "\$output"
 else
-    cat '$ARCH_INSTALL' > "\$output"
+    cat '$CHECKOUT/distributions/arch/install.sh' > "\$output"
 fi
 STANDIN
     standin fc-list << 'STANDIN'
@@ -279,30 +280,35 @@ start_case() {
     EXTRA_ENV=()
     mkdir -p "$CASE/tmp"
     os_release arch
+    : > "$OS_ROOT/etc/pacman.conf"
+    RUN_SCRIPT=$INSTALL
 }
 # os_release <fixture | none>: the made-up system's os-release, from tests/fixtures/distribution/
 os_release() {
     rm -f "$OS_ROOT/etc/os-release"
     [ "$1" = none ] || cp "$FIXTURES/$1.os-release" "$OS_ROOT/etc/os-release"
 }
-# run_install [piped | piped-in <dir> | <arguments>…]: runs install.sh once in the case's
-# surroundings — from the file (given those arguments), or given to bash on its standard
-# input, as `curl … | bash` does (piped-in: the plain name `bash`, found on PATH, run in
-# <dir>). OUTPUT (both streams, as the terminal got them), STATUS.
+# run_install [piped | piped-in <dir> | file-in <dir> <name> | <arguments>…]: runs install.sh
+# once in the case's surroundings — from the file (RUN_SCRIPT, the checkout's unless a case
+# names another; given those arguments), or given to bash on its standard input, as
+# `curl … | bash` does (piped-in: the plain name `bash`, found on PATH, run in <dir>), or as
+# `bash <name>` in <dir> (file-in). OUTPUT (both streams, as the terminal got them), STATUS.
 run_install() {
     safe_bin "$BIN" || setup_error "the private PATH of $CASE is not safe; stopped before running install.sh"
     : > "$CONTROL/log"
     {
         echo "#!$BASH_PATH"
-        [ "${1:-}" = piped-in ] && printf 'cd %q || exit 99\n' "$2"
+        { [ "${1:-}" = piped-in ] || [ "${1:-}" = file-in ]; } && printf 'cd %q || exit 99\n' "$2"
         printf 'exec env -i PATH=%q HOME=%q TMPDIR=%q' "$BIN" "$HOME_DIR" "$CASE/tmp"
         [ ${#EXTRA_ENV[@]} -gt 0 ] && printf ' %q' "${EXTRA_ENV[@]}"
         if [ "${1:-}" = piped ]; then
             printf ' %q --no-new-privs %q < %q\n' "$SETPRIV" "$BIN/bash" "$INSTALL"
         elif [ "${1:-}" = piped-in ]; then
             printf ' %q --no-new-privs bash < %q\n' "$SETPRIV" "$INSTALL"
+        elif [ "${1:-}" = file-in ]; then
+            printf ' %q --no-new-privs bash %q\n' "$SETPRIV" "$3"
         else
-            printf ' %q --no-new-privs %q %q' "$SETPRIV" "$BIN/bash" "$INSTALL"
+            printf ' %q --no-new-privs %q %q' "$SETPRIV" "$BIN/bash" "$RUN_SCRIPT"
             [ $# -gt 0 ] && printf ' %q' "$@"
             echo
         fi
@@ -524,6 +530,46 @@ run_install piped-in "$CASE/cwd"
 check "piped as plain bash, a distributions/arch/install.sh in the folder: it is not run" silent_on "decoy ran"
 check "… the installer is fetched" fetched_from_repository
 check "… and runs" status_is 0
+
+# Where install.sh is run from
+start_case no-slash
+run_install file-in "$CHECKOUT" install.sh
+check "bash install.sh in the checkout (no slash): the installer beside it runs" status_is 0
+check "… nothing fetched" none_logged '^curl: '
+check "… it installs" logged "$sudo_line"
+start_case link
+mkdir -p "$CASE/elsewhere"
+ln -s "$CHECKOUT/install.sh" "$CASE/elsewhere/install.sh"
+RUN_SCRIPT=$CASE/elsewhere/install.sh
+run_install
+check "install.sh run through a link elsewhere: the checkout's installer runs" status_is 0
+check "… nothing fetched" none_logged '^curl: '
+start_case lone
+mkdir -p "$CASE/lone"
+cp "$INSTALL" "$CASE/lone/install.sh"
+RUN_SCRIPT=$CASE/lone/install.sh
+run_install
+check "an install.sh on its own (downloaded): the installer is fetched" fetched_from_repository
+check "… and runs" status_is 0
+start_case update-nixos
+os_release nixos
+run_install --update
+check "--update from a checkout on NixOS: exit 1" status_is 1
+check "… the NixOS refusal" says "This installer is not for NixOS"
+check "… nothing is run at all" test ! -s "$CONTROL/log"
+
+# pacman without its settings: another program of that name (Debian's game)
+start_case pacman-game
+os_release fedora
+rm "$OS_ROOT/etc/pacman.conf"
+run_install piped
+check "a program pacman without /etc/pacman.conf, not Arch-based: refused" says "supports only Arch Linux and systems based on it"
+check "… exit 1, nothing run" test "$STATUS" = 1 -a ! -s "$CONTROL/log"
+start_case pacman-game-arch
+rm "$OS_ROOT/etc/pacman.conf"
+run_install
+check "os-release says Arch but no /etc/pacman.conf: the Arch installer refuses" says "This script is for Arch Linux (pacman)"
+check "… exit 1, nothing run" test "$STATUS" = 1 -a ! -s "$CONTROL/log"
 
 start_case other-dispatch
 : > "$CONTROL/curl-other-dispatch"

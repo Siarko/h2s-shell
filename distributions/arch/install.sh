@@ -34,6 +34,9 @@ set -euo pipefail
 # one fetched from the repository may be newer or older than the script that fetched it.
 # Run directly, without the top-level script, nothing is handed over.
 dispatch_known=1
+# pacman's settings: with pacman itself, what tells an Arch-based system from one that has
+# another program of that name (tests/install-test.sh runs a copy naming a made-up file)
+pacman_conf=/etc/pacman.conf
 if [ -n "${H2S_INSTALL_DISPATCH:-}" ] && [ "$H2S_INSTALL_DISPATCH" != "$dispatch_known" ]; then
     echo "This Arch installer does not match the install.sh that ran it (hand-over $H2S_INSTALL_DISPATCH, it knows $dispatch_known). Fetch install.sh again and run that." >&2
     exit 1
@@ -122,7 +125,7 @@ if [ "${1:-}" = --update ]; then
     exit 0
 fi
 
-if ! command -v pacman > /dev/null; then
+if ! command -v pacman > /dev/null || [ ! -e "$pacman_conf" ]; then
     echo "This script is for Arch Linux (pacman). On NixOS use the flake: see $repository" >&2
     exit 1
 fi

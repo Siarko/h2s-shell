@@ -2077,10 +2077,11 @@ repository's master branch into a temporary file. That one may be newer than the
 fetched it, so the script hands over a version (`H2S_INSTALL_DISPATCH`) the installer
 refuses when it is not its own. Where the script was read from is taken outside any
 function: inside one bash names the caller (`bash` when piped), and the current folder would
-pass for a checkout. On another system that has `pacman` it warns and runs the Arch installer
-all the same; on NixOS and on systems without `pacman` it says it does not support them and
-changes nothing. `install.sh --update` from a checkout installs no package and runs on any
-system.
+pass for a checkout; a link to `install.sh` is followed to its checkout. On another system that
+has `pacman` and `/etc/pacman.conf` (not merely a program of that name) it warns and runs the
+Arch installer all the same, which checks the same two; on NixOS and on systems without them
+it says it does not support them and changes nothing. `install.sh --update` from a checkout
+installs no package and runs on any system but NixOS.
 
 `tests/install-test.sh` runs `install.sh` without letting it change anything: an empty
 environment, a private home directory and a `PATH` of one directory that holds recording
@@ -2102,10 +2103,13 @@ reading the config's origin fails, and that the helper is built as the user afte
 clone and at `--update` (by a stand-in `scripts/build-helper.sh` in the stand-in clone), a
 build that fails being a warning only. Which system it takes itself to be on comes from
 made-up os-release files (the fixtures of `tests/fixtures/distribution/`, read through a
-copy of `install.sh` whose one `os_release_root` line names a scratch tree): NixOS, Fedora,
-Linux Mint and none at all (without `pacman`) are refused with nothing run, Fedora with
-`pacman` is warned about and goes on, EndeavourOS runs the Arch installer, `--update` from a
-checkout runs on Fedora; given on standard input it fetches that installer once, over https,
+copy of each script whose one `system_root` or `pacman_conf` line names a scratch tree):
+NixOS, Fedora, Linux Mint and none at all (without `pacman`) are refused with nothing run,
+Fedora with `pacman` is warned about and goes on, a `pacman` without `/etc/pacman.conf` is
+refused by both scripts, EndeavourOS runs the Arch installer, `--update` from a checkout runs
+on Fedora and is refused on NixOS; `bash install.sh` in the checkout and a link to it
+elsewhere run the installer beside it, an `install.sh` on its own fetches one; given on
+standard input it fetches that installer once, over https,
 and leaves no temporary file — by the plain name `bash` in a folder holding a
 `distributions/arch/install.sh` too, which does not run — and a fetched installer that
 expects another hand-over version refuses. It runs on both systems.

@@ -173,7 +173,7 @@ check "package names, one dropped from the repositories: status 1" status_is 1
 check "package names, one dropped: that name is the FAIL" says "FAIL installed by install.sh: quickshell is in the repositories"
 echo pam-u2f > "$work/dropped"
 run_packages
-check "package names, a hint's package dropped (Arch's facts): that name is the FAIL" says "FAIL named to the user: pam-u2f is in the repositories"
+check "package names, a hint's package dropped (Arch's facts): that name is the FAIL" says "FAIL named in Arch's hints: pam-u2f is in the repositories"
 
 # The real sets: each system's directory holds a check, and every check file parses — on
 # this machine too, where only one of the sets runs

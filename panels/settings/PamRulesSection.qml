@@ -787,6 +787,7 @@ ColumnLayout {
                     title: _hand.modelData
                     rows: _hand.state.adopted?.rows ?? []
                     facts: root.factsFor(_hand.modelData)
+                    distributionFacts: root.integration?.facts ?? null
                 }
             }
         }
@@ -817,6 +818,7 @@ ColumnLayout {
                 title: root._titleOf(_listBlock.modelData)
                 rows: root._rowsOf(_listBlock.modelData)
                 facts: root.factsFor(_listBlock.service)
+                distributionFacts: root.integration?.facts ?? null
                 result: _listBlock.result
                 modalHost: root.modalHost
                 readOnly: root._handOf(_listBlock.modelData) || root._busy

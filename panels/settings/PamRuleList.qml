@@ -32,6 +32,9 @@ Item {
     property var rows: []
     // PamRuleRules.check's facts: { system, fingerprint, securityKey, faillockPresent, faillock }
     property var facts: ({})
+    // The distribution's facts, for how this system gets a reader's package (null: the
+    // neutral hint)
+    property var distributionFacts: null
     // PamRuleRules.check's result for these rows: a row it names gets a red or warning border
     property var result: ({ refusals: [], warnings: [] })
     // Where the fixed row's removal is asked (SettingsModalHost)
@@ -617,11 +620,12 @@ Item {
             Rectangle {
                 id: _option
                 required property string modelData
-                readonly property var option: PamRuleViewRules.addOptions(root.facts).find(item => item.method === modelData) ?? ({})
+                readonly property var option: PamRuleViewRules.addOptions(root.facts, root.distributionFacts).find(item => item.method === modelData) ?? ({})
                 readonly property bool available: option.available === true
                 objectName: "add:" + modelData
                 width: parent ? parent.width : 0
-                height: 44
+                // Taller where the note wraps (what a missing reader needs)
+                height: Math.max(44, _addTexts.implicitHeight + 12)
                 radius: Theme.listItem.radius
                 color: _optionArea.lit && available ? Theme.surfaceHover : Theme.surfaceHoverClear
                 opacity: available ? 1 : 0.5
@@ -645,6 +649,7 @@ Item {
                         }
                     }
                     ColumnLayout {
+                        id: _addTexts
                         objectName: "addTexts"
                         Layout.fillWidth: true
                         spacing: 0
@@ -659,8 +664,7 @@ Item {
                         }
                         Caption {
                             Layout.fillWidth: true
-                            wrapMode: Text.NoWrap
-                            elide: Text.ElideRight
+                            wrapMode: Text.WordWrap
                             text: _option.option.note ?? ""
                         }
                     }

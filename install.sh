@@ -30,9 +30,9 @@ dispatch_version=1
 # make the current folder look like a checkout)
 script_source=${BASH_SOURCE[0]:-}
 
-# The folder os-release is looked for under: "" for the system's (tests/install-test.sh
-# runs a copy that names a made-up tree)
-os_release_root=""
+# The folder the system's files (os-release, pacman.conf) are looked for under: "" for the
+# system's own (tests/install-test.sh runs a copy that names a made-up tree)
+system_root=""
 
 # os_release_word <text>: the value as os-release writes it, its quotes dropped
 os_release_word() {
@@ -48,7 +48,7 @@ detect_system() {
     local file line id="" like="" pretty="" word
     system=""
     name=""
-    for file in "$os_release_root/etc/os-release" "$os_release_root/usr/lib/os-release"; do
+    for file in "$system_root/etc/os-release" "$system_root/usr/lib/os-release"; do
         [ -e "$file" ] || continue
         [ -r "$file" ] || return 0
         while IFS= read -r line || [ -n "$line" ]; do
@@ -83,21 +83,22 @@ run_installer() {
 }
 
 main() {
-    # A checkout's installer beside this file, when read from a file
-    local here="" beside=""
+    # A checkout's installer beside this file, when read from a file: a link to install.sh
+    # followed to the checkout it is in
+    local here="" beside="" real=""
     if [ -n "$script_source" ]; then
+        real=$(readlink -f -- "$script_source") || real=$script_source
         here=.
-        [[ "$script_source" == */* ]] && here=${script_source%/*}
+        [[ "$real" == */* ]] && here=${real%/*}
         [ -f "$here/distributions/arch/install.sh" ] && beside=$here/distributions/arch/install.sh
     fi
 
-    # --update installs no package: from a checkout it runs whatever the system is
-    if [ "${1:-}" = --update ] && [ -n "$beside" ]; then
+    detect_system
+    # --update installs no package: from a checkout it runs on any system but NixOS
+    if [ "${1:-}" = --update ] && [ -n "$beside" ] && [ "$system" != nixos ]; then
         run_installer "$beside" "$@"
         return
     fi
-
-    detect_system
     case "$system" in
         arch) ;;
         nixos)
@@ -105,7 +106,8 @@ main() {
             exit 1
             ;;
         *)
-            if command -v pacman > /dev/null; then
+            # pacman itself, with its settings: not another program of that name (a game)
+            if command -v pacman > /dev/null && [ -e "$system_root/etc/pacman.conf" ]; then
                 echo "Warning: ${name:-this system} is not detected as Arch-based (os-release), but it has pacman: continuing with the Arch installer." >&2
             else
                 echo "This installer supports only Arch Linux and systems based on it, not ${name:-this system}." >&2
@@ -120,7 +122,8 @@ main() {
         return
     fi
 
-    # Given on standard input: the installer fetched from the repository first
+    # Given on standard input: the installer fetched from the repository first — always from
+    # its master branch, whatever revision this script came from
     if ! command -v curl > /dev/null; then
         echo "Fetching the Arch installer needs curl, and there is none. Run install.sh from a checkout instead: $repository" >&2
         exit 1

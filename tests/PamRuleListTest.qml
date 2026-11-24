@@ -229,7 +229,14 @@ TestCase {
         const options = rules.addOptions(facts);
         assertEqual(options.map(option => option.method + ":" + option.available).join(" "),
                     "fingerprint:true securityKey:false password:true raw:true", "addOptions: every method, a missing key off");
-        assertEqual(options[1].note + " | " + options[0].note, "No key registered | A finger is enrolled", "… with its reason");
+        assertEqual(options[1].note + " | " + options[0].note,
+                    "No key registered — it needs pam_u2f and a registered key. From this system's packages: pam_u2f, for security keys. | A finger is enrolled",
+                    "… with its reason and what it needs: the system not known, the neutral hint");
+        const archFacts = { label: "Arch Linux", packages: { fprintd: { package: "fprintd" }, pamU2f: { package: "pam-u2f" } } };
+        assertEqual(rules.addOptions({ fingerprint: "absent", securityKey: "absent" }, archFacts).slice(0, 2).map(option => option.note).join(" | "),
+                    "No finger enrolled — it needs fprintd and an enrolled finger. On Arch Linux: the package fprintd. | "
+                    + "No key registered — it needs pam_u2f and a registered key. On Arch Linux: the package pam-u2f.",
+                    "… on Arch: the package names, as the lock's switches say them");
         assertEqual(options[2].note + " | " + options[3].note, "Only the password, without the system's other rules | Any PAM line, as written — not checked",
                     "… the password and a raw line explained");
         assertEqual(rules.addOptions({}).find(option => option.method === "fingerprint").note, "Not known whether a finger is enrolled",

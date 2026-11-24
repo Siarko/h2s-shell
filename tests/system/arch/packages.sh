@@ -14,13 +14,14 @@ listed=$(pacman -Sl 2> /dev/null | head -n 1)
 
 # The names in the Arch installer's `packages=( … )`, comments dropped
 mapfile -t installed < <(sed -n '/^packages=(/,/^)/p' "$REPO/distributions/arch/install.sh" | sed '1d;$d;s/#.*//' | tr -s ' \t' '\n' | grep .)
-# The names after "pacman -S" in what the installer prints, and the "package" names of
-# Arch's hints
-mapfile -t named < <({ grep -ho 'pacman -S [a-z0-9][a-z0-9-]*' "$REPO/distributions/arch/install.sh" | sed 's/^pacman -S //'
-                       grep -o '"package": *"[^"]*"' "$REPO/distributions/arch/distribution.json" | sed 's/.*: *"//; s/"$//'; } | grep . | sort -u)
+# The names after "pacman -S" in what the installer prints
+mapfile -t named < <(grep -ho 'pacman -S [a-z0-9][a-z0-9-]*' "$REPO/distributions/arch/install.sh" | sed 's/^pacman -S //' | grep . | sort -u)
+# The "package" names of Arch's hints
+mapfile -t hinted < <(grep -o '"package": *"[^"]*"' "$REPO/distributions/arch/distribution.json" | sed 's/.*: *"//; s/"$//' | grep . | sort -u)
 
 check "install.sh's package list is read (some names)" test "${#installed[@]}" -ge 10
-check "the names the installer prints and Arch's hints name are read (some names)" test "${#named[@]}" -ge 3
+check "the names the installer prints are read (some names)" test "${#named[@]}" -ge 3
+check "Arch's hints are read (the font, fprintd, pam-u2f)" test "${#hinted[@]}" = 3
 # "--": a name is never read as an option (pacman -Si without a name lists everything)
 in_repositories() { [ -n "$1" ] && pacman -Si -- "$1" > /dev/null 2>&1; }
 for package in "${installed[@]}"; do
@@ -28,4 +29,7 @@ for package in "${installed[@]}"; do
 done
 for package in "${named[@]}"; do
     check "named to the user: $package is in the repositories" in_repositories "$package"
+done
+for package in "${hinted[@]}"; do
+    check "named in Arch's hints: $package is in the repositories" in_repositories "$package"
 done
