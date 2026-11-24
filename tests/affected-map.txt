@@ -129,6 +129,10 @@ tests-helper.qml self:tests/run-helper.sh
 singletons/helper/ScreenSaverClient.qml self:tests/run-helper.sh
 +singletons/HelperRules.qml self:tests/run-helper.sh
 tests/fixtures/helper/* unit:HelperTest
+# The mockups' root entry, their window and the runners' fixture mockups
+mockup.qml self:tests/mockup-entry-selftest.sh
+mockups/kit/* self:tests/mockup-entry-selftest.sh
+tests/fixtures/mockups/* self:tests/mockup-entry-selftest.sh
 flake.nix self:tests/run-system.sh
 flake.lock self:tests/run-system.sh unit:QuickshellPinTest
 nix/* self:tests/run-system.sh

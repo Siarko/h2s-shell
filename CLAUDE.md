@@ -161,6 +161,41 @@ restart it fully after changing anything under `singletons/`.
 Beyond the test suites, verification is manual: check that the bar renders, the clock
 ticks, cells respond to clicks, and popups toggle.
 
+## Mockups
+
+`mockups/`, with the root entry `mockup.qml`: development only, never installed. A mockup is
+`mockups/<kind>/<name>/Mockup.qml`, run against this tree (no copy of it), with
+`H2S_MOCKUP=<kind>/<name>` (`H2S_MOCKUP_SCENE=<scene>` opens a scene;
+`H2S_MOCKUP_SHOT=1` steps through the scenes headless). Its root is the kit's
+`MockupWindow` (`import qs.mockups.kit`), which holds the scene contract — `scenes`,
+`scene`, `subject`, `subjectRect` — and the shot protocol (`mockups/kit/MockupWindow.qml`).
+Folder names are lowercase with hyphens, so no `import qs.…` reaches them; `kit/` is the only
+importable folder. Three kinds:
+
+- `components/<name>`: one component in all its states (the component's file name in kebab
+  case).
+- `views/<name>`: one view on stand-in data.
+- `planning/<feature>`: an idea with notes (`MOCKUP.md`: the purpose, the scenes, the
+  proposed wording, open questions), only for making the plan and the implementation; not
+  tested; deleted a longer while after the feature is merged.
+
+Components and views have a baseline under `baseline/`, compared exactly (on Arch; NixOS
+runs them load-only). A baseline changes only in the commit of the code change that causes
+it, after the maintainer approved the review images.
+
+Mockup code:
+
+- It uses the real components, views and theme, with stand-in data passed in through
+  properties. It never reads the system, the clock or the network; a time shown is a fixed
+  value, and a looping animation is off in a scene through the component's own property.
+- It never changes a shell file for its own sake. If a view cannot take stand-in data, that
+  missing seam is reported and added to the shell as a change of its own, with its test.
+- It contains no `*Rules.qml`, no literal colours (theme tokens, as everywhere), and no
+  `qmldir`.
+- Planning mockups are throwaway code: no review, no test, and kept out of every closure.
+
+Shell code never imports from `mockups/`.
+
 ## Conventions
 
 - **The helper (`helper/`) is I/O only**: it reports and acts on request, decisions stay
