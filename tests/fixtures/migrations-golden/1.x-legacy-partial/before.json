@@ -1,0 +1,49 @@
+{
+    "profiles": "[{\"name\":\"Full\",\"enabled\":true,\"when\":{},\"set\":{\"polling.hardware.interval\":5000,\"media.visualizerStyle\":\"waveform\",\"media.visualizerLayout\":\"horizontal\"}},{\"name\":\"Power save\",\"enabled\":true,\"when\":{\"all\":[{\"fact\":\"power.onBattery\",\"is\":true}]},\"set\":{\"polling.hardware.interval\":10000}}]",
+    "migratedKeys": [
+        "media.visualizerStyle",
+        "theme.barLayout",
+        "default:lockscreen.lockNotificationDetail",
+        "lockscreen.screensaverCommands"
+    ],
+    "general": {
+        "debug": true
+    },
+    "media": {
+        "visualizerStyle": "bars",
+        "visualizerLayout": "vertical"
+    },
+    "lockscreen": {
+        "screensaverEnabled": true
+    },
+    "gcal": {
+        "enabled": false,
+        "viewMode": "day",
+        "clientId": "",
+        "clientSecret": "",
+        "accessToken": "",
+        "refreshToken": "",
+        "tokenExpiry": 0,
+        "enabledCalendarIds": []
+    },
+    "bar": {
+        "content": {
+            "left": [
+                "power",
+                "workspaces",
+                "clock"
+            ],
+            "leftProfiles": "[\"\", \"x\"]",
+            "center": [
+                "clock"
+            ],
+            "centerProfiles": "not json",
+            "right": [
+                "music"
+            ],
+            "rightProfiles": "null"
+        }
+    },
+    "widgetProfiles": "{\"hardware\":{\"_popup\":[\"cpu\"]},\"music\":{\"_popupMode\":\"hover\"},\"workspaces\":{\"x\":{\"showEmpty\":true}}}",
+    "writtenBy": "1.2.0"
+}

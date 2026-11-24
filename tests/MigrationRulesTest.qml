@@ -61,6 +61,8 @@ TestCase {
         _scopes();
         _documentParts();
         _projection();
+        _wholeLibrary();
+        _ownRecords();
         _runs();
         _failure();
         _wholeScope();
@@ -108,7 +110,7 @@ TestCase {
         assertEqual(JSON.stringify(rules.parsePath("raw:widgetProfiles")), JSON.stringify({ kind: "raw", key: "widgetProfiles" }), "path: a raw key");
         assertEqual(JSON.stringify(rules.parsePath("file:themes/*")), JSON.stringify({ kind: "file", pattern: "themes/*" }), "path: side files");
         for (const bad of ["raw:migratedKeys", "raw:writtenBy", "raw:profiles", "raw:globals", "raw:widgetPresets", "raw:__proto__", "setting:", "setting:a..b",
-                           "setting:*", "preset:", "preset:/b", "preset:a/", "preset:__proto__/b", "preset:a/*", "preset:a/b/*", "preset:a/*/__proto__", "preset:a/b/c/d", "preset:a//k", "preset:/b/k", "file:", "file:a/", "rawx", ":raw", "raw", "Raw:x", "preset:__proto__", "file:../x", "file:/etc/passwd", "file:a//b", "other:x", "bar.height", 3])
+                           "setting:*", "preset:", "preset:*/b", "preset:*/*/k", "preset:*/b/k", "preset:/b", "preset:a/", "preset:__proto__/b", "preset:a/*", "preset:a/b/*", "preset:a/*/__proto__", "preset:a/b/c/d", "preset:a//k", "preset:/b/k", "file:", "file:a/", "rawx", ":raw", "raw", "Raw:x", "preset:__proto__", "file:../x", "file:/etc/passwd", "file:a//b", "other:x", "bar.height", 3])
             assertEqual(rules.parsePath(bad), null, "path: " + JSON.stringify(bad) + " is not one");
         assert(!rules.parseScope([]).ok && !rules.parseScope("setting:a").ok, "scope: empty or not a list: unreadable");
         assert(rules.parsePath("preset:" + "a".repeat(128)) !== null && rules.parsePath("preset:" + "a".repeat(129)) === null, "path: a name of at most 128 characters");
@@ -143,6 +145,72 @@ TestCase {
         assert(overlap(["*"], ["raw:x"]) && overlap(["setting:q"], ["*"]), "overlap: \"*\" overlaps everything");
         assert(rules.scopesOverlap({ ok: false }, rules.parseScope(["raw:x"])), "overlap: an unreadable scope overlaps everything");
         assert(overlap(["setting:x", "preset:music"], ["raw:y", "preset:music/a"]), "overlap: any path of one with any of the other");
+        assertEqual(JSON.stringify(rules.parsePath("preset:*")), JSON.stringify({ kind: "preset", type: "*", name: "", key: "" }), "path: the whole preset library");
+        assert(overlap(["preset:*"], ["preset:clock/a/format"]) && overlap(["preset:music"], ["preset:*"]) && !overlap(["preset:*"], ["setting:x"]),
+               "overlap: the whole library overlaps every preset path, both ways, and nothing else");
+    }
+
+    // The whole library in scope ("preset:*"): every type handed, reset, replaced
+    function _wholeLibrary() {
+        const scope = rules.parseScope(["preset:*"]);
+        const document = _document();
+        assertEqual(JSON.stringify(Object.keys(rules.projection(document, scope).presets).sort()), JSON.stringify(["clock", "music"]), "library: every type handed");
+        assertEqual(JSON.stringify(rules.withoutScope(document, scope, false).presets), "{}", "library: its reset removes every type");
+        const replace = _migration("2026-11-25-l-library", "2.2.0", ["preset:*"], doc => { delete doc.presets.music; doc.presets.tray = { A: { x: 1 } }; return doc; });
+        const applied = rules.applyOne(replace, document, {}, []);
+        assert(applied.ok, "library: a migration may add and remove whole types" + (applied.ok ? "" : ": " + applied.error));
+        assertEqual(JSON.stringify(Object.keys(applied.document.presets).sort()), JSON.stringify(["clock", "tray"]), "library: … the types as it left them");
+        assertEqual(applied.document.globals["theme.name"], "dark", "library: … the rest untouched");
+        const outside = _migration("2026-11-25-l-outside", "2.2.0", ["preset:*"], doc => { doc.globals.x = 1; return doc; });
+        assert(!rules.applyOne(outside, document, {}, []).ok, "library: a setting is still outside it");
+    }
+
+    // A migration's own markers in migratedKeys (ownsRecord), and its check that code from
+    // before the runner already applied it (appliedBefore)
+    function _ownRecords() {
+        const records = ["2026-11-25-a-clock-format", "general.debug", "mine.one", "mine.two", "reset:2026-11-25-x-music-popup"];
+        const owner = extra => _migration("1.0.0-markers", "1.0.0", ["setting:clock.*"], doc => doc,
+                                          Object.assign({ ownsRecord: entry => entry.startsWith("mine.") || entry === "2026-11-25-a-clock-format" || entry === "reset:2026-11-25-x-music-popup" }, extra ?? {}));
+        assertEqual(JSON.stringify(rules.ownedRecords(owner(), records)), JSON.stringify(["mine.one", "mine.two"]), "own records: only its markers, never an id or record form");
+        assertEqual(rules.ownedRecords(_failing[0], records).length, 0, "own records: none without ownsRecord");
+        assertEqual(rules.ownedRecords(owner({ ownsRecord: entry => { throw new Error("x"); } }), records).length, 0, "own records: an ownsRecord that throws owns nothing");
+        let handed = null;
+        const seen = rules.applyOne(owner({ migrate: doc => { handed = doc.records; return doc; } }), _document(), {}, records);
+        assertEqual(JSON.stringify(handed), JSON.stringify(["mine.one", "mine.two"]), "own records: handed as document.records");
+        assertEqual(JSON.stringify(seen.records), JSON.stringify(records), "own records: handed back unchanged, the records as they were");
+        const changed = rules.applyOne(owner({ migrate: doc => { doc.records = ["mine.three", "mine.one"]; return doc; } }), _document(), {}, records);
+        assertEqual(JSON.stringify(changed.records), JSON.stringify(["2026-11-25-a-clock-format", "general.debug", "mine.one", "reset:2026-11-25-x-music-popup", "mine.three"]),
+                    "own records: a kept marker stays in place, a dropped one goes, a new one comes last");
+        const dropped = rules.applyOne(owner({ migrate: doc => { delete doc.records; return doc; } }), _document(), {}, records);
+        assert(dropped.ok && JSON.stringify(dropped.records) === JSON.stringify(records), "own records: a result without records keeps its markers");
+        const stranger = rules.applyOne(_migration("2026-11-25-s-stranger", "2.2.0", ["setting:clock.*"], doc => { doc.records = ["mine.one"]; return doc; }), _document(), {}, records);
+        assert(!stranger.ok && stranger.error.includes("part no document has"), "own records: a migration without ownsRecord returning records fails as a malformed document");
+        const notHanded = rules.applyOne(_migration("2026-11-25-n-none", "2.2.0", ["setting:clock.*"], doc => { handed = doc.records; return doc; }), _document(), {}, records);
+        assertEqual(handed, undefined, "own records: a migration without ownsRecord is handed none");
+        assertEqual(JSON.stringify(notHanded.records), JSON.stringify(records), "own records: … and its records stay");
+        for (const [written, what] of [[["general.debug"], "another's marker"], [["2026-11-25-z-battery-warn"], "an id"], [["reset:2026-11-25-a-clock-format"], "a record form"],
+                                       ["mine.one", "not a list"], [[3], "not text"]]) {
+            const refused = rules.applyOne(owner({ ownsRecord: entry => typeof entry === "string" && entry !== "general.debug", migrate: doc => { doc.records = written; return doc; } }), _document(), {}, records);
+            assert(!refused.ok && refused.error.includes("record it does not own") && JSON.stringify(refused.records) === JSON.stringify(records),
+                   "own records: writing " + what + " fails, the records as they were");
+        }
+        // In a run: its markers written with its id
+        const marking = owner({ migrate: doc => { doc.records.push("mine.three"); return doc; } });
+        const run = rules.run([marking], _document(), { records: ["mine.one"], version: "2.2.0" });
+        assertEqual(JSON.stringify(run.records), JSON.stringify(["mine.one", "mine.three", "1.0.0-markers"]), "own records: a run writes the markers, then the id");
+        assert(run.write && !run.changed, "own records: markers alone are a write, not a change (no backup)");
+
+        // appliedBefore: the config as read decides; not run, not recorded, nothing written
+        const before = owner({ appliedBefore: config => config.migratedKeys.includes("mine.done"), migrate: doc => { doc.globals["clock.x"] = 1; return doc; } });
+        assert(rules.appliedBefore(before, { migratedKeys: ["mine.done"] }) && !rules.appliedBefore(before, { migratedKeys: [] }), "applied before: its check on the config");
+        assert(!rules.appliedBefore(_failing[0], _raw()) && !rules.appliedBefore(owner({ appliedBefore: config => { throw new Error("x"); } }), _raw())
+               && !rules.appliedBefore(owner({ appliedBefore: config => "yes" }), _raw()) && !rules.appliedBefore(before, null)
+               && !rules.appliedBefore(owner({ appliedBefore: config => true }), null),
+               "applied before: no check, a check that throws or does not say true, or no config: no");
+        const done = rules.startup([before], Object.assign(_raw(), { migratedKeys: ["mine.done"] }), {}, [], { version: "2.2.0" });
+        assert(!done.write && !done.backup && done.report.applied.length === 0, "applied before: at start not run, nothing written");
+        const due = rules.startup([before], _raw(), {}, [], { version: "2.2.0" });
+        assert(due.write && due.report.applied.join() === "1.0.0-markers" && due.config.migratedKeys.includes("1.0.0-markers"), "applied before: otherwise run and recorded");
     }
 
     function _documentParts() {

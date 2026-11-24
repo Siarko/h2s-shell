@@ -1,0 +1,15 @@
+{
+    "profiles": "[{\"name\":\"Mine\",\"enabled\":true,\"when\":{},\"set\":{\"bar.edge\":\"bottom\"}}]",
+    "migratedKeys": [
+        "theme.barLayout",
+        "default:lockscreen.lockNotificationDetail"
+    ],
+    "general": {
+        "debug": true
+    },
+    "media": {
+        "visualizerStyle": "bars"
+    },
+    "widgetPresets": "{}",
+    "writtenBy": "1.2.0"
+}

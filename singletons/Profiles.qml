@@ -31,36 +31,8 @@ Singleton {
                                                                         _powerProfileName(PowerProfiles.profile)))
     }
 
-    // Settings that moved into the schema bring their value from a config file written
-    // before profiles along, once — see ProfileRules.migrateLegacy. Runs after seeding, so
-    // the values land in the seeded Full.
-    function _migrateIfNeeded() {
-        if (!Config.ready || Config.profiles === "")
-            return
-        const old = oldConfig()
-        const result = ProfileRules.migrateLegacy(SettingsSchema.entries,
-                                                  path => ProfileRules.readLegacy(old, path),
-                                                  Config.migratedKeys, profiles, globals)
-        for (const failure of result.failed)
-            _log.error("Cannot migrate", failure)
-        // Then the defaults that changed since Full was seeded (ProfileRules.migrateDefaults)
-        const defaults = ProfileRules.migrateDefaults(SettingsSchema.entries, result.migratedKeys, result.profiles)
-        if (defaults.migratedKeys.length === Config.migratedKeys.length)
-            return
-        if (result.copied.length > 0 || defaults.changed.length > 0)
-            backUpConfig()
-        // Always shown, not only in debug: a one-time change to the user's config
-        if (result.copied.length > 0)
-            console.log("[Profiles] Moved into profiles from the old config:", result.copied.join(", "))
-        if (defaults.changed.length > 0)
-            console.log("[Profiles] Now at their new default (Full held the old one):", defaults.changed.join(", "))
-        Config.profiles = JSON.stringify(defaults.profiles)
-        Config.globals = JSON.stringify(result.globals)
-        Config.migratedKeys = defaults.migratedKeys
-    }
-
     // The config file as JSON, with the sections from before profiles that Config no
-    // longer declares; read fresh for each migration
+    // longer declares (ThemeFiles' bar geometry); read fresh each time
     function oldConfig() {
         _configFile.reload()
         try {
@@ -70,8 +42,9 @@ Singleton {
         }
     }
 
+    // Not while saves are blocked: the change it would guard is not saved either
     function backUpConfig() {
-        if (Config.readOnly)
+        if (Config.readOnly || Config.saveBlocked)
             return
         const stamp = new Date().toISOString().replace(/[:.]/g, "-")
         _configCopy.path = Config.path + ".bak-" + stamp
@@ -81,7 +54,7 @@ Singleton {
     FileView {
         id: _configFile
         path: Config.path
-        // Every read, not only the first: oldConfig reloads it for each migration
+        // Every read, not only the first: oldConfig reloads it each time
         blockAllReads: true
         printErrors: false
     }
@@ -91,19 +64,6 @@ Singleton {
         blockWrites: true
         // Only ever written, to a new file
         printErrors: false
-    }
-
-    // The preset library starts as a copy of the old widget settings, once
-    function _migratePresetsIfNeeded() {
-        if (!Config.ready || Config.widgetPresets !== "")
-            return
-        let old = {}
-        try {
-            old = JSON.parse(oldConfig().widgetProfiles || "{}")
-        } catch (error) {}
-        backUpConfig()
-        Config.widgetPresets = JSON.stringify(ProfileRules.presetsFromWidgetProfiles(old))
-        console.log("[Profiles] Widget profiles are now widget presets")
     }
 
     // The migrations that need the profiles (phase "afterSeed": Config.runAfterSeedMigrations),
@@ -116,8 +76,6 @@ Singleton {
     Component.onCompleted: {
         _seedIfNeeded()
         _afterSeedIfNeeded()
-        _migrateIfNeeded()
-        _migratePresetsIfNeeded()
         _applyPowerProfile()
         _reportRangeCorrections()
     }
@@ -127,12 +85,9 @@ Singleton {
         function onReadyChanged() {
             Qt.callLater(root._seedIfNeeded)
             Qt.callLater(root._afterSeedIfNeeded)
-            Qt.callLater(root._migrateIfNeeded)
-            Qt.callLater(root._migratePresetsIfNeeded)
         }
         function onProfilesChanged() {
             Qt.callLater(root._afterSeedIfNeeded)
-            Qt.callLater(root._migrateIfNeeded)
         }
     }
 

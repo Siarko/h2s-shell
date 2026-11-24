@@ -151,6 +151,8 @@ tests/mockup.sh self:tests/mockup-selftest.sh
 tests/fixtures/migrations-testonly/* unit:MigrationsTest
 # The golden outputs of the startup migrations, read by path
 tests/fixtures/migrations-golden/* unit:MigrationsGoldenTest
+# Each registered migration's fixture, read by path
+tests/fixtures/migrations/* unit:MigrationsTest
 flake.nix self:tests/run-system.sh
 flake.lock self:tests/run-system.sh unit:QuickshellPinTest
 nix/* self:tests/run-system.sh

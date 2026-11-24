@@ -1,0 +1,9 @@
+{
+    "profiles": "[{\"name\":\"Night\",\"enabled\":true,\"when\":{},\"set\":{\"lockscreen.lockNotificationDetail\":\"full\"}},{\"name\":\"Full\",\"enabled\":true,\"when\":{},\"set\":{\"bar.edge\":\"top\"}}]",
+    "globals": "{\"lockscreen.lockNotificationDetail\":\"full\"}",
+    "migratedKeys": [
+        "general.debug",
+        "theme.barLayout",
+        "default:lockscreen.lockNotificationDetail"
+    ]
+}

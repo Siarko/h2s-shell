@@ -2,6 +2,7 @@ pragma Singleton
 
 import Quickshell
 import QtQuick
+import qs.singletons.migrations
 
 // The core's settings migrations, in the order they run: one object per file under
 // singletons/migrations/ (migrationId, since, summary, scope, migrate), each added at the end
@@ -10,7 +11,11 @@ import QtQuick
 Singleton {
     id: root
 
-    readonly property list<QtObject> _registered: []
+    readonly property list<QtObject> _registered: [
+        PreProfilesSettings {},
+        WidgetPresetsFromProfiles {},
+        LockNotificationDetailDefault {}
+    ]
 
     // The registry, a new list at each call (a shared list could be changed by a reader)
     function all() {

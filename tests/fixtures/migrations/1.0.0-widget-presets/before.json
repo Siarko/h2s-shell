@@ -1,0 +1,5 @@
+{
+    "profiles": "[{\"name\":\"Full\",\"enabled\":true,\"when\":{},\"set\":{}}]",
+    "migratedKeys": [],
+    "widgetProfiles": "{\"workspaces\":{\"default\":{\"showEmpty\":false},\"only_special\":{\"specialOnly\":true}},\"clock\":{\"default\":{\"format\":\"HH:mm\"},\"_popupMode\":\"hover\"},\"hardware\":{\"compact\":{\"items\":[\"cpu\",\"ram\"]},\"_popup\":[\"cpu\"],\"_labels\":{\"cpu\":\"Processor\"},\"_capsuleLabels\":{\"cpu\":\"C\"}},\"music\":{\"_popupMode\":\"click\"}}"
+}

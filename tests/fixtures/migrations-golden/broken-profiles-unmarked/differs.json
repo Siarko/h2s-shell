@@ -1,0 +1,4 @@
+{
+    "readOnly": true,
+    "why": "A profile list that is not one is never migrated on a guess: the file stays as it is and saves are blocked for the session. The code before the runner read it as no profiles and wrote \"[]\" over it."
+}

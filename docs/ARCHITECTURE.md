@@ -390,17 +390,17 @@ Settings live in **shell profiles**.
 - `singletons/SettingsSchema.qml` lists every setting: key (`media.visualizerStyle`,
   `bar.left`, `widgets.music.popupMode`, …), label, type, default, settings page group,
   and optionally `global: true` (never per profile — debug switches, the dictation
-  socket) and `legacy` (where it lived in a config file written before profiles). The
+  socket). The
   defaults together are the built-in **system profile**.
 - A **profile** is a named list of overrides with a condition (`when`) over live facts:
   battery, battery level, power profile, lock state, fullscreen, open popup. Active
   profiles layer in list order over the system profile; the user can also pin a setting
   as global, which no profile changes. `singletons/ProfileRules.qml` holds the pure logic
-  (conditions, layering, migration) and has its own tests.
+  (conditions, layering) and has its own tests.
 - `singletons/Profiles.qml` evaluates them: **read any setting with
   `Profiles.value(key)`** in a binding — it follows profile switches. It also seeds new
-  configs with Full and Power save, applies the system power profile, and migrates old
-  configs once. Facts can be simulated with `qs ipc call profiles simulate '{…}'`.
+  configs with Full and Power save, applies the system power profile, and starts the
+  after-seed settings migrations once the profiles exist. Facts can be simulated with `qs ipc call profiles simulate '{…}'`.
   A number setting (`number`, `slider`, `interval`, a module's too) reaches `value()`
   within its schema's `min`/`max`: a stored value outside them is used at the nearest
   bound (a `number`'s fraction rounded), one that is not a number at the default
@@ -456,6 +456,17 @@ manual ones (`-manual`) never. Migrations with `phase: "afterSeed"` run from `Pr
 once the profiles exist (`Config.runAfterSeedMigrations`), on the config as it stands when
 it is written, so a save made while they ran is kept. Each run's report is
 `Config.migrationReports`; under the test runner nothing is written.
+
+Each migration is a file in `singletons/migrations/` (its tables frozen in it: it never reads
+the live schema), registered in order in `Migrations.qml`. A migration that took over from
+code older than the runner may say `appliedBefore(config)`: a config that code already
+migrated is neither run nor recorded; and `ownsRecord(entry)`: the per-key markers that code
+wrote in `migratedKeys` (`general.debug`, `default:<key>`) are its own, handed to it and
+written back, so an older shell does not migrate the same keys again. The settings from
+before profiles (`1.0.0-legacy-settings`, after seeding), the widget preset library from the
+old widget settings (`1.0.0-widget-presets`) and the lock screen's former default
+(`2.1.0-lock-notification-detail-default`) are such migrations; `tests/MigrationsGoldenTest.qml`
+holds old configs and what the code before the runner made of them.
 
 ### Version
 

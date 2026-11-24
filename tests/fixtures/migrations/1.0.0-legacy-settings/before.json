@@ -1,0 +1,33 @@
+{
+    "profiles": "[{\"name\":\"Full\",\"enabled\":true,\"when\":{},\"set\":{\"media.visualizerStyle\":\"waveform\",\"media.visualizerLayout\":\"horizontal\",\"bar.left\":[{\"type\":\"clock\",\"preset\":\"\"}]}},{\"name\":\"Power save\",\"enabled\":true,\"when\":{\"all\":[{\"fact\":\"power.onBattery\",\"is\":true}]},\"set\":{\"polling.hardware.interval\":10000}}]",
+    "migratedKeys": [
+        "media.visualizerLayout",
+        "theme.barLayout"
+    ],
+    "general": {
+        "debug": true,
+        "fetch_debug": false
+    },
+    "media": {
+        "visualizerStyle": "bars",
+        "visualizerLayout": "vertical"
+    },
+    "stt": {
+        "socketPath": "/run/user/1000/example.sock"
+    },
+    "gcal": {
+        "enabled": false,
+        "viewMode": "day",
+        "refreshToken": ""
+    },
+    "bar": {
+        "content": {
+            "left": [
+                "power",
+                "workspaces"
+            ],
+            "leftProfiles": "[\"\", \"only_special\"]"
+        }
+    },
+    "widgetProfiles": "{\"hardware\":{\"_popup\":[\"cpu\"],\"_popupLabels\":{\"cpu\":\"Processor\"}},\"music\":{\"_popupMode\":\"hover\"},\"example\":{\"_popupMode\":\"click\"},\"workspaces\":{\"_popupMode\":\"hover\",\"only_special\":{\"specialOnly\":true}}}"
+}

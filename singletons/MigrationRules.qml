@@ -21,7 +21,12 @@ import Quickshell
 //
 // A migration: { migrationId, since, summary, scope: [path…], wholeScopeReason (for "*"),
 // migrate(document, context) → document } — `migrationId`, as a QML object cannot have a
-// property named `id`.
+// property named `id`. Optional: `phase` ("afterSeed"); `ownsRecord(entry)` → bool, the
+// entries of migratedKeys that are its own markers (only ones that are no id or record form:
+// the markers older code wrote per key), handed to it as `document.records` and taken back
+// from its result's `records` — no other record ever reaches it; `appliedBefore(config)` →
+// bool, config.json as read (migratedKeys included) already migrated the way it does by code
+// from before the runner, so it is not run, nor recorded.
 Singleton {
     id: root
 
@@ -110,6 +115,33 @@ Singleton {
     // holds them)
     function pending(registry, records) {
         return (Array.isArray(registry) ? registry : []).filter(migration => !isDone(migration?.migrationId, records));
+    }
+
+    // The migration's own check that `config` (config.json as read) was already migrated its
+    // way by code from before the runner; a check that throws or is absent says no
+    function appliedBefore(migration, config) {
+        if (typeof migration?.appliedBefore !== "function" || !_object(config))
+            return false;
+        try {
+            return migration.appliedBefore(_copy(config)) === true;
+        } catch (error) {
+            return false;
+        }
+    }
+
+    function _owns(migration, entry) {
+        try {
+            return migration.ownsRecord(entry) === true;
+        } catch (error) {
+            return false;
+        }
+    }
+
+    // Of `records`, the migration's own markers (ownsRecord): never an id or a record form
+    function ownedRecords(migration, records) {
+        if (typeof migration?.ownsRecord !== "function")
+            return [];
+        return _records(records).filter(entry => parseRecord(entry).kind === "other" && _owns(migration, entry));
     }
 
     // A new config's records: every registered id applied, none run (defaults are current)
@@ -241,7 +273,8 @@ Singleton {
     }
 
     // One scope path → { kind, … } or null. "setting:<key>", "setting:<prefix>.*",
-    // "preset:<type>" (every preset of the type), "preset:<type>/<name>" (one preset),
+    // "preset:<type>" (every preset of the type; "preset:*" the whole library, every type),
+    // "preset:<type>/<name>" (one preset),
     // "preset:<type>/*/<key>" (one key in every preset of the type),
     // "preset:<type>/<name>/<key>", "raw:<top-level key>", "file:<path>" (a relative path;
     // "*" matches within one folder level), "*"
@@ -264,6 +297,8 @@ Singleton {
             const names = rest.split("/");
             if (names.length === 1 && _name(names[0]))
                 return { kind: "preset", type: names[0], name: "", key: "" };
+            if (names[0] === "*")
+                return null;
             if (names.length === 2 && _name(names[0]) && _name(names[1]) && names[1] !== "*")
                 return { kind: "preset", type: names[0], name: names[1], key: "" };
             if (names.length === 3 && _name(names[0]) && _name(names[1]) && _name(names[2]) && names[2] !== "*")
@@ -314,7 +349,7 @@ Singleton {
 
     // A preset path naming preset `name` of `type` (any of its keys)
     function _presetPath(path, type, name) {
-        return path.kind === "preset" && path.type === type && (path.name === "" || path.name === name);
+        return path.kind === "preset" && (path.type === type || path.type === "*") && (path.name === "" || path.name === name);
     }
 
     // The whole preset is in scope
@@ -332,7 +367,7 @@ Singleton {
     }
 
     function _wholeTypeIn(type, paths) {
-        return paths.some(path => path.kind === "preset" && path.type === type && path.name === "" && path.key === "");
+        return paths.some(path => path.kind === "preset" && (path.type === type || path.type === "*") && path.name === "" && path.key === "");
     }
 
     function _rawIn(key, paths) {
@@ -363,7 +398,8 @@ Singleton {
             return first.prefix.startsWith(second.prefix) || second.prefix.startsWith(first.prefix);
         }
         if (first.kind === "preset")
-            return first.type === second.type && (first.name === "" || second.name === "" || first.name === second.name)
+            return (first.type === second.type || first.type === "*" || second.type === "*")
+                && (first.name === "" || second.name === "" || first.name === second.name)
                 && (first.key === "" || second.key === "" || first.key === second.key);
         if (first.kind === "raw")
             return first.key === second.key;
@@ -654,29 +690,49 @@ Singleton {
         return merged;
     }
 
-    // One migration on the document: handed its projection, its result checked and merged
-    // back. → { ok, error, document } — not ok when it throws, returns no document or reaches
-    // outside its scope (its result discarded; `document` then the input)
-    function applyOne(migration, document, context) {
+    // One migration on the document: handed its projection (and its own markers of
+    // `records`, ownedRecords, as `records`), its result checked and merged back.
+    // → { ok, error, document, records } — not ok when it throws, returns no document, reaches
+    // outside its scope or hands back a marker it does not own (its result discarded;
+    // `document` and `records` then the input). `records`: the markers it changed in place,
+    // new ones after the others, in the order it gave them.
+    function applyOne(migration, document, context, records) {
+        const allRecords = _records(records);
         const scope = parseScope(migration?.scope);
-        const failed = error => ({ ok: false, error: error, document: document });
+        const failed = error => ({ ok: false, error: error, document: document, records: allRecords });
         if (!scope.ok)
             return failed("its scope is unreadable: " + scope.problem);
         if (typeof migration.migrate !== "function")
             return failed("it has no migrate function");
         const handed = projection(document, scope);
+        const owns = typeof migration.ownsRecord === "function";
+        const owned = ownedRecords(migration, allRecords);
         let result;
         try {
-            result = migration.migrate(_copy(handed), _copy(context ?? {}));
+            const input = _copy(handed);
+            if (owns)
+                input.records = owned.slice();
+            result = migration.migrate(input, _copy(context ?? {}));
             // Only plain data comes back (a cycle or a function never reaches the document)
             result = _copy(result);
         } catch (error) {
             return failed("it failed: " + String(error?.message ?? error).slice(0, 300));
         }
+        let markers = owned;
+        if (owns && _object(result) && _own(result, "records")) {
+            markers = result.records;
+            delete result.records;
+            if (!Array.isArray(markers) || markers.some(entry => typeof entry !== "string" || parseRecord(entry).kind !== "other" || !_owns(migration, entry)))
+                return failed("it wrote a record it does not own");
+        }
         const problem = resultProblem(result, handed, scope);
         if (problem !== "")
             return failed(problem);
-        return { ok: true, error: "", document: _merged(document, result, scope) };
+        const nextRecords = allRecords.filter(entry => !owned.includes(entry) || markers.includes(entry));
+        for (const entry of markers)
+            if (!nextRecords.includes(entry))
+                nextRecords.push(entry);
+        return { ok: true, error: "", document: _merged(document, result, scope), records: nextRecords };
     }
 
     // ---- The run ----
@@ -706,7 +762,7 @@ Singleton {
             return report;
         }
         let current = document;
-        const nextRecords = records.slice();
+        let nextRecords = records.slice();
         // The scopes of the migrations that failed, were held or skipped: what overlaps them waits
         const blocked = [];
         const record = (id, entry) => {
@@ -731,9 +787,10 @@ Singleton {
                 blocked.push({ id: id, scope: scope });
                 continue;
             }
-            const outcome = applyOne(migration, current, options?.context);
+            const outcome = applyOne(migration, current, options?.context, nextRecords);
             if (outcome.ok) {
                 current = outcome.document;
+                nextRecords = outcome.records;
                 report.applied.push(id);
                 record(id, id);
                 continue;
@@ -832,7 +889,9 @@ Singleton {
         const parsed = documentOf(raw ?? {}, sideFiles);
         const records = parsed.ok ? parsed.records : _records(raw?.migratedKeys);
         report.records = records;
-        const ofPhase = inPhase(all, phase);
+        // Those that code from before the runner already applied its way are neither run nor
+        // recorded (appliedBefore): such a config is left as it is
+        const ofPhase = inPhase(all, phase).filter(migration => !appliedBefore(migration, raw ?? {}));
         const due = pending(ofPhase, records);
         if (due.length === 0)
             return outcome;

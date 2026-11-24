@@ -5,8 +5,10 @@ import qs.singletons
 
 // Every registered settings migration (Migrations.all()) on its fixture,
 // tests/fixtures/migrations/<id>/before.json and after.json (whole config files): the output
-// as expected, idempotent, unknown keys surviving, the result inside its declared scope, a
-// target key already set never overwritten; and the registry: ids, a "*" scope's reason,
+// as expected (its own markers in migratedKeys too, ownsRecord), idempotent, unknown keys
+// surviving, the result inside its declared scope, a target key already set never
+// overwritten (unless it says why it does: overwritesReason), its appliedBefore check not
+// taking its own fixture's input for done; and the registry: ids, a "*" scope's reason,
 // `since` a minor or major release not older than the one before. The harness itself is
 // checked on a test-only migration (tests/fixtures/migrations-testonly/) and on broken
 // variants of it, each of which it must refuse.
@@ -77,13 +79,18 @@ TestCase {
             return [id + ": its fixture is not a config: " + (input.problem || expected.problem)];
         const problems = [];
         const context = { version: Version.number };
-        const once = rules.applyOne(migration, input.document, context);
+        if (rules.appliedBefore(migration, before))
+            problems.push(id + ": its appliedBefore takes its fixture's input for migrated already");
+        const once = rules.applyOne(migration, input.document, context, input.records);
         if (!once.ok)
             return [id + ": " + once.error];
         if (rules.canonical(once.document) !== rules.canonical(expected.document))
             problems.push(id + ": the output differs from after.json: " + rules.canonical(once.document).slice(0, 400));
-        const twice = rules.applyOne(migration, once.document, context);
-        if (!twice.ok || rules.canonical(twice.document) !== rules.canonical(once.document))
+        if (rules.canonical(once.records.slice().sort()) !== rules.canonical(expected.records.slice().sort()))
+            problems.push(id + ": the records differ from after.json's migratedKeys: " + rules.canonical(once.records).slice(0, 400));
+        const twice = rules.applyOne(migration, once.document, context, once.records);
+        if (!twice.ok || rules.canonical(twice.document) !== rules.canonical(once.document)
+                || rules.canonical(twice.records) !== rules.canonical(once.records))
             problems.push(id + ": not idempotent");
 
         // Unknown keys: a top-level key, a setting in every place, a preset type
@@ -94,14 +101,15 @@ TestCase {
         marked.globals["zz.migrations-test.unknown"] = 1;
         marked.presets.zzMigrationsTestUnknown = { Default: { kept: true } };
         marked.files["zz-migrations-test/unknown.json"] = { kept: true };
-        const withUnknown = rules.applyOne(migration, marked, context);
+        const withUnknown = rules.applyOne(migration, marked, context, input.records.concat(["zz.migrations-test.unknown-record"]));
         if (!withUnknown.ok)
             problems.push(id + ": fails with unknown keys present: " + withUnknown.error);
         else if (withUnknown.document.raw.zzMigrationsTestUnknown?.kept !== true
                  || withUnknown.document.profiles.some(profile => profile.set?.["zz.migrations-test.unknown"] !== 1)
                  || withUnknown.document.globals["zz.migrations-test.unknown"] !== 1
                  || withUnknown.document.presets.zzMigrationsTestUnknown?.Default?.kept !== true
-                 || withUnknown.document.files["zz-migrations-test/unknown.json"]?.kept !== true)
+                 || withUnknown.document.files["zz-migrations-test/unknown.json"]?.kept !== true
+                 || !withUnknown.records.includes("zz.migrations-test.unknown-record"))
             problems.push(id + ": an unknown key did not survive");
 
         // A target already set (a key the output has where the input had none) is kept
@@ -119,8 +127,9 @@ TestCase {
                     sentinels.push([place, key]);
                 }
         }
-        if (sentinels.length > 0) {
-            const kept = rules.applyOne(migration, targets, context);
+        const overwrites = typeof migration.overwritesReason === "string" && migration.overwritesReason.trim() !== "";
+        if (sentinels.length > 0 && !overwrites) {
+            const kept = rules.applyOne(migration, targets, context, input.records);
             if (!kept.ok)
                 problems.push(id + ": fails with its targets already set: " + kept.error);
             else {
@@ -176,7 +185,7 @@ TestCase {
             return result;
         } })],
                 dir, "not idempotent", "a migration that is not idempotent");
-        refused([variant({ migrate: doc => {
+        const overwriting = doc => {
             const result = MigrationHelpers.forEachSetting(doc, values => {
                 if ("testonly.old" in values)
                     values["testonly.new"] = values["testonly.old"];
@@ -186,12 +195,19 @@ TestCase {
             if (result.profiles[1] && doc.profiles[1].set["testonly.new"] === "set later")
                 result.profiles[1].set["testonly.new"] = "set later";
             return result;
-        } })], dir, "overwrote", "a migration that overwrites a target already set");
+        };
+        assertEqual(_all([variant({ migrate: overwriting, overwritesReason: "test" })], dir).join("\n"), "",
+                    "harness: a migration that says why it overwrites is let through");
+        refused([variant({ migrate: overwriting })], dir, "overwrote", "a migration that overwrites a target already set");
         refused([variant({ migrate: doc => { const result = testOnly.migrate(doc); result.globals["theme.name"] = "x"; return result; } })], dir,
                 "outside its scope", "a write outside the scope");
         refused([variant({ scope: ["*"], wholeScopeReason: "test" , migrate: doc => { const result = testOnly.migrate(doc); delete result.raw.zzMigrationsTestUnknown; return result; } })],
                 dir, "unknown key did not survive", "a migration that drops an unknown key");
         refused([variant({ scope: ["*"] })], dir, "wholeScopeReason", "a \"*\" scope without its reason");
+        refused([variant({ appliedBefore: config => true })], dir, "appliedBefore takes", "an appliedBefore that takes its fixture's input for done");
+        refused([variant({ ownsRecord: entry => entry === "testonly.marker",
+                           migrate: doc => { const result = testOnly.migrate(doc); result.records = ["testonly.marker"]; return result; } })],
+                dir, "records differ", "a migration whose markers differ from after.json");
 
         // Side files: a test-only migration over theme files, its fixture with files-before/-after.json
         const renameInThemes = (doc, extra) => {

@@ -1,0 +1,83 @@
+{
+    "profiles": "[{\"name\":\"Full\",\"enabled\":true,\"when\":{},\"set\":{\"polling.hardware.interval\":5000,\"media.visualizerStyle\":\"waveform\",\"media.visualizerLayout\":\"vertical\",\"lockscreen.screensaverEnabled\":true,\"gcal.enabled\":false,\"bar.left\":[{\"type\":\"power\",\"preset\":\"\"},{\"type\":\"workspaces\",\"preset\":\"x\"},{\"type\":\"clock\",\"preset\":\"\"}],\"bar.center\":[{\"type\":\"clock\",\"preset\":\"\"}],\"widgets.hardware.popup\":{\"sources\":[\"cpu\"],\"labels\":{}},\"widgets.music.popupMode\":\"hover\"}},{\"name\":\"Power save\",\"enabled\":true,\"when\":{\"all\":[{\"fact\":\"power.onBattery\",\"is\":true}]},\"set\":{\"polling.hardware.interval\":10000}}]",
+    "migratedKeys": [
+        "media.visualizerStyle",
+        "theme.barLayout",
+        "default:lockscreen.lockNotificationDetail",
+        "lockscreen.screensaverCommands",
+        "general.debug",
+        "general.fetchDebug",
+        "media.visualizerLayout",
+        "lockscreen.screensaverEnabled",
+        "lockscreen.screensaverTimeout",
+        "lockscreen.fadeInDuration",
+        "lockscreen.fadeOutDuration",
+        "lockscreen.notificationsOnScreensaver",
+        "lockscreen.lockscreenEnabled",
+        "lockscreen.notificationsOnLock",
+        "notifications.codePatterns",
+        "stt.previewEnabled",
+        "stt.previewWidth",
+        "stt.finalLingerMs",
+        "stt.showPending",
+        "stt.pauseMusicWhileDictating",
+        "stt.socketPath",
+        "stt.debug",
+        "gcal.enabled",
+        "gcal.debug",
+        "bar.left",
+        "bar.center",
+        "widgets.hardware.popup",
+        "widgets.power.popupMode",
+        "widgets.clock.popupMode",
+        "widgets.music.popupMode",
+        "widgets.sound.popupMode",
+        "widgets.bluetooth.popupMode",
+        "widgets.network.popupMode",
+        "widgets.notifications.popupMode",
+        "widgets.hardware.popupMode",
+        "widgets.battery.popupMode"
+    ],
+    "general": {
+        "debug": true
+    },
+    "media": {
+        "visualizerStyle": "bars",
+        "visualizerLayout": "vertical"
+    },
+    "lockscreen": {
+        "screensaverEnabled": true
+    },
+    "gcal": {
+        "enabled": false,
+        "viewMode": "day",
+        "clientId": "",
+        "clientSecret": "",
+        "accessToken": "",
+        "refreshToken": "",
+        "tokenExpiry": 0,
+        "enabledCalendarIds": []
+    },
+    "bar": {
+        "content": {
+            "left": [
+                "power",
+                "workspaces",
+                "clock"
+            ],
+            "leftProfiles": "[\"\", \"x\"]",
+            "center": [
+                "clock"
+            ],
+            "centerProfiles": "not json",
+            "right": [
+                "music"
+            ],
+            "rightProfiles": "null"
+        }
+    },
+    "widgetProfiles": "{\"hardware\":{\"_popup\":[\"cpu\"]},\"music\":{\"_popupMode\":\"hover\"},\"workspaces\":{\"x\":{\"showEmpty\":true}}}",
+    "writtenBy": "1.2.0",
+    "globals": "{\"general.debug\":true}",
+    "widgetPresets": "{\"workspaces\":{\"x\":{\"showEmpty\":true}}}"
+}

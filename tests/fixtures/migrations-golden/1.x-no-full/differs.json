@@ -1,0 +1,4 @@
+{
+    "readOnly": false,
+    "why": "A migration cannot add a profile: with no profile named Full, a setting that would go into it is neither copied nor marked (pinned ones still go into the globals). The code before the runner created Full at the top for it."
+}

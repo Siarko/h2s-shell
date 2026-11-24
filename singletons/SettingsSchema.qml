@@ -39,32 +39,12 @@ import QtQuick
 //              `description`)
 //   global   — true for a setting that is never per profile (debug switches, say): it
 //              behaves as if the user had pinned it as global, and cannot be unpinned
-//   legacy   — where the setting lived in the old config, e.g. ["media", "visualizerStyle"],
-//              or a function (config) => value where it was spread over several places;
-//              its value there is copied into the profiles once (ProfileRules.migrateLegacy)
-//   formerDefault — the default before it changed: a seeded Full still holding it is taken
-//              never to have chosen and gets the new one, once (ProfileRules.migrateDefaults)
 Singleton {
     id: root
 
-    // Old widget settings, for the legacy readers of the bar entries below; `config` is
-    // the parsed config file from before profiles
-    function _oldWidgetSettings(config) {
-        try {
-            return JSON.parse(config.widgetProfiles || "{}");
-        } catch (error) {
-            return {};
-        }
-    }
-
-
     function _sectionEntry(side, label, defaultTypes) {
         return { key: "bar." + side, label: label, group: "barContent", type: "barSection",
-                 default: defaultTypes.map(type => ({ type: type, preset: "" })),
-                 // No old section is no value, not an empty bar
-                 legacy: config => config.bar?.content?.[side] === undefined ? undefined
-                     : ProfileRules.sectionFromLegacy(config.bar.content[side],
-                                                      config.bar.content[side + "Profiles"]) };
+                 default: defaultTypes.map(type => ({ type: type, preset: "" })) };
     }
 
     // Popup mode per widget type that opens a popup (WidgetRegistry), click by default:
@@ -79,7 +59,6 @@ Singleton {
         return widgets.filter(widget => widget.popup).map(widget => Object.assign({
         key: "widgets." + widget.type + ".popupMode", label: widget.name + " popup", group: "popupMode",
         type: "enum", default: WidgetRegistry.defaultPopupMode,
-        legacy: config => root._oldWidgetSettings(config)[widget.type]?.["_popupMode"],
         options: [
             { value: "click", label: "Click" },
             { value: "hover", label: "Hover" },
@@ -104,13 +83,13 @@ Singleton {
     readonly property var _baseEntries: [
         // ── General ──
         { key: "general.debug", label: "Debug Mode", group: "general",
-          type: "bool", default: false, global: true, legacy: ["general", "debug"] },
+          type: "bool", default: false, global: true },
         { key: "general.fetchDebug", label: "Debug Mode | Fetch", group: "general",
-          type: "bool", default: false, global: true, legacy: ["general", "fetch_debug"] },
+          type: "bool", default: false, global: true },
 
         // ── Media ──
         { key: "media.visualizerStyle", label: "Visualizer style", group: "media",
-          type: "enum", default: "waveform", legacy: ["media", "visualizerStyle"], options: [
+          type: "enum", default: "waveform", options: [
               { value: "waveform", label: "Waveform" },
               { value: "bars", label: "Bars" },
               { value: "dots", label: "Dots" },
@@ -121,7 +100,7 @@ Singleton {
               { value: "none", label: "None" }
           ] },
         { key: "media.visualizerLayout", label: "Layout", group: "media",
-          type: "enum", default: "horizontal", legacy: ["media", "visualizerLayout"], options: [
+          type: "enum", default: "horizontal", options: [
               // Centred: mirrored about a middle line, below the controls or down each
               // side; bottom and sides: glued to the popup's edges, growing inward
               { value: "horizontal", label: "Horizontal (centered)" },
@@ -149,19 +128,15 @@ Singleton {
 
         // ── Lockscreen ──
         { key: "lockscreen.screensaverEnabled", label: "Enable screensaver", group: "lockscreen",
-          type: "bool", default: false, legacy: ["lockscreen", "screensaverEnabled"] },
+          type: "bool", default: false },
         { key: "lockscreen.screensaverTimeout", label: "Activate after", group: "lockscreen",
-          type: "number", min: 5, max: 86400, suffix: "s", default: 300, presets: root.idlePresets,
-          legacy: ["lockscreen", "screensaverTimeout"] },
+          type: "number", min: 5, max: 86400, suffix: "s", default: 300, presets: root.idlePresets },
         { key: "lockscreen.fadeInDuration", label: "Fade in", group: "lockscreen",
-          type: "slider", min: 100, max: 2000, suffix: "ms", default: 800,
-          legacy: ["lockscreen", "fadeInDuration"] },
+          type: "slider", min: 100, max: 2000, suffix: "ms", default: 800 },
         { key: "lockscreen.fadeOutDuration", label: "Fade out", group: "lockscreen",
-          type: "slider", min: 100, max: 2000, suffix: "ms", default: 400,
-          legacy: ["lockscreen", "fadeOutDuration"] },
+          type: "slider", min: 100, max: 2000, suffix: "ms", default: 400 },
         { key: "lockscreen.notificationsOnScreensaver", label: "Show notifications on screensaver",
-          group: "lockscreen", type: "bool", default: true,
-          legacy: ["lockscreen", "notificationsOnScreensaver"] },
+          group: "lockscreen", type: "bool", default: true },
         // What runs when you go away and come back: a list of entries, each with its moment —
         // "dark" (the monitors it waits for: null every monitor that goes dark, else their
         // ids as MonitorRules gives them), "lock" (any lock), "sleep" (any sleep) — and two
@@ -196,7 +171,7 @@ Singleton {
           type: "number", min: 5, max: 86400, suffix: "s", default: 600, presets: root.idlePresets,
           hint: "Counted from your last input." },
         { key: "lockscreen.lockscreenEnabled", label: "Enable lock screen", group: "lockscreen",
-          type: "bool", default: false, legacy: ["lockscreen", "lockscreenEnabled"] },
+          type: "bool", default: false },
         // From the last input, whether the screensaver is on or not (it replaced
         // `lockscreenTimeout`, which counted from the screensaver's start when it was on)
         { key: "lockscreen.lockAfter", label: "Lock after", group: "lockscreen",
@@ -226,13 +201,12 @@ Singleton {
         { key: "lockscreen.hibernateTimeout", label: "Hibernate after", group: "lockscreen",
           type: "number", min: 60, max: 86400, suffix: "s", default: 7200, presets: root.hibernatePresets },
         { key: "lockscreen.notificationsOnLock", label: "Show notifications on lock screen",
-          group: "lockscreen", type: "bool", default: true,
-          legacy: ["lockscreen", "notificationsOnLock"] },
+          group: "lockscreen", type: "bool", default: true },
         // App only by default: a message's text, a one-time code in it, is not for whoever
         // stands at the locked screen. Was "full": a Full seeded with that has it reset once
-        // (formerDefault, ProfileRules.migrateDefaults)
+        // (a settings migration, Migrations)
         { key: "lockscreen.lockNotificationDetail", label: "Notifications on the lock screen show",
-          group: "lockscreen", type: "enum", default: "app", formerDefault: "full", options: [
+          group: "lockscreen", type: "enum", default: "app", options: [
               { value: "full", label: "In full" },
               { value: "title", label: "Title only" },
               { value: "app", label: "App only" }
@@ -248,33 +222,33 @@ Singleton {
         // ── Notifications ──
         // Regular expressions for one-time codes in incoming notifications
         { key: "notifications.codePatterns", label: "Code patterns", group: "notifications",
-          type: "stringList", default: ["\\d{4,8}"], legacy: ["notifications", "codePatterns"] },
+          type: "stringList", default: ["\\d{4,8}"] },
 
         // ── Dictation ──
         { key: "stt.previewEnabled", label: "Show recognized text", group: "stt",
-          type: "bool", default: true, legacy: ["stt", "previewEnabled"] },
+          type: "bool", default: true },
         { key: "stt.previewWidth", label: "Preview width", group: "stt",
-          type: "slider", min: 0, max: 600, suffix: "px", default: 180, legacy: ["stt", "previewWidth"],
+          type: "slider", min: 0, max: 600, suffix: "px", default: 180,
           hint: "How far the widget slides open while dictation is running. At rest it collapses back to just the microphone icon." },
         { key: "stt.finalLingerMs", label: "Keep typed text visible for", group: "stt",
-          type: "number", min: 0, max: 600000, suffix: "ms", default: 2500, legacy: ["stt", "finalLingerMs"] },
+          type: "number", min: 0, max: 600000, suffix: "ms", default: 2500 },
         { key: "stt.showPending", label: "Show pending fragment counter", group: "stt",
-          type: "bool", default: true, legacy: ["stt", "showPending"] },
+          type: "bool", default: true },
         { key: "stt.pauseMusicWhileDictating", label: "Pause music while dictating", group: "stt",
-          type: "bool", default: true, legacy: ["stt", "pauseMusicWhileDictating"],
+          type: "bool", default: true,
           hint: "Speaker output reaches the microphone and gets transcribed. Only a pause the shell applied is resumed afterwards." },
         // Machine wiring, not a mode: a profile switch would drop the dictation connection
         { key: "stt.socketPath", label: "Socket path", group: "stt",
-          type: "string", default: "", global: true, legacy: ["stt", "socketPath"],
+          type: "string", default: "", global: true,
           hint: "Leave empty to use $XDG_RUNTIME_DIR/ptt/ctl.sock" },
         { key: "stt.debug", label: "Debug log", group: "stt",
-          type: "bool", default: false, global: true, legacy: ["stt", "debug"] },
+          type: "bool", default: false, global: true },
 
         // ── Calendar ── (the account, tokens and chosen calendars stay in Config.gcal)
         { key: "gcal.enabled", label: "Enable Google Calendar", group: "calendar",
-          type: "bool", default: true, legacy: ["gcal", "enabled"] },
+          type: "bool", default: true },
         { key: "gcal.debug", label: "Debug Mode", group: "calendar",
-          type: "bool", default: false, global: true, legacy: ["gcal", "debug"] },
+          type: "bool", default: false, global: true },
 
         // ── Bar ──
         // The screen edge the bar stands at
@@ -298,13 +272,7 @@ Singleton {
         // Which sources the hardware popup lists (null: all) and their labels; the
         // capsule on the bar is described by its preset instead
         { key: "widgets.hardware.popup", label: "Hardware popup", group: "hardwarePopup",
-          type: "hardwarePopup", default: { sources: null, labels: {} },
-          legacy: config => {
-              const hardware = root._oldWidgetSettings(config)["hardware"] ?? {};
-              if (hardware["_popup"] === undefined && hardware["_popupLabels"] === undefined)
-                  return undefined;
-              return { sources: hardware["_popup"] ?? null, labels: hardware["_popupLabels"] ?? {} };
-          } },
+          type: "hardwarePopup", default: { sources: null, labels: {} } },
 
         // Toasts: new notifications sliding in at the top right of the screen
         { key: "notifications.toasts", label: "Show toasts", group: "notifications",

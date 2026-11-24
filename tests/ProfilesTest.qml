@@ -158,116 +158,12 @@ TestCase {
             "Full names the power profile in use when seeding");
         assertEqual(seed[0].set["system.powerProfile"], "unchanged", "without one known, Full leaves it unchanged");
 
-        // --- migrating the old config, once per key ---
-        const legacyConfig = { media: { visualizerStyle: "bars" }, general: { debug: true } };
-        const readLegacy = path => path.reduce((node, part) => node?.[part], legacyConfig);
-        const legacyEntries = [
-            { key: "media.style", legacy: ["media", "visualizerStyle"] },
-            { key: "general.debug", legacy: ["general", "debug"], global: true },
-            { key: "media.missing", legacy: ["media", "nothing"] },
-            { key: "polling.x" }
-        ];
-        const userProfiles = [{ name: "Full", when: {}, set: { "polling.x": 1 } }, { name: "Power save", when: onBattery, set: {} }];
-        const migrated = ProfileRules.migrateLegacy(legacyEntries, readLegacy, [], userProfiles, {});
-        assertEqual(migrated.profiles[0].set["media.style"], "bars", "a setting moves into Full with the user's value");
-        assertEqual(migrated.profiles[0].set["polling.x"], 1, "Full keeps what it had");
-        assertEqual(migrated.globals["general.debug"], true, "an always-global setting moves into the globals");
-        assert(!("general.debug" in migrated.profiles[0].set), "and not into Full");
-        assertEqual(JSON.stringify(migrated.copied), JSON.stringify(["media.style", "general.debug"]), "copied lists what moved");
-        assert(migrated.migratedKeys.includes("media.missing"), "a missing old value is still marked done");
-        assert(!migrated.migratedKeys.includes("polling.x"), "keys without a legacy place are not touched");
-        assertEqual(userProfiles[0].set["media.style"], undefined, "the input profiles are not modified");
-        const again = ProfileRules.migrateLegacy(legacyEntries, path => "changed", migrated.migratedKeys, migrated.profiles, migrated.globals);
-        assertEqual(again.copied.length, 0, "a second run copies nothing — later edits are not overwritten");
-        const broken = ProfileRules.migrateLegacy([{ key: "k", legacy: ["nosection", "x"] }],
-            path => { throw new Error("Config has no nosection"); }, [], userProfiles, {});
-        assert(!broken.migratedKeys.includes("k"), "a wrong legacy path does not mark the key done");
-        assertEqual(broken.failed.length, 1, "and is reported");
-        // A config file from before profiles, shaped like the user's (no credentials)
-        const oldFile = {
-            general: { debug: false, fetch_debug: true },
-            media: { visualizerStyle: "bars", visualizerLayout: "horizontal" },
-            stt: { socketPath: "", previewEnabled: true, previewWidth: 180, finalLingerMs: 2500,
-                   showPending: true, pauseMusicWhileDictating: true, debug: false },
-            notifications: { codePatterns: ["\\d{4,6}"] },
-            lockscreen: { screensaverEnabled: false, screensaverTimeout: 100, fadeInDuration: 200,
-                          fadeOutDuration: 800, notificationsOnScreensaver: false, lockscreenEnabled: false,
-                          lockscreenTimeout: 5, notificationsOnLock: true,
-                          screensaverExecCmd: false, screensaverExecSleep: "", screensaverExecWakeup: "" },
-            gcal: { enabled: true, debug: false },
-            bar: {
-                content: { left: ["power", "workspaces"], leftProfiles: '["", "default"]',
-                           center: ["clock"], centerProfiles: '["default"]',
-                           right: ["music"], rightProfiles: "[]" },
-                layout: { reservedSpace: 40, barHeight: 40, topOffset: 0, leftMargin: 0, rightMargin: 0,
-                          leftPadding: 5, rightPadding: 5, radiusTopLeft: 0, radiusTopRight: 0,
-                          radiusBottomLeft: 0, radiusBottomRight: 0 }
-            },
-            widgetProfiles: JSON.stringify({ hardware: { _popup: ["cpu"], _popupLabels: {} }, music: { _popupMode: "hover" } })
-        };
-        const readOld = path => ProfileRules.readLegacy(oldFile, path);
-        for (const entry of SettingsSchema.entries) {
-            if (!entry.legacy || entry.key.endsWith(".popupMode"))
-                continue;
-            assert(readOld(entry.legacy) !== undefined, entry.key + ": read from an old config file");
-        }
-        assertEqual(readOld(["stt", "previewWidth"]), 180, "a plain path");
-        assertEqual(readOld(["widgetProfiles", "music", "_popupMode"]), "hover", "a path into the old widget JSON string");
-        assertEqual(readOld(SettingsSchema.entry("widgets.music.popupMode").legacy), "hover", "popup mode from the old widget settings");
-        assertEqual(readOld(SettingsSchema.entry("widgets.clock.popupMode").legacy), undefined, "no stored popup mode: nothing to move");
-        assertEqual(JSON.stringify(readOld(SettingsSchema.entry("bar.left").legacy)),
-            JSON.stringify([{ type: "power", preset: "" }, { type: "workspaces", preset: "default" }]), "a bar section from the old arrays");
-        assertEqual(ProfileRules.readLegacy({}, ["media", "visualizerStyle"]), undefined, "a config without the section has nothing to move");
-        assertEqual(ProfileRules.readLegacy({}, SettingsSchema.entry("bar.left").legacy), undefined,
-            "no old bar section is no value — not an empty bar");
-        const noFull = ProfileRules.migrateLegacy(legacyEntries, readLegacy, [], [{ name: "Mine", when: {}, set: {} }], {});
-        assertEqual(noFull.profiles[0].name, "Full", "without Full, one is created at the top");
-        assertEqual(noFull.profiles[1].name, "Mine", "and the user's profiles follow");
-
-        // --- a default that changed (formerDefault), once ---
+        // --- the lock screen's notification detail (its former default "full": a settings migration) ---
         const detailKey = "lockscreen.lockNotificationDetail";
         assertEqual(SettingsSchema.defaults[detailKey], "app", "the lock screen shows notifications' app only by default");
-        assertEqual(SettingsSchema.entry(detailKey).formerDefault, "full", "it used to be in full");
-        const seededBefore = [{ name: "Full", when: {}, set: { [detailKey]: "full", "polling.x": 1 } },
-                              { name: "Mine", when: onBattery, set: { [detailKey]: "full" } }];
-        const moved = ProfileRules.migrateDefaults(SettingsSchema.entries, [], seededBefore);
-        assert(!(detailKey in moved.profiles[0].set), "a Full still holding the old default loses it");
-        assertEqual(ProfileRules.resolve(SettingsSchema.defaults, moved.profiles, { "power.onBattery": false }).values[detailKey],
-            "app", "so the new default applies");
-        assertEqual(moved.profiles[0].set["polling.x"], 1, "Full keeps the rest");
-        assertEqual(moved.profiles[1].set[detailKey], "full", "another profile setting it keeps it: the user's");
-        assertEqual(JSON.stringify(moved.changed), JSON.stringify([detailKey]), "changed lists it");
-        assert(moved.migratedKeys.includes("default:" + detailKey), "and it is marked done");
-        assertEqual(seededBefore[0].set[detailKey], "full", "the input is not modified");
-        const chosen = ProfileRules.migrateDefaults(SettingsSchema.entries, [],
-            [{ name: "Full", when: {}, set: { [detailKey]: "title" } }]);
-        assertEqual(chosen.profiles[0].set[detailKey], "title", "a value the user chose stays");
-        assertEqual(chosen.changed.length, 0, "and nothing is reported");
-        const notSet = ProfileRules.migrateDefaults(SettingsSchema.entries, [], [{ name: "Full", when: {}, set: {} }]);
-        assertEqual(ProfileRules.resolve(SettingsSchema.defaults, notSet.profiles, {}).values[detailKey], "app",
-            "a config that never held the setting gets the new default");
-        const later = ProfileRules.migrateDefaults(SettingsSchema.entries, moved.migratedKeys,
-            [{ name: "Full", when: {}, set: { [detailKey]: "full" } }]);
-        assertEqual(later.profiles[0].set[detailKey], "full", "once done, \"full\" set again later is the user's and stays");
         assertEqual(ProfileRules.seedProfiles(SettingsSchema.defaults)[0].set[detailKey], "app", "a new config is seeded with the new default");
 
         // --- the bar ---
-        assertEqual(JSON.stringify(ProfileRules.sectionFromLegacy(["stt", "music", "sound"], '["", "x"]')),
-            JSON.stringify([{ type: "stt", preset: "" }, { type: "music", preset: "x" }, { type: "sound", preset: "" }]),
-            "a section from the two old arrays, a short preset list meaning no preset");
-        assertEqual(ProfileRules.sectionFromLegacy(["clock"], "not json")[0].preset, "", "broken preset JSON: no presets");
-        const oldWidgets = {
-            workspaces: { default: { title: "" }, only_special: { showNormal: true } },
-            clock: { default: { format: "hh:mm" }, _popupMode: "click" },
-            hardware: { default: { capsule: ["cpuTemp"] }, _popup: ["cpu"], _labels: {}, _capsuleLabels: { cpuTemp: "CPU" }, _popupLabels: {} },
-            music: { _popupMode: "hover" }
-        };
-        const presets = ProfileRules.presetsFromWidgetProfiles(oldWidgets);
-        assertEqual(JSON.stringify(Object.keys(presets.workspaces)), JSON.stringify(["default", "only_special"]), "presets are kept");
-        assertEqual(presets.clock._popupMode, undefined, "per-type keys are not presets");
-        assertEqual(presets.music, undefined, "a type with only per-type keys has no presets");
-        assertEqual(presets.hardware.default.capsuleLabels.cpuTemp, "CPU", "capsule labels move into the hardware preset");
-        assertEqual(JSON.stringify(presets.hardware.default.capsule), JSON.stringify(["cpuTemp"]), "with its capsule sources");
         const model = ProfileRules.sectionModel([{ type: "clock", preset: "a" }, { type: "clock", preset: "a" }, { type: "tray", preset: "" }]);
         assertEqual(JSON.stringify(model.map(entry => entry.key)), JSON.stringify(["clock/a#1", "clock/a#2", "tray/#1"]),
             "model keys are unique and depend only on the entry");

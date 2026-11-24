@@ -14,7 +14,8 @@ import qs.components
 // Before the file is read the settings migrations run on it (ConfigFile.load: the registered
 // migrations pending, a backup, the result written), so no reader sees an unmigrated value.
 // A config written before profiles has its settings in sections this file no longer
-// declares; Profiles reads those from the raw file to migrate them. Saving keeps every
+// declares; a migration moves them into the profiles once they are seeded (Migrations,
+// phase "afterSeed"). Saving keeps every
 // key the file holds that is not declared (JsonConfigFile), so what a newer
 // shell wrote survives this one; such a config also gets a warning (newerNotice), never a
 // refusal.
@@ -38,8 +39,8 @@ Singleton {
     // Settings the user pinned as global, { key: value } as JSON: the same in every
     // profile
     property alias globals: _adapter.globals
-    // Settings already copied from their old place in this file into the profiles, once
-    // each
+    // The settings migrations applied (MigrationRules' records), and the per-key markers
+    // older versions wrote
     property alias migratedKeys: _adapter.migratedKeys
     // The ids of the modules turned off (ModuleHost.setEnabled, `modules setEnabled`): a module
     // is on unless listed here. Global, not per profile: which code runs in the shell is not a

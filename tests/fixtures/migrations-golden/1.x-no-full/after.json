@@ -1,0 +1,49 @@
+{
+    "general": {
+        "debug": true
+    },
+    "media": {
+        "visualizerStyle": "bars"
+    },
+    "profiles": "[{\"name\":\"Mine\",\"enabled\":true,\"when\":{},\"set\":{\"bar.edge\":\"bottom\"}}]",
+    "globals": "{\"general.debug\":true}",
+    "widgetPresets": "{}",
+    "migratedKeys": [
+        "theme.barLayout",
+        "default:lockscreen.lockNotificationDetail",
+        "general.debug",
+        "general.fetchDebug",
+        "media.visualizerLayout",
+        "lockscreen.screensaverEnabled",
+        "lockscreen.screensaverTimeout",
+        "lockscreen.fadeInDuration",
+        "lockscreen.fadeOutDuration",
+        "lockscreen.notificationsOnScreensaver",
+        "lockscreen.lockscreenEnabled",
+        "lockscreen.notificationsOnLock",
+        "notifications.codePatterns",
+        "stt.previewEnabled",
+        "stt.previewWidth",
+        "stt.finalLingerMs",
+        "stt.showPending",
+        "stt.pauseMusicWhileDictating",
+        "stt.socketPath",
+        "stt.debug",
+        "gcal.enabled",
+        "gcal.debug",
+        "bar.left",
+        "bar.center",
+        "bar.right",
+        "widgets.hardware.popup",
+        "widgets.power.popupMode",
+        "widgets.clock.popupMode",
+        "widgets.music.popupMode",
+        "widgets.sound.popupMode",
+        "widgets.bluetooth.popupMode",
+        "widgets.network.popupMode",
+        "widgets.notifications.popupMode",
+        "widgets.hardware.popupMode",
+        "widgets.battery.popupMode"
+    ],
+    "writtenBy": "1.2.0"
+}
