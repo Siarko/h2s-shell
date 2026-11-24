@@ -60,6 +60,7 @@ Singleton {
         built: "The built system is not one the shell can name.",
         backupName: "Not a backup of h2s-shell.json.",
         otherFolder: "The configuration is another one now.",
+        realPath: "Where the configuration's folder really is could not be read.",
         running: "A change to NixOS is already running.",
         script: "The shell's script for this could not be read.",
         start: "The run could not be started.",
@@ -90,11 +91,18 @@ Singleton {
         notActivated: "The switch did not start: nothing changed.",
         notRestored: "Not switched, but the previous h2s-shell.json could not be put back.",
         timedOut: "It did not end within 30 minutes: the system may have changed.",
+        cancelled: "It was stopped before it said what it did: the system may have changed.",
         unclear: "Its answer could not be read: the system may have changed."
     })
 
     function refusal(code) {
-        return { code, text: texts[code] ?? texts.arguments };
+        return { code, text: _text(code) };
+    }
+
+    // A code's text; one it does not know (a name like an object's own, "constructor",
+    // included) the request's
+    function _text(code) {
+        return typeof code === "string" && Object.prototype.hasOwnProperty.call(texts, code) ? texts[code] : texts.arguments;
     }
 
     function _refused(code) {
@@ -149,16 +157,37 @@ Singleton {
         return reading?.rootWrites === true ? "apply" : "switch";
     }
 
-    // What the prompt says the run is for, naming the folder and, for a flake, the host
+    // What the prompt says the run is for, naming the folder (its real path, as the root step
+    // uses it) and, for a flake, the host. Within PrivilegedRules.whatMaxLength, which cuts a
+    // longer text at its end: a long folder or host is shortened in the middle here instead,
+    // its start and end kept (both are plain ASCII, so one character is one code point).
     function what(op, folder, host) {
         const flake = host !== "-";
-        if (op === "create")
-            return "Create h2s-shell.json in " + folder;
-        if (op === "restore")
-            return "Put back the previous h2s-shell.json in " + folder;
-        if (op === "apply")
-            return "Write h2s-shell.json in " + folder + " and switch NixOS to the system built " + (flake ? "for " + host : "from it");
-        return "Switch NixOS to the system built " + (flake ? "for " + host + " " : "") + "from " + folder;
+        const make = (shownFolder, shownHost) => {
+            if (op === "create")
+                return "Create h2s-shell.json in " + shownFolder;
+            if (op === "restore")
+                return "Put back the previous h2s-shell.json in " + shownFolder;
+            if (op === "apply")
+                return "Write h2s-shell.json in " + shownFolder + " and switch NixOS to the system built " + (flake ? "for " + shownHost : "from it");
+            return "Switch NixOS to the system built " + (flake ? "for " + shownHost + " " : "") + "from " + shownFolder;
+        };
+        const full = make(folder, host);
+        if (full.length <= PrivilegedRules.whatMaxLength)
+            return full;
+        // The room the fixed words leave (well over 100 characters); a host shown takes at
+        // most a third of it
+        const room = PrivilegedRules.whatMaxLength - make("", "").length;
+        const hostRoom = flake && (op === "apply" || op === "switch") ? Math.min(host.length, Math.floor(room / 3)) : 0;
+        return make(_middle(folder, room - hostRoom), _middle(host, hostRoom));
+    }
+
+    // `text` within `room` characters: its start and end around "…"
+    function _middle(text, room) {
+        if (text.length <= room)
+            return text;
+        const head = Math.ceil((room - 1) / 2);
+        return text.slice(0, head) + "…" + text.slice(text.length - (room - 1 - head));
     }
 
     // The root step's words. `request` { op ("create" | "apply" | "restore"), reading
@@ -185,6 +214,10 @@ Singleton {
         const folder = configuration.folder;
         if (!RootScriptRules.plainPath(folder) || (base !== "" && !folder.startsWith(base + "/")))
             return _refused("paths");
+        // The folder as the root step takes it (cd -P): what the prompt names
+        const real = reading.real;
+        if (!RootScriptRules.plainPath(real))
+            return _refused("realPath");
         const file = reading.file;
         const words = [];
         const expected = { op: request?.op, folder, current: "", sha256: "" };
@@ -245,7 +278,7 @@ Singleton {
         return {
             argv: [shell, "-c", script, "sh", base].concat(words),
             expected,
-            what: what(expected.op, folder, host),
+            what: what(expected.op, real, host),
             refusal: null
         };
     }
@@ -264,8 +297,8 @@ Singleton {
     // The root step's reply (PrivilegedRules' result: ok, code, stdout, stderr, dismissed,
     // refused, cancelled, blocked, timedOut, error) for what plan expected → { ok (what was
     // asked was done: created, applied, appliedWithErrors, restored), quiet (a prompt
-    // dismissed, a run refused by polkit, cancelled, or not started while locked: nothing to
-    // say), kind ("created" | "applied" | "appliedWithErrors" | "restored" | "changed" |
+    // dismissed, a run refused by polkit, or not started while locked: nothing ran, nothing
+    // to say), kind ("created" | "applied" | "appliedWithErrors" | "restored" | "changed" |
     // "refused" | "failed" | ""), op, folder, generation (the system profile's after the run;
     // 0 unknown), backup (the backup this run made, "" none), sha256 (what the shell's file
     // holds after the run, "absent" for none, "" unknown), nothingChanged (neither the system
@@ -286,7 +319,7 @@ Singleton {
         if (code === 3 && refusedLine?.word === "refused" && refusedLine.fields.length === 1 && /^[a-z]+$/.test(refusedLine.fields[0])) {
             const reason = refusedLine.fields[0];
             return Object.assign(outcome, {
-                kind: reason === "changed" ? "changed" : "refused", refused: reason, nothingChanged: true, error: texts[reason] ?? texts.arguments,
+                kind: reason === "changed" ? "changed" : "refused", refused: reason, nothingChanged: true, error: _text(reason),
                 sha256: String(expected?.current ?? "")
             });
         }
@@ -329,12 +362,18 @@ Singleton {
             if (said.word === "not-restored" && code === 6 && fields.length === 2 && fields[0] === expected.sha256 && validBackup(fields[1]))
                 return Object.assign(outcome, { kind: "failed", backup: fields[1], sha256: fields[0], error: texts.notRestored });
         }
-        // No line it can read: a prompt dismissed, a run refused by polkit or not started
-        // while locked ran nothing; anything else may have changed anything
-        const notRun = result?.dismissed === true || result?.refused === true || (result?.blocked ?? "") !== "";
-        if (notRun || result?.cancelled === true)
-            return Object.assign(outcome, { quiet: true, nothingChanged: notRun, sha256: notRun ? String(expected?.current ?? "") : "" });
-        const reason = result?.timedOut === true ? texts.timedOut : texts.unclear;
+        // No line it can read. Known not to have run the root step: a run never started
+        // (blocked: while locked), and pkexec's own answers as PrivilegedRuns reads them — the
+        // prompt dismissed (126) or not authorised (127), each only with its own exit and not
+        // cancelled: the root step itself never exits 126 or 127 (its exits are 0 to 6), so
+        // those are pkexec's, or `timeout`'s when it could not start the shell. Anything
+        // else, a cancel included, may have changed anything.
+        const cancelled = result?.cancelled === true;
+        const notRun = (result?.blocked ?? "") !== ""
+            || (!cancelled && ((result?.dismissed === true && code === 126) || (result?.refused === true && code === 127)));
+        if (notRun)
+            return Object.assign(outcome, { quiet: true, nothingChanged: true, sha256: String(expected?.current ?? "") });
+        const reason = result?.timedOut === true ? texts.timedOut : cancelled ? texts.cancelled : texts.unclear;
         return Object.assign(outcome, { kind: "failed", error: reason });
     }
 }

@@ -25,7 +25,7 @@ TestCase {
         const backup = "h2s-shell.json.20261124T101500Z";
         const reading = more => Object.assign({
             configuration: { found: true, folder, entry: "flake.nix", type: "flake" },
-            rootWrites: true, host: "laptop",
+            real: folder, rootWrites: true, host: "laptop",
             file: { path: folder + "/h2s-shell.json", state: "present", sha256: sha(old) }
         }, more ?? {});
         const candidate = more => Object.assign({ text, drvPath: drv, outPath: out }, more ?? {});
@@ -54,6 +54,36 @@ TestCase {
         assertEqual(rules.what("switch", folder, "-"), "Switch NixOS to the system built from " + folder, "switch, classic: the prompt");
         assertEqual(rules.applyOp(reading({ rootWrites: "true" })) + " " + rules.applyOp(null) + " " + rules.applyOp(reading()), "switch switch apply",
                     "the op: apply only where root may write");
+        // ── the prompt: the folder's real path, never cut silently ──
+        const realFolder = base + "/home/alex/nixos";
+        assertEqual(plan({ op: "apply", reading: reading({ real: realFolder }), candidate: candidate() }).what,
+                    "Write h2s-shell.json in " + realFolder + " and switch NixOS to the system built for laptop", "the prompt names the real path the root step uses");
+        assertEqual(plan({ op: "create", reading: reading({ real: realFolder, file: { state: "absent" } }) }).what, "Create h2s-shell.json in " + realFolder, "… for create");
+        assertEqual(code(plan({ op: "apply", reading: reading({ real: "" }), candidate: candidate() })), "realPath", "the real path not read: refused");
+        assertEqual(code(plan({ op: "apply", reading: reading({ real: "nixos" }), candidate: candidate() })), "realPath", "a real path not plain: refused");
+        const longFolder = base + "/" + "a".repeat(120) + "/" + "b".repeat(120);
+        const longHost = "h".repeat(30) + "x".repeat(150) + "k".repeat(30);
+        const cut = (a, b) => base + "/" + "a".repeat(a) + "…" + "b".repeat(b);
+        const cutHost = (h, k) => "h".repeat(h) + "…" + "k".repeat(k);
+        const shortened = [
+            ["apply", plan({ op: "apply", reading: reading({ real: longFolder, host: longHost }), candidate: candidate() }).what,
+             "Write h2s-shell.json in " + cut(36, 44) + " and switch NixOS to the system built for " + cutHost(22, 21)],
+            ["switch", plan({ op: "apply", reading: reading({ real: longFolder, host: longHost, rootWrites: false }), candidate: candidate() }).what,
+             "Switch NixOS to the system built for " + cutHost(26, 25) + " from " + cut(43, 52)],
+            ["restore of a flake", plan({ op: "restore", reading: reading({ real: longFolder, host: longHost }), from: { folder, backup, sha256: sha(text) } }).what,
+             "Put back the previous h2s-shell.json in " + cut(71, 79)],
+            ["apply, a short host", rules.what("apply", longFolder, "laptop"),
+             "Write h2s-shell.json in " + cut(55, 63) + " and switch NixOS to the system built for laptop"],
+            ["apply, classic", rules.what("apply", longFolder, "-"),
+             "Write h2s-shell.json in " + cut(56, 65) + " and switch NixOS to the system built from it"]
+        ];
+        for (const [name, made, expected] of shortened) {
+            assertEqual(made, expected, "a long path: the " + name + " prompt shortened in the middle, start and end kept");
+            assert(made.length === PrivilegedRules.whatMaxLength && PrivilegedRules.cleanWhat(made) === made, "… exactly within the limit: " + made.length);
+        }
+        const fits = base + "/" + "f".repeat(PrivilegedRules.whatMaxLength - "Create h2s-shell.json in ".length - base.length - 1);
+        assertEqual(rules.what("create", fits, "laptop"), "Create h2s-shell.json in " + fits, "a prompt of exactly the limit: as it is");
+        assertEqual(rules.what("apply", "/x", "laptop"), "Write h2s-shell.json in /x and switch NixOS to the system built for laptop", "a short prompt: as it is");
         // ── classic ──
         const classic = plan({ op: "apply", reading: reading({ configuration: { found: true, folder, entry: "configuration.nix", type: "classic" }, host: "" }),
                                candidate: candidate() });
@@ -198,6 +228,8 @@ TestCase {
         assertEqual(pick(refusedReply(switched, "evaluation"), ["kind", "refused", "nothingChanged", "error"]),
                     show({ kind: "refused", refused: "evaluation", nothingChanged: true, error: rules.texts.evaluation }), "refused, its text");
         assertEqual(refusedReply(created, "zzz").error, rules.texts.arguments, "a refusal without a text: the request's");
+        assertEqual(refusedReply(created, "constructor").error, rules.texts.arguments, "a refusal named like an object's own property: the request's text");
+        assertEqual(rules.refusal("constructor").text, rules.texts.arguments, "… and before a run");
         assertEqual(pick(rules.reply(result(3, "refused changed\n", { stdout: "x\n" }), applied.expected), ["kind"]), show({ kind: "changed" }),
                     "a refusal: whatever stdout says");
         // What never counts
@@ -265,10 +297,22 @@ TestCase {
         assertEqual(pick(quiet({ dismissed: true }), keys),
                     show({ ok: false, quiet: true, kind: "", op: "apply", folder, generation: 0, backup: "", sha256: sha(old), nothingChanged: true, refused: "", error: "" }),
                     "dismissed: quiet, nothing changed");
-        assertEqual(pick(quiet({ refused: true }), ["quiet", "nothingChanged"]), show({ quiet: true, nothingChanged: true }), "not authorized: quiet, nothing changed");
+        assertEqual(pick(rules.reply(result(127, "", { refused: true }), applied.expected), ["quiet", "nothingChanged"]), show({ quiet: true, nothingChanged: true }),
+                    "not authorized: quiet, nothing changed");
+        const unsure = [
+            ["exit 126, not read as dismissed", quiet({})],
+            ["exit 127, not read as refused", rules.reply(result(127, ""), applied.expected)],
+            ["dismissed with another exit", rules.reply(result(1, "", { dismissed: true }), applied.expected)],
+            ["refused with exit 126", quiet({ refused: true })],
+            ["dismissed and cancelled", quiet({ dismissed: true, cancelled: true })]
+        ];
+        for (const [name, outcome] of unsure) {
+            assert(!outcome.ok && !outcome.quiet && outcome.kind === "failed" && !outcome.nothingChanged && outcome.sha256 === "" && outcome.error !== "",
+                   "not known not to have run, " + name + ": failed, may have changed — " + show(outcome));
+        }
         assertEqual(pick(quiet({ blocked: "locked" }), ["quiet", "nothingChanged", "kind"]), show({ quiet: true, nothingChanged: true, kind: "" }), "locked: quiet, nothing ran");
-        assertEqual(pick(quiet({ cancelled: true }), ["quiet", "nothingChanged", "sha256"]), show({ quiet: true, nothingChanged: false, sha256: "" }),
-                    "cancelled: quiet, but it may have changed something");
+        assertEqual(pick(rules.reply(result(-1, "", { cancelled: true }), applied.expected), ["quiet", "kind", "nothingChanged", "sha256", "error"]),
+                    show({ quiet: false, kind: "failed", nothingChanged: false, sha256: "", error: rules.texts.cancelled }), "cancelled: said, it may have changed something");
         assertEqual(pick(rules.reply(said(0, "applied 49 " + backup, { dismissed: true }), applied.expected), ["ok"]), show({ ok: true }),
                     "a line it can read wins over the flags");
         assertEqual(rules.reply(result(126, "", { dismissed: true }), null).sha256, "", "dismissed, nothing expected: the file not known");

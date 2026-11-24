@@ -14,10 +14,12 @@ import qs.singletons.io
 // run at a time. The writer interface of a distribution integration: apply(value, handlers),
 // undo(handlers), busy.
 //
-// `testPkexec`: "" for the system's pkexec, and then only the system's places
-// (NixosApplyRules.livePaths); a fixture suite's stand-in pkexec (module test mode only:
-// PrivilegedRuns runs it in the trusted one's place, which runs the same words as the user)
-// only with places under a scratch folder outside /etc, /usr and /var.
+// The test seams take effect only in module test mode (a fixture suite's): `testPkexec`, a
+// stand-in pkexec that PrivilegedRuns runs in the trusted one's place (it runs the same
+// words as the user), and then places under a scratch folder outside /etc, /usr and /var
+// only; `testShell` and `testScriptsDirectory`, the program run and where the root step's
+// files are read. Anywhere else the run is `live`: the system's pkexec, only the system's
+// places (NixosApplyRules.livePaths), /bin/sh and the shell's own scripts/root/.
 QtObject {
     id: root
 
@@ -26,10 +28,14 @@ QtObject {
     signal finished(var outcome)
 
     property string testPkexec: ""
+    property string testShell: ""
+    property string testScriptsDirectory: ""
     property var paths: NixosApplyRules.livePaths
-    property string shell: "/bin/sh"
+    readonly property bool live: !(Modules.host.testMode && testPkexec !== "")
+    readonly property string shell: !live && testShell !== "" ? testShell : "/bin/sh"
     // Where the root step's files are (scripts/root/ of the shell's tree), read at each run
-    property string scriptsDirectory: Quickshell.shellDir + "/" + RootScriptRules.directory
+    readonly property string scriptsDirectory: !live && testScriptsDirectory !== "" ? testScriptsDirectory
+        : Quickshell.shellDir + "/" + RootScriptRules.directory
     readonly property bool busy: _running
 
     property bool _running: false
@@ -51,7 +57,7 @@ QtObject {
     function _run(request, handlers) {
         if (_running)
             return { started: false, refusal: NixosApplyRules.refusal("running") };
-        const plan = NixosApplyRules.plan(request, paths, testPkexec === "", _scripts.read(), shell);
+        const plan = NixosApplyRules.plan(request, paths, live, _scripts.read(), shell);
         if (plan.refusal !== null)
             return { started: false, refusal: plan.refusal };
         const done = handlers?.done;
@@ -65,7 +71,7 @@ QtObject {
                     onLine(line, stream);
             }
         };
-        if (testPkexec !== "")
+        if (!live)
             startRequest.testPkexec = testPkexec;
         _running = true;
         PrivilegedRuns.startShell(startRequest, result => {

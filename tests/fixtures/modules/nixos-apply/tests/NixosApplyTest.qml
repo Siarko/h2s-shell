@@ -96,7 +96,7 @@ TestCase {
         return {
             configuration: { found: true, folder: _folder, entry: "flake.nix", type: "flake" },
             rootWrites: true, host: "laptop",
-            file: { path: _folder + "/h2s-shell.json", state: "present", sha256: _sha(current) }
+            real: _folder, file: { path: _folder + "/h2s-shell.json", state: "present", sha256: _sha(current) }
         };
     }
 
@@ -157,7 +157,9 @@ TestCase {
         } });
         _then("the stand-ins known, the tree made, the shell's timeout looked up",
               () => module?.programsReady === true && _path("pkexec") !== "" && _ready && CommandTools.known, () => {
+            assertEqual(writer.live, true, "no stand-in pkexec yet: the run would be the system's");
             writer.testPkexec = _path("pkexec");
+            assertEqual(writer.live, false, "the stand-in pkexec in test mode: its run, scratch places");
             // Refused before a run: no prompt, nothing queued
             const refused = writer.apply({ op: "apply", reading: _reading(_first), candidate: { text: _second, drvPath: _out, outPath: _out } }, {});
             assertEqual(JSON.stringify(refused), JSON.stringify({ started: false, refusal: NixosApplyRules.refusal("built") }), "a refusal before any run, said at once");
@@ -193,11 +195,11 @@ TestCase {
     function _dismissed() {
         _reset();
         _then("reset", () => _ready, () => {
-            writer.shell = _path("dismiss");
+            writer.testShell = _path("dismiss");
             _ask("apply", _apply(_first, _second));
         });
         _then("the dismissed run is answered", () => _record.outcome !== null && !writer.busy, () => {
-            writer.shell = "/bin/sh";
+            writer.testShell = "";
             const outcome = _record.outcome;
             assert(outcome.quiet && !outcome.ok && outcome.kind === "" && outcome.nothingChanged && outcome.error === "",
                    "dismissed: quiet, nothing changed: " + JSON.stringify(outcome));
