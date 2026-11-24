@@ -17,6 +17,10 @@ import qs.singletons
 // taller (the "×" keeps one line's width). `fullWidth` is what it needs on one line, whatever
 // the cap.
 //
+// Tab reaches it while it is available; Space or Enter then acts as a click (the first asks,
+// the second deletes) and Escape, while it asks, cancels as the "×" does. A ring inside the
+// button shows it has the keyboard. A click does not take the keyboard.
+//
 //   DeleteButton {
 //       confirmLabel: "Delete everywhere?"
 //       cancelTip: "Cancel — keep the preset"
@@ -47,10 +51,44 @@ Row {
     // The first click, for owners that track which item is being asked about
     signal askingStarted
 
-    readonly property var _look: ThemeRules.buttonLook(kind, { hot: _area.lit && available, asking: asking })
+    readonly property var _look: ThemeRules.buttonLook(kind, { hot: _area.lit && available, asking: asking, focused: activeFocus })
     readonly property var _shape: Theme[_look.group]
 
     spacing: 0
+
+    // A click on the button, or Space or Enter on it: asks, or acts when it asks already
+    function _press() {
+        if (!available)
+            return;
+        if (asking) {
+            asking = false;
+            confirmed();
+        } else {
+            asking = true;
+            askingStarted();
+        }
+    }
+
+    activeFocusOnTab: available
+    Keys.onPressed: event => {
+        if (!root.available)
+            return;
+        if (event.key === Qt.Key_Escape) {
+            // Not asking, Escape is the owner's (it closes a popup or a modal)
+            if (!root.asking)
+                return;
+            event.accepted = true;
+            root.asking = false;
+            return;
+        }
+        if (![Qt.Key_Space, Qt.Key_Return, Qt.Key_Enter].includes(event.key))
+            return;
+        // Taken whole, so an owner that also handles Enter does not act a second time; a held
+        // key presses once, never asking and deleting in one go
+        event.accepted = true;
+        if (!event.isAutoRepeat)
+            root._press();
+    }
 
     Rectangle {
         id: _button
@@ -108,20 +146,23 @@ Row {
             border.color: root._look.border !== "" ? Theme[root._look.border] : "transparent"
         }
 
+        // While it has the keyboard: a line inside the border, which keeps the kind's colour
+        Rectangle {
+            anchors.fill: parent
+            anchors.margins: Theme.border.width
+            visible: root._look.ring !== ""
+            radius: Math.max(0, root._shape.radius - Theme.border.width)
+            topRightRadius: root.asking ? 0 : radius
+            bottomRightRadius: root.asking ? 0 : radius
+            color: "transparent"
+            border.width: Theme.border.width
+            border.color: root._look.ring !== "" ? Theme[root._look.ring] : "transparent"
+        }
+
         PointerArea {
             id: _area
             cursorShape: root.available ? Qt.PointingHandCursor : Qt.ArrowCursor
-            onClicked: {
-                if (!root.available)
-                    return;
-                if (root.asking) {
-                    root.asking = false;
-                    root.confirmed();
-                } else {
-                    root.asking = true;
-                    root.askingStarted();
-                }
-            }
+            onClicked: root._press()
         }
 
         HoverTip {

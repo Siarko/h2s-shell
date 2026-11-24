@@ -95,6 +95,7 @@ QtObject {
     property var _testTree: TestTreeTest {}
     property var _pointerInput: PointerInputTest {}
     property var _buttonKinds: ButtonKindsTest {}
+    property var _buttonKeys: ButtonKeysTest {}
     property var _toastDrag: ToastDragTest {}
     property var _pillSizes: PillSizesTest {}
     property var _apiElements: ApiElementsTest {}

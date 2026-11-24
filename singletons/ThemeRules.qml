@@ -54,7 +54,9 @@ Singleton {
     // theme's group its radius comes from, `fill`, `label` and `border` are colours of
     // Theme; `border` is "" for a kind without one. `state`: `hot` (under the pointer or a
     // pressing finger, and available), `checked` (a toggle that is on), `asking` (the first
-    // click of a button that asks was made).
+    // click of a button that asks was made), `focused` (it has the keyboard). `ring` is the
+    // colour of the line drawn inside the button while it has the keyboard, the colour a
+    // focused checkbox's box takes; "" without it.
     //
     // Three kinds have a tone and wear it as a border, filled with it while hot: "delete"
     // (stops or removes), "warning" (goes on, but think), "success" (a good outcome).
@@ -63,6 +65,11 @@ Singleton {
     // word are plain. Asking, every kind is plain, with its label and a border in the kind's
     // colour.
     function buttonLook(kind, state) {
+        const look = _buttonColours(kind, state);
+        look.ring = state?.focused === true ? "textSecondary" : "";
+        return look;
+    }
+    function _buttonColours(kind, state) {
         const hot = state?.hot === true;
         const tone = ({ "delete": "error", "warning": "warning", "success": "success" })[kind] ?? "";
         const filled = ({ "save": "confirm", "saveChange": "confirmSecondary", "action": "accent" })[kind] ?? "";

@@ -148,6 +148,10 @@ TestCase {
         assertEqual(look("success", asking), "successButton surface success success", "asking, a good outcome: in the success colour");
         assertEqual(look("save", asking), "saveButton surface confirm confirm", "asking before turning something on: in the confirm colour");
         assertEqual(look("normal", asking), "button surface textPrimary outline", "asking, a plain button: bright text, the ordinary outline");
+        assertEqual(ThemeRules.buttonLook("delete", { focused: true }).ring, "textSecondary", "with the keyboard: a ring in the colour a focused checkbox takes");
+        assertEqual(look("delete", { focused: true }), "deleteButton surface textSecondary error", "… the kind's colours kept");
+        assertEqual(ThemeRules.buttonLook("save", { asking: true, focused: true }).ring, "textSecondary", "… asking too");
+        assertEqual(ThemeRules.buttonLook("save", {}).ring + "|" + ThemeRules.buttonLook("save", undefined).ring, "|", "without it: no ring");
         for (const kind of ["normal", "cancel", "save", "saveChange", "delete", "warning", "success", "action"])
             for (const state of [{}, hot, asking, { checked: true }, { checked: true, hot: true }, { asking: true, hot: true }]) {
                 const found = ThemeRules.buttonLook(kind, state);

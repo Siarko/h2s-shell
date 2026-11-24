@@ -297,10 +297,10 @@ TestCase {
             reached.push(host.Window.activeFocusItem?.objectName ?? "");
         }
         assert(stayed && !field.activeFocus && !behindBox.activeFocus, "Tab five times: the keyboard never reaches a control behind");
-        assertEqual(reached.slice(0, 3).join(" "), "modalCheck:one modalCheck:two modalCheck:one", "… it cycles through the checkboxes, wrapping");
+        assertEqual(reached.join(" "), "modalCheck:one modalCheck:two modalButton:0 modalButton:1 modalCheck:one", "… it cycles through the checkboxes and the buttons, wrapping");
         driver.keyClick(Qt.Key_Tab, Qt.ShiftModifier);
         driver.wait(20);
-        assert(_focusInside() && host.Window.activeFocusItem?.objectName.startsWith("modalCheck:"), "… Shift+Tab too");
+        assert(_focusInside() && host.Window.activeFocusItem?.objectName === "modalButton:1", "… Shift+Tab too, back round to the last button");
         host.cancel("window");
 
         // --- a touch tap: the focus stays ---
