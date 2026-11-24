@@ -8,8 +8,8 @@ import qs.singletons.lock
 // run for real against a stand-in for gdbus (tests/fixtures/logind-sleep, linked into a
 // scratch directory whose files say what it answers): CanSuspend yes, na and challenge,
 // logind's IdleAction, a gdbus that fails, is not there or never ends (unknown, never "yes");
-// CanHibernate and CanSuspendThenHibernate, the swap table, memory, lockdown, resume device,
-// NixOS and sleep.conf with a drop-in (a stand-in systemd-analyze, files under a scratch
+// CanHibernate and CanSuspendThenHibernate, the swap table, memory, lockdown, resume device
+// and sleep.conf with a drop-in (a stand-in systemd-analyze, files under a scratch
 // root); the Suspend call made once, non-interactive (`false`), taken, refused, and one that
 // never answers (ended by its watchdog); Hibernate and SuspendThenHibernate the same way, and
 // no other method. Never the real gdbus, system bus or system files: the reader is given the
@@ -126,26 +126,14 @@ TestCase {
                                                              suspendWatchdog: 500 });
             _reader.suspended.connect((ok, error, method) => { suite._suspended = { ok: ok, error: error }; suite._method = method; });
             assertEqual(_support(), JSON.stringify({ canSuspend: "unknown", idleAction: null }), "before a read: unknown");
-            // Whether this is NixOS not known yet (Distribution not answered): the read waits
-            _reader.nixos = undefined;
             _readAfter("echo yes > \"$1/can-suspend\"; echo 'ignore 1800000000' > \"$1/idle-action\"");
-        });
-        _then("the read asked for", () => _ready, () => {
-            assert(!_reader.running && _reader.reads === _readsBefore, "the distribution not known: no read started");
-        });
-        _then("the wait for the distribution timed out", () => _reader.reads > _readsBefore, () => {
-            assert(!_reader.running && _reader.support.canSuspend === "unknown" && _reader.support.hibernation.nixos === null,
-                   "no distribution within the watchdog: answered, everything unknown");
-            // … and made once it answers (the next step waits for it): not NixOS
-            _readsBefore = _reader.reads;
-            _reader.nixos = false;
         });
         _then("the first read answered", () => _answered(), () => {
             assertEqual(_support(), JSON.stringify({ canSuspend: "yes", idleAction: { action: "ignore", after: 1800 } }),
                         "CanSuspend yes; IdleAction ignore after 30 min");
             assertEqual(_hibernation(), JSON.stringify({ canHibernate: "unknown", canSuspendThenHibernate: "unknown", hibernation: {
-                swaps: null, memoryInUse: -1, lockdown: "unknown", resume: "unknown", delay: { state: "unknown" }, nixos: false } }),
-                "nothing about hibernation answered or there: unknown, never yes; the distribution not NixOS: not NixOS");
+                swaps: null, memoryInUse: -1, lockdown: "unknown", resume: "unknown", delay: { state: "unknown" } } }),
+                "nothing about hibernation answered or there: unknown, never yes");
             _readAfter("set -e; r=\"$1/root\"; mkdir -p \"$r/proc\" \"$r/sys/kernel/security\" \"$r/sys/power\" \"$r/etc\"; "
                 + "echo na > \"$1/can-hibernate\"; echo yes > \"$1/can-suspend-then-hibernate\"; "
                 + "printf 'Filename\\t\\tType\\tSize\\tUsed\\tPriority\\n/dev/zram0 partition\\t4194300\\t0\\t100\\n' > \"$r/proc/swaps\"; "
@@ -158,27 +146,24 @@ TestCase {
         _then("the hibernation read answered", () => _answered(), () => {
             assertEqual(_hibernation(), JSON.stringify({ canHibernate: "na", canSuspendThenHibernate: "yes", hibernation: {
                 swaps: [{ name: "/dev/zram0", type: "partition", kib: 4194300, zram: true }], memoryInUse: 2000000, lockdown: "none",
-                resume: false, delay: { state: "set", seconds: 10800, file: "/etc/systemd/sleep.conf.d/h2s-shell.conf" }, nixos: false } }),
+                resume: false, delay: { state: "set", seconds: 10800, file: "/etc/systemd/sleep.conf.d/h2s-shell.conf" } } }),
                 "CanHibernate na, CanSuspendThenHibernate yes; zram only, lockdown none, no resume device; the drop-in's delay 3 h");
             assertEqual(HibernateRules.unavailable(Object.assign({ answer: _reader.support.canHibernate }, _reader.support.hibernation)),
                         "Not available here: no swap space to save the session to (only zram, which is lost at power-off).",
                         "… said as the page says it");
-            _reader.nixos = true;
             _readAfter("set -e; r=\"$1/root\"; echo 'none [integrity] confidentiality' > \"$r/sys/kernel/security/lockdown\"; "
                 + "rm \"$1/sleep-conf\" \"$1/can-hibernate\"");
         });
         _then("the second hibernation read answered", () => _answered(), () => {
             const read = _reader.support;
-            assertEqual(read.canHibernate + " " + read.hibernation.lockdown + " " + read.hibernation.nixos + " " + JSON.stringify(read.hibernation.delay),
-                        "unknown integrity true {\"state\":\"unknown\"}",
-                        "CanHibernate failing: unknown; lockdown integrity; NixOS; sleep.conf not printed: the delay unknown");
-            _reader.nixos = null;
+            assertEqual(read.canHibernate + " " + read.hibernation.lockdown + " " + JSON.stringify(read.hibernation.delay),
+                        "unknown integrity {\"state\":\"unknown\"}",
+                        "CanHibernate failing: unknown; lockdown integrity; sleep.conf not printed: the delay unknown");
             _readAfter("echo na > \"$1/can-suspend\"; echo 'suspend 900000000' > \"$1/idle-action\"");
         });
         _then("the na read answered", () => _answered(), () => {
             assertEqual(_support(), JSON.stringify({ canSuspend: "na", idleAction: { action: "suspend", after: 900 } }),
                         "CanSuspend na; logind suspending by itself after 15 min");
-            assertEqual(_reader.support.hibernation.nixos, null, "… the distribution cannot be told: whether NixOS not known");
             _readAfter("echo challenge > \"$1/can-suspend\"; rm -f \"$1/idle-action\"");
         });
         _then("the challenge read answered", () => _answered(), () => {

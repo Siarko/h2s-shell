@@ -159,7 +159,8 @@ while the distribution is not known nothing is offered and nothing runs. `readIn
 what the system really uses, read as the system merges it (for the hibernation delay
 `systemd-analyze cat-config systemd/sleep.conf`), and which file sets it: a setting from any
 file but the shell's own is the user's or the system's, shown as set there and never
-overridden unasked. Where `/etc` is the
+overridden unasked; `afterOwn` says whether that file is read after the shell's (a change of
+the shell's cannot take effect over it) or before (the shell's would win: it asks first). Where `/etc` is the
 machine's own, `distributions/EtcFiles.qml` writes the shell's files there: one root step
 (`scripts/root/etc-files.sh`, whose files are fixed in it, one per kind, and which writes
 only the kind's exact template), the file as read checked before it is replaced, the old one
@@ -664,13 +665,13 @@ launcher agree on the contract described under "Recovery" below):
   the screensaver and the idle lock, `IdleRules.hibernateBase`) and `Hibernate(false)`;
   `LogindSleep` also reads `CanHibernate`, `CanSuspendThenHibernate`, and what explains a
   "na" or tells the delay without root (`/proc/swaps`, `/proc/meminfo`, the kernel's lockdown,
-  `/sys/power/resume`, `/proc/cmdline`, whether this is NixOS (`Distribution`), `systemd-analyze cat-config
-  systemd/sleep.conf`), parsed by `HibernateRules`. The page's Apply and Undo of the delay
-go through the distribution's integration (`Idle`'s `IntegrationChange` for the kind
-`sleep.hibernateDelay`; on Arch `EtcFiles` writes the drop-in, through
-`PrivilegedRuns.startShell`, the shell's own runs as administrator, announced in the prompt as
-the shell's — "Shell: h2s-shell" and its purpose, `PolkitRules.announcement`'s `shell` —,
-refused when a module's code asks). IPC: `idle state` (JSON, with the monitors' ids) and
+  `/sys/power/resume`, `/proc/cmdline`, `systemd-analyze cat-config systemd/sleep.conf`),
+  parsed by `HibernateRules`. The page's Apply and Undo of the delay go through the
+  distribution's integration (`Idle`'s `IntegrationChange` for the kind
+  `sleep.hibernateDelay`; on Arch `EtcFiles` writes the drop-in, through
+  `PrivilegedRuns.startShell`, the shell's own runs as administrator, announced in the prompt
+  as the shell's — "Shell: h2s-shell" and its purpose, `PolkitRules.announcement`'s `shell` —,
+  refused when a module's code asks). IPC: `idle state` (JSON, with the monitors' ids) and
   `idle setMonitorTimes <id> <json|default>` (one monitor's entry in
   `lockscreen.monitorIdle`, `IdleRules.withMonitorTimes`).
 - **Adapters** — `singletons/lock/`, thin: I/O to events, effects to I/O, no decisions.

@@ -567,7 +567,7 @@ TestCase {
         const facts = (extra, hibernation) => Object.assign({
             canSuspend: "yes", canHibernate: "yes", canSuspendThenHibernate: "yes", idleAction: { action: "ignore", after: 0 },
             hibernation: Object.assign({ swaps: HibernateRules.swaps(header + "/swapfile file 33554428 0 -2\n"), memoryInUse: 8000000,
-                                         lockdown: "none", resume: true, delay: { state: "set", seconds: 7200 }, nixos: false }, hibernation ?? {})
+                                         lockdown: "none", resume: true, delay: { state: "set", seconds: 7200 } }, hibernation ?? {})
         }, extra);
         page.sleepSupport = facts({ canHibernate: "na" }, { swaps: HibernateRules.swaps(header + "/dev/zram0 partition 4194300 0 100\n") });
         _away({ "lockscreen.hibernateEnabled": true, "lockscreen.lockscreenEnabled": true });
@@ -609,7 +609,7 @@ TestCase {
         const kind = "sleep.hibernateDelay";
         const capabilityOf = table => IntegrationRules.capability(table, kind);
         const absent = { state: "absent", text: null, sha256: "absent", ours: false };
-        const inForce = extra => Object.assign({ state: "set", value: 7200, from: "/etc/systemd/sleep.conf", elsewhere: "", file: absent }, extra ?? {});
+        const inForce = extra => Object.assign({ state: "set", value: 7200, from: "/etc/systemd/sleep.conf", elsewhere: "", file: absent, afterOwn: false }, extra ?? {});
         page.delayCapability = capabilityOf({ [kind]: { mode: "apply", undo: true, inForce: true } });
         page.delayInForce = inForce();
         page.delayBusy = "";
@@ -619,7 +619,7 @@ TestCase {
         const apply = named("hibernateApply");
         const replace = named("hibernateReplace");
         const undo = named("hibernateUndo");
-        assert(page._delayOffer.apply.shown && !page._delayOffer.apply.asks && apply.label === "Apply" && apply.kind === "save" && apply.available,
+        assert(page._delayOffer.apply.button === "plain" && apply.label === "Apply" && apply.kind === "save" && apply.available,
                "… with Apply");
         assertEqual(JSON.stringify(page._delayOffer.apply.request), JSON.stringify({ seconds: 10800, current: absent, replace: false }), "… its effect");
         assertEqual(labels(), "Sleep 30 min | Hibernate 2 h 30 min", "the timeline: the sleep, then the hibernation the system will make");
@@ -630,14 +630,20 @@ TestCase {
         page.delayUndoable = true;
         assert(page._delayOffer.undo.shown && undo.label === "Undo" && undo.available, "after an Apply: Undo");
         page.delayUndoable = false;
-        // The user's own file sets it: shown, not overridden
+        // Set in a file read after the shell's: shown, not overridden
+        page.delayInForce = inForce({ from: "/etc/systemd/sleep.conf.d/zz-tlp.conf", elsewhere: "/etc/systemd/sleep.conf.d/zz-tlp.conf", afterOwn: true });
+        assertEqual(named("hibernateDelayLine").text, "Picked 3 h. Set in /etc/systemd/sleep.conf.d/zz-tlp.conf: 2 h; it is read after the shell's file.",
+                    "set in a file read after the shell's: named with its value");
+        assertEqual(page._delayOffer.apply.button, "none", "… and no Apply over it");
+        // Set in the user's own sleep.conf, read before the shell's: warned, Apply asks
         page.delayInForce = inForce({ elsewhere: "/etc/systemd/sleep.conf" });
-        assertEqual(named("hibernateDelayLine").text, "Picked 3 h. Set in /etc/systemd/sleep.conf: 2 h.", "set in another file: named with its value");
-        assert(!page._delayOffer.apply.shown, "… and no Apply over it");
+        assertEqual(named("hibernateDelayLine").text, "Picked 3 h. Set in /etc/systemd/sleep.conf: 2 h.", "set in sleep.conf: named with its value");
+        assert(page._delayOffer.apply.button === "ask" && replace.confirmLabel === "Use the shell's value instead?" && replace.label === "Apply",
+               "… Apply asks first");
         // The shell's own file changed outside it: Apply asks
         const edited = { state: "text", text: "[Sleep]\nHibernateDelaySec=1h\n", sha256: "b".repeat(64), ours: false };
         page.delayInForce = inForce({ from: EtcFilesRules.files[kind], file: edited });
-        assert(page._delayOffer.apply.asks && replace.label === "Apply" && replace.confirmLabel === "Replace?" && replace.kind === "save",
+        assert(page._delayOffer.apply.button === "ask" && replace.label === "Apply" && replace.confirmLabel === "Replace?" && replace.kind === "save",
                "the shell's file edited by hand: Apply asks first");
         replace.asking = true;
         page.delayInForce = inForce({ from: EtcFilesRules.files[kind], file: Object.assign({}, edited, { sha256: "c".repeat(64) }) });
@@ -645,11 +651,11 @@ TestCase {
         page.delayInForce = inForce();
         // NixOS: the option; generic: why not
         page.delayCapability = capabilityOf({ [kind]: { mode: "copy", inForce: true, option: HibernateRules.nixosOption } });
-        page.delayOption = HibernateRules.nixosOption;
+        page.delayHint = "On NixOS it is the option " + HibernateRules.nixosOption + ".";
         assertEqual(named("hibernateDelayLine").text,
                     "Picked 3 h; the system now hibernates after 2 h. On NixOS it is the option programs.h2s-shell.idle.hibernateDelay.",
                     "NixOS: the option named");
-        assert(!page._delayOffer.apply.shown, "… no Apply (/etc is generated)");
+        assertEqual(page._delayOffer.apply.button, "none", "… no Apply (/etc is generated)");
         page.delayCapability = capabilityOf({});
         assertEqual(named("hibernateDelayLine").text, "Picked 3 h; the system now hibernates after 2 h. Not supported on this distribution.",
                     "generic: not supported, no Apply");
@@ -681,7 +687,7 @@ TestCase {
         page.delayInForce = Qt.binding(() => Idle.hibernateDelayInForce);
         page.delayBusy = Qt.binding(() => Idle.hibernateDelayBusy);
         page.delayUndoable = Qt.binding(() => Idle.hibernateDelayUndoable);
-        page.delayOption = Qt.binding(() => Distribution.plan(kind, page._hibernate.after).preview?.option ?? "");
+        page.delayHint = Qt.binding(() => Distribution.plan(kind, page._hibernate.after).preview?.hint ?? "");
     }
 
     // The first item under `item` that `matches`; `withResources` also looks at its

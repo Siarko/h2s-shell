@@ -199,38 +199,62 @@ Singleton {
         return !(delay?.state === "set" && delay.seconds === seconds);
     }
 
+    // Whether systemd reads the file at `path` after the shell's drop-in
+    // (EtcFilesRules.files' sleep.conf.d/h2s-shell.conf), so that a setting there wins over the
+    // shell's. sleep.conf itself (in /etc, /run, /usr/local/lib, /usr/lib) comes before every
+    // drop-in; drop-ins, from every directory together, are read in the order of their names
+    // (one of the same name in another directory is hidden by /etc's, or replaced by it).
+    // A path that is neither is not known: counted as read after, so the shell never claims
+    // its file would win
+    function readAfterDropIn(path) {
+        const given = String(path ?? "");
+        if (/^\/(etc|run|usr\/local\/lib|usr\/lib|lib)\/systemd\/sleep\.conf$/.test(given))
+            return false;
+        const dropIn = /^\/(etc|run|usr\/local\/lib|usr\/lib|lib)\/systemd\/sleep\.conf\.d\/([^/]+\.conf)$/.exec(given);
+        if (dropIn === null)
+            return true;
+        const own = EtcFilesRules.files["sleep.hibernateDelay"];
+        return dropIn[2] > own.slice(own.lastIndexOf("/") + 1);
+    }
+
     // What the Hibernate section offers under the times while sleep is on, its labels and
     // their effects in one answer. `given` { delay (hibernateDelay()'s, as last read), picked
     // (the time picked, seconds), differs (sleep on and the picked time is not the system's:
     // delayDiffers), capability (the distribution's for "sleep.hibernateDelay":
-    // IntegrationRules.capability's), option (the option to set, plan's preview, where the
-    // system's configuration sets it), inForce (readInForce's answer; null before one), busy
-    // ("apply" or "undo" while one runs, else ""), undoable (a change of the shell's in this
-    // run that Undo puts back) } → { shown, line, apply: { shown, asks, label, question,
-    // available, request: { seconds, current, replace } | null }, undo: { shown, label,
-    // available } }.
+    // IntegrationRules.capability's), hint (plan's preview hint, where the system's
+    // configuration sets it: the integration's words), inForce (readInForce's answer; null
+    // before one or while a change runs), busy ("apply" or "undo" while one runs, else ""),
+    // undoable (a change of the shell's in this run that Undo puts back) } → { shown, line,
+    // apply: { button ("none", "plain": acts on the click, "ask": acts on a second click
+    // after its question), label, question, available, request: { seconds, current, replace }
+    // | null }, undo: { shown, label, available } }.
     //
-    // By the capability's mode: "apply" offers Apply — never over a setting made in another
-    // file (the user's or the system's own: named with its value, no Apply), over the
-    // shell's own file changed outside it only as a question; and only once what is in
-    // force was read, the shell's file as the user saw it being what the change is checked
-    // against (`current`). "copy" and "declare" name the option; "unavailable" says why
-    // (nothing while the distribution is not known). The line says first the time picked and
-    // what the system does now — the picked time takes effect only after Apply
+    // By the capability's mode: "apply" offers Apply once what is in force was read, the
+    // shell's file as the user saw it being what the change is checked against (`current`).
+    // A setting in another file is the user's or the system's: named with its value; read
+    // after the shell's file, Apply could not win over it and is not offered; read before
+    // it, Apply asks first (warn, never forbid). The shell's own file changed outside it is
+    // replaced only on a second click too. "copy" and "declare" give the integration's hint;
+    // "unavailable" says why (nothing while the distribution is not known). The line says
+    // first the time picked and what the system does now — the picked time takes effect only
+    // after Apply
     function delayOffer(given, durationOf) {
         const label = typeof durationOf === "function" ? durationOf : seconds => seconds + " s";
         const capability = given?.capability ?? {};
         const busy = typeof given?.busy === "string" ? given.busy : "";
+        const path = EtcFilesRules.files["sleep.hibernateDelay"];
         const undoShown = capability.mode === "apply" && capability.undo === true && given?.undoable === true;
         const offer = {
             shown: given?.differs === true || undoShown,
             line: "",
-            apply: { shown: false, asks: false, label: busy === "apply" ? "Applying…" : "Apply", question: "Replace?", available: busy === "",
-                     request: null },
+            apply: { button: "none", label: busy === "apply" ? "Applying…" : "Apply", question: "", available: busy === "", request: null },
             undo: { shown: undoShown, label: "Undo", available: busy === "" }
         };
-        if (given?.differs !== true)
+        if (given?.differs !== true) {
+            if (undoShown)
+                offer.line = "Undo puts back " + path + " as it was before the last Apply.";
             return offer;
+        }
         const delay = given?.delay;
         const picked = given?.picked;
         const now = "Picked " + label(picked) + "; "
@@ -238,7 +262,8 @@ Singleton {
                : delay?.state === "unset" ? "the system's delay is not set (systemd's default)."
                : "the system's delay could not be read.");
         if (capability.mode === "copy" || capability.mode === "declare") {
-            offer.line = now + " On NixOS it is the option " + String(given?.option ?? "") + ".";
+            const hint = typeof given?.hint === "string" ? given.hint : "";
+            offer.line = hint !== "" ? now + " " + hint : now;
             return offer;
         }
         if (capability.mode !== "apply") {
@@ -248,23 +273,26 @@ Singleton {
         }
         const inForce = given?.inForce ?? null;
         const elsewhere = typeof inForce?.elsewhere === "string" ? inForce.elsewhere : "";
-        if (elsewhere !== "") {
-            offer.line = "Picked " + label(picked) + ". Set in " + elsewhere + ": "
-                + (inForce.state === "set" ? label(inForce.value) : "systemd's default") + ".";
+        const setThere = "Picked " + label(picked) + ". Set in " + elsewhere + ": "
+            + (inForce?.state === "set" ? label(inForce.value) : "systemd's default");
+        if (elsewhere !== "" && inForce.afterOwn !== false) {
+            offer.line = setThere + "; it is read after the shell's file.";
             return offer;
         }
         const file = inForce?.file ?? null;
-        if ((inForce?.state !== "set" && inForce?.state !== "default") || file === null || typeof file !== "object"
-                || (file.state !== "text" && file.state !== "absent")) {
-            offer.line = now;
+        const readable = (inForce?.state === "set" || inForce?.state === "default") && file !== null && typeof file === "object"
+            && (file.state === "text" || file.state === "absent");
+        const replace = readable && file.state === "text" && file.ours !== true;
+        const edited = replace ? " " + path + " was changed outside the shell: Apply replaces it." : "";
+        if (elsewhere !== "")
+            offer.line = setThere + "." + edited;
+        else
+            offer.line = now + (readable ? (replace ? edited : " Apply to change it.") : "");
+        if (!readable)
             return offer;
-        }
-        const replace = file.state === "text" && file.ours !== true;
-        offer.apply.shown = true;
-        offer.apply.asks = replace;
+        offer.apply.button = elsewhere !== "" || replace ? "ask" : "plain";
+        offer.apply.question = elsewhere !== "" ? "Use the shell's value instead?" : replace ? "Replace?" : "";
         offer.apply.request = { seconds: picked, current: file, replace };
-        offer.line = now + (replace ? " " + EtcFilesRules.files["sleep.hibernateDelay"] + " was changed outside the shell: Apply replaces it."
-                                    : " Apply to change it.");
         return offer;
     }
 

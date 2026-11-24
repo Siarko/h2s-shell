@@ -83,6 +83,7 @@ TestCase {
             const started = _change.apply(10800, { current: _change.inForce.file, replace: false });
             assert(started.started, "Apply: started");
             assertEqual(_change.busy, "apply", "… busy while it runs");
+            assertEqual(_change.inForce, null, "… what was read dropped while it runs");
             assertEqual(_change.apply(7200, {}).refusal?.code, "busy", "… a second meanwhile: refused");
             assertEqual(_change.undo().refusal?.code, "busy", "… Undo meanwhile: refused");
         });
@@ -97,6 +98,7 @@ TestCase {
             assertEqual(_change.inForce.elsewhere, "", "… not set elsewhere");
             assert(_change.undo().started, "Undo: started");
             assertEqual(_change.busy, "undo", "… busy while it runs");
+            assertEqual(_change.inForce, null, "… what was read dropped while it runs");
         });
         _then("the Undo answered", () => _finished.length === 2, () => {
             assertEqual(_finished[1].mode + " " + _finished[1].outcome.ok, "undo true", "put back: " + JSON.stringify(_finished[1].outcome));

@@ -492,11 +492,14 @@ sleep (`sleepEnabled`, `sleepTimeout`) and hibernation (`hibernateEnabled`,
     itself needs a swap device (`swapDevices`) and `boot.resumeDevice`.
   - **Arch**: Apply writes `/etc/systemd/sleep.conf.d/h2s-shell.conf` (`[Sleep]`,
     `HibernateDelaySec=`) through pkexec, asking for the password on that click, keeping the
-    file it replaces as a backup that Undo puts back. When another file sets the delay (your
-    own `/etc/systemd/sleep.conf`, a drop-in sorting after the shell's, one in `/run` or
-    `/usr/lib`), the section says "Set in <file>: <value>" and offers no Apply: that setting
-    wins. When the shell's own file was changed by hand, the section says so and Apply asks
-    once more before replacing it. Hibernation
+    file it replaces as a backup that Undo puts back; Undo goes back one change, to the file as
+    it was before the last Apply. When another file sets the delay, the section says "Set in
+    <file>: <value>". A file systemd reads after the shell's (a drop-in in any of its folders
+    whose name sorts after `h2s-shell.conf`) wins over it: no Apply is offered. A file read
+    before it (your own `/etc/systemd/sleep.conf`, a vendor drop-in sorting before it) would
+    lose to it: Apply asks first ("Use the shell's value instead?"). When the shell's own file
+    was changed by hand, the section says so and Apply asks once more before replacing it.
+    Hibernation
     itself needs a swap partition or file (zram does not count) and the `resume` hook in the
     initramfs (or `resume=` on the kernel's command line).
 - **Not locked while asleep** — at each sleep the shell looks whether the session is

@@ -151,13 +151,13 @@ Singleton {
     // systemd-analyze prints it, has `[Sleep]` lines of its own: past its header nothing more
     // is taken as a header
     readonly property var sleepSections: ["CanSuspend", "CanHibernate", "CanSuspendThenHibernate", "IdleAction", "IdleActionUSec",
-                                          "Swaps", "Meminfo", "Lockdown", "Resume", "Cmdline", "NixOS", "SleepConf"]
+                                          "Swaps", "Meminfo", "Lockdown", "Resume", "Cmdline", "SleepConf"]
 
     // The sleep reader's whole output: sections headed `[CanSuspend]`, `[IdleAction]`, … (each
     // with gdbus's answer or the file's text, nothing where the call or the read failed) →
     // { canSuspend, canHibernate, canSuspendThenHibernate: canAnswer(), idleAction:
-    // idleAction(), hibernation: { swaps, memoryInUse, lockdown, resume, delay, nixos }
-    // (HibernateRules' reads; `nixos`: true, false, or null not read) }
+    // idleAction(), hibernation: { swaps, memoryInUse, lockdown, resume, delay }
+    // (HibernateRules' reads) }
     function sleepSupport(output) {
         const sections = {};
         let current = "";
@@ -170,7 +170,6 @@ Singleton {
                 sections[current] += line + "\n";
             }
         }
-        const nixos = String(sections.NixOS ?? "").trim();
         return {
             canSuspend: canAnswer(sections.CanSuspend),
             canHibernate: canAnswer(sections.CanHibernate),
@@ -181,8 +180,7 @@ Singleton {
                 memoryInUse: HibernateRules.memoryInUse(sections.Meminfo),
                 lockdown: HibernateRules.lockdown(sections.Lockdown),
                 resume: HibernateRules.resumeKnown(sections.Resume, sections.Cmdline),
-                delay: HibernateRules.hibernateDelay(sections.SleepConf),
-                nixos: nixos === "yes" ? true : nixos === "no" ? false : null
+                delay: HibernateRules.hibernateDelay(sections.SleepConf)
             }
         };
     }

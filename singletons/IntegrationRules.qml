@@ -19,16 +19,20 @@ import QtQuick
 //     inForce  readInForce reads what is in force
 //     known    false only while the distribution is not known (Distribution's answer)
 //   plan(kind, value) → { preview, refusal }
-//     preview  "apply": { files: [{ path, text }] }; "copy": { option, snippet }
+//     preview  "apply": { files: [{ path, text }] }; "copy", "declare": { option, snippet,
+//              hint (the integration's words naming where the setting is made) }
 //   apply / undo → { started, refusal }
 //   readInForce → what the system uses, read as the system merges it (inForceCommand), and
-//     the shell's own file: { state, value, from, elsewhere, file }
+//     the shell's own file: { state, value, from, elsewhere, file, afterOwn }
 //     state      "set" (a file sets it), "default" (none does: the system's own default),
 //                "unknown" (not read, or not understood)
 //     value      the value in force ("set"), else null
 //     from       the file whose setting is in force ("" for none or not known)
 //     elsewhere  `from` when it is not the shell's own file: the user's or the system's own
 //                setting, which the shell shows ("Set in <file>") and never overrides unasked
+//     afterOwn   `elsewhere` is read after the shell's own file: a change of the shell's
+//                cannot take effect over it (false when `elsewhere` is "", or the shell's
+//                file would be read after it: then the shell may override it, asked)
 //     file       the shell's own file (EtcFilesRules.inForce's answer: its text, sha256 and
 //                whether it is exactly the shell's), the `current` to hand apply; null where
 //                the shell writes nothing
@@ -122,7 +126,7 @@ Singleton {
         if (answer.mode === "apply")
             return { preview: { files: [{ path: EtcFilesRules.files[kind] ?? "", text: textOf(kind, value) }] }, refusal: null };
         const option = String(table[kind].option ?? "");
-        return { preview: { option, snippet: snippetOf(kind, option, value) }, refusal: null };
+        return { preview: { option, snippet: snippetOf(kind, option, value), hint: String(table[kind].hint ?? "") }, refusal: null };
     }
 
     // Why apply may not start for the capability (before the value): null when it may
@@ -150,7 +154,7 @@ Singleton {
 
     // What is in force: `merged` inForceCommand's output (null: not read), `own` the shell's
     // own file as read (EtcFilesRules.inForce's answer; null where it writes none) →
-    // { state, value, from, elsewhere, file }
+    // { state, value, from, elsewhere, file, afterOwn }
     function inForceOf(kind, merged, own) {
         const file = own !== null && typeof own === "object" ? own : null;
         if (kind !== "sleep.hibernateDelay" || typeof merged !== "string")
@@ -160,18 +164,20 @@ Singleton {
             return Object.assign(inForceUnknown(), { file });
         // A file that put systemd's default back (an empty assignment) is a setting too
         const from = typeof delay.file === "string" ? delay.file : "";
+        const elsewhere = from !== "" && from !== EtcFilesRules.files[kind] ? from : "";
         return {
             state: delay.state === "set" ? "set" : "default",
             value: delay.state === "set" ? delay.seconds : null,
             from,
-            elsewhere: from !== "" && from !== EtcFilesRules.files[kind] ? from : "",
-            file
+            elsewhere,
+            file,
+            afterOwn: elsewhere !== "" && HibernateRules.readAfterDropIn(elsewhere)
         };
     }
 
     // Nothing in force can be told
     function inForceUnknown() {
-        return { state: "unknown", value: null, from: "", elsewhere: "", file: null };
+        return { state: "unknown", value: null, from: "", elsewhere: "", file: null, afterOwn: false };
     }
 
     // Whether an answer is readInForce's as the contract has it
@@ -181,6 +187,8 @@ Singleton {
         if (typeof answer.from !== "string" || typeof answer.elsewhere !== "string" || (answer.elsewhere !== "" && answer.elsewhere !== answer.from))
             return false;
         if (answer.file !== null && (typeof answer.file !== "object" || !["text", "absent", "unknown"].includes(answer.file.state)))
+            return false;
+        if (typeof answer.afterOwn !== "boolean" || (answer.afterOwn && answer.elsewhere === ""))
             return false;
         return answer.state === "set" ? answer.value !== null && answer.value !== undefined : answer.value === null;
     }

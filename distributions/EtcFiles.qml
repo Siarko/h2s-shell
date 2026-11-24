@@ -12,8 +12,7 @@ import qs.singletons.io
 //
 // Two parts:
 // - run(job): the run itself, for any root step of the shell's (PAM's, the remembered
-//   authorization's, the hibernation delay's): queued, answered once, the files read again
-//   after a failure;
+//   authorization's): queued, answered once, the files read again after a failure;
 // - read / write / remove / undo: the shell's own files of EtcFilesRules.files, one per
 //   change kind, each change kept as a backup that Undo puts back (scripts/root/etc-files.sh).
 //

@@ -21,7 +21,8 @@ QtObject {
 
     // The integration's capability for the kind
     readonly property var capability: integration?.capability(kind) ?? IntegrationRules.unknownCapability()
-    // readInForce's answer, null until the first
+    // readInForce's answer, null until the first, and while an apply or undo runs (what was
+    // read may no longer be so: nothing acts on it)
     readonly property var inForce: _inForce
     // "apply" or "undo" while one runs, else ""
     readonly property string busy: _busy
@@ -59,9 +60,13 @@ QtObject {
         const handlers = { replace: request?.replace === true, done: outcome => root._finish("apply", outcome) };
         if (request?.current !== undefined && request?.current !== null)
             handlers.current = request.current;
+        // Before the run: its answer may come at once
+        _forget();
         const started = _started(integration.apply(kind, value, handlers));
-        if (!started.started)
+        if (!started.started) {
             _busy = "";
+            read();
+        }
         return started;
     }
 
@@ -72,9 +77,13 @@ QtObject {
         if (_last === null)
             return { started: false, refusal: IntegrationRules.refusal("noUndo") };
         _busy = "undo";
+        // Before the run: its answer may come at once
+        _forget();
         const started = _started(integration.undo(kind, { from: _last, done: outcome => root._finish("undo", outcome) }));
-        if (!started.started)
+        if (!started.started) {
             _busy = "";
+            read();
+        }
         return started;
     }
 
@@ -83,8 +92,15 @@ QtObject {
         return answer?.started === true ? answer : { started: false, refusal: answer?.refusal ?? EtcFilesRules.refusal("start") };
     }
 
+    // What was read is dropped, and a reading under way loses
+    function _forget() {
+        _reads++;
+        _inForce = null;
+    }
+
     function _finish(mode, outcome) {
         _busy = "";
+        _forget();
         if (outcome?.ok === true)
             _last = mode === "apply" ? outcome : null;
         finished(mode, outcome);

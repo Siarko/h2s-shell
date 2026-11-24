@@ -73,8 +73,9 @@ The interface modules are written against (`qs.api`), versioned on its own
 
 ### Changed
 - Settings → When away → Hibernate: Apply of the system's delay keeps the file it replaces
-  as a backup, and Undo puts it back. A delay set in another file (your own sleep.conf or a
-  drop-in) is shown as "Set in <file>: <value>" and never overwritten; a hand-edited copy of
+  as a backup, and Undo puts it back. A delay set in another file is shown as "Set in
+  <file>: <value>": one read after the shell's file wins and no Apply is offered; one read
+  before it (your own sleep.conf) is overridden only after Apply asks; a hand-edited copy of
   the shell's own file is replaced only after Apply asks again ("Replace?"). On a
   distribution the shell does not know, no Apply: "Not supported on this distribution."
 - The machine's u2f settings are no longer changed: a security key row of

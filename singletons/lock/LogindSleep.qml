@@ -7,8 +7,7 @@ import qs.singletons
 // CanSuspendThenHibernate ("yes", "no", "challenge", "na") — and does by itself — its
 // IdleAction and IdleActionUSec properties (logind.conf) —, and what explains a hibernation
 // it does not allow or tells its delay — /proc/swaps, /proc/meminfo, the kernel's lockdown,
-// its resume device and command line, whether this is NixOS (Distribution's answer, `nixos`:
-// a read waits until it is there), sleep.conf with its drop-ins (`systemd-analyze
+// its resume device and command line, sleep.conf with its drop-ins (`systemd-analyze
 // cat-config`) — read by refresh(); and the sleep itself, suspend(method):
 // Manager.Suspend, SuspendThenHibernate or Hibernate, with `false`: non-interactive, so
 // logind never asks for a password (a polkit rule that wants one makes it fail: such a
@@ -36,16 +35,11 @@ Scope {
 
     property string toolDirectory: ""
     property string fileRoot: ""
-    // Whether this is NixOS: true, false, null when the distribution cannot be told, or
-    // undefined until Distribution has answered
-    // (From the one answer object: Distribution's ready and id are two bindings on it, and
-    // one may still hold the old value while the other changes)
-    property var nixos: Distribution.detection.ready ? (Distribution.detection.id === "" ? null : Distribution.detection.id === "nixos") : undefined
     property int watchdog: 32000
     property int suspendWatchdog: 30000
     // { canSuspend, canHibernate, canSuspendThenHibernate: "yes" | "no" | "challenge" | "na" |
     // "unknown", idleAction: { action, after (s) } | null (not read), hibernation: { swaps,
-    // memoryInUse, lockdown, resume, delay, nixos } } — LockParseRules.sleepSupport
+    // memoryInUse, lockdown, resume, delay } } — LockParseRules.sleepSupport
     property var support: LockParseRules.sleepSupportUnread()
     property int reads: 0
     readonly property bool running: _query.running
@@ -62,27 +56,10 @@ Scope {
             _query._again = true;
             return;
         }
-        // Not before the distribution is known: asked again when it is (onNixosChanged). The
-        // watchdog bounds the wait: past it the read is answered unknown (and still made
-        // once the distribution answers)
-        if (nixos === undefined) {
-            if (!_waitsForDistribution)
-                _watchdog.restart();
-            _waitsForDistribution = true;
-            return;
-        }
-        _waitsForDistribution = false;
-        _query._nixos = nixos === true ? "yes" : nixos === false ? "no" : "";
         _query._again = false;
         _query._timedOut = false;
         _query.running = true;
         _watchdog.restart();
-    }
-
-    property bool _waitsForDistribution: false
-    onNixosChanged: {
-        if (_waitsForDistribution && nixos !== undefined)
-            refresh();
     }
 
     // The calls suspend() makes, by name
@@ -117,15 +94,8 @@ Scope {
         interval: root.watchdog
         repeat: false
         onTriggered: {
-            if (!_query.running) {
-                if (root._waitsForDistribution) {
-                    const outcome = LockParseRules.sleepSupportUnread();
-                    root.support = outcome;
-                    root.reads++;
-                    root.read(outcome);
-                }
+            if (!_query.running)
                 return;
-            }
             _query._timedOut = true;
             _query.running = false;
         }
@@ -136,8 +106,6 @@ Scope {
         property string _output: ""
         property bool _timedOut: false
         property bool _again: false
-        // What the read says of NixOS ("yes", "no", "" not known), set as it starts
-        property string _nixos: ""
         // Each answer under its header; a call that fails prints nothing on stdout
         // Ended (the watchdog), the call under way is ended with it: no gdbus left behind
         command: ["sh", "-c",
@@ -150,9 +118,8 @@ Scope {
             + "ask IdleActionUSec org.freedesktop.DBus.Properties.Get org.freedesktop.login1.Manager IdleActionUSec; "
             + "show Swaps /proc/swaps; show Meminfo /proc/meminfo; show Lockdown /sys/kernel/security/lockdown; "
             + "show Resume /sys/power/resume; show Cmdline /proc/cmdline; "
-            + "echo '[NixOS]'; echo \"$3\"; "
             + "echo '[SleepConf]'; \"$analyze\" --no-pager cat-config systemd/sleep.conf 2> /dev/null & call=$!; wait $call; "
-            + "true", root._gdbus, root._analyze, root.fileRoot, _query._nixos]
+            + "true", root._gdbus, root._analyze, root.fileRoot]
         stdout: StdioCollector {
             onStreamFinished: _query._output = text
         }

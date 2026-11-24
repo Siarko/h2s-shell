@@ -109,6 +109,7 @@ TestCase {
                 } else if (capability.mode === "copy") {
                     assert(planned.preview.option !== "" && planned.preview.snippet.startsWith(planned.preview.option + " "), label + "… the option and the line to copy: "
                            + planned.preview.snippet);
+                    assert(planned.preview.hint.includes(planned.preview.option), label + "… a hint naming the option: " + planned.preview.hint);
                 }
                 assertEqual(integration.plan(kind, "x").refusal?.code, "value", label + "a value it does not take: refused");
             }
@@ -167,8 +168,8 @@ TestCase {
             assertEqual((_answers["arch apply sleep.hibernateDelay"] ?? [])[0]?.quiet, true, "arch: the hibernation delay's apply ran (its prompt dismissed)");
             const archDelay = (_answers["arch readInForce sleep.hibernateDelay"] ?? [])[0];
             assertEqual(JSON.stringify(archDelay), JSON.stringify({ state: "set", value: 7200, from: "/etc/systemd/sleep.conf", elsewhere: "/etc/systemd/sleep.conf",
-                                                                   file: { state: "absent", text: null, sha256: "absent", ours: false } }),
-                        "arch: the delay in force, set elsewhere, and the shell's own file (none in the scratch tree)");
+                                                                   file: { state: "absent", text: null, sha256: "absent", ours: false }, afterOwn: false }),
+                        "arch: the delay in force, set elsewhere (read before the shell's file), and the shell's own file (none in the scratch tree)");
             const nixosDelay = (_answers["nixos readInForce sleep.hibernateDelay"] ?? [])[0];
             assertEqual(nixosDelay?.elsewhere + " " + nixosDelay?.value + " " + nixosDelay?.file, "/etc/systemd/sleep.conf 7200 null", "nixos: the delay in force, no file of the shell's");
             assertEqual(JSON.stringify(_runs), JSON.stringify({ arch: ["Change the time before hibernating"] }),

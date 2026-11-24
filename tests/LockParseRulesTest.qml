@@ -149,23 +149,24 @@ TestCase {
                     JSON.stringify({ canSuspend: "unknown", idleAction: { action: "ignore", after: 0 } }), "sleepSupport: a failed CanSuspend: unknown");
         assertEqual(JSON.stringify(LockParseRules.sleepSupport("")), JSON.stringify({
             canSuspend: "unknown", canHibernate: "unknown", canSuspendThenHibernate: "unknown", idleAction: null,
-            hibernation: { swaps: null, memoryInUse: -1, lockdown: "unknown", resume: "unknown", delay: { state: "unknown" }, nixos: null }
+            hibernation: { swaps: null, memoryInUse: -1, lockdown: "unknown", resume: "unknown", delay: { state: "unknown" } }
         }), "sleepSupport: nothing: unknown, not read");
         assertEqual(JSON.stringify(LockParseRules.sleepSupportUnread()), JSON.stringify(LockParseRules.sleepSupport("")), "… the same before a read");
         const whole = LockParseRules.sleepSupport("[CanSuspend]\n('yes',)\n[CanHibernate]\n('na',)\n[CanSuspendThenHibernate]\n('challenge',)\n"
             + "[IdleAction]\n[IdleActionUSec]\n"
             + "[Swaps]\nFilename Type Size Used Priority\n/dev/zram0 partition 4194300 0 100\n"
             + "[Meminfo]\nMemTotal: 1000 kB\nMemAvailable: 400 kB\n"
-            + "[Lockdown]\nnone [integrity] confidentiality\n[Resume]\n0:0\n[Cmdline]\nroot=x resume=/dev/sda2\n[NixOS]\nno\n"
-            + "[SleepConf]\n# /etc/systemd/sleep.conf\n[Swaps]\n[NixOS]\n[Sleep]\nHibernateDelaySec=3h\n");
+            + "[Lockdown]\nnone [integrity] confidentiality\n[Resume]\n0:0\n[Cmdline]\nroot=x resume=/dev/sda2\n"
+            + "[SleepConf]\n# /etc/systemd/sleep.conf\n[Swaps]\n[Cmdline]\n[Sleep]\nHibernateDelaySec=3h\n");
         assertEqual(JSON.stringify(whole), JSON.stringify({
             canSuspend: "yes", canHibernate: "na", canSuspendThenHibernate: "challenge", idleAction: null,
             hibernation: { swaps: [{ name: "/dev/zram0", type: "partition", kib: 4194300, zram: true }], memoryInUse: 600, lockdown: "integrity",
-                           resume: true, delay: { state: "set", seconds: 10800, file: "/etc/systemd/sleep.conf" }, nixos: false }
+                           resume: true, delay: { state: "set", seconds: 10800, file: "/etc/systemd/sleep.conf" } }
         }), "sleepSupport: every section; sleep.conf's own [Sleep] and look-alike headers stay in it, past its header");
-        assertEqual(LockParseRules.sleepSupport("[NixOS]\nyes\n").hibernation.nixos, true, "sleepSupport: NixOS");
-        assertEqual(LockParseRules.sleepSupport("[Bogus]\n[NixOS]\nyes\n[Other]\nno\n").hibernation.nixos, null,
-                    "sleepSupport: an unknown header is a line of the section before (NixOS: not one word)");
+        assertEqual(LockParseRules.sleepSupport("[Resume]\n0:0\n").hibernation.resume, false, "sleepSupport: no resume device");
+        assertEqual(LockParseRules.sleepSupport("[Resume]\n0:0\n[Bogus]\n").hibernation.resume, "unknown",
+                    "sleepSupport: an unknown header is a line of the section before (Resume: not one device)");
+        assertEqual(LockParseRules.sleepSupport("[NixOS]\nyes\n").hibernation.nixos, undefined, "sleepSupport: no NixOS section");
         assertEqual(LockParseRules.sleepSupport("('yes',)\n").canSuspend, "unknown", "sleepSupport: an answer without its header: unknown");
 
         // The sleep call's outcome

@@ -2,13 +2,12 @@ import QtQuick
 import Quickshell
 import qs.singletons
 import qs.singletons.io
-import qs.singletons.lock
 import qs.singletons.network
 
 // What uses the distribution's answer, while the answer changes and when it cannot be told —
 // in a process of its own, since it makes the shell's one Distribution answer otherwise
 // (its reader's override):
-// - the readers that wait for it (LogindSleep, RememberedAdminReader) never see a moment's
+// - the reader that waits for it (RememberedAdminReader) never sees a moment's
 //   "cannot be told" while a new answer comes in (Distribution's ready and id are two
 //   bindings on one answer: read apart, one may still hold the old value);
 // - with the distribution not known, nothing is looked up on a guessed PATH: the command
@@ -21,16 +20,12 @@ TestCase {
     asynchronous: true
     ownProcess: true
 
-    property Component _sleepComponent: Component {
-        LogindSleep {}
-    }
     property Component _adminReaderComponent: Component {
         RememberedAdminReader {}
     }
 
-    property var _sleep: null
     property var _adminReader: null
-    property var _seen: ({ sleep: [], admin: [] })
+    property var _seen: ({ admin: [] })
     property var _readyAnswers: []
     property int _question: 0
     property var _inForce: null
@@ -49,9 +44,7 @@ TestCase {
         // (And the command runner's own look-up done, so that nothing of it runs later)
         _then("Distribution answered the first time", () => Distribution.detection.ready && CommandTools.known
               && !CommandTools._lookup.running && !CommandTools._probe.running, () => {
-            _sleep = _sleepComponent.createObject(suite, {});
             _adminReader = _adminReaderComponent.createObject(suite, {});
-            _sleep.nixosChanged.connect(() => suite._note("sleep", suite._sleep.nixos));
             _adminReader.nixosChanged.connect(() => suite._note("admin", suite._adminReader.nixos));
             // What a consumer acting on readiness reads at that moment
             Distribution.readyChanged.connect(() => {
@@ -65,17 +58,15 @@ TestCase {
         });
         _then("a new answer", () => _answered(Distribution._reader.override), () => {
             const expected = Distribution.detection.id === "nixos" ? "true" : "false";
-            assertEqual(_seen.sleep.join(","), "undefined," + expected,
-                        "LogindSleep: not answered, then the new answer — never a moment's \"cannot be told\" (null) between");
-            assertEqual(_seen.admin.join(","), "undefined," + expected, "RememberedAdminReader: the same");
+            assertEqual(_seen.admin.join(","), "undefined," + expected,
+                        "RememberedAdminReader: not answered, then the new answer — never a moment's \"cannot be told\" (null) between");
             assertEqual(_readyAnswers.join(","), Distribution.detection.id, "the answer read from detection when ready changes: the new one");
             assertEqual(Distribution.integration?.distribution, Distribution.detection.id, "the integration: the new answer's");
-            _seen = { sleep: [], admin: [] };
+            _seen = { admin: [] };
             Distribution._reader.override = "no-such-distribution";
         });
         _then("the distribution not known", () => Distribution.detection.ready && Distribution.detection.id === "", () => {
-            assertEqual(_seen.sleep.join(","), "undefined,null", "LogindSleep: not answered, then cannot be told");
-            assertEqual(_seen.admin.join(","), "undefined,null", "RememberedAdminReader: the same");
+            assertEqual(_seen.admin.join(","), "undefined,null", "RememberedAdminReader: not answered, then cannot be told");
             assertEqual(Distribution.integration, null, "no integration");
             const capability = Distribution.capability("sleep.hibernateDelay");
             assertEqual(capability.mode + "|" + capability.known + "|" + capability.reason, "unavailable|false|" + IntegrationRules.unknown,
@@ -115,7 +106,6 @@ TestCase {
     }
 
     function _end() {
-        _sleep?.destroy();
         _adminReader?.destroy();
         suite.finish();
     }

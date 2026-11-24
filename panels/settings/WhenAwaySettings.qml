@@ -60,11 +60,11 @@ Flickable {
     property var delayInForce: Idle.hibernateDelayInForce
     property string delayBusy: Idle.hibernateDelayBusy
     property bool delayUndoable: Idle.hibernateDelayUndoable
-    // The option to set where the system's configuration sets the delay
-    property string delayOption: Distribution.plan("sleep.hibernateDelay", _hibernate.after).preview?.option ?? ""
+    // Where the system's configuration sets the delay, in the integration's words
+    property string delayHint: Distribution.plan("sleep.hibernateDelay", _hibernate.after).preview?.hint ?? ""
     // What the section offers under the times: its line, Apply and Undo, labels and effects
     readonly property var _delayOffer: HibernateRules.delayOffer({
-        delay: _hibernation.delay, picked: _hibernate.after, differs: _delayDiffers, capability: delayCapability, option: delayOption,
+        delay: _hibernation.delay, picked: _hibernate.after, differs: _delayDiffers, capability: delayCapability, hint: delayHint,
         inForce: delayInForce, busy: delayBusy, undoable: delayUndoable
     }, seconds => Format.duration(seconds))
     readonly property var _monitorMap: _edited("lockscreen.monitorIdle")
@@ -592,7 +592,8 @@ Flickable {
                 }
                 // With sleep on the delay is the system's, one per machine: a time that differs
                 // is said, with what the distribution lets the shell do (Apply, the password
-                // asked on the click; the option to set; why not), and Undo after an Apply
+                // asked on the click, or on a second one after its question; where it is set;
+                // why not), and Undo after an Apply
                 RowLayout {
                     objectName: "hibernateDelay"
                     visible: root._delayOffer.shown
@@ -605,17 +606,18 @@ Flickable {
                     }
                     SmallButton {
                         objectName: "hibernateApply"
-                        visible: root._delayOffer.apply.shown && !root._delayOffer.apply.asks
+                        visible: root._delayOffer.apply.button === "plain"
                         label: root._delayOffer.apply.label
                         kind: "save"
                         available: root._delayOffer.apply.available
                         fontSize: Theme.fontSizeSmall
                         onClicked: Idle.applyHibernateDelay(root._delayOffer.apply.request)
                     }
-                    // The shell's file changed outside it: Apply replaces it only on a second click
+                    // A setting the change would override (another file read before the shell's,
+                    // the shell's own changed outside it): Apply acts only on a second click
                     DeleteButton {
                         objectName: "hibernateReplace"
-                        visible: root._delayOffer.apply.shown && root._delayOffer.apply.asks
+                        visible: root._delayOffer.apply.button === "ask"
                         kind: "save"
                         label: root._delayOffer.apply.label
                         confirmLabel: root._delayOffer.apply.question

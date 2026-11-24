@@ -7,7 +7,7 @@ import qs.singletons.io
 // is one of these with its table; Distribution forwards to the one the system is.
 //
 // `table` names each change kind it offers ({ <kind>: { mode, trial, undo, inForce, reason,
-// option } }); a kind it does not name is unavailable. A kind it applies is written by
+// option, hint } }); a kind it does not name is unavailable. A kind it applies is written by
 // `files` (EtcFiles; null where nothing is written). Every function answers: apply and undo
 // at once with { started, refusal } and, when started, `handlers.done` once later;
 // readInForce always later, once.

@@ -10,6 +10,7 @@ import qs.singletons
 // Hibernate section offers by each shipped distribution's capability (Arch applies, NixOS
 // names the option, generic says why not) and what is in force.
 TestCase {
+    id: suite
     suiteName: "HibernateRules"
 
     property Component _arch: Component {
@@ -26,74 +27,102 @@ TestCase {
     function _offers(rules, duration) {
         const kind = "sleep.hibernateDelay";
         const json = value => JSON.stringify(value);
-        const made = [_arch.createObject(null), _nixos.createObject(null), _generic.createObject(null)];
+        const made = [_arch.createObject(suite), _nixos.createObject(suite), _generic.createObject(suite)];
         const [arch, nixos, generic] = made.map(integration => integration.capability(kind));
-        const option = made[1].plan(kind, 10800).preview.option;
+        const hint = made[1].plan(kind, 10800).preview.hint;
         made.forEach(integration => integration.destroy());
         const ours = "/etc/systemd/sleep.conf.d/h2s-shell.conf";
         const absent = { state: "absent", text: null, sha256: "absent", ours: false };
         const shells = { state: "text", text: rules.dropInText(3600), sha256: "a".repeat(64), ours: true };
         const edited = { state: "text", text: "[Sleep]\nHibernateDelaySec=1h\n", sha256: "b".repeat(64), ours: false };
-        const read = (file, extra) => Object.assign({ state: "set", value: 7200, from: "/etc/systemd/sleep.conf", elsewhere: "", file }, extra ?? {});
+        const read = (file, extra) => Object.assign({ state: "set", value: 7200, from: "/etc/systemd/sleep.conf", elsewhere: "", file, afterOwn: false }, extra ?? {});
         const set = { state: "set", seconds: 7200 };
-        const offer = (extra) => rules.delayOffer(Object.assign({ delay: set, picked: 10800, differs: true, capability: arch, option: "",
+        const offer = (extra) => rules.delayOffer(Object.assign({ delay: set, picked: 10800, differs: true, capability: arch, hint: "",
                                                                     inForce: read(absent), busy: "", undoable: false }, extra ?? {}), duration);
 
         // Arch: Apply, its effect the request it shows
         let answer = offer();
         assertEqual(answer.line, "Picked 3 h; the system now hibernates after 2 h. Apply to change it.", "Arch: the picked time after Apply");
-        assert(answer.shown && answer.apply.shown && !answer.apply.asks && answer.apply.label === "Apply" && answer.apply.available, "… Apply offered");
+        assert(answer.shown && answer.apply.button === "plain" && answer.apply.label === "Apply" && answer.apply.available, "… Apply on the click");
         assertEqual(json(answer.apply.request), json({ seconds: 10800, current: absent, replace: false }),
                     "… its effect: the time picked, checked against the file as read, nothing replaced");
         assert(!answer.undo.shown, "… no Undo before a change");
         answer = offer({ inForce: read(shells, { from: ours }) });
-        assert(answer.apply.shown && !answer.apply.asks && answer.apply.request.current === shells, "the shell's own file sets it: Apply over it, no question");
+        assert(answer.apply.button === "plain" && answer.apply.request.current === shells, "the shell's own file sets it: Apply over it, no question");
         assertEqual(offer({ delay: { state: "unset" }, inForce: read(absent, { state: "default", value: null, from: "" }) }).line,
                     "Picked 3 h; the system's delay is not set (systemd's default). Apply to change it.", "unset: said, Apply offered");
-        // Set elsewhere: shown, never overridden
+        // Set in a file read after the shell's: shown, Apply could not win
+        answer = offer({ inForce: read(absent, { from: "/etc/systemd/sleep.conf.d/zz.conf", elsewhere: "/etc/systemd/sleep.conf.d/zz.conf", afterOwn: true }) });
+        assertEqual(answer.line, "Picked 3 h. Set in /etc/systemd/sleep.conf.d/zz.conf: 2 h; it is read after the shell's file.",
+                    "set in a file read after the shell's: named with its value");
+        assert(answer.shown && answer.apply.button === "none" && answer.apply.request === null, "… no Apply (it could not win)");
+        answer = offer({ inForce: read(absent, { state: "default", value: null, from: "/run/x.conf", elsewhere: "/run/x.conf", afterOwn: true }) });
+        assertEqual(answer.line, "Picked 3 h. Set in /run/x.conf: systemd's default; it is read after the shell's file.", "… a file putting the default back: named too");
+        assertEqual(answer.apply.button, "none", "… no Apply");
+        answer = offer({ inForce: read(absent, { elsewhere: "/etc/systemd/sleep.conf", afterOwn: undefined }) });
+        assertEqual(answer.apply.button, "none", "… not told whether it is read after: no Apply");
+        // Set in a file read before it: warned, Apply asks first
         answer = offer({ inForce: read(absent, { elsewhere: "/etc/systemd/sleep.conf" }) });
-        assertEqual(answer.line, "Picked 3 h. Set in /etc/systemd/sleep.conf: 2 h.", "set in the user's own file: named with its value");
-        assert(answer.shown && !answer.apply.shown && answer.apply.request === null, "… no Apply over it");
-        answer = offer({ inForce: read(absent, { state: "default", value: null, from: "/run/x.conf", elsewhere: "/run/x.conf" }) });
-        assertEqual(answer.line, "Picked 3 h. Set in /run/x.conf: systemd's default.", "… a file putting the default back: named too");
-        assert(!answer.apply.shown, "… no Apply");
+        assertEqual(answer.line, "Picked 3 h. Set in /etc/systemd/sleep.conf: 2 h.", "set in the user's own sleep.conf: named with its value");
+        assert(answer.apply.button === "ask" && answer.apply.question === "Use the shell's value instead?", "… Apply asks first");
+        assertEqual(json(answer.apply.request), json({ seconds: 10800, current: absent, replace: false }), "… the shell's own file written, nothing else replaced");
+        answer = offer({ inForce: read(edited, { elsewhere: "/etc/systemd/sleep.conf" }) });
+        assertEqual(answer.line, "Picked 3 h. Set in /etc/systemd/sleep.conf: 2 h. " + ours + " was changed outside the shell: Apply replaces it.",
+                    "… and the shell's file edited by hand: both said");
+        assert(answer.apply.button === "ask" && answer.apply.request.replace === true, "… one question, the file replaced");
+        answer = offer({ inForce: read({ state: "unknown", text: null, sha256: "", ours: false }, { elsewhere: "/etc/systemd/sleep.conf" }) });
+        assertEqual(answer.line + "|" + answer.apply.button, "Picked 3 h. Set in /etc/systemd/sleep.conf: 2 h.|none", "… the shell's file not read: no Apply");
         // The shell's file changed outside it: the question first
         answer = offer({ inForce: read(edited, { from: ours }) });
         assertEqual(answer.line, "Picked 3 h; the system now hibernates after 2 h. " + ours + " was changed outside the shell: Apply replaces it.",
                     "the shell's file edited by hand: warned");
-        assert(answer.apply.shown && answer.apply.asks && answer.apply.question === "Replace?", "… Apply asks first");
+        assert(answer.apply.button === "ask" && answer.apply.question === "Replace?", "… Apply asks first");
         assertEqual(json(answer.apply.request), json({ seconds: 10800, current: edited, replace: true }), "… and replaces only that file as read");
         // What is in force not read: no Apply (another file may set it)
         for (const inForce of [null, read(absent, { state: "unknown", value: null, from: "" }), read(null), read({ state: "unknown", text: null, sha256: "", ours: false })]) {
             answer = offer({ inForce });
-            assert(answer.shown && !answer.apply.shown, "not read: no Apply (" + json(inForce) + ")");
+            assert(answer.shown && answer.apply.button === "none" && answer.apply.request === null, "not read: no Apply (" + json(inForce) + ")");
             assertEqual(answer.line, "Picked 3 h; the system now hibernates after 2 h.", "… nothing promised");
         }
         assertEqual(offer({ delay: { state: "unknown" }, inForce: null }).line, "Picked 3 h; the system's delay could not be read.", "unread: said");
         // Busy, Undo
         answer = offer({ busy: "apply" });
         assert(answer.apply.label === "Applying\u2026" && !answer.apply.available, "applying: said, not again");
+        assert(!offer({ busy: "undo" }).apply.available && offer({ busy: "undo" }).apply.label === "Apply", "undoing: Apply not clickable, its label kept");
         answer = offer({ undoable: true });
         assert(answer.undo.shown && answer.undo.label === "Undo" && answer.undo.available, "after an Apply: Undo");
         answer = offer({ undoable: true, differs: false });
-        assert(answer.shown && answer.undo.shown && !answer.apply.shown && answer.line === "", "… shown when the times agree now, alone");
+        assert(answer.shown && answer.undo.shown && answer.apply.button === "none", "… shown when the times agree now");
+        assertEqual(answer.line, "Undo puts back " + ours + " as it was before the last Apply.", "… with a line saying what it undoes");
         assert(!offer({ undoable: true, busy: "undo" }).undo.available, "… not while one runs");
-        assert(!offer({ differs: false }).shown, "the same time, nothing to undo: nothing shown");
-        // NixOS: the option to set
-        answer = offer({ capability: nixos, option });
+        answer = offer({ differs: false });
+        assert(!answer.shown && answer.line === "", "the same time, nothing to undo: nothing shown");
+        // NixOS: the integration's hint
+        answer = offer({ capability: nixos, hint });
         assertEqual(answer.line, "Picked 3 h; the system now hibernates after 2 h. On NixOS it is the option programs.h2s-shell.idle.hibernateDelay.",
-                    "NixOS: the option named");
-        assert(!answer.apply.shown && !answer.apply.asks && answer.apply.request === null && !offer({ capability: nixos, option, undoable: true }).undo.shown,
-               "… no Apply, no question, no Undo");
-        assert(!offer({ capability: nixos, option, inForce: read(absent, { elsewhere: "/etc/systemd/sleep.conf" }) }).line.startsWith("Picked 3 h. Set in"),
+                    "NixOS: the option named, in the integration's words");
+        assert(answer.apply.button === "none" && answer.apply.request === null && !offer({ capability: nixos, hint, undoable: true }).undo.shown,
+               "… no Apply, no Undo");
+        assertEqual(offer({ capability: nixos, hint: "" }).line, "Picked 3 h; the system now hibernates after 2 h.", "… no hint: nothing more said");
+        assert(!offer({ capability: nixos, hint, inForce: read(absent, { elsewhere: "/etc/systemd/sleep.conf", afterOwn: true }) }).line.startsWith("Picked 3 h. Set in"),
                "… its generated sleep.conf is no setting of the user's to name");
         // Generic, and the distribution not known
         answer = offer({ capability: generic });
         assertEqual(answer.line, "Picked 3 h; the system now hibernates after 2 h. Not supported on this distribution.", "generic: why not");
-        assert(!answer.apply.shown && !offer({ capability: generic, undoable: true }).undo.shown, "… no Apply, no Undo");
+        assert(answer.apply.button === "none" && !offer({ capability: generic, undoable: true }).undo.shown, "… no Apply, no Undo");
         answer = offer({ capability: IntegrationRules.unknownCapability() });
         assertEqual(answer.line, "Picked 3 h; the system now hibernates after 2 h.", "not known yet: nothing promised");
-        assert(!answer.apply.shown, "… no Apply");
+        assertEqual(answer.apply.button, "none", "… no Apply");
+
+        // Which files systemd reads after the shell's drop-in
+        for (const [path, after] of [["/etc/systemd/sleep.conf", false], ["/usr/lib/systemd/sleep.conf", false], ["/run/systemd/sleep.conf", false],
+                                     ["/usr/local/lib/systemd/sleep.conf", false],
+                                     ["/usr/lib/systemd/sleep.conf.d/10-vendor.conf", false], ["/etc/systemd/sleep.conf.d/aa.conf", false],
+                                     ["/run/systemd/sleep.conf.d/50-x.conf", false], ["/run/systemd/sleep.conf.d/h2s-shell.conf", false],
+                                     ["/etc/systemd/sleep.conf.d/zz-tlp.conf", true], ["/run/systemd/sleep.conf.d/i.conf", true],
+                                     ["/usr/lib/systemd/sleep.conf.d/h2s-shell.confx.conf", true],
+                                     ["/home/me/sleep.conf", true], ["", true], ["/etc/systemd/sleep.conf.d/x.txt", true], [null, true]])
+            assertEqual(rules.readAfterDropIn(path), after, "read after the shell's drop-in: " + path + " → " + after);
     }
 
     function run() {
