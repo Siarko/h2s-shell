@@ -22,8 +22,10 @@ import qs.singletons
 // - config / configDirectory are set only while the context is inactive; set while
 //   active, PamContext drops the new value silently.
 // - A start that went through is reported as pamStarted, with whether the config starts
-//   with the marker line (LockIoRules.pamMarked; read here just before the start, which is
-//   when the PAM child reads it too) — the rules watch only such a conversation's silence.
+//   with the marker line (LockIoRules.pamMarked) — the rules watch only such a
+//   conversation's silence. The config is read without blocking, from the start on (when
+//   the PAM child reads it too); pamStarted follows when the read is done, and a read that
+//   fails or never ends reports nothing marked, so nothing is watched.
 //
 // The typed password passes through respond() only, as an argument: nothing here keeps
 // it. Created with the lock's scope (LockScope) and destroyed with it, which kills a
@@ -64,10 +66,9 @@ Scope {
         _context.config = config;
         _conversation = conversation;
         _completedInStart = false;
-        const marked = LockIoRules.pamMarked(_configText(configDirectory + "/" + config));
         const started = _context.start();
         if (started && _conversation === conversation)
-            root.event({ type: "pamStarted", method: method, conversation: conversation, marked: marked });
+            _readConfig(conversation, configDirectory + "/" + config);
         if (started || _completedInStart)
             return;
         _conversation = null;
@@ -95,18 +96,32 @@ Scope {
         _context.respond(text);
     }
 
-    // The config's text; "" when it cannot be read (then PAM cannot read it either)
-    function _configText(path) {
-        _configFile.path = "";
-        _configFile.path = path;
-        return _configFile.text();
+    // The conversation whose config is being read, or null
+    property var _readFor: null
+
+    function _readConfig(conversation, path) {
+        _readFor = conversation;
+        if (_configFile.path === path)
+            _configFile.reload();
+        else
+            _configFile.path = path;
     }
 
-    // Read on demand, blocking: a PAM config is a small file in a local directory
+    // The read is done: reported for the conversation it was made for, while that one runs
+    function _configRead(marked) {
+        const conversation = _readFor;
+        _readFor = null;
+        if (conversation === null || conversation !== _conversation)
+            return;
+        root.event({ type: "pamStarted", method: method, conversation: conversation, marked: marked });
+    }
+
+    // Read on demand, never blocking the shell
     FileView {
         id: _configFile
-        blockLoading: true
         printErrors: false
+        onLoaded: root._configRead(LockIoRules.pamMarked(text()))
+        onLoadFailed: root._configRead(false)
     }
 
     function _resultName(result) {

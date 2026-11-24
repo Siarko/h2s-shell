@@ -989,7 +989,7 @@ Singleton {
             return refused;
         if (event.marked !== true)
             return "not marked";
-        _setRegionOf(transaction, event.method, { watch: event.conversation });
+        _setRegionOf(transaction, event.method, { watch: event.conversation, silentDue: false });
         LockStepRules.startTimer(transaction, "silent:" + event.method, transaction.state.settings.timings.firstWord);
     }
 
@@ -999,7 +999,7 @@ Singleton {
         const region = method === "password" ? transaction.state.password : transaction.state.passive[method];
         if (region.watch === null && region.silentStarts === 0)
             return;
-        _setRegionOf(transaction, method, { watch: null, silentStarts: 0 });
+        _setRegionOf(transaction, method, { watch: null, silentDue: false, silentStarts: 0 });
         LockStepRules.stopTimer(transaction, "silent:" + method);
     }
 
@@ -1014,10 +1014,17 @@ Singleton {
     // nothing was asked, typed or counted. It is aborted and started again after the
     // settle — the password with the secret it still holds (no prompt took it), a passive
     // method as a new round — at most `limits.silentStarts` starts; the last is left to run.
+    // The first expiry only arms a 0 ms pass: a word that arrived with the expiry is
+    // handled before it, and ends the watch.
     function _silentTimedOut(transaction, method) {
         const region = method === "password" ? transaction.state.password : transaction.state.passive[method];
         if (!region || region.watch === null || region.conversation === null || region.conversation.id !== region.watch)
             return;
+        if (region.silentDue !== true) {
+            _setRegionOf(transaction, method, { silentDue: true });
+            LockStepRules.startTimer(transaction, "silent:" + method, 0);
+            return;
+        }
         const starts = region.silentStarts + 1;
         const seconds = Math.round(transaction.state.settings.timings.firstWord / 100) / 10;
         const config = LockStepRules.where(region.config);
@@ -1025,7 +1032,7 @@ Singleton {
             ? region.status === "verifying" && transaction.state.secret !== null
             : region.status === "running";
         if (!restartable || starts >= limits.silentStarts) {
-            _setRegionOf(transaction, method, { watch: null });
+            _setRegionOf(transaction, method, { watch: null, silentDue: false });
             LockStepRules.log(transaction, "warning", method + ": PAM said nothing in " + seconds + " s, start " + starts
                 + " of " + limits.silentStarts + ", PAM config " + config + ": left running");
             return;
@@ -1033,7 +1040,7 @@ Singleton {
         LockStepRules.log(transaction, "warning", method + ": PAM said nothing in " + seconds + " s (stuck before its first module), PAM config "
             + config + ": started again (" + (starts + 1) + " of " + limits.silentStarts + ")");
         _abort(transaction, method);
-        _setRegionOf(transaction, method, { status: method === "password" ? "pending" : "idle", watch: null, silentStarts: starts });
+        _setRegionOf(transaction, method, { status: method === "password" ? "pending" : "idle", watch: null, silentDue: false, silentStarts: starts });
     }
 
     // A PAM event counts only for the conversation that is running now, for this method,
@@ -1413,7 +1420,7 @@ Singleton {
         if (region.conversation === null)
             return;
         LockStepRules.emit(transaction, "abortPam", { method: method, conversation: region.conversation.id });
-        _setRegionOf(transaction, method, { conversation: null, settling: true, watch: null });
+        _setRegionOf(transaction, method, { conversation: null, settling: true, watch: null, silentDue: false });
         LockStepRules.stopTimer(transaction, "silent:" + method);
         LockStepRules.startTimer(transaction, "settle:" + method, transaction.state.settings.timings.settle);
     }
