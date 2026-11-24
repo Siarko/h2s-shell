@@ -484,6 +484,7 @@ Singleton {
             sleepSince: null,        // a profile switch made the sleep due: it counts from then (ms)
             sleepAfterSeen: null,    // the whole computer's stage at the last step (machineAfter)
             stage: ({}),             // monitor id → 0 none, 1 screensaver, 2 screens off: reached in this period
+            saverSince: ({}),        // monitor id → when it first reached a stage in this period (ms): its screensaver appeared
             // The command entries whose "go" ran and whose "back" is due at their moment's
             // end: [{ id, moment, back }] — the "back" as it was when the "go" ran
             commandsRun: [],
@@ -546,14 +547,35 @@ Singleton {
         return times.screenOffAfter > 0;
     }
 
+    // A monitor's screensaver shows before its screen-off (at or before its time)
+    function _saverBeforeOff(times) {
+        return times.saverAfter > 0 && times.saverAfter <= times.screenOffAfter;
+    }
+
     // When a monitor's screen-off comes (ms from the last input), its stage on: its time, but
     // never before the screensaver shown at or before it has faded in (and saverFadeMargin) —
     // powering off at once would cut the fade short (equal times: never seen at all)
     function offAt(config, times) {
         const off = times.screenOffAfter * 1000;
-        if (!(times.saverAfter > 0 && times.saverAfter <= times.screenOffAfter))
+        if (!_saverBeforeOff(times))
             return off;
         return Math.max(off, times.saverAfter * 1000 + (config.saverFade ?? 0) + saverFadeMargin);
+    }
+
+    // When a monitor's screen-off comes (monotonic ms), its stage on and not forced, or -1
+    // while its screensaver has yet to appear (or appear anew: a monitor back after dropping
+    // off): offAt from the last input, and never before
+    // the screensaver has faded in since it appeared on that monitor (`saverSince`) — a
+    // screensaver that came late (an old `since`, a step held past its time, a profile
+    // switched while away) still gets its fade before the power goes
+    function _offTime(state, config, id, times) {
+        const fromInput = state.idleSince + offAt(config, times);
+        if (!_saverBeforeOff(times))
+            return fromInput;
+        const since = state.saverSince?.[id];
+        if (typeof since !== "number")
+            return -1;
+        return Math.max(fromInput, since + (config.saverFade ?? 0) + saverFadeMargin);
     }
 
     // A monitor goes dark at some point: a stage of its own on (or the screensaver forced)
@@ -583,7 +605,8 @@ Singleton {
             const idleFor = now - state.idleSince;
             if (times.saverAfter > 0 && idleFor >= times.saverAfter * 1000)
                 timeline = 1;
-            if (times.screenOffAfter > 0 && idleFor >= offAt(config, times))
+            const offTime = times.screenOffAfter > 0 ? _offTime(state, config, id, times) : -1;
+            if (offTime >= 0 && now >= offTime)
                 timeline = 2;
         }
         return Math.max(reached, timeline);
@@ -851,8 +874,9 @@ Singleton {
                 }
                 if (times.saverAfter > 0 && reached < 1)
                     due.push(state.idleSince + times.saverAfter * 1000);
-                if (times.screenOffAfter > 0 && reached < 2)
-                    due.push(state.idleSince + offAt(config, times));
+                const offTime = times.screenOffAfter > 0 && reached < 2 ? _offTime(state, config, id, times) : -1;
+                if (offTime >= 0)
+                    due.push(offTime);
             }
         }
         const lockAt = _lockAt(state, config.lockAfter);
@@ -890,6 +914,7 @@ Singleton {
         const next = Object.assign({}, state);
         next.shown = Object.assign({}, state.shown);
         next.stage = Object.assign({}, state.stage);
+        next.saverSince = Object.assign({}, state.saverSince ?? {});
         next.connectors = Object.assign({}, state.connectors ?? {});
         next.offAsks = Object.assign({}, state.offAsks ?? {});
         next.gone = {};
@@ -906,6 +931,7 @@ Singleton {
     function _wake(next, now, actions) {
         next.idleSince = now;
         next.stage = {};
+        next.saverSince = {};
         next.forced = false;
         next.dark = false;
         next.gone = {};
@@ -1236,7 +1262,7 @@ Singleton {
         for (const id of before) {
             if (config.monitors.includes(id))
                 continue;
-            departed[id] = { connector: beforeConnectors[id] ?? "", stage: next.stage[id] };
+            departed[id] = { connector: beforeConnectors[id] ?? "", stage: next.stage[id], saverSince: next.saverSince[id] };
             const shown = next.shown[id] ?? "on";
             if (shown !== "on" && !sourceChanged)
                 next.gone[id] = { at: now, stage: next.stage[id], shellOff: shown === "off", connector: beforeConnectors[id] ?? "",
@@ -1250,6 +1276,8 @@ Singleton {
                 const was = _sameMonitor(departed, id, config);
                 if (was !== "") {
                     next.stage[id] = departed[was].stage;
+                    if (departed[was].saverSince !== undefined)
+                        next.saverSince[id] = departed[was].saverSince;
                     // Shown as it was: the picture in place moves to the new id, no action
                     if (next.shown[was] !== undefined)
                         next.shown[id] = next.shown[was];
@@ -1305,6 +1333,15 @@ Singleton {
         }
         // Only connected monitors keep a stage: one plugged in again starts from the clock
         next.stage = stage(next, config, now);
+        // When each monitor first reached a stage in this period: kept while it holds one, so
+        // its screen-off can wait for the fade in from then (a monitor back after dropping
+        // off shows its screensaver anew: from now)
+        const saverSince = {};
+        for (const id of config.monitors) {
+            if (next.stage[id] >= 1)
+                saverSince[id] = typeof next.saverSince[id] === "number" ? next.saverSince[id] : now;
+        }
+        next.saverSince = saverSince;
         next.lockedDark = lockedDark(next, config, now);
         const want = wanted(next, config, now);
 

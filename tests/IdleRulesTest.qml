@@ -103,6 +103,7 @@ TestCase {
         _monitorTimes();
         _screenOff();
         _offAfterFade();
+        _lateSaver();
         _lock();
         _input();
         _lockScreen();
@@ -366,8 +367,11 @@ TestCase {
                                  fadeInDuration: 100 }, ["oled"], true);
         quick.idle(500, 0);
         assertEqual(quick.next(), 1000, "a time of one second: due after it");
-        assertEqual([900, 1000, 2000].map(ms => rules.stage(quick.state, quick.config, ms).oled).join(" "), "0 1 2",
-                    "times of one and two seconds: the screensaver at 1 s, the screens off at 2 s");
+        assertEqual([900, 1000, 2000].map(ms => rules.stage(quick.state, quick.config, ms).oled).join(" "), "0 1 1",
+                    "times of one and two seconds: the screensaver at 1 s, and first, even asked late");
+        quick.deadline();
+        assertEqual([1999, 2000].map(ms => rules.stage(quick.state, quick.config, ms).oled).join(" "), "1 2",
+                    "… the screens off at 2 s");
         const offQuick = _machine({ screenOffEnabled: true, screenOffTimeout: 1 }, ["oled"], true).idle(500, 0);
         assert(offQuick.next() === 1000 && rules.stage(offQuick.state, offQuick.config, 1000).oled === 2, "screens off after one second");
         offQuick.deadline().at(1500, { type: "busInhibitors", count: 1 });
@@ -880,6 +884,73 @@ TestCase {
         assertEqual(locked.next(), 31000, "the lock screen's own screen-off: its time, no fade waited for");
         assertEqual(rules.config({ fadeInDuration: 1500 }, [], false).saverFade, 1500, "the fade in read from the profile (ms)");
         assertEqual(rules.config({}, [], false).saverFade, 800, "… its default when not set");
+    }
+
+    // A screensaver that comes late (an old `since`, a step held past its time by a slow read
+    // of logind, a profile switched while away) still fades in before its monitor's screen
+    // goes off: the wait counts from when it appeared on that monitor, not from the last input
+    function _lateSaver() {
+        const rules = IdleRules;
+        const fade = 2000 + rules.saverFadeMargin;
+        const values = { screensaverEnabled: true, screensaverTimeout: 60, screenOffEnabled: true, screenOffTimeout: 60,
+                         fadeInDuration: 2000 };
+
+        const old = _machine(values, ["oled"], true);
+        old.idle(100000, 0);
+        assertEqual(old.shown(), "oled=saver", "an old since: the screensaver first, not off at once");
+        assertEqual(old.next(), 100000 + fade, "… off once it has faded in, counted from when it appeared");
+        old.at(100000 + fade - 1, { type: "deadline" });
+        assertEqual(old.actions, "", "… not a moment before");
+        old.deadline();
+        assertEqual(old.actions, "powerOff:oled", "… then off");
+
+        const gap = _machine(_with(values, { screenOffTimeout: 61 }), ["lcd"], true);
+        gap.idle(100000, 0);
+        assertEqual(gap.shown(), "lcd=saver", "an old since, the screen-off a second after: the screensaver only");
+        assertEqual(gap.next(), 100000 + fade, "… off after its fade in");
+
+        const slow = _machine(values, ["oled"], true);
+        slow.idle(5000, 0);
+        slow.at(70000, { type: "logindIdleBlock", held: false });
+        assertEqual(slow.actions, "showSaver:oled,active:true", "a step late past both times (logind's read): the screensaver only");
+        assertEqual(slow.next(), 70000 + fade, "… off once it has faded in");
+        slow.deadline();
+        assertEqual(slow.actions, "powerOff:oled", "… then off");
+
+        const switched = _machine({ screensaverEnabled: true, screensaverTimeout: 300, screenOffEnabled: true, screenOffTimeout: 300,
+                                     fadeInDuration: 2000 }, ["oled"], true);
+        switched.idle(5000, 0);
+        switched.reconfigure(100000, values);
+        assertEqual(switched.actions, "showSaver:oled,active:true", "a profile switched while away, both times past: the screensaver only");
+        assertEqual(switched.next(), 100000 + fade, "… off once it has faded in");
+        switched.deadline();
+        assertEqual(switched.actions, "powerOff:oled", "… then off");
+
+        // Per monitor: the LCD's screensaver came on time, the OLED's late
+        const pair = _machine(_own({ fadeInDuration: 2000 }, { lcd: _entry(30, 60), oled: _entry(60, 60) }), ["lcd", "oled"], true);
+        pair.idle(5000, 0).deadline();
+        assertEqual(pair.actions, "showSaver:lcd", "per monitor: the LCD's screensaver on time");
+        pair.at(70000, { type: "logindIdleBlock", held: false });
+        assertEqual(pair.actions, "showSaver:oled,powerOff:lcd,active:true",
+                    "… a late step: the LCD, long faded in, off; the OLED only its screensaver");
+        assertEqual(pair.next(), 70000 + fade, "… the OLED off once its own screensaver has faded in");
+        pair.deadline();
+        assertEqual(pair.actions, "powerOff:oled", "… then the OLED off");
+        pair.input(80000);
+        assertEqual(pair.shown(), "lcd=on oled=on", "input: both on");
+        pair.idle(200000, 80000);
+        assertEqual(pair.shown(), "lcd=saver oled=saver", "a new period with an old since: both their screensavers, the last period's moment forgotten");
+        assertEqual(pair.next(), 200000 + fade, "… both off after the fade in");
+
+        // Power control found while the screensaver shows (the monitor's id changes form): it
+        // has been fading in since it appeared, not since the change
+        const qtForm = { id: "|U27|SN", base: "|U27|SN", connector: "DP-1" };
+        const backend = { id: "Dell|U27|SN", base: "Dell|U27|SN", connector: "DP-1" };
+        const found = _machine(values, [qtForm], false);
+        found.idle(5000, 0).deadline();
+        found.reconfigure(61000, values, [backend], true);
+        assertEqual(found.actions, "", "power control found during the fade in: still the screensaver");
+        assertEqual(found.next(), 60000 + fade, "… off once it has faded in since it appeared");
     }
 
     function _lock() {

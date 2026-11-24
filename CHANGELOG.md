@@ -188,6 +188,9 @@ The interface modules are written against (`qs.api`), versioned on its own
   text ("30") included — falls back to the default. The config file keeps what was written;
   a banner under the bar names the settings, the log says so once, and Settings shows the
   value in use with a note.
+- A screensaver that came late (a profile switched while you were away, the computer slow
+  to check what keeps the screen on) went dark at once where the screen was due off by
+  then: the screen now turns off only once the screensaver has faded in on it.
 - A run as administrator that ignored the end of its time limit and had to be killed is
   told as "It did not end within <limit> s", not with its last output line; one that wrote
   more than 1 MB of errors before failing is told with its last line, not an early one.
