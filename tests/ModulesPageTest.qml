@@ -773,6 +773,7 @@ TestCase {
         assertEqual(_named(banner, "warningBody")[0].text, "The shell crashed twice within 30 seconds of starting. Modules on when it crashed: Tailscale.",
                     "… why, and the modules on when it crashed by name");
         assert(!_named(banner, "openModules")[0].visible && !_named(banner, "warningClose")[0].visible, "… no Open Modules, no ×");
+        assert(_named(banner, "loadModules")[0].activeFocusOnTab, "… Load modules reached by Tab on the page");
         _host.calls = [];
         _click(_named(banner, "loadModules")[0]);
         assert(_until(() => _host.calls.length === 1), "Load modules calls the host");

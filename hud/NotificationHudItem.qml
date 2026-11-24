@@ -334,6 +334,7 @@ Item {
         id: notifCard
         notification: root.currentNotif
         compactDismiss: true
+        keepsTab: true
         imageMaxHeight: 120
         // A toast stays small: a long body is cut, the notification centre shows it whole
         bodyMaxLines: 6

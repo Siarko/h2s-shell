@@ -217,6 +217,23 @@ Singleton {
         return { close: true, reason: sidePanelReasons[event], closeList: false };
     }
 
+    // Where a scrolled view (a Flickable) goes so that an item in it shows whole: the new
+    // top of the view, `viewTop` when it shows already. The item's top and bottom are in the
+    // content's coordinates; `margin` is kept above or below it. An item taller than the view
+    // shows its top. Never past the content's ends.
+    function scrollToShow(itemTop, itemBottom, viewTop, viewHeight, contentHeight, margin) {
+        const values = [itemTop, itemBottom, viewTop, viewHeight, contentHeight, margin];
+        if (!values.every(value => typeof value === "number" && isFinite(value)) || viewHeight <= 0)
+            return typeof viewTop === "number" && isFinite(viewTop) ? viewTop : 0;
+        const highest = Math.max(0, contentHeight - viewHeight);
+        let top = viewTop;
+        if (itemBottom + margin > viewTop + viewHeight)
+            top = itemBottom + margin - viewHeight;
+        if (itemTop - margin < top)
+            top = itemTop - margin;
+        return Math.min(highest, Math.max(0, top));
+    }
+
     // Whether a side panel asked to open may: "" when it may, else why not — no page frame
     // above it (a popup panel, an anchor, the bar), or the session locked
     function sidePanelRefusal(frameFound, locked) {

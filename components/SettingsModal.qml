@@ -55,78 +55,28 @@ Item {
     readonly property Item panel: _panel
     readonly property Item contentItem: _content.item
 
-    // The item that had the keyboard before it opened
-    property Item _focusBefore: null
-
     visible: open
 
     onOpenChanged: {
         if (open) {
             values = {};
-            const focused = Window.activeFocusItem;
-            _focusBefore = focused && !_isInside(focused) ? focused : null;
-            _panel.forceActiveFocus();
+            _trap.take();
         } else {
-            _giveFocusBack();
+            _trap.giveBack();
         }
     }
 
     function _isInside(item) {
-        for (let step = item; step; step = step.parent) {
-            if (step === _panel)
-                return true;
-        }
-        return false;
+        return _trap.isInside(item);
     }
 
-    function _giveFocusBack() {
-        const focused = Window.activeFocusItem;
-        if (focused && !_isInside(focused) && focused !== Window.contentItem)
-            return;
-        if (_focusBefore && _focusBefore.visible)
-            _focusBefore.forceActiveFocus();
-        _focusBefore = null;
-    }
-
-    // The keyboard moved out while open (a click or tap that takes it, Qt's own Tab from a
-    // control inside): back into the panel
-    readonly property Item _focused: Window.activeFocusItem
-    on_FocusedChanged: {
-        if (open && _focused && !_isInside(_focused))
-            Qt.callLater(() => {
-                const focused = Window.activeFocusItem;
-                if (root.open && focused && !root._isInside(focused))
-                    _panel.forceActiveFocus();
-            });
-    }
-
-    // Tab inside the panel: the next control there that takes the keyboard (`forward`, else
-    // the one before), wrapping round; none, the panel itself
-    function _cycle(forward) {
-        let item = Window.activeFocusItem ?? _panel;
-        for (let step = 0; step < 1000 && item; step++) {
-            item = item.nextItemInFocusChain(forward);
-            if (item && item !== _panel && _isInside(item) && item.visible && item.enabled) {
-                item.forceActiveFocus(forward ? Qt.TabFocusReason : Qt.BacktabFocusReason);
-                return;
-            }
-            if (item === Window.activeFocusItem)
-                break;
-        }
-        _panel.forceActiveFocus();
-    }
-
-    // Shortcuts, not key handlers: a control that takes Tab itself (activeFocusOnTab) would
-    // hand the keyboard on through the whole window's chain before a handler saw the key
-    Shortcut {
-        sequence: "Tab"
-        enabled: root.open && root.visible
-        onActivated: root._cycle(true)
-    }
-    Shortcut {
-        sequences: ["Backtab", "Shift+Tab"]
-        enabled: root.open && root.visible
-        onActivated: root._cycle(false)
+    // The keyboard stays inside while open: Tab cycles there, and a click or tap that takes it
+    // out (or Qt's own Tab from a control inside) brings it back
+    FocusTrap {
+        id: _trap
+        scope: _panel
+        active: root.open && root.visible
+        holdsFocus: true
     }
 
     function _toggle(key) {

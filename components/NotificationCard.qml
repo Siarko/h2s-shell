@@ -37,6 +37,10 @@ Rectangle {
     readonly property bool bodyCut: _body.length > 0 && bodyMaxLines > 0 && _bodyBox.edit.lineCount > bodyMaxLines
     readonly property real bodyShownHeight: _bodyBox.implicitHeight
 
+    // Tab stays inside the card while it has the keyboard (a toast: the HUD's other controls
+    // are not the card's)
+    property bool keepsTab: false
+
     property bool timerVisible: false
     // Fraction of the auto-dismiss time left, 1 → 0; the owner runs the countdown
     property real timerProgress: 1.0
@@ -54,6 +58,11 @@ Rectangle {
     // the owner skips its own slide out
     readonly property bool swiping: _swipeLayer.active
     property bool swipedAway: false
+
+    FocusTrap {
+        scope: notifCard
+        active: notifCard.keepsTab
+    }
 
     implicitHeight: _contentCol.implicitHeight + contentPadding * 2
     radius: cornerRadius

@@ -251,6 +251,9 @@ FloatingWindow {
     // closes it.
     property Item _openList: null
 
+    // The control Tab reaches is scrolled into view, on any page, side panel or modal
+    FocusFollower {}
+
     Rectangle {
         anchors.fill: parent
         color: Theme.popupBackground

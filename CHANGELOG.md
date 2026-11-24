@@ -168,7 +168,8 @@ The interface modules are written against (`qs.api`), versioned on its own
 ### Fixed
 - Buttons can be used from the keyboard: Tab reaches them (a ring shows which), Space or
   Enter presses one, and Escape cancels a button's question; an unavailable button is passed
-  over.
+  over. Tab stays inside an open side panel and inside a toast, and a Settings page scrolls to
+  the control Tab reaches.
 - The Arch installer: a checkout of a fork, or of another repository whose address contains
   this one's name, is no longer taken for an install ("Already installed"), but left alone
   with where it comes from (never its user or password); this repository is recognised in

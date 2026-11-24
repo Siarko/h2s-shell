@@ -46,14 +46,16 @@ Rectangle {
     Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
     activeFocusOnTab: available
-    Keys.onPressed: event => {
-        if (!root.available || ![Qt.Key_Space, Qt.Key_Return, Qt.Key_Enter].includes(event.key))
+    Keys.onPressed: event => root._key(event)
+
+    // A key pressed while it has the keyboard: Space and Enter click. Taken whole, so an owner
+    // that also handles Enter does not act a second time; a held key clicks once
+    function _key(event) {
+        if (!available || ![Qt.Key_Space, Qt.Key_Return, Qt.Key_Enter].includes(event.key))
             return;
-        // Taken whole, so an owner that also handles Enter does not act a second time; a held
-        // key clicks once
         event.accepted = true;
         if (!event.isAutoRepeat)
-            root.clicked();
+            clicked();
     }
 
     // While it has the keyboard: a line inside the border, which keeps the kind's colour

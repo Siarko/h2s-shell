@@ -70,24 +70,34 @@ Row {
     }
 
     activeFocusOnTab: available
-    Keys.onPressed: event => {
-        if (!root.available)
+    Keys.onShortcutOverride: event => root._override(event)
+    Keys.onPressed: event => root._key(event)
+
+    // Escape while it asks is its own, before any shortcut (a side panel's Escape closes the
+    // panel): it cancels the question. Not asking, Escape is the owner's
+    function _override(event) {
+        if (available && asking && event.key === Qt.Key_Escape)
+            event.accepted = true;
+    }
+
+    // A key pressed while it has the keyboard: Space and Enter act as a click, Escape cancels a
+    // question. Taken whole, so an owner that also handles Enter does not act a second time; a
+    // held key presses once, never asking and deleting in one go
+    function _key(event) {
+        if (!available)
             return;
         if (event.key === Qt.Key_Escape) {
-            // Not asking, Escape is the owner's (it closes a popup or a modal)
-            if (!root.asking)
+            if (!asking)
                 return;
             event.accepted = true;
-            root.asking = false;
+            asking = false;
             return;
         }
         if (![Qt.Key_Space, Qt.Key_Return, Qt.Key_Enter].includes(event.key))
             return;
-        // Taken whole, so an owner that also handles Enter does not act a second time; a held
-        // key presses once, never asking and deleting in one go
         event.accepted = true;
         if (!event.isAutoRepeat)
-            root._press();
+            _press();
     }
 
     Rectangle {

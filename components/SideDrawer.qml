@@ -10,8 +10,8 @@ import qs.singletons
 // It never closes itself: what the user does is reported by `requested(event)` — Close
 // "closeButton", a click on the dimmed area "outsideClick", Escape "escape" — and the owner
 // sets `open`. Escape first closes a dropdown's list open inside it (ApiElementRules.
-// sidePanelEvent). While open it holds the keyboard focus, given back on closing to the item
-// that had it.
+// sidePanelEvent). Opening, it takes the keyboard, given back on closing to the item that had
+// it; Tab stays inside it while open.
 //
 //   SideDrawer { anchors.fill: parent; open: shown; title: "Files"; content: filesComp
 //                onRequested: event => shown = false }
@@ -31,9 +31,6 @@ Item {
     // The component shown: set when it opens, cleared once the panel is out of sight, so the
     // content stays while it slides out
     property Component _shown: null
-    // The item that had the keyboard before it opened
-    property Item _focusBefore: null
-
     // Takes the content away at once, the panel out of sight: what it showed is going (its
     // page destroyed)
     function dropContent() {
@@ -43,30 +40,23 @@ Item {
     onOpenChanged: {
         if (open) {
             _shown = content;
-            const focused = Window.activeFocusItem;
-            _focusBefore = focused && !_isInside(focused) ? focused : null;
-            _panel.forceActiveFocus();
+            _trap.take();
         } else {
-            _giveFocusBack();
+            _trap.giveBack();
         }
     }
     onContentChanged: if (open) _shown = content
 
     function _isInside(item) {
-        for (let step = item; step; step = step.parent) {
-            if (step === _panel)
-                return true;
-        }
-        return false;
+        return _trap.isInside(item);
     }
 
-    function _giveFocusBack() {
-        const focused = Window.activeFocusItem;
-        if (focused && !_isInside(focused))
-            return;
-        if (_focusBefore && _focusBefore.visible)
-            _focusBefore.forceActiveFocus();
-        _focusBefore = null;
+    // Tab stays inside while open. The keyboard is not held: a Settings modal asked from the
+    // panel takes it, and gives it back when it closes
+    FocusTrap {
+        id: _trap
+        scope: _panel
+        active: root.open && root.visible
     }
 
     // A dropdown's list open over the panel (components/FloatingList.qml, which lives in the

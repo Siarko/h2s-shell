@@ -60,6 +60,8 @@ StartupWarning {
         SmallButton {
             objectName: "openModules"
             visible: !root.onPage
+            // In the HUD, Tab from a toast's reply field must not land here
+            activeFocusOnTab: root.onPage && available
             label: "Open Modules"
             onClicked: root.openRequested()
         },
@@ -68,6 +70,7 @@ StartupWarning {
             label: root.words.load.label
             available: root.words.load.available
             kind: "warning"
+            activeFocusOnTab: root.onPage && available
             onClicked: {
                 if (!root.words.load.available || !root.host)
                     return;

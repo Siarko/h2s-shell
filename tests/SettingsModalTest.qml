@@ -301,7 +301,10 @@ TestCase {
         driver.keyClick(Qt.Key_Tab, Qt.ShiftModifier);
         driver.wait(20);
         assert(_focusInside() && host.Window.activeFocusItem?.objectName === "modalButton:1", "… Shift+Tab too, back round to the last button");
-        host.cancel("window");
+        const answersBefore = answers.length;
+        driver.keyClick(Qt.Key_Escape);
+        assert(_until(() => !host.open), "Escape with a button of the modal focused: closed");
+        assertEqual((answers.length - answersBefore) + " " + _last()?.reason + " " + _last()?.button, "1 escape cancel", "… as cancelled, by Escape, not by that button");
 
         // --- a touch tap: the focus stays ---
         _askRemove();

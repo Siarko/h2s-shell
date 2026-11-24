@@ -158,6 +158,7 @@ TestCase {
         assert(open.visible && open.label === "Open Modules", "… Open Modules");
         assert(load.visible && load.label === "Load modules" && load.available, "… Load modules");
         assert(close.visible, "… ×");
+        assert(!open.activeFocusOnTab && !load.activeFocusOnTab, "… neither reached by Tab (a toast's reply field is not left for them)");
         const insets = BarGeometry.reservedInsets(BarLayout.edge, Theme.bar.reservedSpace);
         assert(banner.mapToItem(null, 0, 0).y >= insets.top, "… under the bar, clear of its reserved space");
         assert(hud.warnings.maskItem !== null && _rect(hud.warnings.maskItem) === _rect(banner),

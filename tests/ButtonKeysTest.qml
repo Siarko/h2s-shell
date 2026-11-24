@@ -7,7 +7,11 @@ import qs.singletons
 // unavailable one is passed over; Space, Return and the keypad's Enter click once, never
 // reaching an owner that also handles Enter; an unavailable button
 // does nothing; DeleteButton asks, deletes, and Escape cancels its question (and is the
-// owner's otherwise); a click with the pointer leaves the keyboard with the field.
+// owner's otherwise); a click with the pointer leaves the keyboard with the field. A
+// repeated key (held down) does nothing more, on fake events. FocusTrap keeps Tab inside
+// its scope only while the keyboard is there; an open SideDrawer keeps Tab inside, and
+// Escape on its asking DeleteButton cancels the question before closing the panel;
+// FocusFollower scrolls the item with the keyboard into view (ApiElementRules.scrollToShow).
 //
 // Opens a small window for a moment, an ordinary one that takes the keyboard (keys are
 // sent to it), in the runner's headless compositor.
@@ -24,12 +28,13 @@ TestCase {
     property int asks: 0
     property int ownerEnters: 0
     property int ownerEscapes: 0
+    property var drawerEvents: []
 
     property var _window: FloatingWindow {
         title: "h2s-tests button keys"
         visible: false
-        implicitWidth: 520
-        implicitHeight: 160
+        implicitWidth: 700
+        implicitHeight: 400
         color: Theme.popupBackground
 
         // An owner that handles Enter and Escape itself (a form, a popup)
@@ -69,6 +74,46 @@ TestCase {
             }
         }
 
+        // A scope that keeps Tab, two buttons in it and one after it
+        Row {
+            id: trapScope
+            x: 10; y: 120
+            spacing: 10
+            SmallButton { id: trapA; objectName: "trapA"; label: "A" }
+            SmallButton { id: trapB; objectName: "trapB"; label: "B" }
+        }
+        SmallButton { id: afterTrap; objectName: "afterTrap"; x: 10; y: 160; label: "After" }
+        FocusTrap { scope: trapScope; active: true }
+
+        // A view scrolled to its top, a button far below in it
+        Flickable {
+            id: view
+            x: 400; y: 120
+            width: 200; height: 100
+            contentWidth: width
+            contentHeight: 600
+            clip: true
+            SmallButton { id: far; y: 500; label: "Far" }
+        }
+        FocusFollower {}
+
+        SideDrawer {
+            id: drawer
+            anchors.fill: parent
+            title: "Drawer"
+            content: Component {
+                Column {
+                    spacing: 6
+                    SmallButton { objectName: "drawerButton"; label: "In" }
+                    DeleteButton { objectName: "drawerDelete" }
+                }
+            }
+            onRequested: event => {
+                suite.drawerEvents = suite.drawerEvents.concat([event]);
+                drawer.open = false;
+            }
+        }
+
         WindowDriver {
             id: driver
             name: "ButtonKeysDriver"
@@ -94,10 +139,71 @@ TestCase {
         driver.wait(20);
     }
 
+    function _find(item, name) {
+        if (!item)
+            return null;
+        if (item.objectName === name)
+            return item;
+        for (const child of item.children) {
+            const found = _find(child, name);
+            if (found)
+                return found;
+        }
+        return null;
+    }
+
+    function _event(key, repeat) {
+        return { key: key, isAutoRepeat: repeat === true, accepted: false };
+    }
+
+    function _held() {
+        // A key held down: the first press, then the repeats the keyboard sends
+        const counted = { clicks: 0 };
+        const probe = Qt.createQmlObject('import qs.components; SmallButton {}', area);
+        probe.clicked.connect(() => counted.clicks++);
+        const first = _event(Qt.Key_Space);
+        probe._key(first);
+        const repeat = _event(Qt.Key_Space, true);
+        probe._key(repeat);
+        assertEqual(counted.clicks + " " + first.accepted + " " + repeat.accepted, "1 true true", "SmallButton: a held Space clicks once, each event taken");
+        probe.destroy();
+
+        const asker = Qt.createQmlObject('import qs.components; DeleteButton {}', area);
+        let confirmed = 0;
+        asker.confirmed.connect(() => confirmed++);
+        asker._key(_event(Qt.Key_Return));
+        const again = _event(Qt.Key_Return, true);
+        asker._key(again);
+        assertEqual(asker.asking + " " + confirmed + " " + again.accepted, "true 0 true", "DeleteButton: a held Return asks and does not go on to delete");
+        const override = _event(Qt.Key_Escape);
+        asker._override(override);
+        assert(override.accepted, "… asking, it takes Escape before any shortcut");
+        asker.asking = false;
+        const notAsking = _event(Qt.Key_Escape);
+        asker._override(notAsking);
+        assert(!notAsking.accepted, "… not asking, it leaves Escape to shortcuts");
+        asker.destroy();
+    }
+
+    function _rules() {
+        const show = ApiElementRules.scrollToShow;
+        assertEqual(show(20, 40, 0, 100, 600, 8), 0, "scrollToShow: in view, the view stays");
+        assertEqual(show(500, 530, 0, 100, 600, 8), 438, "… below: just enough to show it, the margin under it");
+        assertEqual(show(50, 70, 200, 100, 600, 8), 42, "… above: its top, the margin above it");
+        assertEqual(show(100, 400, 0, 100, 600, 8), 92, "… taller than the view: its top shows");
+        assertEqual(show(580, 600, 0, 100, 600, 8), 500, "… never past the content's end");
+        assertEqual(show(2, 20, 50, 100, 600, 8), 0, "… nor above its start");
+        assertEqual(show(500, 530, 30, 0, 600, 8) + " " + show(NaN, 530, 30, 100, 600, 8), "30 30", "… no view or a value not a number: stays");
+    }
+
     function runAsync() {
         try {
+            _rules();
+            _held();
             _run();
+            _traps();
         } finally {
+            drawer.open = false;
             _window.visible = false;
         }
         finish();
@@ -174,5 +280,55 @@ TestCase {
         assert(_until(() => remove.asking), "a click on the delete button asks");
         assert(field.activeFocus, "… the field keeps the keyboard");
         remove.asking = false;
+    }
+
+    function _traps() {
+        // --- FocusTrap ---
+        afterTrap.forceActiveFocus();
+        _tab(true);
+        assert(!afterTrap.activeFocus, "the keyboard outside the trap's scope: Shift+Tab goes on as usual");
+        trapA.forceActiveFocus();
+        const reached = [];
+        for (let i = 0; i < 3; i++) {
+            _tab();
+            reached.push(area.Window.activeFocusItem?.objectName ?? "");
+        }
+        assertEqual(reached.join(" "), "trapB trapA trapB", "inside the scope: Tab cycles there, never reaching the button after it");
+        _tab(true);
+        assertEqual(area.Window.activeFocusItem?.objectName, "trapA", "… Shift+Tab too");
+
+        // --- FocusFollower ---
+        assertEqual(view.contentY, 0, "the view at its top, the button below out of sight");
+        far.forceActiveFocus();
+        assert(_until(() => view.contentY > 0), "the button takes the keyboard: the view scrolls");
+        const place = far.mapToItem(view, 0, 0);
+        assert(place.y >= 0 && place.y + far.height <= view.height, "… until it shows whole (" + place.y + ")");
+
+        // --- an open side panel ---
+        field.forceActiveFocus();
+        drawer.open = true;
+        assert(_until(() => _find(drawer, "drawerDelete") !== null && drawer.panel.x < area.width), "the side panel opens");
+        const inside = [];
+        let stayed = true;
+        for (let i = 0; i < 6; i++) {
+            _tab();
+            const focused = area.Window.activeFocusItem;
+            stayed = stayed && drawer._isInside(focused);
+            inside.push(focused?.objectName || focused?.label || "");
+        }
+        assert(stayed, "Tab six times in an open side panel: the keyboard never leaves it (" + inside.join(", ") + ")");
+        assert(inside.includes("drawerButton") && inside.includes("drawerDelete") && inside.includes("Close"), "… it reaches each of its buttons");
+        _tab(true);
+        assert(drawer._isInside(area.Window.activeFocusItem), "… nor with Shift+Tab");
+
+        const asker = _find(drawer, "drawerDelete");
+        asker.forceActiveFocus();
+        driver.keyClick(Qt.Key_Space);
+        assert(asker.asking, "its delete button asks");
+        driver.keyClick(Qt.Key_Escape);
+        assert(!asker.asking && drawer.open && drawerEvents.length === 0, "Escape: the question cancelled, the panel stays open");
+        driver.keyClick(Qt.Key_Escape);
+        assert(_until(() => !drawer.open) && drawerEvents.join(",") === "escape", "Escape again: the panel asked to close");
+        assert(_until(() => field.activeFocus), "… and the keyboard back with the field");
     }
 }
