@@ -45,8 +45,15 @@ TestCase {
             ": > $s/etc/pam.d/h2s-shell-password; : > $s/run/current-system/sw/bin/h2s-shell",
             // Stand-in gits: each answers its code only to the exact read-only words for its folder, else 2
             "mkdir -p $d/bin",
-            "stand_in() { printf '#!/bin/sh\\n[ \"$*\" = \"-c safe.directory=%s --no-optional-locks -C %s ls-files --error-unmatch -- h2s-shell.json\" ] || exit 2\\nexit %s\\n' \"$2\" \"$2\" \"$3\" > $d/bin/$1; chmod +x $d/bin/$1; }",
-            "stand_in git-tracked $d/connected/etc/nixos 0; stand_in git-untracked $d/chosen 1; stand_in git-broken $d/chosen 128",
+            "stand_in() { printf '#!/bin/sh\\n[ \"$*\" = \"%s--no-optional-locks -C %s ls-files --error-unmatch -- h2s-shell.json\" ] || exit 2\\nexit %s\\n' \"$4\" \"$2\" \"$3\" > $d/bin/$1; chmod +x $d/bin/$1; }",
+            "off='-c core.fsmonitor=false '",
+            "stand_in git-tracked $d/connected/etc/nixos 0 \"$off\"; stand_in git-untracked $d/chosen 1 \"$off\"; stand_in git-broken $d/chosen 128 \"$off\"",
+            "stand_in git-root $d/rootowned/etc/nixos 0 \"$off-c safe.directory=$d/rootowned/etc/nixos \"",
+            // A stand-in stat that says every folder and file is root's, mode 755: a root-owned tree
+            "mkdir -p $d/rootbin; printf '#!/bin/sh\\necho 0 755\\n' > $d/rootbin/stat; chmod +x $d/rootbin/stat",
+            "cp -a $d/connected $d/rootowned",
+            // /etc/nixos a link to a folder whose name holds a line break: its real path is unknown
+            "s=$d/oddlink; mkdir -p $s/etc \"$d/odd\nname\"; : > \"$d/odd\nname/flake.nix\"; ln -s \"$d/odd\nname\" $s/etc/nixos",
             "sha256sum $d/connected/etc/nixos/h2s-shell.json | cut -d' ' -f1 > $d/sha256"
         ].join("\n"), [_scratch, json, published], code => {
             suite.assertEqual(code, 0, "the made-up trees are written");
@@ -69,6 +76,9 @@ TestCase {
         _make("empty", { base: base("empty") });
         _make("locked", { base: base("locked"), chosenFolder: _scratch + "/chosen", chosenHost: "laptop", git: _scratch + "/bin/git-untracked" });
         _make("lockedBrokenGit", { base: base("locked"), chosenFolder: _scratch + "/chosen" });
+        _make("rootowned", { base: base("rootowned"), git: _scratch + "/bin/git-root",
+                             environment: { PATH: _scratch + "/rootbin:" + (Quickshell.env("PATH") ?? "") } });
+        _make("oddlink", { base: base("oddlink") });
         _make("gone", { base: base("connected"), chosenFolder: _scratch + "/nowhere" });
         // Read again at once with another folder: the first read's answers are dropped
         const replaced = _make("replaced", { base: base("connected"), chosenFolder: _scratch + "/nowhere" });
@@ -111,6 +121,15 @@ TestCase {
         assertEqual(answer.file.sha256, _sha256, "the file's sha256");
         assertEqual(answer.owner + " " + answer.rootWrites + " " + answer.homeWarning, "yours false true", "a folder the user owns: yours, the warning due");
         assertEqual(answer.real, _scratch + "/connected/etc/nixos", "its real path");
+
+        answer = reading("rootowned");
+        assertEqual(answer.owner + " " + answer.rootWrites + " " + answer.homeWarning + " " + answer.gitAccess, "root true false root",
+                    "a root-owned tree (a stand-in stat): root writes, no warning, root's repository");
+        assertEqual(answer.gitKnowsFile, "tracked", "git asked with safe.directory for root's repository, the fsmonitor program off");
+
+        answer = reading("oddlink");
+        assertEqual(answer.configuration.found + " '" + answer.real + "' " + answer.owner, "true '' unknown",
+                    "a link whose target holds a line break: its real path and owner unknown, no record made up from it");
 
         answer = reading("linked");
         assertEqual(answer.state + " " + answer.configuration.type + " " + answer.configuration.folder, "found classic " + _scratch + "/linked/etc/nixos",

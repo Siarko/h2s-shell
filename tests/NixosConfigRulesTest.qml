@@ -14,6 +14,8 @@ TestCase {
     // | "unreadable" }, chains: { folder: { real, parts: [[part, uid, mode]] } }, lists, links }
     function answer(spec) {
         const lines = [];
+        if (spec.uid !== undefined)
+            lines.push("uid\t" + spec.uid);
         for (const path of Object.keys(spec.exists ?? {}))
             lines.push("exists\t" + path + "\t" + spec.exists[path]);
         for (const path of Object.keys(spec.files ?? {})) {
@@ -60,7 +62,10 @@ TestCase {
                       "/etc/pam.d/h2s-shell-password": "present", "/run/current-system/sw/bin/h2s-shell": "present" },
             files: { "/etc/hostname": "nixos\n", "/etc/nixos/h2s-shell.json": JSON.stringify({ version: 1, idle: { hibernateDelay: "3h" } }),
                      "/etc/h2s-shell/settings.json": JSON.stringify(settings({ idle: { hibernateDelay: "3h" } })) },
-            chains: { "/etc/nixos": { real: "/etc/nixos", parts: rootChain } },
+            chains: { "/etc/nixos": { real: "/etc/nixos", parts: rootChain },
+                      "/etc/nixos/flake.nix": { real: "/etc/nixos/flake.nix", parts: rootChain.concat([["/etc/nixos/flake.nix", "0", "644"]]) },
+                      "/etc/nixos/h2s-shell.json": { real: "/etc/nixos/h2s-shell.json", parts: rootChain.concat([["/etc/nixos/h2s-shell.json", "0", "644"]]) } },
+            uid: "1000",
             lists: { "/nix/var/nix/profiles": ["default", "per-user", "system", "system-10-link", "system-11-link", "system-48-link"] },
             links: { "/nix/var/nix/profiles/system": "system-48-link" }
         };
@@ -213,10 +218,10 @@ TestCase {
         assertEqual(readingOf(usual, changed(connected, spec => spec.files["/etc/hostname"] = "unreadable")).facts[3].value, "Unknown", "the Host fact unknown");
 
         // ── git ──
-        assertEqual(JSON.stringify(rules.gitArgv("git", "/srv/cfg")),
-                    JSON.stringify(["git", "-c", "safe.directory=/srv/cfg", "--no-optional-locks", "-C", "/srv/cfg", "ls-files", "--error-unmatch", "--", "h2s-shell.json"]),
+        assertEqual(JSON.stringify(rules.gitArgv("git", "/srv/cfg", "root")),
+                    JSON.stringify(["git", "-c", "core.fsmonitor=false", "-c", "safe.directory=/srv/cfg", "--no-optional-locks", "-C", "/srv/cfg", "ls-files", "--error-unmatch", "--", "h2s-shell.json"]),
                     "git asked read only, its repository named safe");
-        assertEqual(rules.gitArgv("git", "/srv/my cfg").length + rules.gitArgv("", "/srv/cfg").length, 0, "no plain folder or no git: not asked");
+        assertEqual(rules.gitArgv("git", "/srv/my cfg", "root").length + rules.gitArgv("", "/srv/cfg", "root").length, 0, "no plain folder or no git: not asked");
         assertEqual(rules.gitAnswer({ ok: true, code: 0 }), "tracked", "0: git knows the file");
         assertEqual(rules.gitAnswer({ ok: false, code: 1, timedOut: false, cancelled: false, failedToStart: false, error: "" }), "untracked", "1: it does not");
         assertEqual(rules.gitAnswer({ ok: false, code: 128 }) + " " + rules.gitAnswer({ ok: false, code: 1, timedOut: true })
@@ -233,7 +238,10 @@ TestCase {
         const joined = inputs => rules.readArgs(inputs).join(" ");
         assert(joined({ nixPath: "nixos-config=/srv/c/machine.nix" }).includes("exists /srv/c/machine.nix"), "nixos-config's own file name asked");
         assertEqual(joined({ nixPath: "nixos-config=/srv/my c/configuration.nix" }).includes("/srv/my c"), false, "a nixos-config that is not plain: not asked");
-        assertEqual(joined({ nixPath: "nixos-config=/etc/nixos/configuration.nix" }).split("chain /etc/nixos").length, 2, "a folder asked once");
+        const pairs = rules.readArgs({ nixPath: "nixos-config=/etc/nixos/configuration.nix" });
+        const count = (op, path) => pairs.filter((word, index) => index % 2 === 0 && word === op && pairs[index + 1] === path).length;
+        assertEqual(count("chain", "/etc/nixos") + " " + count("chain", "/etc/nixos/configuration.nix") + " " + count("exists", "/etc/nixos/configuration.nix"),
+                    "1 1 1", "each pair asked once");
         chosen = pick({ nixPath: "nixos-config=/srv/c/machine.nix" }, { "/etc/nixos/flake.nix": "absent", "/srv/c/machine.nix": "present" });
         assertEqual(chosen.entry + " " + chosen.entryReadable, "machine.nix true", "nixos-config's entry file");
         assertEqual(pick({ nixPath: "nixos-config=/c.nix" }, { "/etc/nixos/flake.nix": "absent", "/c.nix": "present" }).folder, "/", "… at the root: the folder /");
@@ -260,6 +268,45 @@ TestCase {
         assertEqual(rules.withGit(null, { ok: true }), null, "no reading: nothing added");
         reading = readingOf(usual, changed(connected, spec => spec.lists["/nix/var/nix/profiles"] = []));
         assertEqual(reading.facts[6].value, "0", "no generations: 0, not unknown");
+
+        // ── The entry file and the shell's file count in the owner chain ──
+        const home = [["/", "0", "755"], ["/home", "0", "755"], ["/home/someone", "1000", "700"], ["/home/someone/dotfiles", "1000", "755"]];
+        reading = readingOf(usual, changed(connected, spec => spec.chains["/etc/nixos/flake.nix"] = {
+            real: "/home/someone/dotfiles/flake.nix", parts: home.concat([["/home/someone/dotfiles/flake.nix", "1000", "644"]]) }));
+        assertEqual(reading.owner + " " + reading.rootWrites + " " + reading.homeWarning, "yours false true",
+                    "a root folder whose flake.nix links into the home folder: yours, the warning due");
+        reading = readingOf(usual, changed(connected, spec => spec.chains["/etc/nixos/h2s-shell.json"].parts[3] = ["/etc/nixos/h2s-shell.json", "1000", "644"]));
+        assertEqual(reading.owner + " " + reading.homeWarning, "yours true", "the user's own h2s-shell.json in root's folder: yours");
+        reading = readingOf(usual, changed(connected, spec => spec.chains["/etc/nixos/flake.nix"].parts[3] = ["/etc/nixos/flake.nix", "0", "666"]));
+        assertEqual(reading.owner, "yours", "a flake.nix anyone may write: yours");
+        reading = readingOf(usual, changed(connected, spec => spec.chains["/etc/nixos/flake.nix"] = { real: "", parts: [] }));
+        assertEqual(reading.owner + " " + reading.rootWrites, "unknown false", "the entry file's chain unknown: unknown");
+        reading = readingOf(usual, changed(connected, spec => {
+            spec.files["/etc/nixos/h2s-shell.json"] = "absent";
+            spec.chains["/etc/nixos/h2s-shell.json"] = { real: "", parts: [] };
+        }));
+        assertEqual(reading.owner, "root", "no shell's file: only the folder and the entry file count");
+        assert(joined(usual).includes("chain /etc/nixos/flake.nix") && joined(usual).includes("chain /etc/nixos/h2s-shell.json")
+               && joined(usual).includes("real /etc/nixos/configuration.nix") && joined(usual).includes("uid /"),
+               "the entry files' and the shell's file's chains asked, and the user's id");
+        assertEqual(joined(usual).includes("sha256"), false, "the file's sha256 comes with its read, not a second read");
+
+        // ── git: never a repository's own programs, safe.directory only for root's or the user's ──
+        assertEqual(JSON.stringify(rules.gitArgv("git", "/srv/cfg", "user")),
+                    JSON.stringify(["git", "-c", "core.fsmonitor=false", "--no-optional-locks", "-C", "/srv/cfg", "ls-files", "--error-unmatch", "--", "h2s-shell.json"]),
+                    "the user's repository: no safe.directory, the fsmonitor program off");
+        assertEqual(rules.gitArgv("git", "/srv/cfg", "").length + rules.gitArgv("git", "/srv/cfg", undefined).length, 0, "anyone else's: git not asked");
+        assertEqual(readingOf(usual, inGit).gitAccess, "root", "a root-owned chain: root's repository");
+        const owned = uid => readingOf(usual, changed(inGit, spec => spec.chains["/etc/nixos"].parts[2] = ["/etc/nixos", uid, "755"])).gitAccess;
+        assertEqual(owned("1000"), "user", "the folder the user's: their repository");
+        assertEqual(owned("1001"), "", "the folder another account's: no safe.directory, git not asked");
+        assertEqual(readingOf(usual, changed(inGit, spec => { spec.chains["/etc/nixos"].parts[2] = ["/etc/nixos", "1000", "755"]; delete spec.uid; })).gitAccess,
+                    "", "the user's id unknown: not asked");
+        raw = rules.records(["real\t/a\t/x", "real\t/a\t/y", "exists\t/a\tabsent", "exists\t/a\tpresent", "x\t7", "uid\t8\textra", "uid\tabc",
+                             "uid\t1000", "uid\t0"], ok, []);
+        assertEqual(raw.real["/a"] + " " + raw.exists["/a"] + " " + raw.uid, "/x absent 1000", "the first record of a path wins; malformed ids ignored");
+        assertEqual(rules.gitAccess({ uid: "1000", real: { "/r": "/" }, chain: { "/r": { parts: [{ part: "/", uid: "1000", mode: "755" }], end: "ok" } } }, "/r"),
+                    "user", "a one-part chain the user's: their repository");
 
         // ── Config keeps the choice: machine state ──
         assertEqual(typeof Config.nixos.folder + typeof Config.nixos.host + Array.isArray(Array.from(Config.nixos.homeWarningAcknowledged)),

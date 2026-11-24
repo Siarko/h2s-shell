@@ -82,25 +82,39 @@ Singleton {
     // The words for scripts/nixos-config.sh: everything the reading needs, in one run
     function readArgs(inputs) {
         const where = places(inputs?.base);
-        const args = ["file", where.hostname, "file", where.settings, "exists", where.pamMarker, "exists", where.binMarker,
+        const args = ["uid", "/", "file", where.hostname, "file", where.settings, "exists", where.pamMarker, "exists", where.binMarker,
                       "list", where.profiles, "link", where.systemProfile];
+        // Each pair asked once
         const seen = {};
+        const ask = (op, path) => {
+            if (seen[op + " " + path])
+                return;
+            seen[op + " " + path] = true;
+            args.push(op, path);
+        };
         for (const each of candidates(inputs)) {
             const folder = each.folder;
-            if (each.entry !== "")
-                args.push("exists", folder + "/" + each.entry);
-            if (seen[folder])
-                continue;
-            seen[folder] = true;
-            args.push("exists", folder + "/flake.nix", "exists", folder + "/configuration.nix", "exists", folder + "/.git",
-                      "file", folder + "/" + fileName, "sha256", folder + "/" + fileName, "real", folder, "chain", folder);
+            if (each.entry !== "") {
+                for (const op of ["exists", "real", "chain"])
+                    ask(op, folder + "/" + each.entry);
+            }
+            for (const name of ["flake.nix", "configuration.nix", ".git"])
+                ask("exists", folder + "/" + name);
+            ask("file", folder + "/" + fileName);
+            // What root builds and reads, each through its own links: the entry files and the
+            // shell's file count in the owner chain as much as the folder
+            for (const path of [folder, folder + "/flake.nix", folder + "/configuration.nix", folder + "/" + fileName]) {
+                ask("real", path);
+                ask("chain", path);
+            }
         }
         return args;
     }
 
-    // The script's answer → { exists, files, sha256, real, chain: { path: { parts: [{ part,
-    // uid, mode }], end } }, lists: { folder: { names, end } }, links }. A run that failed or
-    // was cut short answers nothing (every path unknown). `result` is CommandRunner's.
+    // The script's answer → { uid (the user's id, "" unknown), exists, files, sha256, real,
+    // chain: { path: { parts: [{ part, uid, mode }], end } }, lists: { folder: { names, end } },
+    // links }. The first record of a path counts. A run that failed or was cut short answers
+    // nothing (every path unknown). `result` is CommandRunner's.
     function records(lines, result, args) {
         const usable = result !== null && typeof result === "object" && result.ok === true && result.truncated !== true;
         const list = usable && Array.isArray(lines) ? lines : [];
@@ -109,24 +123,32 @@ Singleton {
             if (args[i] === "file")
                 asked.push(args[i + 1]);
         }
-        const raw = { exists: {}, files: PamStackRules.filesAnswer(list, usable ? result : null, asked).answers, sha256: {}, real: {},
+        const raw = { uid: "", exists: {}, files: PamStackRules.filesAnswer(list, usable ? result : null, asked).answers, sha256: {}, real: {},
                       chain: {}, lists: {}, links: {} };
         // A file's lines each start with "|", so they never read as a record
         for (const line of list) {
             const fields = String(line).split("\t");
             const [kind, path] = fields;
-            if (kind === "exists" && fields.length === 3 && ["present", "unreadable", "absent", "unknown"].includes(fields[2])) {
-                raw.exists[path] = fields[2];
+            const first = map => !Object.prototype.hasOwnProperty.call(map, path);
+            if (kind === "uid" && fields.length === 2 && /^[0-9]+$/.test(path)) {
+                raw.uid = raw.uid === "" ? path : raw.uid;
+            } else if (kind === "exists" && fields.length === 3 && ["present", "unreadable", "absent", "unknown"].includes(fields[2])) {
+                if (first(raw.exists))
+                    raw.exists[path] = fields[2];
             } else if (kind === "sha256" && fields.length === 3 && /^[0-9a-f]{64}$/.test(fields[2])) {
-                raw.sha256[path] = fields[2];
+                if (first(raw.sha256))
+                    raw.sha256[path] = fields[2];
             } else if (kind === "real" && fields.length === 3 && fields[2].startsWith("/")) {
-                raw.real[path] = fields[2];
+                if (first(raw.real))
+                    raw.real[path] = fields[2];
             } else if (kind === "chain" && fields.length === 5) {
                 raw.chain[path] = raw.chain[path] ?? { parts: [], end: "" };
-                raw.chain[path].parts.push({ part: fields[2], uid: fields[3], mode: fields[4] });
+                // Parts after the chain's end are not its
+                if (raw.chain[path].end === "")
+                    raw.chain[path].parts.push({ part: fields[2], uid: fields[3], mode: fields[4] });
             } else if (kind === "chainend" && fields.length === 3) {
                 raw.chain[path] = raw.chain[path] ?? { parts: [], end: "" };
-                raw.chain[path].end = fields[2];
+                raw.chain[path].end = raw.chain[path].end === "" ? fields[2] : raw.chain[path].end;
             } else if (kind === "list" && fields.length === 3) {
                 raw.lists[path] = raw.lists[path] ?? { names: [], end: "" };
                 raw.lists[path].names.push(fields[2]);
@@ -134,7 +156,8 @@ Singleton {
                 raw.lists[path] = raw.lists[path] ?? { names: [], end: "" };
                 raw.lists[path].end = fields[2];
             } else if (kind === "link" && fields.length === 3 && fields[2] !== "unknown") {
-                raw.links[path] = fields[2];
+                if (first(raw.links))
+                    raw.links[path] = fields[2];
             }
         }
         return raw;
@@ -189,13 +212,13 @@ Singleton {
         return missing(classic === "unknown" ? "unknown" : "none");
     }
 
-    // The folder's owner chain → "root" (every folder of its real path, / down to it, root's
-    // and not writable by group or others), "yours" (any other: a configuration any program
-    // of the user's may change, as one in the home folder or behind a link into it) or
+    // A path's owner chain → "root" (every part of its real path, / down to it, root's and
+    // not writable by group or others), "yours" (any other: what any program of the user's
+    // may change, as a folder in the home folder or a file behind a link into it) or
     // "unknown" (not all of it could be read)
-    function ownerChain(raw, folder) {
-        const chain = raw?.chain?.[folder];
-        const real = raw?.real?.[folder];
+    function ownerChain(raw, path) {
+        const chain = raw?.chain?.[path];
+        const real = raw?.real?.[path];
         if (!chain || !Array.isArray(chain.parts))
             return "unknown";
         let unknown = chain.end !== "ok" || chain.parts.length === 0 || typeof real !== "string"
@@ -284,14 +307,43 @@ Singleton {
         return hostPattern.test(text) ? text : "";
     }
 
-    // The check whether git knows the shell's file — read only: safe.directory for a
-    // repository not the user's, no optional locks so nothing refreshes the index; a flake
-    // in git sees only the files git knows. [] when the folder is not plain.
-    function gitArgv(git, realFolder) {
-        if (!plainPath(realFolder) || typeof git !== "string" || git === "")
+    // The configuration's owner chain: the folder's, the entry file's and — when there is
+    // one — the shell's file's, the most open of them (any "yours" is yours, else any
+    // "unknown" is unknown): root builds what the entry file says and reads the shell's
+    // file, each through its own links
+    function configurationOwner(raw, configuration, fileState) {
+        if (!configuration?.found)
+            return "";
+        const paths = [configuration.folder, configuration.folder + "/" + configuration.entry];
+        if (fileState !== "absent")
+            paths.push(configuration.folder + "/" + fileName);
+        const owners = paths.map(path => ownerChain(raw, path));
+        return owners.includes("yours") ? "yours" : owners.includes("unknown") ? "unknown" : "root";
+    }
+
+    // Whose repository git may be asked about → "root" (a root-owned chain: named safe, as git
+    // would otherwise refuse a repository not the user's), "user" (the folder the user's own:
+    // git's own ownership check stands) or "" (anyone else's: git is not asked — a repository
+    // another account can write could name programs git runs)
+    function gitAccess(raw, folder) {
+        if (ownerChain(raw, folder) === "root")
+            return "root";
+        const parts = raw?.chain?.[folder]?.parts ?? [];
+        const own = parts.length > 0 ? parts[parts.length - 1].uid : "";
+        return typeof raw?.uid === "string" && raw.uid !== "" && own === raw.uid ? "user" : "";
+    }
+
+    // The check whether git knows the shell's file — read only: the repository's own
+    // fsmonitor program never run (core.fsmonitor from the command line wins over the
+    // repository's config; ls-files reads no file contents, so no filter or textconv runs,
+    // and runs no hooks), safe.directory only for root's repository (`access` gitAccess's), no
+    // optional locks so nothing refreshes the index; a flake in git sees only the files git
+    // knows. [] when the folder is not plain or git may not be asked.
+    function gitArgv(git, realFolder, access) {
+        if (!plainPath(realFolder) || typeof git !== "string" || git === "" || (access !== "root" && access !== "user"))
             return [];
-        return [git, "-c", "safe.directory=" + realFolder, "--no-optional-locks", "-C", realFolder,
-                "ls-files", "--error-unmatch", "--", fileName];
+        return [git, "-c", "core.fsmonitor=false"].concat(access === "root" ? ["-c", "safe.directory=" + realFolder] : [])
+            .concat(["--no-optional-locks", "-C", realFolder, "ls-files", "--error-unmatch", "--", fileName]);
     }
 
     // git's answer → "tracked", "untracked" (it ran and does not know the file) or "unknown"
@@ -305,8 +357,8 @@ Singleton {
     }
 
     // The whole reading, before git is asked → { configuration (choose's), real ("" unknown),
-    // owner (ownerChain's; "" without a configuration), rootWrites (only a root-owned chain:
-    // an unknown one is the user's for writing), git ("present" | "absent" | "unknown"),
+    // owner (configurationOwner's), rootWrites (only a root-owned chain: an unknown one is the
+    // user's for writing), git ("present" | "absent" | "unknown"), gitAccess (gitAccess's),
     // gitKnowsFile ("" without git, "unknown" until withGit), host, file { path, state
     // ("absent" | "present" | "unreadable"), sha256 ("" unknown or none) }, fileStatus,
     // module ("present" | "absent" | "unknown"), published ("present" | "absent" |
@@ -319,7 +371,6 @@ Singleton {
         const folder = configuration.folder;
         const found = configuration.found;
         const real = found ? (raw?.real?.[folder] ?? "") : "";
-        const owner = found ? ownerChain(raw, folder) : "";
         const gitState = found ? _exists(raw, folder + "/.git") : "unknown";
         const git = gitState === "present" || gitState === "unreadable" ? "present" : gitState;
         const filePath = found ? folder + "/" + fileName : "";
@@ -329,6 +380,7 @@ Singleton {
             state: fileAnswer?.absent === true ? "absent" : typeof fileAnswer?.text === "string" ? "present" : "unreadable",
             sha256: typeof fileAnswer?.text === "string" ? (raw?.sha256?.[filePath] ?? "") : ""
         };
+        const owner = configurationOwner(raw, configuration, file.state);
         const settingsAnswer = raw?.files?.[where.settings];
         const markers = [_exists(raw, where.pamMarker), _exists(raw, where.binMarker)];
         const module = markers.every(state => state === "present" || state === "unreadable") ? "present"
@@ -343,6 +395,7 @@ Singleton {
             owner,
             rootWrites: owner === "root",
             git,
+            gitAccess: found ? gitAccess(raw, folder) : "",
             gitKnowsFile: git === "present" ? "unknown" : "",
             host: found ? host(inputs, raw?.files?.[where.hostname]) : "",
             file,

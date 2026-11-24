@@ -14,14 +14,17 @@
 #                                     that leads nowhere)
 #   file TAB <path> TAB text          the file's lines follow, each after a "|", then
 #   end TAB <path>
+#   sha256 TAB <path> TAB <hex>       the sha256 of exactly the bytes read and shown
 #   file TAB <path> TAB absent | unreadable   as pam-files.sh's (larger than 64 KiB: unreadable)
-#   sha256 TAB <path> TAB <hex> | unknown     a regular readable file's sha256
-#   real TAB <path> TAB <real path> | unknown the path with every link resolved
+#   real TAB <path> TAB <real path> | unknown the path with every link resolved (unknown also
+#                                     when it holds a tab or a line break)
+#   uid TAB <n>                       this user's id (the path is not read)
 #   chain TAB <path> TAB <part> TAB <uid> TAB <mode>
 #                                     each folder of the real path from / down to it, its
 #                                     owner and octal mode (stat); <uid> "unknown" when it
 #                                     cannot be read, then
-#   chainend TAB <path> TAB ok | unknown      unknown: the real path could not be found
+#   chainend TAB <path> TAB ok | unknown      unknown: the real path could not be found, or
+#                                     holds a tab or a line break
 #   list TAB <folder> TAB <name>      each entry of the folder (names with a tab or a line
 #                                     break left out), then
 #   listend TAB <folder> TAB ok | unreadable
@@ -72,7 +75,7 @@ exists() {
 }
 
 file() {
-    local path=$1 text
+    local path=$1 text sum
     if [ ! -e "$path" ]; then
         if absent "$path"; then
             printf 'file\t%s\tabsent\n' "$path"
@@ -92,25 +95,31 @@ file() {
         return
     fi
     text=${text%x}
+    # Hashed from the text read, so that it names exactly what is shown (a second read
+    # could see the file changed between the two)
+    sum=$(printf '%s' "$text" | sha256sum) || sum=
     printf 'file\t%s\ttext\n' "$path"
     printf '%s' "$text" | while IFS= read -r line || [ -n "$line" ]; do
         printf '|%s\n' "$line"
     done
     printf 'end\t%s\n' "$path"
+    [ -z "$sum" ] || printf 'sha256\t%s\t%s\n' "$path" "${sum%% *}"
 }
 
-sha256() {
-    local path=$1 sum
-    if [ -f "$path" ] && [ -r "$path" ] && sum=$(sha256sum -- "$path" 2> /dev/null); then
-        printf 'sha256\t%s\t%s\n' "$path" "${sum%% *}"
-    else
-        printf 'sha256\t%s\tunknown\n' "$path"
-    fi
+# resolve <path>: the real path on stdout; fails when it cannot be found or would not stay
+# one field of one record
+resolve() {
+    local resolved
+    resolved=$(readlink -e -- "$1" 2> /dev/null) && [ -n "$resolved" ] || return 1
+    case "$resolved" in
+        *$'\t'* | *$'\n'*) return 1 ;;
+    esac
+    printf '%s' "$resolved"
 }
 
 real() {
     local path=$1 resolved
-    if resolved=$(readlink -e -- "$path" 2> /dev/null) && [ -n "$resolved" ]; then
+    if resolved=$(resolve "$path"); then
         printf 'real\t%s\t%s\n' "$path" "$resolved"
     else
         printf 'real\t%s\tunknown\n' "$path"
@@ -119,7 +128,7 @@ real() {
 
 chain() {
     local path=$1 resolved part rest owner
-    if ! resolved=$(readlink -e -- "$path" 2> /dev/null) || [ -z "$resolved" ]; then
+    if ! resolved=$(resolve "$path"); then
         printf 'chainend\t%s\tunknown\n' "$path"
         return
     fi
@@ -186,7 +195,8 @@ while [ $# -ge 2 ]; do
         *$'\t'* | *$'\n'*) continue ;;
     esac
     case "$op" in
-        exists | file | sha256 | real | chain | list | link) "$op" "$path" ;;
+        exists | file | real | chain | list | link) "$op" "$path" ;;
+        uid) printf 'uid\t%s\n' "$(id -u)" ;;
     esac
 done
 exit 0

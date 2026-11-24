@@ -5,8 +5,9 @@ import qs.singletons.io
 
 // The system's NixOS configuration, read as the user (NixosConfigRules decides what the
 // answers mean): one run of scripts/nixos-config.sh for every file, folder and link the
-// reading needs, then — for a configuration in git — git asked whether it knows the shell's
-// file, read only (NixosConfigRules.gitArgv). git is never asked to change anything.
+// reading needs, then — for a configuration in git that is root's or the user's own — git
+// asked whether it knows the shell's file, read only, the repository's own programs off
+// (NixosConfigRules.gitArgv). git is never asked to change anything.
 //
 // read() is called by the page that shows it, when it is shown and on "Look again"; a read
 // started while one runs replaces it, and the older one's answers are dropped. The folder and
@@ -25,6 +26,8 @@ QtObject {
     property string nixPath: Quickshell.env("NIX_PATH") ?? ""
     property var readCommand: [Quickshell.shellDir + "/scripts/nixos-config.sh"]
     property string git: "git"
+    // Added to the reading's environment (a suite's stand-in programs on PATH)
+    property var environment: ({})
 
     // A read is under way
     readonly property bool busy: _busy
@@ -63,6 +66,7 @@ QtObject {
             killAfterMs: 1000,
             maxOutputBytes: 1048576,
             keepOutput: false,
+            environment: Object.assign({}, environment ?? {}),
             onLine: (line, stream) => {
                 if (stream === "stdout" && generation === root._generation)
                     lines.push(line);
@@ -71,7 +75,7 @@ QtObject {
                 if (generation !== root._generation)
                     return;
                 const reading = NixosConfigRules.reading(inputs, NixosConfigRules.records(lines, result, args));
-                const argv = reading.git === "present" ? NixosConfigRules.gitArgv(root.git, reading.real) : [];
+                const argv = reading.git === "present" ? NixosConfigRules.gitArgv(root.git, reading.real, reading.gitAccess) : [];
                 if (argv.length === 0) {
                     root._finish(reading);
                     return;
