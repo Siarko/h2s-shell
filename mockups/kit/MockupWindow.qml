@@ -27,6 +27,10 @@ import qs.components
 // its Mockup.qml). Animations take Theme's durations, which the entry makes instant; a
 // looping one is off through the component's own property. A text field shows no cursor
 // while shooting: the panel never takes the keyboard focus.
+// A simulated pointer (hover, press) acts only inside the scene's own cell: one cell per
+// scene, all shown while shooting, `subject` the scene's cell, the pointer otherwise parked
+// off every cell; nothing is shown or hidden under the pointer between scenes (Qt Quick
+// sends hover again where the pointer was left).
 //
 // Shooting (shooting, set by the entry): each scene in turn is set, three frames are
 // waited for once the window is mapped (the first frame after a change can still show the

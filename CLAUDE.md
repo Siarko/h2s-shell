@@ -211,6 +211,13 @@ Mockup code:
   animations take Theme's durations, which the entry makes instant.
   A picture is loaded before the scene that shows it (its asynchronous `Image` made from the
   start, hidden): the shot is taken three frames after the scene is set.
+- A pointer state (hover, press) is simulated with QtTest's events (a `TestCase` with
+  `when: false`), only inside the scene's own cell: each scene has a cell of its own, all
+  shown side by side while shooting and the shot cropped to it (`subject`), and the pointer,
+  when nothing is to be under it, rests on a strip off every cell. Nothing is shown or
+  hidden under the pointer as the scenes go by: Qt Quick sends hover again at the pointer's
+  place when items change under it, so an item shown where an earlier scene left the
+  pointer is lit in some runs and not in others.
 - It never changes a shell file for its own sake. If a view cannot take stand-in data, that
   missing seam is reported and added to the shell as a change of its own, with its test.
 - It contains no `*Rules.qml`, no literal colours (theme tokens, as everywhere), and no

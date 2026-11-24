@@ -9,37 +9,58 @@ import qs.mockups.kit
 //   disabled-off, disabled-on   not `enabled`: dimmed
 // The switch has no look of its own under the pointer or with the keyboard: it takes no
 // keyboard focus, and its pointer area only gives the cursor and the click.
+// Every scene has a cell of its own, all shown side by side while shooting, the shot cropped
+// to the scene's cell, as in the mockups that move a pointer; on screen only the scene's
+// cell is shown.
 MockupWindow {
     id: root
 
     scenes: ["off", "on", "disabled-off", "disabled-on"]
-    readonly property bool on: scene === "on" || scene === "disabled-on"
-    readonly property bool disabled: scene.startsWith("disabled-")
 
-    contentWidth: 124
-    contentHeight: 48
-    subject: content_
+    readonly property int cellWidth: 124
+    readonly property int cellHeight: 48
+    readonly property int cellsPerRow: 4
+    contentWidth: shooting ? cellsPerRow * cellWidth : cellWidth
+    contentHeight: shooting ? Math.ceil(scenes.length / cellsPerRow) * cellHeight : cellHeight
+    subject: _cells.itemAt(Array.prototype.indexOf.call(scenes, scene)) ?? content_
 
     Item {
         id: content_
         anchors.fill: parent
 
-        Row {
-            anchors.centerIn: parent
-            spacing: 20
+        Repeater {
+            id: _cells
+            model: root.scenes.length
+            Item {
+                id: cell
+                required property int index
+                readonly property string sceneName: root.scenes[index]
+                readonly property bool on: sceneName === "on" || sceneName === "disabled-on"
+                readonly property bool disabled: sceneName.startsWith("disabled-")
+                x: root.shooting ? (index % root.cellsPerRow) * root.cellWidth : 0
+                y: root.shooting ? Math.floor(index / root.cellsPerRow) * root.cellHeight : 0
+                width: root.cellWidth
+                height: root.cellHeight
+                visible: root.shooting || sceneName === root.scene
 
-            ToggleSwitch {
-                anchors.verticalCenter: parent.verticalCenter
-                checked: root.on
-                enabled: !root.disabled
-            }
-            ToggleSwitch {
-                anchors.verticalCenter: parent.verticalCenter
-                width: 44
-                height: 24
-                offColor: Theme.textDisabled
-                checked: root.on
-                enabled: !root.disabled
+                Row {
+                    anchors.centerIn: parent
+                    spacing: 20
+
+                    ToggleSwitch {
+                        anchors.verticalCenter: parent.verticalCenter
+                        checked: cell.on
+                        enabled: !cell.disabled
+                    }
+                    ToggleSwitch {
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 44
+                        height: 24
+                        offColor: Theme.textDisabled
+                        checked: cell.on
+                        enabled: !cell.disabled
+                    }
+                }
             }
         }
     }

@@ -21,7 +21,8 @@ import qs.mockups.kit
 // The pointer is simulated with QtTest's events: each scene puts it where the scene needs
 // it before its frames are waited for, so the look depends on the scene, never on time.
 // Every scene has a cell of its own, all of them shown side by side while shooting, the shot
-// cropped to the scene's cell: no button is shown or hidden as the scenes go by, so none
+// cropped to the scene's cell, and the pointer, when no button is to be under it, parked on
+// a strip below the cells: no button is shown or hidden as the scenes go by, so none
 // is ever under a pointer left where an earlier scene put it (Qt Quick sends hover again at
 // the pointer's place as items change under it). On screen only the scene's cell is shown.
 // A pressed button is never released: a release would make the look linger for a moment
@@ -55,7 +56,8 @@ MockupWindow {
     readonly property int cellHeight: 8 * 24 + 7 * 8 + 2 * 12
     readonly property int cellsPerRow: 6
     contentWidth: shooting ? cellsPerRow * cellWidth : cellWidth
-    contentHeight: shooting ? Math.ceil(scenes.length / cellsPerRow) * cellHeight : cellHeight
+    readonly property int gridHeight: Math.ceil(scenes.length / cellsPerRow) * cellHeight
+    contentHeight: shooting ? gridHeight + away.height : cellHeight
     subject: _cells.itemAt(Array.prototype.indexOf.call(scenes, scene)) ?? content_
 
     function _button(name, kind) {
@@ -74,10 +76,10 @@ MockupWindow {
             pointer.mouseMove(button, button.width / 2, button.height / 2);
             pointer.mousePress(button, button.width / 2, button.height / 2);
             // Off the button (and its larger pointer target) with the button held
-            pointer.mouseMove(away, 1, 1, -1, Qt.LeftButton);
+            pointer.mouseMove(away, away.width / 2, away.height / 2, -1, Qt.LeftButton);
         }
         else
-            pointer.mouseMove(away, 1, 1);
+            pointer.mouseMove(away, away.width / 2, away.height / 2);
         if (parsed.state === "focus" && button)
             button.forceActiveFocus();
         else
@@ -93,12 +95,12 @@ MockupWindow {
         id: content_
         anchors.fill: parent
 
+        // Where the pointer rests off every cell (and the keyboard focus off every button)
         Item {
             id: away
-            x: 0
-            y: 0
-            width: 4
-            height: 4
+            y: root.gridHeight
+            width: parent.width
+            height: 8
         }
 
         Repeater {
