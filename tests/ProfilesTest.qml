@@ -1,4 +1,5 @@
 import QtQuick
+import Quickshell
 import Quickshell.Io
 import qs.singletons
 
@@ -328,8 +329,8 @@ TestCase {
 
     // The migrations read the config file fresh each time (Profiles.oldConfig): a section
     // written to the file after the first read is seen. The file is put back as it was; one
-    // that was not there is left empty, which every reader takes as no file (Config is not
-    // read again in a run).
+    // that was not there is removed again (until then it is empty, which every reader takes
+    // as no file).
     property FileView _configOnDisk: FileView {
         blockAllReads: true
         blockWrites: true
@@ -340,6 +341,7 @@ TestCase {
         _configOnDisk.path = Config.path;
         _configOnDisk.reload();
         const before = _configOnDisk.text() ?? "";
+        const existed = _configOnDisk.loaded;
         let parsed = {};
         try {
             parsed = JSON.parse(before || "{}");
@@ -357,5 +359,7 @@ TestCase {
             _configOnDisk.setText(before);
         }
         assertEqual(Profiles.oldConfig().legacyProbe, undefined, "the old config: the file put back");
+        if (!existed)
+            Quickshell.execDetached(["rm", "-f", "--", Config.path]);
     }
 }

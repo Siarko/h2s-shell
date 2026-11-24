@@ -188,6 +188,9 @@ ticks, cells respond to clicks, and popups toggle.
 - **Never start a `Process` with a declarative `running: true`** — Quickshell writes
   `running = false` on exit and destroys the binding. Use `Component.onCompleted` or a
   `Timer`.
+- **A `FileView` read with `text()` right after its path changes or after `reload()` sets
+  `blockAllReads`**: `blockLoading` blocks only the first load, so such a read returns the
+  text loaded before. Otherwise read it in `onLoaded`.
 - **A question is the button's or the Settings modal's, nothing else asks.** A one-word
   question stays on the button, `components/DeleteButton.qml`: the first click turns it into
   a red question ("Delete?") with a "×" attached that cancels, a second click acts. No
