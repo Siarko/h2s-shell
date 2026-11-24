@@ -147,6 +147,8 @@ mockups/kit/* self:tests/run-mockups-selftest.sh mockup:all
 tests/fixtures/mockups/* self:tests/run-mockups-selftest.sh self:tests/mockup-selftest.sh
 # The mockups' screen tool
 tests/mockup.sh self:tests/mockup-selftest.sh
+# The migration harness's test-only migration and its fixture, read by path
+tests/fixtures/migrations-testonly/* unit:MigrationsTest
 flake.nix self:tests/run-system.sh
 flake.lock self:tests/run-system.sh unit:QuickshellPinTest
 nix/* self:tests/run-system.sh
