@@ -108,6 +108,7 @@ tests/affected.sh self:tests/affected-selftest.sh
 tests/affected-map.txt self:tests/affected-selftest.sh
 tests/mutate.sh self:tests/mutate-selftest.sh
 tests/fixtures/mutate/* self:tests/mutate-selftest.sh
+tests/mutants-accepted.txt self:tests/mutate-selftest.sh
 tests/release-check.sh self:tests/release-check-selftest.sh
 tests/release-check-selftest.sh self:tests/release-check-selftest.sh
 tests/flaky-suites.txt self:tests/release-check-selftest.sh

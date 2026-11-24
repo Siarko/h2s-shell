@@ -9,6 +9,10 @@
 #              killed; '>=' -> '>' and
 #              18 -> 19 survived, named with their lines; '<' -> '<=' and '>' -> '>=' in
 #              `list<int>` not compiled; the summary says so; exit 0
+#   accepted   --accepted with '>=' -> '>' listed: shown apart as accepted, its key not
+#              printed again, 18 -> 19's printed as a survivor-key line; an entry for an edited
+#              line is stale; the summary says survived 2 (accepted 1) / stale 1
+#   listed     an entry without a reason line above it, or not in four fields: status 2
 #   untouched  after the run the subject in the tree it ran from is as it was (mutants are
 #              made in mutate.sh's own copies), and no temp dir is left
 #   judged     --judge on canned runs: a load error naming the subject is "not compiled",
@@ -75,8 +79,10 @@ echo "run:"
 mutate -j 2 "$subject" MutateFixtureRulesTest > "$work/run.log" 2>&1
 status=$?
 check "exit 0 (it exited $status)" test "$status" = 0
-check "the summary: killed 3 / survived 2 / not compiled 2" \
-    grep -q "^mutate.sh: $subject, [0-9]* s: killed 3 / survived 2 / not compiled 2$" "$work/run.log"
+check "the summary: killed 3 / survived 2 (accepted 0) / stale 0 / not compiled 2" \
+    grep -q "^mutate.sh: $subject, [0-9]* s: killed 3 / survived 2 (accepted 0) / stale 0 / not compiled 2$" "$work/run.log"
+check "each survivor's key printed" \
+    test "$(grep -c -F "survivor-key	$subject	" "$work/run.log")" = 2
 survivors=$(sed -n '/^Surviving mutants/,/^$/p' "$work/run.log")
 check "'>=' -> '>' survived" grep -q -F "$subject:11:20  '>=' -> '>'" <<< "$survivors"
 check "18 -> 19 survived" grep -q -F "$subject:11:23  '18' -> '19'" <<< "$survivors"
@@ -85,6 +91,35 @@ check "list<int> not compiled, twice" test "$(grep -c -F "$subject:8:" <<< "$unc
 check "the negated returns killed" grep -q -F "killed  $subject:11:9 " "$work/run.log"
 check "… both" grep -q -F "killed  $subject:15:9 " "$work/run.log"
 check "the dropped '!' killed" grep -q -F "killed  $subject:15:16 " "$work/run.log"
+
+echo "accepted:"
+{
+    echo "# reason: the fixture's own equivalent"
+    printf '%s\t%s\t%s\t%s\n' "$subject" ">= -> >" "#1" "return age >= 18;"
+    echo
+    echo "# reason: a line since edited"
+    printf '%s\t%s\t%s\t%s\n' "$subject" "18 -> 19" "#1" "return age >= 21;"
+    echo "# reason: another file's, not counted here"
+    printf '%s\t%s\t%s\t%s\n' "singletons/OtherRules.qml" "< -> <=" "#1" "return a < b;"
+} > "$work/accepted.txt"
+mutate -j 2 --accepted "$work/accepted.txt" "$subject" MutateFixtureRulesTest > "$work/accepted.log" 2>&1
+check "the summary: survived 2 (accepted 1) / stale 1" \
+    grep -q "^mutate.sh: $subject, [0-9]* s: killed 3 / survived 2 (accepted 1) / stale 1 / not compiled 2$" "$work/accepted.log"
+check "the accepted one is shown apart" \
+    bash -c 'sed -n "/^Accepted survivors/,/^\$/p" "$1" | grep -q -F "$2:11:20  '"'"'>='"'"' -> '"'"'>'"'"'"' _ "$work/accepted.log" "$subject"
+check "the other survivor's key only" \
+    bash -c '[ "$(grep -c "^survivor-key" "$1")" = 1 ] && grep -q -F "survivor-key	$2	18 -> 19	#1	return age >= 18;" "$1"' _ "$work/accepted.log" "$subject"
+check "the edited line's entry named stale" \
+    bash -c 'sed -n "/^Stale accepted entries/,/^\$/p" "$1" | grep -q -F "return age >= 21;"' _ "$work/accepted.log"
+
+echo "listed:"
+printf '%s\t%s\t%s\t%s\n' "$subject" ">= -> >" "#1" "return age >= 18;" > "$work/no-reason.txt"
+mutate --list --accepted "$work/no-reason.txt" "$subject" > "$work/listed.log" 2>&1
+check "an entry without a reason: status 2" test $? = 2
+check "… said, with its line" grep -q "no-reason.txt:1: an entry without a '# reason: …' line" "$work/listed.log"
+printf '# reason: x\n%s >= -> > #1\n' "$subject" > "$work/no-tabs.txt"
+mutate --list --accepted "$work/no-tabs.txt" "$subject" > /dev/null 2>&1
+check "an entry not in four fields: status 2" test $? = 2
 
 echo "untouched:"
 check "the subject in the tree not changed" cmp -s "$fixtures/FixtureRules.qml" "$tree/$subject"

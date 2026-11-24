@@ -15,6 +15,9 @@
 #                                       the verdict on one run of the suites — its output
 #                                       and status, the subject's path in the tree (for
 #                                       tests/mutate-selftest.sh)
+#   tests/mutate.sh --accepted <list> …
+#                                       the accepted survivors (default:
+#                                       tests/mutants-accepted.txt, when there is one)
 #   tests/mutate.sh -j <n> …            at most <n> mutants at once (default: as many as the
 #                                       unit runner would run shards: half the processors,
 #                                       at most 16, no more than the run's memory budget
@@ -41,6 +44,17 @@
 #                 killed, shown as "killed (memory cap)" and listed apart
 # Lock scenarios and module fixture parts are not run: only unit suites.
 #
+# Accepted survivors: a mutant no check can tell apart (an equivalent mutant) is listed in
+# tests/mutants-accepted.txt, one line per mutant, its fields separated by tabs —
+#   <file>  <old> -> <new>  #<n>  <the line it mutates, without its leading and trailing blanks>
+# where #<n> counts the mutants with the same old and new text on lines that read the same
+# (1 for the first in the file): a key that holds while lines move and breaks when the line
+# is edited. Each entry, or block of entries, has a `# reason: <why>` line above it (a blank
+# line ends a block); an entry without one is a list error. Such a survivor is shown apart,
+# as accepted; an entry that matches no mutant any more, or one a suite now kills, is stale.
+# Every surviving mutant not accepted is printed once more as a line for the list:
+# `survivor-key<TAB><entry>`. The summary: `survived <n> (accepted <m>) / stale <k>`.
+#
 # Each mutant's Quickshell runs under the unit runner's memory cap (tests/memory-cap.sh,
 # H2S_TEST_MEMORY_MAX, 1536M by default), all of them within one memory budget for the run
 # (H2S_TEST_MEMORY_BUDGET: by default the memory available less a reserve), made here: a
@@ -49,13 +63,13 @@
 # there is `nix`, else PATH; H2S_TEST_TOOLS says which). Each worker has its own copy of the tree, under this
 # run's temp dir, removed by its path when the run ends (an interrupt included).
 #
-# Exit status: 0 when it ran (whatever survived); 2 for a wrong option or file, suites that
+# Exit status: 0 when it ran (whatever survived); 2 for a wrong option, file or accepted list, suites that
 # fail unmutated, or a copy that could not be made; 130 when interrupted.
 set -uo pipefail
 export LC_ALL=C
 
 REPO=$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd -P)
-usage() { echo "usage: tests/mutate.sh [--list] [--max <n>] [--seed <n>] [-j <n>] <file> [<suite>…]  |  tests/mutate.sh --judge <log> <status> <file>" >&2; exit 2; }
+usage() { echo "usage: tests/mutate.sh [--list] [--max <n>] [--seed <n>] [--accepted <list>] [-j <n>] <file> [<suite>…]  |  tests/mutate.sh --judge <log> <status> <file>" >&2; exit 2; }
 fail() { echo "mutate.sh: $*" >&2; exit 2; }
 
 # verdict <log> <status> <file>: survived, not-run, not-compiled, capped (killed at the
@@ -86,9 +100,11 @@ list_only=0
 max=""
 seed=""
 jobs=""
+accepted_list=""
 while [ $# -gt 0 ]; do
     case "$1" in
         --list) list_only=1; shift ;;
+        --accepted) [ -n "${2:-}" ] || usage; [ -f "$2" ] || fail "--accepted: no file $2"; accepted_list=$2; shift 2 ;;
         --max) [[ "${2:-}" =~ ^[1-9][0-9]*$ ]] || fail "--max needs a number above 0"; max=$2; shift 2 ;;
         --seed) [[ "${2:-}" =~ ^[0-9]+$ ]] || fail "--seed needs a number"; seed=$2; shift 2 ;;
         -j) [[ "${2:-}" =~ ^[1-9][0-9]*$ ]] || fail "-j needs a number above 0"; jobs=$2; shift 2 ;;
@@ -113,6 +129,30 @@ file=${absolute#"$REPO"/}
 [ -f "$REPO/$file" ] || fail "no file $file in the tree"
 case "$file" in *.qml) ;; *) fail "$file is not a QML file" ;; esac
 case "$file" in tests/*) fail "$file is a test: mutate what it tests" ;; esac
+
+# ---- The accepted survivors -------------------------------------------------------------
+[ -n "$accepted_list" ] || accepted_list=$REPO/tests/mutants-accepted.txt
+declare -A accepted=()
+accepted_entries=()
+if [ -f "$accepted_list" ]; then
+    number=0 reason=""
+    while IFS= read -r raw || [ -n "$raw" ]; do
+        number=$((number + 1))
+        raw=${raw%$'\r'}
+        if [[ "$raw" =~ ^[[:space:]]*$ ]]; then reason=""; continue; fi
+        if [[ "$raw" == '#'* ]]; then
+            [[ "$raw" =~ ^#\ reason:[[:space:]]*[^[:space:]] ]] && reason=1
+            continue
+        fi
+        [ -n "$reason" ] || fail "$accepted_list:$number: an entry without a '# reason: …' line above it"
+        IFS=$'\t' read -r -a fields <<< "$raw"
+        { [ ${#fields[@]} = 4 ] && [[ "${fields[1]}" == *" -> "* ]] && [[ "${fields[2]}" =~ ^#[1-9][0-9]*$ ]]; } \
+            || fail "$accepted_list:$number: not '<file><TAB><old> -> <new><TAB>#<n><TAB><line>'"
+        [ "${fields[0]}" = "$file" ] || continue
+        accepted[$raw]=1
+        accepted_entries+=("$raw")
+    done < "$accepted_list"
+fi
 
 # ---- The mutants ------------------------------------------------------------------------
 # One per line: <line>, <column>, <old text>, <new text>, <kind>, separated by US (\037:
@@ -255,8 +295,30 @@ subject=$work/subject.qml
 cp "$REPO/$file" "$subject" || fail "cannot copy $file into $work"
 
 mapfile -t all < <(enumerate "$subject")
-[ ${#all[@]} -gt 0 ] || { echo "mutate.sh: $file: no mutants"; exit 0; }
+if [ ${#all[@]} = 0 ]; then
+    if [ ${#accepted_entries[@]} -gt 0 ]; then
+        echo "mutate.sh: $file, 0 s: killed 0 / survived 0 (accepted 0) / stale ${#accepted_entries[@]} / not compiled 0"
+    else
+        echo "mutate.sh: $file: no mutants"
+    fi
+    exit 0
+fi
 total=${#all[@]}
+
+# Each mutant's key, as an entry of the accepted list names it
+trim() { local text=${1//$'\t'/ }; text=${text#"${text%%[![:space:]]*}"}; printf '%s' "${text%"${text##*[![:space:]]}"}"; }
+mapfile -t source_lines < "$subject"
+declare -A occurrences=() key_of=() all_keys=()
+for mutant in "${all[@]}"; do
+    IFS=$'\037' read -r line column old new kind <<< "$mutant"
+    old=${old//$'\t'/ } new=${new//$'\t'/ }
+    text=$(trim "${source_lines[line - 1]}")
+    id=$old$'\037'$new$'\037'$text
+    occurrences[$id]=$(( ${occurrences[$id]:-0} + 1 ))
+    printf -v key '%s\t%s -> %s\t#%d\t%s' "$file" "$old" "$new" "${occurrences[$id]}" "$text"
+    key_of[$mutant]=$key
+    all_keys[$key]=1
+done
 
 # describe <mutant line>: file:line:column  'old' -> 'new'  | the line as it reads
 describe() {
@@ -410,9 +472,29 @@ for pid in "${workers[@]}"; do wait "$pid"; done
 workers=()
 
 results=$(cat "$work"/results-* 2> /dev/null | sort -t$'\037' -k2,2n -k3,3n)
+# An accepted survivor is shown apart; an entry no survivor matches is stale
+declare -A outcome_of=()
+relabelled=""
+while IFS= read -r entry; do
+    [ -n "$entry" ] || continue
+    outcome=${entry%%$'\037'*} mutant=${entry#*$'\037'}
+    outcome_of[${key_of[$mutant]}]=$outcome
+    [ "$outcome" = survived ] && [ -n "${accepted[${key_of[$mutant]}]:-}" ] && outcome=accepted
+    relabelled+=$outcome$'\037'$mutant$'\n'
+done <<< "$results"
+results=${relabelled%$'\n'}
+stale_entries=()
+for entry in "${accepted_entries[@]}"; do
+    if [ -z "${all_keys[$entry]:-}" ]; then
+        stale_entries+=("$entry")
+    else
+        case "${outcome_of[$entry]:-}" in "" | survived | not-run) ;; *) stale_entries+=("$entry") ;; esac
+    fi
+done
 count() { printf '%s\n' "$results" | grep -c "^$1"$'\037'; }
 capped=$(count capped)
-killed=$(( $(count killed) + capped )) survived=$(count survived) not_compiled=$(count not-compiled) not_run=$(count not-run)
+killed=$(( $(count killed) + capped )) accepted_count=$(count accepted) not_compiled=$(count not-compiled) not_run=$(count not-run)
+survived=$(( $(count survived) + accepted_count ))
 section() {
     local outcome=$1 title=$2 entry
     [ "$(count "$outcome")" -gt 0 ] || return 0
@@ -423,9 +505,22 @@ section() {
     done
 }
 section survived "Surviving mutants (no suite noticed them)"
+section accepted "Accepted survivors (in $accepted_list)"
 section capped "Killed at the memory cap or the run's budget (Quickshell ran away: counted as killed)"
 section not-compiled "Not compiled"
 section not-run "Not run (the runner could not be set up, or the text was not found)"
+if [ ${#stale_entries[@]} -gt 0 ]; then
+    echo
+    echo "Stale accepted entries (no such survivor now: remove them from $accepted_list):"
+    printf '  %s\n' "${stale_entries[@]}"
+fi
+if [ "$(count survived)" -gt 0 ]; then
+    echo
+    echo "The survivors' keys (an entry of the accepted list, under a '# reason: …' line, for one that cannot be told apart):"
+    printf '%s\n' "$results" | grep "^survived"$'\037' | while IFS= read -r entry; do
+        printf 'survivor-key\t%s\n' "${key_of[${entry#*$'\037'}]}"
+    done
+fi
 echo
-echo "mutate.sh: $file, $((SECONDS - started)) s: killed $killed$([ "$capped" -gt 0 ] && echo " ($capped at the memory cap)") / survived $survived / not compiled $not_compiled${not_run:+$([ "$not_run" -gt 0 ] && echo " / not run $not_run")}"
+echo "mutate.sh: $file, $((SECONDS - started)) s: killed $killed$([ "$capped" -gt 0 ] && echo " ($capped at the memory cap)") / survived $survived (accepted $accepted_count) / stale ${#stale_entries[@]} / not compiled $not_compiled${not_run:+$([ "$not_run" -gt 0 ] && echo " / not run $not_run")}"
 exit 0

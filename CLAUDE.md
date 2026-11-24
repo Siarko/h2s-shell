@@ -101,12 +101,18 @@ survivor gets a check, or a reason in the slice's report why it cannot be told a
 equivalent mutant). Before a minor or major release it runs on every Rules file changed since
 the last release, with the full set on both machines and soaks of suites known to flake.
 `run-all.sh` runs only its self-test.
-`tests/release-check.sh` runs all of that before a release: the full set here and through
-`remote-run.sh` (`H2S_REMOTE` or `--remote`), `mutate.sh` on each `*Rules.qml` changed since
-the last tag, `soak.sh` on the suites in `tests/flaky-suites.txt` (and a module's own
+A survivor that cannot be told apart goes into `tests/mutants-accepted.txt` (the
+`survivor-key` line mutate.sh prints, under a `# reason: …` line); an entry whose line was
+edited goes stale and the survivor shows again.
+`tests/release-check.sh` runs all of that before a release, on HEAD of a tree with nothing
+uncommitted: the full set here and through `remote-run.sh` (`H2S_REMOTE` or `--remote`),
+`mutate.sh` on each `*Rules.qml` changed since the last minor or major tag before HEAD,
+`soak.sh` on the suites in `tests/flaky-suites.txt` (and a module's own
 `tests/flaky-suites.txt`), and each module's suites (`H2S_MODULE_DIRS`, `:`-separated, or
-`--module <dir>`); one summary, non-zero on any failure, NOT RUN (status 2) for a part it had
-nothing to run on. A suite found flaking gets a line in `tests/flaky-suites.txt`.
+`--module <dir>`); one summary, non-zero on any failure (a survivor not accepted, a stale
+entry), NOT RUN (status 2) for a part it had nothing to run on; the logs kept under
+`~/.cache/h2s-shell-tests/release-check/`. A suite found flaking gets a line in
+`tests/flaky-suites.txt`.
 `tests/soak.sh <suite | module dir> <n>` runs a suite n times in a row under busy loops:
 a check that depends on timing fails there in minutes.
 

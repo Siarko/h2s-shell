@@ -2088,7 +2088,15 @@ file. A mutant is killed (a suite failed, or it ran past four times the unmutate
 not compiled, not run, or survived; the survivors are listed with file, line and column, and
 each is a missing check or a mutation that changes nothing. `--list` prints the mutants, `--max
 <n>` (with `--seed`) picks some at random, `-j <n>` runs that many at once (by default as many
-as the unit runner's shards). Suites that fail unmutated end it with status 2. It is run by
+as the unit runner's shards). Suites that fail unmutated end it with status 2. A survivor no
+check can tell apart (an equivalent mutant) is listed in `tests/mutants-accepted.txt`, one
+tab-separated line per mutant — the file, `<old> -> <new>`, `#<n>` (its count among the
+mutants with the same change on lines that read the same) and the line it mutates, trimmed —
+under a `# reason: …` line (an entry without one is an error, status 2); `--accepted <list>`
+names another list. Such a survivor is shown apart as accepted; an entry that matches no
+surviving mutant any more (its line was edited, or a suite now kills it) is stale. Each
+survivor not accepted is printed as `survivor-key<TAB><entry>`, and the summary reads
+`survived <n> (accepted <m>) / stale <k>`. It is run by
 hand on a new or much changed Rules file; `tests/mutate-selftest.sh`, a part of `--quick`,
 checks its verdicts on a fixture Rules file with a mutant of each outcome.
 
@@ -2242,19 +2250,25 @@ missing repository, and the destination in no file written.
 ### Before a release
 
 `tests/release-check.sh` runs every check due before a minor or major release and ends with
-one summary: the full `tests/run-all.sh --keep-going` here and, through
-`tests/remote-run.sh`, on the other machine (its destination from `H2S_REMOTE` or
-`--remote`; `HEAD` is what goes there, so commit first); `tests/mutate.sh` on each
-`*Rules.qml` outside `tests/` changed since the last tag (`--since <ref>` names another; with
-no tag, every one); `tests/soak.sh` on each suite in `tests/flaky-suites.txt`, and on each
+one summary. It checks `HEAD`, here and on the other machine alike, and refuses a tree with
+uncommitted changes to tracked files or an untracked Rules file (status 2). The parts: the
+full `tests/run-all.sh --keep-going` here and, through `tests/remote-run.sh`, on the other
+machine (its destination from `H2S_REMOTE` or `--remote`, handed on in the environment and
+written nowhere); `tests/mutate.sh` on each `*Rules.qml` outside `tests/` changed between the
+last minor or major release tag before `HEAD` (`v<major>.<minor>.0`, a tag at `HEAD` itself
+left out) and `HEAD` (`--since <ref>` names another; with no such tag, every one); `tests/soak.sh` on each suite in `tests/flaky-suites.txt`, and on each
 module whose own `tests/flaky-suites.txt` names a suite; and `tests/run-modules.sh` on each
-module directory given (`H2S_MODULE_DIRS`, separated by `:`, or `--module <dir>`). The remote
+module directory given (`H2S_MODULE_DIRS`, separated by `:`, or `--module <dir>`); a
+module's list names suites of its manifest. The remote
 run goes on beside the rest; the parts here run one after another, since the lock bed needs
 the machine to itself, a soak loads every processor and the runners each size their work to
-the whole memory budget. Every part runs whatever another's verdict; a mutation run with
-survivors counts as failed. It exits 1 when a part failed, 2 when none failed but one did not
-run (no destination, no module directory, a part that could not be set up), and `--dry-run`
-prints the plan. `tests/release-check-selftest.sh`, a part of `--quick`, checks it on stand-in
+the whole memory budget. Every part runs whatever another's verdict. A mutation run fails on
+a survivor not accepted or a stale entry, and counts as not run when a mutant was not run or
+it printed no summary. The logs and the summary are kept in
+`~/.cache/h2s-shell-tests/release-check/<date-time>/`, and the summary names the log of each
+part that did not pass. It exits 1 when a part failed, 2 when none failed but one did not run
+(no destination, no module directory, a part that could not be set up); `--dry-run` prints the
+plan, and exits 2 too when the plan has such a part. `tests/release-check-selftest.sh`, a part of `--quick`, checks it on stand-in
 runners in a made-up repository.
 
 ### Where the test tools come from

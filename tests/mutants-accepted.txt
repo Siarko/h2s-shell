@@ -1,0 +1,10 @@
+# Surviving mutants that no check can tell apart (equivalent mutants), read by tests/mutate.sh
+# (and so by tests/release-check.sh, which fails on any other survivor and on a stale entry).
+# One line per mutant, its four fields separated by tabs, as mutate.sh prints it after
+# `survivor-key<TAB>`:
+#
+#   <file>  <old> -> <new>  #<n>  <the line it mutates, trimmed>
+#
+# Each entry, or block of entries, under a `# reason: <why it cannot be told apart>` line; a
+# blank line ends a block. An entry whose line is edited no longer matches: the survivor
+# shows again and the entry is stale, to be looked at anew.
