@@ -186,11 +186,17 @@ TestCase {
         let refused = edit.build(archSudo, [password("r1", "sufficient", true), fixed], plain);
         assert(!refused.ok && refused.text === null && codes(refused).includes("R4"), "counting without pam_faillock: refused, no text");
 
-        // --- refusals: no text for rows the checks refuse ---
-        assertEqual(codes(edit.build(archSudo, [], facts())).join(" "), "R3", "no rows: R3");
-        assert(codes(edit.build(archSudo, [fingerprint("r1", "required"), fixed], facts({ fingerprint: "absent" }))).includes("R2"),
-               "a required reader not ready: R2");
-        assert(codes(edit.build(archSudo, [raw("r1", "auth sufficient pam_permit.so"), fixed], facts())).includes("R9"), "a raw line letting anyone in: R9");
+        // --- risks: written (the page asks first), the risk handed on ---
+        built = edit.build(archSudo, [], facts());
+        assert(built.ok && built.text.includes("auth requisite pam_deny.so") && codes(built).join(" ") === "R3"
+               && built.risks.length === 1, "no rows: written as the deny closing, with R3 as its risk");
+        built = edit.build(archSudo, [fingerprint("r1", "required"), fixed], facts({ fingerprint: "absent" }));
+        assert(built.ok && built.text !== null && built.risks.some(item => item.code === "R2"), "a required reader not ready: written, R2 as its risk");
+        built = edit.build(archSudo, [raw("r1", "auth sufficient pam_permit.so"), fixed], facts());
+        assert(built.ok && built.text.includes("auth sufficient pam_permit.so") && built.risks.some(item => item.code === "R9"),
+               "a raw line letting anyone in: written, R9 as its risk");
+        assertEqual(edit.build(archSudo, [fingerprint("r1"), fixed], facts()).risks.length, 0, "no risk: none handed on");
+        assert(edit.build(null, [], polkit()).risks.some(item => item.code === "R3"), "polkit-1 too: the risk handed on");
         assertEqual(codes(edit.build(null, [fingerprint("r1"), fixed], facts())).join(" "), "unread", "sudo not read: refused");
         assertEqual(codes(edit.build(null, [fingerprint("r1"), fixed], polkit({ vendorText: null }))).join(" "), "unread", "polkit's vendor file not read: refused");
 
@@ -376,7 +382,8 @@ TestCase {
         snippet = edit.optionsSnippet(option, [row("r1", "fingerprint", "sufficient", { timeout: -1, tries: -1 }), fixed], false, nixos({ fingerprint: "ready" }));
         assert(snippet.ok && snippet.text.includes("{ method = \"fingerprint\"; control = \"sufficient\"; timeout = -1; tries = -1; }"), "NixOS: no limit is -1");
         snippet = edit.optionsSnippet(option, { sudo: [], polkit: [fixed] }, true, nixos({}));
-        assert(!snippet.ok && snippet.refusals.some(item => item.code === "R3" && item.service === "sudo"), "NixOS: an empty list refused, with its service");
+        assert(snippet.ok && snippet.text.includes("  sudo.rules = [\n  ];") && snippet.refusals.length === 0
+               && snippet.risks.some(item => item.code === "R3" && item.service === "sudo"), "NixOS: an empty list written, its risk with its service");
         snippet = edit.optionsSnippet(option, [raw("r1", "auth sufficient pam_ldap.so"), fixed], false, nixos({}));
         assert(!snippet.ok && snippet.refusals.some(item => item.code === "R8"), "NixOS: a bare third-party module refused");
         snippet = edit.optionsSnippet(option, [raw("r1", "auth sufficient /nix/store/abc-pam_ldap/lib/security/pam_ldap.so"), fixed], false, nixos({}));
@@ -413,9 +420,9 @@ TestCase {
                     "… with a final newline: before it");
         assertEqual(edit.build("", [fingerprint("r1")], facts()).text, fpBlock + "\n", "an empty file: the block and a final newline");
         assertEqual(JSON.stringify(edit.build(null, [fingerprint("r1"), fixed], facts())),
-                    JSON.stringify({ ok: false, text: null, remove: false, refusals: [{ code: "unread", row: -1, id: "", text: edit.reasonTexts.unread }], warnings: [] }),
+                    JSON.stringify({ ok: false, text: null, remove: false, refusals: [{ code: "unread", row: -1, id: "", text: edit.reasonTexts.unread }], risks: [], warnings: [] }),
                     "a refusal of the file: not ok, no text, nothing removed, for the list");
-        refused = edit.build(archSudo, [], facts());
+        refused = edit.build(archSudo, [row("r1", "fingerprint", "sufficient", { timeout: 10, tries: 21 }), fixed], facts());
         assert(refused.ok === false && refused.text === null && refused.remove === false, "a refusal of the rows: not ok, no text, nothing removed");
         assertEqual(codes(edit.build(42, [fingerprint("r1"), fixed], polkit())).join(" "), "unread", "polkit-1 handed something not a text: refused");
         assertEqual(edit.build(null, [fingerprint("r1"), fixed], polkit({ replace: "abc" })).ok, true, "no polkit-1 of ours: a Replace hash has nothing to act on");

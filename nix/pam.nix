@@ -2,8 +2,9 @@
 # on NixOS, so the shell's rule editor gives its rules as these options to copy into the
 # system's configuration (PamEditRules.optionsSnippet writes them). Each row
 # becomes one or more of NixOS's PAM rules, above NixOS's own; the checks that can be made
-# from the configuration are assertions and warnings, as the editor's are refusals and
-# warnings (PamRuleRules.check). tests/PamNixosModuleTest.qml checks the names and ranges
+# from the configuration are assertions and warnings, as the editor's are refusals, and
+# risks and warnings (PamRuleRules.check): rows that may let anyone in or lock the user out
+# are warnings at the rebuild, as the editor writes them once confirmed. tests/PamNixosModuleTest.qml checks the names and ranges
 # here against the editor's; tests/system/nixos/pam.sh evaluates the lines against
 # PamEditRules' for the same rows (a security key row's arguments from the machine's
 # security.pam.u2f.settings left out: the editor's lines have none).
@@ -282,7 +283,7 @@ let
   # (NixOS's own rules)
   keepsPassword = service: service.enabled && (service.rows == null || (analyse service.rows).hasPassword);
 
-  # The refusals and warnings of one service's rows, as messages
+  # The refusals (assertions), risks and warnings (both warnings) of one service's rows, as messages
   problems = name: service:
     let
       rows = service.rows;
@@ -293,9 +294,7 @@ let
       systemRows = lib.filter (row: row.method == "system") rows;
     in {
       refusals =
-        lib.optional (rows == [ ])
-          "${where} is empty: give it rows, or leave it null for NixOS's own rules."
-        ++ lib.optional (systemRows != [ ] && (lib.length systemRows > 1 || (lib.last rows).method != "system"))
+        lib.optional (systemRows != [ ] && (lib.length systemRows > 1 || (lib.last rows).method != "system"))
           "${where}: the { method = \"system\"; } row can only be last, and only once."
         ++ each (index: row:
           lib.optional (row.method != "fingerprint" && (row.timeout != null || row.tries != null))
@@ -324,20 +323,24 @@ let
           # module the words inside: what the checks read would not be what the module gets
           ++ lib.optional (row.method == "raw" && lib.any (word: spaced word || lib.hasPrefix "[" word) row.args)
             "${at index row}: one word per argument: no spaces, tabs or brackets.")
-        ++ lib.concatLists (lib.imap0 (index: role:
-          lib.optional role.denies
-            "${at index (lib.elemAt rows index)}: this line refuses everyone: nobody would get in."
-          ++ lib.optional role.letsAnyone
-            "${at index (lib.elemAt rows index)}: this line lets anyone in: ${rawName (lib.elemAt rows index)} asks for no password, key or finger."
-          ++ lib.optional (role.reader && role.fails && !ready role.method)
-            "${at index (lib.elemAt rows index)}: this row must pass, but ${readyOption role.method} is off: nobody would get in.")
-          analysis.roles)
-        ++ lib.optional (rows != [ ] && !analysis.wayIn)
-          "${where}: no row can let you in: keep a password row, or a fingerprint or security key row with services.fprintd.enable or security.pam.u2f.enable."
         ++ lib.optional (fprintAuthSet name)
           "${name}'s rules come from programs.h2s-shell.pam: remove security.pam.services.${name}.fprintAuth."
         ++ lib.optional (serviceU2f name)
           "${name}'s rules come from programs.h2s-shell.pam: remove security.pam.services.${name}.${u2fName}.";
+      # Risks: written as asked, said at every rebuild (the editor asks before it writes them)
+      risks =
+        lib.optional (rows == [ ])
+          "${where} is empty: nobody would get in. Give it rows, or leave it null for NixOS's own rules. ${lockout}"
+        ++ lib.concatLists (lib.imap0 (index: role:
+          lib.optional role.denies
+            "${at index (lib.elemAt rows index)}: this line refuses everyone: nobody would get in. ${lockout}"
+          ++ lib.optional role.letsAnyone
+            "${at index (lib.elemAt rows index)}: this line lets anyone in without a password: ${rawName (lib.elemAt rows index)} asks for no password, key or finger."
+          ++ lib.optional (role.reader && role.fails && !ready role.method)
+            "${at index (lib.elemAt rows index)}: this row must pass, but ${readyOption role.method} is off: nobody would get in. ${lockout}")
+          analysis.roles)
+        ++ lib.optional (rows != [ ] && !analysis.wayIn)
+          "${where}: no row can let you in: keep a password row, or a fingerprint or security key row with services.fprintd.enable or security.pam.u2f.enable. ${lockout}";
       warnings =
         lib.optional (rows != [ ] && analysis.wayIn && !analysis.hasPassword)
           "${where}: only the reader lets you in. If it breaks, use the other of sudo and polkit, su or a root console."
@@ -375,6 +378,8 @@ let
           ++ lib.optional (row.method == "raw" && placeOf row == "place")
             "${at index row}: ${toString row.module} is not in the Nix store or ${systemModules}: if a user can write this file, any of that user's programs can replace it without a password, and it runs as root at the next sudo or administrator prompt.");
     };
+  # What a lockout risk adds: the shell's editor cannot repair what the rebuild puts in force
+  lockout = "sudo may become unreachable, and the shell cannot fix it: that takes su, a root console or booting an earlier generation.";
   spaced = text: lib.any (character: lib.hasInfix character text) [ " " "\t" "\n" "\r" ];
   broken = text: lib.hasInfix "\n" text || lib.hasInfix "\r" text;
   # A service's own switch for NixOS's key rule: u2f.enable, u2fAuth before it
@@ -526,8 +531,6 @@ in
 
     assertions = map (message: { assertion = false; inherit message; }) (lib.unique (
       lib.concatMap (found: found.refusals) allProblems
-      ++ lib.optional (ruled != { } && !(keepsPassword services.sudo || keepsPassword services.polkit-1))
-        "programs.h2s-shell.pam: keep a password in sudo's or polkit's rules: one is the way to repair the other."
       ++ lib.optional (u2f.broken != [ ] && (config.security.pam.u2f.enable
           || lib.any (service: lib.any (row: row.method == "securityKey") service.rows) (lib.attrValues ruled)))
         "security.pam.u2f.settings: ${lib.concatStringsSep ", " u2f.broken} is not a plain option name, or holds a tab or a line break: pam_u2f would not get it as one argument."
@@ -535,7 +538,10 @@ in
         "polkit's rules come from programs.h2s-shell.pam: remove programs.h2s-shell.polkit.passwordFirst."
     ));
     warnings = lib.unique (
-      lib.concatMap (found: found.warnings) allProblems
+      lib.concatMap (found: found.risks) allProblems
+      ++ lib.optional (ruled != { } && !(keepsPassword services.sudo || keepsPassword services.polkit-1))
+        "programs.h2s-shell.pam: neither sudo's nor polkit's rules keep a password: if the reader breaks, both are closed. ${lockout}"
+      ++ lib.concatMap (found: found.warnings) allProblems
       ++ lib.optional (u2f.conf != null && (config.security.pam.u2f.enable
           || lib.any (service: lib.any (row: row.method == "securityKey") service.rows) (lib.attrValues ruled)))
         "security.pam.u2f.settings.conf names ${u2f.conf}: the options in it are not checked."

@@ -609,7 +609,7 @@ Singleton {
     // ── Building the file ──
 
     function _refused(code, text, warnings) {
-        return { ok: false, text: null, remove: false, refusals: [{ code, row: -1, id: "", text }], warnings: warnings ?? [] };
+        return { ok: false, text: null, remove: false, refusals: [{ code, row: -1, id: "", text }], risks: [], warnings: warnings ?? [] };
     }
 
     // The new text of a service's file for the rows. `currentText`: the file as it
@@ -620,7 +620,8 @@ Singleton {
     // vendor file, dropping what a Replace kept) and optionally `systemLines`. Our polkit-1
     // is otherwise rebuilt from itself, the block swapped in place. → { ok, text, remove
     // (polkit: delete our file, the vendor file is in force again — only when it would be
-    // the vendor file), refusals, warnings }. Refused (no text) for rows the checks refuse —
+    // the vendor file), refusals, risks (PamRuleRules.check's: written, the caller asks
+    // first), warnings }. Refused (no text) for rows the checks refuse —
     // a file changed by hand is R6 unless replaced —, a Replace of a text that changed since
     // ("changed"), a fixed row with the service's own lines not below the block
     // ("noSystem", unless the shell writes no lines), a file not read ("unread").
@@ -642,7 +643,7 @@ Singleton {
         const found = replace ? { changed: false } : changes(currentText, service);
         const checked = PamRuleRules.check(rows, Object.assign({}, known, { changedByHand: known.changedByHand === true || found.changed }));
         if (checked.refusals.length > 0)
-            return { ok: false, text: null, remove: false, refusals: checked.refusals, warnings: checked.warnings };
+            return { ok: false, text: null, remove: false, refusals: checked.refusals, risks: checked.risks, warnings: checked.warnings };
         const lines = blockLines(rows, known);
         let physical, at;
         if (replace) {
@@ -672,12 +673,12 @@ Singleton {
         let text = physical.join("\n");
         if (service === "polkit-1") {
             if (lines.length === 0 && !replace && without === known.vendorText)
-                return { ok: true, text: null, remove: true, refusals: [], warnings: checked.warnings };
+                return { ok: true, text: null, remove: true, refusals: [], risks: checked.risks, warnings: checked.warnings };
             if (replace)
                 text = replacedMarker + "\n" + text;
             text = writtenMarker + " " + sha256(text) + "\n" + text;
         }
-        return { ok: true, text, remove: false, refusals: [], warnings: checked.warnings };
+        return { ok: true, text, remove: false, refusals: [], risks: checked.risks, warnings: checked.warnings };
     }
 
     // ── Module options (a system whose configuration writes the PAM files) ──
@@ -724,20 +725,21 @@ Singleton {
     // them): `rows` one list (sudo and polkit), or with `split` { sudo, polkit } (or
     // "polkit-1") one per service. `facts` as for check (the system's: its module
     // directories, which modules libpam finds by bare name), the other service's rows filled
-    // in. → { ok, text, refusals, warnings }, each item with its `service`; no text while one
-    // is refused.
+    // in. → { ok, text, refusals, risks, warnings }, each item with its `service`; no text
+    // while one is refused (a risk is written: the module warns of it again at the rebuild).
     function optionsSnippet(option, rows, split, facts) {
         const lists = split === true
             ? { "sudo": rows?.sudo, "polkit-1": rows?.["polkit-1"] ?? rows?.polkit }
             : { "sudo": rows, "polkit-1": rows };
         const services = split === true ? ["sudo", "polkit-1"] : ["sudo"];
-        const refusals = [], warnings = [];
+        const refusals = [], risks = [], warnings = [];
         const blocks = [];
         for (const service of services) {
             const list = Array.isArray(lists[service]) ? lists[service] : [];
             const known = Object.assign({}, facts ?? {}, { service, otherService: lists[PamRuleRules.otherService(service)] });
             const checked = PamRuleRules.check(list, known);
             refusals.push(...checked.refusals.map(item => Object.assign({ service }, item)));
+            risks.push(...checked.risks.map(item => Object.assign({ service }, item)));
             warnings.push(...checked.warnings.map(item => Object.assign({ service }, item)));
             const entries = [];
             list.forEach((row, i) => {
@@ -751,7 +753,7 @@ Singleton {
             blocks.push(["  " + name + " = ["].concat(entries, ["  ];"]).join("\n"));
         }
         if (refusals.length > 0)
-            return { ok: false, text: null, refusals, warnings };
-        return { ok: true, text: String(option) + " = {\n" + blocks.join("\n") + "\n};\n", refusals, warnings };
+            return { ok: false, text: null, refusals, risks, warnings };
+        return { ok: true, text: String(option) + " = {\n" + blocks.join("\n") + "\n};\n", refusals, risks, warnings };
     }
 }

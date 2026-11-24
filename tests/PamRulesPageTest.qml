@@ -438,8 +438,38 @@ TestCase {
         const same = rules.applyQueue({ "sudo": { rows: [fixed], currentText: _sudo, facts: facts("sudo") },
                                         "polkit-1": { rows: [fixed], currentText: null, facts: facts("polkit-1") } });
         assertEqual(same.items.length, 0, "… nothing that differs: nothing");
-        const refused = rules.applyQueue({ "sudo": { rows: [finger], currentText: _sudo, facts: Object.assign(facts("sudo"), { otherService: [finger] }) } });
+        const refused = rules.applyQueue({ "sudo": { rows: [Object.assign({}, finger, { control: "bogus" }), fixed], currentText: _sudo, facts: facts("sudo") } });
         assertEqual(refused.items.length + " " + refused.refusals[0].service, "0 sudo", "… a refused build: its refusal, nothing written");
+        const risky = rules.applyQueue({ "sudo": { rows: [finger], currentText: _sudo, facts: Object.assign(facts("sudo"), { otherService: [finger] }) },
+                                         "polkit-1": { rows: [finger, fixed], currentText: null, facts: facts("polkit-1") } });
+        assertEqual(risky.items.map(item => item.service).join(",") + " " + risky.refusals.length + " " + risky.risks.map(item => item.service + ":" + item.code).join(","),
+                    "sudo,polkit-1 0 sudo:R5", "… a risk: written, the risk with its service");
+        assertEqual(rules.applyQueue({ "sudo": { rows: [finger], currentText: _sudo, facts: Object.assign(facts("sudo"), { otherService: [finger] }) } })
+                        .risks.length, 1, "… (a risk alone)");
+        assertEqual(rules.applyQueue({ "sudo": { rows: [fixed], currentText: _sudo, facts: Object.assign(facts("sudo"), { otherService: [finger] }) },
+                                       "polkit-1": { rows: [finger], currentText: null, facts: Object.assign(facts("polkit-1"), { otherService: [finger] }) } })
+                        .risks.map(item => item.service + ":" + item.code).join(","), "polkit-1:R5", "… only the risks of a service written");
+
+        // --- the risk question ---
+        assertEqual(rules.riskQuestion([], {}), null, "riskQuestion: no risk, no question");
+        let question = rules.riskQuestion([{ service: "sudo", code: "R9", row: 0, text: "x" }, { service: "polkit-1", code: "R9", row: 0, text: "x" }], { files: "k" });
+        assertEqual(JSON.stringify([question.kind, question.title, question.body, question.buttons, question.subject]),
+                    JSON.stringify(["danger", "Save anyway?", [rules.riskTexts.R9], [{ id: "save", label: "Save anyway", kind: "delete" }], { files: "k" }]),
+                    "… a line that lets anyone in, in both: named once, no lockout line, keyed to the files");
+        for (const code of ["R1", "R2", "R3", "R5"]) {
+            question = rules.riskQuestion([{ service: "sudo", code, row: -1, text: "x" }]);
+            assertEqual(JSON.stringify(question.body), JSON.stringify(["sudo: " + rules.riskTexts[code], { text: rules.lockoutText, strong: true }]),
+                        "… " + code + " in sudo only: named with its service, then the lockout");
+        }
+        question = rules.riskQuestion([{ service: "polkit-1", code: "R1", row: 2, text: "x" }, { service: "polkit-1", code: "R1", row: -1, text: "y" }]);
+        assertEqual(JSON.stringify(question.body.slice(0, 2)), JSON.stringify(["Administrator prompts: " + rules.riskTexts.R1row, "Administrator prompts: " + rules.riskTexts.R1]),
+                    "… a line refusing everyone and no way in: two lines, administrator prompts named");
+        question = rules.riskQuestion([{ service: "sudo", code: "R1", row: 0, text: "x" }]);
+        assertEqual(question.body[0], "sudo: " + rules.riskTexts.R1row, "… the first row refusing everyone: a line, not the list");
+        question = rules.riskQuestion([{ service: "sudo", code: "R7x", row: -1, text: "Something else." }]);
+        assertEqual(question.body.join(" "), "sudo: Something else.", "… a risk without its own words: the check's text");
+        assertEqual(rules.rowState({ refusals: [], risks: [{ id: "r1" }], warnings: [{ id: "r1" }] }, "r1"), "risky", "rowState: a risk over a warning");
+        assertEqual(rules.rowState({ refusals: [{ id: "r1" }], risks: [{ id: "r1" }], warnings: [] }, "r1"), "refused", "… a refusal over a risk");
 
         const directories = ["/s", "/v"];
         const answers = { "/s/system-auth": { text: _systemAuth } };
@@ -556,9 +586,27 @@ TestCase {
         // --- a check: the fixed row removed ---
         assert(_click("remove:system"), "the fixed row's × clicked");
         assert(_until(() => _modalTitle() === "Remove the system's password?") && _modalClick("modalButton:0"), "… removed");
-        assert(_until(() => _texts("refusal").length > 0), "a refusal shown under the list");
+        assert(_until(() => _texts("refusal").length > 0), "a risk shown in red under the list");
         assert(_texts("refusal").some(text => text === PamRuleRules.texts.R3), "… no rows");
-        assert(!_item("apply").available, "… Apply off");
+        assert(_item("apply").available, "… Apply stays on: a risk is asked about, not refused");
+
+        // --- Apply with a risk: the question first, cancel writes nothing, the trial after it ---
+        const startsRisk = _trial.starts;
+        assert(_click("apply"), "Apply with no rows");
+        assert(_until(() => _modalTitle() === "Save anyway?"), "… the risk question first");
+        const riskLines = _all(host.modal, "modalLine").map(line => line.text);
+        assert(riskLines.includes(PamRuleViewRules.riskTexts.R3) && riskLines.includes(PamRuleViewRules.lockoutText),
+               "… it names the risk, and that sudo may become unreachable: " + riskLines.join(" | "));
+        assert(_modalClick("modalButton:1") && _until(() => !host.open), "… cancelled");
+        assertEqual(_trial.starts + " " + _runs.length + " " + section._busy, startsRisk + " 0 false", "… nothing tried, nothing written");
+        assert(_click("apply") && _until(() => _modalTitle() === "Save anyway?"), "Apply again: asked again");
+        assert(_modalClick("modalButton:0"), "… Save anyway");
+        assert(_until(() => _modalTitle() === "Try the new rules"), "… then the trial, as before every write");
+        assertEqual(_trial.starts + " " + _runs.length, (startsRisk + 1) + " 0", "… tried, nothing written yet");
+        assert(_modalClick("modalButton:0") && _until(() => !section._busy), "the trial cancelled");
+        assertEqual(_runs.length, 0, "… nothing written");
+        host.cancel("window");
+        assert(_until(() => !host.open), "(closed)");
         assert(_click("reset"), "Reset");
         assert(_until(() => _texts("refusal").length === 0 && !section.changed), "… back to what is in force");
 
@@ -615,7 +663,7 @@ TestCase {
         _held();
         assert(_until(() => _modalTitle() === "Saved", 15000), "passed: written, said");
         assert(_until(() => !_archIntegration.busy), "… the integration no longer busy");
-        assertEqual(_trial.starts, 2, "… one trial stood for both services");
+        assertEqual(_trial.starts, startsRisk + 3, "… one trial stood for both services (the risk's and the failed one before)");
         assertEqual(_runs.join(" | "), "Change the sign-in rules for sudo | Change the sign-in rules for administrator prompts", "… sudo, then administrator prompts");
         assert(_readFile(_paths.system + "/sudo").indexOf("pam_fprintd.so") > 0, "… sudo's file has the fingerprint");
         assert(_readFile(_paths.system + "/polkit-1").indexOf("# Written by h2s-shell") === 0, "… polkit's file of the shell's own");

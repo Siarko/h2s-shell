@@ -271,16 +271,42 @@ ColumnLayout {
         if (_busy || !editor || mode !== "apply")
             return;
         notice = "";
-        const inputs = {};
-        for (const service of PamRuleRules.services)
-            inputs[service] = { rows: _lists[service], currentText: service === "sudo" ? _files.sudo : _files.polkit, facts: factsFor(service) };
-        const queue = PamRuleViewRules.applyQueue(inputs);
+        const queue = _applyQueue();
         if (queue.refusals.length > 0) {
             _ask(PamRuleViewRules.notSavedSpec(queue.refusals[0].text), () => {});
             return;
         }
         if (queue.items.length === 0)
             return;
+        // Rows that may let anyone in or lock the user out are written only once confirmed;
+        // the answer acts on the files it was asked about, and the trial still comes first
+        const question = PamRuleViewRules.riskQuestion(queue.risks, { files: _queueKey(queue) });
+        if (question === null) {
+            _startApply(queue);
+            return;
+        }
+        if (!_ask(question, answer => {
+            if (answer.cancelled || answer.button !== "save" || root._busy || !root.editor || root.mode !== "apply")
+                return;
+            const now = root._applyQueue();
+            if (now.refusals.length === 0 && root._queueKey(now) === answer.subject.files)
+                root._startApply(now);
+        }))
+            notice = "Not saved: another question is open.";
+    }
+
+    function _applyQueue() {
+        const inputs = {};
+        for (const service of PamRuleRules.services)
+            inputs[service] = { rows: _lists[service], currentText: service === "sudo" ? _files.sudo : _files.polkit, facts: factsFor(service) };
+        return PamRuleViewRules.applyQueue(inputs);
+    }
+
+    function _queueKey(queue) {
+        return JSON.stringify(queue.items.map(item => [item.service, item.text]));
+    }
+
+    function _startApply(queue) {
         _flow = Object.assign(_idleFlow(), { phase: "trial", items: queue.items, shared: editor.split !== true });
         _next();
     }
@@ -826,7 +852,8 @@ ColumnLayout {
                 onEdited: rows => root._setRows(_listBlock.modelData, rows)
             }
             Repeater {
-                model: ScriptModel { values: _listBlock.result.refusals.map(item => item.text).filter((text, i, all) => all.indexOf(text) === i) }
+                // Refusals and risks alike in red: a risk is saved only once confirmed
+                model: ScriptModel { values: _listBlock.result.refusals.concat(_listBlock.result.risks ?? []).map(item => item.text).filter((text, i, all) => all.indexOf(text) === i) }
                 CheckLine { required property string modelData; refusal: true; text: modelData }
             }
             Repeater {

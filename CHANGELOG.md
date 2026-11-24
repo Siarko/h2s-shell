@@ -60,8 +60,9 @@ The interface modules are written against (`qs.api`), versioned on its own
 - Settings → System → Authentication: "Sign-in rules" for sudo and administrator prompts
   (polkit) — what is in force as steps, rows of methods (fingerprint, security key,
   password, a raw PAM line) tried from the top with their control words and details, one list
-  for both or one each, checks under each list, the file it would write. Arch: Apply tries
-  the new rules first, then writes each file as administrator with a backup; Undo; a file
+  for both or one each, checks under each list, the file it would write. Rows that could let
+  anyone in or lock you out are red warnings: Apply asks "Save anyway?" first, naming the
+  risk. Arch: Apply tries the new rules first, then writes each file as administrator with a backup; Undo; a file
   changed outside the shell is shown and can be replaced. NixOS: the module's options, with
   Copy. Under it, "Unlocking the lock screen": switches for the fingerprint and the security
   key.
@@ -85,12 +86,12 @@ The interface modules are written against (`qs.api`), versioned on its own
   with closing lines that keep NixOS's own rules from being reached.
   `control` is PAM's word (`sufficient` by default; `optional` only on a raw row — a
   fingerprint, key or password row's result would be ignored). NixOS's own fingerprint and
-  key rules are off for a service with rules. A list nobody could get in with, a required
-  reader the machine does not have, both services without a password, a raw line that lets
-  anyone in on its own (a module that asks for nothing, with no other row that must pass and
-  still asks), an optional fingerprint, key or password row,
+  key rules are off for a service with rules. An optional fingerprint, key or password row,
   or a module of another package named without its path stops the build with an assertion;
-  a reader as the only way in, a store path written out (`"${pkgs.…}/lib/security/…"` is
+  a list nobody could get in with (an empty one too), a required reader the machine does not
+  have, both services without a password (each saying that sudo may become unreachable), a
+  raw line that lets anyone in on its own (a module that asks for nothing, with no other row
+  that must pass and still asks), a reader as the only way in, a store path written out (`"${pkgs.…}/lib/security/…"` is
   the way), a module from outside the store, a required raw line of a module the shell does
   not know without the `system` row (it lets in a user the module says it does not apply
   to), a raw line that asks for nothing beside a row that still asks, and a fingerprint with

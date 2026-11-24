@@ -10,7 +10,9 @@ import QtQuick
 // are). Here: the row model and its edits (the fixed row stays last and goes only when
 // asked for explicitly), the control words with their explanations, the methods' details
 // and ranges, one shared list or one per service, and `check(rows, facts)`: every refusal
-// (Apply off) and warning the list gets, raw lines judged as far as a line alone can be.
+// (rows that cannot be written as they are: Apply off), risk (rows that can be written but
+// may let anyone in or lock the user out: Apply asks first) and warning the list gets, raw
+// lines judged as far as a line alone can be.
 // Pure: no text is generated here (PamEditRules) and nothing is read.
 Singleton {
     id: root
@@ -649,22 +651,27 @@ Singleton {
     // (PamStackRules.faillockConfig's numbers, or null), otherService (the other service's
     // rows, in force or pending: the same rows for a shared list; not a list = not known),
     // changedByHand, sharedApplyStopped (a shared Apply stopped between the two
-    // services) }. → { refusals, warnings }, each item { code, row (index, −1 for the list),
-    // id ("" for the list), text }.
+    // services) }. → { refusals, risks, warnings }, each item { code, row (index, −1 for
+    // the list), id ("" for the list), text }. Refusals: what cannot be written as it is
+    // (R4 out of range, R6 changed by hand, R8 not a line). Risks: what the user may write
+    // after confirming it (riskTexts' question) — R1 no way in, R2 a required reader not
+    // ready, R3 no rows, R5 both services without a password (lockouts), R9 a line that lets
+    // anyone in: what they could write with sudoedit, the shell lets them write too.
     function check(rows, facts) {
         const list = Array.isArray(rows) ? rows : [];
         const known = facts ?? {};
         const service = String(known.service ?? "");
-        const refusals = [], warnings = [];
+        const refusals = [], risks = [], warnings = [];
         const item = (code, index, text) => ({ code, row: index, id: index >= 0 ? String(list[index]?.id ?? "") : "", text });
         const refuse = (code, index, text) => refusals.push(item(code, index, text));
+        const risk = (code, index, text) => risks.push(item(code, index, text));
         const warn = (code, index, text) => warnings.push(item(code, index, text));
 
         if (known.changedByHand === true)
             refuse("R6", -1, texts.R6);
         if (list.length === 0) {
-            refuse("R3", -1, texts.R3);
-            return { refusals, warnings };
+            risk("R3", -1, texts.R3);
+            return { refusals, risks, warnings };
         }
 
         const analysed = _analyse(list, service, known);
@@ -701,27 +708,27 @@ Singleton {
         // credential, or made by its arguments to pass without one. Beside a row that still
         // asks it no longer checks anything: W22 (a key line: W19–W21 below). Jumps are refused
         // (R8), so no row is skipped between.
-        const refusedR9 = [];
+        const letsInR9 = [];
         roles.forEach((role, i) => {
             if (!role.raw || role.credential !== "no" || role.refusals.length > 0 || role.denies)
                 return;
             if (alone(role, i, asks)) {
-                refuse("R9", i, texts.R9);
-                refusedR9.push(i);
+                risk("R9", i, texts.R9);
+                letsInR9.push(i);
             } else if (decides(role) && !role.key) {
                 warn("W22", i, texts.W22);
             }
         });
 
         // W15–W21: a key line whose own check pam_u2f's settings void — the system's, or a raw
-        // line's own words where R9 does not already refuse it. Where its pass lets the user in
+        // line's own words where R9 does not already name it. Where its pass lets the user in
         // on its own: anyone without a key (alwaysok, W15), any program without a touch
         // (userpresence=0, W16), a user without a key (nouserok where PAM_IGNORE is no answer,
         // W17). Where another row still asks: it no longer asks, only the other rows decide
         // (W19, W20, W21). Settings not read: W18. Warnings, not refusals: the settings are the
         // system's, not the row's
         roles.forEach((role, i) => {
-            if (!role.key || role.refusals.length > 0 || refusedR9.includes(i))
+            if (!role.key || role.refusals.length > 0 || letsInR9.includes(i))
                 return;
             const system = role.u2f?.known === true ? role.u2f : null;
             const say = (code, flag) => {
@@ -749,14 +756,14 @@ Singleton {
         // R1: a raw pam_deny that fails refuses everyone
         roles.forEach((role, i) => {
             if (role.denies && role.refusals.length === 0)
-                refuse("R1", i, texts.R1deny);
+                risk("R1", i, texts.R1deny);
         });
 
         // R1: some row can let the user in with what the machine has now
         const hasPassword = roles.some(role => (role.method === "password" || role.method === "system") && role.decides);
         const wayIn = hasPassword || roles.some(role => isReader(role) && ready(role.method) && role.decides);
         if (!wayIn)
-            refuse("R1", -1, texts.R1);
+            risk("R1", -1, texts.R1);
 
         // R2 / W2: a reader or key that must pass
         roles.forEach((role, i) => {
@@ -764,13 +771,13 @@ Singleton {
                 if (ready(role.method))
                     warn("W2", i, texts.W2);
                 else
-                    refuse("R2", i, texts.R2);
+                    risk("R2", i, texts.R2);
             }
         });
 
         // R5: one of the two services keeps a password
         if (!hasPassword && !(Array.isArray(known.otherService) && _hasPassword(known.otherService, otherService(service), known)))
-            refuse("R5", -1, texts.R5);
+            risk("R5", -1, texts.R5);
 
         // W1: the way in is a reader only
         if (wayIn && !hasPassword)
@@ -842,12 +849,12 @@ Singleton {
         if (known.sharedApplyStopped === true && Array.isArray(known.otherService) && !sameRows(list, known.otherService))
             warn("W8", -1, texts.W8);
 
-        return { refusals, warnings };
+        return { refusals, risks, warnings };
     }
 
     // The codes only, sorted: for a view's state and the tests
     function codes(result) {
-        return result.refusals.concat(result.warnings).map(found => found.code)
+        return result.refusals.concat(result.risks ?? [], result.warnings).map(found => found.code)
             .filter((code, i, all) => all.indexOf(code) === i).sort();
     }
 }

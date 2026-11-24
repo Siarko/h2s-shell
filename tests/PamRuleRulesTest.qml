@@ -429,8 +429,25 @@ TestCase {
 
         // --- the items ---
         result = rules.check([fingerprint("r1", "required"), fixed], arch({ fingerprint: "absent", changedByHand: true }));
-        assertEqual(JSON.stringify(result.refusals.map(refusal => [refusal.code, refusal.row, refusal.id])),
+        assertEqual(JSON.stringify(result.refusals.concat(result.risks).map(refusal => [refusal.code, refusal.row, refusal.id])),
                     JSON.stringify([["R6", -1, ""], ["R2", 0, "r1"]]), "each item names its row, −1 for the list");
+
+        // --- risks: written once confirmed, never refused; what cannot be written is refused ---
+        const kinds = (rows, facts) => {
+            const checked = rules.check(rows, facts);
+            const say = list => list.map(found => found.code).filter((code, i, all) => all.indexOf(code) === i).sort().join(" ");
+            return "refused: " + say(checked.refusals) + " / risks: " + say(checked.risks);
+        };
+        assertEqual(kinds([fingerprint("r1")], arch({ fingerprint: "absent", otherService: [] })), "refused:  / risks: R1 R5", "R1, R5: risks, not refusals");
+        assertEqual(kinds([raw("r1", "auth required pam_deny.so"), fixed], arch()), "refused:  / risks: R1", "R1 (a raw pam_deny): a risk");
+        assertEqual(kinds([fingerprint("r1", "required"), fixed], arch({ fingerprint: "absent" })), "refused:  / risks: R2", "R2: a risk");
+        assertEqual(kinds([], arch()), "refused:  / risks: R3", "R3: a risk");
+        assertEqual(kinds([raw("r1", "auth sufficient pam_permit.so"), fixed], arch()), "refused:  / risks: R9", "R9: a risk");
+        assertEqual(kinds([fingerprint("r1", "sufficient", { tries: 21 }), fixed], arch()), "refused: R4 / risks: ", "R4: still refused");
+        assertEqual(kinds([fixed], arch({ changedByHand: true })), "refused: R6 / risks: ", "R6: still refused");
+        assertEqual(kinds([raw("r1", "account required pam_unix.so"), fixed], arch()), "refused: R8 / risks: ", "R8: still refused");
+        assertEqual(kinds([], arch({ changedByHand: true })), "refused: R6 / risks: R3", "an empty list changed by hand: both");
+        assert(rules.codes({ refusals: [], risks: [{ code: "R9" }], warnings: [{ code: "W1" }] }).join(" ") === "R9 W1", "codes take the risks too");
         assertEqual(rules.rawLine("-auth [success=done default=ignore] pam_ldap.so", {}).reads, "-auth · [success=done default=ignore] · pam_ldap.so",
                     "what a raw line reads as");
         assertEqual(codes([fingerprint("r1"), fixed], arch()).length, 0, "a reader above the system's password: nothing to say");
@@ -490,7 +507,7 @@ TestCase {
         assertEqual(found.text, "An empty Enter to reach the reader counts as a wrong password (1 lock you out until reset).", "W3: one, until reset");
         const listWide = [rules.check([], arch()), rules.check([fingerprint("r1")], arch({ fingerprint: "absent", otherService: null })),
                           rules.check([fingerprint("r1")], arch({ sharedApplyStopped: true, otherService: [password("p1")] }))];
-        const items = listWide.reduce((all, result) => all.concat(result.refusals, result.warnings), []).filter(item => ["R1", "R3", "R5", "W1", "W8"].includes(item.code));
+        const items = listWide.reduce((all, result) => all.concat(result.refusals, result.risks, result.warnings), []).filter(item => ["R1", "R3", "R5", "W1", "W8"].includes(item.code));
         assertEqual(items.map(item => item.code).filter((code, i, all) => all.indexOf(code) === i).sort().join(" "), "R1 R3 R5 W1 W8", "(each list-wide code made)");
         assert(items.every(item => item.row === -1 && item.id === ""), "list-wide items name row −1: " + JSON.stringify(items.map(item => [item.code, item.row])));
 

@@ -36,7 +36,7 @@ Item {
     // neutral hint)
     property var distributionFacts: null
     // PamRuleRules.check's result for these rows: a row it names gets a red or warning border
-    property var result: ({ refusals: [], warnings: [] })
+    property var result: ({ refusals: [], risks: [], warnings: [] })
     // Where the fixed row's removal is asked (SettingsModalHost)
     property var modalHost: null
     // Shown only: no handle, arrow, "×" or add row
@@ -279,7 +279,7 @@ Item {
         radius: Theme.settings.cardRadius
         color: Theme.surface
         border.width: Theme.border.width
-        border.color: checkState === "refused" ? Theme.error : checkState === "warned" ? Theme.warning : Theme.divider
+        border.color: checkState === "refused" || checkState === "risky" ? Theme.error : checkState === "warned" ? Theme.warning : Theme.divider
         opacity: root._dragIndex === index ? 0.35 : 1
 
         // A row removed while its handle is held: its area goes without a release or a

@@ -778,12 +778,17 @@ asks first. A row opens to its control words (with what each means), the fingerp
 timeout and tries (each may be "No limit"), the key's PIN, whether wrong passwords count
 toward pam_faillock, or a raw line's text. Rows are dragged by their handle; "Add a row"
 lists the methods, those the computer lacks off with the reason. Under each list its checks:
-refusals in red (nothing is saved while one stands), warnings in the warning colour. A raw
-line that asks for nothing is refused where it lets anyone in on its own (at once, or a line
+refusals in red (rows that cannot be written as they are — a value out of range, a line that is
+not an `auth` line, a file changed outside the shell —: nothing is saved while one stands),
+risks in red too (no row that can let you in, a required reader the computer does not have,
+no rows, neither service keeping a password, a line that lets anyone in: Apply first asks
+"Save anyway?", naming each risk and, where you could be locked out, that sudo may become
+unreachable and the shell cannot fix it; the trial still runs after it), warnings in the
+warning colour. A raw line that asks for nothing is a risk where it lets anyone in on its own (at once, or a line
 that must pass with no other such row that still asks — a line counts as one that must pass
 only where a wrong credential's code, `auth_err`, else `default`, is `bad` or `die`); beside
 a row that still asks it is a warning: only the other rows decide. A
-security key row whose check pam_u2f's settings void gets a warning, not a refusal — the
+security key row whose check pam_u2f's settings void gets a warning, not a risk — the
 settings are the system's, kept as they are: `alwaysok` (no key), `userpresence=0` (the last
 one, as pam_u2f reads it: no touch), and on a raw line whose word takes PAM_IGNORE as no
 answer `nouserok` (a user without a key). Where the row lets in on its own the warning says
@@ -792,7 +797,7 @@ says the row no longer asks and only the other rows decide. The shell's own key 
 raw lines whose ignore is not "ignore", treat PAM_IGNORE as a failure, so `nouserok` never
 opens them. The settings read: on NixOS the module's
 `/etc/pam.d/h2s-shell-u2f` (`security.pam.u2f.settings`), elsewhere
-`/etc/security/pam_u2f.conf`; a raw pam_u2f line by its own words (a refusal where it lets
+`/etc/security/pam_u2f.conf`; a raw pam_u2f line by its own words (a risk where it lets
 in on its own) and by `pam_u2f.conf`. Settings that cannot be read — the file, or which
 system this is or where the file is not known — or a settings file a raw line names itself,
 are a warning too. "Show
@@ -804,7 +809,9 @@ and the lock screen's switches, with "Not supported on this distribution."
 #### NixOS
 
 `/etc/pam.d` is NixOS's: the page shows the module's options for the rows
-(`programs.h2s-shell.pam`), with Copy; they take effect after `nixos-rebuild switch`.
+(`programs.h2s-shell.pam`), with Copy; they take effect after `nixos-rebuild switch`. Copy
+works with risks too; `nixos-rebuild` repeats each of them as a warning (a refusal stops it
+with an assertion).
 
 #### Arch
 

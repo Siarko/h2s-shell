@@ -327,5 +327,38 @@
         "auth [success=ok new_authtok_reqd=ok ignore=bad default=bad] pam_u2f.so cue pinverification=1"
       ]
     }
+  },
+  {
+    "name": "risks are written as asked: sudo empty (nobody gets in), polkit a pam_permit that lets anyone in",
+    "machine": {},
+    "split": true,
+    "rows": {
+      "sudo": [],
+      "polkit": [
+        {
+          "id": "r1",
+          "method": "raw",
+          "control": "",
+          "details": {
+            "text": "auth sufficient pam_permit.so"
+          }
+        },
+        {
+          "id": "system",
+          "method": "system",
+          "control": "",
+          "details": {}
+        }
+      ]
+    },
+    "snippet": "programs.h2s-shell.pam = {\n  sudo.rules = [\n  ];\n  polkit.rules = [\n    { method = \"raw\"; control = \"sufficient\"; module = \"pam_permit.so\"; args = [ ]; }\n    { method = \"system\"; }\n  ];\n};\n",
+    "lines": {
+      "sudo": [
+        "auth requisite pam_deny.so"
+      ],
+      "polkit-1": [
+        "auth sufficient pam_permit.so"
+      ]
+    }
   }
 ]

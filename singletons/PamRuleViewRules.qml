@@ -113,11 +113,14 @@ Singleton {
         return { text: "Reads as: " + reading.reads + ". Written exactly as typed; the trial runs it.", problem: false };
     }
 
-    // How a row's border says what the checks found: "refused", "warned" or ""
+    // How a row's border says what the checks found: "refused", "risky" (written only after
+    // the risk question), "warned" or ""
     function rowState(result, id) {
         const mine = list => (list ?? []).some(found => found.id !== "" && String(found.id) === String(id));
         if (mine(result?.refusals))
             return "refused";
+        if (mine(result?.risks))
+            return "risky";
         return mine(result?.warnings) ? "warned" : "";
     }
 
@@ -357,9 +360,10 @@ Singleton {
     // What Apply writes: each service whose new file differs from the one in force, in order
     // (sudo, then polkit-1). `inputs`: { service: { rows, currentText, facts } }. → { items:
     // [{ service, built, currentText, vendorText, text (the candidate) }], refusals (a build
-    // that refused, with its service) }
+    // that refused, with its service), risks (the risks of the services written, with their
+    // service: riskQuestion asks before anything runs) }
     function applyQueue(inputs) {
-        const items = [], refusals = [];
+        const items = [], refusals = [], risks = [];
         for (const service of PamRuleRules.services) {
             const input = inputs?.[service];
             if (!input)
@@ -374,10 +378,48 @@ Singleton {
                 continue;
             const current = input.currentText;
             const same = chosen.remove ? (current === null || current === undefined) : chosen.text === current;
-            if (!same)
+            if (!same) {
                 items.push({ service, built, currentText: current, vendorText: input.facts?.vendorText, text: chosen.text });
+                risks.push(...(built.risks ?? []).map(item => Object.assign({ service }, item)));
+            }
         }
-        return { items, refusals };
+        return { items, refusals, risks };
+    }
+
+    // ── The risk question ──
+
+    // What each risk means, in the question before Apply writes it
+    readonly property var riskTexts: ({
+        R1: "No row can let you in: nobody would get in.",
+        R1row: "A line refuses everyone: nobody would get in.",
+        R2: "A row must pass with a reader that is not ready: nobody would get in.",
+        R3: "There are no rows: nobody would get in.",
+        R5: "Neither sudo nor administrator prompts keep a password: if the reader breaks, both are closed.",
+        R9: "A line lets anyone in without a password."
+    })
+    readonly property var lockoutCodes: ["R1", "R2", "R3", "R5"]
+    readonly property string lockoutText: "sudo may become unreachable, and the shell cannot fix it: that takes su or a root console."
+
+    // The Settings modal's question before Apply writes rows with risks (applyQueue's
+    // `risks`, each with its service; `subject` what the answer acts on): null when there is
+    // none. One line per risk — named by its service when only one of the two has it — then,
+    // for a lockout, that sudo may become unreachable
+    function riskQuestion(risks, subject) {
+        const list = Array.isArray(risks) ? risks : [];
+        if (list.length === 0)
+            return null;
+        const keyOf = found => found.code === "R1" && found.row >= 0 ? "R1row" : found.code;
+        const keys = list.map(keyOf).filter((key, i, all) => all.indexOf(key) === i);
+        const body = keys.map(key => {
+            const services = list.filter(found => keyOf(found) === key).map(found => found.service)
+                .filter((service, i, all) => all.indexOf(service) === i);
+            const text = riskTexts[key] ?? list.find(found => keyOf(found) === key).text;
+            return services.length === 1 && PamRuleRules.services.includes(services[0])
+                ? (services[0] === "sudo" ? "sudo" : "Administrator prompts") + ": " + text : text;
+        });
+        if (list.some(found => lockoutCodes.includes(found.code)))
+            body.push({ text: lockoutText, strong: true });
+        return { kind: "danger", title: "Save anyway?", body, buttons: [{ id: "save", label: "Save anyway", kind: "delete" }], subject: subject ?? {} };
     }
 
     // Whether a passed trial also stands for `text` as `service`'s file: its own candidate, or
