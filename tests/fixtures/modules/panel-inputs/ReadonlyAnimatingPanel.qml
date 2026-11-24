@@ -1,12 +1,12 @@
 import QtQuick
 
 // A popup panel whose `popupAnimating` is readonly: the popup cannot set it, and still
-// gives it `availableHeight`
+// gives it `availableHeight`, kept current
 Item {
     id: panel
     property var module: null
     property real availableHeight: 0
-    readonly property bool popupAnimating: false
+    readonly property bool popupAnimating: true
     implicitWidth: 200
     implicitHeight: 40
 

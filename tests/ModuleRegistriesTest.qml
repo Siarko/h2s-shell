@@ -48,6 +48,7 @@ TestCase {
     property int _openedCount: 0
     // The panel-inputs fixture's singleton
     property var _inputsState: null
+    property real _heightBefore: 0
 
     function _then(description, condition, action, timeoutMs) {
         _steps.push({ description: description, condition: condition, action: action, deadline: timeoutMs ?? 15000 });
@@ -576,7 +577,7 @@ TestCase {
             assertEqual(_inputsState.panel.availableHeight, 77, "a readonly availableHeight keeps its own value");
             assert(_inputsState.sawAnimating, "… popupAnimating still given: true while the popup opened");
             assertEqual(_inputsState.panel.popupAnimating, false, "… false once it is still");
-            assert(_has(errors, "ReadonlyHeightPanel.qml: `availableHeight` could not be set"),
+            assert(_has(errors, "its popup panel ReadonlyHeightPanel.qml: `availableHeight` could not be set: "),
                    "… its status names the panel and the input: " + JSON.stringify(errors));
             _widgetA.togglePopup(false);
         });
@@ -590,9 +591,17 @@ TestCase {
             const errors = Modules.status("panel-inputs")?.errors;
             assert(_inputsState.panel.availableHeight > 0 && _inputsState.panel.availableHeight === _popup.item.availableContentHeight,
                    "availableHeight still given: the popup's (" + _inputsState.panel.availableHeight + ")");
-            assertEqual(_inputsState.panel.popupAnimating, false, "a readonly popupAnimating keeps its own value");
-            assert(_has(errors, "ReadonlyAnimatingPanel.qml: `popupAnimating` could not be set"),
+            assertEqual(_inputsState.panel.popupAnimating, true, "a readonly popupAnimating keeps its own value");
+            assert(_has(errors, "its popup panel ReadonlyAnimatingPanel.qml: `popupAnimating` could not be set: "),
                    "… its status names the panel and the input: " + JSON.stringify(errors));
+            assert(!_has(errors, "TypeError"), "… the message only, no error type: " + JSON.stringify(errors));
+            _heightBefore = _inputsState.panel.availableHeight;
+            _popup.item.paddingTop += 10;
+        });
+        _then("the popup's content height changes", () => _popup.item.availableContentHeight !== _heightBefore, () => {
+            assertEqual(_inputsState.panel.availableHeight, _popup.item.availableContentHeight,
+                        "a later change of the popup's height reaches the panel's availableHeight (" + _heightBefore + " → " + _inputsState.panel.availableHeight + ")");
+            _popup.item.paddingTop -= 10;
             _widgetA.togglePopup(false);
         });
         _then("that popup closes", () => _popup?.active === false && _inputsState.panel === null, () => {

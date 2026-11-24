@@ -312,30 +312,35 @@ LazyLoader {
             try {
                 item.opener = popupLoader.opener;
             } catch (error) {
-                Modules.reportError(owner, "its popup panel's `opener` could not be set: " + error);
+                _reportPanelInput("opener", error);
             }
         }
         // Binds one input a panel may declare (`availableHeight`, `popupAnimating`) to the
         // popup's value. Never throws, so the rest of the panel's setup goes on: one it
-        // declares readonly keeps its own value, said once — in the module's status for a
-        // module's panel, in the log for the shell's own
-        property var _panelInputsReported: ({})
+        // declares readonly keeps its own value, and _reportPanelInput says so
         function _bindPanelInput(item, name, value) {
-            if (typeof item[name] === "undefined")
+            if (!(name in item))
                 return;
             try {
                 item[name] = Qt.binding(value);
             } catch (error) {
-                const owner = WidgetRegistry.popupModule(popupLoader.contentType);
-                const panel = String(contentLoader.source).split("/").pop() || popupLoader.contentType;
-                // The message only: the test runners count a printed TypeError as a defect
-                const line = panel + ": `" + name + "` could not be set: " + (error?.message ?? error);
-                if (owner !== "") {
-                    Modules.reportError(owner, "its popup panel " + line);
-                } else if (!_panelInputsReported[line]) {
-                    _panelInputsReported[line] = true;
-                    console.warn("Popup: " + line);
-                }
+                _reportPanelInput(name, error);
+            }
+        }
+        // An input the panel would not take: a module's panel gets an error in its status, the
+        // message only (Modules.reportError says it once). The shell's own panel gets the
+        // whole error in the log, once: a printed TypeError fails the unit runner, as this
+        // defect of the shell's own should
+        property var _panelInputsReported: ({})
+        function _reportPanelInput(name, error) {
+            const owner = WidgetRegistry.popupModule(popupLoader.contentType);
+            const panel = String(contentLoader.source).split("/").pop() || popupLoader.contentType;
+            const line = "its popup panel " + panel + ": `" + name + "` could not be set: ";
+            if (owner !== "") {
+                Modules.reportError(owner, line + (error?.message ?? error));
+            } else if (!_panelInputsReported[line]) {
+                _panelInputsReported[line] = true;
+                console.warn("Popup: " + line + error);
             }
         }
         // Deferred so the panel and its Repeaters are created on the main event loop, after
