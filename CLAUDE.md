@@ -142,8 +142,10 @@ its verdict says `<suite>: killed at the memory cap (1536M)` or `… at the run'
 (the lock bed names the scenario and the process); `tests/mutate.sh` runs such a mutant once more
 when the others are done, alone, and counts it as killed, shown as "killed (memory cap)", only
 when it is stopped again; a mutant stopped at the time limit (four times the unmutated run) the
-same, shown as "killed (time limit)", and an accepted survivor a suite killed (a suite can fail
-on its own under load) — a busy machine must not turn a survivor into a kill.
+same, shown as "killed (time limit)"; a failure with no failed check and no error naming the
+mutated file (an error elsewhere, a crash) the same, shown as "killed (unclear failure)"; and an
+accepted survivor a suite killed (a suite can fail on its own under load) — a busy machine must
+not turn a survivor into a kill.
 `tests/release-check.sh` looks once more, alone, at an accepted entry a suite killed before it
 counts it as stale.
 

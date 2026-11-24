@@ -41,18 +41,22 @@
 #   not compiled  Quickshell could not load the mutated file: a load error naming it at a
 #                 line (a syntax error, "Type … unavailable", in the chain of `caused by`),
 #                 whatever the status — a run that hung after it included
-#   killed        else: a suite failed (a check, a TypeError or ReferenceError, a crash);
-#                 or the run took longer than four times the unmutated run's time (at least
-#                 60 s): a hang, shown as "killed (time limit)"; or Quickshell was stopped at
-#                 the memory cap or the run's budget (the runner says "killed at the memory
-#                 cap"): a mutant that runs away, shown as "killed (memory cap)". Both are
-#                 listed apart, and counted as killed only when the mutant, run once more
-#                 when every other mutant is done — alone, against limits measured again on
-#                 the unmutated copy (the larger of the two) — is stopped there again: under
-#                 load, from other mutants or anything else, a slow survivor reaches the
-#                 time limit and a neighbour's memory the budget; the second run's outcome
-#                 is the mutant's (an accepted survivor that a suite killed is run once
-#                 more the same way: a suite can fail on its own under load)
+#   killed        a check failed (a `FAIL:` line) or a JavaScript error (TypeError,
+#                 ReferenceError, …) names the mutated file; or the run took longer than
+#                 four times the unmutated run's time (at least 60 s): a hang, shown as
+#                 "killed (time limit)"; or Quickshell was stopped at the memory cap or the
+#                 run's budget (the runner says "killed at the memory cap"): a mutant that
+#                 runs away, shown as "killed (memory cap)"; or the run failed with neither
+#                 (an error naming another file, a crash, the runner's own time-out of a
+#                 suite): shown as "killed (unclear failure)". The last three are listed
+#                 apart, and the mutant is run once more when every other mutant is done —
+#                 alone, against limits measured again on the unmutated copy (the larger of
+#                 the two); the second run's outcome is the mutant's: under load, from other
+#                 mutants or anything else, a slow survivor reaches the time limit, a
+#                 neighbour's memory the budget, and a suite can fail on its own (a late
+#                 answer reaching a suite already torn down). An accepted survivor that a
+#                 suite killed is run once more the same way. A measurement that fails is
+#                 made once more; failing again, the first limits stay, with a warning
 # Lock scenarios and module fixture parts are not run: only unit suites.
 #
 # Accepted survivors: a mutant no check can tell apart (an equivalent mutant) is listed in
@@ -86,8 +90,9 @@ usage() { echo "usage: tests/mutate.sh [--list] [--max <n>] [--seed <n>] [--acce
 fail() { echo "mutate.sh: $*" >&2; exit 2; }
 
 # verdict <log> <status> <file>: survived, not-run, not-compiled, capped (killed at the
-# memory cap), timed-out (stopped at the time limit: 124 from `timeout`, 137 from its -k) or
-# killed. A load error names the file at a line in Quickshell's `caused by`
+# memory cap), timed-out (stopped at the time limit: 124 from `timeout`, 137 from its -k),
+# killed (a check's FAIL line, or an error naming the file) or unclear (a failure with
+# neither: an error in another file, a crash, a suite the runner timed out). A load error names the file at a line in Quickshell's `caused by`
 # chain; a JavaScript error at run time (TypeError, ReferenceError, …) names it too, and is
 # a kill
 verdict() {
@@ -102,8 +107,11 @@ verdict() {
         echo capped
     elif [ "$status" = 124 ] || [ "$status" = 137 ]; then
         echo timed-out
-    else
+    elif grep -q -E "  FAIL: " "$log" 2> /dev/null \
+        || grep -E "${subject//./\\.}[^A-Za-z0-9_/]" "$log" 2> /dev/null | grep -q -E "(Type|Reference|Range|Syntax|Eval|URI)Error"; then
         echo killed
+    else
+        echo unclear
     fi
 }
 if [ "${1:-}" = --judge ]; then
@@ -373,7 +381,7 @@ if [ -n "$max" ] && [ "$max" -lt ${#all[@]} ]; then
 fi
 pick_note="${#picked[@]} of $total mutants"
 [ -z "$only_list" ] || pick_note="$pick_note (--only $only_list)"
-[ ${#picked[@]} -lt "$total" ] && pick_note="$pick_note (--max $max --seed $seed)"
+[ -n "$max" ] && [ ${#picked[@]} -lt ${#all[@]} ] && pick_note="$pick_note (--max $max --seed $seed)"
 
 if [ "$list_only" = 1 ]; then
     echo "mutate.sh: $file, $pick_note"
@@ -492,6 +500,7 @@ shown_as() {
     case "$1" in
         capped) echo "killed (memory cap)" ;;
         timed-out) echo "killed (time limit)" ;;
+        unclear) echo "killed (unclear failure)" ;;
         *) echo "$1" ;;
     esac
 }
@@ -530,22 +539,36 @@ while IFS= read -r entry; do
     [ -n "$entry" ] || continue
     outcome=${entry%%$'\037'*} mutant=${entry#*$'\037'}
     case "$outcome" in
-        timed-out | capped) again+=("$mutant") ;;
+        timed-out | capped | unclear) again+=("$mutant") ;;
         killed) [ -z "${accepted[${key_of[$mutant]}]:-}" ] || again+=("$mutant") ;;
     esac
 done < <(cat "$work"/results-* 2> /dev/null | sort -t$'\037' -k2,2n -k3,3n)
 if [ ${#again[@]} -gt 0 ]; then
-    echo "mutate.sh: ${#again[@]} stopped at a limit or accepted but killed: each once more, alone"
-    again_first=$first_limit again_rest=$rest_limit
-    measured=$SECONDS
-    run_suites "$work/tree-0" "$work/again-first.log" 900 "${first[@]}" \
-        || { tail -n 20 "$work/again-first.log" >&2; fail "${first[*]} failed on the unmutated tree, measured again: no mutant can be judged"; }
-    [ $(( (SECONDS - measured) * 4 )) -le "$again_first" ] || again_first=$(( (SECONDS - measured) * 4 ))
+    echo "mutate.sh: ${#again[@]} stopped at a limit, failed unclearly, or accepted but killed: each once more, alone"
+    # measure_again <limit now> <log> <cap s> <suite>…: MEASURED, the larger of the limit now
+    # and four times an unmutated run as the machine is now; a run that fails is made once
+    # more, and failing again leaves the limit as it was, with a warning (the results so far
+    # stand). Not in a subshell: stop must see the run under way
+    measure_again() {
+        local limit=$1 log=$2 cap=$3 try measured
+        shift 3
+        for try in 1 2; do
+            measured=$SECONDS
+            if run_suites "$work/tree-0" "$log" "$cap" "$@"; then
+                [ $(( (SECONDS - measured) * 4 )) -le "$limit" ] || limit=$(( (SECONDS - measured) * 4 ))
+                MEASURED=$limit
+                return
+            fi
+        done
+        echo "mutate.sh: warning: $* failed twice on the unmutated tree, measured again: the first limit ($limit s) stays" >&2
+        tail -n 20 "$log" >&2
+        MEASURED=$limit
+    }
+    measure_again "$first_limit" "$work/again-first.log" 900 "${first[@]}"
+    again_first=$MEASURED again_rest=$rest_limit
     if [ ${#rest[@]} -gt 0 ]; then
-        measured=$SECONDS
-        run_suites "$work/tree-0" "$work/again-rest.log" 1800 "${rest[@]}" \
-            || { tail -n 20 "$work/again-rest.log" >&2; fail "${rest[*]} failed on the unmutated tree, measured again: no mutant can be judged"; }
-        [ $(( (SECONDS - measured) * 4 )) -le "$again_rest" ] || again_rest=$(( (SECONDS - measured) * 4 ))
+        measure_again "$rest_limit" "$work/again-rest.log" 1800 "${rest[@]}"
+        again_rest=$MEASURED
     fi
     for index in "${!again[@]}"; do
         mutant=${again[$index]}
@@ -579,8 +602,8 @@ for entry in "${accepted_entries[@]}"; do
     fi
 done
 count() { printf '%s\n' "$results" | grep -c "^$1"$'\037'; }
-capped=$(count capped) timed_out=$(count timed-out)
-killed=$(( $(count killed) + capped + timed_out )) accepted_count=$(count accepted) not_compiled=$(count not-compiled) not_run=$(count not-run)
+capped=$(count capped) timed_out=$(count timed-out) unclear=$(count unclear)
+killed=$(( $(count killed) + capped + timed_out + unclear )) accepted_count=$(count accepted) not_compiled=$(count not-compiled) not_run=$(count not-run)
 survived=$(( $(count survived) + accepted_count ))
 section() {
     local outcome=$1 title=$2 entry
@@ -595,6 +618,7 @@ section survived "Surviving mutants (no suite noticed them)"
 section accepted "Accepted survivors (in $accepted_list)"
 section capped "Killed at the memory cap or the run's budget, alone too (Quickshell ran away: counted as killed)"
 section timed-out "Killed at the time limit, alone too (a hang: counted as killed)"
+section unclear "Killed by a failure that names neither a check nor the file, alone too (counted as killed)"
 section not-compiled "Not compiled"
 section not-run "Not run (the runner could not be set up, or the text was not found)"
 if [ ${#stale_entries[@]} -gt 0 ]; then
@@ -616,5 +640,5 @@ if [ "$(count survived)" -gt 0 ]; then
     done
 fi
 echo
-echo "mutate.sh: $file, $((SECONDS - started)) s: killed $killed$(limits=(); [ "$capped" -gt 0 ] && limits+=("$capped at the memory cap"); [ "$timed_out" -gt 0 ] && limits+=("$timed_out at the time limit"); [ ${#limits[@]} = 0 ] || printf ' (%s)' "$(IFS=,; echo "${limits[*]}" | sed 's/,/, /g')") / survived $survived (accepted $accepted_count) / stale ${#stale_entries[@]} / not compiled $not_compiled${not_run:+$([ "$not_run" -gt 0 ] && echo " / not run $not_run")}"
+echo "mutate.sh: $file, $((SECONDS - started)) s: killed $killed$(limits=(); [ "$capped" -gt 0 ] && limits+=("$capped at the memory cap"); [ "$timed_out" -gt 0 ] && limits+=("$timed_out at the time limit"); [ "$unclear" -gt 0 ] && limits+=("$unclear by unclear failures"); [ ${#limits[@]} = 0 ] || printf ' (%s)' "$(IFS=,; echo "${limits[*]}" | sed 's/,/, /g')") / survived $survived (accepted $accepted_count) / stale ${#stale_entries[@]} / not compiled $not_compiled${not_run:+$([ "$not_run" -gt 0 ] && echo " / not run $not_run")}"
 exit 0
