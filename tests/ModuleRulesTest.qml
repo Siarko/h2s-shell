@@ -1573,6 +1573,41 @@ TestCase {
         assert(Object.isFrozen(rows) && Object.isFrozen(rows[0]) && rows[0].id === "a", "frozenRows: the list and its entries frozen");
         for (const bad of ["", "{", "{}", "null", undefined])
             assertEqual(rules.frozenRows(bad).length, 0, "frozenRows: not a JSON list → [] — " + JSON.stringify(bad));
+
+        // (1.40) Api.system.distribution: a frozen copy of the detection's facts, unknown until it names one
+        const nixosFacts = Object.freeze({ id: "nixos", label: "NixOS", etcManaged: true, programDirectories: Object.freeze(["/run/current-system/sw/bin"]) });
+        const unknownDistribution = ready => JSON.stringify({ ready: ready, id: "", label: "", facts: null });
+        const known = rules.apiDistribution({ ready: true, id: "nixos", facts: nixosFacts, how: "marker", shipped: { nixos: nixosFacts } });
+        assertEqual(JSON.stringify(known), JSON.stringify({ ready: true, id: "nixos", label: "NixOS", facts: nixosFacts }),
+                    "apiDistribution: ready, id, label and the facts — nothing else of the detection (how, shipped)");
+        assert(Object.isFrozen(known) && Object.isFrozen(known.facts) && Object.isFrozen(known.facts.programDirectories), "… frozen, the facts and their lists too");
+        assert(known.facts !== nixosFacts && known.facts.programDirectories !== nixosFacts.programDirectories, "… a copy, never the shell's own objects");
+        const listRead = known.facts.programDirectories;
+        try {
+            listRead.push("/tmp/bin");
+            listRead[0] = "/tmp/bin";
+        } catch (error) {}
+        assertEqual(known.facts.programDirectories.join(","), "/run/current-system/sw/bin", "… a list changed after reading it: the next read is as before (a new copy each time)");
+        assertEqual(JSON.stringify(rules.apiDistribution({ ready: false, id: "", facts: null })), unknownDistribution(false), "apiDistribution: not answered → not ready, unknown");
+        assertEqual(JSON.stringify(rules.apiDistribution({ ready: true, id: "", facts: null, problem: "x" })), unknownDistribution(true), "… answered without a distribution → ready, unknown");
+        assertEqual(JSON.stringify(rules.apiDistribution({ ready: false, id: "nixos", facts: nixosFacts })), unknownDistribution(false), "… an id before it is ready → unknown");
+        assertEqual(JSON.stringify(rules.apiDistribution({ ready: true, id: "arch", facts: nixosFacts })), unknownDistribution(true), "… facts of another id → unknown");
+        assertEqual(JSON.stringify(rules.apiDistribution({ ready: true, id: "nixos", facts: null })), unknownDistribution(true), "… no facts → unknown");
+        for (const bad of [null, undefined, "nixos", 3, [], { ready: "yes", id: "nixos", facts: nixosFacts }])
+            assertEqual(JSON.stringify(rules.apiDistribution(bad)), unknownDistribution(false), "apiDistribution: garbage → not ready, unknown — " + JSON.stringify(bad));
+        const shippedDetection = { ready: false, id: "", facts: null, shipped: { nixos: nixosFacts, arch: { id: "arch" }, generic: { id: "generic" } } };
+        assertEqual(JSON.stringify(rules.testDistribution(null, shippedDetection)), JSON.stringify({ ready: false, id: "", facts: null }), "testDistribution: none named → not answered");
+        assertEqual(JSON.stringify(rules.testDistribution("nixos", shippedDetection)), JSON.stringify({ ready: true, id: "nixos", facts: nixosFacts }),
+                    "testDistribution: named → that distribution's shipped facts, whatever this machine is");
+        assertEqual(JSON.stringify(rules.testDistribution("", shippedDetection)), JSON.stringify({ ready: true, id: "", facts: null }), "… \"\" → answered, unknown");
+        assertEqual(JSON.stringify(rules.testDistribution("plan9", shippedDetection)), JSON.stringify({ ready: true, id: "", facts: null }), "… no such distribution → unknown");
+        assertEqual(JSON.stringify(rules.testDistribution("nixos", { ready: false, shipped: null })), JSON.stringify({ ready: false, id: "", facts: null }), "… the manifests not read yet → not answered");
+        assertEqual(JSON.stringify(rules.testDistribution("nixos", { ready: true, shipped: null })), JSON.stringify({ ready: true, id: "", facts: null }), "… a manifest that cannot be used → answered, unknown");
+        assertEqual(JSON.stringify(rules.testDistributionName("arch")), JSON.stringify({ name: "arch", problems: [] }), "testDistributionName: an id taken");
+        assertEqual(JSON.stringify([rules.testDistributionName("").name, rules.testDistributionName(null).name, rules.testDistributionName(undefined).name]), "[\"\",null,null]",
+                    "… \"\" (unknown) and null (not answered) taken");
+        for (const bad of ["Arch", "windows", 3, {}, true])
+            assert(rules.testDistributionName(bad).name === null && rules.testDistributionName(bad).problems.length === 1, "testDistributionName: refused — " + JSON.stringify(bad));
         assert(Array.isArray(Api.networks) && Object.isFrozen(Api.networks), "Api.networks: a frozen list");
         assert(Array.isArray(Api.vpnsUp) && Object.isFrozen(Api.vpnsUp), "Api.vpnsUp: a frozen list");
         assert(Api.networks.every(network => Object.isFrozen(network) && typeof network.id === "string"

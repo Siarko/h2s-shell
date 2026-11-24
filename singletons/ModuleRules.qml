@@ -46,7 +46,7 @@ Singleton {
     // (statusOf), and the change that removes it raises `apiFloor`. From that release on a
     // minor only adds: a removal needs a major version, after at least one release in which
     // the thing was listed as deprecated.
-    readonly property string apiVersion: "1.39"
+    readonly property string apiVersion: "1.40"
 
     // The oldest API version whose modules still run unchanged on this shell: a module
     // written for an older one is `incompatible`, with the reason (apiCompatibility), so a
@@ -1572,6 +1572,72 @@ Singleton {
                 localNetworks: localNetworksReady ? localNetworks : [], vpnsUp: vpnsUp },
             problems: problems
         };
+    }
+
+    // Api.system.distribution from a detection as Distribution has it ({ ready, id, facts })
+    // → frozen { ready, id, label, facts }: ready once the detection has answered; id, label
+    // and facts (a copy of the distribution's facts, frozen; each list a new copy at each read)
+    // only when it named a distribution, else "", "" and null — unknown, never a default
+    // system. Only the facts: nothing of the integration (capability, plan, apply, undo) is
+    // reachable through it
+    function apiDistribution(detection) {
+        const given = isObject(detection) ? detection : {};
+        const ready = given.ready === true;
+        const known = ready && isString(given.id, 64) && isObject(given.facts) && given.facts.id === given.id;
+        let facts = null;
+        if (known) {
+            try {
+                facts = JSON.parse(JSON.stringify(given.facts));
+            } catch (error) {
+                facts = null;
+            }
+        }
+        if (!isObject(facts))
+            return Object.freeze({ ready: ready, id: "", label: "", facts: null });
+        // A list is handed out as a new copy at each read: the engine lets a frozen array be
+        // pushed to and written by index, so a list kept in the object would not stay as read
+        const shown = {};
+        for (const key of Object.keys(facts)) {
+            const value = facts[key];
+            if (Array.isArray(value))
+                Object.defineProperty(shown, key, { enumerable: true, get: () => Object.freeze(value.slice()) });
+            else
+                shown[key] = value;
+        }
+        return Object.freeze({
+            ready: true,
+            id: given.id,
+            label: typeof facts.label === "string" ? facts.label : "",
+            facts: Object.freeze(shown)
+        });
+    }
+
+    // Module test mode: the distribution ModuleTestKit.setDistribution named, as
+    // H2S_DISTRIBUTION names it to the shell → a detection apiDistribution takes.
+    // `name`: null (none named: not answered, as before detection), "" (answered, unknown: a
+    // system that cannot be told) or an id of DistributionRules.ids; `detection`: the shell's
+    // own (Distribution.detection), for the shipped facts — the tree's distribution.json
+    // files, the same on every machine; nothing of this machine's system is used. Not
+    // answered until those are read; answered and unknown when one cannot be used
+    function testDistribution(name, detection) {
+        if (name === null || name === undefined)
+            return { ready: false, id: "", facts: null };
+        const given = isObject(detection) ? detection : {};
+        const shipped = isObject(given.shipped) ? given.shipped : null;
+        if (shipped === null)
+            return { ready: given.ready === true, id: "", facts: null };
+        if (typeof name !== "string" || name === "" || !DistributionRules.ids.includes(name) || !isObject(get(shipped, name)))
+            return { ready: true, id: "", facts: null };
+        return { ready: true, id: name, facts: shipped[name] };
+    }
+
+    // ModuleTestKit.setDistribution's argument → { name (testDistribution's), problems }
+    function testDistributionName(value) {
+        if (value === null || value === undefined)
+            return { name: null, problems: [] };
+        if (value === "" || (typeof value === "string" && DistributionRules.ids.includes(value)))
+            return { name: value, problems: [] };
+        return { name: null, problems: ["not a distribution: " + show(value) + " (one of " + DistributionRules.ids.join(", ") + ", \"\" or null)"] };
     }
 
     // A JSON text of a list of plain objects → that list, the list, each entry and the

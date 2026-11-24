@@ -117,7 +117,7 @@ TestCase {
         assertEqual(Api.moduleStatus(null), null, "… and for no id");
 
         // --- API version and slot table ---
-        assertEqual(Api.version, "1.39", "Api.version");
+        assertEqual(Api.version, "1.40", "Api.version");
         // (1.26) Its icon, as the shell draws it
         assertEqual(JSON.stringify(module.icon), JSON.stringify({ kind: "svg", glyph: "", url: Qt.resolvedUrl("../icon.svg").toString(), colors: "theme" }),
                     "module.icon: its SVG, by its file's URL, painted in the theme's colour");
@@ -578,6 +578,69 @@ TestCase {
             assertEqual(_afterOff, null, "the chooser open when it was turned off: done never called");
             ModuleTestKit.clearRecords();
             assertEqual(ModuleTestKit.chooserCalls.length, 0, "clearRecords(): the chooser calls too");
+            // (1.40) Not answered until a suite names a distribution
+            const unanswered = Api.system.distribution;
+            assertEqual(JSON.stringify(unanswered), JSON.stringify({ ready: false, id: "", label: "", facts: null }),
+                        "Api.system.distribution in test mode: not answered by default, unknown");
+            assert(Object.isFrozen(unanswered), "… frozen");
         });
+        // Named again while waiting: another module's suite running beside this one may clear
+        // the test kit's records (clearRecords) meanwhile. Ready once the shell has read the
+        // tree's distribution.json files; every check after that is synchronous
+        _then("the distribution facts are read", () => {
+            ModuleTestKit.setDistribution("arch");
+            return Api.system.distribution.ready === true;
+        }, () => _checkDistribution());
+    }
+
+    // (1.40) Api.system.distribution, as H2S_DISTRIBUTION names each distribution
+    function _checkDistribution() {
+        const facts = distribution => distribution.facts === null ? "null"
+            : [distribution.facts.etcManaged, distribution.facts.helper, distribution.facts.setuidWrapperDirectory,
+               distribution.facts.programDirectories.join(","), distribution.facts.polkitRulesInstallable].join(" ");
+        const arch = Api.system.distribution;
+        assertEqual([arch.ready, arch.id, arch.label].join("|"), "true|arch|Arch Linux", "setDistribution(\"arch\"): ready, its id and label");
+        assertEqual(facts(arch), "false build  /usr/bin,/bin true", "… its static facts");
+        assertEqual(arch.facts.pamDirectories.join(","), "/etc/pam.d,/usr/lib/pam.d", "… lists among them");
+        assert(Object.isFrozen(arch) && Object.isFrozen(arch.facts) && Object.isFrozen(arch.facts.pamDirectories), "… frozen, the facts and their lists too");
+        const writes = [
+            () => { arch.id = "nixos"; },
+            () => { arch.facts.etcManaged = true; },
+            () => { arch.facts.pamDirectories.push("/tmp/pam.d"); },
+            () => { arch.facts.pamDirectories[0] = "/tmp/pam.d"; },
+            () => { delete arch.facts.label; },
+            () => { Api.system.distribution = null; }
+        ];
+        for (const write of writes) {
+            try {
+                write();
+            } catch (error) {}
+        }
+        assertEqual([arch.id, arch.facts.etcManaged, arch.facts.pamDirectories.join(","), arch.facts.label, Api.system.distribution.id].join("|"),
+                    "arch|false|/etc/pam.d,/usr/lib/pam.d|Arch Linux|arch", "… a module's writes change nothing, neither its copy nor the shell's");
+        const reachable = Object.keys(arch).map(key => arch[key]).concat(Object.keys(arch.facts).map(key => arch.facts[key]));
+        assert(!reachable.some(value => typeof value === "function") && ["capability", "plan", "apply", "undo", "readInForce", "integration", "details"]
+               .every(key => arch[key] === undefined && arch.facts[key] === undefined), "… only facts: no function, nothing of the integration's");
+
+        assertEqual(JSON.stringify(ModuleTestKit.setDistribution("nixos")), "[]", "setDistribution(\"nixos\"): taken");
+        const nixos = Api.system.distribution;
+        assertEqual([nixos.ready, nixos.id, nixos.label].join("|"), "true|nixos|NixOS", "… ready, its id and label");
+        assertEqual(facts(nixos), "true package /run/wrappers/bin /run/current-system/sw/bin false", "… its static facts");
+        assert(nixos !== arch && arch.id === "arch", "… a new object; the one read before is unchanged");
+
+        ModuleTestKit.setDistribution("generic");
+        const generic = Api.system.distribution;
+        assertEqual([generic.ready, generic.id, generic.label, facts(generic)].join("|"), "true|generic|Other Linux|false build  /usr/bin,/bin true",
+                    "setDistribution(\"generic\"): a system with no integration of its own, its facts");
+
+        ModuleTestKit.setDistribution("");
+        assertEqual(JSON.stringify(Api.system.distribution), JSON.stringify({ ready: true, id: "", label: "", facts: null }),
+                    "setDistribution(\"\"): answered, unknown — no default system");
+        const problems = ModuleTestKit.setDistribution("windows");
+        assert(problems.length === 1 && problems[0].startsWith("not a distribution"), "setDistribution(\"windows\"): refused, said why: " + problems.join("; "));
+        assertEqual(JSON.stringify(Api.system.distribution), JSON.stringify({ ready: true, id: "", label: "", facts: null }), "… the distribution stays as it was");
+        ModuleTestKit.setDistribution("nixos");
+        ModuleTestKit.clearRecords();
+        assertEqual(Api.system.distribution.ready, false, "clearRecords(): not answered again");
     }
 }

@@ -1369,6 +1369,18 @@ switches, read when asked. A reading that failed or says something unexpected is
 - Arch: `user-dirs.dirs` is xdg-user-dirs' when it is installed, else there is none and the
   download folder is `~/Downloads`.
 
+`Api.system.distribution` (API 1.40) is which distribution the shell runs on, as
+`singletons/Distribution.qml` detected it: frozen `{ ready, id, label, facts }`, `ready` once
+the detection has answered, `id` and `label` `""` and `facts` `null` while it is not known or
+could not be told. `facts` is a frozen copy of the distribution's `distribution.json`
+(`ModuleRules.apiDistribution`); nothing of its integration (capability, plan, apply,
+undo) is reachable through it. A module that differs by system reads it instead of checking
+for `/etc/NIXOS` or reading os-release itself.
+- NixOS: `id` `"nixos"`, `etcManaged` true (`/etc` is generated from the configuration),
+  programs under `/run/current-system/sw/bin`, setuid wrappers in `/run/wrappers/bin`.
+- Arch: `id` `"arch"`, `etcManaged` false, programs in `/usr/bin`, polkit rules installable
+  in `/usr/share/polkit-1/rules.d`.
+
 A module's data directory is `<dataHome>/h2s-shell/module-data/<id>`, apart from its own
 directory (which installing and removing it owns). The host makes it before the module
 loads (`ModuleHost.dataRoot`, set by `Modules` from `SystemFacts.dataHome`), again at each
@@ -1730,7 +1742,10 @@ blocked ("" | "locked" | "busy"), error }`; it returns `{ open, cancel() }`.
   loads (`ModuleHost.testHome`: `mktemp -d` in `XDG_RUNTIME_DIR`, else `/tmp`), never in the
   user's data home. A module's suites see test mode through `ModuleTestKit` (`qs.tests`):
   `setEnabled`, `status`, `widgetEntries`, `opened`, `notified`, `setNow`, `setSystem`
-  (the facts `Api.system` tells; never moves `module.dataDirectory`), `setNetworks` (the
+  (the facts `Api.system` tells; never moves `module.dataDirectory`), `setDistribution`
+(the distribution `Api.system.distribution` names, as `H2S_DISTRIBUTION` names it to the
+shell: `"nixos"`, `"arch"`, `"generic"` with its facts from the tree's files, `""` unknown,
+`null` — the default — not answered), `setNetworks` (the
   network facts: by default read and empty), `dataHome`, `chooserCalls`, `chooserOpen`,
   `answerChooser(moduleId, paths)`, `cancelChooser(moduleId)`, `setChooserLocked` (the
   file chooser; an open call and its lock are reset before each suite), `clearRecords`

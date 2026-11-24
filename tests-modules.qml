@@ -95,6 +95,8 @@ QtObject {
             ModuleTestKit.setNetworks(null);
             // … nor what it said is remembered (ModuleTestKit.setRemembered)
             ModuleTestKit.setRemembered(0);
+            // … nor the distribution it named (ModuleTestKit.setDistribution)
+            ModuleTestKit.setDistribution(null);
             // … nor a file chooser it left open, nor the chooser's lock it set
             FileChooser.testReset();
             // … nor the side panels' lock (ModuleTestKit.setSessionLocked)

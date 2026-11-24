@@ -1,6 +1,7 @@
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import qs.api
 import qs.singletons
 import qs.singletons.io
 
@@ -10,7 +11,8 @@ import qs.singletons.io
 // empty /etc/NIXOS beside it —, a tree with only /usr/lib/os-release, one whose os-release
 // cannot be read, markers that exist but cannot be read, the override (also changed after the
 // start), and made-up distributions directories (one with a broken
-// distribution.json). Then the shell's own Distribution: it answers, and takes the test seam.
+// distribution.json). Then the shell's own Distribution: it answers, takes the test seam, and
+// Api.system.distribution hands modules a copy of its answer.
 TestCase {
     id: suite
     suiteName: "DistributionReading"
@@ -119,6 +121,14 @@ TestCase {
         assert(DistributionRules.ids.includes(Distribution.id) && Distribution.facts?.id === Distribution.id,
                "… one of the distributions, with its facts (" + Distribution.id + ")");
         assertEqual(Distribution._reader.override, TestSeams.distribution, "… the override is the test seam's");
+        // (module API 1.40) What modules read of it, outside module test mode: a frozen copy
+        const shown = Api.system.distribution;
+        assert(!Api.testMode, "module test mode is off in the unit suites");
+        assertEqual([shown.ready, shown.id, shown.label].join("|"), [true, Distribution.id, Distribution.facts?.label].join("|"),
+                    "Api.system.distribution: the shell's own answer, its id and label");
+        assertEqual(JSON.stringify(shown.facts), JSON.stringify(Distribution.facts), "… its facts, all of them");
+        assert(shown.facts !== Distribution.facts && Object.isFrozen(shown.facts) && Object.isFrozen(shown.facts.programDirectories),
+               "… a frozen copy, never the shell's own object");
 
         for (const name of Object.keys(_readers))
             _readers[name].destroy();

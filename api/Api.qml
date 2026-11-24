@@ -9,7 +9,7 @@ import qs.singletons.network
 // The module API: everything a
 // module may use of the shell. A module imports `qs.api` and reaches:
 //
-//   Api.version            "1.39" — this shell's module API, "major.minor". A module's manifest
+//   Api.version            "1.40" — this shell's module API, "major.minor". A module's manifest
 //                          asks for one ("api"); it loads when the major is the same, this
 //                          minor is at least the one asked for, and the one asked for is not
 //                          below the shell's floor (ModuleRules.apiFloor: the oldest version
@@ -359,6 +359,33 @@ import qs.singletons.network
 //                            refresh()          reads the name, the host name and
 //                                               user-dirs.dirs again; the facts stay as they
 //                                               were until the new answers come
+//                            distribution       (1.40) which distribution the shell runs on,
+//                                               frozen { ready, id, label, facts }: ready
+//                                               once the shell's detection has answered; id
+//                                               "nixos" | "arch" | "generic" (a system the
+//                                               shell has no integration for) and label
+//                                               ("NixOS") — "" while not answered, or when
+//                                               it could not be told; facts the
+//                                               distribution's static facts, a frozen copy
+//                                               (lists too), or null with id "": etcManaged
+//                                               (/etc is generated from the system's
+//                                               configuration), programDirectories,
+//                                               setuidWrapperDirectory, pamDirectories,
+//                                               pamModuleDirectories,
+//                                               networkManagerVpnDirectories,
+//                                               polkitRulesDirectory, polkitRulesInstallable,
+//                                               helper and builtinModules ("package": the
+//                                               system's package ships them), matches and
+//                                               markers (how it is detected); the keys and
+//                                               kinds are distributions/<id>/
+//                                               distribution.json's (DistributionRules
+//                                               .manifest). Read-only facts: nothing that
+//                                               changes the system is reached through it.
+//                                               A module that differs by system reads this,
+//                                               never /etc/NIXOS or os-release itself. In
+//                                               module test mode the test kit's
+//                                               (ModuleTestKit.setDistribution): not
+//                                               answered until a suite names one
 //                          Every path is absolute, without a trailing "/". A fact that could
 //                          not be read, or reads as something unexpected (a relative path, a
 //                          line break), is unknown — "" for a text, null for `uid` — never a
@@ -1153,15 +1180,23 @@ Singleton {
     property var _testRemembered: RememberRules.remembered(null, 5, 0)
 
     // (1.13) System facts (above): the shell's reading, or in test mode the test kit's
-    readonly property var system: testMode ? _systemObject(_testSystemFacts, true) : _systemObject(SystemFacts.facts, false)
+    readonly property var system: testMode ? _systemObject(_testSystemFacts, true, _distribution) : _systemObject(SystemFacts.facts, false, _distribution)
     // Set by ModuleTestKit.setSystem in test mode (null: the made-up defaults)
     property var _testSystemGiven: null
     readonly property var _testSystemFacts: SystemFactsRules.testFacts(_testSystemGiven, SystemFactsRules.testDefaults(Modules.host.testHome)).facts
 
-    function _systemObject(facts, test) {
+    // (1.40) Api.system.distribution: a frozen copy of Distribution's answer, never the
+    // singleton or its integration; in test mode the one ModuleTestKit.setDistribution named
+    readonly property var _distribution: ModuleRules.apiDistribution(testMode
+        ? ModuleRules.testDistribution(_testDistributionName, Distribution.detection) : Distribution.detection)
+    // Set by ModuleTestKit.setDistribution in test mode (null: not answered)
+    property var _testDistributionName: null
+
+    function _systemObject(facts, test, distribution) {
         const forwarding = test ? Object.freeze({ ipv4: facts.ipForwarding?.ipv4 ?? null, ipv6: facts.ipForwarding?.ipv6 ?? null }) : null;
         return Object.freeze({
             ready: facts.ready === true,
+            distribution: distribution,
             userName: String(facts.userName ?? ""),
             uid: typeof facts.uid === "number" ? facts.uid : null,
             hostName: String(facts.hostName ?? ""),

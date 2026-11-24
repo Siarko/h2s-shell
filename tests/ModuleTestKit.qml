@@ -66,11 +66,19 @@ import qs.components as Components
 //                          untilMs (ms since the epoch, from now on); 0, a time past or not a
 //                          number: nothing kept. It does not run out by itself: it stays until
 //                          the next call. Reset before each suite
+//   setDistribution(id)    (1.40) what Api.system.distribution tells, as H2S_DISTRIBUTION
+//                          tells the shell: "nixos", "arch" or "generic" — that
+//                          distribution's facts, from the tree's distributions/<id>/
+//                          distribution.json (nothing of this machine's system); "": answered,
+//                          unknown (a system that cannot be told); null: not answered (the
+//                          default). Ready once the shell has read those files. → the
+//                          problems, frozen ([] when taken; another value is left out and
+//                          the distribution stays as it was). Reset before each suite
 //   dataHome               (1.13) the data home the modules' data directories are in now:
 //                          below the host's private temporary home ("" until it is made)
 //   clearRecords()         empties `opened`, `notified` and `chooserCalls`, and sets the
-//                          real clock, the default system and network facts and nothing
-//                          remembered again. The records are shared by every module's
+//                          real clock, the default system and network facts, no
+//                          distribution answered and nothing remembered again. The records are shared by every module's
 //                          suites (they run side by side): it clears theirs too
 //   (1.17, the file chooser: module.chooseFiles opens no dialog in test mode — each call
 //   that would open one is recorded and waits for the suite's answer; the lock is the one
@@ -256,6 +264,15 @@ Singleton {
         return Object.freeze(checked.problems);
     }
 
+    function setDistribution(id) {
+        if (!Modules.host.testMode)
+            return Object.freeze(["module test mode is off"]);
+        const checked = ModuleRules.testDistributionName(id);
+        if (checked.problems.length === 0)
+            Api._testDistributionName = checked.name;
+        return Object.freeze(checked.problems);
+    }
+
     function setNetworks(facts) {
         if (!Modules.host.testMode)
             return Object.freeze(["module test mode is off"]);
@@ -291,6 +308,7 @@ Singleton {
             Api._testSystemGiven = null;
             Api._testNetworkGiven = null;
             setRemembered(0);
+            Api._testDistributionName = null;
         }
         Api._opened = [];
         Notifier.clearRecorded();
