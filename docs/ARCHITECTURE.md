@@ -1593,7 +1593,10 @@ and a trusted `timeout` are found.
   limit `PrivilegedRules.shellRunMs`, 5 minutes, or a longer one the request asks for as
   `timeoutMs`, at most `PrivilegedRules.shellMaxRunMs`, an hour — the prompt shows it among
   the words; its output line by line through the request's `onLine`, as a module's run;
-  refused while no trusted `timeout` is found). Only an old `PrivilegedAction` run is handed to pkexec as it is. The shell's own
+  refused while no trusted `timeout` is found). The answer of either keeps the last 1 MB
+  of stderr (`PrivilegedRules.stderrTailChars`), where a failure says why; a command killed
+  after its limit and the kill-after (no exit status: pkexec hands over to `timeout`, which
+  ends with the KILL) reads as timed out. Only an old `PrivilegedAction` run is handed to pkexec as it is. The shell's own
   trusted `timeout` runs inside pkexec, as root, and ends the command at its limit whatever
   happens to the shell. Nothing is put around pkexec: once the command runs as root the
   shell cannot signal it, and the kernel drops `setpriv --pdeathsig` at the exec of a setuid

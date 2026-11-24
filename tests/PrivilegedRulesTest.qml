@@ -260,7 +260,7 @@ TestCase {
                     "… the longest allowed, an hour");
         assertEqual(JSON.stringify(rules.shellArgv("/t", ["/bin/true"], 1000)), JSON.stringify(["pkexec", "/t", "-k", "3", "1", "/bin/true"]),
                     "… the shortest allowed, a second");
-        assertEqual(rules.shellArgv("/t", ["/bin/true"], 1500.4)[4], "1.5", "… rounded to whole ms");
+        assertEqual(rules.shellArgv("/t", ["/bin/true"], 1000.5)[4], "1.001", "… rounded to whole ms (1000.5 ms is 1.001 s, not 1.0005 cut to 1)");
         assertEqual([rules.shellArgv("/t", ["/bin/true"], 3600001), rules.shellArgv("/t", ["/bin/true"], 999), rules.shellArgv("/t", ["/bin/true"], 0),
                      rules.shellArgv("/t", ["/bin/true"], NaN), rules.shellArgv("/t", ["/bin/true"], Infinity), rules.shellArgv("/t", ["/bin/true"], "600000"),
                      rules.shellArgv("/t", ["/bin/true"], null)].join(","),
@@ -378,10 +378,13 @@ TestCase {
         assert(ran(127).refused && !ran(127).dismissed, "127: refused");
         assert(ran(124, { durationMs: 30000 }).timedOut && ran(137, { durationMs: 31000 }).timedOut, "124 or 137 after the limit: timedOut");
         assert(!ran(124, { durationMs: 500 }).timedOut, "124 before the limit: the command's own status");
-        assert(ran(-1, { durationMs: 30000 }).timedOut && !ran(-1, { durationMs: 30000 }).ok, "no status after the limit (timeout ended by its KILL): timedOut");
-        assert(!ran(-1, { durationMs: 500 }).timedOut, "… no status before the limit: a crash, not the limit");
-        assert(!ran(-1, { durationMs: 30000, failedToStart: true }).timedOut, "… pkexec never started: not timed out");
-        assert(!ran(-1, { durationMs: 30000, cancelled: true }).timedOut, "… cancelled: not timed out");
+        assert(ran(-1, { durationMs: 33000 }).timedOut && !ran(-1, { durationMs: 33000 }).ok, "no status after the limit and the kill-after (timeout ended by its KILL): timedOut");
+        assert(!ran(-1, { durationMs: 32999 }).timedOut, "… no status before the limit and the kill-after: a crash (the prompt's time counts too)");
+        assert(!ran(-1, { durationMs: 500 }).timedOut, "… no status well before the limit: a crash, not the limit");
+        assert(!ran(-1, { durationMs: 33000, failedToStart: true }).timedOut, "… pkexec never started: not timed out");
+        assert(!ran(-1, { durationMs: 33000, cancelled: true }).timedOut, "… cancelled: not timed out");
+        assert(ran(124, { durationMs: 30000 }).timedOut && !ran(124, { durationMs: 29999 }).timedOut, "124 from the limit on, without the kill-after");
+        assertEqual(rules.stderrTailChars, 1048576, "an answer keeps the last 1 MB of stderr");
         assert(!ran(126, { cancelled: true, code: 126 }).dismissed && ran(-1, { cancelled: true }).cancelled, "cancelled: nothing else");
         assertEqual(ran(-1, { failedToStart: true }).error, "pkexec could not be started", "pkexec not started: said so");
         assert(!ran(0).notFound && !ran(1).notFound && !rules.cancelledResult().notFound && rules.notFoundResult("/usr/bin/x").notFound,

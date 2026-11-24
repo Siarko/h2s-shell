@@ -923,7 +923,7 @@ import qs.singletons.network
 //                                            run: a real privileged run never takes an
 //                                            environment its module chose
 //                          result, frozen: { ok (exit 0), code (-1 without one), stdout,
-//                          stderr, dismissed (pkexec's 126: the prompt dismissed or the
+//                          stderr (its last 1 MB, where a failure says why), dismissed (pkexec's 126: the prompt dismissed or the
 //                          password not accepted — nothing is shown; also a run refused for
 //                          the lock), refused (127: not authorised, or no agent answered —
 //                          the shell says so once), notFound, timedOut, cancelled, blocked,

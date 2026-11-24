@@ -19,6 +19,9 @@ Singleton {
     // How long after TERM the command gets KILL: `timeout -k` inside pkexec, and how long a
     // cancelled run may take to exit before the next run may start
     readonly property int killAfterMs: 3000
+    // How much of a run's stderr its answer keeps: the end, where a failure says what went
+    // wrong (a long run, as a system switch, may write far more before it)
+    readonly property int stderrTailChars: 1048576
     // With the shell's own polkit agent: how long a started run keeps the head of the queue
     // when no password request comes (no request: a polkit rule let it run, or it was never
     // going to ask)
@@ -514,8 +517,10 @@ Singleton {
     //   dismissed  pkexec exited 126: the prompt dismissed or the password not accepted
     //   refused    pkexec exited 127: not authorised, or no agent answered
     //   timedOut   the shell's `timeout` ended it after at least the limit: 124, or after its
-    //              KILL 137 — or no status at all (code -1), as pkexec execs `timeout`, which
-    //              then ends itself with the KILL its command got
+    //              KILL 137 — or no status at all (code -1) after at least the limit and the
+    //              kill-after, as pkexec execs `timeout`, which then ends itself with the KILL
+    //              its command got (earlier, no status is a crash: the time counted includes
+    //              the prompt's, so a crash before the limit could otherwise pass for it)
     // A command that itself exits 124, 126, 127 or 137 reads the same (pkexec and `timeout`
     // pass the command's status through), and so does `timeout`'s own status: 125 (it
     // failed: a plain failure), 126 (the command could not be run: read as dismissed), 127
@@ -525,8 +530,9 @@ Singleton {
     function runResult(run, timeoutMs) {
         const code = typeof run?.code === "number" ? run.code : -1;
         const cancelled = run?.cancelled === true;
-        const killed = code === -1 && run?.failedToStart !== true;
-        const timedOut = !cancelled && (code === 124 || code === 137 || killed) && (run?.durationMs ?? 0) >= timeoutMs;
+        const durationMs = run?.durationMs ?? 0;
+        const killed = code === -1 && run?.failedToStart !== true && durationMs >= timeoutMs + killAfterMs;
+        const timedOut = !cancelled && ((code === 124 || code === 137) && durationMs >= timeoutMs || killed);
         return _result({
             ok: run?.ok === true && code === 0 && !cancelled,
             code: code,

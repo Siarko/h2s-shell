@@ -133,7 +133,8 @@ The interface modules are written against (`qs.api`), versioned on its own
 
 ### Fixed
 - A run as administrator that ignored the end of its time limit and had to be killed is
-  told as "It did not end within <limit> s", not with its last output line.
+  told as "It did not end within <limit> s", not with its last output line; one that wrote
+  more than 1 MB of errors before failing is told with its last line, not an early one.
 - Settings pages that read the system read it again each time the window is shown, not only
   when the page is first built: the sign-in rules and the lock screen's switches (a security
   key registered meanwhile), "Remember the password", what sleep logind allows, the

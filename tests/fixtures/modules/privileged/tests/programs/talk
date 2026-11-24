@@ -8,7 +8,19 @@
 #   talk hold <seconds>        prints "started", then sleeps ignoring TERM (as a process run as
 #                              root, which the shell cannot signal: only KILL ends it here)
 #   talk env <name>            prints "<name>=<value>" from its environment ("" when unset)
+#   talk flood <n>             writes <n> lines of 100 "x" to stderr, then "the real error",
+#                              and exits 3 (a long run's failure, its reason last)
 case "$1" in
+    flood)
+        line=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+        i=0
+        while [ "$i" -lt "$2" ]; do
+            echo "$line"
+            i=$((i + 1))
+        done >&2
+        echo "the real error" >&2
+        exit 3
+        ;;
     env)
         eval "value=\${$2-}"
         echo "$2=$value"

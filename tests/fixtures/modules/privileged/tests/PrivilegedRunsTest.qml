@@ -940,6 +940,24 @@ TestCase {
             assertEqual(record.lines.join(","), "started", "its line came through onLine");
             const told = ModuleTestKit.notified.filter(entry => entry.summary === "Hold failed");
             assert(told.length === 1 && told[0].body === "It did not end within 1 s", "one notification: " + JSON.stringify(ModuleTestKit.notified));
+            _shellFlood();
+        });
+    }
+
+    // A run that writes more than 1 MB to stderr before it fails: its answer keeps the end,
+    // so the notice shows its reason, not what came first
+    function _shellFlood() {
+        _runs = {};
+        ModuleTestKit.clearRecords();
+        _shell("Flood", [_path("talk"), "flood", "12000"]);
+        _then("the flooding run ends", () => _done("Flood") && _idle(), () => {
+            const result = _runs.Flood.result;
+            assert(!result.ok && result.code === 3 && !result.timedOut, "it failed with its own status: " + JSON.stringify(result.code));
+            assert(result.stderr.endsWith("\nthe real error") && result.stderr.length <= 1048576 && result.stderr.length > 1000000,
+                   "the answer's stderr is its last 1 MB, the reason last (" + result.stderr.length + " chars)");
+            assert(!result.stderr.includes("pkexec:"), "… what came first is gone");
+            const told = ModuleTestKit.notified.filter(entry => entry.summary === "Flood failed");
+            assert(told.length === 1 && told[0].body === "the real error", "the notice shows the reason: " + JSON.stringify(told));
             _shellRefused();
         });
     }
@@ -957,16 +975,22 @@ TestCase {
             const locked = _runs.Locked.result;
             assert(!locked.ok && locked.dismissed && locked.blocked === "locked" && _runs.Locked.lines.length === 0,
                    "while locked: dismissed, blocked locked, no line: " + JSON.stringify(locked));
+            _shell("Not a stand-in", [talk, "lines", "1", "0"], { testPkexec: talk });
             _shell("Too long", [talk, "lines", "1", "0"], { timeoutMs: 3600001 });
             _shell("No callback", [talk, "lines", "1", "0"], { onLine: "line" });
         });
-        _then("the wrong requests are answered", () => _done("Too long", "No callback") && _idle(), () => {
+        _then("the wrong requests are answered", () => _done("Not a stand-in", "Too long", "No callback") && _idle(), () => {
+            const notStandIn = _runs["Not a stand-in"].result;
+            assert(!notStandIn.ok && notStandIn.code === -1 && notStandIn.error.startsWith("test mode: pkexec is not run")
+                   && notStandIn.stderr === "" && _runs["Not a stand-in"].lines.length === 0,
+                   "a testPkexec that is no module's stand-in: the trusted pkexec in its place, refused at the launch, nothing run: " + JSON.stringify(notStandIn));
             const tooLong = _runs["Too long"].result;
             assert(!tooLong.ok && tooLong.error.startsWith("timeoutMs must be") && tooLong.stderr === "", "a limit past an hour: refused, nothing run: " + JSON.stringify(tooLong));
             const noCallback = _runs["No callback"].result;
             assert(!noCallback.ok && noCallback.error === "onLine is not a function" && noCallback.stderr === "", "onLine no function: refused: " + JSON.stringify(noCallback));
             assertEqual(JSON.stringify(ModuleTestKit.notified.map(entry => [entry.summary, entry.body])),
-                        JSON.stringify([["Too long failed", tooLong.error], ["No callback failed", "onLine is not a function"]]),
+                        JSON.stringify([["Too long failed", tooLong.error], ["No callback failed", "onLine is not a function"],
+                                        ["Not a stand-in failed", notStandIn.error]]),
                         "each told as a failure of the shell's own, with its reason (as a command without an absolute program)");
         });
     }

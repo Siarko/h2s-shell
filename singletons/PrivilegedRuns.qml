@@ -505,6 +505,9 @@ Singleton {
         if (notice)
             Notifier.send(notice.summary, notice.options);
         const legacy = job.kind === "legacy";
+        // The end of its stderr, kept apart from the runner's output (which keeps the first
+        // maxOutputBytes): the answer's stderr, so a long run's failure shows its last lines
+        job.stderrTail = { lines: [], start: 0, chars: 0 };
         // No time limit around pkexec: a module's or the shell's limit is the `timeout` inside it
         // (PrivilegedRules.pkexecArgv); the old type has none, as before
         job.runner = _runner.start(job.argv, {
@@ -527,6 +530,8 @@ Singleton {
             onLine: (line, stream) => {
                 if (job.muted)
                     return;
+                if (!legacy && stream === "stderr")
+                    root._keepTail(job.stderrTail, line);
                 if (legacy) {
                     if (stream === "stdout" && line.trim() !== "")
                         job.lines.push(line);
@@ -563,8 +568,31 @@ Singleton {
         else if (job.result?.refusal)
             result = PrivilegedRules.refusedResult({ blocked: "", error: job.result.refusal });
         else
-            result = PrivilegedRules.runResult(job.result, job.timeoutMs);
+            result = PrivilegedRules.runResult(Object.assign({}, job.result, { stderr: _tailText(job.stderrTail) }), job.timeoutMs);
         _deliver(job, result);
+    }
+
+    // A stream's last lines, at most PrivilegedRules.stderrTailChars in all (line breaks
+    // counted): old lines leave from the front; the array is compacted now and then
+    function _keepTail(tail, line) {
+        tail.lines.push(line);
+        tail.chars += line.length + 1;
+        while (tail.chars > PrivilegedRules.stderrTailChars + 1 && tail.lines.length - tail.start > 1) {
+            tail.chars -= tail.lines[tail.start].length + 1;
+            tail.lines[tail.start] = "";
+            tail.start++;
+        }
+        if (tail.start > 4096 && tail.start * 2 > tail.lines.length) {
+            tail.lines = tail.lines.slice(tail.start);
+            tail.start = 0;
+        }
+    }
+
+    function _tailText(tail) {
+        if (!tail)
+            return "";
+        const text = tail.lines.slice(tail.start).join("\n");
+        return text.length > PrivilegedRules.stderrTailChars ? text.slice(text.length - PrivilegedRules.stderrTailChars) : text;
     }
 
     function _refuse(job, reply) {
