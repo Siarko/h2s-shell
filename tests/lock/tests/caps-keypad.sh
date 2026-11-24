@@ -44,6 +44,9 @@ press_key KP_Enter
 check_within 10 "Caps Lock letters, keypad digits and the keypad's Enter: unlocks" compositor_unlocked
 log "password checks: $(tr '\n' ' ' < "$WORK/pam/check.log" 2> /dev/null)"
 check "PAM got exactly LT-test-905" test "$(password_details | tail -n 1)" = "$(password_detail_of "$LOCKTEST_PASSWORD")"
+# The test stack starts with the lock's marker (pam/password), so a PAM start stuck before
+# any module ran is started again instead of hanging the unlock above
+check "the password check was watched for a stuck start" lines_more_than 0 '"marked":true,"method":"password","type":"pamStarted"' "$WORK/shell.log"
 
 # Caps Lock on at the unlock, turned off at the desktop, locked again: the new lock says
 # nothing of Caps Lock (it used to claim it was on, from the keys of the lock before)

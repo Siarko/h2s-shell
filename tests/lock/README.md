@@ -337,7 +337,10 @@ test writes one: `caps_led 1|0|none` (`caps-keypad.sh`).
 
 **Timings**: `stack_start --timings '<json>'` hands the shell `LockRules.timings` overrides
 (`H2S_LOCK_TEST_TIMINGS`), so that what takes minutes — five rounds that time out — runs in
-seconds (`fingerprint-timeout.sh`). Unset, the shell keeps its own.
+seconds (`fingerprint-timeout.sh`). Unset, the shell keeps its own, but for `firstWord`: 3 s
+unless a test gives it, so that a PAM start stuck before any module ran (the test stacks
+start with the lock's marker line, as the shipped ones do) is started again well inside the
+10 s a check waits for an unlock.
 
 ## The test tree
 

@@ -274,7 +274,8 @@ check_timed() {
 # --reload-seam                      the shell's `locktest reload` IPC is enabled
 #                                    (H2S_LOCK_TEST_RELOAD=1): a test asks for Quickshell.reload()
 # --timings <json>                   LockRules.timings overrides for the shell
-#                                    (H2S_LOCK_TEST_TIMINGS): what takes minutes, in seconds
+#                                    (H2S_LOCK_TEST_TIMINGS): what takes minutes, in seconds.
+#                                    firstWord is 3000 unless given (see below)
 # --launcher-timings "<k=s ...>"    the launcher's pauses (H2S_LAUNCHER_TEST_TIMINGS): first (1 s),
 #                                    lockwait (15 s), stopwait (8 s), ipccall (10 s) — so restart tests run in seconds
 # --shell-path <dir>                 put <dir> first on the shell's PATH (a stand-in program, such
@@ -320,6 +321,15 @@ stack_start() {
             *) abort "stack_start: unknown option $1" ;;
         esac
     done
+    # A PAM start stuck before its marker (pam/password) is started again after firstWord;
+    # the shell's 8 s and the settle after it would outlast the 10 s a check waits for an
+    # unlock, so a stuck start (rare, and seen only under load) failed the test. Shorter
+    # here: a start restarted early only costs a start, no module having run.
+    case "$timings" in
+        *'"firstWord"'*) ;;
+        "" | "{}" | "{ }") timings='{"firstWord": 3000}' ;;
+        *) timings="{\"firstWord\": 3000, ${timings#*\{}" ;;
+    esac
     local keymap_file=$TOOLS/share/keymaps/$keymap.xkb
     [ -f "$keymap_file" ] || abort "stack_start: no keymap $keymap (the tool set's share/keymaps)"
     [ -z "$settings" ] || write_settings "$settings"
