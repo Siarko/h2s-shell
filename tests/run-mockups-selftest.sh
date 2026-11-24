@@ -66,8 +66,12 @@ source "$REPO/tests/headless.sh"
 
 # The entries this script started, by case: ended with headless.sh's own clean-up
 declare -A pids=() units=() logs=() statuses=()
+# What a case writes into the tree itself (in-tree baselines, a stray file): removed at the end
+tree_writes=()
 selftest_cleanup() {
     trap '' INT TERM HUP
+    local written
+    for written in "${tree_writes[@]}"; do rm -rf -- "$written"; done
     local case
     for case in "${!pids[@]}"; do
         kill -TERM "${pids[$case]}" 2> /dev/null
@@ -619,6 +623,40 @@ runner approve-software "${compare_vars[@]}" -- --approve components/good
 check "$([ "${runner_status[software-shoot]}" = 0 ] && [ "${runner_status[approve-software]}" = 1 ] && grep -q -F "it was not drawn with llvmpipe (software)" "${out[approve-software]}"; echo $?)" "--approve refuses a run drawn with the software backend (status ${runner_status[approve-software]})"
 check "$(cmp -s "$baseline/manifest.txt" "$work/baseline-approved/manifest.txt"; echo $?)" "and leaves the baseline as it was"
 show_on_failure "$before" approve-software
+
+# Two mockups approved in one call, into the tree's own baselines: the first one's new
+# baseline is not an uncommitted change that refuses the second
+before=$failures
+in_tree_good=$REPO/tests/fixtures/mockups/components/good/baseline
+in_tree_effects=$REPO/tests/fixtures/mockups/components/effects/baseline
+if [ -e "$in_tree_good" ] || [ -e "$in_tree_effects" ]; then
+    check 1 "the fixtures good and effects have no baseline in the tree, for this case to write and remove"
+else
+    tree_writes+=("$in_tree_good" "$in_tree_effects")
+    runner in-tree-shoot H2S_MOCKUP_SHOTS="$work/shots-in-tree" -- --shoot components/good components/effects
+    runner in-tree-approve H2S_MOCKUP_SHOTS="$work/shots-in-tree" -- --approve components/good components/effects
+    check "$([ "${runner_status[in-tree-shoot]}" = 0 ] && [ "${runner_status[in-tree-approve]}" = 0 ] \
+        && grep -q '^APPROVED components/good ' "${out[in-tree-approve]}" && grep -q '^APPROVED components/effects ' "${out[in-tree-approve]}" \
+        && [ -s "$in_tree_good/manifest.txt" ] && [ -s "$in_tree_effects/manifest.txt" ]; echo $?)" "--approve of two mockups into the tree's baselines approves both (status ${runner_status[in-tree-approve]})"
+    show_on_failure "$before" in-tree-approve
+    rm -rf -- "$in_tree_good" "$in_tree_effects"
+fi
+
+# The tree changed while a mockup ran (a Quickshell that writes a file into the tree as it
+# starts the mockup): its shots are not labelled with the tree as it was before
+before=$failures
+stray=$REPO/tests/fixtures/mockups/components/good/stray-$$.txt
+tree_writes+=("$stray")
+mkdir -p "$work/tree-writer"
+printf '#!%s\n[ "${1:-}" = -p ] && echo "$$" >> %q\nexec %q "$@"\n' "$(type -P bash)" "$stray" "$LOCKTEST_QS" > "$work/tree-writer/qs"
+chmod +x "$work/tree-writer/qs"
+runner tree-changed "${compare_vars[@]}" H2S_MOCKUP_SHOTS="$work/shots-tree-changed" LOCKTEST_QS="$work/tree-writer/qs" H2S_TEST_TOOLS="$LOCKTEST_TOOL_SOURCE" -- --shoot components/good
+check "$([ "${runner_status[tree-changed]}" = 2 ] && [ "$(verdict_of tree-changed components/good)" = "NOT RUN" ] \
+    && grep -q -F "the tree changed while it ran" "${out[tree-changed]}"; echo $?)" "the tree changed while the mockup ran: NOT RUN (status ${runner_status[tree-changed]})"
+rm -f -- "$stray"
+runner tree-changed-approve "${compare_vars[@]}" H2S_MOCKUP_SHOTS="$work/shots-tree-changed" -- --approve components/good
+check "$([ "${runner_status[tree-changed-approve]}" = 1 ]; echo $?)" "and that run cannot be approved (status ${runner_status[tree-changed-approve]})"
+show_on_failure "$before" tree-changed
 
 # A Quickshell that names no version: what drew the scenes cannot be told
 before=$failures

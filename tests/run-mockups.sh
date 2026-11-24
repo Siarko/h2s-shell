@@ -33,6 +33,8 @@
 # file), and, when the mockup passed, run.txt: the environment it was drawn in and a line per
 # scene (below). <kind>/<name>/last-run-<hash of the tree's path> names the last run this
 # tree made of the mockup, whatever came of it: the shots folder may be shared by checkouts.
+# The origin is taken as the mockup starts and again when it ends; a tree changed in between
+# (its baselines aside, which --approve writes) makes the mockup NOT RUN, with no run.txt.
 #
 # --compare, the baseline: mockups/<kind>/<name>/baseline/ (H2S_MOCKUP_BASELINES=<dir> reads
 # and writes <dir>/<kind>/<name>/baseline/ instead: the self-test's), holding <NN>-<scene>.png
@@ -583,17 +585,24 @@ shots_root=${H2S_MOCKUP_SHOTS:-${XDG_CACHE_HOME:-${HOME:?}/.cache}/h2s-shell-moc
 # whatever came of it. --approve takes only that run, and only while the tree is as it was
 tree_key=$(printf '%s' "$REPO" | sha256sum | cut -c 1-16)
 # tree_origin: this tree's path, its commit and a checksum of its uncommitted changes (the
-# diff against HEAD and each untracked file's checksum)
+# diff against HEAD and each untracked file's checksum), the mockups' baselines left out: they
+# are what --approve writes, and what a baseline is drawn from is the rest
 tree_origin() {
     local commit changes
+    local -a outside_baselines=(-- . ':(exclude,glob)**/baseline/**')
     commit=$(git -C "$REPO" rev-parse --verify -q HEAD 2> /dev/null) || commit="(none)"
     changes=$({
-        git -C "$REPO" diff HEAD --binary 2> /dev/null
-        (cd "$REPO" && git ls-files -z -o --exclude-standard 2> /dev/null | xargs -0 -r sha256sum --)
+        git -C "$REPO" diff HEAD --binary "${outside_baselines[@]}" 2> /dev/null
+        (cd "$REPO" && git ls-files -z -o --exclude-standard "${outside_baselines[@]}" 2> /dev/null | xargs -0 -r sha256sum --)
     } | sha256sum)
     echo "tree $REPO"
     echo "commit $commit"
     echo "changes ${changes%% *}"
+}
+# mockup_origin <kind>/<name>: the tree's origin and the checksum of the mockup's file
+mockup_origin() {
+    tree_origin
+    echo "mockup $(sha256_of "$REPO/$base/$1/Mockup.qml")"
 }
 
 # ---- --approve: the last run's shots become the baseline -----------------------------
@@ -619,7 +628,7 @@ approve() {
         echo "REFUSED  $name — the last run from this tree ($run) did not pass (no run.txt): look at its verdict, run it again"
         return 1
     fi
-    now=$(tree_origin; echo "mockup $(sha256_of "$REPO/$base/$name/Mockup.qml")")
+    now=$(mockup_origin "$name")
     [ "$(sed -n 's/^commit //p' <<< "$now")" != "(none)" ] || problems+=("this tree's commit cannot be told (git): which code drew the shots cannot be checked")
     for key in tree commit changes mockup; do
         value=$(sed -n "s/^$key //p" "$run/origin.txt" 2> /dev/null)
@@ -709,7 +718,7 @@ if [ -z "$jobs" ]; then
 fi
 
 run_id=$(date -u +%Y%m%d-%H%M%S)-$$
-if [ "$mode" = load-only ]; then shots_root=""; else origin=$(tree_origin); fi
+[ "$mode" != load-only ] || shots_root=""
 # shots_of <name>: the mockup's folder for this run
 shots_of() { echo "$shots_root/$1/$run_id"; }
 
@@ -740,7 +749,10 @@ start_mockup() {
     if [ -n "$shots_root" ]; then
         shots=$(shots_of "$name")
         mkdir -p "$shots" || setup_error "cannot create the shots folder $shots"
-        { printf '%s\n' "$origin"; echo "mockup $(sha256_of "$REPO/$base/$name/Mockup.qml")"; } > "$shots/origin.txt"
+        # Taken as the mockup starts, and again when it has ended (below): the tree it loads is
+        # the tree as it is then
+        mockup_origin "$name" > "$work/origin-$index.txt"
+        cp -- "$work/origin-$index.txt" "$shots/origin.txt"
         echo "${shots##*/}" > "$shots_root/$name/last-run-$tree_key"
     fi
     H2S_MOCKUP_ONE=$$:$name:$shots HEADLESS_QUIET_RESOLVE=1 LOCKTEST_QS=$LOCKTEST_QS H2S_TEST_TOOLS=$LOCKTEST_TOOL_SOURCE \
@@ -762,6 +774,14 @@ while [ "$next" -lt ${#names[@]} ] || [ ${#running[@]} -gt 0 ]; do
     [ -n "$finished" ] || setup_error "lost track of the mockups (wait said $status, ${#running[@]} listed as running)"
     index=${index_of[$finished]}
     statuses[index]=$status
+    # The tree changed while the mockup ran: what it drew is not of the tree its origin.txt
+    # names, so no verdict is given, and its shots cannot be approved
+    if [ -n "$shots_root" ] && [ "$(mockup_origin "${names[$index]}")" != "$(cat "$work/origin-$index.txt")" ]; then
+        rm -f -- "$(shots_of "${names[$index]}")/run.txt"
+        echo "NOT RUN  ${names[$index]} — the tree changed while it ran (its commit, its uncommitted changes or the mockup's file): run it again" \
+            > "$work/mockup-$index.out"
+        statuses[index]=2
+    fi
     remaining=()
     for pid in "${running[@]}"; do [ "$pid" = "$finished" ] || remaining+=("$pid"); done
     running=("${remaining[@]}")
