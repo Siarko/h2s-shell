@@ -240,8 +240,9 @@ Scope {
     // what the handles' `programs` show. A new object only when something in it changed
     property var programVerdicts: ({})
     // In test mode, per module that names testPrograms: { <id>: { <name>: verdict } }
-    // (ModuleRules.testProgramVerdicts) — what its handle's `programs` show instead
-    property var testProgramVerdicts: ({})
+    // (ModuleRules.testProgramVerdicts) — what its handle's `programs` show instead. Frozen
+    // at every level: a handle reads the module's entry
+    property var testProgramVerdicts: Object.freeze({})
     // In test mode, the stand-in pkexec of each module that names testPrograms and pkexec
     // among its programs (ModuleRules.testStandIns), once the look at its stand-ins found it
     // there, inside the module: the only pkexec a module's commands may start
@@ -2052,7 +2053,7 @@ Scope {
                 standIns[record.manifest.id] = record.testVerdicts;
         }
         if (JSON.stringify(standIns) !== JSON.stringify(testProgramVerdicts))
-            testProgramVerdicts = standIns;
+            testProgramVerdicts = Object.freeze(standIns);
         _publishFacts();
         generation++;
         modulesChanged();
@@ -2087,7 +2088,7 @@ Scope {
         slots = ({});
         anchors = [];
         factValues = ({});
-        testProgramVerdicts = ({});
+        testProgramVerdicts = Object.freeze({});
         generation++;
         modulesChanged();
     }
@@ -2260,7 +2261,9 @@ Scope {
                          + (found.length > 0 ? found.join(", ") : "none") + (found.length < names.length
                             ? "; no stand-in for " + names.filter(name => verdicts[name].path === "").join(", ") : ""));
         }
-        record.testVerdicts = verdicts;
+        // Frozen, as everything a module's handle reads of it (its `programs`): no module's
+        // code can change which stand-in its runs take for pkexec
+        record.testVerdicts = Object.freeze(verdicts);
     }
 
     // The machine woke (SystemSleep, neutral: the lock screen reports it there): each active

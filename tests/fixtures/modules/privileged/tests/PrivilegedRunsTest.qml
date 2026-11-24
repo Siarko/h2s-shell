@@ -135,8 +135,27 @@ TestCase {
     function runAsync() {
         assert(Api.testMode, "test mode is on");
         _then("its programs are known and running as administrator is available",
-              () => module?.programsReady === true && module.privileged.available, () => _refusals());
+              () => module?.programsReady === true && module.privileged.available, () => _frozenStandIns());
         _clock.start();
+    }
+
+    // What the handle reads of its stand-ins is frozen at every level: the module's code can
+    // neither swap its pkexec for another program nor add one
+    function _frozenStandIns() {
+        const verdicts = module._verdicts;
+        const standIn = _path("pkexec");
+        assert(Object.isFrozen(verdicts) && Object.isFrozen(verdicts.pkexec), "the handle's stand-in verdicts are frozen");
+        for (const write of [() => { verdicts.pkexec = { path: "/usr/bin/pkexec", trusted: true }; },
+                             () => { verdicts.pkexec.path = "/usr/bin/pkexec"; },
+                             () => { verdicts.other = { path: "/usr/bin/pkexec" }; }]) {
+            try {
+                write();
+            } catch (error) {}
+        }
+        assert(module._verdicts.pkexec.path === standIn && module._verdicts.other === undefined && standIn.endsWith("/tests/programs/pkexec"),
+               "… a write changes nothing: " + JSON.stringify(module._verdicts.pkexec));
+        assertEqual(module.programs.pkexec.path, standIn, "… its programs still name the stand-in");
+        _refusals();
     }
 
     // --- Refused before pkexec runs: every `blocked` reason, notFound, errors ---
