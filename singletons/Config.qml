@@ -6,27 +6,27 @@ import QtCore
 import QtQuick
 import qs.components
 
-// The config file. Settings are not here: they live in the profiles (see Profiles and
+// The config file (ConfigFile, its keys declared in ConfigAdapter). Settings are not here: they live in the profiles (see Profiles and
 // SettingsSchema). What is left is data that is not a
 // preference — the Google account and its tokens, remembered per-app volumes — plus the
 // widget preset library and the profiles themselves.
 //
 // A config written before profiles has its settings in sections this file no longer
 // declares; Profiles reads those from the raw file to migrate them. Saving keeps every
-// top-level key the file holds that is not declared here (JsonConfigFile), so what a newer
+// key the file holds that is not declared (JsonConfigFile), so what a newer
 // shell wrote survives this one; such a config also gets a warning (newerNotice), never a
 // refusal.
 Singleton {
     id: root
 
-    property alias gcal: _gcal
-    property alias audio: _audio
-    property alias bluetooth: _bluetooth
-    property alias network: _network
+    readonly property alias gcal: _adapter.gcal
+    readonly property alias audio: _adapter.audio
+    readonly property alias bluetooth: _adapter.bluetooth
+    readonly property alias network: _adapter.network
     // The NixOS configuration the user chose and what they acknowledged about it
     // (distributions/nixos/NixosConfiguration.qml): remembered, not a preference — it names
     // this machine's folder
-    property alias nixos: _nixos
+    readonly property alias nixos: _adapter.nixos
     // Named presets of a widget's settings, { type: { name: { ... } } } as JSON — a shared
     // library a bar entry points into. "" until migrated from the old widgetProfiles.
     property alias widgetPresets: _adapter.widgetPresets
@@ -54,11 +54,11 @@ Singleton {
     // Read from the file as it was loaded (ModuleInstallRules.readAcknowledgements tells "never
     // written" from "missing in a file that should hold it"): whether it held the key, and
     // the version that wrote it ("" for none)
-    property bool acknowledgedModulesInFile: false
-    property string writtenByAtLoad: ""
-    // The config was written by a newer shell (MigrationRules.newerConfig, newerNotice): the
-    // startup banner's text and its dismissal for this run
-    property var newerNotice: MigrationRules.newerNotice(null, Version.number)
+    readonly property alias acknowledgedModulesInFile: _file.acknowledgedModulesInFile
+    readonly property alias writtenByAtLoad: _file.writtenByAtLoad
+    // The config was written by a newer shell (ConfigFile): the startup banner's text, and
+    // its dismissal for this run
+    readonly property alias newerNotice: _file.newerNotice
     property bool newerNoticeDismissed: false
     // The sleep notice's state (SleepLockNotice, SleepNoticeRules: JSON, "" while quiet):
     // remembered, so a restart neither repeats nor loses it
@@ -79,7 +79,7 @@ Singleton {
     // The file is there but could not be read or is not a JSON object
     // (ProfileRules.configReadFailed): the properties hold their defaults, which are then
     // not what the user chose — settings where that matters fail safe on it
-    property bool loadFailed: false
+    readonly property alias loadFailed: _file.loadFailed
     // Set by the test runner: the suites load the real config, and nothing they change
     // may reach the user's file
     property bool readOnly: false
@@ -123,98 +123,19 @@ Singleton {
         stderr: SplitParser { onRead: line => console.warn("[Config] could not restrict the config's permissions:", line) }
     }
 
-    JsonConfigFile {
+    ConfigFile {
         id: _file
         path: StandardPaths.writableLocation(StandardPaths.GenericConfigLocation) + "/h2s_shell/config.json"
         onAdapterUpdated: _saveTimer.restart()
-        onLoaded: {
-            root.loadFailed = ProfileRules.configReadFailed("", text());
-            try {
-                const data = JSON.parse(text());
-                root.acknowledgedModulesInFile = data !== null && typeof data === "object" && Object.prototype.hasOwnProperty.call(data, "acknowledgedModules");
-                root.writtenByAtLoad = typeof data?.writtenBy === "string" ? data.writtenBy : "";
-                root.newerNotice = MigrationRules.newerNotice(
-                    MigrationRules.newerConfig(data?.writtenBy, data?.migratedKeys, Version.number, Migrations.all()), Version.number);
-            } catch (error) {
-                root.acknowledgedModulesInFile = false;
-                root.writtenByAtLoad = "";
-                root.newerNotice = MigrationRules.newerNotice(null, Version.number);
-            }
-            if (root.newerNotice.shown)
-                console.warn("[Config] " + root.newerNotice.log);
-            if (root.loadFailed)
-                console.warn("[Config] " + path + " is not a JSON object: its settings are not used");
+        onRead: {
+            if (newerNotice.shown)
+                console.warn("[Config] " + newerNotice.log);
+            if (loadFailed)
+                console.warn("[Config] " + (readError !== "" ? "could not read " + path + ": " + readError : path + " is not a JSON object: its settings are not used"));
             root.ready = true;
         }
-        onLoadFailed: error => {
-            root.loadFailed = ProfileRules.configReadFailed(error === FileViewError.FileNotFound ? "missing" : "error", "");
-            if (root.loadFailed)
-                console.warn("[Config] could not read " + path + ": " + FileViewError.toString(error));
-            root.ready = true;
-        }
-
-        adapter: JsonAdapter {
+        adapter: ConfigAdapter {
             id: _adapter
-            property string widgetPresets: ""
-            property string profiles: ""
-            property string globals: "{}"
-            property list<string> migratedKeys: []
-            property list<string> disabledModules: []
-            property list<string> enabledModules: []
-            // ModuleInstallRules.parseAcknowledgements' text: "" until first written
-            property string acknowledgedModules: ""
-            property string sleepLockNotice: ""
-            property string moduleUpdates: ""
-            property list<string> screensOff: []
-            // The shell version that last wrote this file — for reference, and for
-            // migrations that need to know what wrote it
-            property string writtenBy: ""
-            // Remembered per app by the volume sliders, not a preference
-            property JsonObject audio: JsonObject {
-                id: _audio
-                property string appVolumes: "{}"
-            }
-
-            // Whether Bluetooth was left on, remembered by BluetoothPower, not a preference:
-            // "" until it is first seen switched, then "on" or "off"
-            property JsonObject bluetooth: JsonObject {
-                id: _bluetooth
-                property string powered: ""
-            }
-
-            // Which VPNs the shell brought up with a network, and which were taken down by
-            // hand (VpnManager), so a restart keeps them — remembered, not a preference
-            property JsonObject network: JsonObject {
-                id: _network
-                property string vpnMemory: "{}"
-                // The blocking rules last loaded and the boot they were loaded in
-                // (VpnLockdown: root's to read back, so remembered), and the VPN servers'
-                // addresses last found
-                property string lockdown: "{}"
-            }
-
-            // The NixOS configuration chosen with "Change…" (an absolute folder, "" for the
-            // usual places) and the flake's host chosen with it ("" for /etc/hostname's), and
-            // the real paths of configurations outside root's folders whose one-time warning
-            // the user took
-            property JsonObject nixos: JsonObject {
-                id: _nixos
-                property string folder: ""
-                property string host: ""
-                property list<string> homeWarningAcknowledged: []
-            }
-
-            // The Google account, its tokens and the calendars picked — data, not settings
-            property JsonObject gcal: JsonObject {
-                id: _gcal
-                property string viewMode: "day"
-                property string clientId: ""
-                property string clientSecret: ""
-                property string accessToken: ""
-                property string refreshToken: ""
-                property real tokenExpiry: 0
-                property list<string> enabledCalendarIds: []
-            }
         }
     }
 
@@ -230,8 +151,7 @@ Singleton {
                 root._refusedSave = !root.readOnly;
                 return;
             }
-            _adapter.writtenBy = Version.number;
-            _file.save();
+            _file.saveStamped();
             root.saved();
             _log.log("Saved");
         }

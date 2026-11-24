@@ -186,11 +186,13 @@ Singleton {
 
     // ---- Keys the config file holds that this version does not declare ----
 
-    // The text to save: `writtenText` (what the config's JsonAdapter wrote — every key it
-    // declares) with the top-level keys of `loadedText` (the file as it was loaded) that it
-    // lacks put back, so a key a newer shell wrote survives this one's saves. Keys sorted, as
-    // JsonAdapter writes them. "" when nothing is to be put back, or either text is not a JSON
-    // object (the adapter's text then stands as written).
+    // The text to save: `writtenText` (the config adapter's content — every key it declares)
+    // with the keys of `loadedText` (the file as last read or written) that it lacks put back:
+    // top-level keys, and keys inside an object both hold (a declared JsonObject), at any
+    // depth; lists and other values are the adapter's. So a key a newer shell wrote survives
+    // this one's saves. Keys sorted at every level, as JsonAdapter writes them. "" when
+    // nothing is to be put back, or either text is not a JSON object (the adapter's own write
+    // then stands).
     function keepUndeclaredKeys(writtenText, loadedText) {
         let written = null;
         let loaded = null;
@@ -202,13 +204,30 @@ Singleton {
         }
         if (!_object(written) || !_object(loaded))
             return "";
-        const missing = Object.keys(loaded).filter(key => !_own(written, key));
-        if (missing.length === 0)
-            return "";
-        const merged = {};
-        for (const key of Object.keys(written).concat(missing).sort())
-            _put(merged, key, _own(written, key) ? written[key] : loaded[key]);
-        return JSON.stringify(merged, null, 4) + "\n";
+        const merged = _withUndeclared(written, loaded);
+        return merged.added ? JSON.stringify(merged.value, null, 4) + "\n" : "";
+    }
+
+    // → { value, added }: `written` with `loaded`'s keys it lacks, recursively
+    function _withUndeclared(written, loaded) {
+        const keys = Object.keys(written);
+        for (const key of Object.keys(loaded))
+            if (!_own(written, key))
+                keys.push(key);
+        const value = {};
+        let added = keys.length > Object.keys(written).length;
+        for (const key of keys.sort()) {
+            if (!_own(written, key)) {
+                _put(value, key, loaded[key]);
+            } else if (_object(written[key]) && _object(loaded[key])) {
+                const inner = _withUndeclared(written[key], loaded[key]);
+                added = added || inner.added;
+                _put(value, key, inner.value);
+            } else {
+                _put(value, key, written[key]);
+            }
+        }
+        return { value: value, added: added };
     }
 
     // ---- Scopes ----

@@ -223,8 +223,9 @@ The interface modules are written against (`qs.api`), versioned on its own
   Without polkit rules it works as before; set to true beside them, it stops the build.
 
 ### Fixed
-- Settings a newer version of the shell wrote are no longer dropped when an older version
-  saves the config, and a config written by a newer version shows a warning under the bar.
+- Settings a newer version of the shell wrote in the config file (at its top level and inside
+  its sections, such as the Google account's) are no longer dropped when an older version
+  saves it, and a config written by a newer version shows a warning under the bar.
 - NixOS: the lock screen's PAM services the module writes (`h2s-shell-password`,
   `h2s-shell-fingerprint`, `h2s-shell-u2f`) start with the lock's marker line, as the
   shipped Arch configs do, so a check stuck before its first module is started again after

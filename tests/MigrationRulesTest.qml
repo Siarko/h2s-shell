@@ -460,6 +460,14 @@ TestCase {
         assertEqual(rules.keepUndeclaredKeys(written, "{"), "", "undeclared: an unreadable file: nothing");
         assertEqual(rules.keepUndeclaredKeys(written, "[1]"), "", "undeclared: not an object: nothing");
         assertEqual(rules.keepUndeclaredKeys("{", loaded), "", "undeclared: unreadable written text: nothing");
+        const nested = JSON.parse(rules.keepUndeclaredKeys(written, JSON.stringify({ gcal: { viewMode: "day", futureToken: "t", deeper: { x: 1 } } })));
+        assert(nested.gcal.futureToken === "t" && nested.gcal.deeper.x === 1 && nested.gcal.viewMode === "week",
+               "undeclared: a key inside an object both hold put back, the declared one the adapter's");
+        assertEqual(Object.keys(nested.gcal).join(","), "deeper,futureToken,viewMode", "… sorted inside too");
+        assertEqual(rules.keepUndeclaredKeys(written, JSON.stringify({ gcal: "text", profiles: { a: 1 } })), "",
+                    "undeclared: an object on one side only is not merged (the adapter's value stands)");
+        assertEqual(rules.keepUndeclaredKeys(JSON.stringify({ list: [{ a: 1 }] }), JSON.stringify({ list: [{ a: 1, b: 2 }] })), "",
+                    "undeclared: lists are the adapter's, never merged");
         const proto = JSON.parse(rules.keepUndeclaredKeys(written, "{\"__proto__\": {\"polluted\": 1}}"));
         assert(Object.prototype.hasOwnProperty.call(proto, "__proto__") && ({}).polluted === undefined, "undeclared: a key named __proto__ stays a key");
     }
