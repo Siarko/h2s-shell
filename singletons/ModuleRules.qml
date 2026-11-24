@@ -1755,6 +1755,19 @@ Singleton {
         }
     }
 
+    // What one module's element at an anchor gets as `context`: the block's, the
+    // contribution's own (a slot read as the anchor), then { anchor, placement }. A VPN
+    // provider object (`provider`) goes only to the elements of its own module (`scopeId`, the
+    // provider's module the view names): on a place every module's elements share (a VPN
+    // card's title) another module's element gets provider null, never a module's live object
+    function elementContext(blockContext, ownContext, moduleId, scopeId, anchor, placement) {
+        const context = Object.assign({}, isObject(blockContext) ? blockContext : {}, isObject(ownContext) ? ownContext : {},
+                                      { anchor: anchor, placement: placement });
+        if (has(context, "provider") && context.provider !== null && (typeof scopeId !== "string" || scopeId === "" || moduleId !== scopeId))
+            context.provider = null;
+        return context;
+    }
+
     // Whether a slot contribution's context has changed by value: plain data compared as
     // JSON, objects of Qt (a provider, an item) and functions by identity — one level deep,
     // as contexts are written ({ slot, editIndex, provider, close }). Never throws.

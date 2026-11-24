@@ -1,4 +1,5 @@
 import QtQuick
+import qs.singletons
 import qs.singletons.network
 
 // A VPN provider's own Component under a VPN's row in the network popup (`place` "row") or on
@@ -7,7 +8,8 @@ import qs.singletons.network
 // and breaks nothing. A module's elements come through the anchor hosts of the row and the
 // card instead. Its root item gets `context` (the VPN's, as the view's block gives it: {
 // vpnId, entryId, vpn, provider, otherVpnsUp, otherVpns }, with `extra` — { open } on the
-// card) when it declares that property — passed again only when it says something new
+// card) when it declares that property, as a frozen copy of its own (ReadOnlyRules.context) —
+// passed again only when it says something new
 // (VpnProviderRules.sameVpnContext), so a provider re-read that changed another entry does not
 // poke this one.
 Loader {
@@ -44,7 +46,9 @@ Loader {
             return;
         try {
             if ("context" in item) {
-                item.context = context;
+                // Its own frozen copy: the VPN's row and lists a new copy at each read, the
+                // provider as it is (ReadOnlyRules.context) — a module's provider sets these too
+                item.context = ReadOnlyRules.context(context);
                 _passed = context;
             }
         } catch (error) {

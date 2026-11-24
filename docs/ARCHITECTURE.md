@@ -1233,7 +1233,7 @@ close this section.
   | `settings.network_ethernet.profiles.card.actions` | `append` | as the wired profile's `settings` | the same wired profiles' cards' buttons, the same | 1.25 |
   | `settings.network_wifi.saved.card.title` | `append` | as the saved Wi-Fi network's `settings` | each saved Wi-Fi network's card, closed and open: its name's line, after the name — what a module adds to that network (any element, on theme tokens), as tall as the line, a quarter of the card at most for all | 1.28 |
   | `settings.network_ethernet.profiles.card.title` | `append` | as the wired profile's `settings` | each wired profile's card, the same | 1.28 |
-  | `settings.network_vpn.vpns.card.title` | `append` | as the VPN's row | each VPN's card, whatever its provider (not own-provider), the same | 1.29 |
+  | `settings.network_vpn.vpns.card.title` | `append` | as the VPN's row (1.42: `provider` null for an element of another module than the VPN's provider) | each VPN's card, whatever its provider (not own-provider), the same | 1.29 |
   | `popup.network.wifi.row.title` | `append` | as the saved Wi-Fi network's `settings`; a network not saved (no profile) has `networkId` `""` and its SSID as `name`; `ssid` is the SSID scanned, saved or not; of several profiles for one SSID the one fully up, else the one coming up, else the one last used (`ModuleRules.wifiRowContext`). Saved is what the row offers Forget for (`ModuleRules.savedWifiProfile`): a hotspot profile is not, and a profile just saved is only once its details are read, a moment after | the network popup's list of Wi-Fi networks in range, each network's row, closed and open: its name's line, after the name, as on the cards (`panels/network/WifiNetworkRow.qml`, a quarter of the row at most); not the same list in Settings → Wi-Fi. A long list builds only the rows in view: a row scrolled out goes with its elements and is built anew when it comes back, so an element there keeps no state of its own (its module keeps it, by the context) | 1.32 |
   | `popup.network.connections.wired.row.title` | `append` | as the wired profile's `settings`, for the wired profile up on the Ethernet device; with none up `networkId` and `name` `""` (`ModuleRules.wiredRowContext`) | the network popup's Ethernet part, the wired row's name line, the same (`panels/NetworkPanel.qml`) | 1.32 |
 
@@ -1445,8 +1445,10 @@ copy at each read instead (`singletons/ReadOnlyRules.qml`): `module.manifest`'s 
 `module.status`' (`errors`, `warnings`, `deprecations`, …; a frozen copy, never the host's own
 record), `Api.system.distribution.facts`', a list in an `Api.theme` group, and an element's
 `context` (`ReadOnlyRules.context`: a frozen object of its own for each element and a VPN
-provider's page, its lists and plain objects — the VPN's row — new at each read, its live
-objects — a provider, a `close` function — as they are).
+provider's page and extras, its lists and plain objects — the VPN's row — new at each read
+(read `context.vpn` once into a local), its live objects — a provider, a `close` function —
+as they are; a list or object holding a live one is copied without it, with a warning).
+A VPN's `provider` object goes only to its own module's elements (`ModuleRules.elementContext`).
 `module.programs`, `module.uses` and `Api.moduleStatus(id)`'s answer hold no list.
 `tests/ApiListsTest.qml` holds the functions to it.
 

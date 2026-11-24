@@ -30,9 +30,11 @@ import qs.singletons.network
 //                          module.status' lists (a frozen copy, never the shell's own record)
 //                          and an element's context's lists and plain objects (the VPN's
 //                          row; a frozen context of its own for each element, a VPN
-//                          provider's page too; its provider object and functions as they
-//                          are): two reads are not the same object, and a write into one does
-//                          not stay. (The engine
+//                          provider's page and its extras too; its provider object and
+//                          functions as they are, a list or object holding one copied without
+//                          it, with a warning in the log): two reads are not the same object,
+//                          and a write into one does not stay — read context.vpn once into a
+//                          local (const vpn = context.vpn) rather than again for each field. (The engine
 //                          lets a frozen list take push, writes to its indices and sort.)
 //   Lists                  (1.42) a new list in the API is given only by a function that
 //                          returns a new copy at each call, the caller's own; the five lists
@@ -174,7 +176,9 @@ import qs.singletons.network
 //                                                     (the VPN's: every VPN's card, whatever
 //                                                     its provider — not own-provider):
 //                                                     append, after the name; context as the
-//                                                     card's settings. For what a module adds
+//                                                     card's settings (1.42: provider null for
+//                                                     an element of another module than the
+//                                                     VPN's provider). For what a module adds
 //                                                     to that network (an exit node, a mark of
 //                                                     its own): any element — public elements
 //                                                     or its own, on theme tokens. Each is as

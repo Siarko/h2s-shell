@@ -124,7 +124,7 @@ Item {
                     placement: root.placement
                     takes: root.takes
                     properties: root.elementProperties
-                    context: Object.assign({}, root.block?.context ?? {}, contribution.context ?? {}, { anchor: root.path, placement: root.placement })
+                    context: ModuleRules.elementContext(root.block?.context, contribution.context, contribution.module ?? "", root.scopeId, root.path, root.placement)
                     sizedByElement: true
                     givenHeight: root.elementHeight > 0
                     clip: root.elementHeight > 0
@@ -164,7 +164,7 @@ Item {
                     placement: root.placement
                     takes: root.takes
                     properties: root.elementProperties
-                    context: Object.assign({}, root.block?.context ?? {}, contribution.context ?? {}, { anchor: root.path, placement: root.placement })
+                    context: ModuleRules.elementContext(root.block?.context, contribution.context, contribution.module ?? "", root.scopeId, root.path, root.placement)
                     width: root.width
                 }
             }

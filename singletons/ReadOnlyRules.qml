@@ -36,27 +36,51 @@ Singleton {
     //   - plain data (a list, or an object made of {} and lists, texts, finite numbers,
     //     true/false and null all the way down): a getter that returns a new read-only copy
     //     (copy's) at each read;
-    //   - a list holding anything else (a live object): a getter that returns a new frozen
-    //     list of the same items at each read;
+    //   - a list or {} object holding anything else (a function, a live object): the same, a
+    //     copy of what JSON carries (the rest left out; null when JSON cannot carry it at
+    //     all), and a warning in the log, once per key — never the value itself;
     //   - anything else (a live object, a function, a text, number, true/false, null): as it is.
     // Not an object (or a list) → itself
     function context(value) {
         if (value === null || typeof value !== "object" || Array.isArray(value))
             return value;
         const shown = {};
+        const lossy = lossyContextKeys(value);
         for (const key of Object.keys(value)) {
             const item = value[key];
-            if (_plainData(item, 0) && item !== null && typeof item === "object") {
-                const text = JSON.stringify(item);
-                Object.defineProperty(shown, key, { enumerable: true, get: () => _shown(JSON.parse(text)) });
-            } else if (Array.isArray(item)) {
-                const items = item.slice();
-                Object.defineProperty(shown, key, { enumerable: true, get: () => Object.freeze(items.slice()) });
+            if (_dataShaped(item)) {
+                if (lossy.includes(key) && !_warnedKeys.includes(key)) {
+                    _warnedKeys = _warnedKeys.concat([key]);
+                    console.warn("[ReadOnlyRules] a context's " + JSON.stringify(key)
+                                 + " holds what JSON cannot carry (a function or a live object): handed out as a copy without it");
+                }
+                let text = null;
+                try {
+                    text = JSON.stringify(item) ?? null;
+                } catch (error) {}
+                Object.defineProperty(shown, key, { enumerable: true, get: () => text === null ? null : _shown(JSON.parse(text)) });
             } else {
                 Object.defineProperty(shown, key, { enumerable: true, value: item });
             }
         }
         return Object.freeze(shown);
+    }
+
+    // The keys of a context (context()) whose list or {} object holds what JSON cannot carry
+    // whole: handed out as a lossy copy
+    function lossyContextKeys(value) {
+        if (value === null || typeof value !== "object" || Array.isArray(value))
+            return [];
+        return Object.keys(value).filter(key => _dataShaped(value[key]) && !_plainData(value[key], 0));
+    }
+
+    // The keys warned of once (context())
+    property var _warnedKeys: []
+
+    // A list, or an object made directly of {} (not a live object: a QObject reads as one)
+    function _dataShaped(value) {
+        return value !== null && typeof value === "object" && !Qt.isQtObject(value)
+            && (Array.isArray(value) || Object.getPrototypeOf(value) === Object.prototype);
     }
 
     // Data JSON carries as it is: texts, finite numbers, true/false, null, and lists and
@@ -73,7 +97,8 @@ Singleton {
             return false;
         if (Array.isArray(value))
             return value.every(item => _plainData(item, depth + 1));
-        if (Object.getPrototypeOf(value) !== Object.prototype)
+        // A QObject reads as an object of {} here: it is live, never data
+        if (Qt.isQtObject(value) || Object.getPrototypeOf(value) !== Object.prototype)
             return false;
         return Object.keys(value).every(key => value[key] === undefined || _plainData(value[key], depth + 1));
     }

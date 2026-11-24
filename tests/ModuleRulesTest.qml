@@ -1952,6 +1952,20 @@ TestCase {
         // Contexts compared by value
         const object = Qt.createQmlObject("import QtQuick; QtObject {}", this);
         const close = () => 1;
+        // elementContext: the block's, the contribution's, then anchor and placement; the
+        // provider object only to its own module's elements
+        const providerObject = { connect: () => true };
+        const block = { vpnId: "p:a", provider: providerObject, placement: "x" };
+        const ownElement = rules.elementContext(block, { slot: "network.vpn.row" }, "p", "p", "settings.v.card.title", "append");
+        assertEqual(JSON.stringify(ownElement), JSON.stringify({ vpnId: "p:a", provider: {}, placement: "append", slot: "network.vpn.row", anchor: "settings.v.card.title" }),
+                    "elementContext: the block's keys, the contribution's, then anchor and placement");
+        assert(ownElement.provider === providerObject, "… the provider object to its own module's element");
+        assert(rules.elementContext(block, null, "other", "p", "a", "append").provider === null, "… another module's element: provider null");
+        assert(rules.elementContext(block, null, "p", "", "a", "append").provider === null && rules.elementContext(block, null, "", "", "a", "append").provider === null,
+               "… no scope named: provider null");
+        assert(block.provider === providerObject, "… the block's context unchanged");
+        assert(!("provider" in rules.elementContext({ count: 1 }, null, "m", "", "a", "prepend")), "… no provider key added where there was none");
+        assertEqual(JSON.stringify(rules.elementContext(null, undefined, "m", "", "a", "prepend")), "{\"anchor\":\"a\",\"placement\":\"prepend\"}", "… no context given: anchor and placement");
         assert(rules.sameContext({ slot: "a", n: [1, { b: 2 }] }, { slot: "a", n: [1, { b: 2 }] }), "sameContext: equal plain data");
         assert(!rules.sameContext({ slot: "a" }, { slot: "b" }), "… a changed value");
         assert(!rules.sameContext({ slot: "a" }, { slot: "a", x: 1 }), "… a key more");

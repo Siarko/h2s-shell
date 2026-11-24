@@ -38,7 +38,13 @@ The interface modules are written against (`qs.api`), versioned on its own
   frozen object of its own (a VPN provider's page's too), its lists and plain objects
   (`otherVpnsUp`, `otherVpns`, the VPN's row `vpn`) a new copy at each read, its `provider`
   and `close` as they are: the elements at one place shared one context, so what one module
-  wrote into it every other saw — into `vpn`, the shell's own row of that VPN.
+  wrote into it every other saw — into `vpn`, the shell's own row of that VPN. A provider's
+  page and its row and card extras get the same. Read `context.vpn` once into a local: each
+  read is a new copy. A list or object in a context that holds a function or a live object
+  is copied without it, with a warning in the log.
+- 1.42: on a VPN card's name's line (`settings.network_vpn.vpns.card.title`, every module's
+  elements) `context.provider` is null for an element of another module than the VPN's
+  provider: a module's live provider object goes only to its own module's elements.
 - 1.41: a list or object inside the plain data the API hands out is a new frozen copy at
   each read (the routes in `Api.vpnsUp`'s rows, `Api.anchors`' placements,
   `Api.system.distribution`'s facts, `module.manifest`'s lists and objects, a list in an

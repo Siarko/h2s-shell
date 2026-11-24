@@ -2860,6 +2860,8 @@ TestCase {
                         "the VPN cards' name line: the element on every card, NetworkManager's and every provider's");
             assertEqual(vpnIds.map(id => _titleElements(cards[id])[0].item.context.vpnId + "|" + _titleElements(cards[id])[0].item.context.anchor).join(" "),
                         vpnIds.map(id => id + "|settings.network_vpn.vpns.card.title").join(" "), "… each with its card's VPN, at the place's path");
+            assertEqual(vpnIds.map(id => String(_titleElements(cards[id])[0].item.context.provider)).join(" "), Array(5).fill("null").join(" "),
+                        "… no card's provider object: anchors-vpn-title provides none of them (another module's live provider is never handed out)");
             assertEqual(vpnIds.map(id => Math.round(_titleElements(cards[id])[0].width) + "x" + Math.round(_titleElements(cards[id])[0].item.width)).join(" "),
                         Array(5).fill("16x16").join(" "), "… an element with no implicit width at its own width (16)");
             for (const id of vpnIds)

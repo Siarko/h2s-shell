@@ -805,6 +805,20 @@ TestCase {
             suite._rowOne = suite._row("vpt:one");
             suite._extrasOne = suite._extrasOf(suite._rowOne);
             assert(suite._extrasOne?.item?.context?.provider === suite._fakeOne, "views: the row's extras get the provider object in their context");
+            // A provider's extras (a module's provider sets them too) get their own frozen context:
+            // the VPN's row a copy at each read, never VpnManager's own
+            const extrasGiven = suite._extrasOne.item.context;
+            const shellRow = VpnManager.vpns.find(vpn => vpn.uuid === "vpt:one");
+            const shellRowText = JSON.stringify(shellRow);
+            assert(Object.isFrozen(extrasGiven) && extrasGiven.vpn !== shellRow && extrasGiven.vpn.uuid === "vpt:one",
+                   "extras: their context frozen, the VPN's row a copy, not VpnManager's");
+            for (const write of [() => { extrasGiven.vpn.name = "Evil"; }, () => { extrasGiven.vpn.active = !shellRow.active; }, () => { extrasGiven.otherVpnsUp.push("Evil"); }]) {
+                try {
+                    write();
+                } catch (error) {}
+            }
+            assert(JSON.stringify(VpnManager.vpns.find(vpn => vpn.uuid === "vpt:one")) === shellRowText && extrasGiven.vpn.name === shellRow.name
+                   && !extrasGiven.otherVpnsUp.includes("Evil"), "extras: a write into their context's row or list stays neither there nor in VpnManager's row");
             // The page in the core's frame: title, Back, the page with its context
             assert(suite._frame.shown && suite._frame.title === "Fake VPN · One" && suite._texts(suite._frame).includes("‹ Back"),
                    "page: in the core's frame — its title and Back (" + suite._frame.title + ")");
