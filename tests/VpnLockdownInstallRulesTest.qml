@@ -29,6 +29,7 @@ TestCase {
                "scripts: the longest the root step takes, and one byte more");
         assertEqual(rules.byteLength("aé€😀"), 1 + 2 + 3 + 4, "bytes: counted as UTF-8, as the root step counts them");
         assert(!rules.validScript(longest + "é".repeat(Math.ceil((rules.maxBytes - longest.length) / 2) + 1)), "scripts: the limit in bytes, not characters");
+        assert(rules.byteLength("\uD800") === Infinity && !rules.validScript(longest + "\uD800"), "bytes: a text that is not valid Unicode — no length it takes");
         assert(rules.validUser("alex") && rules.validUser("_a-1") && !rules.validUser("a b") && !rules.validUser("a\"") && !rules.validUser("-a")
                && !rules.validUser("") && !rules.validUser("a".repeat(33)) && !rules.validUser(null), "users the root step takes: names, nothing to quote");
         assertEqual(rules.ruleText("a\"b", "/x"), "", "… no rule for another");

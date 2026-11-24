@@ -168,8 +168,7 @@ Singleton {
     // and the script counted as asking), "note" (this run's, the user's click: left to the
     // user, the script counted as asking). PolkitRules.announces ties a question to a run.
     function promptAnswer(flow, running, byItself) {
-        if (!flow || !Array.isArray(running) || running.length === 0)
-            return "";
+        // No question, or no run under way (no words): announces says no
         if (!PolkitRules.announces(flow, { pkexecArgv: running, announced: false }))
             return "";
         return byItself === true ? "close" : "note";
