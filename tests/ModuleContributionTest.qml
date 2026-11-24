@@ -2,6 +2,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Wayland
 import qs.components
+import qs.singletons
 
 // components/ModuleContribution.qml with a stand-in host, in a window (a Row lays out its
 // children in its polish pass): how wide an element is.
@@ -49,6 +50,21 @@ TestCase {
         return condition();
     }
 
+    // A host that gives an element its context, as ModuleHost.initialProperties does for an
+    // element that declares one
+    property var _contextHost: QtObject {
+        readonly property var activeIds: ["fake"]
+        function initialProperties(url, properties) {
+            return { context: properties.context };
+        }
+        function handle(moduleId) {
+            return null;
+        }
+        function reportError(moduleId, text) {
+            console.warn("ModuleContributionTest: " + moduleId + ": " + text);
+        }
+    }
+
     property Component _contribution: Component {
         ModuleContribution {}
     }
@@ -92,6 +108,38 @@ TestCase {
         text.item.text = "";
         assertEqual(text.implicitWidth, 0, "… emptied: no width");
         text.destroy();
+
+        // Two elements at one place, given one context: each its own, its lists a new copy at
+        // each read — a change to one element's list reaches neither the other nor the view's
+        const given = { anchor: "settings.x", otherVpnsUp: ["Work"], count: 1 };
+        // Set as a binding sets it (createObject's properties would convert the lists)
+        const first = _make("ContextElement.qml", { host: _contextHost });
+        const second = _make("ContextElement.qml", { host: _contextHost });
+        first.context = given;
+        second.context = given;
+        assert(_until(() => first.ready && second.ready), "context: both elements built");
+        assert(first.ready && second.ready && first.item.othersUp === 1 && second.item.othersUp === 1, "context: given to each element");
+        assert(first.item.context !== second.item.context && first.item.context !== given && Object.isFrozen(first.item.context),
+               "… each its own frozen object, never the one given");
+        for (const change of [list => list.push("Evil"), list => { list[0] = "Evil"; }, list => list.sort(() => -1)]) {
+            try {
+                change(first.item.context.otherVpnsUp);
+            } catch (error) {}
+        }
+        assertEqual(JSON.stringify(first.item.context.otherVpnsUp) + " " + JSON.stringify(second.item.context.otherVpnsUp) + " " + JSON.stringify(given.otherVpnsUp),
+                    "[\"Work\"] [\"Work\"] [\"Work\"]", "… push, an index write, sort on one element's list: not at its next read, nor the other's, nor the view's");
+        try {
+            first.item.context.count = 5;
+        } catch (error) {}
+        assertEqual(second.item.context.count + " " + first.item.context.count, "1 1", "… a write to a key does not stay");
+        // Passed again when it changes by value: a binding on the element's list follows
+        first.context = { anchor: "settings.x", otherVpnsUp: ["Work", "Home"], count: 1 };
+        assert(_until(() => first.item.othersUp === 2), "… a new context: the element's binding follows (" + first.item.othersUp + ")");
+        assert(Object.isFrozen(first.item.context) && second.item.othersUp === 1, "… frozen again, the other element unchanged");
+        assert(Array.isArray(second.item.context.otherVpnsUp) && Array.isArray(first.item.context.otherVpnsUp),
+               "… a list arrives as an Array, given at first and passed later");
+        first.destroy();
+        second.destroy();
         finish();
     }
 }

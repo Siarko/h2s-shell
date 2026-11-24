@@ -30,8 +30,13 @@ QtObject {
     readonly property string _hostKey: ""
 
     // ---- Who it is ---- (moduleId above: its id; QML reserves the name `id`)
-    // Its status (Modules.status: state, errors, warnings, …), as `qs ipc call modules list`
-    readonly property var status: ModuleHandleHosts.hostOf(root._hostKey) ? (ModuleHandleHosts.hostOf(root._hostKey).statuses.find(entry => entry.id === moduleId && entry.state !== "duplicate") ?? null) : null
+    // Its status (Modules.status: state, errors, warnings, …), as `qs ipc call modules list`:
+    // a read-only copy (ReadOnlyRules.copy: each list in it a new copy at each read), never
+    // the host's own record, which the shell's views read
+    readonly property var status: {
+        const found = ModuleHandleHosts.hostOf(root._hostKey)?.statuses.find(entry => entry.id === moduleId && entry.state !== "duplicate") ?? null;
+        return found ? ReadOnlyRules.copy(found) : null;
+    }
     // True while the module is enabled and loaded: everything that acts follows this
     readonly property bool active: ModuleHandleHosts.hostOf(root._hostKey) ? ModuleHandleHosts.hostOf(root._hostKey).activeIds.includes(moduleId) : false
     // (API 1.15) The object made from its manifest's `main` while the module is active: null

@@ -7,7 +7,8 @@ import qs.singletons
 // gets the module's handle as `module` and `context` (when it declares them) before its
 // Component.onCompleted; `context` is passed again only when it changes by value
 // (ModuleRules.sameContext), so a contribution is not poked by a re-read that changed nothing
-// of it. `properties` ({ name: value }) are passed the same way (a settings page's editIndex;
+// of it. Each element gets a frozen context of its own whose lists are a new copy at each
+// read (ReadOnlyRules.context): the elements at one place never share a list. `properties` ({ name: value }) are passed the same way (a settings page's editIndex;
 // one the root object has without declaring it in its file is set right after it is made).
 // `shown` (module API 1.2), when the root object declares `property bool shown`: true while
 // the contribution is on screen — the place it sits in visible and its window open — kept
@@ -129,7 +130,7 @@ Item {
         _passedProperties = _allProperties();
         // The compiled file is cached: this does not compile it again
         // Given only what its root object declares (a Loader warns about the rest)
-        const initial = host.initialProperties(url, Object.assign(_allProperties(), { module: host.handle(moduleId), context: context }));
+        const initial = host.initialProperties(url, Object.assign(_allProperties(), { module: host.handle(moduleId), context: ReadOnlyRules.context(context) }));
         _loader.setSource(url, initial);
         // Made at once (the compiled file is cached, the Loader is synchronous): what it is
         // is read here, before it is shown — its own width too, before it is given one
@@ -182,7 +183,7 @@ Item {
             return;
         try {
             if ("context" in target)
-                target.context = context;
+                target.context = ReadOnlyRules.context(context);
         } catch (thrown) {
             // It takes no context
         }

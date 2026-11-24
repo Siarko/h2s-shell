@@ -26,8 +26,12 @@ import qs.singletons.network
 //                          or object inside an object is a getter that returns a new copy at
 //                          each read: the routes in Api.vpnsUp's rows, Api.anchors'
 //                          placements, Api.system.distribution's facts, module.manifest's
-//                          lists and objects, a list in an Api.theme group: two reads are not
-//                          the same object, and a write into one does not stay. (The engine
+//                          lists and objects, a list in an Api.theme group, (1.42)
+//                          module.status' lists (a frozen copy, never the shell's own record)
+//                          and an element's context's lists (a frozen context of its own
+//                          for each element; its provider object and functions as they
+//                          are): two reads are not the same object, and a write into one does
+//                          not stay. (The engine
 //                          lets a frozen list take push, writes to its indices and sort.)
 //   Lists                  (1.42) a new list in the API is given only by a function that
 //                          returns a new copy at each call, the caller's own; the five lists
@@ -47,10 +51,9 @@ import qs.singletons.network
 //                          Api.localNetworks — still hand out one frozen list every module
 //                          shares: copy it (slice()) before changing it. They are deprecated
 //                          (listed in the module's deprecations where its code reads one) and
-//                          go with the shell's next tightening. Not yet given through
-//                          functions: module.manifest's lists, module.programs and
-//                          module.uses, the lists in Api.theme's groups, what
-//                          Api.moduleStatus(id) answers
+//                          go with the shell's next tightening. A list inside an object
+//                          stays a getter (Read-only data, above); module.programs,
+//                          module.uses and Api.moduleStatus(id)'s answer hold no list
 //   Api.theme              the theme's tokens, read-only (api/ThemeTokens.qml)
 //   Api.listSlots()        (1.42; Api.slots the shared list, above) the slots the core
 //                          offers: [{ name, where, context, since }]. Once

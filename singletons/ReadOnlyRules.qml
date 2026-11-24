@@ -29,6 +29,32 @@ Singleton {
         return text === undefined ? null : _shown(JSON.parse(text));
     }
 
+    // An object of plain data beside live things — what a module's element gets as `context`
+    // (a provider's object, a close function, a VPN's lists) → a new frozen object with the
+    // same keys in the same order: a list in it a getter that returns a new read-only copy
+    // (copy's) at each read, so the elements at one place, and the view that gave it, never
+    // share one list; anything else as it is. A list JSON cannot carry stays as it is. Not an
+    // object (or a list) → itself
+    function context(value) {
+        if (value === null || typeof value !== "object" || Array.isArray(value))
+            return value;
+        const shown = {};
+        for (const key of Object.keys(value)) {
+            const item = value[key];
+            let text;
+            if (Array.isArray(item)) {
+                try {
+                    text = JSON.stringify(item);
+                } catch (error) {}
+            }
+            if (typeof text === "string")
+                Object.defineProperty(shown, key, { enumerable: true, get: () => _shown(JSON.parse(text)) });
+            else
+                Object.defineProperty(shown, key, { enumerable: true, value: item });
+        }
+        return Object.freeze(shown);
+    }
+
     // `value` came from JSON.parse: nothing else holds it
     function _shown(value) {
         if (value === null || typeof value !== "object")

@@ -82,6 +82,41 @@ TestCase {
         assertEqual(JSON.stringify(context.otherVpns[0].routes), "[\"10.0.0.0/8\",\"0.0.0.0/0\"]", "… nor in the context given");
         loader.destroy();
 
+        // context(): an element's context — its lists a new copy at each read, the rest as it is
+        const live = Qt.createQmlObject("import QtQuick\nQtObject { property int calls: 0 }", suite, "ReadOnlyLive.qml");
+        const close = () => 1;
+        const vpn = { name: "Office" };
+        const givenContext = { anchor: "a.b", otherVpnsUp: ["Work", "Home"], otherVpns: ReadOnlyRules.copy([{ name: "Work", routes: ["10.0.0.0/8"] }]),
+                        provider: live, close: close, vpn: vpn, count: 2, open: true, none: null };
+        const givenText = JSON.stringify([givenContext.otherVpnsUp, givenContext.otherVpns]);
+        const shownContext = ReadOnlyRules.context(givenContext);
+        assertEqual(Object.keys(shownContext).join(","), Object.keys(givenContext).join(","), "context: the same keys in the same order");
+        assert(Object.isFrozen(shownContext) && shownContext !== givenContext, "… a new frozen object");
+        assert(shownContext.otherVpnsUp !== shownContext.otherVpnsUp && shownContext.otherVpnsUp !== givenContext.otherVpnsUp
+               && shownContext.otherVpns !== givenContext.otherVpns, "… a list in it a new copy at each read, never the one given");
+        assert(Array.isArray(shownContext.otherVpnsUp) && Object.isFrozen(shownContext.otherVpns) && shownContext.otherVpns[0].routes !== shownContext.otherVpns[0].routes,
+               "… a list, read-only, a row's lists a new copy at each read too");
+        assertEqual(_tryChanges(() => shownContext.otherVpnsUp), "[\"Work\",\"Home\"]", "… push, index writes, sort: the next read is as it was");
+        assertEqual(_tryChanges(() => shownContext.otherVpns), "[{\"name\":\"Work\",\"routes\":[\"10.0.0.0/8\"]}]", "… a list of rows too");
+        assertEqual(JSON.stringify([givenContext.otherVpnsUp, givenContext.otherVpns]), givenText, "… the lists given unchanged");
+        assert(shownContext.provider === live && shownContext.close === close && shownContext.vpn === vpn
+               && shownContext.anchor === "a.b" && shownContext.count === 2 && shownContext.open === true && shownContext.none === null,
+               "… anything else as it is: a live object, a function, an object, a text, number, true/false, null");
+        for (const write of [() => { shownContext.anchor = "x"; }, () => { shownContext.otherVpnsUp = []; }, () => { shownContext.extra = 1; }]) {
+            try {
+                write();
+            } catch (error) {}
+        }
+        assert(shownContext.anchor === "a.b" && shownContext.otherVpnsUp.length === 2 && !("extra" in shownContext), "… its keys hold");
+        const other = ReadOnlyRules.context(givenContext);
+        try {
+            other.otherVpnsUp.push("Evil");
+        } catch (error) {}
+        assert(other.otherVpnsUp.length === 2 && shownContext.otherVpnsUp.length === 2, "two contexts made of one: neither sees a change to the other's list");
+        assert(ReadOnlyRules.context(null) === null && ReadOnlyRules.context("t") === "t" && ReadOnlyRules.context(givenContext.otherVpnsUp) === givenContext.otherVpnsUp,
+               "context: null, a text or a list → itself");
+        live.destroy();
+
         // JSON's own "__proto__" key stays a key; the prototype is untouched
         const odd = ReadOnlyRules.copy(JSON.parse("{\"__proto__\":{\"polluted\":true},\"plain\":\"__proto__\"}"));
         assert(Object.keys(odd).includes("__proto__") && odd.polluted === undefined && Object.getPrototypeOf(odd) === Object.prototype

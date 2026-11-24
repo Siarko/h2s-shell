@@ -1440,10 +1440,14 @@ properties (`Api.slots`, `Api.anchors`, `Api.networks`, `Api.vpnsUp`, `Api.local
 still hand out one frozen list every module shares; they are deprecated: a module whose code
 reads one has it listed among its `deprecations` (`ModuleSourceRules.codeDeprecations`, which
 does not count `Api.networksReady` or `Api.localNetworksReady`), and they go with the shell's
-next tightening. Not yet given through functions:
-`module.manifest`'s lists, `module.programs` and `module.uses`, the lists in `Api.theme`'s
-groups, what `Api.moduleStatus(id)` answers. `tests/ApiListsTest.qml` holds the functions to
-it.
+next tightening. A list inside an object the API hands out is a getter that returns a new
+copy at each read instead (`singletons/ReadOnlyRules.qml`): `module.manifest`'s lists,
+`module.status`' (`errors`, `warnings`, `deprecations`, …; a frozen copy, never the host's own
+record), `Api.system.distribution.facts`', a list in an `Api.theme` group, and an element's
+`context` (`ReadOnlyRules.context`: a frozen object of its own for each element, its lists
+new at each read, its live objects — a provider, a `close` function — as they are).
+`module.programs`, `module.uses` and `Api.moduleStatus(id)`'s answer hold no list.
+`tests/ApiListsTest.qml` holds the functions to it.
 
 **Network facts.** `Api.listNetworks()` (the saved Wi-Fi and Ethernet networks, a Wi-Fi one
 only once its details are read, so a hotspot never shows) with `Api.networksReady`;

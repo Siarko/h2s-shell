@@ -191,6 +191,29 @@ TestCase {
             assert(_has(collision?.errors, "battery.percent"), "key-collision: the core's fact dropped, with an error");
             assert(_has(collision?.errors, "\"clock\""), "key-collision: the core's widget type dropped, with an error");
 
+            // module.status: a read-only copy of its status, never the host's own record — its
+            // lists a new copy at each read, so a change by the module reaches neither the
+            // shell's views nor its next read
+            const collisionHandle = host.handle("key-collision");
+            const ownStatus = collisionHandle.status;
+            const hostText = JSON.stringify(collision);
+            assertEqual(JSON.stringify(ownStatus), hostText, "module.status: the same data as the host's status");
+            assert(ownStatus !== collision && Object.isFrozen(ownStatus) && ownStatus.errors !== ownStatus.errors,
+                   "… a frozen copy, never the host's record; a list in it a new copy at each read");
+            for (const change of [list => list.push("made up"), list => { list[0] = "made up"; }, list => list.sort(() => -1)]) {
+                try {
+                    change(collisionHandle.status.errors);
+                } catch (error) {}
+            }
+            for (const write of [() => { collisionHandle.status.state = "failed"; }, () => { collisionHandle.status.errors = []; }]) {
+                try {
+                    write();
+                } catch (error) {}
+            }
+            assertEqual(JSON.stringify(collisionHandle.status) + " " + JSON.stringify(_status("key-collision")), hostText + " " + hostText,
+                        "… push, an index write, sort on its errors, a write to its state: not at its next read, nor in the host's status");
+            collisionHandle.reportError("module.status follows");
+
             const notJson = _expectState("bad-manifest", "failed");
             assert(_has(notJson?.errors, "not valid JSON"), "bad-manifest: not JSON, said so");
             const fields = _expectState("bad-manifest-fields", "failed");
@@ -255,6 +278,10 @@ TestCase {
             suite._goodState = main.goodState;
             assert(host.setEnabled("good", false), "setEnabled(good, false)");
             assert(host._plainList(Config.disabledModules).includes("good"), "… stored in Config.disabledModules");
+        });
+        _then("module.status follows its status", () => _has(host.handle("key-collision").status?.errors, "module.status follows"), () => {
+            assert(_has(_status("key-collision")?.errors, "module.status follows") && Object.isFrozen(host.handle("key-collision").status),
+                   "module.status: a runtime error reported shows in it, still a frozen copy");
         });
         _then("good is disabled", () => _status("good")?.state === "disabled" && _goodState.mains === 0, () => {
             assertEqual(_status("good")?.enabled, false, "disabled: enabled false in its status");

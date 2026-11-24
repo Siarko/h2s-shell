@@ -29,9 +29,14 @@ The interface modules are written against (`qs.api`), versioned on its own
   it and no other module, nor the next call, sees that. Called in a binding
   (`property var networks: Api.listNetworks()`), the binding is evaluated again when the
   list's content changes, not on a re-read that found the same. The five properties stay
-  for now and are still one frozen list every module shares. Not yet given through functions:
-  `module.manifest`'s lists, `module.programs` and `module.uses`, the lists in `Api.theme`'s
-  groups, what `Api.moduleStatus(id)` answers.
+  for now and are still one frozen list every module shares. A list inside an object the API
+  hands out stays a new copy at each read (1.41): `module.manifest`'s, a list in an
+  `Api.theme` group, `Api.system.distribution.facts`'.
+- 1.42: `module.status` is a frozen copy of the module's status, its lists (`errors`,
+  `warnings`, `deprecations`, …) a new copy at each read: it was the shell's own record, so a
+  module that changed it changed what Settings → Modules showed. An element's `context` is a
+  frozen object of its own, its lists (`otherVpnsUp`, `otherVpns`) a new copy at each read: the
+  elements at one place shared one context, so what one module wrote into it every other saw.
 - 1.41: a list or object inside the plain data the API hands out is a new frozen copy at
   each read (the routes in `Api.vpnsUp`'s rows, `Api.anchors`' placements,
   `Api.system.distribution`'s facts, `module.manifest`'s lists and objects, a list in an

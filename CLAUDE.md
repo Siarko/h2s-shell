@@ -343,10 +343,11 @@ new kind.
   Such a function reads its notifying source (a `string` property holding the text) first, on
   every call, so a binding calling it follows the list; a new one gets a row in
   `tests/ApiListsTest.qml`'s `_lists` and a binding with its checks in `_bindings` (a constant
-  list: in the watcher, counted as never evaluated again). Lists the API still hands out
-  otherwise (the five old properties, deprecated in `ModuleSourceRules.deprecatedCode`; `module.manifest`'s lists, `module.programs`,
-  `module.uses`, lists in `Api.theme`'s groups, `Api.moduleStatus(id)`'s answer) are not yet
-  converted. — One shared list carried one module's `push` or `sort` to every other.
+  list: in the watcher, counted as never evaluated again). A list inside an object
+  the API hands out (`module.manifest`, `module.status`, an `Api.theme` group, an element's
+  `context`) is a getter returning a new copy at each read (`ReadOnlyRules.copy`, or
+  `ReadOnlyRules.context` beside live objects); the five old list properties are deprecated in
+  `ModuleSourceRules.deprecatedCode`. — One shared list carried one module's `push` or `sort` to every other.
 - **Animations stop when nothing shows them**: a running animation or timer is gated on the
   window and the item being visible (and on reduce motion). — Hidden windows kept animating
   every frame.
