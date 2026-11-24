@@ -39,7 +39,12 @@
 # with the reason, a part not passed with its log: NOT RUN for a part with nothing to run on
 # (no destination, no module directory) or one that could not be set up (its status 2, the
 # last lines it printed). A mutation run fails on a survivor not in tests/mutants-accepted.txt
-# or a stale entry there, and is not run when a mutant was not run or it gave no summary.
+# or a stale entry there, and is not run when a mutant was not run or it gave no summary. An
+# accepted entry it found stale because a suite killed its mutant (mutate.sh's `stale-killed`
+# lines) gets a second look before that: once every part here has ended, those mutants run
+# again, alone (`tests/mutate.sh -j 1 --only <the entries> <file>`, its log beside the
+# part's), and only an entry stale there too counts — a busy machine can make a survivor look
+# killed. An entry whose line no mutant matches any more is stale without one.
 #
 # Exit status: 0 when every part ran and passed; 1 when any failed; 2 when none failed but
 # one did not run (a --dry-run whose plan has such a part too), for a wrong option or list,
@@ -178,6 +183,7 @@ summary=() started_at=()
 current="" remote_pid=""
 started=$SECONDS
 log_of() { printf '%s/%02d.log' "$logs" "$1"; }
+look_log_of() { printf '%s/%02d-second-look.log' "$logs" "$1"; }
 
 # start <index> <shown>: the part in the background, in a process group of its own (so that
 # an interrupt ends all of it), its output in its log, and on the terminal when shown
@@ -194,18 +200,30 @@ start() {
     set +m
 }
 
-# mutate_verdict <log>: FAIL <why>, NOT RUN <why> or PASS, from mutate.sh's summary line
+# mutate_summary <log>: its summary line, when it gave one
+mutate_summary() { grep -E '^mutate\.sh: .*, [0-9]+ s: killed ' "$1" | tail -n 1; }
+
+# mutate_verdict <log> [<second look's log>]: FAIL <why>, NOT RUN <why> or PASS, from
+# mutate.sh's summary line; with the second look's log (when it gave a summary), the stale
+# entries a suite killed count only when it killed them again
 mutate_verdict() {
-    local line survived accepted stale not_run
+    local line survived accepted stale not_run looked note=""
     if grep -q '^mutate\.sh: .*: no mutants$' "$1"; then echo PASS; return; fi
-    line=$(grep -E '^mutate\.sh: .*, [0-9]+ s: killed ' "$1" | tail -n 1)
+    line=$(mutate_summary "$1")
     [[ "$line" =~ " / survived "([0-9]+)" (accepted "([0-9]+)") / stale "([0-9]+)" / " ]] \
         || { echo "NOT RUN it gave no summary line"; return; }
     survived=${BASH_REMATCH[1]} accepted=${BASH_REMATCH[2]} stale=${BASH_REMATCH[3]}
     not_run=0
     [[ "$line" =~ " / not run "([0-9]+) ]] && not_run=${BASH_REMATCH[1]}
+    if [ -n "${2:-}" ] && [ -n "$(mutate_summary "$2")" ]; then
+        looked=$(grep -c '^stale-killed'$'\t' "$1")
+        stale=$((stale - looked + $(grep -c '^stale-killed'$'\t' "$2")))
+        note=" (after a second look, alone)"
+    elif [ -n "${2:-}" ]; then
+        note=" (the second look, alone, gave no summary)"
+    fi
     if [ $((survived - accepted)) -gt 0 ] || [ "$stale" -gt 0 ]; then
-        echo "FAIL $((survived - accepted)) survived not accepted, $stale stale accepted entries"
+        echo "FAIL $((survived - accepted)) survived not accepted, $stale stale accepted entries$note"
     elif [ "$not_run" -gt 0 ]; then
         echo "NOT RUN $not_run mutants not run"
     else
@@ -213,15 +231,22 @@ mutate_verdict() {
     fi
 }
 
-# record <index> <status>
+# record <index> <status> [<took>]: its summary line; a mutation part with entries for a
+# second look is noted in `looks` instead (recorded again once they have run)
+looks=()
+statuses=() took_of=()
 record() {
     local index=$1 status=$2 name=${names[$1]} took reason verdict log
     log=$(log_of "$1")
-    took="$((SECONDS - started_at[index])) s"
+    took=${3:-"$((SECONDS - started_at[index])) s"}
+    if [ -z "${3:-}" ] && [ "${kinds[index]}" = mutate ] && [ "$status" = 0 ] && grep -q '^stale-killed'$'\t' "$log"; then
+        looks+=("$index") statuses[index]=$status took_of[index]=$took
+        return
+    fi
     case "$status" in
         0)
             verdict=PASS
-            [ "${kinds[index]}" != mutate ] || verdict=$(mutate_verdict "$log")
+            [ "${kinds[index]}" != mutate ] || verdict=$(mutate_verdict "$log" ${3:+"$(look_log_of "$index")"})
             case "$verdict" in
                 PASS) summary[index]="  PASS     $name ($took)" ;;
                 FAIL*) summary[index]="  FAIL     $name (${verdict#FAIL }, $took) — each needs a check or an entry with its reason in tests/mutants-accepted.txt; log: $log" ;;
@@ -291,6 +316,20 @@ for index in "${!names[@]}"; do
     status=$?
     current=""
     record "$index" "$status"
+done
+# The second looks: the machine here is quiet now (the remote part runs on the other one)
+for index in "${looks[@]}"; do
+    file=${names[index]#mutants of }
+    grep '^stale-killed'$'\t' "$(log_of "$index")" | cut -f2- > "$logs/$(printf '%02d' "$index")-stale.txt"
+    echo
+    echo "==== ${names[index]}: a second look, alone, at the accepted entries it found killed"
+    set -m
+    ( (cd "$REPO" && exec tests/mutate.sh -j 1 --only "$logs/$(printf '%02d' "$index")-stale.txt" "$file") 2>&1 < /dev/null | tee "$(look_log_of "$index")" ) &
+    current=$!
+    set +m
+    wait "$current"
+    current=""
+    record "$index" "${statuses[index]}" "${took_of[index]}"
 done
 if [ -n "$remote_pid" ]; then
     echo

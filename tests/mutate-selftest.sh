@@ -17,9 +17,19 @@
 #              made in mutate.sh's own copies), and no temp dir is left
 #   judged     --judge on canned runs: a load error naming the subject is "not compiled",
 #              after a time-out (124) or a kill (137) too; a TypeError or ReferenceError
-#              naming it is "killed"; a failed check "killed"; a Quickshell stopped at the
+#              naming it is "killed"; a failed check "killed"; a time-out (124, or 137 from
+#              its -k) without a load error "timed-out"; a Quickshell stopped at the
 #              memory cap or the run's budget "capped" (counted as killed); 0 "survived";
 #              2 "not run"
+#   limits     with a stand-in for the unit runner and a time limit of a second: a mutant
+#              slow only the first time (18 -> 19) is run once more, alone, and survives —
+#              its accepted entry holds; one that hangs every time (the dropped '!') is
+#              killed at the time limit, counted as killed and listed apart, and its accepted
+#              entry is stale with a `stale-killed` line; an accepted survivor a check
+#              killed the first time only (the first negated return) is run once more and
+#              holds; nothing else is run again, the
+#              limits are measured again first; --only runs just the mutants it names, and
+#              one naming none is status 2
 #   unjudged   a suite that fails unmutated: status 2, no mutant run
 #   refused    a file outside the tree, a test file, a wrong option: status 2
 #
@@ -125,6 +135,78 @@ echo "untouched:"
 check "the subject in the tree not changed" cmp -s "$fixtures/FixtureRules.qml" "$tree/$subject"
 check "no temp dir left" test -z "$(ls -A "$work/tmp")"
 
+echo "limits:"
+# A tree of its own whose unit runner is a stand-in: it passes on the subject as it is,
+# sleeps past the limit on 18 -> 19 the first time only and on the dropped '!' every time,
+# fails on the first negated return the first time only, passes on '>=' -> '>' and fails on
+# anything else. Each run of it is noted in runs
+limits=$work/limits
+mkdir -p "$limits/tree/tests" "$limits/tree/singletons" "$limits/state"
+cp "$REPO/tests/mutate.sh" "$REPO/tests/memory-cap.sh" "$limits/tree/tests/"
+cp "$fixtures/FixtureRules.qml" "$limits/tree/$subject"
+cp "$fixtures/FixtureRules.qml" "$limits/state/original.qml"
+cat > "$limits/tree/tests/run-unit.sh" << STANDIN
+#!$(type -P bash)
+state=$limits/state
+subject=\$(dirname "\$0")/../$subject
+if cmp -s "\$subject" "\$state/original.qml"; then echo unmutated >> "\$state/runs"; exit 0; fi
+if grep -q "age >= 19" "\$subject"; then
+    echo slow >> "\$state/runs"
+    [ -e "\$state/slow-once" ] && exit 0
+    touch "\$state/slow-once"
+    exec sleep 20
+fi
+if grep -q "return adult(age);" "\$subject"; then echo hang >> "\$state/runs"; exec sleep 20; fi
+if grep -q "age > 18" "\$subject"; then echo survivor >> "\$state/runs"; exit 0; fi
+if grep -q "return !(age >= 18)" "\$subject"; then
+    echo flaky >> "\$state/runs"
+    [ -e "\$state/flaky-once" ] && exit 0
+    touch "\$state/flaky-once"
+    echo "  FAIL: a check that fails on its own"
+    exit 1
+fi
+echo other >> "\$state/runs"
+echo "  FAIL: a check"
+exit 1
+STANDIN
+chmod +x "$limits/tree/tests/run-unit.sh"
+{
+    echo "# reason: slow only under load"
+    printf '%s\t%s\t%s\t%s\n' "$subject" "18 -> 19" "#1" "return age >= 18;"
+    echo "# reason: an entry a hang kills"
+    printf '%s\t%s\t%s\t%s\n' "$subject" "! -> " "#1" "return !adult(age);"
+    echo "# reason: killed once by a suite failing on its own"
+    printf '%s\t%s\t%s\t%s\n' "$subject" "return age >= 18 -> return !(age >= 18)" "#1" "return age >= 18;"
+} > "$limits/accepted.txt"
+limited() { H2S_MUTATE_MIN_LIMIT=1 H2S_TEST_MEMORY_MAX=0 H2S_TEST_MEMORY_BUDGET=0 TMPDIR=$work/tmp "$limits/tree/tests/mutate.sh" "$@"; }
+limited -j 2 --accepted "$limits/accepted.txt" "$subject" MutateFixtureRulesTest > "$limits/run.log" 2>&1
+status=$?
+check "exit 0 (it exited $status)" test "$status" = 0
+check "the summary: killed 4 (1 at the time limit) / survived 3 (accepted 2) / stale 1" \
+    grep -q "^mutate.sh: $subject, [0-9]* s: killed 4 (1 at the time limit) / survived 3 (accepted 2) / stale 1 / not compiled 0$" "$limits/run.log"
+check "an accepted survivor killed once by a check: run once more, alone: survived" \
+    grep -q -F "[again 1/3] survived  $subject:11:9 " "$limits/run.log"
+check "the slow one first stopped at the time limit" grep -q -F "] killed (time limit)  $subject:11:23 " "$limits/run.log"
+check "… run once more, alone: survived" grep -q -F "[again 2/3] survived  $subject:11:23 " "$limits/run.log"
+check "… shown as accepted" bash -c 'sed -n "/^Accepted survivors/,/^\$/p" "$1" | grep -q -F "$2:11:23 "' _ "$limits/run.log" "$subject"
+check "the hang run once more and stopped again" grep -q -F "[again 3/3] killed (time limit)  $subject:15:16 " "$limits/run.log"
+check "… listed apart" bash -c 'sed -n "/^Killed at the time limit/,/^\$/p" "$1" | grep -q -F "$2:15:16 "' _ "$limits/run.log" "$subject"
+check "… its entry stale, with a stale-killed line" \
+    grep -q -F "stale-killed	$subject	! -> 	#1	return !adult(age);" "$limits/run.log"
+check "… the only stale-killed line" test "$(grep -c "^stale-killed" "$limits/run.log")" = 1
+check "nothing else run again (the hang, the slow and the flaky one twice, four others once)" \
+    bash -c '[ "$(grep -c hang "$1")" = 2 ] && [ "$(grep -c slow "$1")" = 2 ] && [ "$(grep -c flaky "$1")" = 2 ] && [ "$(grep -c -e other -e survivor "$1")" = 4 ]' _ "$limits/state/runs"
+check "the limits measured again before the second runs" test "$(grep -c unmutated "$limits/state/runs")" = 2
+grep -F "18 -> 19" "$limits/accepted.txt" > "$limits/only.txt"
+: > "$limits/state/runs"
+limited --only "$limits/only.txt" "$subject" MutateFixtureRulesTest > "$limits/only.log" 2>&1
+check "--only: one mutant of seven" grep -q -F "mutate.sh: $subject, 1 of 7 mutants (--only $limits/only.txt)" "$limits/only.log"
+check "… only it run" test "$(grep -v -c unmutated "$limits/state/runs")" = 1
+printf '%s\t%s\t%s\t%s\n' "$subject" "18 -> 19" "#1" "return age >= 21;" > "$limits/none.txt"
+limited --only "$limits/none.txt" "$subject" MutateFixtureRulesTest > /dev/null 2>&1
+check "--only naming no mutant: status 2" test $? = 2
+check "no temp dir left" test -z "$(ls -A "$work/tmp")"
+
 echo "unjudged:"
 mutate "$subject" MutateFailingTest > "$work/unjudged.log" 2>&1
 status=$?
@@ -149,7 +231,8 @@ check "… after a kill too" judged "$work/load.log" 137 not-compiled
 check "a TypeError naming it: killed" judged "$work/type.log" 1 killed
 check "a ReferenceError naming it: killed" judged "$work/reference.log" 1 killed
 check "a failed check: killed" judged "$work/failed.log" 1 killed
-check "a time-out without a load error: killed" judged "$work/failed.log" 124 killed
+check "a time-out without a load error: timed out" judged "$work/failed.log" 124 timed-out
+check "… killed after the time-out too" judged "$work/failed.log" 137 timed-out
 check "stopped at the memory cap: capped (counted as killed)" judged "$work/capped.log" 1 capped
 check "stopped at the run's memory budget: capped too" judged "$work/budget.log" 1 capped
 check "status 0: survived" judged "$work/failed.log" 0 survived

@@ -28,7 +28,9 @@ tree=$work/tree
 mkdir -p "$tree/tests" "$tree/singletons" "$work/status"
 cp "$REPO/tests/release-check.sh" "$tree/tests/"
 # standin <runner>: notes "<runner> <arguments>" in calls and "start/end <runner>" in events,
-# prints a line (mutate.sh: its summary line, with the survivors given in survive/<file>),
+# prints a line (mutate.sh: its summary line, with the survivors given in survive/<file>, and
+# the stale-killed lines counted in stalekilled/<file>, or in looked/<file> for its second
+# look, called with --only),
 # waits for the event in wait/<runner> when there is one (at most 10 s), sleeps sleep/<runner>
 # seconds, and ends with the status in status/<runner> (default 0)
 standin() {
@@ -38,9 +40,14 @@ w=$work
 if [ "$1" = remote-run.sh ]; then echo "$1 \$* H2S_REMOTE=\${H2S_REMOTE:-}" >> "\$w/calls"; else echo "$1 \$*" >> "\$w/calls"; fi
 echo "start $1" >> "\$w/events"
 echo "output of $1 \$*"
-if [ "$1" = mutate.sh ] && [ ! -f "\$w/nosummary/\$(basename "\$1")" ]; then
-    read -r survived accepted stale notrun < <(cat "\$w/survive/\$(basename "\$1")" 2> /dev/null || echo 0 0 0 0)
-    echo "mutate.sh: \$1, 1 s: killed 3 / survived \$survived (accepted \$accepted) / stale \$stale / not compiled 0\$([ "\$notrun" = 0 ] || echo " / not run \$notrun")"
+subject=\${@: -1}
+if [ "$1" = mutate.sh ] && [[ " \$* " == *" --only "* ]]; then
+    [ -f "\$w/nosummary/looked-\$(basename "\$subject")" ] || echo "mutate.sh: \$subject, 1 s: killed 1 / survived 0 (accepted 0) / stale 0 / not compiled 0"
+    for i in \$(seq "\$(cat "\$w/looked/\$(basename "\$subject")" 2> /dev/null || echo 0)"); do printf 'stale-killed\t%s\tx -> y\t#1\tline %s\n' "\$subject" "\$i"; done
+elif [ "$1" = mutate.sh ] && [ ! -f "\$w/nosummary/\$(basename "\$subject")" ]; then
+    read -r survived accepted stale notrun < <(cat "\$w/survive/\$(basename "\$subject")" 2> /dev/null || echo 0 0 0 0)
+    echo "mutate.sh: \$subject, 1 s: killed 3 / survived \$survived (accepted \$accepted) / stale \$stale / not compiled 0\$([ "\$notrun" = 0 ] || echo " / not run \$notrun")"
+    for i in \$(seq "\$(cat "\$w/stalekilled/\$(basename "\$subject")" 2> /dev/null || echo 0)"); do printf 'stale-killed\t%s\tx -> y\t#1\tline %s\n' "\$subject" "\$i"; done
 fi
 if [ -f "\$w/wait/$1" ]; then
     for i in \$(seq 200); do grep -qx "\$(cat "\$w/wait/$1")" "\$w/events" && break; sleep 0.05; done
@@ -90,7 +97,10 @@ run() {
     STATUS=$?
     TOOK=$((SECONDS - began))
 }
-reset() { rm -rf "$work/status" "$work/survive" "$work/nosummary" "$work/wait" "$work/sleep"; mkdir -p "$work/status" "$work/survive" "$work/nosummary" "$work/wait" "$work/sleep"; }
+reset() {
+    rm -rf "$work/status" "$work/survive" "$work/nosummary" "$work/wait" "$work/sleep" "$work/stalekilled" "$work/looked"
+    mkdir -p "$work/status" "$work/survive" "$work/nosummary" "$work/wait" "$work/sleep" "$work/stalekilled" "$work/looked"
+}
 status_is() { [ "$STATUS" = "$1" ]; }
 says() { grep -q -- "$1" <<< "$OUTPUT"; }
 silent_on() { ! grep -q -- "$1" <<< "$OUTPUT"; }
@@ -226,6 +236,39 @@ echo "1 1 1 0" > "$work/survive/ChangedRules.qml"
 run --remote box --module "$work/mod-b"
 check "a stale accepted entry (its line edited): FAIL, status 1" \
     bash -c '[ "$1" = 1 ] && grep -q "^  FAIL     mutants of singletons/ChangedRules.qml (0 survived not accepted, 1 stale" <<< "$2"' _ "$STATUS" "$OUTPUT"
+check "… no second look at it" not_called "mutate.sh -j 1 --only"
+
+# Stale entries a suite killed: looked at once more, alone, after every other part here
+reset
+echo "0 0 2 0" > "$work/survive/ChangedRules.qml"
+echo 2 > "$work/stalekilled/ChangedRules.qml"
+echo "end run-all.sh" > "$work/wait/remote-run.sh"
+run --remote box --module "$work/mod-b"
+looked_list=$(sed -n 's/^mutate.sh -j 1 --only \([^ ]*\) singletons\/ChangedRules.qml$/\1/p' "$work/calls")
+check "stale entries a suite killed: a second look, alone, at those" \
+    bash -c '[ -n "$1" ] && [ "$(grep -c "^singletons/ChangedRules.qml	x -> y	#1	line [12]$" "$1")" = 2 ]' _ "$looked_list"
+check "… after every other part here" \
+    bash -c '[ "$(grep -v remote-run "$1" | tail -n 3 | tr "\n" " ")" = "end run-modules.sh start mutate.sh end mutate.sh " ]' _ "$work/events"
+check "… none of the other file's" not_called "mutate.sh -j 1 --only .* singletons/NewRules.qml"
+check "… surviving there: PASS, status 0" \
+    bash -c '[ "$1" = 0 ] && grep -q "^  PASS     mutants of singletons/ChangedRules.qml " <<< "$2"' _ "$STATUS" "$OUTPUT"
+check "… its output shown and kept" bash -c 'ls "$1"/*-second-look.log > /dev/null 2>&1' _ "$(sed -n 's/^release-check.sh: the logs in //p' <<< "$OUTPUT" | tail -n 1)"
+
+reset
+echo "0 0 2 0" > "$work/survive/ChangedRules.qml"
+echo 1 > "$work/stalekilled/ChangedRules.qml"
+echo 1 > "$work/looked/ChangedRules.qml"
+run --remote box --module "$work/mod-b"
+check "one killed again there, one edited line: FAIL with 2 stale" \
+    bash -c '[ "$1" = 1 ] && grep -q "^  FAIL     mutants of singletons/ChangedRules.qml (0 survived not accepted, 2 stale accepted entries (after a second look, alone)" <<< "$2"' _ "$STATUS" "$OUTPUT"
+
+reset
+echo "0 0 1 0" > "$work/survive/ChangedRules.qml"
+echo 1 > "$work/stalekilled/ChangedRules.qml"
+touch "$work/nosummary/looked-ChangedRules.qml"
+run --remote box --module "$work/mod-b"
+check "a second look without a summary: the first verdict stands, said" \
+    bash -c '[ "$1" = 1 ] && grep -q "1 stale accepted entries (the second look, alone, gave no summary)" <<< "$2"' _ "$STATUS" "$OUTPUT"
 
 reset
 echo "0 0 0 3" > "$work/survive/ChangedRules.qml"
