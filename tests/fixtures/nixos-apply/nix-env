@@ -1,0 +1,12 @@
+#!/bin/sh
+# Stand-in for nix-env (NixosApplyScriptTest): records its words; unless ctl/nix-env.code
+# says otherwise, sets the profile (-p <profile> --set <path>) to a new generation's link.
+base=${0%/run/current-system/sw/bin/nix-env}
+printf 'nix-env %s\n' "$*" >> "$base/log/calls"
+code=$(cat "$base/ctl/nix-env.code")
+[ "$code" = 0 ] || exit "$code"
+[ $# -eq 4 ] && [ "$1" = -p ] && [ "$3" = --set ] || exit 2
+count=$(ls -- "${2%/*}" | grep -c '^system-[0-9]*-link$')
+generation=$((count + 1))
+ln -s -- "$4" "$2-$generation-link"
+ln -sfn -- "system-$generation-link" "$2"

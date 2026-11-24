@@ -27,9 +27,14 @@ take_base() {
     [ -z "$base" ] || refuse paths
     return 0
   fi
-  case "$base" in /*) ;; *) refuse paths;; esac
-  case "$base" in */|*//*|*/.|*/..|*/./*|*/../*|*[!A-Za-z0-9/._-]*) refuse paths;; esac
+  is_plain "$base" || refuse paths
   case "$base" in /etc|/etc/*|/usr|/usr/*|/var|/var/*) refuse paths;; esac
+}
+
+# is_plain <path>: absolute, of plain parts (RootScriptRules.plainPath)
+is_plain() {
+  case "$1" in /*) ;; *) return 1;; esac
+  case "$1" in */|*//*|*/.|*/..|*/./*|*/../*|*[!A-Za-z0-9/._-]*) return 1;; esac
 }
 
 # safe_dir <dir>: no link, the owner's, nobody else may write in it

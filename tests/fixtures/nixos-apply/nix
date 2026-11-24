@@ -1,0 +1,23 @@
+#!/bin/sh
+# Stand-in for nix (NixosApplyScriptTest): records its words (the expression as EXPR, and
+# whether it overrides the shell's file), the environment the root step hands it and the
+# candidate, then answers as ctl/eval.{out,err,code} say. Its scratch base is where it lies.
+base=${0%/run/current-system/sw/bin/nix}
+override=no; previous=
+{
+  printf 'nix'
+  for word in "$@"; do
+    if [ "$previous" = --expr ]; then
+      case "$word" in *'programs.h2s-shell.settingsFile = lib.mkForce candidate;'*) override=yes;; esac
+      word=EXPR
+    fi
+    printf ' %s' "$word"; previous=$word
+  done
+  printf '\n'
+  printf 'nix-vars flake=%s host=%s nixpath=%s override=%s\n' "$H2S_FLAKE" "$H2S_HOST" "${NIX_PATH-unset}" "$override"
+  printf 'nix-home %s\n' "$(tr '\n\t' '  ' < "$HOME/.gitconfig" 2> /dev/null)"
+  printf 'nix-candidate %s %s\n' "${H2S_CANDIDATE##*/}" "$(sha256sum < "$H2S_CANDIDATE" | cut -d' ' -f1)"
+} >> "$base/log/calls"
+cat "$base/ctl/eval.out"
+cat "$base/ctl/eval.err" >&2
+exit "$(cat "$base/ctl/eval.code")"
