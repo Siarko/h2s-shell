@@ -1190,8 +1190,9 @@ close this section.
   outside it; `prepend` and `append` inside it, first and last of its content, under its
   frame. Top to bottom, for a block B holding c1 … cn: B.before · B's frame · B.prepend ·
   c1.before · c1 · c1.after · … · B.append · B.after. Only the paths in
-  `ModuleRules.anchorTable` take content (`Api.anchors` is its read-only copy, each row's
-  `placements` a new frozen copy at each read): naming a block
+  `ModuleRules.anchorTable` take content (`Api.listAnchors()` gives a new copy of it at each
+  call, API 1.42; `Api.anchors` is its shared read-only copy, each row's `placements` a new
+  frozen copy at each read): naming a block
   does not publish it, and a place not in the table
   or a placement it does not take is an error in the module's status, the rest of the module
   loading. Each placement a kind has is a host, `components/AnchorContent.qml` — the slot's
@@ -1225,7 +1226,7 @@ close this section.
   | `popup.notifications` | `prepend` | `count` (the notifications in the list) | the notifications popup, under its header, above the list (`panels/NotificationPanel.qml`); the slot `notifications.popup.top` is read as it | 1.22 |
   | `popup.network.connections.vpn.row` | `after` | `vpnId`, `entryId`, `vpn`, `provider` (the provider object), `otherVpnsUp`, `otherVpns` | the network popup's VPN part, under the row of each VPN of the module's provider (`panels/network/VpnSection.qml`); own-provider; the slot `network.vpn.row` is read as it | 1.23 |
   | `settings.network_vpn.vpns.card.settings` | `prepend` | as the VPN's row | Settings → System → Network → VPN, the opened card of each VPN of the module's provider, above the card's own rows (`panels/settings/NetworkVpnSettings.qml`); own-provider; built while the card is open; the slot `network.vpn.card` is read as it (its context adds `open: true`) | 1.23 |
-  | `settings.network_wifi.saved.card.settings` | `append` | `networkId` (the profile's UUID, `Api.networks`' `id`), `name`, `kind` (`"wifi"`), `active` (fully up) — the network as `Api.networks` names it — and `ssid` (its SSID, plain, on one line; API 1.32) | Settings → System → Network → Wi-Fi, the opened card of each saved network, under the page's rows (the password) (`panels/settings/NetworkWifiSettings.qml`); built while the card is open; not on a hotspot's card | 1.24 |
+  | `settings.network_wifi.saved.card.settings` | `append` | `networkId` (the profile's UUID, `Api.listNetworks()`' `id`), `name`, `kind` (`"wifi"`), `active` (fully up) — the network as `Api.listNetworks()` names it — and `ssid` (its SSID, plain, on one line; API 1.32) | Settings → System → Network → Wi-Fi, the opened card of each saved network, under the page's rows (the password) (`panels/settings/NetworkWifiSettings.qml`); built while the card is open; not on a hotspot's card | 1.24 |
   | `settings.network_ethernet.profiles.card.settings` | `append` | as the saved Wi-Fi network's (`kind` `"ethernet"`) | Settings → System → Network → Ethernet, the opened card of each wired profile, under the card's rows (`panels/settings/NetworkEthernetSettings.qml`); built while the card is open | 1.24 |
   | `settings.network_vpn.vpns.card.actions` | `append` | as the VPN's row | the same VPN cards' buttons, closed and open: in the row on the name's line, after the card's own ("Settings…", "Edit"), before "Delete"; own-provider; a `SmallButton` only | 1.25 |
   | `settings.network_wifi.saved.card.actions` | `append` | as the saved Wi-Fi network's `settings` | the same Wi-Fi cards' buttons, closed and open: in the row on the name's line, after "Edit", before "Forget"; a `SmallButton` only | 1.25 |
@@ -1239,7 +1240,7 @@ close this section.
   A module's icon (the manifest's `icon`) is its face in Settings → Modules; the shell puts
   it on no card. A module shows what it adds to a network in that card's `title` place.
 
-  A saved Wi-Fi network's card is a place only while `Api.networks` names its network
+  A saved Wi-Fi network's card is a place only while `Api.listNetworks()` names its network
   (`ModuleRules.networkListed`): until its details are read it could be a hotspot, so its
   card has no anchor and no module's element or button is built in it.
 
@@ -1424,11 +1425,25 @@ user can write there. It is never in a configuration backup as a whole: only the
 folders inside it that the manifest's `"backup": ["notes.db", "accounts"]` (API 1.37;
 relative paths, no `..`, at most 32) names.
 
-**Network facts.** `Api.networks` (the saved Wi-Fi and Ethernet networks, a Wi-Fi one only
-once its details are read, so a hotspot never shows) with `Api.networksReady`;
-`Api.vpnsUp`, whose rows say what each VPN does with the traffic — `fullTunnel`, `setsDns`,
-`routes`, each `null` where it is not known, never `false` for "not read"; and
-`Api.localNetworks` (`{ device, kind, family, address, network }`: the global addresses of
+**Lists in the module API.** A single value is a property; a list is a function that returns
+a new copy at each call (API 1.42): `Api.listSlots()`, `Api.listAnchors()`,
+`Api.listNetworks()`, `Api.listVpnsUp()`, `Api.listLocalNetworks()`. The engine lets a frozen
+list take `push`, index writes and `sort`, so one list two modules read would carry one
+module's change to the other; each call instead parses the list's JSON text again
+(`ModuleRules.ownRows`), and the copy — its rows and the lists inside them too — is the
+caller's, not frozen. The function reads its text property first, on every call, and that
+string notifies only when the content changed: a binding calling the function
+(`property var networks: Api.listNetworks()`) is evaluated again on a real change, not on a
+re-read that found the same, and its property's change signal is the module's. The older
+properties (`Api.slots`, `Api.anchors`, `Api.networks`, `Api.vpnsUp`, `Api.localNetworks`)
+still hand out one frozen list every module shares. `tests/ApiListsTest.qml` holds the
+functions to it.
+
+**Network facts.** `Api.listNetworks()` (the saved Wi-Fi and Ethernet networks, a Wi-Fi one
+only once its details are read, so a hotspot never shows) with `Api.networksReady`;
+`Api.listVpnsUp()`, whose rows say what each VPN does with the traffic — `fullTunnel`,
+`setsDns`, `routes`, each `null` where it is not known, never `false` for "not read"; and
+`Api.listLocalNetworks()` (`{ device, kind, family, address, network }`: the global addresses of
 every device that is no VPN's, deprecated IPv6 privacy addresses left out by the flags `ip -j
 -6 address show` gives) with `Api.localNetworksReady`, false while the reading has
 not worked. All come from what the shell's network singletons read from NetworkManager

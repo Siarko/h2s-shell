@@ -9,7 +9,7 @@ import qs.singletons.network
 // The module API: everything a
 // module may use of the shell. A module imports `qs.api` and reaches:
 //
-//   Api.version            "1.41" — this shell's module API, "major.minor". A module's manifest
+//   Api.version            "1.42" — this shell's module API, "major.minor". A module's manifest
 //                          asks for one ("api"); it loads when the major is the same, this
 //                          minor is at least the one asked for, and the one asked for is not
 //                          below the shell's floor (ModuleRules.apiFloor: the oldest version
@@ -27,18 +27,34 @@ import qs.singletons.network
 //                          each read: the routes in Api.vpnsUp's rows, Api.anchors'
 //                          placements, Api.system.distribution's facts, module.manifest's
 //                          lists and objects, a list in an Api.theme group: two reads are not
-//                          the same object, and a write into one does not stay. (The engine lets a frozen list take push, writes to its
-//                          indices and sort.) A list handed out as a value — Api.networks,
-//                          Api.vpnsUp, Api.localNetworks, Api.slots, Api.anchors — is the one
-//                          every module reads: copy it (slice()) before changing it
+//                          the same object, and a write into one does not stay. (The engine
+//                          lets a frozen list take push, writes to its indices and sort.) A
+//                          single value is a property; a list is a function (below)
+//   Lists                  (1.42) every list the API hands out comes from a function that
+//                          returns a new copy at each call, the caller's own: listSlots(),
+//                          listAnchors(), listNetworks(), listVpnsUp(), listLocalNetworks().
+//                          Not frozen: sort it, extend it, write into it — no other caller sees
+//                          it, and the next call is the shell's list again. The rows and the
+//                          lists and objects inside them are plain and the caller's too (a
+//                          row's routes is one list: row.routes === row.routes). Called in a
+//                          binding, the binding follows the list: it is evaluated again when
+//                          the list's content changed, not on a re-read that found the same:
+//                            property var networks: Api.listNetworks()
+//                          and onNetworksChanged is the module's change signal. Called in a
+//                          handler, it is the list of that moment. A view of a changing list
+//                          takes it through a ScriptModel of keys, as any changing list. The
+//                          old properties — Api.slots, Api.anchors, Api.networks, Api.vpnsUp,
+//                          Api.localNetworks — still hand out one frozen list every module
+//                          shares: copy it (slice()) before changing it
 //   Api.theme              the theme's tokens, read-only (api/ThemeTokens.qml)
-//   Api.slots              the slots the core offers: [{ name, where, context, since }]. Once
+//   Api.listSlots()        (1.42; Api.slots the shared list, above) the slots the core
+//                          offers: [{ name, where, context, since }]. Once
 //                          a slot's view is built from anchor blocks, a manifest's `slots`
 //                          entry for it is read as its anchor (ModuleRules.slotAliases: the
 //                          element's context also carries `slot`) and listed in the
 //                          module's deprecations
-//   Api.anchors            (1.20) the places in the shell's views a module may put elements
-//                          at, frozen [{ path, kind, placements, takes, context, scope, since,
+//   Api.listAnchors()      (1.42; Api.anchors, 1.20, the shared list, frozen) the places in
+//                          the shell's views a module may put elements at: [{ path, kind, placements, takes, context, scope, since,
 //                          where, view }] (ModuleRules.anchorTable, the reference; 1.28: no
 //                          `marks` any more).
 //                          A path is <surface>.<view>[.<block>]…[.<region>]: surface "settings" or
@@ -99,7 +115,7 @@ import qs.singletons.network
 //                                                     System → Network → Wi-Fi, under the
 //                                                     page's rows (the password), while the
 //                                                     card is open: append; context { networkId:
-//                                                     the profile's UUID (Api.networks' id),
+//                                                     the profile's UUID (listNetworks()' id),
 //                                                     name, kind: "wifi", active: fully up,
 //                                                     (1.32) ssid: the network's SSID, plain,
 //                                                     on one line }. Not on a hotspot's card
@@ -202,7 +218,7 @@ import qs.singletons.network
 //                                                     context). Not in Settings → Wi-Fi's own
 //                                                     list of networks in range
 //                          A saved Wi-Fi network's card is a place only once its details are
-//                          read (until then Api.networks leaves it out: it could be a hotspot)
+//                          read (until then listNetworks() leaves it out: it could be a hotspot)
 //   Api.module(id)         the calling module's own handle (api/ModuleHandle.qml) when `id`
 //                          is its id, or null. Deprecated (1.19): a module keeps to its own
 //                          handle — another module is Api.moduleStatus(id) and its exports
@@ -465,23 +481,27 @@ import qs.singletons.network
 //                          before any release
 //   Api.copy(text)         puts text on the clipboard
 //   Api.openSettings(page) the settings window on a page, by id (a core page's or a module's)
-//   Api.networks           (1.3) the saved networks this computer joins, frozen:
+//   Api.listNetworks()     (1.42; Api.networks, 1.3, the shared list, frozen) the saved
+//                          networks this computer joins:
 //                          [{ id (the NetworkManager profile UUID, system.vpnWithNetworks' key),
 //                          name, kind ("wifi" | "ethernet"), active (bool, fully up) }] — no
 //                          hotspots, VPNs, bridges or their ports; active ones first, then
-//                          NetworkProfiles' order; empty until the profiles are read. A new
-//                          array only when something in it changed
+//                          NetworkProfiles' order; empty until the profiles are read. A
+//                          binding on the call (and Api.networks, a new array) follows only a
+//                          change of its content
 //                          (1.16) A Wi-Fi network only once its details are read (until
 //                          then it could be a hotspot)
 //   Api.networksReady      (1.16) the profiles and the Wi-Fi details of every Wi-Fi profile
-//                          have been read: an empty Api.networks then means none. False while
-//                          not, and when the last reading of either failed (no nmcli,
-//                          NetworkManager not running) — Api.networks is then not known
-//                          whole, never "no network". While false Api.networks may still
+//                          have been read: an empty list of networks then means none. False
+//                          while not, and when the last reading of either failed (no nmcli,
+//                          NetworkManager not running) — the list is then not known whole,
+//                          never "no network". While false the list may still
 //                          list some (the Ethernet ones before the Wi-Fi details are read)
-//   Api.vpnsUp             (1.3) the VPNs up now, frozen: [{ name, type ("wireguard", "vpn"…
+//   Api.listVpnsUp()       (1.42; Api.vpnsUp, 1.3, the shared list, frozen) the VPNs up
+//                          now: [{ name, type ("wireguard", "vpn"…
 //                          or "provider"), provider (a provider's providerId, else "") }];
-//                          a new array only when something in it changed. (1.16) Each row
+//                          a binding on the call (and Api.vpnsUp, a new array) follows only a
+//                          change of its content. (1.16) Each row
 //                          also says what the VPN does with the traffic, null where that is
 //                          not known (never false for "not read"):
 //                            fullTunnel  true | false | null — true: it takes all traffic of
@@ -492,7 +512,8 @@ import qs.singletons.network
 //                            setsDns     true | false | null — it brings DNS servers of its
 //                                        own while up; null until read while it is fully up
 //                            routes      [networks] | null — what it carries, canonical
-//                                        ("10.0.0.0/8"; "0.0.0.0/0", "::/0" for all), frozen;
+//                                        ("10.0.0.0/8"; "0.0.0.0/0", "::/0" for all; in
+//                                        Api.vpnsUp's rows a frozen copy at each read);
 //                                        null when not known, and when there would be more
 //                                        than 256 (the shell logs that)
 //                          NetworkManager's WireGuard: from its profile — its peers'
@@ -504,7 +525,8 @@ import qs.singletons.network
 //                          halves is a full tunnel); all three null while it is still
 //                          activating. A provider's VPN: what its entry reports (VpnProvider,
 //                          below), null where it reports nothing
-//   Api.localNetworks      (1.16) the networks this computer is on, frozen: [{ device (the
+//   Api.listLocalNetworks() (1.42; Api.localNetworks, 1.16, the shared list, frozen) the
+//                          networks this computer is on: [{ device (the
 //                          interface the address is on — a modem's wwan0, not its control
 //                          device), kind ("wifi" | "ethernet" | "bridge" | "modem" |
 //                          "other"), family (4 | 6), address (this computer's, canonical, no
@@ -517,10 +539,10 @@ import qs.singletons.network
 //                          NetworkManager's VPNs or a provider's), except a Wi-Fi or Ethernet
 //                          device a VPN runs on (IPsec), which stays less the VPNs' own
 //                          addresses; from NetworkManager's devices, read again when the
-//                          networks change; at most 64. A new array only when something in
-//                          it changed
-//   Api.localNetworksReady (1.16) the devices' addresses were read; false (and
-//                          Api.localNetworks empty) while not, and when the last reading
+//                          networks change; at most 64. A binding on the call (and
+//                          Api.localNetworks, a new array) follows only a change of its content
+//   Api.localNetworksReady (1.16) the devices' addresses were read; false (and the list
+//                          empty) while not, and when the last reading
 //                          failed — unknown, never "no network"
 //                          These show every installed module the saved network names, the
 //                          VPN names and the addresses: modules are trusted and run in the
@@ -704,7 +726,7 @@ import qs.singletons.network
 //                          components/VpnProvider.qml): providerId (the module's id),
 //                          kind, typeName, glyph, entries, ready, busy, canChange,
 //                          lockdownNote, settingsPage (an entry may set fullTunnel, setsDns
-//                          and routes, 1.16: Api.vpnsUp's; absent is null, unknown);
+//                          and routes, 1.16: listVpnsUp()'s; absent is null, unknown);
 //                          connect(entryId, request),
 //                          disconnect(entryId, request), attend(entryId);
 //                          failed(entryId, what, reason) — (1.28) the shell sends `what` and
@@ -715,7 +737,7 @@ import qs.singletons.network
 //                          settings.network_vpn.vpns.card.settings (1.23; the old slots
 //                          network.vpn.row and .card are read as them); its framed page the
 //                          slot network.vpn.page. Their context's `otherVpns` (1.16): the
-//                          other VPNs up as Api.vpnsUp's rows, beside `otherVpnsUp` (their
+//                          other VPNs up as listVpnsUp()'s rows, beside `otherVpnsUp` (their
 //                          names).
 //
 // A module's popup panel (the manifest's `popupPanel`, 1.15): built when its popup opens and
@@ -1238,6 +1260,29 @@ Singleton {
     // each row's placements a new copy at each read (ReadOnlyRules.copy)
     readonly property var anchors: ReadOnlyRules.copy(ModuleRules.anchorTable.map(row =>
         Object.assign({}, row, { placements: row.placements ?? [] })))
+
+    // (1.42) The lists above and below as functions (above, "Lists"): each call parses its
+    // source text again, so the answer is the caller's alone. The text is read on every call,
+    // first and unconditionally, so a binding calling one follows its changes; the two tables
+    // are constant
+    readonly property string _slotsText: JSON.stringify(ModuleRules.slotTable)
+    readonly property string _anchorsText: JSON.stringify(ModuleRules.anchorTable.map(row =>
+        Object.assign({}, row, { placements: row.placements ?? [] })))
+    function listSlots() {
+        return ModuleRules.ownRows(_slotsText);
+    }
+    function listAnchors() {
+        return ModuleRules.ownRows(_anchorsText);
+    }
+    function listNetworks() {
+        return ModuleRules.ownRows(_networksText);
+    }
+    function listVpnsUp() {
+        return ModuleRules.ownRows(_vpnsUpText);
+    }
+    function listLocalNetworks() {
+        return ModuleRules.ownRows(_localNetworksText);
+    }
 
     // (1.3, 1.16) Network facts (above). Through a JSON text: a string property notifies only
     // when its value changes, so a module reacting to these is not woken by every re-read of

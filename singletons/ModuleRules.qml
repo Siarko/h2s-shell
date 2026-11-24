@@ -46,7 +46,7 @@ Singleton {
     // (statusOf), and the change that removes it raises `apiFloor`. From that release on a
     // minor only adds: a removal needs a major version, after at least one release in which
     // the thing was listed as deprecated.
-    readonly property string apiVersion: "1.41"
+    readonly property string apiVersion: "1.42"
 
     // The oldest API version whose modules still run unchanged on this shell: a module
     // written for an older one is `incompatible`, with the reason (apiCompatibility), so a
@@ -1646,6 +1646,20 @@ Singleton {
             rows = [];
         }
         return Array.isArray(rows) ? ReadOnlyRules.copy(rows) : Object.freeze([]);
+    }
+
+    // A JSON text of a list → a new list parsed from it, the caller's own: nothing in it (the
+    // rows, the lists and objects inside them) is shared with any other caller. Not frozen —
+    // a frozen list protects nothing in this engine, and the copy is the caller's to sort or
+    // extend. Not a list (or not JSON) → []
+    function ownRows(text) {
+        let rows = null;
+        try {
+            rows = JSON.parse(text);
+        } catch (error) {
+            rows = null;
+        }
+        return Array.isArray(rows) ? rows : [];
     }
 
     // ---- What a module hands the core at run time ----

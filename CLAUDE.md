@@ -337,6 +337,12 @@ new kind.
   reader gets its own (a function's answer). Non-writable index properties, accessor elements and a `Proxy`
   do not close it (sort still writes, a `Proxy` list is no model and no JSON list). — A
   module could push a made-up row into lists every module reads.
+- **The module API gives a list only through a function that returns a new copy at each
+  call** (`Api.listNetworks()`: parsed again from the list's JSON text, not frozen, the
+  caller's own, nested rows included); a single value is a property. Such a function reads its
+  notifying source (a `string` property holding the text) first, on every call, so a binding
+  calling it follows the list; a new one gets a row in `tests/ApiListsTest.qml`. A property
+  never holds a list. — One shared list carried one module's `push` or `sort` to every other.
 - **Animations stop when nothing shows them**: a running animation or timer is gated on the
   window and the item being visible (and on reduce motion). — Hidden windows kept animating
   every frame.
