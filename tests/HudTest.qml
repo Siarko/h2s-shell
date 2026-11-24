@@ -243,6 +243,22 @@ TestCase {
             Profiles.rangeNoticeDismissed = savedDismissed;
         }
 
+        // A config written by a newer shell: a banner saying what is kept; × closes it
+        const newer = hud.warnings.newerWarning;
+        const savedNewerDismissed = Config.newerNoticeDismissed;
+        try {
+            assert(!newer.visible, "a config of this version: no newer-version banner");
+            hud.warnings.newerNotice = MigrationRules.newerNotice({ newer: true, writtenBy: "9.0.0", unknown: [] }, "2.1.0");
+            assert(_until(() => newer.visible && newer.height > 0), "a config written by a newer shell: the banner");
+            assertEqual(_named(newer, "warningTitle").text, "Settings written by h2s-shell 9.0.0", "… naming the version that wrote it");
+            assertEqual(newer.body, "This is h2s-shell 2.1.0. What this version does not know is kept, unused.", "… what happens to it");
+            newer.dismissed();
+            assert(_until(() => !newer.visible), "× closes it");
+        } finally {
+            hud.warnings.newerNotice = Qt.binding(() => Config.newerNotice);
+            Config.newerNoticeDismissed = savedNewerDismissed;
+        }
+
         // The font warning names the package as this system gets it, never as a command
         const font = hud.warnings.fontWarning;
         const saidFacts = hud.warnings.distributionFacts;

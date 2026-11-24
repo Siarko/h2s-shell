@@ -12,8 +12,10 @@ import qs.components
 // widget preset library and the profiles themselves.
 //
 // A config written before profiles has its settings in sections this file no longer
-// declares; Profiles reads those from the raw file once to migrate them, and the first
-// save then drops them.
+// declares; Profiles reads those from the raw file to migrate them. Saving keeps every
+// top-level key the file holds that is not declared here (JsonConfigFile), so what a newer
+// shell wrote survives this one; such a config also gets a warning (newerNotice), never a
+// refusal.
 Singleton {
     id: root
 
@@ -54,6 +56,10 @@ Singleton {
     // the version that wrote it ("" for none)
     property bool acknowledgedModulesInFile: false
     property string writtenByAtLoad: ""
+    // The config was written by a newer shell (MigrationRules.newerConfig, newerNotice): the
+    // startup banner's text and its dismissal for this run
+    property var newerNotice: MigrationRules.newerNotice(null, Version.number)
+    property bool newerNoticeDismissed: false
     // The sleep notice's state (SleepLockNotice, SleepNoticeRules: JSON, "" while quiet):
     // remembered, so a restart neither repeats nor loses it
     property alias sleepLockNotice: _adapter.sleepLockNotice
@@ -117,7 +123,7 @@ Singleton {
         stderr: SplitParser { onRead: line => console.warn("[Config] could not restrict the config's permissions:", line) }
     }
 
-    FileView {
+    JsonConfigFile {
         id: _file
         path: StandardPaths.writableLocation(StandardPaths.GenericConfigLocation) + "/h2s_shell/config.json"
         onAdapterUpdated: _saveTimer.restart()
@@ -127,10 +133,15 @@ Singleton {
                 const data = JSON.parse(text());
                 root.acknowledgedModulesInFile = data !== null && typeof data === "object" && Object.prototype.hasOwnProperty.call(data, "acknowledgedModules");
                 root.writtenByAtLoad = typeof data?.writtenBy === "string" ? data.writtenBy : "";
+                root.newerNotice = MigrationRules.newerNotice(
+                    MigrationRules.newerConfig(data?.writtenBy, data?.migratedKeys, Version.number, Migrations.all()), Version.number);
             } catch (error) {
                 root.acknowledgedModulesInFile = false;
                 root.writtenByAtLoad = "";
+                root.newerNotice = MigrationRules.newerNotice(null, Version.number);
             }
+            if (root.newerNotice.shown)
+                console.warn("[Config] " + root.newerNotice.log);
             if (root.loadFailed)
                 console.warn("[Config] " + path + " is not a JSON object: its settings are not used");
             root.ready = true;
@@ -220,7 +231,7 @@ Singleton {
                 return;
             }
             _adapter.writtenBy = Version.number;
-            _file.writeAdapter();
+            _file.save();
             root.saved();
             _log.log("Saved");
         }

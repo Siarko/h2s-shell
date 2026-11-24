@@ -7,7 +7,8 @@ import qs.singletons
 // overlapping scopes, the run in registry order with the per-scope reset on a failure (the
 // ones before applied, the failed scope removed, dependents skipped, independent ones run), a
 // failing "*" migration writing nothing and asking for read-only, a new config's baseline,
-// a config from a newer version, the registry's own checks (ids, since x.y.0 in order) and the
+// a config from a newer version and what is said about it, the undeclared top-level keys a
+// save puts back, the registry's own checks (ids, since x.y.0 in order) and the
 // backups kept. MigrationHelpers: rename, map and remove across every profile, the globals
 // and asked presets, an existing target never overwritten.
 TestCase {
@@ -65,6 +66,8 @@ TestCase {
         _wholeScope();
         _baseline();
         _newer();
+        _newerNotice();
+        _undeclaredKeys();
         _registry();
         _backups();
         _helpers();
@@ -425,6 +428,40 @@ TestCase {
         assert(one.newer && one.writtenBy === "2.1.0", "newer: one unknown id is enough; writtenBy given back");
         assertEqual(rules.newerConfig(null, [], "2.2.0", registry).writtenBy, "", "newer: no writtenBy: empty");
         assert(!rules.newerConfig("", [], "2.2.0", registry).newer && !rules.newerConfig("garbage", [], "2.2.0", registry).newer, "newer: no or unreadable writtenBy is not newer");
+    }
+
+    function _newerNotice() {
+        const none = rules.newerNotice(rules.newerConfig("2.1.0", ["bar.height"], "2.1.0", _failing), "2.1.0");
+        assert(!none.shown && none.title === "" && none.log === "", "newer notice: a config of this version: nothing said");
+        assert(!rules.newerNotice(null, "2.1.0").shown && !rules.newerNotice(undefined, "2.1.0").shown, "newer notice: nothing known: nothing said");
+        const byVersion = rules.newerNotice(rules.newerConfig("2.3.0", [], "2.1.0", _failing), "2.1.0");
+        assert(byVersion.shown, "newer notice: a newer writtenBy: shown");
+        assertEqual(byVersion.title, "Settings written by h2s-shell 2.3.0", "… its title names the version that wrote it");
+        assertEqual(byVersion.body, "This is h2s-shell 2.1.0. What this version does not know is kept, unused.", "… its body: kept, nothing refused");
+        assertEqual(byVersion.log, "settings written by h2s-shell 2.3.0 (this is 2.1.0): what this version does not know is kept, unused", "… one log line");
+        const byRecords = rules.newerNotice(rules.newerConfig("2.1.0", ["2026-12-01-future"], "2.1.0", _failing), "2.1.0");
+        assertEqual(byRecords.title, "Settings written by a newer h2s-shell", "newer notice: unknown records under the same writtenBy: no version named");
+        assert(byRecords.log.endsWith("; settings updates it does not know: 2026-12-01-future"), "… the log names the unknown ids");
+        assert(byRecords.key !== byVersion.key, "… another reason, another key");
+    }
+
+    function _undeclaredKeys() {
+        const written = JSON.stringify({ gcal: { viewMode: "week" }, profiles: "[]", writtenBy: "2.1.0" }, null, 4) + "\n";
+        const loaded = JSON.stringify({ writtenBy: "2.3.0", profiles: "[1]", acknowledgedModules: "{\"weather\":{}}", futureSection: { list: [1, 2], nested: { a: null } } });
+        const kept = rules.keepUndeclaredKeys(written, loaded);
+        const parsed = JSON.parse(kept);
+        assertEqual(JSON.stringify(parsed.futureSection), JSON.stringify({ list: [1, 2], nested: { a: null } }), "undeclared: a key the adapter lacks put back as loaded");
+        assertEqual(parsed.acknowledgedModules, "{\"weather\":{}}", "… every such key");
+        assert(parsed.profiles === "[]" && parsed.writtenBy === "2.1.0" && parsed.gcal.viewMode === "week", "… the declared keys as the adapter wrote them, never the loaded values");
+        assertEqual(Object.keys(parsed).join(","), "acknowledgedModules,futureSection,gcal,profiles,writtenBy", "… keys sorted, as JsonAdapter writes them");
+        assert(kept.endsWith("}\n") && kept.includes("\n    \"gcal\": {\n        \"viewMode\""), "… indented by four, a closing newline");
+        assertEqual(rules.keepUndeclaredKeys(written, JSON.stringify({ profiles: "[9]", writtenBy: "2.0.0" })), "", "undeclared: none in the file: nothing to put back");
+        assertEqual(rules.keepUndeclaredKeys(written, ""), "", "undeclared: no file loaded: nothing");
+        assertEqual(rules.keepUndeclaredKeys(written, "{"), "", "undeclared: an unreadable file: nothing");
+        assertEqual(rules.keepUndeclaredKeys(written, "[1]"), "", "undeclared: not an object: nothing");
+        assertEqual(rules.keepUndeclaredKeys("{", loaded), "", "undeclared: unreadable written text: nothing");
+        const proto = JSON.parse(rules.keepUndeclaredKeys(written, "{\"__proto__\": {\"polluted\": 1}}"));
+        assert(Object.prototype.hasOwnProperty.call(proto, "__proto__") && ({}).polluted === undefined, "undeclared: a key named __proto__ stays a key");
     }
 
     function _registry() {

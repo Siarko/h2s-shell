@@ -4,7 +4,8 @@ import qs.singletons
 
 // The banners under the bar, stacked, about how the shell was started or set up
 // (StartupWarning; Hud.qml places them): the safe-mode banner (SafeModeBanner), started
-// without scripts/launch.sh, no Nerd Font, settings outside their range. Only those that apply show; with none the column
+// without scripts/launch.sh, no Nerd Font, settings outside their range, settings written by a
+// newer version. Only those that apply show; with none the column
 // is empty (height 0).
 Column {
     id: root
@@ -26,6 +27,9 @@ Column {
     readonly property alias safeModeBanner: safeModeBanner
     readonly property alias fontWarning: fontWarning
     readonly property alias rangeWarning: rangeWarning
+    readonly property alias newerWarning: newerWarning
+    // The config written by a newer shell (Config; a suite gives stand-ins)
+    property var newerNotice: Config.newerNotice
     // Number settings the shell uses other than stored (Profiles; a suite gives stand-ins)
     property var rangeCorrections: Profiles.rangeCorrections
     readonly property var _rangeNotice: ProfileRules.rangeNotice(rangeCorrections)
@@ -79,5 +83,16 @@ Column {
         title: root._rangeNotice.title
         body: root._rangeNotice.body
         onDismissed: Profiles.rangeNoticeDismissed = root._rangeNotice.key
+    }
+
+    // The config was written by a newer shell: what this one does not know is kept, unused
+    // (Config keeps the keys it does not declare); nothing is refused
+    StartupWarning {
+        id: newerWarning
+        width: parent.width
+        visible: (root.newerNotice?.shown ?? false) && !Config.newerNoticeDismissed
+        title: root.newerNotice?.title ?? ""
+        body: root.newerNotice?.body ?? ""
+        onDismissed: Config.newerNoticeDismissed = true
     }
 }

@@ -422,7 +422,13 @@ the widget preset library (`widgetPresets`), and data that is not a preference: 
 Google account and tokens, the chosen calendars, remembered per-app volumes. Writes are
 debounced 1 s by `_saveTimer`, which then emits `Config.saved`; `Config.ready` turns true
 once the file has been read, and `Config.readOnly` (set by `tests.qml`) keeps the test
-suites from writing the user's file.
+suites from writing the user's file. `JsonAdapter` writes only the properties it declares,
+so the file goes through `components/JsonConfigFile.qml`, whose save puts back the
+top-level keys the loaded file held that the adapter does not declare
+(`MigrationRules.keepUndeclaredKeys`): what a newer version wrote survives an older one's
+saves. A config written by a newer version (`writtenBy` newer, or migration records this
+version does not know, `MigrationRules.newerConfig`) gets one log line and a startup
+banner; it is never refused.
 
 ### Version
 

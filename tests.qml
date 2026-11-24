@@ -129,6 +129,7 @@ QtObject {
     property var _readOnlyRules: ReadOnlyRulesTest {}
     property var _migrationRules: MigrationRulesTest {}
     property var _migrations: MigrationsTest {}
+    property var _configFile: ConfigFileTest {}
     property var _devRules: DevRulesTest {}
     property var _moduleDependencyRules: ModuleDependencyRulesTest {}
     property var _moduleUpdateRules: ModuleUpdateRulesTest {}

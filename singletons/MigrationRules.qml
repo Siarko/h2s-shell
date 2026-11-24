@@ -164,6 +164,53 @@ Singleton {
         return { newer: byVersion || unknown.length > 0, writtenBy: typeof writtenBy === "string" ? writtenBy : "", unknown: unknown };
     }
 
+    // What the shell says about a config newerConfig found written by a newer shell: the
+    // startup banner and one log line. `version` is the running shell's.
+    // → { shown, key, title, body, log }
+    function newerNotice(newer, version) {
+        if (!newer?.newer)
+            return { shown: false, key: "", title: "", body: "", log: "" };
+        const writtenBy = typeof newer.writtenBy === "string" && newer.writtenBy !== "" && ModuleUpdateRules.compareVersions(newer.writtenBy, version) === 1
+            ? newer.writtenBy : "";
+        const unknown = Array.isArray(newer.unknown) ? newer.unknown.filter(id => typeof id === "string") : [];
+        const named = writtenBy !== "" ? "h2s-shell " + writtenBy : "a newer h2s-shell";
+        return {
+            shown: true,
+            key: writtenBy + "\n" + unknown.join("\n"),
+            title: "Settings written by " + named,
+            body: "This is h2s-shell " + version + ". What this version does not know is kept, unused.",
+            log: "settings written by " + named + " (this is " + version + "): what this version does not know is kept, unused"
+                + (unknown.length > 0 ? "; settings updates it does not know: " + unknown.join(", ") : "")
+        };
+    }
+
+    // ---- Keys the config file holds that this version does not declare ----
+
+    // The text to save: `writtenText` (what the config's JsonAdapter wrote — every key it
+    // declares) with the top-level keys of `loadedText` (the file as it was loaded) that it
+    // lacks put back, so a key a newer shell wrote survives this one's saves. Keys sorted, as
+    // JsonAdapter writes them. "" when nothing is to be put back, or either text is not a JSON
+    // object (the adapter's text then stands as written).
+    function keepUndeclaredKeys(writtenText, loadedText) {
+        let written = null;
+        let loaded = null;
+        try {
+            written = JSON.parse(writtenText);
+            loaded = JSON.parse(loadedText);
+        } catch (error) {
+            return "";
+        }
+        if (!_object(written) || !_object(loaded))
+            return "";
+        const missing = Object.keys(loaded).filter(key => !_own(written, key));
+        if (missing.length === 0)
+            return "";
+        const merged = {};
+        for (const key of Object.keys(written).concat(missing).sort())
+            _put(merged, key, _own(written, key) ? written[key] : loaded[key]);
+        return JSON.stringify(merged, null, 4) + "\n";
+    }
+
     // ---- Scopes ----
 
     function _settingKey(text) {
