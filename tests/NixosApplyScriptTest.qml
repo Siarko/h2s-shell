@@ -53,7 +53,7 @@ TestCase {
     // ---- The cases, run one after another: setup (shell, $1 the base), the script's words,
     // then a look at the tree ----
     function _case(name, setup, words, check, more) {
-        _cases.push({ name, setup, words, check, base: more?.base, env: more?.env ?? [], folder: more?.folder ?? _folder });
+        _cases.push({ name, setup, words, check, base: more?.base, env: more?.env ?? [], folder: more?.folder ?? _folder, script: more?.script });
     }
 
     function _next() {
@@ -67,7 +67,7 @@ TestCase {
             + "printf '%s %s\\n' \"$2\" \"$3\" > ctl/eval.out; put() { printf '%s' \"$1\" > etc/nixos/h2s-shell.json; }; ";
         _exec(["sh", "-c", reset + (next.setup ?? ""), "sh", _scratch, _drv, _out], code => {
             suite.assertEqual(code, 0, next.name + ": set up");
-            const words = ["/bin/sh", "-c", suite._script, "sh", next.base ?? suite._scratch].concat(typeof next.words === "function" ? next.words() : next.words);
+            const words = ["/bin/sh", "-c", next.script ? next.script() : suite._script, "sh", next.base ?? suite._scratch].concat(typeof next.words === "function" ? next.words() : next.words);
             const timed = PrivilegedRules.shellArgv(CommandTools.timeout, words);
             const command = ["env"].concat(next.env).concat(["sh", "-c", "umask 000; exec \"$@\"", "sh"]).concat(timed.slice(1));
             suite._exec(command, (runCode, stdout, stderr) => {
@@ -384,6 +384,23 @@ TestCase {
             assertEqual(state.file, _first, "restore: the file as it was before the first apply");
             assertEqual(state.calls.length, 0, "restore: nothing evaluated or switched");
         });
+        // A program the root step runs gone, or not executable, after its checks: under set -e
+        // the shell would end with 127 or 126 — which the shell reads as pkexec's own answers
+        // (dismissed, not authorised: nothing ran) — so the root step ends `failed` instead
+        const broken = program => () => {
+            const at = "  activate \"$backup_name\";;";
+            suite.assert(suite._script.includes(at), "the apply op ends with its activation, where the broken program is put");
+            return suite._script.replace(at, "  \"$bin/" + program + "\"\n" + at);
+        };
+        for (const [name, program, setup, current, json] of [["a program gone mid-run", "gone", "", _first, _second],
+                                                             ["a program not executable mid-run", "not-executable",
+                                                              ": > run/current-system/sw/bin/not-executable", _second, _third]]) {
+            _case(name, setup, _apply(_sha(current), json), (run, state) => {
+                assert(new RegExp("^failed unknown h2s-shell\\.json\\." + _stampPattern + "$").test(run.last), name + ": failed, its backup named: " + run.last);
+                assertEqual(run.code, 1, name + ": exit 1, never 126 or 127");
+                assertEqual(state.file, json, name + ": the file written before it is kept (restore puts it back)");
+            }, { script: broken(program) });
+        }
         _then();
     }
 

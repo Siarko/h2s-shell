@@ -59,6 +59,8 @@
 #                                                   activated, but the old file could not be
 #                                                   put back: the candidate (<sha256>) is
 #                                                   still written, the old one in <backup>
+#   failed unknown <backup | ->                     exit 1: a program it runs gone or not
+#                                                   executable mid-run (never exit 126/127)
 #   refused <code>                                  exit 3, on stderr; nothing switched, and
 #                                                   nothing written (the codes: arguments,
 #                                                   paths, folder, owner, json, hash, link,
@@ -78,7 +80,12 @@ store=$base/nix/store; backups=$base/var/lib/h2s-shell/nixos-backup
 max_bytes=65536
 prefix=h2s-shell.json
 work=
-trap 'clean_up; [ -z "$work" ] || rm -rf -- "$work"' EXIT
+# Under set -e a program not found or not executable ends the shell with 127 or 126, which
+# the shell reads as pkexec's own answers (a prompt dismissed, not authorised: nothing ran);
+# this step never ends with either: such an end says `failed`, exit 1 (what it wrote is kept,
+# its backup named when made)
+trap 'end_status=$?; clean_up; [ -z "$work" ] || rm -rf -- "$work"
+  case "$end_status" in 126|127) say "failed unknown ${backup_name:--}"; exit 1;; esac' EXIT
 
 # The configuration's system with the candidate in place of the shell's file, its drvPath
 # and out path on one line. Its inputs come from the environment (nix eval --impure):

@@ -199,6 +199,8 @@ TestCase {
         assertEqual(pick(reply(applied, 1, "failed 51 " + backup), keys),
                     show({ ok: false, quiet: false, kind: "failed", op: "apply", folder, generation: 51, backup, sha256: sha(text), nothingChanged: false,
                            refused: "", error: rules.texts.failed }), "a failed activation: the file kept, maybe partly changed");
+        assertEqual(pick(reply(applied, 1, "failed unknown " + backup), ["kind", "generation", "backup", "nothingChanged", "error"]),
+                    show({ kind: "failed", generation: 0, backup, nothingChanged: false, error: rules.texts.failed }), "a program gone mid-run: failed, generation unknown");
         assertEqual(pick(reply(switched, 1, "failed 51 -"), ["kind", "backup", "nothingChanged"]), show({ kind: "failed", backup: "", nothingChanged: false }), "switch failed");
         assertEqual(pick(reply(applied, 1, "restored " + sha(old) + " " + backup + "-1"), keys),
                     show({ ok: false, quiet: false, kind: "failed", op: "apply", folder, generation: 0, backup: backup + "-1", sha256: sha(old), nothingChanged: true,
