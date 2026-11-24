@@ -144,3 +144,7 @@ singletons/IdleRules.qml	0 -> 1	#1	const asked = next.offAsks[id] ?? 0;
 singletons/NixosConfigRules.qml	0 -> 1	#1	return cut <= 0 ? "/" : path.slice(0, cut);
 # reason: readArgs always gives whole pairs; an odd last word would only add an undefined path that no record names
 singletons/NixosConfigRules.qml	< -> <=	#1	for (let i = 0; Array.isArray(args) && i + 1 < args.length; i += 2) {
+
+# reason: _generation answers below 0 only to say "not a generation", and its callers only test
+# for < 0, so -1 and -2 cannot be told apart
+singletons/NixosApplyRules.qml	1 -> 2	#1	return /^[0-9]+$/.test(field) ? Number(field) : field === "unknown" ? 0 : -1;

@@ -33,6 +33,10 @@
 #                                                       runs as administrator, on a fixture
 #                                                       (a run of its own: its suite times
 #                                                       the shell's one queue)
+#   tests/run-modules.sh tests/fixtures/modules/nixos-apply
+#                                                       the shell's NixOS root step, on a
+#                                                       fixture's stand-in pkexec (a run of
+#                                                       its own: it locks the session)
 #   tests/resolve-selftest.sh                           where the runners take their tools
 #   tests/launcher-selftest.sh                          the supervisor in scripts/launch.sh
 #   tests/deploy-check-selftest.sh                      the deploy check, on canned answers
@@ -113,6 +117,7 @@ parts=(
     "unit suites|tests/run-unit.sh"
     "module fixture suites|tests/run-modules.sh tests/fixtures/modules/good tests/fixtures/modules/legacy-elevate"
     "privileged runs fixture|tests/run-modules.sh tests/fixtures/modules/privileged tests/fixtures/modules/privileged-undeclared"
+    "NixOS root step fixture|tests/run-modules.sh tests/fixtures/modules/nixos-apply"
     "tool lookup self-test|tests/resolve-selftest.sh"
     "supervisor self-test|tests/launcher-selftest.sh"
     "deploy check self-test|tests/deploy-check-selftest.sh"

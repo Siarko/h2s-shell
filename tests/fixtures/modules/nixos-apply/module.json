@@ -1,0 +1,11 @@
+{
+    "id": "nixos-apply",
+    "name": "NixOS apply fixture",
+    "version": "0.1.0",
+    "api": "1.41",
+    "description": "Runs the shell's NixOS root step (distributions/nixos/NixosApply.qml) on its stand-in pkexec, in module test mode (tests/fixtures/modules)",
+    "main": "Main.qml",
+    "optionalPrograms": ["pkexec", "dismiss"],
+    "testPrograms": "tests/programs",
+    "tests": ["tests/NixosApplyTest.qml"]
+}

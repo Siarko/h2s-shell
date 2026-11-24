@@ -1,0 +1,11 @@
+#!/bin/sh
+# Stands in for pkexec in the fixture's suite (module test mode: the manifest's testPrograms,
+# so the shell's queue runs nothing else as pkexec, and a command of the shell's own names it
+# as its testPkexec). Prints the words it was given on stderr, one per line after "pkexec:",
+# then runs them as the user — unless the program it is handed (the word after the shell's
+# `timeout -k <s> <limit>`) is named "dismiss": exit 126, as pkexec for a dismissed prompt.
+for word; do printf 'pkexec:%s\n' "$word" >&2; done
+case "${5##*/}" in
+    dismiss) exit 126 ;;
+esac
+exec "$@"
