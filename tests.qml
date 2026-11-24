@@ -61,6 +61,8 @@ QtObject {
     property var _distributionReading: DistributionReadingTest {}
     property var _distributionUnknown: DistributionUnknownTest {}
     property var _etcFilesRules: EtcFilesRulesTest {}
+    property var _nixosConfigRules: NixosConfigRulesTest {}
+    property var _nixosConfigurationReading: NixosConfigurationReadingTest {}
     property var _etcFiles: EtcFilesTest {}
     property var _integrationChange: IntegrationChangeTest {}
     property var _distributionContract: DistributionContractTest {}

@@ -99,6 +99,7 @@ scripts/seams.sh lock:all self:tests/launcher-selftest.sh
 +scripts/seams.sh unit:PamStacksReadingTest unit:TestSeamsShapeTest
 +tests/lock/seams/seams.sh unit:PamStacksReadingTest unit:TestSeamsShapeTest unit:PamTrialTest
 scripts/pam-files.sh unit:PamStacksReadingTest unit:PamTrialTest unit:VpnLockdownInstallTest self:tests/distribution-selftest.sh
+scripts/nixos-config.sh unit:NixosConfigurationReadingTest
 scripts/pam-trial-stage.sh unit:PamTrialTest
 scripts/root/replace-lib.sh unit:PamApplyTest unit:RememberInstallTest unit:VpnLockdownInstallTest unit:PamRulesPageTest unit:RememberAdminPageTest unit:EtcFilesTest unit:DistributionContractTest
 scripts/root/replace-file.sh unit:PamApplyTest unit:PamRulesPageTest unit:EtcFilesTest unit:DistributionContractTest

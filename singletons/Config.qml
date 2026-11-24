@@ -21,6 +21,10 @@ Singleton {
     property alias audio: _audio
     property alias bluetooth: _bluetooth
     property alias network: _network
+    // The NixOS configuration the user chose and what they acknowledged about it
+    // (distributions/nixos/NixosConfiguration.qml): remembered, not a preference — it names
+    // this machine's folder
+    property alias nixos: _nixos
     // Named presets of a widget's settings, { type: { name: { ... } } } as JSON — a shared
     // library a bar entry points into. "" until migrated from the old widgetProfiles.
     property alias widgetPresets: _adapter.widgetPresets
@@ -176,6 +180,17 @@ Singleton {
                 // (VpnLockdown: root's to read back, so remembered), and the VPN servers'
                 // addresses last found
                 property string lockdown: "{}"
+            }
+
+            // The NixOS configuration chosen with "Change…" (an absolute folder, "" for the
+            // usual places) and the flake's host chosen with it ("" for /etc/hostname's), and
+            // the real paths of configurations outside root's folders whose one-time warning
+            // the user took
+            property JsonObject nixos: JsonObject {
+                id: _nixos
+                property string folder: ""
+                property string host: ""
+                property list<string> homeWarningAcknowledged: []
             }
 
             // The Google account, its tokens and the calendars picked — data, not settings

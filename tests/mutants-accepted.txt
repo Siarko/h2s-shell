@@ -140,3 +140,7 @@ singletons/IdleRules.qml	false -> true	#1	if (state.logindSleepBlock !== false)
 # id when power control is lost is turned on in that step, and none is off before it is found),
 # so offAsks[id] is never missing here
 singletons/IdleRules.qml	0 -> 1	#1	const asked = next.offAsks[id] ?? 0;
+# reason: a plain absolute path never has its last "/" at index 1 (that would take "//"), so "<= 1" and "<= 0" cut alike
+singletons/NixosConfigRules.qml	0 -> 1	#1	return cut <= 0 ? "/" : path.slice(0, cut);
+# reason: readArgs always gives whole pairs; an odd last word would only add an undefined path that no record names
+singletons/NixosConfigRules.qml	< -> <=	#1	for (let i = 0; Array.isArray(args) && i + 1 < args.length; i += 2) {
