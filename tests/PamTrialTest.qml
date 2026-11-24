@@ -197,6 +197,7 @@ TestCase {
             _sh("printf '%s\\n' \"$2\" > \"$1/finger\"; printf '%s\\n' \"$3\" > \"$1/count\"; : > \"$1/log\"",
                 [_scratch, spec.finger ?? "no", String(spec.count ?? 0)], result => {
                 suite.assertEqual(result.code, 0, spec.label + ": stand-ins set");
+                suite._trial.firstWordMs = spec.firstWordMs ?? PamTrialRules.firstWordMs;
                 suite._trial.start(spec.service ?? "sudo", textOf());
                 suite._ready = true;
             });
@@ -527,6 +528,18 @@ TestCase {
             check: state => outcome(state, "the plain word `required` with PAM_IGNORE lets in through the closing permit: why it is not written so", "passed")
         });
 
+        // A PAM child that says nothing (as one blocked in pam_start): a module first that
+        // waits in silence on its first run only; the conversation is started again
+        _scenario({
+            label: "silent start", firstWordMs: 3000, count: 0, answer: _password,
+            text: () => "#%PAM-1.0\nauth required " + _modules + "/pam_exec.so quiet " + _scratch + "/bin/stall.sh\nauth include system-auth\n",
+            check: (state, after) => {
+                outcome(state, "a conversation silent at its start, then started again: passed", "passed");
+                assertEqual(state.starts, 2, "… on its second start");
+                assertEqual(after.log, "stalled,stall passed,preauth 0,right,authsucc 0", "… the first child given up while it waited, the second through the include");
+            }
+        });
+
         // polkit-1: the shell's own file over the vendor one
         let polkit = "";
         _then("polkit's candidate", () => _ready, () => {
@@ -569,6 +582,10 @@ TestCase {
             + "preauth) echo \"preauth $count\" >> %s/log ;;\\n"
             + "authfail) count=$((count + 1)); echo $count > %s/count; echo \"authfail $count\" >> %s/log; exit 1 ;;\\n"
             + "authsucc) echo \"authsucc $count\" >> %s/log; echo 0 > %s/count ;;\\n*) exit 1 ;;\\nesac\\n' \"$b\" \"$s\" \"$s\" \"$s\" \"$s\" \"$s\" \"$s\" \"$s\" > \"$s/bin/counter.sh\"",
+            // Silent on its first run (a pipe nobody writes, for longer than the scenario's
+            // firstWordMs; it ends by itself), at once after
+            "mkfifo \"$s/stall-fifo\"; echo 0 > \"$s/stall-count\"",
+            "printf '#!%s\\nread -r n < %s/stall-count\\nif [ \"$n\" = 0 ]; then echo 1 > %s/stall-count; echo stalled >> %s/log; read -r -t 6 _ <> %s/stall-fifo; exit 0; fi\\necho \"stall passed\" >> %s/log\\n' \"$b\" \"$s\" \"$s\" \"$s\" \"$s\" \"$s\" > \"$s/bin/stall.sh\"",
             "printf '#!%s\\nread -r answer < %s/finger\\necho \"finger $answer\" >> %s/log\\n[ \"$answer\" = ok ]\\n' \"$b\" \"$s\" \"$s\" > \"$s/bin/finger.sh\"",
             "chmod +x \"$s/bin/\"*.sh",
             // Arch's shape: sudo in /etc/pam.d, polkit-1 only in the vendor directory, system-auth of stand-ins

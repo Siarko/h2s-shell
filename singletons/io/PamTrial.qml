@@ -15,7 +15,8 @@ import qs.singletons
 //   when this object is destroyed mid-trial; and, when this object is made, to remove the
 //   staging directories a shell no longer running left behind (`sweep`);
 // - one PamContext with the staging directory as its configDirectory, its messages and
-//   result handed back, the user's answer passed to it — never kept.
+//   result handed back, the user's answer passed to it — never kept; and a timer for a
+//   conversation that stays silent (PamTrialRules.firstWordMs).
 //
 // Every command is a property, so a suite points it at stand-ins (tests/PamTrialTest.qml).
 // Every event carries the trial it belongs to; an answer of an earlier trial changes nothing.
@@ -30,6 +31,9 @@ Scope {
     // Added to every command's environment (a suite's seams)
     property var environment: ({})
     property int timeoutMs: 6000
+    // How long a PAM conversation may say nothing before it is started again
+    // (PamTrialRules.firstWordMs: a PAM child blocked in pam_start)
+    property int firstWordMs: PamTrialRules.firstWordMs
 
     // PamTrialRules' state of the current (or last) trial
     readonly property var state: _state
@@ -38,7 +42,7 @@ Scope {
 
     // A new trial of `text` as the service's file; ignored while one runs
     function start(service, text) {
-        _dispatch({ type: "start", service: service, text: text, parent: stagingParent, token: _token() });
+        _dispatch({ type: "start", service: service, text: text, parent: stagingParent, token: _token(), firstWordMs: firstWordMs });
     }
 
     // The user's answer to the question PAM asks in trial `trial`; `text` is used, not kept
@@ -94,6 +98,12 @@ Scope {
         }
         case "startPam":
             _startPam(effect.trial, effect.configDirectory, effect.config);
+            break;
+        case "watchPam":
+            _silence.trial = effect.trial;
+            _silence.start = effect.start;
+            _silence.interval = Math.max(1, effect.ms);
+            _silence.restart();
             break;
         case "respondPam":
             if (_conversation === effect.trial)
@@ -161,6 +171,14 @@ Scope {
     }
 
     property CommandRunner _runner: CommandRunner {}
+
+    // The watch of the current conversation's start: its end is PamTrialRules' to judge
+    // (stale when PAM spoke, the trial ended or another start came)
+    property Timer _silence: Timer {
+        property int trial: 0
+        property int start: 0
+        onTriggered: root._dispatch({ type: "pamSilent", trial: trial, start: start })
+    }
 
     // Staging directories whose shell is gone (killed mid-trial) are removed; a running
     // shell's — another instance's, a test run's — and one without the shell's record are not

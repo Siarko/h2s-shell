@@ -138,7 +138,9 @@ TestCase {
         assertEqual(state.phase + " " + types(effects), "staging stage", "all read: staged");
         assertEqual(effects[0].parent + " " + effects[0].files.map(file => file.name).join(","), parent + " sudo,system-auth", "… under the parent, both files");
         assertEqual(effects[0].files[1].text, systemAuth, "… system-auth's text as read");
-        assertEqual(types(go({ type: "staged", trial: 1, lines: ["staged\t" + dir], result: ok })), "startPam", "staged: the conversation starts");
+        effects = go({ type: "staged", trial: 1, lines: ["staged\t" + dir], result: ok });
+        assertEqual(types(effects), "startPam watchPam", "staged: the conversation starts, watched for its first word");
+        assertEqual(effects[1].start + " " + effects[1].ms + " " + state.starts, "1 " + trial.firstWordMs + " 1", "… the first start, firstWordMs by default");
         assertEqual(state.phase + " " + state.staging, "running " + dir, "… running, the directory kept");
         assertEqual(types(go({ type: "pamMessage", trial: 0, message: "late", messageIsError: false, responseRequired: false })) + state.messages.length, "0",
                     "a message of another trial: dropped");
@@ -184,6 +186,40 @@ TestCase {
         assertEqual(resultOf("maxTries"), "failed maxTries", "maxTries");
         assertEqual(resultOf("error"), "failed error", "error");
         assertEqual(resultOf("anything"), "failed error", "an unknown result: an error, never a pass");
+
+        // A conversation that says nothing (a PAM child blocked in pam_start): started again
+        const silentRun = () => {
+            state = trial.initialState();
+            go({ type: "start", service: "sudo", text: "auth required pam_unix.so\n", parent, token, firstWordMs: 1500 });
+            go({ type: "filesRead", trial: 1, lines: places, result: ok, paths: [] });
+            return go({ type: "staged", trial: 1, lines: ["staged\t" + dir], result: ok });
+        };
+        assertEqual(silentRun()[1].ms, 1500, "the start's firstWordMs is the watch's");
+        effects = go({ type: "pamSilent", trial: 1, start: 1 });
+        assertEqual(types(effects) + " " + effects[1].configDirectory + " " + effects[1].config + " " + effects[2].start + " " + state.phase,
+                    "abortPam startPam watchPam " + dir + " sudo 2 running", "silent: aborted and started again in the same directory, the new start watched");
+        assertEqual(types(go({ type: "pamSilent", trial: 1, start: 1 })), "", "… the first start's watch again: stale, nothing");
+        effects = go({ type: "pamSilent", trial: 1, start: 2 });
+        assertEqual(types(effects) + " " + state.starts, "abortPam startPam watchPam 3", "silent again: a third start");
+        effects = go({ type: "pamSilent", trial: 1, start: 3 });
+        assertEqual(state.phase + " " + state.reason + " " + types(effects), "failed startFailed abortPam removeStaging",
+                    "silent at the last start: aborted, failed as a start that failed, the directory removed");
+        assertEqual(trial.maxStarts, 3, "three starts in all");
+        silentRun();
+        go({ type: "pamMessage", trial: 1, message: "Password: ", messageIsError: false, responseRequired: true });
+        assertEqual(types(go({ type: "pamSilent", trial: 1, start: 1 })) + " " + state.phase, " running", "PAM spoke: its watch ends nothing");
+        silentRun();
+        go({ type: "pamSilent", trial: 1, start: 1 });
+        assertEqual(state.heard, false, "a new start: not heard yet");
+        go({ type: "pamCompleted", trial: 1, result: "success" });
+        assertEqual(types(go({ type: "pamSilent", trial: 1, start: 2 })) + " " + state.phase, " passed", "ended: a watch after it does nothing");
+        silentRun();
+        assertEqual(types(go({ type: "pamSilent", trial: 2, start: 1 })), "", "another trial's watch: nothing");
+        go({ type: "cancel", trial: 1 });
+        assertEqual(types(go({ type: "pamSilent", trial: 1, start: 1 })) + " " + state.phase, " cancelled", "cancelled: its watch does nothing");
+        state = trial.initialState();
+        go({ type: "start", service: "sudo", text: "x", parent, token, firstWordMs: -5 });
+        assertEqual(state.firstWordMs, trial.firstWordMs, "a firstWordMs that is no positive number: the default");
 
         // Refusals before PAM
         state = trial.initialState();

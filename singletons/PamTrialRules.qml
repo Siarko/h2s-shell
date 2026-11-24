@@ -42,6 +42,18 @@ Singleton {
     // PAM's messages kept for the view: the last ones, each cut to a length
     readonly property int maxMessages: 20
     readonly property int maxMessageLength: 300
+    // A conversation that says nothing at all (no message, no result) this long after it
+    // started is started again, at most `maxStarts` times in all, then the trial fails as a
+    // start that failed. Why: Quickshell forks its PAM child from the shell's running
+    // threads, and the child loads the modules (dlopen in pam_start); glibc does not reset
+    // the dynamic loader's write lock in a forked child, so a fork while another thread
+    // held it (dl_iterate_phdr, a dlopen or dlclose of its own) leaves the child blocked in
+    // pam_start for good, before any module ran. A new fork does not inherit that. Every
+    // module the shell writes speaks or ends at once (pam_unix asks, pam_fprintd and
+    // pam_u2f with `cue` say what to do, pam_faillock ends), so the silence is never a
+    // module waiting (a raw line of a module that waits in silence may fail the trial).
+    readonly property int firstWordMs: 8000
+    readonly property int maxStarts: 3
 
     // Why a trial did not pass, by its reason code
     readonly property var texts: ({
@@ -222,7 +234,11 @@ Singleton {
             prompt: null,
             // Why it did not pass: a code of `texts` ("" while it may still pass), its
             // text, and PAM's own last error message ("" when it said none)
-            reason: "", reasonText: "", pamReason: ""
+            reason: "", reasonText: "", pamReason: "",
+            // The conversation's starts so far (each a new PAM child), whether PAM has said
+            // anything in the current one, and how long it may stay silent (the start
+            // event's firstWordMs, else firstWordMs)
+            starts: 0, heard: false, firstWordMs: firstWordMs
         };
     }
 
@@ -249,6 +265,14 @@ Singleton {
             effects.push({ type: "removeStaging", trial: next.trial, parent: next.parent, directory: next.staging });
             next.staging = "";
         }
+    }
+
+    // A new PAM child for the staged directory, watched until it first says something
+    function _startConversation(next, effects) {
+        next.starts += 1;
+        next.heard = false;
+        effects.push({ type: "startPam", trial: next.trial, configDirectory: next.staging, config: next.service });
+        effects.push({ type: "watchPam", trial: next.trial, start: next.starts, ms: next.firstWordMs });
     }
 
     function _readNext(next, effects, answer) {
@@ -280,10 +304,13 @@ Singleton {
     //   { type: "respond", trial, text }            the user's answer to the prompt
     //   { type: "pamCompleted", trial, result }     "success" / "failed" / "maxTries" / "error"
     //   { type: "cancel", trial }                   the user cancelled
+    //   { type: "pamSilent", trial, start }         the watch of that start ran out
     // Effects, each with the trial it belongs to:
     //   { type: "readFiles", paths }                run pam-files.sh (no paths: the places)
     //   { type: "stage", parent, directory, files } make the staging directory
     //   { type: "startPam", configDirectory, config }
+    //   { type: "watchPam", start, ms }             answer with pamSilent after `ms`
+    //                                              (replaces an earlier watch)
     //   { type: "respondPam", text }                the answer, passed on; never kept here
     //   { type: "abortPam" }
     //   { type: "removeStaging", parent, directory }
@@ -304,6 +331,9 @@ Singleton {
                 candidate: typeof event.text === "string" ? event.text : null,
                 parent: String(event.parent ?? "")
             });
+            const silence = Number(event.firstWordMs);
+            if (isFinite(silence) && silence > 0)
+                next.firstWordMs = silence;
             next.target = stagingDirectory(next.parent, event.token);
             if (!validName(next.service)) {
                 _fail(next, effects, "service");
@@ -347,7 +377,7 @@ Singleton {
                 break;
             }
             next.phase = "running";
-            effects.push({ type: "startPam", trial: next.trial, configDirectory: directory, config: next.service });
+            _startConversation(next, effects);
             break;
         }
         case "pamStartFailed":
@@ -357,6 +387,7 @@ Singleton {
         case "pamMessage": {
             if (!current || next.phase !== "running")
                 break;
+            next.heard = true;
             const text = _cut(event.message);
             if (event.responseRequired === true) {
                 next.prompt = { text, visible: event.responseVisible === true };
@@ -390,6 +421,16 @@ Singleton {
             _fail(next, effects, result === "failed" || result === "maxTries" ? result : "error");
             break;
         }
+        case "pamSilent":
+            if (!current || next.phase !== "running" || next.heard || event.start !== next.starts)
+                break;
+            effects.push({ type: "abortPam", trial: next.trial });
+            if (next.starts >= maxStarts) {
+                _fail(next, effects, "startFailed");
+                break;
+            }
+            _startConversation(next, effects);
+            break;
         case "cancel":
             if (!current || !activePhases.includes(next.phase))
                 break;
