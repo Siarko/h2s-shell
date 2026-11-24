@@ -1,0 +1,41 @@
+# The approved baseline of components/small-button: a PNG per scene (<NN>-<scene>.png), compared pixel
+# for pixel by tests/run-mockups.sh --compare, and what it was drawn with (a run drawn
+# otherwise is NOT RUN). Written by tests/run-mockups.sh --approve; never by hand.
+environment renderer OpenGL VENDOR: Mesa RENDERER: llvmpipe (LLVM 23.1.5, 256 bits) VERSION: 4.6 (Compatibility Profile) Mesa 26.3.1-arch1.2
+environment backend llvmpipe
+environment quickshell Quickshell 0.3.2 (revision , distributed by Arch Linux)
+environment font:JetBrainsMono-Nerd-Font 1c680e8cde9fcf8b88a5605ce8d1fb94dd3fb15841f7ca7bf4c55664855e5611 /usr/share/fonts/TTF/JetBrainsMonoNerdFont-Regular.ttf
+environment font:JetBrainsMono-Nerd-Font:bold e490660ad75e0b152c93b1604c2ea1a4ea675f1b8a3fe0d005b1998568f99f1f /usr/share/fonts/TTF/JetBrainsMonoNerdFont-Bold.ttf
+environment font:sans-serif 6038a160b491e121c1f12c7bccb4a9c8730296e3adc1086a059404ed84b7451c /usr/share/fonts/TTF/DejaVuSans.ttf
+environment font:monospace b5babc084554ebdd142fe099d8b7c573ff161738bca913723d3e84f5c3df1c78 /usr/share/fonts/TTF/DejaVuSansMono.ttf
+environment font:emoji 15671215ab769fdc7162a045d56fd7d7e477c51b04e6b3c761d914d8fdd6cc44 /usr/share/fonts/noto/NotoColorEmoji.ttf
+environment font-rendering hinting=True hintstyle=1 antialias=True rgba= lcdfilter=1 autohint=False embeddedbitmap=True
+environment qt-core 5205d073601b17d36c2e988378157747870122fef75b81d3ef5e38e05ca26f77 /usr/lib/libQt6Core.so.6.12.0
+environment qt-gui f259d516cf7624ef5ba9155eb10bf043f361cfb7ec58a3a54f958793aa1c1d10 /usr/lib/libQt6Gui.so.6.12.0
+environment qt-quick 81c159125a0084a8980eb603a550fb09befaebd720c79d22318dac71eb625f29 /usr/lib/libQt6Quick.so.6.12.0
+environment qt-svg (not loaded)
+environment freetype 0b0e16faaaed2145c89e193bc52f308bfb909ccd182fbed0d2f245329c248fca /usr/lib/libfreetype.so.6.20.7
+environment fontconfig ea856e202615c9198c76bbd72a4de6b4bd91ad160a33eb51500ef132d8fc6536 /usr/lib/libfontconfig.so.1.17.0
+environment harfbuzz 70b65f53855877c74f99189eaa3652c8abd67ce3c9d5e3611a6d0e36291c6482 /usr/lib/libharfbuzz.so.0.61510.0
+scene 00 rest 140x272 b1126dffb624613ea38e6f9b41c24b62e068caf7c003c273cee1ce4114508c62
+scene 01 disabled 140x272 44bd66e3c00771ef199958cc2e3e771020c8765a596ad533fc7a878d6c775926
+scene 02 checked 140x272 c1250506aff2aff09d416a13c67cbff90dcfa40440596e5289e16c73a319c22e
+scene 03 hover-normal 140x272 b2f6a7058f6cf77258962aed79a06532fe3eff2fc8eee40abeef4bc6ea939d20
+scene 04 hover-save 140x272 6f8c157a9ab1e99821189f359d182185c9696ec37f2fb3fbb70760f2c3ee9ef6
+scene 05 hover-saveChange 140x272 5d524d8ced3215de9fc1ad908cc9a45e7fe97c1d98e25f6fba26f706c7353ad7
+scene 06 hover-action 140x272 3347d886666131c8a920a451971ebf9302d7ea91898297cd5578160113e12518
+scene 07 hover-cancel 140x272 c33f4356a0ee9146708968d46c4f9b2dd0a3c221678a04cf1ef1382e94b2128a
+scene 08 hover-delete 140x272 42daa2ce61a28c0a622f61bcfb99421fa6d54fc44e375b9f0e516b82978fdee5
+scene 09 hover-warning 140x272 b3614b569602f221c12d427725c1cc904cec6e2c05906d2497e1d1d123dadd79
+scene 10 hover-success 140x272 5f141a193ad91b0c38dfe3e788896c9789c924dfced23ab4755549b14c045d67
+scene 11 focus-normal 140x272 d0251c8101557b4f208c653c92785b63902c355890cfbe12ac57dbc3f75d68d4
+scene 12 focus-save 140x272 4372a63a2b985d4cea9c5f7d7d15890239b3e29168a5d79a10cde1643a5cb966
+scene 13 focus-saveChange 140x272 22fb625da6c307a78dac612051132cd93c47676530bd13141a3b56b0fc764a41
+scene 14 focus-action 140x272 b1c9a19ce7f2eb2b4207d1df8fa6547c002ca49162770eecf7034340d35abafe
+scene 15 focus-cancel 140x272 1f46aa955d7cc2137154ae3b3668a55729ebebc863251c41680f41b0cfa159b8
+scene 16 focus-delete 140x272 6e8bd768d3e908874d1a77a810e9e1dc60f844518ce3fef277ffc76742a3b3e9
+scene 17 focus-warning 140x272 5634429e9501d3fa1493729b656e9ae346e1268be7a8381798519327c13acc1e
+scene 18 focus-success 140x272 93bff16acd3ac8fe23de70a5d5accd4f2f28d4312b1761ec9b6d680bba82d678
+scene 19 pressed-normal 140x272 b2f6a7058f6cf77258962aed79a06532fe3eff2fc8eee40abeef4bc6ea939d20
+scene 20 pressed-save 140x272 6f8c157a9ab1e99821189f359d182185c9696ec37f2fb3fbb70760f2c3ee9ef6
+scene 21 pressed-delete 140x272 42daa2ce61a28c0a622f61bcfb99421fa6d54fc44e375b9f0e516b82978fdee5

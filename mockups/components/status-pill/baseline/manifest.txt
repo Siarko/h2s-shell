@@ -1,0 +1,24 @@
+# The approved baseline of components/status-pill: a PNG per scene (<NN>-<scene>.png), compared pixel
+# for pixel by tests/run-mockups.sh --compare, and what it was drawn with (a run drawn
+# otherwise is NOT RUN). Written by tests/run-mockups.sh --approve; never by hand.
+environment renderer OpenGL VENDOR: Mesa RENDERER: llvmpipe (LLVM 23.1.5, 256 bits) VERSION: 4.6 (Compatibility Profile) Mesa 26.3.1-arch1.2
+environment backend llvmpipe
+environment quickshell Quickshell 0.3.2 (revision , distributed by Arch Linux)
+environment font:JetBrainsMono-Nerd-Font 1c680e8cde9fcf8b88a5605ce8d1fb94dd3fb15841f7ca7bf4c55664855e5611 /usr/share/fonts/TTF/JetBrainsMonoNerdFont-Regular.ttf
+environment font:JetBrainsMono-Nerd-Font:bold e490660ad75e0b152c93b1604c2ea1a4ea675f1b8a3fe0d005b1998568f99f1f /usr/share/fonts/TTF/JetBrainsMonoNerdFont-Bold.ttf
+environment font:sans-serif 6038a160b491e121c1f12c7bccb4a9c8730296e3adc1086a059404ed84b7451c /usr/share/fonts/TTF/DejaVuSans.ttf
+environment font:monospace b5babc084554ebdd142fe099d8b7c573ff161738bca913723d3e84f5c3df1c78 /usr/share/fonts/TTF/DejaVuSansMono.ttf
+environment font:emoji 15671215ab769fdc7162a045d56fd7d7e477c51b04e6b3c761d914d8fdd6cc44 /usr/share/fonts/noto/NotoColorEmoji.ttf
+environment font-rendering hinting=True hintstyle=1 antialias=True rgba= lcdfilter=1 autohint=False embeddedbitmap=True
+environment qt-core 5205d073601b17d36c2e988378157747870122fef75b81d3ef5e38e05ca26f77 /usr/lib/libQt6Core.so.6.12.0
+environment qt-gui f259d516cf7624ef5ba9155eb10bf043f361cfb7ec58a3a54f958793aa1c1d10 /usr/lib/libQt6Gui.so.6.12.0
+environment qt-quick 81c159125a0084a8980eb603a550fb09befaebd720c79d22318dac71eb625f29 /usr/lib/libQt6Quick.so.6.12.0
+environment qt-svg (not loaded)
+environment freetype 0b0e16faaaed2145c89e193bc52f308bfb909ccd182fbed0d2f245329c248fca /usr/lib/libfreetype.so.6.20.7
+environment fontconfig ea856e202615c9198c76bbd72a4de6b4bd91ad160a33eb51500ef132d8fc6536 /usr/lib/libfontconfig.so.1.17.0
+environment harfbuzz 70b65f53855877c74f99189eaa3652c8abd67ce3c9d5e3611a6d0e36291c6482 /usr/lib/libharfbuzz.so.0.61510.0
+scene 00 kinds 240x204 d3f8fa3dd3520887380d321bf174ced071621d05ef053e7bc48bbdb76a8001e5
+scene 01 parts 240x204 ef3c663aa6fe520efcf53d699e6443222ac19f1234484b432a92de2775d8c332
+scene 02 hover 240x204 c5b75260d7e6772ed3c8f6822fddccec0234397d1458f58fe0e867cdea7438a9
+scene 03 expanded 240x204 b3cd25dbeb95e891cc8570ff1045d9db48485644b139ae5e5b90a311db3981c1
+scene 04 not-expandable 240x204 ef3c663aa6fe520efcf53d699e6443222ac19f1234484b432a92de2775d8c332
