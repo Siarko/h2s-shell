@@ -64,10 +64,9 @@ Singleton {
         return ["a{sv}", "1", "domains", "a{sv}", "1", "*", "a{sv}", "1", "servers", "as", String(list.length)].concat(list);
     }
 
-    // An address for NetworkManager's connectivity check: http(s), a host, nothing that
-    // could break out of its line in the configuration file (spaces, quotes, newlines)
+    // An address for NetworkManager's connectivity check (ConnectivityRules.isUri)
     function isConnectivityUri(text: string): bool {
-        return /^https?:\/\/[A-Za-z0-9.-]+(:\d+)?(\/[^\s"'\\]*)?$/.test(String(text ?? ""));
+        return ConnectivityRules.isUri(text);
     }
 
     // Whether Enter in a network's password field in the network popup connects, as the

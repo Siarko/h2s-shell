@@ -157,7 +157,9 @@ is: per change kind (`sleep.hibernateDelay`, …) `capability(kind)` says how th
 or `unavailable` with its reason — and `plan`, `apply`, `undo` and `readInForce` act on it;
 while the distribution is not known nothing is offered and nothing runs. `readInForce` says
 what the system really uses, read as the system merges it (for the hibernation delay
-`systemd-analyze cat-config systemd/sleep.conf`), and which file sets it: a setting from any
+`systemd-analyze cat-config systemd/sleep.conf`; for the connectivity check's address
+`scripts/nm-config-files.sh`, NetworkManager's files in its order, a setting in the
+distribution's packaged `/usr/lib/NetworkManager/conf.d` counting as the default), and which file sets it: a setting from any
 file but the shell's own is the user's or the system's, shown as set there and never
 overridden unasked; `afterOwn` says whether that file is read after the shell's (a change of
 the shell's cannot take effect over it) or before (the shell's would win: it asks first). Where `/etc` is the
@@ -171,13 +173,19 @@ when the request says the user was told. Its `run` is also how the PAM editor an
 the remembered authorization queue their own root steps. A feature reaches a kind through
 `singletons/io/IntegrationChange.qml` (the capability, what is in force, the user's Apply and
 Undo, one at a time) and decides what to offer in its own Rules: the hibernation delay's
-`HibernateRules.delayOffer`.
+`HibernateRules.delayOffer`, the connectivity check's address's `ConnectivityRules.offer`. A
+`copy` kind may also say `anyway`: the shell still writes its file where the system's
+configuration makes `/etc`, when the user asks (warned, without Undo). After the connectivity
+check's file changes, the root step has NetworkManager read its configuration again (its
+`nmcli` at a fixed place).
 `tests/DistributionContractTest.qml` holds every integration to the same answers.
 
 #### NixOS
 
 `/etc/NIXOS` makes it `nixos`, whatever os-release says. `/etc` is generated: the integration
-writes nothing; a setting the shell's NixOS module has an option for is the line to copy.
+writes nothing unasked; a setting the system's configuration has an option for is the line to
+copy. The connectivity check's address may still be written to NetworkManager's `conf.d` when
+the user asks ("Write anyway", outside the system's configuration).
 
 #### Arch
 

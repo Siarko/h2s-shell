@@ -98,7 +98,8 @@ scripts/pam-files.sh unit:PamStacksReadingTest unit:PamTrialTest self:tests/dist
 scripts/pam-trial-stage.sh unit:PamTrialTest
 scripts/root/replace-lib.sh unit:PamApplyTest unit:RememberInstallTest unit:PamRulesPageTest unit:RememberAdminPageTest unit:EtcFilesTest unit:DistributionContractTest
 scripts/root/replace-file.sh unit:PamApplyTest unit:PamRulesPageTest unit:EtcFilesTest unit:DistributionContractTest
-scripts/root/etc-files.sh unit:EtcFilesTest unit:DistributionContractTest
+scripts/root/etc-files.sh unit:EtcFilesTest unit:DistributionContractTest unit:IntegrationChangeTest
+scripts/nm-config-files.sh unit:IntegrationChangeTest unit:DistributionContractTest
 scripts/root/pam-apply.sh unit:PamApplyTest unit:PamRulesPageTest
 scripts/root/remember-install.sh unit:RememberInstallTest unit:RememberAdminPageTest
 tests/test-tree.sh unit:TestTreeTest lock:all

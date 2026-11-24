@@ -56,10 +56,18 @@ Singleton {
     // permissions`): { "org.freedesktop.NetworkManager.<action>": "yes" | "auth" | "no" }.
     // "auth" asks for an administrator's password: the page marks it (PrivilegedMark).
     property var permissions: ({})
-    // NixOS keeps /etc declarative: written files there are outside the system's own
-    // configuration, so the page offers the line for configuration.nix instead
-    // (Distribution: false until it has answered, as until any check has)
-    readonly property bool isNixos: Distribution.detection.id === "nixos"
+    // The connectivity check's address as a change the distribution makes
+    // (IntegrationRules' "network.connectivityUri"): what this system can do for it, the line
+    // to copy for an address where its configuration sets it, what is in force (readInForce's
+    // answer, null until read and while a change runs), "apply" or "undo" while one runs, and
+    // whether Undo can put back a change of this run
+    readonly property var connectivityUriCapability: _uriChange.capability
+    function connectivityUriSnippet(uri: string): string {
+        return Distribution.plan(ConnectivityRules.kind, uri).preview?.snippet ?? "";
+    }
+    readonly property var connectivityUriInForce: _uriChange.inForce
+    readonly property string connectivityUriBusy: _uriChange.busy
+    readonly property bool connectivityUriUndoable: _uriChange.undoable
 
     // polkit's answer for one of NetworkManager's actions ("settings.modify.hostname")
     function need(action: string): string {
@@ -121,7 +129,12 @@ Singleton {
         _connectivity.request();
     }
 
-    onWatchingChanged: if (watching) refresh()
+    // What is in force for the address is read when a page starts showing this, and after
+    // each change (not on every NetworkManager event: only the files decide it)
+    onWatchingChanged: if (watching) {
+        refresh();
+        _uriChange.read();
+    }
 
     Connections {
         target: NetworkEvents
@@ -325,29 +338,44 @@ Singleton {
     }
 
     // The connectivity check's address lives in NetworkManager's configuration, which only
-    // root writes (the D-Bus property is read-only). One pkexec run — one password prompt —
-    // writes our own file in conf.d (named to come after a distribution's, e.g. Arch's
+    // root writes (the D-Bus property is read-only): the distribution's integration writes the
+    // shell's file in conf.d (named to come after a distribution's, e.g. Arch's
     // 20-connectivity.conf) or removes it for the distribution's address, then has
-    // NetworkManager read its configuration again. The address is checked first
-    // (NetworkRules.isConnectivityUri) and handed in as an argument, never pasted into the
-    // script. On NixOS this is a file outside the system's own configuration.
-    readonly property string connectivityConfigFile: "/etc/NetworkManager/conf.d/90-h2s-connectivity.conf"
+    // NetworkManager read its configuration again (scripts/root/etc-files.sh). One run, one
+    // password prompt, on the user's click. `request` ConnectivityRules.offer's { uri,
+    // current, replace, anyway } → false when not started (said in the log)
+    function applyConnectivityUri(request): bool {
+        const what = request?.uri === "" ? "Going back to the default connectivity check" : "Setting the connectivity check's address";
+        const started = _uriChange.apply(request?.uri, { current: request?.current, replace: request?.replace === true, anyway: request?.anyway === true });
+        if (started.started)
+            _uriWhat = what;
+        else
+            console.warn("NetworkOverview: the connectivity check's address not changed: " + started.refusal?.text);
+        return started.started;
+    }
 
-    function setConnectivityUri(uri: string): void {
-        if (uri !== "" && !NetworkRules.isConnectivityUri(uri))
-            return;
-        const script = "set -e; mkdir -p \"$(dirname \"$2\")\";"
-            + " if [ -n \"$1\" ]; then printf '%s\\n' '# Written by h2s-shell (Settings > System > Network)' '[connectivity]' \"uri=$1\" > \"$2\";"
-            + " else rm -f \"$2\"; fi; nmcli general reload conf";
-        const what = uri !== "" ? "Setting the connectivity check's address" : "Going back to the default connectivity check";
-        _action.run(["pkexec", "sh", "-c", script, "sh", uri, connectivityConfigFile], result => {
-            // pkexec: 126 cancelled or refused, 127 no agent answered
-            if (result.code === 127)
-                Authentication.reportDenied(what);
-            else if (!result.ok && result.code !== 126)
-                Notifier.send(what + " failed", { body: Nmcli.errorMessage(result.error) || ("Exit code " + result.code) });
+    // The address's file as it was before this run's last change
+    function undoConnectivityUri(): bool {
+        const started = _uriChange.undo();
+        if (started.started)
+            _uriWhat = "Undoing the change to the connectivity check's address";
+        else
+            console.warn("NetworkOverview: the connectivity check's address not put back: " + started.refusal?.text);
+        return started.started;
+    }
+
+    // What the last change of the address was, for its notification
+    property string _uriWhat: ""
+
+    IntegrationChange {
+        id: _uriChange
+        kind: ConnectivityRules.kind
+        onFinished: (mode, outcome) => {
+            if (outcome?.ok !== true && outcome?.quiet !== true)
+                Notifier.send(root._uriWhat + " failed", { body: outcome?.error ?? "" });
+            // The address NetworkManager uses now, whichever way it went
             root.refresh();
-        });
+        }
     }
 
     function setConnectivityCheck(on: bool): void {

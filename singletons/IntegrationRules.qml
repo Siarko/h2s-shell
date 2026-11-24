@@ -9,7 +9,7 @@ import QtQuick
 // distribution's) holds its table of kinds; these functions read it, so every integration
 // answers the same way. Pure.
 //
-//   capability(kind) → { mode, trial, undo, inForce, reason, known }
+//   capability(kind) → { mode, trial, undo, inForce, anyway, reason, known }
 //     mode     "apply"        the shell writes the change (distributions/EtcFiles.qml)
 //              "declare"      the shell sets it in the system's configuration and rebuilds
 //              "copy"         the system's configuration sets it: the shell gives the text
@@ -17,9 +17,12 @@ import QtQuick
 //     trial    the change is tried before it is applied
 //     undo     the applied change can be put back
 //     inForce  readInForce reads what is in force
+//     anyway   "copy" or "declare": the shell can still write its file where the system's
+//              configuration makes /etc, when the user asks (apply's `handlers.anyway`;
+//              warned, the user's choice), with no Undo
 //     known    false only while the distribution is not known (Distribution's answer)
 //   plan(kind, value) → { preview, refusal }
-//     preview  "apply": { files: [{ path, text }] }; "copy", "declare": { option, snippet,
+//     preview  "apply": { files: [{ path, text ("" removes the file) }] }; "copy", "declare": { option, snippet,
 //              hint (the integration's words naming where the setting is made) }
 //   apply / undo → { started, refusal }
 //   readInForce → what the system uses, read as the system merges it (inForceCommand), and
@@ -40,7 +43,7 @@ Singleton {
     id: root
 
     // The change kinds the shell defines, each with how its value is checked
-    readonly property var kinds: ["sleep.hibernateDelay"]
+    readonly property var kinds: ["sleep.hibernateDelay", "network.connectivityUri"]
     readonly property var modes: ["apply", "declare", "copy", "unavailable"]
 
     // The reason of a kind the integration does not offer
@@ -61,7 +64,7 @@ Singleton {
     }
 
     function _unavailable(reason, known) {
-        return { mode: "unavailable", trial: false, undo: false, inForce: false, reason, known };
+        return { mode: "unavailable", trial: false, undo: false, inForce: false, anyway: false, reason, known };
     }
 
     // The answer while the distribution is not known: nothing offered
@@ -69,7 +72,7 @@ Singleton {
         return _unavailable(unknown, false);
     }
 
-    // An integration's `table` ({ <kind>: { mode, trial, undo, inForce, reason, option } })
+    // An integration's `table` ({ <kind>: { mode, trial, undo, inForce, anyway, reason, option } })
     // for `kind` → the capability; a kind the shell does not define, or the table does not
     // name or names wrongly, is unavailable with a reason
     function capability(table, kind) {
@@ -81,31 +84,36 @@ Singleton {
         // Only an applied change is tried or undone by the shell
         const applied = entry.mode === "apply";
         return { mode: entry.mode, trial: applied && entry.trial === true, undo: applied && entry.undo === true,
-                 inForce: entry.inForce === true, reason: "", known: true };
+                 inForce: entry.inForce === true, anyway: !applied && entry.anyway === true, reason: "", known: true };
     }
 
     // Whether an answer is a capability as the contract has it
     function valid(answer) {
         if (answer === null || typeof answer !== "object" || !modes.includes(answer.mode))
             return false;
-        if (["trial", "undo", "inForce", "known"].some(key => typeof answer[key] !== "boolean") || typeof answer.reason !== "string")
+        if (["trial", "undo", "inForce", "anyway", "known"].some(key => typeof answer[key] !== "boolean") || typeof answer.reason !== "string")
             return false;
         if (answer.mode === "unavailable")
-            return answer.reason !== "" && !answer.trial && !answer.undo && !answer.inForce;
-        return answer.known && answer.reason === "" && (answer.mode === "apply" || (!answer.trial && !answer.undo));
+            return answer.reason !== "" && !answer.trial && !answer.undo && !answer.inForce && !answer.anyway;
+        return answer.known && answer.reason === "" && (answer.mode === "apply" ? !answer.anyway : !answer.trial && !answer.undo);
     }
 
     // Whether `value` is one for the kind
     function validValue(kind, value) {
         if (kind === "sleep.hibernateDelay")
             return Number.isInteger(value) && value >= HibernateRules.delayRange.minimum && value <= HibernateRules.delayRange.maximum;
+        // "": the shell's file removed, the system's own address in force again
+        if (kind === "network.connectivityUri")
+            return value === "" || (typeof value === "string" && ConnectivityRules.isUri(value));
         return false;
     }
 
-    // The file's text the shell writes for an applied kind
+    // The file's text the shell writes for an applied kind ("" for none: the file removed)
     function textOf(kind, value) {
         if (kind === "sleep.hibernateDelay")
             return HibernateRules.dropInText(value);
+        if (kind === "network.connectivityUri" && value !== "")
+            return ConnectivityRules.text(value);
         return "";
     }
 
@@ -113,6 +121,8 @@ Singleton {
     function snippetOf(kind, option, value) {
         if (kind === "sleep.hibernateDelay")
             return option + " = " + value + ";";
+        if (kind === "network.connectivityUri" && value !== "")
+            return option + " = \"" + value + "\";";
         return "";
     }
 
@@ -129,11 +139,12 @@ Singleton {
         return { preview: { option, snippet: snippetOf(kind, option, value), hint: String(table[kind].hint ?? "") }, refusal: null };
     }
 
-    // Why apply may not start for the capability (before the value): null when it may
-    function applyRefusal(answer) {
+    // Why apply may not start for the capability (before the value): null when it may.
+    // `anyway`: the user asked to write the file where the system's configuration makes /etc
+    function applyRefusal(answer, anyway) {
         if (answer.mode === "unavailable")
             return refusal(answer.known === false ? "unknown" : "unavailable", answer.reason);
-        return answer.mode === "apply" ? null : refusal("mode");
+        return answer.mode === "apply" || (anyway === true && answer.anyway === true) ? null : refusal("mode");
     }
 
     // Why undo may not start: null when it may
@@ -145,10 +156,12 @@ Singleton {
     }
 
     // The command that prints the kind's setting as the system merges it (every file it
-    // reads, in its order, each under a `# <path>` line), or null for a kind without one
-    function inForceCommand(kind) {
+    // reads, in its order), or null for a kind without one; `shellDir` the shell's tree
+    function inForceCommand(kind, shellDir) {
         if (kind === "sleep.hibernateDelay")
             return ["systemd-analyze", "--no-pager", "cat-config", "systemd/sleep.conf"];
+        if (kind === "network.connectivityUri")
+            return [String(shellDir ?? "") + "/scripts/nm-config-files.sh"];
         return null;
     }
 
@@ -157,6 +170,8 @@ Singleton {
     // { state, value, from, elsewhere, file, afterOwn }
     function inForceOf(kind, merged, own) {
         const file = own !== null && typeof own === "object" ? own : null;
+        if (kind === "network.connectivityUri" && typeof merged === "string")
+            return _connectivityInForce(merged, file);
         if (kind !== "sleep.hibernateDelay" || typeof merged !== "string")
             return Object.assign(inForceUnknown(), { file });
         const delay = HibernateRules.hibernateDelay(merged);
@@ -173,6 +188,18 @@ Singleton {
             file,
             afterOwn: elsewhere !== "" && HibernateRules.readAfterDropIn(elsewhere)
         };
+    }
+
+    // The connectivity check's address in force (ConnectivityRules.setting); one from the
+    // distribution's packages is its default, not set elsewhere
+    function _connectivityInForce(merged, file) {
+        const setting = ConnectivityRules.setting(merged);
+        if (setting.state === "unknown")
+            return Object.assign(inForceUnknown(), { file });
+        const own = EtcFilesRules.files["network.connectivityUri"];
+        const elsewhere = setting.state === "set" && setting.from !== own ? setting.from : "";
+        return { state: setting.state, value: setting.value, from: setting.from, elsewhere, file,
+                 afterOwn: elsewhere !== "" && ConnectivityRules.readAfterOwn(elsewhere) };
     }
 
     // Nothing in force can be told

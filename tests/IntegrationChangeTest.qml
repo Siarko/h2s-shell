@@ -15,7 +15,11 @@ import qs.singletons.io
 // the capability; what is in force read (none, then the shell's own); Apply with the file as
 // read, busy meanwhile, a second refused; the reading again after it; Undo of it, and none
 // left after; a prompt dismissed (quiet, nothing to undo); NixOS's copy refused before any run;
-// a reading's answer that comes after a later reading's dropped.
+// a reading's answer that comes after a later reading's dropped. Then the connectivity check's
+// address the same way, its reading the real scripts/nm-config-files.sh on the scratch tree:
+// set in NetworkManager.conf (read before the shell's file), Save, NetworkManager told to read
+// its configuration again (a stand-in nmcli under the scratch base), Undo; and NixOS's file
+// written only when asked anyway.
 // Asynchronous.
 TestCase {
     id: suite
@@ -29,6 +33,10 @@ TestCase {
     property var _arch: null
     property var _change: null
     property var _nixosChange: null
+    property var _uriChange: null
+    property var _anywayChange: null
+    readonly property string _uriKind: "network.connectivityUri"
+    readonly property string _address: "http://a.example/check"
     property var _runs: []
     property var _finished: []
     // How the stand-in answers the next run: "run" or "dismissed"
@@ -66,7 +74,8 @@ TestCase {
     function runAsync() {
         _then("the scratch tree made, the shell's timeout looked up", () => _ready && CommandTools.known, () => {
             const merged = ["sh", "-c", "printf '# %s\\n' \"$1\"; cat -- \"$0\" 2> /dev/null; true", _scratch + _path, _path];
-            _arch = _archComponent.createObject(suite, { start: suite._start, base: _scratch, inForceCommands: { [_kind]: merged } });
+            _arch = _archComponent.createObject(suite, { start: suite._start, base: _scratch, inForceCommands: {
+                [_kind]: merged, [_uriKind]: [Quickshell.shellDir + "/scripts/nm-config-files.sh", _scratch] } });
             _change = _changeComponent.createObject(suite, { kind: _kind, integration: _arch });
             _change.finished.connect((mode, outcome) => suite._finished = suite._finished.concat([{ mode, outcome }]));
             assertEqual([_change.capability.mode, _change.capability.undo].join(" "), "apply true", "Arch's capability: applied, with Undo");
@@ -132,9 +141,65 @@ TestCase {
         });
         _then("the folder looked at", () => _shellOutput !== "", () => {
             assertEqual(_shellOutput, "[0]", "after Undo: no file left in the drop-in folder");
+            _finished = [];
+            _answer = "run";
+            _uriChange = _changeComponent.createObject(suite, { kind: _uriKind, integration: _arch });
+            _uriChange.finished.connect((mode, outcome) => suite._finished = suite._finished.concat([{ mode, outcome }]));
+            _uriChange.read();
+        });
+        const uriRead = (state, fileState) => () => _uriChange.inForce !== null && _uriChange.inForce.state === state && _uriChange.inForce.file?.state === fileState;
+        const main = "/etc/NetworkManager/NetworkManager.conf";
+        _then("the address read: set in NetworkManager.conf", uriRead("set", "absent"), () => {
+            assertEqual([_uriChange.inForce.value, _uriChange.inForce.elsewhere, _uriChange.inForce.afterOwn].join(" "), "http://mine/ " + main + " false",
+                        "set in NetworkManager.conf, over the package's default, read before the shell's file");
+            assert(_uriChange.apply(_address, { current: _uriChange.inForce.file, replace: false }).started, "Save: started");
+        });
+        _then("the Save answered", () => _finished.length === 1, () => {
+            assertEqual(_finished[0].mode + " " + _finished[0].outcome.ok, "apply true", "saved: " + JSON.stringify(_finished[0].outcome));
+            assertEqual(_runs[_runs.length - 1], "Change the connectivity check's address", "… the prompt's reason");
+        });
+        _then("read again: the shell's own file in force", () => uriRead("set", "text")() && _uriChange.inForce.from !== main, () => {
+            assertEqual([_uriChange.inForce.value, _uriChange.inForce.from, _uriChange.inForce.elsewhere, _uriChange.inForce.file.ours].join(" "),
+                        _address + " " + EtcFilesRules.files[_uriKind] + "  true", "the address from the shell's file, exactly its text, nothing elsewhere");
+            _sh("cat \"$1/nmcli.log\"");
+        });
+        _then("NetworkManager's stand-in looked at", () => _shellOutput !== "", () => {
+            assertEqual(_shellOutput, "[0]general reload conf\n", "NetworkManager told to read its configuration again, once");
+            assert(_uriChange.undo().started, "Undo: started");
+        });
+        _then("the Undo answered", () => _finished.length === 2, () => {
+            assertEqual(_finished[1].mode + " " + _finished[1].outcome.ok, "undo true", "put back: " + JSON.stringify(_finished[1].outcome));
+        });
+        _then("read again: NetworkManager.conf's address", () => uriRead("set", "absent")() && _uriChange.inForce.elsewhere === main, () => {
+            _sh("cat \"$1/nmcli.log\"");
+        });
+        _then("NetworkManager's stand-in looked at again", () => _shellOutput !== "", () => {
+            assertEqual(_shellOutput, "[0]general reload conf\ngeneral reload conf\n", "… and again after Undo");
+            _anywayChange = _changeComponent.createObject(suite, { kind: _uriKind, integration: _nixosComponent.createObject(suite, {
+                start: suite._start, base: _scratch, inForceCommands: { [_uriKind]: [Quickshell.shellDir + "/scripts/nm-config-files.sh", _scratch] } }) });
+            _anywayChange.finished.connect((mode, outcome) => suite._finished = suite._finished.concat([{ mode, outcome }]));
+            const runs = _runs.length;
+            assertEqual(_anywayChange.apply(_address, {}).refusal?.code, "mode", "NixOS: not written unasked");
+            assertEqual(_runs.length, runs, "… nothing run");
+            _anywayChange.read();
+        });
+        _then("NixOS's reading", () => _anywayChange.inForce !== null && _anywayChange.inForce.file?.state === "absent", () => {
+            assert(_anywayChange.apply(_address, { current: _anywayChange.inForce.file, anyway: true }).started, "NixOS: written when asked anyway");
+        });
+        _then("the write answered", () => _finished.length === 3, () => {
+            assertEqual(_finished[2].outcome.ok, true, "written: " + JSON.stringify(_finished[2].outcome));
+            assert(!_anywayChange.undoable || _anywayChange.capability.undo === false, "… no Undo offered for it");
+            _sh("cat \"$1/etc/NetworkManager/conf.d/90-h2s-connectivity.conf\"");
+        });
+        _then("the file looked at", () => _shellOutput !== "", () => {
+            assertEqual(_shellOutput, "[0]" + ConnectivityRules.text(_address), "… the shell's file for the address");
         });
         _clock.start();
-        _sh("set -e; umask 022; mkdir -p \"$1/etc/systemd\"", code => suite._ready = code === 0);
+        _sh("set -e; umask 022; mkdir -p \"$1/etc/systemd\" \"$1/etc/NetworkManager\" \"$1/usr/lib/NetworkManager/conf.d\" \"$1/usr/bin\";"
+            + " printf '[connectivity]\\nuri=http://ping.example/\\n' > \"$1/usr/lib/NetworkManager/conf.d/20-connectivity.conf\";"
+            + " printf '[connectivity]\\nuri=http://mine/\\n' > \"$1/etc/NetworkManager/NetworkManager.conf\";"
+            + " printf '#!/bin/sh\\nprintf \"%%s\\\\n\" \"$*\" >> \"%s/nmcli.log\"\\n' \"$1\" > \"$1/usr/bin/nmcli\"; chmod 755 \"$1/usr/bin/nmcli\"",
+            code => suite._ready = code === 0);
     }
 
     function _sh(script, done) {
@@ -188,6 +253,8 @@ TestCase {
     function _end() {
         _change?.destroy();
         _nixosChange?.destroy();
+        _uriChange?.destroy();
+        _anywayChange?.destroy();
         _arch?.destroy();
         _exec(["rm", "-rf", "--", _scratch], () => suite.finish());
     }

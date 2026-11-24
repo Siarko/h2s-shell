@@ -78,6 +78,15 @@ The interface modules are written against (`qs.api`), versioned on its own
   before it (your own sleep.conf) is overridden only after Apply asks; a hand-edited copy of
   the shell's own file is replaced only after Apply asks again ("Replace?"). On a
   distribution the shell does not know, no Apply: "Not supported on this distribution."
+- Settings → System → Network → Overview, the connectivity check's address: on Arch, Save and
+  Default keep the file they replace as a backup, Undo puts it back, and NetworkManager reads
+  its configuration again after each. An address set in another of NetworkManager's files is
+  shown as "Set in <file>: <address>": one read after the shell's file wins and no Save is
+  offered; one read before it (NetworkManager.conf, a NixOS configuration's setting) is
+  overridden only after Save or Write anyway asks; a hand-edited copy of the shell's own file
+  is replaced or removed only after it asks again ("Replace?", "Remove?"). The distribution's
+  packaged address (Arch's 20-connectivity.conf) counts as the default, not as set elsewhere.
+  On a distribution the shell does not know, no Save: "Not supported on this distribution."
 - The machine's u2f settings are no longer changed: a security key row of
   `programs.h2s-shell.pam` keeps `nouserok`, `alwaysok`, `userpresence`, `interactive` and
   `pinverification` from `security.pam.u2f.settings` instead of stripping them or stopping

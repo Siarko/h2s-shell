@@ -14,7 +14,8 @@ Integration {
 
     distribution: "arch"
     table: ({
-        "sleep.hibernateDelay": { mode: "apply", trial: false, undo: true, inForce: true }
+        "sleep.hibernateDelay": { mode: "apply", trial: false, undo: true, inForce: true },
+        "network.connectivityUri": { mode: "apply", trial: false, undo: true, inForce: true }
     })
     files: EtcFiles {
         start: root.start

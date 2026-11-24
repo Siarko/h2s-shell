@@ -1,4 +1,5 @@
 import QtQuick
+import Quickshell
 import qs.singletons
 import qs.singletons.io
 
@@ -6,9 +7,10 @@ import qs.singletons.io
 // change (IntegrationRules: the answers' shapes). Each distribution's (distributions/<id>/)
 // is one of these with its table; Distribution forwards to the one the system is.
 //
-// `table` names each change kind it offers ({ <kind>: { mode, trial, undo, inForce, reason,
-// option, hint } }); a kind it does not name is unavailable. A kind it applies is written by
-// `files` (EtcFiles; null where nothing is written). Every function answers: apply and undo
+// `table` names each change kind it offers ({ <kind>: { mode, trial, undo, inForce, anyway,
+// reason, option, hint } }); a kind it does not name is unavailable. A kind it applies, or
+// writes anyway when the user asks, is written by `files` (EtcFiles; null where nothing is
+// written). Every function answers: apply and undo
 // at once with { started, refusal } and, when started, `handlers.done` once later;
 // readInForce always later, once.
 QtObject {
@@ -32,9 +34,11 @@ QtObject {
 
     // `handlers` { current (readInForce's `file` as the user saw it: its text decides; left
     // out: read at the run), replace (the user was told the file is not exactly the shell's),
-    // done (EtcFiles' outcome → nothing) }
+    // anyway (the user asked to write it where the system's configuration makes /etc: the
+    // capability's `anyway`), done (EtcFiles' outcome → nothing) }. A value whose text is ""
+    // removes the shell's file
     function apply(kind, value, handlers) {
-        const refusal = IntegrationRules.applyRefusal(capability(kind));
+        const refusal = IntegrationRules.applyRefusal(capability(kind), handlers?.anyway === true);
         if (refusal !== null)
             return { started: false, refusal };
         const planned = plan(kind, value);
@@ -42,7 +46,8 @@ QtObject {
             return { started: false, refusal: planned.refusal };
         if (files === null)
             return { started: false, refusal: IntegrationRules.refusal("mode") };
-        return files.write(kind, IntegrationRules.textOf(kind, value), handlers);
+        const text = IntegrationRules.textOf(kind, value);
+        return text === "" ? files.remove(kind, handlers) : files.write(kind, text, handlers);
     }
 
     // `handlers` { from (the outcome of the change undone; left out: the last one), done }
@@ -58,13 +63,16 @@ QtObject {
     // done({ state, value, from, elsewhere, file }) once, later: the setting as the system
     // merges it, and the shell's own file where it writes one (IntegrationRules.inForceOf)
     function readInForce(kind, done) {
-        const command = Object.prototype.hasOwnProperty.call(inForceCommands, kind) ? inForceCommands[kind] : IntegrationRules.inForceCommand(kind);
+        const command = Object.prototype.hasOwnProperty.call(inForceCommands, kind) ? inForceCommands[kind]
+            : IntegrationRules.inForceCommand(kind, Quickshell.shellDir);
+        // The shell's own file, where it may write one
+        const writes = files !== null && (capability(kind).mode === "apply" || capability(kind).anyway);
         if (!capability(kind).inForce || command === null) {
             Qt.callLater(() => done(IntegrationRules.inForceUnknown()));
             return;
         }
         // Both readings, then one answer
-        const reading = { merged: undefined, own: files === null ? null : undefined };
+        const reading = { merged: undefined, own: writes ? undefined : null };
         const answer = () => {
             if (reading.merged !== undefined && reading.own !== undefined)
                 done(IntegrationRules.inForceOf(kind, reading.merged, reading.own));
@@ -78,7 +86,7 @@ QtObject {
                 answer();
             }
         });
-        if (files !== null) {
+        if (writes) {
             files.read(kind, own => {
                 reading.own = own;
                 answer();

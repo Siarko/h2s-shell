@@ -20,7 +20,8 @@ TestCase {
         const code = plan => plan.refusal?.code ?? "";
 
         // ── The places ──
-        assertEqual(JSON.stringify(rules.files), JSON.stringify({ "sleep.hibernateDelay": "/etc/systemd/sleep.conf.d/h2s-shell.conf" }),
+        assertEqual(JSON.stringify(rules.files), JSON.stringify({ "sleep.hibernateDelay": "/etc/systemd/sleep.conf.d/h2s-shell.conf",
+                                                                     "network.connectivityUri": "/etc/NetworkManager/conf.d/90-h2s-connectivity.conf" }),
                     "the files, one per kind: the hibernation delay's drop-in (fixed in etc-files.sh too)");
         assertEqual(rules.fileOf(kind, "") + " " + rules.fileOf(kind, scratch), "/etc/systemd/sleep.conf.d/h2s-shell.conf " + scratch + "/etc/systemd/sleep.conf.d/h2s-shell.conf",
                     "the file under the system's base and a scratch one");
@@ -133,6 +134,19 @@ TestCase {
         assertEqual(rules.what("write", kind), "Change the time before hibernating", "the prompt: the change");
         assertEqual(rules.what("undo", kind), "Undo the change to the time before hibernating", "… Undo");
         assertEqual(rules.what("remove", kind), "Go back to the system's time before hibernating", "… removal");
+        const uri = "network.connectivityUri";
+        assertEqual([rules.what("write", uri), rules.what("undo", uri), rules.what("remove", uri)].join(" | "),
+                    "Change the connectivity check's address | Undo the change to the connectivity check's address | Go back to the default connectivity check",
+                    "the connectivity check's address: its prompts");
+        const uriText = ConnectivityRules.text("http://a.example/x");
+        assert(rules.shellText(uri, uriText), "… the shell's file for an address");
+        assert(!rules.shellText(uri, uriText.replace("uri=", "uri =")) && !rules.shellText(uri, HibernateRules.dropInText(600))
+               && !rules.shellText(kind, uriText), "… a hand edit, or another kind's text: not");
+        const uriRead = text => rules.inForce({ text }, uri);
+        assertEqual(rules.writeArgv("/bin/sh", { kind: uri, text: ConnectivityRules.text("http://b/"), current: uriRead("[connectivity]\nuri=http://a/\n") }, "", true, scripts).refusal?.code,
+                    "other", "… a file not exactly the shell's: not replaced unasked");
+        assertEqual(rules.removeArgv("/bin/sh", { kind: uri, current: uriRead(uriText) }, "", true, scripts).argv.slice(-3).join(" "),
+                    "remove " + uri + " " + PamEditRules.sha256(uriText), "… the shell's own removed");
 
         // ── The reply ──
         const expected = rules.writeArgv("/bin/sh", { kind, text, current: absent }, "", true, scripts).expected;

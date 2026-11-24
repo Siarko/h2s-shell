@@ -134,6 +134,7 @@ QtObject {
     property var _awayViewRules: AwayViewRulesTest {}
     property var _sleepNoticeRules: SleepNoticeRulesTest {}
     property var _hibernateRules: HibernateRulesTest {}
+    property var _connectivityRules: ConnectivityRulesTest {}
     property var _monitorRules: MonitorRulesTest {}
     property var _screenPowerReading: ScreenPowerReadingTest {}
     property var _wlopmScreenPowerReading: WlopmScreenPowerReadingTest {}

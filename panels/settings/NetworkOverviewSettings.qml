@@ -59,6 +59,21 @@ Flickable {
         return "";
     }
 
+    // The distribution's answers for the connectivity check's address (NetworkOverview's),
+    // handed in by a suite
+    property var uriCapability: NetworkOverview.connectivityUriCapability
+    property var uriInForce: NetworkOverview.connectivityUriInForce
+    property string uriBusy: NetworkOverview.connectivityUriBusy
+    property bool uriUndoable: NetworkOverview.connectivityUriUndoable
+    property string uriCurrent: NetworkOverview.connectivityCheckUri
+    // What the address's row offers: Save, Default, Copy, Write anyway, Undo, labels and
+    // effects, and the line under it
+    readonly property var _uriOffer: ConnectivityRules.offer({
+        field: _uriField.text.trim(), current: uriCurrent, capability: uriCapability,
+        snippet: uriCapability.mode === "copy" || uriCapability.mode === "declare" ? NetworkOverview.connectivityUriSnippet(_uriField.text.trim()) : "",
+        inForce: uriInForce, busy: uriBusy, undoable: uriUndoable
+    })
+
     function _copy(text) {
         Quickshell.clipboardText = text;
         Notifier.send("Copied for configuration.nix", { body: text, urgency: "low", category: "x-qs-shell" });
@@ -335,50 +350,84 @@ Flickable {
                 text: _current
                 problem: text !== "" && !NetworkRules.isConnectivityUri(text)
                 input.inputMethodHints: Qt.ImhUrlCharactersOnly | Qt.ImhNoPredictiveText | Qt.ImhNoAutoUppercase
-                onAccepted: _uriSave.clicked()
+                onAccepted: if (root._uriOffer.save.button === "plain") _uriSave.clicked(); else if (root._uriOffer.copy.shown) _uriCopy.clicked()
                 onEditingChanged: if (!editing && text === _current) text = Qt.binding(() => _current)
             }
             // Root always: the address is in NetworkManager's configuration (pkexec)
-            PrivilegedMark { need: "auth"; visible: !NetworkOverview.isNixos }
+            PrivilegedMark { need: "auth"; visible: root._uriOffer.save.shown }
             SmallButton {
                 id: _uriSave
-                readonly property bool _changed: _uriField.text !== NetworkOverview.connectivityCheckUri && !_uriField.problem
-                // NixOS: the line for configuration.nix, to keep the system declarative
-                label: NetworkOverview.isNixos ? "Copy for configuration.nix"
-                    : _uriField.text === "" && NetworkOverview.connectivityCheckUri !== "" ? "Default" : "Save"
+                objectName: "connectivitySave"
+                visible: root._uriOffer.save.shown && root._uriOffer.save.button === "plain"
+                label: root._uriOffer.save.label
                 kind: "save"
-                available: NetworkOverview.isNixos ? _uriField.text !== "" && !_uriField.problem : _changed && !NetworkOverview.busy
-                tooltip: !NetworkOverview.isNixos && _uriField.text === "" ? "Back to the distribution's address (none on some)" : ""
-                onClicked: {
-                    if (!available)
-                        return;
-                    if (NetworkOverview.isNixos) {
-                        root._copy("networking.networkmanager.settings.connectivity.uri = \"" + _uriField.text.trim() + "\";");
-                        return;
-                    }
-                    NetworkOverview.setConnectivityUri(_uriField.text.trim());
-                }
+                available: root._uriOffer.save.available
+                tooltip: root._uriOffer.save.tooltip
+                onClicked: if (available) NetworkOverview.applyConnectivityUri(root._uriOffer.save.request)
+            }
+            // A setting the change would override (another file read before the shell's, the
+            // shell's own changed outside it): it acts only on a second click
+            DeleteButton {
+                objectName: "connectivitySaveAsking"
+                visible: root._uriOffer.save.shown && root._uriOffer.save.button === "ask"
+                kind: "save"
+                label: root._uriOffer.save.label
+                confirmLabel: root._uriOffer.save.question
+                available: root._uriOffer.save.available
+                // The question is about this file and this address: another resets it
+                readonly property string subject: JSON.stringify(root._uriOffer.save.request)
+                onSubjectChanged: asking = false
+                onConfirmed: NetworkOverview.applyConnectivityUri(root._uriOffer.save.request)
+            }
+            SmallButton {
+                objectName: "connectivityUndo"
+                visible: root._uriOffer.undo.shown
+                label: root._uriOffer.undo.label
+                available: root._uriOffer.undo.available
+                onClicked: if (available) NetworkOverview.undoConnectivityUri()
+            }
+            // Where the system's configuration sets it: the line for it, to keep it declarative
+            SmallButton {
+                id: _uriCopy
+                objectName: "connectivityCopy"
+                visible: root._uriOffer.copy.shown
+                label: root._uriOffer.copy.label
+                kind: "save"
+                available: root._uriOffer.copy.available && root._uriOffer.copy.text !== ""
+                onClicked: if (available) root._copy(root._uriOffer.copy.text)
             }
         }
         RowLayout {
-            visible: NetworkOverview.isNixos
+            visible: root._uriOffer.anyway.shown
             Layout.fillWidth: true
             Layout.topMargin: 4
             spacing: 6
             Hint {
-                text: "Add the copied line to your configuration.nix and rebuild — or write NetworkManager's file here, outside the system's configuration:"
+                text: root._uriOffer.anyway.hint
             }
             PrivilegedMark { need: "auth" }
             SmallButton {
-                label: "Write anyway"
-                available: _uriSave._changed && !NetworkOverview.busy
-                onClicked: if (available) NetworkOverview.setConnectivityUri(_uriField.text.trim())
+                objectName: "connectivityAnyway"
+                visible: root._uriOffer.anyway.button === "plain"
+                label: root._uriOffer.anyway.label
+                available: root._uriOffer.anyway.available
+                onClicked: if (available) NetworkOverview.applyConnectivityUri(root._uriOffer.anyway.request)
+            }
+            DeleteButton {
+                objectName: "connectivityAnywayAsking"
+                visible: root._uriOffer.anyway.button === "ask"
+                kind: "save"
+                label: root._uriOffer.anyway.label
+                confirmLabel: root._uriOffer.anyway.question
+                available: root._uriOffer.anyway.available
+                readonly property string subject: JSON.stringify(root._uriOffer.anyway.request)
+                onSubjectChanged: asking = false
+                onConfirmed: NetworkOverview.applyConnectivityUri(root._uriOffer.anyway.request)
             }
         }
         Hint {
-            text: _uriField.problem ? "An http:// or https:// address, without spaces or quotes."
-                : NetworkOverview.isNixos ? "The address it fetches now and then."
-                : "The address it fetches now and then; saved in " + NetworkOverview.connectivityConfigFile + "."
+            objectName: "connectivityHint"
+            text: root._uriOffer.hint
         }
 
     }

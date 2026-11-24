@@ -29,14 +29,18 @@ TestCase {
     // Every kind the shell defines, and two it does not
     readonly property var _kinds: IntegrationRules.kinds.concat(["no.such.kind", "toString"])
     // A value each defined kind takes
-    readonly property var _values: ({ "sleep.hibernateDelay": 10800 })
+    readonly property var _values: ({ "sleep.hibernateDelay": 10800, "network.connectivityUri": "http://nmcheck.gnome.org/check_network_status.txt" })
     // Stand-ins for the merged readings: the system's own file sets each kind
-    readonly property var _merged: ({ "sleep.hibernateDelay": ["sh", "-c", "printf '# /etc/systemd/sleep.conf\\n[Sleep]\\nHibernateDelaySec=2h\\n'"] })
+    readonly property var _merged: ({
+        "sleep.hibernateDelay": ["sh", "-c", "printf '# /etc/systemd/sleep.conf\\n[Sleep]\\nHibernateDelaySec=2h\\n'"],
+        "network.connectivityUri": ["sh", "-c", "printf 'file\\t%s\\ttext\\n|[connectivity]\\n|uri=http://mine/\\nend\\t%s\\ndone\\n' \"$0\" \"$0\"",
+                                    "/etc/NetworkManager/NetworkManager.conf"]
+    })
     // What each shipped integration answers per defined kind (mode, undo, inForce)
     readonly property var _expectedModes: ({
-        arch: { "sleep.hibernateDelay": "apply undo inForce" },
-        nixos: { "sleep.hibernateDelay": "copy - inForce" },
-        generic: { "sleep.hibernateDelay": "unavailable - -" }
+        arch: { "sleep.hibernateDelay": "apply undo inForce", "network.connectivityUri": "apply undo inForce" },
+        nixos: { "sleep.hibernateDelay": "copy - inForce", "network.connectivityUri": "copy - inForce" },
+        generic: { "sleep.hibernateDelay": "unavailable - -", "network.connectivityUri": "unavailable - -" }
     })
 
     property var _integrations: []
@@ -114,33 +118,56 @@ TestCase {
                 assertEqual(integration.plan(kind, "x").refusal?.code, "value", label + "a value it does not take: refused");
             }
 
-            // Before any change: nothing to put back
-            const undone = integration.undo(kind, { done: _counter(id + " undo " + kind) });
-            assert(typeof undone?.started === "boolean" && (undone.started ? undone.refusal === null : typeof undone.refusal?.text === "string"),
-                   label + "undo answers: " + JSON.stringify(undone));
-            assert(!undone.started, label + "… nothing undone before a change");
-            assertEqual(undone.refusal.code, capability.undo ? "noUndo" : capability.mode === "unavailable" ? "unavailable" : capability.mode === "apply" ? "noUndo" : "mode",
-                        label + "… refused for its reason");
-
-            const applied = integration.apply(kind, value, { done: _counter(id + " apply " + kind) });
-            assert(typeof applied?.started === "boolean" && (applied.started ? applied.refusal === null : typeof applied.refusal?.text === "string"),
-                   label + "apply answers: " + JSON.stringify(applied));
-            assertEqual(applied.started, capability.mode === "apply", label + "… started only where the shell applies");
-            if (applied.started)
-                _expected.push(id + " apply " + kind);
-            if (capability.mode === "unavailable")
-                assertEqual(applied.refusal.text, capability.reason, label + "… refused with the reason");
+            // One run at a time per EtcFiles: a kind's turn waits for the last one's answer
+            if (integration.files?.busy === true)
+                _deferred.push(() => _changes(integration, kind, capability, value, label));
+            else
+                _changes(integration, kind, capability, value, label);
 
             integration.readInForce(kind, _counter(id + " readInForce " + kind));
             _expected.push(id + " readInForce " + kind);
         }
     }
 
+    // Undo before any change, then apply: each answers at once, `done` once when started
+    function _changes(integration, kind, capability, value, label) {
+        const id = integration.distribution;
+        // Before any change: nothing to put back
+        const undone = integration.undo(kind, { done: _counter(id + " undo " + kind) });
+        assert(typeof undone?.started === "boolean" && (undone.started ? undone.refusal === null : typeof undone.refusal?.text === "string"),
+               label + "undo answers: " + JSON.stringify(undone));
+        assert(!undone.started, label + "… nothing undone before a change");
+        assertEqual(undone.refusal.code, capability.undo ? "noUndo" : capability.mode === "unavailable" ? "unavailable" : capability.mode === "apply" ? "noUndo" : "mode",
+                    label + "… refused for its reason");
+
+        const applied = integration.apply(kind, value, { done: _counter(id + " apply " + kind) });
+        assert(typeof applied?.started === "boolean" && (applied.started ? applied.refusal === null : typeof applied.refusal?.text === "string"),
+               label + "apply answers: " + JSON.stringify(applied));
+        assertEqual(applied.started, capability.mode === "apply", label + "… started only where the shell applies");
+        if (applied.started)
+            _expected.push(id + " apply " + kind);
+        if (capability.mode === "unavailable")
+            assertEqual(applied.refusal.text, capability.reason, label + "… refused with the reason");
+    }
+
+    // The changes waiting for their integration's EtcFiles
+    property var _deferred: []
+    // Runs the waiting changes one at a time, each once nothing runs
+    function _runDeferred() {
+        _steps.unshift({ description: "a waiting change's turn", condition: () => _integrations.every(integration => integration.files?.busy !== true), action: () => {
+            const next = suite._deferred.shift();
+            if (next !== undefined) {
+                next();
+                suite._runDeferred();
+            }
+        } });
+    }
+
     function runAsync() {
         _then("the scratch folder made, the shell's timeout looked up", () => _ready && CommandTools.known, () => {
             _integrations = [
                 _arch.createObject(suite, { start: _standIn("arch"), base: _scratch, inForceCommands: _merged }),
-                _nixos.createObject(suite, { inForceCommands: _merged }),
+                _nixos.createObject(suite, { start: _standIn("nixos"), base: _scratch, inForceCommands: _merged }),
                 _generic.createObject(suite)
             ];
             assertEqual(_integrations.map(integration => integration.distribution).sort().join(" "), DistributionRules.ids.slice().sort().join(" "),
@@ -150,6 +177,8 @@ TestCase {
             assertEqual(_integrations[2].files, null, "generic: nothing it could write with");
             const unknown = IntegrationRules.unknownCapability();
             assert(IntegrationRules.valid(unknown) && unknown.mode === "unavailable" && !unknown.known, "while the distribution is not known: unavailable, not known");
+            assert(_deferred.length > 0, "Arch's second applied kind waits for the first one's run");
+            _runDeferred();
         });
         _then("every started apply and every readInForce answered", () => _expected.every(key => (_answers[key] ?? []).length > 0)
               && !_integrations[0].files.busy, () => {
@@ -172,8 +201,15 @@ TestCase {
                         "arch: the delay in force, set elsewhere (read before the shell's file), and the shell's own file (none in the scratch tree)");
             const nixosDelay = (_answers["nixos readInForce sleep.hibernateDelay"] ?? [])[0];
             assertEqual(nixosDelay?.elsewhere + " " + nixosDelay?.value + " " + nixosDelay?.file, "/etc/systemd/sleep.conf 7200 null", "nixos: the delay in force, no file of the shell's");
-            assertEqual(JSON.stringify(_runs), JSON.stringify({ arch: ["Change the time before hibernating"] }),
-                        "runs as administrator: only arch's applied kind, once; none from nixos or generic");
+            assertEqual(JSON.stringify(_runs), JSON.stringify({ arch: ["Change the time before hibernating", "Change the connectivity check's address"] }),
+                        "runs as administrator: only arch's applied kinds, once each; none from nixos or generic");
+            assertEqual(JSON.stringify((_answers["arch readInForce network.connectivityUri"] ?? [])[0]),
+                        JSON.stringify({ state: "set", value: "http://mine/", from: "/etc/NetworkManager/NetworkManager.conf", elsewhere: "/etc/NetworkManager/NetworkManager.conf",
+                                         file: { state: "absent", text: null, sha256: "absent", ours: false }, afterOwn: false }),
+                        "arch: the address in force, set in NetworkManager.conf (read before the shell's file), and the shell's own file");
+            assertEqual((_answers["nixos readInForce network.connectivityUri"] ?? [])[0]?.file?.state, "absent",
+                        "nixos: the shell's own file read too, for Write anyway");
+            assertEqual(_integrations[1].capability("network.connectivityUri").anyway, true, "nixos: the address written anyway when asked");
             // Distribution forwards to the integration of the system it answered
             Distribution.whenReady(() => suite._facade = true);
         });
@@ -193,7 +229,7 @@ TestCase {
             assertEqual(delay.preview?.files?.[0]?.path ?? delay.preview?.snippet ?? delay.refusal?.code, plans[id], "… its plan: the distribution's");
         });
         _clock.start();
-        _exec(["sh", "-c", "mkdir -p \"$1/etc/systemd\" && chmod 755 \"$1/etc/systemd\"", "sh", _scratch], code => {
+        _exec(["sh", "-c", "mkdir -p \"$1/etc/systemd\" \"$1/etc/NetworkManager\" && chmod 755 \"$1/etc/systemd\" \"$1/etc/NetworkManager\"", "sh", _scratch], code => {
             suite.assertEqual(code, 0, "the scratch folder made");
             suite._ready = true;
         });

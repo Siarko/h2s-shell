@@ -5,7 +5,10 @@
 # replace-file.sh and run as `sh -c <text> sh <base> <arguments>…`; never run by path. The
 # files it may write are fixed here, one per change kind, under <base> ("" for the system:
 # take_base), in a folder whose parent is already there:
-#   sleep.hibernateDelay   /etc/systemd/sleep.conf.d/h2s-shell.conf
+#   sleep.hibernateDelay      /etc/systemd/sleep.conf.d/h2s-shell.conf
+#   network.connectivityUri   /etc/NetworkManager/conf.d/90-h2s-connectivity.conf
+#                             (NetworkManager then reads its configuration again:
+#                             reload_networkmanager)
 # and their backups in /var/lib/h2s-shell/backup/<kind>/ (`<file name>.<UTC time>`,
 # `.absent` when there was no file; every one kept). Its arguments:
 #   write  <kind> <sha256 of the text> <current sha256 | absent> <text>
@@ -29,6 +32,22 @@ shell_text() {
     case "$seconds" in ''|0*|*[!0-9]*) return 1;; esac
     [ ${#seconds} -le 9 ] || return 1
     [ "$1" = "# Written by h2s-shell: Settings, When away, Hibernate$newline[Sleep]${newline}HibernateDelaySec=$seconds$newline" ];;
+  network.connectivityUri)
+    # http(s)://<host>[:<port>][/<path>]: letters, digits, dots and hyphens in the host,
+    # nothing in the path that breaks its line (blanks, control characters, quotes, "\")
+    head="# Written by h2s-shell (Settings > System > Network)$newline[connectivity]${newline}uri="
+    uri=${1#"$head"}; uri=${uri%"$newline"}
+    [ "$1" = "$head$uri$newline" ] || return 1
+    case "$uri" in http://*) rest=${uri#http://};; https://*) rest=${uri#https://};; *) return 1;; esac
+    authority=${rest%%/*}; host=${authority%%:*}
+    case "$host" in ''|*[!A-Za-z0-9.-]*) return 1;; esac
+    if [ "$authority" != "$host" ]; then
+      port=${authority#*:}
+      case "$port" in ''|*[!0-9]*) return 1;; esac
+    fi
+    case "$rest" in
+    */*) case "/${rest#*/}" in *[[:space:][:cntrl:]\"\'\\]*) return 1;; esac;;
+    esac;;
   *) return 1;;
   esac
 }
@@ -38,8 +57,25 @@ newline='
 mode=$1; kind=$2; shift 2
 case "$kind" in
 sleep.hibernateDelay) parent=$base/etc/systemd; folder=$parent/sleep.conf.d; prefix=h2s-shell.conf;;
+network.connectivityUri) parent=$base/etc/NetworkManager; folder=$parent/conf.d; prefix=90-h2s-connectivity.conf;;
 *) refuse arguments;;
 esac
+# reload_networkmanager: NetworkManager reads its configuration again, through its own nmcli
+# at a fixed place under <base> (a suite's stand-in under its scratch base; the system's as
+# root); a failure leaves the file as written and says so before the last line
+reload_networkmanager() {
+  for program in "$base/run/current-system/sw/bin/nmcli" "$base/usr/bin/nmcli"; do
+    [ -x "$program" ] || continue
+    "$program" general reload conf > /dev/null 2>&1 && return 0
+    echo "warning: NetworkManager did not read its configuration again" >&2
+    return 0
+  done
+  echo "warning: no nmcli: NetworkManager did not read its configuration again" >&2
+}
+# after_change: what the kind needs once its file changed
+after_change() {
+  case "$kind" in network.connectivityUri) reload_networkmanager;; esac
+}
 target=$folder/$prefix; backups=$base/var/lib/h2s-shell/backup/$kind
 trap clean_up EXIT
 case "$mode" in
@@ -78,13 +114,16 @@ write)
   seal "$want"
   make_backup "$current"
   put_in_place
+  after_change
   say "written $kind $got $backup_name";;
 remove)
   check_current "$target" "$current"
   make_backup "$current"
   rm -f -- "$target"; settle
+  after_change
   say "removed $kind absent $backup_name";;
 undo)
   restore "$name" "$current"
+  after_change
   say "restored $kind $restored $backup_name";;
 esac

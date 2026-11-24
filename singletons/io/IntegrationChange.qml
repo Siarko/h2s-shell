@@ -51,13 +51,14 @@ QtObject {
     }
 
     // The user's Apply of `value`: `request` { current (readInForce's `file` as the user saw
-    // it), replace (the user was told that file is not exactly the shell's) } → the
-    // integration's { started, refusal }
+    // it), replace (the user was told that file is not exactly the shell's), anyway (the user
+    // asked to write where the system's configuration makes /etc) } → the integration's
+    // { started, refusal }
     function apply(value, request) {
         if (_busy !== "")
             return { started: false, refusal: EtcFilesRules.refusal("busy") };
         _busy = "apply";
-        const handlers = { replace: request?.replace === true, done: outcome => root._finish("apply", outcome) };
+        const handlers = { replace: request?.replace === true, anyway: request?.anyway === true, done: outcome => root._finish("apply", outcome) };
         if (request?.current !== undefined && request?.current !== null)
             handlers.current = request.current;
         // Before the run: its answer may come at once

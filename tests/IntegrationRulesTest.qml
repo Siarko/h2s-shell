@@ -12,21 +12,24 @@ TestCase {
         const rules = IntegrationRules;
         const kind = "sleep.hibernateDelay";
         const show = answer => JSON.stringify(answer);
-        const unavailable = reason => show({ mode: "unavailable", trial: false, undo: false, inForce: false, reason, known: true });
+        const unavailable = reason => show({ mode: "unavailable", trial: false, undo: false, inForce: false, anyway: false, reason, known: true });
 
-        assertEqual(show(rules.kinds), show(["sleep.hibernateDelay"]), "the change kinds the shell defines");
+        assertEqual(show(rules.kinds), show(["sleep.hibernateDelay", "network.connectivityUri"]), "the change kinds the shell defines");
         assertEqual(show(rules.modes), show(["apply", "declare", "copy", "unavailable"]), "the modes");
 
         // ── capability ──
         assertEqual(show(rules.capability({ [kind]: { mode: "apply", trial: true, undo: true, inForce: true } }, kind)),
-                    show({ mode: "apply", trial: true, undo: true, inForce: true, reason: "", known: true }), "applied, tried, undone, read");
-        assertEqual(show(rules.capability({ [kind]: { mode: "apply" } }, kind)), show({ mode: "apply", trial: false, undo: false, inForce: false, reason: "", known: true }),
+                    show({ mode: "apply", trial: true, undo: true, inForce: true, anyway: false, reason: "", known: true }), "applied, tried, undone, read");
+        assertEqual(show(rules.capability({ [kind]: { mode: "apply" } }, kind)), show({ mode: "apply", trial: false, undo: false, inForce: false, anyway: false, reason: "", known: true }),
                     "… each only when said");
         assertEqual(show(rules.capability({ [kind]: { mode: "apply", trial: 1, undo: "yes", inForce: {} } }, kind)),
-                    show({ mode: "apply", trial: false, undo: false, inForce: false, reason: "", known: true }), "… said as true only");
+                    show({ mode: "apply", trial: false, undo: false, inForce: false, anyway: false, reason: "", known: true }), "… said as true only");
         assertEqual(show(rules.capability({ [kind]: { mode: "copy", trial: true, undo: true, inForce: true } }, kind)),
-                    show({ mode: "copy", trial: false, undo: false, inForce: true, reason: "", known: true }), "copied: never tried or undone by the shell");
+                    show({ mode: "copy", trial: false, undo: false, inForce: true, anyway: false, reason: "", known: true }), "copied: never tried or undone by the shell");
         assertEqual(show(rules.capability({ [kind]: { mode: "declare", undo: true } }, kind)).indexOf('"undo":false') > 0, true, "… nor declared (not yet)");
+        assertEqual(rules.capability({ [kind]: { mode: "copy", anyway: true } }, kind).anyway, true, "copied: written anyway when the table says so");
+        assertEqual(rules.capability({ [kind]: { mode: "copy", anyway: 1 } }, kind).anyway, false, "… said as true only");
+        assertEqual(rules.capability({ [kind]: { mode: "apply", anyway: true } }, kind).anyway, false, "… never where applied (it is applied anyway)");
         assertEqual(show(rules.capability({}, kind)), unavailable(rules.unsupported), "not named: unavailable, not supported");
         assertEqual(show(rules.capability({ [kind]: { mode: "unavailable", reason: "No swap." } }, kind)), unavailable("No swap."), "unavailable with its own reason");
         assertEqual(show(rules.capability({ [kind]: { mode: "unavailable" } }, kind)), unavailable(rules.unsupported), "… or the general one");
@@ -34,23 +37,27 @@ TestCase {
         assertEqual(show(rules.capability({ "no.kind": { mode: "apply" } }, "no.kind")), unavailable(rules.unsupported), "a kind the shell does not define: unavailable");
         assertEqual(show(rules.capability(null, kind)), unavailable(rules.unsupported), "no table: unavailable");
         assertEqual(show(rules.capability({}, "toString")), unavailable(rules.unsupported), "a name every object has: unavailable");
-        assertEqual(show(rules.unknownCapability()), show({ mode: "unavailable", trial: false, undo: false, inForce: false, reason: rules.unknown, known: false }),
+        assertEqual(show(rules.unknownCapability()), show({ mode: "unavailable", trial: false, undo: false, inForce: false, anyway: false, reason: rules.unknown, known: false }),
                     "while the distribution is not known: unavailable, not known");
 
         // ── valid ──
         for (const answer of [rules.unknownCapability(), rules.capability({}, kind), rules.capability({ [kind]: { mode: "apply", trial: true, undo: true } }, kind),
                               rules.capability({ [kind]: { mode: "copy" } }, kind)])
             assert(rules.valid(answer), "valid: " + show(answer));
-        const good = { mode: "apply", trial: false, undo: true, inForce: true, reason: "", known: true };
-        for (const [why, bad] of [["no mode", Object.assign({}, good, { mode: "x" })], ["no mode, nothing else wrong", Object.assign({}, good, { mode: "x", undo: false })], ["unavailable without a reason", { mode: "unavailable", trial: false, undo: false, inForce: false, reason: "", known: true }],
-                                  ["unavailable but undone", { mode: "unavailable", trial: false, undo: true, inForce: false, reason: "r", known: true }],
-                                  ["unavailable but read", { mode: "unavailable", trial: false, undo: false, inForce: true, reason: "r", known: true }],
-                                  ["unavailable but tried", { mode: "unavailable", trial: true, undo: false, inForce: false, reason: "r", known: true }],
+        const good = { mode: "apply", trial: false, undo: true, inForce: true, anyway: false, reason: "", known: true };
+        for (const [why, bad] of [["no mode", Object.assign({}, good, { mode: "x" })], ["no mode, nothing else wrong", Object.assign({}, good, { mode: "x", undo: false })], ["unavailable without a reason", { mode: "unavailable", trial: false, undo: false, inForce: false, anyway: false, reason: "", known: true }],
+                                  ["unavailable but undone", { mode: "unavailable", trial: false, undo: true, inForce: false, anyway: false, reason: "r", known: true }],
+                                  ["unavailable but read", { mode: "unavailable", trial: false, undo: false, inForce: true, anyway: false, reason: "r", known: true }],
+                                  ["unavailable but tried", { mode: "unavailable", trial: true, undo: false, inForce: false, anyway: false, reason: "r", known: true }],
                                   ["copied but undone", Object.assign({}, good, { mode: "copy" })], ["copied but tried", Object.assign({}, good, { mode: "copy", undo: false, trial: true })],
                                   ["offered with a reason", Object.assign({}, good, { reason: "r" })], ["offered while not known", Object.assign({}, good, { known: false })],
                                   ["a flag not a boolean", Object.assign({}, good, { undo: 1 })], ["no reason", Object.assign({}, good, { reason: undefined })],
+                                  ["applied and written anyway", Object.assign({}, good, { anyway: true })],
+                                  ["unavailable but written anyway", { mode: "unavailable", trial: false, undo: false, inForce: false, anyway: true, reason: "r", known: true }],
+                                  ["no anyway", Object.assign({}, good, { anyway: undefined })],
                                   ["nothing", null]])
             assert(!rules.valid(bad), "not valid: " + why);
+        assert(rules.valid(Object.assign({}, good, { mode: "copy", undo: false, anyway: true })), "valid: copied, written anyway when asked");
 
         // ── values and plans ──
         assert(rules.validValue(kind, 60) && rules.validValue(kind, 86400), "the delay: a minute to a day");
@@ -73,6 +80,11 @@ TestCase {
         // ── when apply and undo may start ──
         assertEqual(rules.applyRefusal(rules.capability(applied, kind)), null, "apply: where applied");
         assertEqual(rules.applyRefusal(rules.capability(copied, kind)).code, "mode", "… not where copied");
+        assertEqual(rules.applyRefusal(rules.capability(copied, kind), true).code, "mode", "… nor asked anyway where the table does not say so");
+        const anyway = { [kind]: { mode: "copy", anyway: true } };
+        assertEqual(rules.applyRefusal(rules.capability(anyway, kind), true), null, "… where copied and written anyway, asked so");
+        assertEqual(rules.applyRefusal(rules.capability(anyway, kind)).code, "mode", "… not unasked");
+        assertEqual(rules.undoRefusal(rules.capability(anyway, kind)).code, "mode", "… and no Undo of it");
         assertEqual(show(rules.applyRefusal(rules.capability({}, kind))), show({ code: "unavailable", text: rules.unsupported }), "… unavailable, with the reason");
         assertEqual(show(rules.applyRefusal(rules.unknownCapability())), show({ code: "unknown", text: rules.unknown }), "… not known");
         assertEqual(rules.undoRefusal(rules.capability({ [kind]: { mode: "apply", undo: true } }, kind)), null, "undo: where applied and undone");
@@ -86,9 +98,9 @@ TestCase {
         const own = EtcFilesRules.inForce({ text: HibernateRules.dropInText(600) }, kind);
         const merged = (...files) => files.map(([path, body]) => "# " + path + "\n" + body).join("\n");
         const ownPath = "/etc/systemd/sleep.conf.d/h2s-shell.conf";
-        assertEqual(show(rules.inForceCommand(kind)), show(["systemd-analyze", "--no-pager", "cat-config", "systemd/sleep.conf"]),
+        assertEqual(show(rules.inForceCommand(kind, "/s")), show(["systemd-analyze", "--no-pager", "cat-config", "systemd/sleep.conf"]),
                     "the delay as systemd merges sleep.conf and its drop-ins");
-        assertEqual(rules.inForceCommand("no.kind"), null, "… none for another kind");
+        assertEqual(rules.inForceCommand("no.kind", "/s"), null, "… none for another kind");
         assertEqual(show(rules.inForceOf(kind, merged(["/usr/lib/systemd/sleep.conf", "[Sleep]\n#HibernateDelaySec=\n"], [ownPath, "[Sleep]\nHibernateDelaySec=600\n"]), own)),
                     show({ state: "set", value: 600, from: ownPath, elsewhere: "", file: own, afterOwn: false }), "set by the shell's own drop-in: not elsewhere");
         assertEqual(show(rules.inForceOf(kind, merged(["/etc/systemd/sleep.conf", "[Sleep]\nHibernateDelaySec=2h\n"]), own)),
@@ -118,5 +130,40 @@ TestCase {
                                   ["a state that is none, nothing else wrong", { state: "absent", value: null, from: "", elsewhere: "", file: null, afterOwn: false }],
                                   ["no from, nothing else wrong", { state: "default", value: null, from: undefined, elsewhere: "", file: null, afterOwn: false }]])
             assert(!rules.validInForce(bad), "not valid: " + why);
+        // ── the connectivity check's address ──
+        const uri = "network.connectivityUri";
+        const address = "http://nmcheck.gnome.org/check_network_status.txt";
+        assert(rules.validValue(uri, address) && rules.validValue(uri, "https://a.b:8443/x"), "the address: http(s)");
+        assert(rules.validValue(uri, ""), "… or none (the shell's file removed)");
+        for (const wrong of ["ftp://a/b", "http://a/b c", 5, null])
+            assert(!rules.validValue(uri, wrong), "… not " + show(wrong));
+        assertEqual(rules.textOf(uri, address), ConnectivityRules.text(address), "its file's text");
+        assertEqual(rules.textOf(uri, ""), "", "… none for no address");
+        const ownUri = "/etc/NetworkManager/conf.d/90-h2s-connectivity.conf";
+        assertEqual(show(rules.plan({ [uri]: { mode: "apply" } }, uri, address)), show({ preview: { files: [{ path: ownUri, text: ConnectivityRules.text(address) }] }, refusal: null }),
+                    "applied: the shell's conf.d file and its text");
+        assertEqual(rules.plan({ [uri]: { mode: "copy", option: "o.p" } }, uri, address).preview.snippet, "o.p = \"" + address + "\";", "copied: the option set to the quoted address");
+        assertEqual(rules.plan({ [uri]: { mode: "copy", option: "o.p" } }, uri, "").preview.snippet, "", "… nothing to copy for no address");
+        assertEqual(show(rules.inForceCommand(uri, "/s")), show(["/s/scripts/nm-config-files.sh"]), "read from NetworkManager's files, in its order");
+        const nm = (...files) => files.map(([path, body]) => "file\t" + path + "\ttext\n" + body.map(line => "|" + line + "\n").join("") + "end\t" + path + "\n").join("") + "done\n";
+        const ownFile = EtcFilesRules.inForce({ text: ConnectivityRules.text(address) }, uri);
+        const lib = "/usr/lib/NetworkManager/conf.d/20-connectivity.conf";
+        assertEqual(show(rules.inForceOf(uri, nm([lib, ["[connectivity]", "uri=http://ping.archlinux.org/nm-check.txt"]]), ownFile)),
+                    show({ state: "default", value: null, from: lib, elsewhere: "", file: ownFile, afterOwn: false }),
+                    "set only by the distribution's package: its default, not elsewhere");
+        assertEqual(show(rules.inForceOf(uri, nm([lib, ["[connectivity]", "uri=http://a/"]], [ownUri, ["[connectivity]", "uri=" + address]]), ownFile)),
+                    show({ state: "set", value: address, from: ownUri, elsewhere: "", file: ownFile, afterOwn: false }), "set by the shell's own file");
+        const main = "/etc/NetworkManager/NetworkManager.conf";
+        assertEqual(show(rules.inForceOf(uri, nm([main, ["[connectivity]", "uri=http://mine/"]]), ownFile)),
+                    show({ state: "set", value: "http://mine/", from: main, elsewhere: main, file: ownFile, afterOwn: false }),
+                    "set in NetworkManager.conf: elsewhere, read before the shell's file");
+        const later = "/etc/NetworkManager/conf.d/99-mine.conf";
+        assertEqual(show(rules.inForceOf(uri, nm([ownUri, ["[connectivity]", "uri=" + address]], [later, ["[connectivity]", "uri="]]), ownFile)),
+                    show({ state: "set", value: "", from: later, elsewhere: later, file: ownFile, afterOwn: true }),
+                    "emptied by a later conf.d file: elsewhere, read after the shell's");
+        assertEqual(show(rules.inForceOf(uri, "file\t" + main + "\tunreadable\ndone\n", ownFile)),
+                    show({ state: "unknown", value: null, from: "", elsewhere: "", file: ownFile, afterOwn: false }), "a file not read: unknown");
+        for (const answer of [rules.inForceOf(uri, nm([later, ["[connectivity]", "uri="]]), null), rules.inForceOf(uri, nm([lib, ["[connectivity]", "uri=http://a/"]]), null)])
+            assert(rules.validInForce(answer), "a valid answer: " + show(answer));
     }
 }

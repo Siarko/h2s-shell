@@ -210,6 +210,58 @@ TestCase {
         _notificationsPage();
         _firstSections();
         _whenAwayPage();
+        _networkConnectivity();
+    }
+
+    // The connectivity check's address on System → Network → Overview, with the distribution's
+    // answers handed to the page (Arch's, NixOS's capability): the buttons bound to
+    // ConnectivityRules.offer's labels and effects. Nothing is clicked here (it would ask for
+    // the password for real): IntegrationChangeTest runs the change on a stand-in
+    function _networkConnectivity() {
+        const component = Qt.createComponent(Qt.resolvedUrl("../panels/settings/NetworkOverviewSettings.qml"));
+        const page = component.createObject(_stage, {});
+        if (page === null)
+            return fail("the network overview builds: " + component.errorString().trim());
+        const named = name => _find(page, item => item.objectName === name);
+        const kind = ConnectivityRules.kind;
+        const absent = { state: "absent", text: null, sha256: "absent", ours: false };
+        const read = extra => Object.assign({ state: "default", value: null, from: "", elsewhere: "", file: absent, afterOwn: false }, extra ?? {});
+        const address = "http://a.example/check";
+        try {
+            const field = _find(page, item => item.placeholder !== undefined && String(item.placeholder).startsWith("Not set up"));
+            assert(field !== null, "the address's field");
+            page.uriCurrent = "";
+            field.text = address;
+            page.uriCapability = IntegrationRules.capability({ [kind]: { mode: "apply", undo: true, inForce: true } }, kind);
+            page.uriInForce = read();
+            page.uriBusy = "";
+            page.uriUndoable = false;
+            assert(named("connectivitySave").visible && named("connectivitySave").label === "Save" && named("connectivitySave").available, "Arch: Save");
+            assert(!named("connectivitySaveAsking").visible && !named("connectivityCopy").visible && !named("connectivityUndo").visible, "… alone");
+            assertEqual(named("connectivityHint").text, "The address it fetches now and then; saved in " + EtcFilesRules.files[kind] + ".", "… the line under it");
+            page.uriUndoable = true;
+            assert(named("connectivityUndo").visible && named("connectivityUndo").available, "after a change: Undo");
+            const main = "/etc/NetworkManager/NetworkManager.conf";
+            page.uriInForce = read({ state: "set", value: "http://mine/", from: main, elsewhere: main });
+            const asking = named("connectivitySaveAsking");
+            assert(asking.visible && !named("connectivitySave").visible && asking.label === "Save" && asking.confirmLabel === "Use the shell's value instead?",
+                   "set in NetworkManager.conf: Save asks first");
+            assertEqual(named("connectivityHint").text, "The address it fetches now and then; saved in " + EtcFilesRules.files[kind] + ". Set in " + main + ": http://mine/.",
+                        "… named with its value");
+            asking.asking = true;
+            field.text = address + "2";
+            assert(!asking.asking, "… the question dropped when the address is another");
+            page.uriInForce = read({ state: "set", value: "http://mine/", from: "/etc/NetworkManager/conf.d/99.conf", elsewhere: "/etc/NetworkManager/conf.d/99.conf", afterOwn: true });
+            assert(!named("connectivitySave").visible && !asking.visible, "set in a file read after the shell's: no Save");
+            page.uriCapability = IntegrationRules.capability({ [kind]: { mode: "copy", inForce: true, anyway: true, option: ConnectivityRules.nixosOption } }, kind);
+            page.uriInForce = read();
+            assert(!named("connectivitySave").visible && named("connectivityCopy").visible && named("connectivityCopy").label === "Copy for configuration.nix",
+                   "NixOS: the line to copy");
+            assert(named("connectivityAnyway").visible && named("connectivityAnyway").available, "… and Write anyway");
+            assertEqual(named("connectivityHint").text, "The address it fetches now and then.", "… the line under it");
+        } finally {
+            page.destroy();
+        }
     }
 
     // Every page with sections (SectionTitle, SettingsSection — the one look of a section): a

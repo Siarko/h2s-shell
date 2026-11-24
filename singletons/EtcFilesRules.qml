@@ -29,7 +29,8 @@ Singleton {
 
     // Each change kind's file, as fixed in etc-files.sh
     readonly property var files: ({
-        "sleep.hibernateDelay": "/etc/systemd/sleep.conf.d/h2s-shell.conf"
+        "sleep.hibernateDelay": "/etc/systemd/sleep.conf.d/h2s-shell.conf",
+        "network.connectivityUri": "/etc/NetworkManager/conf.d/90-h2s-connectivity.conf"
     })
     // Where each kind's backups are: <backupsDirectory>/<kind>
     readonly property string backupsDirectory: "/var/lib/h2s-shell/backup"
@@ -41,7 +42,13 @@ Singleton {
 
     // What the prompt says each kind's run is for
     readonly property var _subjects: ({
-        "sleep.hibernateDelay": "the time before hibernating"
+        "sleep.hibernateDelay": "the time before hibernating",
+        "network.connectivityUri": "the connectivity check's address"
+    })
+    // What the prompt says a removal is for, where "Go back to the system's <subject>" reads
+    // badly
+    readonly property var _removals: ({
+        "network.connectivityUri": "Go back to the default connectivity check"
     })
 
     // Why a run was not started, or what the root step refused, by code
@@ -124,6 +131,8 @@ Singleton {
             const value = /^HibernateDelaySec=([1-9][0-9]{0,8})\n$/m.exec(text);
             return value !== null && HibernateRules.dropInText(Number(value[1])) === text;
         }
+        if (kind === "network.connectivityUri")
+            return ConnectivityRules.shellText(text);
         return false;
     }
 
@@ -163,6 +172,7 @@ Singleton {
     function what(mode, kind) {
         const subject = _subjects[kind] ?? "a system file";
         return mode === "undo" ? "Undo the change to " + subject
+            : mode === "remove" && Object.prototype.hasOwnProperty.call(_removals, kind) ? _removals[kind]
             : mode === "remove" ? "Go back to the system's " + subject.replace(/^the /, "")
             : "Change " + subject;
     }

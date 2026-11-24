@@ -597,7 +597,12 @@ the Wi-Fi, mobile broadband, airplane-mode and networking switches, each device 
 hardware, MAC, speed, Wi-Fi signal and channel, addresses, gateway, DNS, search domains and
 MTU (bridges, containers' and tunnels folded under "Other devices"), and the hostname, a
 global DNS and the connectivity check — through `nmcli` and NetworkManager's D-Bus
-properties (`busctl`); a change refused for want of rights goes to the polkit prompt.
+properties (`busctl`); a change refused for want of rights goes to the polkit prompt. The
+connectivity check's address is NetworkManager's configuration, which the page reads in
+NetworkManager's order: an address set in another of its files is shown with the file ("Set
+in <file>: <address>"), not overridden when that file is read after the shell's, and
+overridden only after asking when it is read before.
+
 **Wi-Fi** (shown when the computer has Wi-Fi): the radio's switch on the page's heading, the
 network in use, the saved networks with connect, edit and forget on each card's name line
 (under the name in a narrow window or while a long question asks),
@@ -659,6 +664,18 @@ what was switched on in which boot is kept in Config.
 "Files you can import" lists each kind (`NetworkRules.vpnImportKinds`) with its
 files and whether it can be imported now — a missing plugin named with what it is for,
 other installed plugins after. Modem follows.
+
+#### The connectivity check's address: NixOS
+
+The address is the option `networking.networkmanager.settings.connectivity.uri`: "Copy for
+configuration.nix" copies the line; "Write anyway" writes NetworkManager's file outside the
+system's configuration, without Undo.
+
+#### The connectivity check's address: Arch
+
+Save writes `/etc/NetworkManager/conf.d/90-h2s-connectivity.conf` (Default removes it), keeping
+the file it replaces as a backup that Undo puts back, and NetworkManager reads its
+configuration again.
 
 ## Authentication prompts (polkit)
 
