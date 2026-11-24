@@ -12,7 +12,7 @@ tools=(
     "coreutils|timeout: ends a compositor or a Quickshell that hangs"
     "fontconfig|fc-match: the characters of the theme's font, for the glyphs suite"
     "hyprland|the compositor the lock screen is tested in"
-    "grim|screenshots of the lock screen"
+    "grim|screenshots of the lock screen, the mockups' shots"
     "wlr-randr|sets the headless output's size"
     "wl-clipboard|wl-copy, wl-paste: the primary selection of the paste test"
     "libxkbcommon|xkbcli: tells the virtual keyboard which keys type a character"
@@ -23,6 +23,8 @@ tools=(
     "pkgconf|pkg-config: finds the Wayland protocol files the input bindings are generated from"
     "wayland|wayland.xml, one of those protocol files"
     "wayland-protocols|xdg-shell.xml, another"
+    "imagemagick|magick: makes the mockups' shots smaller, losslessly"
+    "mesa|llvmpipe: the software OpenGL the mockups are drawn with"
 )
 in_repositories() { [ -n "$1" ] && pacman -Si -- "$1" > /dev/null 2>&1; }
 for entry in "${tools[@]}"; do

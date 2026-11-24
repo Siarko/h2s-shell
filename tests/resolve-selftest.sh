@@ -130,6 +130,11 @@ rm "$work/store/dddddddd-h2s-locktest-tools/bin/labwc"
 cp -a "$store" "$work/store/eeeeeeee-h2s-locktest-tools"
 rm "$work/store/eeeeeeee-h2s-locktest-tools/bin/python3"
 
+# The set with magick too (the mockups need), and a magick on a system
+cp -a "$store" "$work/store/ffffffff-h2s-locktest-tools"
+answers store/ffffffff-h2s-locktest-tools/bin/magick "Version: ImageMagick 7.1.2-36 Q16-HDRI x86_64"
+answers magick/magick "Version: ImageMagick 6.9.0-1 Q16"
+
 # nix: writes down how it was called, prints the store path
 nix_stand_in() { stand_in "$1/nix" "echo \"\$*\" >> '$work/nix.calls'" "echo '$2'"; }
 nix_stand_in nix "$store"
@@ -137,6 +142,7 @@ nix_stand_in nix-partial "$work/store/bbbbbbbb-h2s-locktest-tools"
 nix_stand_in nix-mute-hyprland "$work/store/cccccccc-h2s-locktest-tools"
 nix_stand_in nix-no-labwc "$work/store/dddddddd-h2s-locktest-tools"
 nix_stand_in nix-no-python "$work/store/eeeeeeee-h2s-locktest-tools"
+nix_stand_in nix-mockups "$work/store/ffffffff-h2s-locktest-tools"
 stand_in nix-failing/nix "echo 'error: the stand-in build failed' >&2" "exit 1"
 
 # Quickshells, and launchers: one that runs the launch.sh it is pointed at (H2S_SHELL_DIR)
@@ -182,6 +188,9 @@ echo "launcher=$LOCKTEST_LAUNCHER"
 echo "launcher_from=$LOCKTEST_LAUNCHER_FROM"
 echo "qs=$LOCKTEST_QS"
 echo "python=${LOCKTEST_PYTHON:-}"
+echo "grim=${LOCKTEST_GRIM:-}"
+echo "wlr_randr=${LOCKTEST_WLR_RANDR:-}"
+echo "magick=${LOCKTEST_MAGICK:-}"
 # The lock bed's set from the system's tools, as run.sh has it made (MAKE_ANYWAY: a caller
 # that asks for it where it is not for)
 if { [ "$LOCKTEST_NEED" = lock ] && [ "$LOCKTEST_TOOL_SOURCE" = system ]; } || [ -n "${MAKE_ANYWAY:-}" ]; then
@@ -1029,10 +1038,42 @@ prints out "  FAIL  no-check — ended well without a PASS line: it checked noth
 artifacts=$(sed -n 's|^artifacts (logs, screenshots): \(.*\)$|\1|p' "$work/$case_name.out")
 case "$artifacts" in "$work"/temp/h2s-locktest.*) rm -rf "$artifacts" ;; esac
 
+# ---- The mockups need: grim, wlr-randr and magick besides the compositor ---
+resolve mockups-system mockups "base session system lockset wlr-randr magick qs"
+exits 0
+prints out "tools: system (PATH, not pinned) — labwc 7.8.9, setpriv 6.5.4, magick 6.9.0-1"
+prints out "grim=$work/lockset/grim"
+prints out "wlr_randr=$work/wlr-randr/wlr-randr"
+prints out "magick=$work/magick/magick"
+
+resolve mockups-system-missing mockups "base session system qs" H2S_TEST_TOOLS=system
+exits 2
+prints err "$missing_header_system"
+prints err "  grim not found on PATH (the mockups' shots)"
+prints err "  wlr-randr not found on PATH (sets the headless output's size)"
+prints err "  magick not found on PATH (makes the mockups' shots smaller, losslessly)"
+silent_on err "fc-match"
+hands_over_nothing
+
+mockups_store=$work/store/ffffffff-h2s-locktest-tools
+resolve mockups-nix mockups "base session nix-mockups qs"
+exits 0
+prints out "tools: nix (tests/lock/tools.nix, pinned: $mockups_store) — labwc 1.2.3, setpriv 4.5.6, magick 7.1.2-36"
+prints out "grim=$mockups_store/bin/grim"
+prints out "wlr_randr=$mockups_store/bin/wlr-randr"
+prints out "magick=$mockups_store/bin/magick"
+
+# A pinned set without magick (built from a tools.nix before it held one)
+resolve mockups-nix-no-magick mockups "base session nix qs"
+exits 2
+prints err "$missing_header_nix"
+prints err "  the pinned tool set ($store) lacks bin/magick (makes the mockups' shots smaller, losslessly)"
+hands_over_nothing
+
 # ---- A caller that does not say what it needs ---
 resolve no-need "" "base session system qs"
 exits 2
-prints err "driver: resolve.sh: LOCKTEST_NEED must be unit, lock or python, not ''"
+prints err "driver: resolve.sh: LOCKTEST_NEED must be unit, lock, python or mockups, not ''"
 hands_over_nothing
 
 # ---- Nothing left behind (the nix log, the launcher probe's dir) ---

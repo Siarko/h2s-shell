@@ -67,8 +67,8 @@ tests/TestCase.qml unit:all modules:all
 tests/SharedStateReader.qml unit:all self:tests/run-unit-selftest.sh
 tests/run-unit.sh unit:all self:tests/run-unit-selftest.sh
 tests/count-suites.sh unit:all self:tests/run-unit-selftest.sh
-tests/headless.sh unit:all modules:all self:tests/run-unit-selftest.sh
-tests/memory-cap.sh unit:all modules:all lock:all self:tests/run-unit-selftest.sh self:tests/lock/selftest.sh self:tests/mutate-selftest.sh self:tests/run-all-selftest.sh self:tests/run-helper.sh
+tests/headless.sh unit:all modules:all self:tests/run-unit-selftest.sh self:tests/run-mockups-selftest.sh
+tests/memory-cap.sh unit:all modules:all lock:all self:tests/run-unit-selftest.sh self:tests/run-mockups-selftest.sh self:tests/lock/selftest.sh self:tests/mutate-selftest.sh self:tests/run-all-selftest.sh self:tests/run-helper.sh
 tests/run-modules.sh modules:all self:tests/run-unit-selftest.sh
 tests/fixtures/pkexec-on-path/* modules:all
 tests/run-all.sh self:tests/run-all-selftest.sh
@@ -78,8 +78,8 @@ tests/remote-run.sh self:tests/remote-run-selftest.sh
 tests/run-system.sh self:tests/run-system.sh self:tests/run-system-selftest.sh
 tests/system/* self:tests/run-system.sh
 tests/device/deploy-check.sh self:tests/deploy-check-selftest.sh
-tests/lock/resolve.sh unit:all modules:all lock:all self:tests/resolve-selftest.sh
-tests/lock/tools.nix unit:all modules:all lock:all self:tests/resolve-selftest.sh
+tests/lock/resolve.sh unit:all modules:all lock:all self:tests/resolve-selftest.sh self:tests/run-mockups-selftest.sh
+tests/lock/tools.nix unit:all modules:all lock:all self:tests/resolve-selftest.sh self:tests/run-mockups-selftest.sh
 tests/lock/run.sh lock:all self:tests/lock/selftest.sh
 tests/lock/lint.sh self:tests/lock/selftest.sh
 tests/lock/lib.sh lock:all
@@ -129,10 +129,11 @@ tests-helper.qml self:tests/run-helper.sh
 singletons/helper/ScreenSaverClient.qml self:tests/run-helper.sh
 +singletons/HelperRules.qml self:tests/run-helper.sh
 tests/fixtures/helper/* unit:HelperTest
-# The mockups' root entry, their window and the runners' fixture mockups
-mockup.qml self:tests/mockup-entry-selftest.sh
-mockups/kit/* self:tests/mockup-entry-selftest.sh
-tests/fixtures/mockups/* self:tests/mockup-entry-selftest.sh
+# The mockups' runner, root entry, window and the runners' fixture mockups
+tests/run-mockups.sh self:tests/run-mockups-selftest.sh
+mockup.qml self:tests/run-mockups-selftest.sh
+mockups/kit/* self:tests/run-mockups-selftest.sh
+tests/fixtures/mockups/* self:tests/run-mockups-selftest.sh
 flake.nix self:tests/run-system.sh
 flake.lock self:tests/run-system.sh unit:QuickshellPinTest
 nix/* self:tests/run-system.sh

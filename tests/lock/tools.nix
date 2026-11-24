@@ -4,7 +4,7 @@
 #   nix build --no-link --print-out-paths --impure -f tests/lock/tools.nix
 #
 # prints one store path holding bin/ (labwc, Hyprland, hyprctl, grim, setpriv, python3
-# with pywayland, xkbcli, dbus-daemon, gdbus, wl-copy, wl-paste, wlr-randr, fc-match), share/ltproto (Python bindings of the input
+# with pywayland, xkbcli, dbus-daemon, gdbus, wl-copy, wl-paste, wlr-randr, fc-match, magick), share/ltproto (Python bindings of the input
 # and window protocols), share/us.xkb (the keymap the virtual keyboard sends by default) and
 # share/keymaps/<name>.xkb (the others a test may ask for). run.sh does this itself.
 #
@@ -96,6 +96,8 @@ pkgs.linkFarm "h2s-locktest-tools" [
   # Pins the headless labwc output's size (its default is 1280x720), which the nested
   # Hyprland's window, and so its output, follows
   { name = "bin/wlr-randr"; path = "${pkgs.wlr-randr}/bin/wlr-randr"; }
+  # Makes the mockups' shots smaller, losslessly (tests/run-mockups.sh)
+  { name = "bin/magick"; path = "${pkgs.imagemagick}/bin/magick"; }
   { name = "share/ltproto"; path = "${protocols}/ltproto"; }
   { name = "share/us.xkb"; path = keymap; }
   { name = "share/keymaps"; path = keymaps; }

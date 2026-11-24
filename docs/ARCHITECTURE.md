@@ -2433,6 +2433,11 @@ The deploy check (`tests/device/deploy-check.sh`) and its self-test take only a 
 (for the shell's JSON answers) from the same source: the pinned set's where there is `nix`,
 else the one on `PATH`; none is a set-up error, status 2.
 
+The mockup runner (`tests/run-mockups.sh`) takes labwc, `setpriv`, grim, wlr-randr and
+`magick` (ImageMagick) from the same source, and draws with Mesa's llvmpipe, software
+OpenGL under Qt Quick's normal renderer, which draws shader effects and needs no GPU; a run
+whose log does not name llvmpipe as the OpenGL renderer is NOT RUN for that mockup.
+
 The lock test bed (`tests/lock/run.sh`) takes a larger set from the same source: labwc,
 Hyprland and `hyprctl`, grim, wlr-randr, `wl-copy` and `wl-paste`, `xkbcli`, `dbus-daemon`,
 `gdbus`, `setpriv`, a `python3` that imports pywayland, the Python bindings of the virtual
@@ -2463,11 +2468,12 @@ are the ones beside the libpam Quickshell links, on both systems.
 
 #### NixOS
 
-`nix` builds the pinned tools, for the unit suites, the lock test bed and the deploy check's
-`python3` alike (there is no `python3` on `PATH` to fall back on), and the helper's package
+`nix` builds the pinned tools, for the unit suites, the mockup runner, the lock test bed and
+the deploy check's `python3` alike (there is no `python3` on `PATH` to fall back on), and the helper's package
 for `tests/run-helper.sh`. The
 launcher is the package's `h2s-shell`, so the tests run the Quickshell the installed shell
-runs.
+runs. Mesa's llvmpipe, which the mockup runner draws with, is the one the system's graphics
+drivers provide (`hardware.graphics`), as for any program.
 
 #### Arch
 
@@ -2482,13 +2488,15 @@ does not install them. The packages, each with what the tests use it for
 | `util-linux` | `setpriv`, `setsid`, `flock`, `script`: the test processes' isolation, the bed's lock, a terminal for `install.sh` |
 | `coreutils` | `timeout`: ends a compositor or a Quickshell that hangs |
 | `hyprland` | the compositor the lock screen is tested in |
-| `grim` | screenshots of the lock screen |
+| `grim` | screenshots of the lock screen, the mockups' shots |
 | `wlr-randr` | sets the headless output's size |
 | `wl-clipboard` | `wl-copy`, `wl-paste`: the primary selection of the paste test |
 | `libxkbcommon` | `xkbcli`: tells the virtual keyboard which keys type a character |
 | `dbus`, `glib2` | `dbus-daemon`, `gdbus`: a private session bus for the notification tests |
 | `python`, `python-pywayland` | the virtual keyboard and pointer, and the scanner their bindings are made with; `python` also reads the shell's answers in the deploy check |
 | `pkgconf`, `wayland`, `wayland-protocols` | finding the protocol files those bindings are made from |
+| `imagemagick` | `magick`: makes the mockups' shots smaller, losslessly |
+| `mesa` | llvmpipe: the software OpenGL the mockups are drawn with |
 
 `tests/run-helper.sh` builds the helper with `cmake`, `base-devel` (the compiler) and
 `qt6-base`, which `install.sh` installs.

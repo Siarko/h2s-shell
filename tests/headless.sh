@@ -58,9 +58,10 @@ LOCKTEST_DIR=$REPO/tests/lock
 # Read by resolve.sh
 # shellcheck disable=SC2034
 PROBE_TIMEOUT=5
-# What these runners use of the tools: the compositor, not the lock bed's whole set
+# What these runners use of the tools: the compositor, not the lock bed's whole set; the
+# caller's HEADLESS_NEED names another need of resolve.sh (tests/run-mockups.sh: mockups)
 # shellcheck disable=SC2034
-LOCKTEST_NEED=unit
+LOCKTEST_NEED=${HEADLESS_NEED:-unit}
 probe=""
 work=""
 

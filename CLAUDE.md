@@ -170,7 +170,12 @@ ticks, cells respond to clicks, and popups toggle.
 `MockupWindow` (`import qs.mockups.kit`), which holds the scene contract — `scenes`,
 `scene`, `subject`, `subjectRect` — and the shot protocol (`mockups/kit/MockupWindow.qml`). The entry isolates the process from
 the session it runs in (`singletons/Isolation.qml`): no module loads, no notification server
-is registered, nothing is sent, whatever environment it inherited. Folder names are lowercase with hyphens, so no `import qs.…` reaches them; `kit/` is the only
+is registered, nothing is sent, whatever environment it inherited.
+`tests/run-mockups.sh --load-only | --shoot [<kind>/<name>…]` runs them headless, each in a
+compositor of its own, side by side, in a fixed environment (Mesa's llvmpipe, which draws
+shader effects; scale 1, 96 DPI, `QT_HASH_SEED=0`, UTC); `--shoot` writes a PNG per scene,
+cropped to the subject, into `$H2S_MOCKUP_SHOTS` (else `~/.cache/h2s-shell-mockups/`).
+With no name it runs every component and view mockup, never a planning one. Folder names are lowercase with hyphens, so no `import qs.…` reaches them; `kit/` is the only
 importable folder. Three kinds:
 
 - `components/<name>`: one component in all its states (the component's file name in kebab
@@ -189,6 +194,8 @@ Mockup code:
 - It uses the real components, views and theme, with stand-in data passed in through
   properties. It never reads the system, the clock or the network; a time shown is a fixed
   value, and a looping animation is off in a scene through the component's own property.
+  A picture is loaded before the scene that shows it (its asynchronous `Image` made from the
+  start, hidden): the shot is taken three frames after the scene is set.
 - It never changes a shell file for its own sake. If a view cannot take stand-in data, that
   missing seam is reported and added to the shell as a change of its own, with its test.
 - It contains no `*Rules.qml`, no literal colours (theme tokens, as everywhere), and no

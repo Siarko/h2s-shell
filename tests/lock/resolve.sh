@@ -6,6 +6,9 @@
 # setup_error to remove) and LOCKTEST_NEED, what it uses:
 #
 #   unit   labwc, setpriv, setsid, timeout, fc-match
+#   mockups labwc, setpriv, setsid, timeout, grim, wlr-randr, magick (tests/run-mockups.sh:
+#          the compositor, the shots, the output's size, the shots made smaller). Sets
+#          LOCKTEST_GRIM, LOCKTEST_WLR_RANDR, LOCKTEST_MAGICK
 #   lock   the lock test bed's whole set (below), setsid, timeout, and a launcher
 #   python python3 and timeout only (tests/device/deploy-check.sh reads JSON with it): the
 #          pinned set's bin/python3, or the one on PATH; no launcher, no Quickshell. Sets
@@ -74,7 +77,8 @@ tool_use() {
         timeout) echo "ends a compositor or a Quickshell that hangs" ;;
         fc-match) echo "the characters of the theme's font, for the glyphs suite" ;;
         Hyprland | hyprctl) echo "the compositor the lock screen is tested in" ;;
-        grim) echo "screenshots of the lock screen" ;;
+        grim) if [ "${LOCKTEST_NEED:-}" = mockups ]; then echo "the mockups' shots"; else echo "screenshots of the lock screen"; fi ;;
+        magick) echo "makes the mockups' shots smaller, losslessly" ;;
         python3) if [ "${LOCKTEST_NEED:-}" = python ]; then echo "reads the shell's answers, JSON"; else echo "the virtual keyboard and pointer"; fi ;;
         xkbcli) echo "tells the virtual keyboard which keys type a character" ;;
         dbus-daemon | gdbus) echo "a private session bus for the notification tests" ;;
@@ -103,8 +107,8 @@ version_number() {
 tool_version() { version_number "$(version_line "$1")"; }
 
 case "${LOCKTEST_NEED:-}" in
-    unit | lock | python) ;;
-    *) setup_error "resolve.sh: LOCKTEST_NEED must be unit, lock or python, not '${LOCKTEST_NEED:-}'" ;;
+    unit | lock | python | mockups) ;;
+    *) setup_error "resolve.sh: LOCKTEST_NEED must be unit, lock, python or mockups, not '${LOCKTEST_NEED:-}'" ;;
 esac
 
 # ---- The source -----------------------------------------------------------------------
@@ -162,6 +166,8 @@ pinned_parts() {
         printf '%s\n' "${lock_programs[@]/#/bin/}" share/ltproto share/us.xkb share/keymaps
     elif [ "$LOCKTEST_NEED" = python ]; then
         echo bin/python3
+    elif [ "$LOCKTEST_NEED" = mockups ]; then
+        printf '%s\n' bin/labwc bin/setpriv bin/grim bin/wlr-randr bin/magick
     else
         printf '%s\n' bin/labwc bin/setpriv bin/fc-match
     fi
@@ -223,14 +229,22 @@ if [ "$LOCKTEST_TOOL_SOURCE" = nix ]; then
     LOCKTEST_LABWC=$LOCKTEST_TOOLS/bin/labwc
     SETPRIV=$LOCKTEST_TOOLS/bin/setpriv
     LOCKTEST_PYTHON=$LOCKTEST_TOOLS/bin/python3
+    LOCKTEST_GRIM=$LOCKTEST_TOOLS/bin/grim
+    LOCKTEST_WLR_RANDR=$LOCKTEST_TOOLS/bin/wlr-randr
+    LOCKTEST_MAGICK=$LOCKTEST_TOOLS/bin/magick
     if [ "$LOCKTEST_NEED" = python ]; then needed_tools=(timeout); else needed_tools=(setsid timeout); fi
 else
     LOCKTEST_TOOLS=""
     LOCKTEST_LABWC=$(type -P labwc)
     SETPRIV=$(type -P setpriv)
     LOCKTEST_PYTHON=$(type -P python3)
+    LOCKTEST_GRIM=$(type -P grim)
+    LOCKTEST_WLR_RANDR=$(type -P wlr-randr)
+    LOCKTEST_MAGICK=$(type -P magick)
     if [ "$LOCKTEST_NEED" = python ]; then
         needed_tools=(python3 timeout)
+    elif [ "$LOCKTEST_NEED" = mockups ]; then
+        needed_tools=(labwc setpriv setsid timeout grim wlr-randr magick)
     elif [ "$LOCKTEST_NEED" = lock ]; then
         needed_tools=("${lock_programs[@]}" pkg-config setsid timeout)
     else
@@ -370,6 +384,7 @@ else
 fi
 tools_line+=" — labwc $(tool_version "$LOCKTEST_LABWC"), setpriv $(tool_version "$SETPRIV")"
 [ "$LOCKTEST_NEED" = lock ] && tools_line+=", Hyprland $hyprland_version"
+[ "$LOCKTEST_NEED" = mockups ] && tools_line+=", magick $(tool_version "$LOCKTEST_MAGICK")"
 echo "$tools_line"
 [ "$LOCKTEST_NEED" = lock ] && echo "launcher: $LOCKTEST_LAUNCHER ($launcher_said)"
 

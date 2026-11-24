@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
-# The mockups' root entry (mockup.qml) and its window (mockups/kit/MockupWindow.qml), headless
-# on the fixture mockups in tests/fixtures/mockups/ (H2S_MOCKUP_BASE):
+# The mockups' headless runner (tests/run-mockups.sh), their root entry (mockup.qml) and its
+# window (mockups/kit/MockupWindow.qml), on the fixture mockups in tests/fixtures/mockups/
+# (H2S_MOCKUP_BASE).
 #
+# The entry, driven here as the runner drives it:
 #   - a good mockup loads with its qs.* imports, prints one MOCKUP-SHOT line per scene with
 #     the subject's bounds, steps on `ipc call mockup next`, answers `ipc call mockup name`,
 #     and ends with MOCKUP-DONE and exit 0; also with the tree reached through a symbolic
@@ -14,17 +16,31 @@
 #     a MockupWindow, a repeated and an empty scene name, an unknown first scene, and shots
 #     that take longer than their limit each end with MOCKUP-ERROR and exit 2.
 #
-#   tests/mockup-entry-selftest.sh
+# The runner:
+#   - --load-only passes good mockups and writes no shot; --shoot writes one PNG per scene,
+#     of the subject's size, into H2S_MOCKUP_SHOTS; the effects fixture's effects are drawn
+#     (the renderer draws MultiEffect and layer.effect), and each scene drawn twice in one
+#     process is the same file;
+#   - a load error, a repeated scene and a QML warning from the mockup's own file FAIL, the
+#     others in the same run still PASS;
+#   - with no name it runs every component and view fixture, never the planning one, which
+#     runs when named; a name that is not <kind>/<name> or not a mockup runs nothing;
+#   - a missing tool (grim) is a set-up error naming it, status 2, nothing run;
+#   - old shots go: of a mockup's runs the newest 20 and those younger than a day stay, and
+#     over the size limit the oldest run goes, this run's never.
 #
-# In the unit runners' isolation (tests/headless.sh): one private headless compositor for
-# all cases, a private HOME and runtime dir, the memory cap. Nothing is left running.
+#   tests/run-mockups-selftest.sh
+#
+# The entry's cases in the unit runners' isolation (tests/headless.sh): one private headless
+# compositor for all of them, a private HOME and runtime dir, the memory cap; the runner's
+# cases each start the runner, which makes its own. Nothing is left running.
 #
 # Exit status: 0 when every check passed, 1 when one failed, 2 when it could not be set up.
 set -uo pipefail
 
 REPO=$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd -P)
 # shellcheck disable=SC2034  # read by headless.sh
-HEADLESS_NAME=mockup-entry-selftest.sh
+HEADLESS_NAME=run-mockups-selftest.sh
 # shellcheck source=headless.sh
 source "$REPO/tests/headless.sh"
 
@@ -216,10 +232,139 @@ for entry in "${errors[@]}"; do
     grep -q 'MOCKUP-ERROR ' "$log" || sed 's/^/    /' "$log" | head -n 10
 done
 
+# ---- The runner ---------------------------------------------------------------------
+# runner <case> [VAR=value…] -- <arguments…>: tests/run-mockups.sh on the fixtures, its
+# shots in the case's own folder; output in out[case], status in runner_status[case]
+declare -A out=() runner_status=()
+runner() {
+    local case=$1
+    shift
+    local variables=()
+    while [ "$1" != -- ]; do variables+=("$1"); shift; done
+    shift
+    out[$case]=$work/runner-$case.out
+    env H2S_MOCKUP_BASE=tests/fixtures/mockups H2S_MOCKUP_SHOTS="$work/shots-$case" LOCKTEST_QS="$LOCKTEST_QS" \
+        "${variables[@]}" "$REPO/tests/run-mockups.sh" "$@" > "${out[$case]}" 2>&1 < /dev/null
+    runner_status[$case]=$?
+}
+# verdict_of <case> <name>: the mockup's verdict word in the run's summary
+verdict_of() {
+    awk -v name="$2" '/^  (PASS|FAIL|NOT RUN) / {
+        verdict = $1; mockup = $2
+        if ($1 == "NOT") { verdict = "NOT RUN"; mockup = $3 }
+        if (mockup == name) { print verdict; exit }
+    }' "${out[$1]}"
+}
+show_on_failure() { [ "$failures" = "$1" ] || sed 's/^/    | /' "${out[$2]}" | tail -n 40; }
+# run_of <case> <name>: the one run folder of the mockup's shots
+run_of() { find "$work/shots-$1/fixtures/$2" -mindepth 1 -maxdepth 1 -type d 2> /dev/null | head -n 1; }
+
+echo "runner: --load-only on good mockups"
+before=$failures
+runner load-only -- --load-only components/good components/effects
+check "$([ "${runner_status[load-only]}" = 0 ]; echo $?)" "exits 0 (was ${runner_status[load-only]})"
+check "$([ "$(verdict_of load-only components/good)" = PASS ]; echo $?)" "components/good PASS"
+check "$([ "$(verdict_of load-only components/effects)" = PASS ]; echo $?)" "components/effects PASS"
+check "$([ ! -e "$work/shots-load-only" ]; echo $?)" "no shot written"
+check "$(grep -q '^renderer: llvmpipe$' "${out[load-only]}"; echo $?)" "says the renderer, llvmpipe"
+show_on_failure "$before" load-only
+
+echo "runner: --shoot"
+before=$failures
+runner shoot -- --shoot components/good components/effects
+check "$([ "${runner_status[shoot]}" = 0 ]; echo $?)" "exits 0 (was ${runner_status[shoot]})"
+good_run=$(run_of shoot components/good)
+effects_run=$(run_of shoot components/effects)
+check "$([ "$(cd "$good_run" 2> /dev/null && ls)" = "$(printf '00-normal.png\n01-checked.png')" ]; echo $?)" "components/good: 00-normal.png and 01-checked.png"
+check "$(grep -q -F "shots: $good_run" "${out[shoot]}"; echo $?)" "the verdict names the shots' folder"
+# The button's size is the theme's: the shot is the subject's, not the window's 200x80
+size=$(magick identify -format '%wx%h' "$good_run/00-normal.png" 2> /dev/null)
+check "$([[ "$size" =~ ^[1-9][0-9]*x[1-9][0-9]*$ ]] && [ "$size" != 200x80 ]; echo $?)" "the shot is cropped to the subject ($size)"
+check "$(cmp -s "$good_run/00-normal.png" "$good_run/01-checked.png"; [ $? = 1 ]; echo $?)" "the two scenes differ"
+check "$([ "$(find "$effects_run" -name '*.png' | wc -l)" = 8 ]; echo $?)" "components/effects: eight shots"
+for scene in rounded-image shadow-blur layer-effect; do
+    # Drawn: the effect's item is there, more than the background's one colour
+    colours=$(magick identify -format '%k' "$effects_run"/*-"$scene".png 2> /dev/null)
+    check "$([ "${colours:-0}" -gt 1 ]; echo $?)" "the $scene effect is drawn ($colours colours)"
+done
+for scene in text rounded-image shadow-blur layer-effect; do
+    check "$(cmp -s "$effects_run"/0[0-3]-"$scene".png "$effects_run"/0[4-7]-"$scene"-again.png; echo $?)" "$scene drawn twice in one process: the same file"
+done
+show_on_failure "$before" shoot
+
+echo "runner: what fails, beside what passes"
+before=$failures
+runner failing -- --load-only components/good components/load-error components/repeated-scene components/warning
+check "$([ "${runner_status[failing]}" = 1 ]; echo $?)" "exits 1 (was ${runner_status[failing]})"
+check "$([ "$(verdict_of failing components/good)" = PASS ]; echo $?)" "components/good PASS"
+for name in load-error repeated-scene warning; do
+    check "$([ "$(verdict_of failing components/$name)" = FAIL ]; echo $?)" "components/$name FAIL"
+done
+check "$(grep -q "MOCKUP-ERROR components/load-error: .*NoSuchFixtureType" "${out[failing]}"; echo $?)" "the load error is named"
+check "$(grep -q "MOCKUP-ERROR components/repeated-scene: scene name 'first' is repeated" "${out[failing]}"; echo $?)" "the repeated scene is named"
+check "$(grep -q "a line about the mockup's own files: .*warning/Mockup.qml.*Unable to assign" "${out[failing]}"; echo $?)" "the warning from the mockup's file is named"
+show_on_failure "$before" failing
+
+echo "runner: no name runs every component and view, never a planning mockup"
+before=$failures
+runner all -- --load-only
+expected=$(cd "$REPO/tests/fixtures/mockups" && find components views -mindepth 2 -maxdepth 2 -name Mockup.qml -printf '%h\n' | LC_ALL=C sort)
+ran=$(awk '/^  (PASS|FAIL) / { print $2 } /^  NOT RUN / { print $3 }' "${out[all]}" | LC_ALL=C sort)
+check "$([ "$ran" = "$expected" ]; echo $?)" "ran each component and view fixture once ($(echo $ran))"
+check "$(! grep -q 'planning/' <<< "$ran"; echo $?)" "no planning mockup"
+runner planning -- --load-only planning/idea
+check "$([ "${runner_status[planning]}" = 0 ] && [ "$(verdict_of planning planning/idea)" = PASS ]; echo $?)" "planning/idea runs when named (status ${runner_status[planning]})"
+show_on_failure "$before" all
+
+echo "runner: names that run nothing"
+for entry in "Bad_Name|is not <kind>/<name>" "planning/../idea|is not <kind>/<name>" "components/no-such-mockup|no mockup components/no-such-mockup"; do
+    IFS='|' read -r name expected <<< "$entry"
+    runner bad-name -- --load-only components/good "$name"
+    check "$([ "${runner_status[bad-name]}" = 2 ] && grep -q -F -- "$expected" "${out[bad-name]}" && ! grep -q -E '^  (PASS|FAIL)' "${out[bad-name]}"; echo $?)" "'$name': exit 2, '$expected', nothing run"
+done
+runner no-mode -- components/good
+check "$([ "${runner_status[no-mode]}" = 2 ] && grep -q '^usage:' "${out[no-mode]}"; echo $?)" "no mode: the usage, exit 2"
+
+echo "runner: a missing tool (grim)"
+before=$failures
+# Every program on PATH but grim, the system's tools taken
+mkdir -p "$work/no-grim"
+IFS=: read -r -a path_parts <<< "$PATH"
+for part in "${path_parts[@]}"; do
+    for program in "$part"/*; do
+        name=${program##*/}
+        [ "$name" != grim ] && [ -x "$program" ] && [ ! -e "$work/no-grim/$name" ] && ln -s "$program" "$work/no-grim/$name"
+    done
+done
+runner no-grim PATH="$work/no-grim" H2S_TEST_TOOLS=system -- --shoot components/good
+check "$([ "${runner_status[no-grim]}" = 2 ]; echo $?)" "exits 2 (was ${runner_status[no-grim]})"
+check "$(grep -q -F "grim not found on PATH (the mockups' shots)" "${out[no-grim]}"; echo $?)" "names grim and its use"
+check "$(! grep -q -E '^  (PASS|FAIL)' "${out[no-grim]}" && [ ! -e "$work/shots-no-grim" ]; echo $?)" "nothing run, no shot"
+show_on_failure "$before" no-grim
+
+echo "runner: old shots go"
+before=$failures
+shots=$work/shots-prune/fixtures
+# 22 runs of components/good two days old, two younger than a day with older names, and a
+# 2 MB run of components/effects older than all of them
+for i in $(seq -w 1 22); do mkdir -p "$shots/components/good/20200101-0000$i-1"; touch "$shots/components/good/20200101-0000$i-1/00-normal.png"; done
+touch -d '2 days ago' "$shots"/components/good/2020*
+mkdir -p "$shots/components/good/20190101-000001-1" "$shots/components/good/20190101-000002-1" "$shots/components/effects/20180101-000000-1"
+head -c 2097152 /dev/zero > "$shots/components/effects/20180101-000000-1/00-text.png"
+runner prune H2S_MOCKUP_SHOTS_LIMIT_MB=1 -- --shoot components/good
+check "$([ "${runner_status[prune]}" = 0 ]; echo $?)" "exits 0 (was ${runner_status[prune]})"
+kept=$(cd "$shots/components/good" && ls | LC_ALL=C sort)
+check "$([ "$(grep -c . <<< "$kept")" = 22 ]; echo $?)" "22 runs of components/good stay ($(grep -c . <<< "$kept"))"
+check "$(grep -q -x '20200101-000004-1' <<< "$kept" && ! grep -q -x '20200101-000003-1' <<< "$kept"; echo $?)" "the three oldest of the two-day-old runs went, the 19 newer stayed"
+check "$(grep -q -x '20190101-000001-1' <<< "$kept" && grep -q -x '20190101-000002-1' <<< "$kept"; echo $?)" "the runs younger than a day stayed"
+check "$([ -n "$(run_of prune components/good)" ] && [ -s "$(ls -d "$shots"/components/good/2026* 2> /dev/null | head -n 1)/00-normal.png" ]; echo $?)" "this run's shots stayed"
+check "$([ ! -e "$shots/components/effects/20180101-000000-1" ]; echo $?)" "over the size limit, the oldest run went"
+show_on_failure "$before" prune
+
 echo
 if [ "$failures" = 0 ]; then
-    echo "mockup-entry-selftest.sh: every check passed"
+    echo "run-mockups-selftest.sh: every check passed"
     exit 0
 fi
-echo "mockup-entry-selftest.sh: $failures check(s) FAILED"
+echo "run-mockups-selftest.sh: $failures check(s) FAILED"
 exit 1
