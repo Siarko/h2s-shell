@@ -35,8 +35,10 @@ The interface modules are written against (`qs.api`), versioned on its own
 - 1.42: `module.status` is a frozen copy of the module's status, its lists (`errors`,
   `warnings`, `deprecations`, …) a new copy at each read: it was the shell's own record, so a
   module that changed it changed what Settings → Modules showed. An element's `context` is a
-  frozen object of its own, its lists (`otherVpnsUp`, `otherVpns`) a new copy at each read: the
-  elements at one place shared one context, so what one module wrote into it every other saw.
+  frozen object of its own (a VPN provider's page's too), its lists and plain objects
+  (`otherVpnsUp`, `otherVpns`, the VPN's row `vpn`) a new copy at each read, its `provider`
+  and `close` as they are: the elements at one place shared one context, so what one module
+  wrote into it every other saw — into `vpn`, the shell's own row of that VPN.
 - 1.41: a list or object inside the plain data the API hands out is a new frozen copy at
   each read (the routes in `Api.vpnsUp`'s rows, `Api.anchors`' placements,
   `Api.system.distribution`'s facts, `module.manifest`'s lists and objects, a list in an

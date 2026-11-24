@@ -346,7 +346,7 @@ new kind.
   list: in the watcher, counted as never evaluated again). A list inside an object
   the API hands out (`module.manifest`, `module.status`, an `Api.theme` group, an element's
   `context`) is a getter returning a new copy at each read (`ReadOnlyRules.copy`, or
-  `ReadOnlyRules.context` beside live objects); the five old list properties are deprecated in
+  `ReadOnlyRules.context` beside live objects: plain objects copied too); the five old list properties are deprecated in
   `ModuleSourceRules.deprecatedCode`. — One shared list carried one module's `push` or `sort` to every other.
 - **Animations stop when nothing shows them**: a running animation or timer is gated on the
   window and the item being visible (and on reduce motion). — Hidden windows kept animating

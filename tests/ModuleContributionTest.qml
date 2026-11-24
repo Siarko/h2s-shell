@@ -65,6 +65,17 @@ TestCase {
         }
     }
 
+    // The context the bound contributions take from the start
+    property var _given: null
+    property Component _boundContribution: Component {
+        ModuleContribution {
+            host: suite._contextHost
+            moduleId: "fake"
+            url: Qt.resolvedUrl("fixtures/elements/ContextElement.qml")
+            context: Object.assign({}, suite._given ?? {}, { placement: "append" })
+        }
+    }
+
     property Component _contribution: Component {
         ModuleContribution {}
     }
@@ -109,35 +120,46 @@ TestCase {
         assertEqual(text.implicitWidth, 0, "… emptied: no width");
         text.destroy();
 
-        // Two elements at one place, given one context: each its own, its lists a new copy at
-        // each read — a change to one element's list reaches neither the other nor the view's
-        const given = { anchor: "settings.x", otherVpnsUp: ["Work"], count: 1 };
-        // Set as a binding sets it (createObject's properties would convert the lists)
-        const first = _make("ContextElement.qml", { host: _contextHost });
-        const second = _make("ContextElement.qml", { host: _contextHost });
-        first.context = given;
-        second.context = given;
+        // Two elements at one place, given one context from the start, as AnchorContent binds
+        // it (it reaches the element through Loader.setSource's initial properties): each its
+        // own, frozen, its lists and plain objects a new copy at each read — a change to one
+        // element's reaches neither the other nor the view's
+        suite._given = { anchor: "settings.x", otherVpnsUp: ["Work"], count: 1, vpn: { name: "Work", active: true, routes: ["10.0.0.0/8"] } };
+        const first = _boundContribution.createObject(_window.contentItem, {});
+        const second = _boundContribution.createObject(_window.contentItem, {});
+        const given = suite._given;
         assert(_until(() => first.ready && second.ready), "context: both elements built");
-        assert(first.ready && second.ready && first.item.othersUp === 1 && second.item.othersUp === 1, "context: given to each element");
+        assertEqual(first.item.atStart + " " + second.item.atStart, "true,true,true,true true,true,true,true",
+                    "… given from the start through the initial properties: frozen, its list an Array, its list and its plain object getters");
+        assert(first.item.othersUp === 1 && second.item.othersUp === 1, "context: given to each element");
         assert(first.item.context !== second.item.context && first.item.context !== given && Object.isFrozen(first.item.context),
                "… each its own frozen object, never the one given");
         for (const change of [list => list.push("Evil"), list => { list[0] = "Evil"; }, list => list.sort(() => -1)]) {
             try {
                 change(first.item.context.otherVpnsUp);
             } catch (error) {}
+            try {
+                change(first.item.context.vpn.routes);
+            } catch (error) {}
         }
+        try {
+            first.item.context.vpn.active = false;
+        } catch (error) {}
         assertEqual(JSON.stringify(first.item.context.otherVpnsUp) + " " + JSON.stringify(second.item.context.otherVpnsUp) + " " + JSON.stringify(given.otherVpnsUp),
                     "[\"Work\"] [\"Work\"] [\"Work\"]", "… push, an index write, sort on one element's list: not at its next read, nor the other's, nor the view's");
+        const vpnText = JSON.stringify({ name: "Work", active: true, routes: ["10.0.0.0/8"] });
+        assertEqual(JSON.stringify(first.item.context.vpn) + " " + JSON.stringify(second.item.context.vpn) + " " + JSON.stringify(given.vpn),
+                    vpnText + " " + vpnText + " " + vpnText, "… the VPN's row: a write into it or its routes not at its next read, nor the other's, nor the view's");
         try {
             first.item.context.count = 5;
         } catch (error) {}
         assertEqual(second.item.context.count + " " + first.item.context.count, "1 1", "… a write to a key does not stay");
         // Passed again when it changes by value: a binding on the element's list follows
-        first.context = { anchor: "settings.x", otherVpnsUp: ["Work", "Home"], count: 1 };
+        first.context = { anchor: "settings.x", otherVpnsUp: ["Work", "Home"], count: 1, vpn: given.vpn };
         assert(_until(() => first.item.othersUp === 2), "… a new context: the element's binding follows (" + first.item.othersUp + ")");
         assert(Object.isFrozen(first.item.context) && second.item.othersUp === 1, "… frozen again, the other element unchanged");
         assert(Array.isArray(second.item.context.otherVpnsUp) && Array.isArray(first.item.context.otherVpnsUp),
-               "… a list arrives as an Array, given at first and passed later");
+               "… its list an Array when passed later too");
         first.destroy();
         second.destroy();
         finish();

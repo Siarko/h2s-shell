@@ -28,8 +28,9 @@ import qs.singletons.network
 //                          placements, Api.system.distribution's facts, module.manifest's
 //                          lists and objects, a list in an Api.theme group, (1.42)
 //                          module.status' lists (a frozen copy, never the shell's own record)
-//                          and an element's context's lists (a frozen context of its own
-//                          for each element; its provider object and functions as they
+//                          and an element's context's lists and plain objects (the VPN's
+//                          row; a frozen context of its own for each element, a VPN
+//                          provider's page too; its provider object and functions as they
 //                          are): two reads are not the same object, and a write into one does
 //                          not stay. (The engine
 //                          lets a frozen list take push, writes to its indices and sort.)

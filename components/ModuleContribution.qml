@@ -7,8 +7,10 @@ import qs.singletons
 // gets the module's handle as `module` and `context` (when it declares them) before its
 // Component.onCompleted; `context` is passed again only when it changes by value
 // (ModuleRules.sameContext), so a contribution is not poked by a re-read that changed nothing
-// of it. Each element gets a frozen context of its own whose lists are a new copy at each
-// read (ReadOnlyRules.context): the elements at one place never share a list. `properties` ({ name: value }) are passed the same way (a settings page's editIndex;
+// of it. Each element gets a frozen context of its own whose lists and plain objects (the
+// VPN's row) are a new copy at each read (ReadOnlyRules.context): the elements at one place
+// never share a value one could change. `properties` ({ name: value }) are passed the same way
+// (a settings page's editIndex;
 // one the root object has without declaring it in its file is set right after it is made).
 // `shown` (module API 1.2), when the root object declares `property bool shown`: true while
 // the contribution is on screen — the place it sits in visible and its window open — kept

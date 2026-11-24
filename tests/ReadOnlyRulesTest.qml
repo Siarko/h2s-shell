@@ -85,9 +85,12 @@ TestCase {
         // context(): an element's context — its lists a new copy at each read, the rest as it is
         const live = Qt.createQmlObject("import QtQuick\nQtObject { property int calls: 0 }", suite, "ReadOnlyLive.qml");
         const close = () => 1;
-        const vpn = { name: "Office" };
+        const vpn = { uuid: "vpt:office", name: "Office", active: true, status: undefined, attention: { reason: "r", action: "" }, routes: ["10.0.0.0/8"] };
+        const vpnText = JSON.stringify(vpn);
+        const withLive = { name: "x", provider: live };
+        const liveList = [live, "text"];
         const givenContext = { anchor: "a.b", otherVpnsUp: ["Work", "Home"], otherVpns: ReadOnlyRules.copy([{ name: "Work", routes: ["10.0.0.0/8"] }]),
-                        provider: live, close: close, vpn: vpn, count: 2, open: true, none: null };
+                        provider: live, close: close, vpn: vpn, withLive: withLive, liveList: liveList, count: 2, open: true, none: null };
         const givenText = JSON.stringify([givenContext.otherVpnsUp, givenContext.otherVpns]);
         const shownContext = ReadOnlyRules.context(givenContext);
         assertEqual(Object.keys(shownContext).join(","), Object.keys(givenContext).join(","), "context: the same keys in the same order");
@@ -99,9 +102,27 @@ TestCase {
         assertEqual(_tryChanges(() => shownContext.otherVpnsUp), "[\"Work\",\"Home\"]", "… push, index writes, sort: the next read is as it was");
         assertEqual(_tryChanges(() => shownContext.otherVpns), "[{\"name\":\"Work\",\"routes\":[\"10.0.0.0/8\"]}]", "… a list of rows too");
         assertEqual(JSON.stringify([givenContext.otherVpnsUp, givenContext.otherVpns]), givenText, "… the lists given unchanged");
-        assert(shownContext.provider === live && shownContext.close === close && shownContext.vpn === vpn
+        assert(shownContext.provider === live && shownContext.close === close && shownContext.withLive === withLive
                && shownContext.anchor === "a.b" && shownContext.count === 2 && shownContext.open === true && shownContext.none === null,
-               "… anything else as it is: a live object, a function, an object, a text, number, true/false, null");
+               "… anything else as it is: a live object, a function, an object holding a live one, a text, number, true/false, null");
+        // An object of plain data (a VPN's row): a new read-only copy at each read, its lists too
+        assert(shownContext.vpn !== vpn && shownContext.vpn !== shownContext.vpn && Object.isFrozen(shownContext.vpn)
+               && JSON.stringify(shownContext.vpn) === vpnText, "… an object of plain data: a new frozen copy at each read, the same data");
+        for (const write of [() => { shownContext.vpn.active = false; }, () => { shownContext.vpn.name = "Evil"; }, () => { shownContext.vpn.extra = 1; }]) {
+            try {
+                write();
+            } catch (error) {}
+        }
+        assertEqual(_tryChanges(() => shownContext.vpn.routes), "[\"10.0.0.0/8\"]", "… its lists: push, index writes, sort do not stay");
+        assertEqual(JSON.stringify(shownContext.vpn) + " " + JSON.stringify(vpn), vpnText + " " + vpnText, "… a write into it stays neither in it nor in the row given");
+        // A list holding a live object: a new frozen list of the same items at each read
+        const liveShown = shownContext.liveList;
+        assert(liveShown !== shownContext.liveList && liveShown !== liveList && Object.isFrozen(liveShown) && liveShown[0] === live && liveShown[1] === "text",
+               "… a list holding a live object: a new frozen list of the same items at each read");
+        try {
+            liveShown.push("Evil");
+        } catch (error) {}
+        assert(shownContext.liveList.length === 2 && liveList.length === 2, "… a push into one: not at the next read, nor in the list given");
         for (const write of [() => { shownContext.anchor = "x"; }, () => { shownContext.otherVpnsUp = []; }, () => { shownContext.extra = 1; }]) {
             try {
                 write();

@@ -810,6 +810,20 @@ TestCase {
                    "page: in the core's frame — its title and Back (" + suite._frame.title + ")");
             assert(suite._texts(suite._frame).includes("Fake page for one of vpt") && typeof suite._frame.page?.context?.close === "function",
                    "page: the provider's page given its context (provider, close): " + JSON.stringify(suite._texts(suite._frame)));
+            // Its own frozen context: the VPN's row a copy at each read, never VpnManager's own
+            const pageGiven = suite._frame.page.context;
+            const managerRow = VpnManager.vpns.find(vpn => vpn.uuid === "vpt:one");
+            assert(Object.isFrozen(pageGiven) && pageGiven.provider === suite._fakeOne && pageGiven.vpn !== managerRow && pageGiven.vpn.uuid === "vpt:one",
+                   "page: its context frozen, the provider as it is, the VPN's row a copy, not VpnManager's");
+            const rowText = JSON.stringify(managerRow);
+            try {
+                pageGiven.vpn.name = "Evil";
+            } catch (error) {}
+            try {
+                pageGiven.otherVpnsUp.push("Evil");
+            } catch (error) {}
+            assert(JSON.stringify(VpnManager.vpns.find(vpn => vpn.uuid === "vpt:one")) === rowText && pageGiven.vpn.name === managerRow.name
+                   && !pageGiven.otherVpnsUp.includes("Evil"), "page: a write into its context's row or list stays neither there nor in VpnManager's row");
             // Another entry changes; this row's extras are not poked (the probe's P2)
             suite._extrasOne.item.contextChanged.connect(() => suite._contextSets++);
             suite._fakeOne.entries = suite._fakeOne.entries.slice();

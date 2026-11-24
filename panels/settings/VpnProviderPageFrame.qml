@@ -110,7 +110,9 @@ Flickable {
                     return;
                 try {
                     if ("context" in item) {
-                        item.context = context;
+                        // Its own frozen copy: its plain data a new copy at each read, the
+                        // provider and close() as they are (ReadOnlyRules.context)
+                        item.context = ReadOnlyRules.context(context);
                         _passed = context;
                     }
                 } catch (error) {

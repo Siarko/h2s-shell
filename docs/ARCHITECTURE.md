@@ -1444,8 +1444,9 @@ next tightening. A list inside an object the API hands out is a getter that retu
 copy at each read instead (`singletons/ReadOnlyRules.qml`): `module.manifest`'s lists,
 `module.status`' (`errors`, `warnings`, `deprecations`, …; a frozen copy, never the host's own
 record), `Api.system.distribution.facts`', a list in an `Api.theme` group, and an element's
-`context` (`ReadOnlyRules.context`: a frozen object of its own for each element, its lists
-new at each read, its live objects — a provider, a `close` function — as they are).
+`context` (`ReadOnlyRules.context`: a frozen object of its own for each element and a VPN
+provider's page, its lists and plain objects — the VPN's row — new at each read, its live
+objects — a provider, a `close` function — as they are).
 `module.programs`, `module.uses` and `Api.moduleStatus(id)`'s answer hold no list.
 `tests/ApiListsTest.qml` holds the functions to it.
 

@@ -30,29 +30,52 @@ Singleton {
     }
 
     // An object of plain data beside live things — what a module's element gets as `context`
-    // (a provider's object, a close function, a VPN's lists) → a new frozen object with the
-    // same keys in the same order: a list in it a getter that returns a new read-only copy
-    // (copy's) at each read, so the elements at one place, and the view that gave it, never
-    // share one list; anything else as it is. A list JSON cannot carry stays as it is. Not an
-    // object (or a list) → itself
+    // (a provider's object, a close function, the VPN's row and lists) → a new frozen object
+    // with the same keys in the same order, so the elements at one place, and the view that
+    // gave it, never share a value one of them could change:
+    //   - plain data (a list, or an object made of {} and lists, texts, finite numbers,
+    //     true/false and null all the way down): a getter that returns a new read-only copy
+    //     (copy's) at each read;
+    //   - a list holding anything else (a live object): a getter that returns a new frozen
+    //     list of the same items at each read;
+    //   - anything else (a live object, a function, a text, number, true/false, null): as it is.
+    // Not an object (or a list) → itself
     function context(value) {
         if (value === null || typeof value !== "object" || Array.isArray(value))
             return value;
         const shown = {};
         for (const key of Object.keys(value)) {
             const item = value[key];
-            let text;
-            if (Array.isArray(item)) {
-                try {
-                    text = JSON.stringify(item);
-                } catch (error) {}
-            }
-            if (typeof text === "string")
+            if (_plainData(item, 0) && item !== null && typeof item === "object") {
+                const text = JSON.stringify(item);
                 Object.defineProperty(shown, key, { enumerable: true, get: () => _shown(JSON.parse(text)) });
-            else
+            } else if (Array.isArray(item)) {
+                const items = item.slice();
+                Object.defineProperty(shown, key, { enumerable: true, get: () => Object.freeze(items.slice()) });
+            } else {
                 Object.defineProperty(shown, key, { enumerable: true, value: item });
+            }
         }
         return Object.freeze(shown);
+    }
+
+    // Data JSON carries as it is: texts, finite numbers, true/false, null, and lists and
+    // objects made directly of {} (no class, no QObject) holding only such data (undefined in
+    // an object, which JSON leaves out, reads the same). A cycle or a deep nesting is not
+    function _plainData(value, depth) {
+        if (depth > 64)
+            return false;
+        if (value === null || typeof value === "string" || typeof value === "boolean")
+            return true;
+        if (typeof value === "number")
+            return Number.isFinite(value);
+        if (typeof value !== "object")
+            return false;
+        if (Array.isArray(value))
+            return value.every(item => _plainData(item, depth + 1));
+        if (Object.getPrototypeOf(value) !== Object.prototype)
+            return false;
+        return Object.keys(value).every(key => value[key] === undefined || _plainData(value[key], depth + 1));
     }
 
     // `value` came from JSON.parse: nothing else holds it
