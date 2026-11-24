@@ -13,7 +13,8 @@ TestCase {
         // --- text ---
         for (const text of ["a\nb", "tab\there", "‮evil", "zero​width", "soft­hyphen", "nul\u0000",
                             "tag󠀁", "lone \ud800 surrogate", "\u0085next line", "bom﻿",
-                            "line\u2028separator", "paragraph\u2029separator"])
+                            "line\u2028separator", "paragraph\u2029separator",
+                            "unit\u001fseparator", "c1 \u009f end", "lone \udfff low"])
             assert(rules.unprintable(text), "unprintable: " + JSON.stringify(text));
         for (const text of ["", "plain words", "café", "日本語", "emoji 😀", "--flag=value", "a b"])
             assert(!rules.unprintable(text), "printable: " + JSON.stringify(text));
@@ -25,6 +26,15 @@ TestCase {
         assertEqual(rules.cleanWhat("x".repeat(rules.whatMaxLength - 1) + "😀😀"), "x".repeat(rules.whatMaxLength - 1) + "😀",
                     "what: an emoji at the cap counted as one character, never cut in half");
         assertEqual(rules.cleanWhat("Send\u2028a\u2029file"), "Send a file", "what: line and paragraph separators are white space, folded");
+        // Surrogate pairs at the ends of their ranges stay whole; a lone low surrogate after
+        // any other character is dropped, never glued to it
+        assertEqual(JSON.stringify(rules.characters(42)), "[]", "characters: not a string → none");
+        assertEqual(rules.characters("a\ud800\udc00b").join("|"), "a|\ud800\udc00|b", "characters: U+10000 (D800 DC00) is one character");
+        assertEqual(rules.characters("x\udbff\udfffy").join("|"), "x|\udbff\udfff|y", "characters: U+10FFFF (DBFF DFFF) is one character");
+        assertEqual(rules.cleanWhat("a\ud800\udc00b") + rules.cleanWhat("x\udbff\udfffy"), "a\ud800\udc00bx\udbff\udfffy",
+                    "what: pairs at the ends of the surrogate ranges kept");
+        assertEqual(rules.cleanWhat("a\udc00b"), "ab", "what: a lone low surrogate after a letter dropped");
+        assertEqual(rules.cleanWhat("\ue000\udc00"), "\ue000", "what: a lone low surrogate after a character above the surrogates dropped");
 
         // --- The notification when the shell's prompt does not answer ---
         const announced = PolkitRules.announcement({ moduleName: "Tailscale", moduleId: "tailscale", what: "Send a file", pkexecArgv: ["/usr/bin/true"] });
@@ -46,7 +56,9 @@ TestCase {
         assertEqual(JSON.stringify(rules.options({ what: "Connect", timeoutMs: 30000, endWithShell: true })), JSON.stringify(rules.options(good)),
                     "options: the command runner's endWithShell is ignored — a privileged run never has setpriv put around its pkexec");
         for (const given of [undefined, null, "x", [1]])
-            assert(rules.options(given).problem !== "", "options: not an object (" + JSON.stringify(given) + ") → a problem");
+            assertEqual(rules.options(given).problem, "the options are not an object (what and timeoutMs are needed)",
+                        "options: not an object (" + JSON.stringify(given) + ") → a problem");
+        assertEqual(rules.options({ what: "x", timeoutMs: 999 }).timeoutMs, 0, "timeoutMs out of range: none kept");
         for (const limit of [undefined, 999, 3600001, NaN, Infinity, "30000"])
             assert(rules.options({ what: "x", timeoutMs: limit }).problem.startsWith("timeoutMs"), "timeoutMs " + String(limit) + " → a problem");
         assertEqual(rules.options({ what: "x", timeoutMs: 1000 }).timeoutMs + rules.options({ what: "x", timeoutMs: 3600000 }).timeoutMs, 3601000,
@@ -104,6 +116,13 @@ TestCase {
         const missing = asked({ argv: ["", "up"] });
         assert(missing.notFound && missing.blocked === "" && missing.error.includes("not found"),
                "argv[0] \"\" (the path of a program not found): notFound: " + JSON.stringify(missing));
+        assert(asked({ argv: [""] }).notFound, "argv [\"\"] alone: notFound");
+        // Only an empty first word with the rest fine is notFound; any other wrong command is an error
+        for (const [argv, what] of [[{ 0: "", 1: "up", length: 2 }, "a list that is no array"], [[5, "up"], "a first word not text"],
+                                    [["", "a\u0000b"], "an empty first word and a later word with a NUL"]]) {
+            const wrong = asked({ argv: argv });
+            assert(!wrong.notFound && wrong.blocked === "" && wrong.error !== "", what + ": an error, not notFound: " + JSON.stringify(wrong));
+        }
         assertEqual(asked({ active: false }).error, "the module is off", "module off: error");
         assertEqual(asked({ locked: true }).blocked, "locked", "locked: blocked locked");
         assertEqual(asked({ options: rules.options({ what: " ‮\n", timeoutMs: 1000 }) }).blocked, "no-purpose", "what empty after cleaning: no-purpose");
@@ -116,6 +135,9 @@ TestCase {
         const relative = asked({ argv: ["tailscale", "up"] });
         assert(relative.notFound && relative.blocked === "" && relative.error.includes("absolute"),
                "argv[0] not absolute (root's PATH is never searched): notFound: " + JSON.stringify(relative));
+        assert(relative.error.startsWith("\"tailscale\" is not an absolute path"), "… the word named whole: " + relative.error);
+        const firstWord = asked({ argv: ["/opt/a\u202eb", "up"], declaration: { problem: "", paths: ["/opt/a\u202eb"] } });
+        assert(firstWord.blocked === "unprintable" && firstWord.error.startsWith("word 1"), "a format character in argv[0]: unprintable, word 1: " + JSON.stringify(firstWord));
         // The command is not parsed: whatever argv[0] is, an absolute path the manifest declares passes
         for (const argv of [["/bin/sh", "-c", "id"], ["/usr/bin/env", "tailscale"], ["/usr/bin/python3", "-c", "x"],
                             ["/usr/bin/timeout", "5", "/bin/sh"], ["/nix/store/abc-coreutils-9.5/bin/coreutils", "--coreutils-prog=env", "/bin/sh"]])
@@ -150,6 +172,8 @@ TestCase {
                    what + ": not approved, nothing may run: " + JSON.stringify(answer));
         }
         assertEqual(rules.declaration(block, undefined, "tailscale", null).paths.length, 0, "programs not looked at: no path");
+        assertEqual(rules.declaration(block, Object.create({ tailscale: { source: "user", privileged: true } }), "tailscale", programsFound).problem,
+                    "asks for administrator rights; the user has not approved its declaration", "an inherited acknowledgement is none: not approved");
         assertEqual(rules.declaration({ why: "x", programs: ["constructor", "__proto__"] }, undefined, "x", {}).paths.length, 0, "inherited names find nothing");
         const undeclared = asked({ declaration: rules.declaration(null, undefined, "tailscale", programsFound) });
         assert(undeclared.blocked === "undeclared" && undeclared.error.includes("does not declare") && !undeclared.notFound,
@@ -180,7 +204,8 @@ TestCase {
                                      [["pkexec", "--user", "x"], "pkexec with words of its own"], [[], "none"], ["pkexec", "not a list"], [[""], "an empty word"], [[7], "not a string"]])
             assert(rules.legacyElevateProblem(words, false).startsWith("elevate must be") && rules.legacyElevateProblem(words, true).startsWith("elevate must be"),
                    what + ": refused, in test mode too: " + JSON.stringify(words));
-        assert(rules.legacyElevateProblem(["/usr/bin/pkexec"], false).includes("is refused"), "one path outside test mode: refused (only the trusted pkexec by name)");
+        assertEqual(rules.legacyElevateProblem(["/usr/bin/pkexec"], false), "elevate must be \"pkexec\", the shell's trusted pkexec: \"/usr/bin/pkexec\" is refused",
+                    "one path outside test mode: refused, the word named (only the trusted pkexec by name)");
         assertEqual(rules.legacyElevateProblem(["/m/a/tests/programs/pkexec"], true), "", "test mode: one word, left to the test-mode gate");
         assertEqual(rules.legacyElevateProblem(["/m/a/tests/programs/pkexec", "/bin/sh"], true).startsWith("elevate must be"), true, "test mode: a stand-in with more words: refused");
 
@@ -250,6 +275,7 @@ TestCase {
         waiting = rules.queueStep(waiting.state, { type: "add", id: 2, owner: "b", now: 11 });
         assertEqual(waiting.state.jobs[0].phase, "checking", "the first run is being checked (waiting for the look-up)");
         assertEqual(rules.nextDeadline(waiting.state), 0, "no deadline while it waits: nothing lets the next run go");
+        assertEqual(rules.nextDeadline({ jobs: [{ deadline: 5 }, { deadline: 1 }, { deadline: 0 }] }), 1, "nextDeadline: the earliest, however small");
         const later = rules.queueStep(waiting.state, { type: "tick", now: 10 + rules.headStrictMs + 1 });
         assertEqual(JSON.stringify(later.effects), "[]", "a tick long after: the second run is not started");
         const lockedWait = rules.queueStep(later.state, { type: "lock", locked: true, now: 9000 });
@@ -278,6 +304,10 @@ TestCase {
         assertEqual(rules.pkexecChoice(userOwned).path, "", "setuid but the user's file: none");
         assertEqual(rules.pkexecChoice(["user\t1000\t1000", "cand\tpkexec\t"]).reason, "pkexec is not installed", "not found: not installed");
         assertEqual(rules.pkexecChoice([]).reason, "the look-up for pkexec did not answer", "no answer: said so");
+        assert(rules.setuidRoot({ owner: "0", mode: "4755" }) && !rules.setuidRoot({ owner: "0", mode: "104755" }),
+               "setuidRoot: a mode of more than five octal digits is not read");
+        assert(!rules.setuidRoot({ owner: "0", mode: 4755 }) && !rules.setuidRoot({ owner: "0", mode: "2755" }),
+               "setuidRoot: a mode that is no text is not read; setgid alone (2755, read as octal) is not setuid");
 
         // --- available ---
         const facts = { testMode: false, standIn: "", pkexecKnown: true, pkexec: "/usr/bin/pkexec", pkexecReason: "",
@@ -306,6 +336,12 @@ TestCase {
         assert(!ran(124, { durationMs: 500 }).timedOut, "124 before the limit: the command's own status");
         assert(!ran(126, { cancelled: true, code: 126 }).dismissed && ran(-1, { cancelled: true }).cancelled, "cancelled: nothing else");
         assertEqual(ran(-1, { failedToStart: true }).error, "pkexec could not be started", "pkexec not started: said so");
+        assert(!ran(0).notFound && !ran(1).notFound && !rules.cancelledResult().notFound && rules.notFoundResult("/usr/bin/x").notFound,
+               "notFound only in the answer for a program not there");
+        assert(!rules.runResult({ code: 124 }, 1).timedOut, "124 with no duration known: not timed out");
+        assertEqual(rules.runResult({}, 30000).code, -1, "no status: code -1");
+        assert(!ran(0, { ok: false }).ok && !ran(0, { cancelled: true }).ok, "ok only when the runner says ok, the status is 0 and it was not cancelled");
+        assert(rules.cancelledResult().cancelled && !rules.cancelledResult().ok, "cancelledResult: cancelled");
         assertEqual(rules.failureNotice(ran(127), "Connect", 30000, true), null, "refused: no failure notice (the agent tells it)");
         assertEqual(rules.failureNotice(ran(126), "Connect", 30000, true), null, "dismissed: none");
         assertEqual(rules.failureNotice(ran(0), "Connect", 30000, true), null, "ok: none");
@@ -336,6 +372,7 @@ TestCase {
         assertEqual(kinds(step(asking, { type: "tick", now: 2099 })), "", "before 2 s: still held");
         stepped = step(asking, { type: "tick", now: 2100 });
         assertEqual(kinds(stepped) + " | " + phases(stepped.state), "check:2 | 1=running 2=checking", "2 s with no request: released, the next looked at");
+        assertEqual(rules.nextDeadline(stepped.state), 0, "… released: no deadline left");
         // Its own request seen
         stepped = step(asking, { type: "request", open: true, own: true, now: 500 });
         assertEqual(rules.nextDeadline(stepped.state), 0, "its own request opens: held while it is open, no deadline");
@@ -343,7 +380,9 @@ TestCase {
         assertEqual(kinds(step(ownOpen, { type: "tick", now: 60000 })), "", "… a minute later still held");
         stepped = step(ownOpen, { type: "request", open: false, own: false, now: 61000 });
         assertEqual(kinds(stepped) + " | " + phases(stepped.state), "check:2 | 1=running 2=checking", "its request ended: released");
-        assertEqual(kinds(step(asking, { type: "request", open: false, own: false, now: 500 })) + " | " + rules.nextDeadline(asking), " | 2100",
+        assertEqual(rules.nextDeadline(stepped.state), 0, "… no deadline left");
+        assertEqual(kinds(step(asking, { type: "request", open: false, own: false, now: 500 })) + " | "
+                    + rules.nextDeadline(step(asking, { type: "request", open: false, own: false, now: 500 }).state), " | 2100",
                     "no request ending that was never seen opening: nothing, the 2 s unchanged");
         // Another program's request shown after its own: held until no request is open
         stepped = step(ownOpen, { type: "request", open: true, own: false, now: 3000 });
@@ -371,6 +410,8 @@ TestCase {
         stepped = step(otherInFront, { type: "request", open: false, own: false, now: 30000 });
         assertEqual(kinds(stepped) + " | " + rules.nextDeadline(stepped.state), " | 32000", "that one ended: the 2 s start again");
         assertEqual(kinds(step(stepped.state, { type: "tick", now: 32000 })), "check:2", "… and release the head when they pass");
+        assertEqual(rules.nextDeadline(step(stepped.state, { type: "request", open: false, own: false, now: 31000 }).state), 32000,
+                    "… a second end with none open after it does not start them again");
         stepped = step(step(otherInFront, { type: "request", open: true, own: true, now: 40000 }).state, { type: "tick", now: 200000 });
         assertEqual(kinds(stepped), "", "its own after it: held while it is open, no limit");
         assertEqual(rules.nextDeadline(step(otherInFront, { type: "request", open: false, own: false, now: 119000 }).state), 100 + rules.headStrictMs,
@@ -404,6 +445,21 @@ TestCase {
         assertEqual(kinds(stepped), "answer:1:cancelled check:2", "… or killAfterMs later without an exit (run as root, it cannot be signalled)");
         assertEqual(kinds(step(stepped.state, { type: "exited", id: 1, now: 9000 })), "", "… its late exit is not answered again");
         assertEqual(kinds(step(cancelled, { type: "cancel", id: 1, now: 1100 })), "", "cancel twice: once");
+        assertEqual(rules.nextDeadline(step(cancelled, { type: "request", open: true, own: true, now: 1200 }).state), 4000,
+                    "… a request after the cancel does not hold the ending run past killAfterMs");
+        assertEqual(kinds(step(cancelled, { type: "ownerGone", owner: "m1", killAfterMs: 3000, now: 1300 })), "forget:2",
+                    "… its owner gone then: not signalled again (its waiting run forgotten)");
+        assertEqual(kinds(step(step(cancelled, { type: "ownerGone", owner: "m1", now: 1300 }).state, { type: "exited", id: 1, now: 1400 })),
+                    "forget:1", "… and it ends with no answer");
+        for (const [killAfterMs, deadline] of [[500, 1500], [0, 1000], [-5, 4000], [undefined, 4000]])
+            assertEqual(rules.nextDeadline(step(asking, { type: "cancel", id: 1, killAfterMs: killAfterMs, now: 1000 }).state), deadline,
+                        "cancel with killAfterMs " + killAfterMs + ": ending until " + deadline + " (not a number, or negative: the default)");
+        const atOnce = step(asking, { type: "cancel", id: 1, killAfterMs: 0, now: 1 });
+        assertEqual(kinds(step(atOnce.state, { type: "tick", now: 1 })), "answer:1:cancelled check:2", "killAfterMs 0: a tick at once ends it");
+        const lone = step(step(step(step(rules.queueStart(false), { type: "add", id: 1, owner: "m", now: 0 }).state,
+                                    { type: "checked", id: 1, found: true, shellAgent: true, now: 0 }).state, { type: "tick", now: 2000 }).state,
+                          { type: "cancel", id: 1, killAfterMs: 3000, now: 2100 }).state;
+        assertEqual(kinds(step(lone, { type: "add", id: 2, owner: "m", now: 2200 })), "check:2", "a run ending that had let the head go holds nothing: the next starts");
         const released = step(asking, { type: "tick", now: 2100 }).state;
         stepped = step(released, { type: "cancel", id: 1, killAfterMs: 3000, now: 2200 });
         assertEqual(kinds(stepped) + " | " + phases(stepped.state), "signal:1 | 1=ending 2=checking", "cancel of a run that let the head go: the next goes on");
@@ -418,6 +474,8 @@ TestCase {
         assertEqual(kinds(step(stepped.state, { type: "exited", id: 1, now: 500 })), "forget:1 check:3", "… the cancelled one ends with no answer, the next starts");
         assertEqual(kinds(step(stepped.state, { type: "tick", now: 3100 })), "forget:1 check:3", "… or killAfterMs later");
         assertEqual(kinds(step(off, { type: "ownerGone", owner: "", now: 0 })), "", "an empty owner touches nothing");
+        const unowned = step(step(rules.queueStart(false), { type: "add", id: 1, now: 0 }).state, { type: "add", id: 2, now: 0 }).state;
+        assertEqual(kinds(step(unowned, { type: "ownerGone", owner: "", now: 0 })), "", "… not even runs added with no owner");
         // The lock
         let lockQueue = step(rules.queueStart(false), { type: "add", id: 1, owner: "m", now: 0 }).state;
         lockQueue = step(lockQueue, { type: "checked", id: 1, found: true, shellAgent: true, now: 0 }).state;
@@ -434,6 +492,9 @@ TestCase {
         assertEqual(kinds(step(askingLocked.state, { type: "tick", now: 2100 })), "", "… and nothing starts while locked");
         const unlocked = step(step(askingLocked.state, { type: "add", id: 5, owner: "m", now: 300 }).state, { type: "lock", locked: false, now: 400 });
         assertEqual(kinds(unlocked), "", "unlocked: nothing was kept to start");
+        assertEqual(kinds(step(rules.queueStart(true), { type: "add", id: 1, owner: "m", now: 0 })), "answer:1:locked", "a queue started locked: runs answered locked");
+        assertEqual(rules.nextDeadline(step(step(rules.queueStart(false), { type: "add", id: 1, owner: "m" }).state, { type: "checked", id: 1, found: true, shellAgent: true }).state),
+                    rules.headQuietMs, "an event with no time counts as 0");
         // Odd events
         assertEqual(kinds(step(asking, { type: "exited", id: 99, now: 0 })) + kinds(step(asking, { type: "checked", id: 2, found: true, now: 0 }))
                     + kinds(step(asking, { type: "add", id: 1, now: 0 })) + kinds(step(asking, { type: "nonsense", now: 0 })), "",

@@ -8,3 +8,39 @@
 # Each entry, or block of entries, under a `# reason: <why it cannot be told apart>` line; a
 # blank line ends a block. An entry whose line is edited no longer matches: the survivor
 # shows again and the entry is stale, to be looked at anew.
+
+# reason: a high surrogate last in the text: charCodeAt(text.length) is NaN, which no range
+# test passes, so it is never paired either way
+singletons/PrivilegedRules.qml	< -> <=	#1	if (code >= 0xd800 && code <= 0xdbff && i + 1 < text.length) {
+
+# reason: an empty argv has argv[0] undefined, never "", so length >= 0 decides nothing more
+singletons/PrivilegedRules.qml	> -> >=	#1	if (problem !== "" && Array.isArray(argv) && argv.length > 0 && argv[0] === ""
+
+# reason: argv[argv.length] is undefined, and unprintable(undefined) reads the text
+# "undefined": printable, so the extra turn never refuses
+singletons/PrivilegedRules.qml	< -> <=	#1	for (let i = 0; i < argv.length; i++) {
+
+# reason: mode 0 has no setuid bit, so whether it passes mode >= 0 does not change the answer
+singletons/PrivilegedRules.qml	>= -> >	#1	return verdict?.owner === "0" && mode >= 0 && (mode & 0o4000) !== 0;
+singletons/PrivilegedRules.qml	0 -> 1	#1	return verdict?.owner === "0" && mode >= 0 && (mode & 0o4000) !== 0;
+
+# reason: two runs with the same deadline give the same earliest deadline whichever is taken
+singletons/PrivilegedRules.qml	< -> <=	#1	if (job.deadline > 0 && (next === 0 || job.deadline < next))
+
+# reason: a waiting run's holds, shellAgent, requestSeen, otherOpen and launchedAt are never
+# read before they are set: holds by stop() as the run turns "ending" (the only phase that
+# reads it), the others at "checked" as it turns "asking" (the only phase the request event
+# and PrivilegedRuns read them in)
+singletons/PrivilegedRules.qml	false -> true	#1	jobs.push({ id: event.id, owner: event.owner ?? "", phase: "waiting", holds: false, shellAgent: false,
+singletons/PrivilegedRules.qml	false -> true	#2	jobs.push({ id: event.id, owner: event.owner ?? "", phase: "waiting", holds: false, shellAgent: false,
+singletons/PrivilegedRules.qml	false -> true	#1	requestSeen: false, otherOpen: false, launchedAt: 0, deadline: 0, silent: false });
+singletons/PrivilegedRules.qml	false -> true	#2	requestSeen: false, otherOpen: false, launchedAt: 0, deadline: 0, silent: false });
+singletons/PrivilegedRules.qml	0 -> 1	#1	requestSeen: false, otherOpen: false, launchedAt: 0, deadline: 0, silent: false });
+
+# reason: once the head's own request was seen (requestSeen true, kept until the run is
+# checked anew) otherOpen is read no more: only the branch before its own request reads it
+singletons/PrivilegedRules.qml	false -> true	#1	head.otherOpen = false;
+
+# reason: a mode of one octal digit (0 to 7) never has the setuid bit (04000), so refusing it
+# ({2,5}) or reading it ({1,5}) gives the same answer
+singletons/PrivilegedRules.qml	1 -> 2	#1	const mode = typeof verdict?.mode === "string" && /^[0-7]{1,5}$/.test(verdict.mode) ? parseInt(verdict.mode, 8) : -1;
