@@ -3,7 +3,8 @@
 # which failed, could not be set up, was left out, was not reached or was ended is named as
 # that and never counted as passed, and the exit status; that parts run side by side, their
 # output printed in the list's order, a failure ending the ones running, and the lock bed
-# last and alone; that a SIGTERM ends every part that is running at once. Then that every
+# last and alone; that a failed part's log is kept, named on its line, and the oldest kept
+# runs' dropped; that a SIGTERM ends every part that is running at once. Then that every
 # part of the real list names a runner that is there. Starts none of the real parts.
 #
 # Exit status: 0 when every check passed, 1 otherwise.
@@ -12,6 +13,9 @@ set -uo pipefail
 REPO=$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)
 work=$(mktemp -d "${TMPDIR:-/tmp}/run-all-selftest.XXXXXX") || { echo "cannot create a temp dir" >&2; exit 2; }
 trap 'rm -rf "$work"' EXIT
+# The kept logs of a failed part go here, not into the user's cache
+export XDG_CACHE_HOME=$work/cache
+kept_logs=$work/cache/h2s-shell-tests/run-all
 failed=0
 check() {
     local description=$1
@@ -104,7 +108,10 @@ check "all pass: says passed" says "^run-all.sh: passed$"
 
 run "first|good" "second|bad" "third|good-too" -- -j 1
 check "a part fails (-j 1): status 1" status_is 1
-check "a part fails: it is named FAIL, with its command" says "^  FAIL     second (status 1, .*) — $work/bad$"
+check "a part fails: it is named FAIL, with its command and its kept log" says "^  FAIL     second (status 1, .*) — $work/bad; log: $kept_logs/[0-9]*-[0-9]*-[0-9]*/01.log$"
+kept_log=$(sed -n 's/^  FAIL     second .*; log: //p' <<< "$OUTPUT")
+check "… the kept log holds its output, after the run" bash -c '[ "$(cat "$1")" = "output of bad" ]' _ "$kept_log"
+check "… the logs of the parts that passed are not kept" bash -c '[ "$(ls "$(dirname "$1")")" = 01.log ]' _ "$kept_log"
 check "a part fails: the parts after it do not run" ran "good bad "
 check "a part fails: they are named NOT RUN, with the reason" says "^  NOT RUN  third — not reached: stopped after 'second' failed"
 check "a part fails: the one not reached is not a pass" silent_on "PASS     third"
@@ -158,11 +165,19 @@ check "a part cannot be set up: status 2" status_is 2
 check "a part cannot be set up: NOT RUN, with the reason it printed" \
     says "^  NOT RUN  first — it could not be set up: some-runner.sh: labwc not found on PATH (the headless compositor)"
 check "a part cannot be set up: it is not a pass" silent_on "PASS     first"
+check "a part cannot be set up: its log kept" says "^  NOT RUN  first — it could not be set up: .*; log: $kept_logs/.*/00.log$"
 check "a part cannot be set up: the others still run" ran_set no-tool good
 check "a part cannot be set up: does not say passed" silent_on "run-all.sh: passed"
 
 run "first|no-tool" "second|bad"
 check "one cannot be set up, one fails: status 1" status_is 1
+check "… both logs kept, in one directory" bash -c '[ "$(sed -n "s/.*; log: \(.*\)\/0[01]\.log$/\1/p" <<< "$1" | sort -u | wc -l)" = 1 ] && [ "$(grep -c "; log: " <<< "$1")" = 2 ]' _ "$OUTPUT"
+# Kept logs of 25 earlier runs: the oldest go, the newest 20 runs' stay
+rm -rf "$kept_logs"
+for day in $(seq 10 34); do mkdir -p "$kept_logs/200001$day-000000-1"; done
+run "first|bad"
+check "kept logs: the newest 20 runs' stay, this one's among them" \
+    bash -c '[ "$(ls "$1" | wc -l)" = 20 ] && [ ! -e "$1/20000115-000000-1" ] && [ -e "$1/20000116-000000-1" ] && [ -f "$1/$(ls "$1" | sort | tail -n 1)/00.log" ]' _ "$kept_logs"
 
 run "first|slow" "second|good" "lock bed|bed"
 bed_alone() { in_order "end good" "start bed" && in_order "end slow" "start bed" "end bed"; }

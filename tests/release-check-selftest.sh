@@ -32,11 +32,13 @@ cp "$REPO/tests/release-check.sh" "$tree/tests/"
 # the stale-killed lines counted in stalekilled/<file>, or in looked/<file> for its second
 # look, called with --only),
 # waits for the event in wait/<runner> when there is one (at most 10 s), sleeps sleep/<runner>
-# seconds, and ends with the status in status/<runner> (default 0)
+# seconds, and ends with the status in status/<runner> (default 0). Before all of that it
+# sleeps delay/<runner> seconds: a runner slow to start, as on a busy machine
 standin() {
     cat > "$tree/tests/$1" << EOF
 #!$(type -P bash)
 w=$work
+[ ! -f "\$w/delay/$1" ] || sleep "\$(cat "\$w/delay/$1")"
 if [ "$1" = remote-run.sh ]; then echo "$1 \$* H2S_REMOTE=\${H2S_REMOTE:-}" >> "\$w/calls"; else echo "$1 \$*" >> "\$w/calls"; fi
 echo "start $1" >> "\$w/events"
 echo "output of $1 \$*"
@@ -98,8 +100,8 @@ run() {
     TOOK=$((SECONDS - began))
 }
 reset() {
-    rm -rf "$work/status" "$work/survive" "$work/nosummary" "$work/wait" "$work/sleep" "$work/stalekilled" "$work/looked"
-    mkdir -p "$work/status" "$work/survive" "$work/nosummary" "$work/wait" "$work/sleep" "$work/stalekilled" "$work/looked"
+    rm -rf "$work/status" "$work/survive" "$work/nosummary" "$work/wait" "$work/sleep" "$work/delay" "$work/stalekilled" "$work/looked"
+    mkdir -p "$work/status" "$work/survive" "$work/nosummary" "$work/wait" "$work/sleep" "$work/delay" "$work/stalekilled" "$work/looked"
 }
 status_is() { [ "$STATUS" = "$1" ]; }
 says() { grep -q -- "$1" <<< "$OUTPUT"; }
@@ -184,7 +186,12 @@ rm "$tree/singletons/LooseRules.qml"
 
 # ---- Running it -----------------------------------------------------------------------------
 reset
+# Each waits for the other: the remote part, started first, to see the full set here end;
+# the full set here to see the remote part start — which, slow to start (on a busy machine
+# it can be), may come after the full set here has started
 echo "end run-all.sh" > "$work/wait/remote-run.sh"
+echo "start remote-run.sh" > "$work/wait/run-all.sh"
+echo 1 > "$work/delay/remote-run.sh"
 run --remote box --module "$work/mod-a" --module "$work/mod-b"
 check "all pass: status 0" status_is 0
 check "all pass: says passed" says "^release-check.sh: passed$"

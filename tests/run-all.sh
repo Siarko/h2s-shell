@@ -60,7 +60,9 @@
 # part that could not be set up (its status 2: a missing tool is named with its use, a
 # system without a set), one left out by --quick, one not reached after a failure, one
 # ended because another failed. A part that did not run to its end is never counted as
-# passed. Without --keep-going a failure starts nothing more and ends the parts still
+# passed. The log of a part that failed or could not be set up is kept, named on its line,
+# under ${XDG_CACHE_HOME:-~/.cache}/h2s-shell-tests/run-all/<date-time>/ (the newest 20
+# runs' kept); the others go with the run. Without --keep-going a failure starts nothing more and ends the parts still
 # running (they are named NOT RUN, ended); the lock bed then does not run.
 #
 # Exit status: 0 when every part ran and passed (with --quick: every part but the lock
@@ -249,6 +251,25 @@ print_summary() {
 
 trap 'end_running; print_ready; echo; echo "run-all.sh: interrupted; the parts so far:"; print_summary; exit 130' INT TERM HUP
 
+# keep_log <index>: the part's log copied where it outlives the run (a one-off failure can be
+# read afterwards); kept_note "; log: <path>", or empty when it cannot be kept
+kept="" kept_note=""
+keep_log() {
+    local base=${XDG_CACHE_HOME:-$HOME/.cache}/h2s-shell-tests/run-all copy old
+    kept_note=""
+    [ -f "$logs/$1" ] || return 0
+    if [ -z "$kept" ]; then
+        kept=$base/$(date +%Y%m%d-%H%M%S)-$$
+        mkdir -p "$kept" 2> /dev/null || { kept=""; return 0; }
+        # The newest 20 runs' logs stay (names sort by their time)
+        for old in $(find "$base" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort -r | tail -n +21); do
+            rm -rf -- "${base:?}/$old"
+        done
+    fi
+    copy=$kept/$(printf '%02d' "$1").log
+    cp "$logs/$1" "$copy" 2> /dev/null && kept_note="; log: $copy"
+}
+
 # record <index> <status>: its summary line, and what its end means for the rest
 record() {
     local index=$1 status=$2 name=${names[$1]} took reason
@@ -258,7 +279,8 @@ record() {
         2)
             # A set-up error ends with its reason: the last lines the part printed
             reason=$(grep -v '^[[:space:]]*$' "$logs/$index" | tail -n 3 | tr '\n' ' ' | cut -c 1-400)
-            summary[index]="  NOT RUN  $name — it could not be set up: ${reason:-status 2, no output}"
+            keep_log "$index"
+            summary[index]="  NOT RUN  $name — it could not be set up: ${reason:-status 2, no output}$kept_note"
             any_not_run=1
             ;;
         130)
@@ -266,7 +288,8 @@ record() {
             summary[index]="  NOT RUN  $name — interrupted"
             ;;
         *)
-            summary[index]="  FAIL     $name (status $status, $took) — ${commands[index]}"
+            keep_log "$index"
+            summary[index]="  FAIL     $name (status $status, $took) — ${commands[index]}$kept_note"
             any_failed=1
             if [ "$keep_going" != 1 ] && [ -z "$stopped_by" ] && [ -z "$ending" ]; then
                 stopped_by=$name
