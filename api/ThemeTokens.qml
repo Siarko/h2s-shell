@@ -3,7 +3,8 @@ import qs.singletons
 
 // The theme as a module reads it (Api.theme): the tokens the core's own widgets use, every
 // one read-only and following the theme in use (a profile switch, a theme edited live). The
-// groups (capsule, popup, row, …) are deep frozen copies of the theme's values (curve() too): reading
+// groups (capsule, popup, row, …) are frozen copies of the theme's values, a list or object in one
+// a new deep frozen copy at each read (curve() a new one per call): reading
 // `Api.theme.row.radius` works, writing does nothing (1.31: `progress`, a progress bar's
 // thickness and radius). Part of the module API 1.0 — a token
 // added is a minor bump; the names are the core Theme's (singletons/Theme.qml).
@@ -102,25 +103,38 @@ QtObject {
         return _deepFrozen(Theme.curve(name));
     }
 
-    // A deep copy, frozen all the way down: nothing a module holds is the core's own object
-    // (re-made whenever the theme's group changes, so it stays current)
+    // A group as every module reads it: frozen, never the core's own object (re-made whenever
+    // the theme's group changes, so it stays current). The engine lets a frozen list take
+    // push, index writes and sort, so a list or plain object in it is a getter returning a
+    // new deep frozen copy at each read: what one module changes no other sees
     function _frozen(group) {
-        const copy = _deepFrozen(Object.assign({}, group ?? {}));
-        return copy !== null && typeof copy === "object" ? copy : Object.freeze({});
+        const shown = {};
+        const source = group !== null && typeof group === "object" ? group : {};
+        for (const key of Object.keys(source)) {
+            const value = source[key];
+            if (_isPlain(value))
+                Object.defineProperty(shown, key, { enumerable: true, get: () => _deepFrozen(value) });
+            else
+                Object.defineProperty(shown, key, { enumerable: true, value: value });
+        }
+        return Object.freeze(shown);
     }
 
+    // A list or a plain object (not a colour or another Qt value type, which is a value already)
+    function _isPlain(value) {
+        return value !== null && typeof value === "object"
+            && (Array.isArray(value) || Object.getPrototypeOf(value) === Object.prototype);
+    }
+
+    // A new deep copy, frozen all the way down (for curve(): one per call)
     function _deepFrozen(value) {
-        if (value === null || typeof value !== "object")
-            return value;
-        // Only plain objects and arrays are copied: a colour or another Qt value type is a
-        // value already (a copy), and must stay what it is
-        if (!Array.isArray(value) && Object.getPrototypeOf(value) !== Object.prototype)
+        if (!_isPlain(value))
             return value;
         try {
             const copy = Array.isArray(value) ? value.map(item => _deepFrozen(item)) : {};
             if (!Array.isArray(value)) {
                 for (const key of Object.keys(value))
-                    copy[key] = _deepFrozen(value[key]);
+                    Object.defineProperty(copy, key, { enumerable: true, value: _deepFrozen(value[key]) });
             }
             return Object.freeze(copy);
         } catch (error) {

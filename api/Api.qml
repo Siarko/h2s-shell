@@ -26,7 +26,8 @@ import qs.singletons.network
 //                          or object inside an object is a getter that returns a new copy at
 //                          each read: the routes in Api.vpnsUp's rows, Api.anchors'
 //                          placements, Api.system.distribution's facts, module.manifest's
-//                          lists. (The engine lets a frozen list take push, writes to its
+//                          lists and objects, a list in an Api.theme group: two reads are not
+//                          the same object, and a write into one does not stay. (The engine lets a frozen list take push, writes to its
 //                          indices and sort.) A list handed out as a value — Api.networks,
 //                          Api.vpnsUp, Api.localNetworks, Api.slots, Api.anchors — is the one
 //                          every module reads: copy it (slice()) before changing it

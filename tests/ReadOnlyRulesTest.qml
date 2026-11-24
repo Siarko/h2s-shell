@@ -68,6 +68,20 @@ TestCase {
                "… frozen, each object read-only, its lists a new copy at each read");
         assertEqual(_tryChanges(() => rows[0].routes), "[\"10.0.0.0/8\"]", "… an item's list: changes do not stay");
 
+        // Through a Loader's initial properties, as a module's element gets its context
+        // (components/ModuleContribution.qml): the rows and the lists inside them arrive
+        const context = { otherVpns: ReadOnlyRules.copy([{ name: "Office", routes: ["10.0.0.0/8", "0.0.0.0/0"] }]) };
+        const loader = Qt.createQmlObject("import QtQuick\nLoader {}", suite, "ReadOnlyLoader.qml");
+        loader.setSource(Qt.resolvedUrl("fixtures/modules/anchors-vpn-a/Row.qml"), { context: context });
+        const given = loader.item?.context?.otherVpns ?? null;
+        assertEqual(JSON.stringify(given), "[{\"name\":\"Office\",\"routes\":[\"10.0.0.0/8\",\"0.0.0.0/0\"]}]",
+                    "through Loader.setSource's initial properties: the rows and their lists arrive");
+        assert(Array.isArray(given) && Array.isArray(given?.[0]?.routes) && given[0].routes.includes("0.0.0.0/0"), "… as lists, as a module reads them");
+        assertEqual(_tryChanges(() => loader.item.context.otherVpns[0].routes), "[\"10.0.0.0/8\",\"0.0.0.0/0\"]",
+                    "… and a change to the element's list does not stay at the next read");
+        assertEqual(JSON.stringify(context.otherVpns[0].routes), "[\"10.0.0.0/8\",\"0.0.0.0/0\"]", "… nor in the context given");
+        loader.destroy();
+
         // JSON's own "__proto__" key stays a key; the prototype is untouched
         const odd = ReadOnlyRules.copy(JSON.parse("{\"__proto__\":{\"polluted\":true},\"plain\":\"__proto__\"}"));
         assert(Object.keys(odd).includes("__proto__") && odd.polluted === undefined && Object.getPrototypeOf(odd) === Object.prototype

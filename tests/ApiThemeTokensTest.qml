@@ -71,5 +71,22 @@ TestCase {
             assert(group !== null && typeof group === "object" && Object.isFrozen(group), "group " + name + " is a frozen object");
             assertEqual(JSON.stringify(Object.keys(group).sort()), JSON.stringify(Object.keys(Theme[name] ?? {}).sort()), "group " + name + " has the theme's entries");
         }
+
+        // A list or object a theme puts in a group: a new deep frozen copy at each read, since
+        // the engine lets a frozen list take push, index writes and sort — every module reads
+        // the same group. A colour stays a colour
+        const source = { radius: 4, stops: [3, 1, 2], inner: { points: [0.1, 0.9] }, tint: Qt.rgba(1, 0, 0, 1) };
+        const group = tokens._frozen(source);
+        assert(Object.isFrozen(group) && group.stops !== group.stops && group.inner !== group.inner && Object.isFrozen(group.inner.points),
+               "a group's list or object: a new frozen copy at each read");
+        for (const change of [() => group.stops.push(9), () => { group.stops[0] = 9; }, () => group.stops.sort(), () => group.inner.points.push(1),
+                              () => { group.inner.points[0] = 5; }, () => { group.radius = 9; }]) {
+            try {
+                change();
+            } catch (error) {}
+        }
+        assertEqual(JSON.stringify([group.radius, group.stops, group.inner.points, source.stops, source.inner.points]),
+                    "[4,[3,1,2],[0.1,0.9],[3,1,2],[0.1,0.9]]", "… push, index writes and sort do not stay, in the group or the theme's own");
+        assert(Qt.colorEqual(group.tint, "#ff0000") && String(group.tint).startsWith("#"), "… a colour stays a colour");
     }
 }

@@ -1164,7 +1164,8 @@ close this section.
   outside it; `prepend` and `append` inside it, first and last of its content, under its
   frame. Top to bottom, for a block B holding c1 … cn: B.before · B's frame · B.prepend ·
   c1.before · c1 · c1.after · … · B.append · B.after. Only the paths in
-  `ModuleRules.anchorTable` take content (`Api.anchors` is its frozen copy): naming a block
+  `ModuleRules.anchorTable` take content (`Api.anchors` is its read-only copy, each row's
+  `placements` a new frozen copy at each read): naming a block
   does not publish it, and a place not in the table
   or a placement it does not take is an error in the module's status, the rest of the module
   loading. Each placement a kind has is a host, `components/AnchorContent.qml` — the slot's
@@ -1373,7 +1374,8 @@ switches, read when asked. A reading that failed or says something unexpected is
 `singletons/Distribution.qml` detected it: frozen `{ ready, id, label, facts }`, `ready` once
 the detection has answered, `id` and `label` `""` and `facts` `null` while it is not known or
 could not be told. `facts` is a frozen copy of the distribution's `distribution.json`
-(`ModuleRules.apiDistribution`; a list a new copy at each read); nothing of its integration
+(`ModuleRules.apiDistribution`; a list or object in it a new frozen copy at each read,
+`singletons/ReadOnlyRules.qml`); nothing of its integration
 (capability, plan, apply, undo) is reachable through it. A module that differs by system reads it instead of checking
 for `/etc/NIXOS` or reading os-release itself.
 - NixOS: `id` `"nixos"`, `etcManaged` true (`/etc` is generated from the configuration),
