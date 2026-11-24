@@ -70,6 +70,29 @@ the font, the lock screen's PAM configs (see [Lock screen](#lock-screen-password
 and turns on UPower, power-profiles-daemon, Bluetooth and NetworkManager unless your
 configuration says otherwise. Update with `nix flake update h2s-shell`.
 
+The module can also read the shell's settings file, a JSON file kept beside your
+configuration (with a flake, inside it: pure evaluation reads nothing outside the flake).
+Hand it the path once:
+
+```nix
+programs.h2s-shell.settingsFile = ./h2s-shell.json;
+```
+
+Its keys are the module's own options, with the file's schema version:
+
+```json
+{ "version": 1, "idle": { "hibernateDelay": "3h" },
+  "polkit": { "rememberAdmin": { "enable": true, "users": ["<your user>"], "minutes": 15 } } }
+```
+
+`idle.hibernateDelay`, `pam.rules`, `pam.sudo.rules`, `pam.polkit.rules` and
+`polkit.rememberAdmin.{enable,users,minutes}` are read. Each value is only a default: the
+same option set in your configuration wins. A wrong value or version stops the build with
+an assertion naming the key; a key this version of the module does not know is a warning
+and is ignored. What was taken in, and what is in force, is in
+`/etc/h2s-shell/settings.json`. Without `settingsFile` nothing is read. (On Arch there is
+no such file: the shell writes the system's files itself.)
+
 Without the module: `nix run github:Siarko/h2s-shell`.
 
 ### Starting it

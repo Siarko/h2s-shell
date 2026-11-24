@@ -2201,6 +2201,12 @@ trees, on either system.
   in the shell's tree, and the command hands that directory to the launcher
   (`H2S_SHELL_BUILTIN_MODULES`).
 - `layout`: the files the shell's code reads on NixOS are where it looks for them.
+- `settings`: the module's `programs.h2s-shell.settingsFile` (`nix/settings.nix`),
+  evaluated, not built: the fixture `tests/fixtures/settings-nixos/settings.json` gives
+  the same options and `/etc` files as the same values written as options, and
+  `/etc/h2s-shell/settings.json` holds what it took in and what is in force; a
+  hand-written option wins over the file's value; a wrong schema version or value is an
+  assertion naming it, an unknown key a warning.
 
 #### Arch
 

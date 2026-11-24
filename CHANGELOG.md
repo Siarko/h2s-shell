@@ -34,6 +34,15 @@ The interface modules are written against (`qs.api`), versioned on its own
   changed outside the shell is shown and can be replaced. NixOS: the module's options, with
   Copy. Under it, "Unlocking the lock screen": switches for the fingerprint and the security
   key.
+- NixOS: the module's `programs.h2s-shell.settingsFile = ./h2s-shell.json;` reads the
+  shell's settings file, JSON whose keys are the module's options with a `version` (now 1):
+  `idle.hibernateDelay`, `pam.rules`, `pam.sudo.rules`, `pam.polkit.rules`,
+  `polkit.rememberAdmin.{enable,users,minutes}`. Each value is a default, so the same option
+  in the configuration wins; a wrong value (type, range, a hibernation delay that is no
+  systemd time span, a PAM row with a field the rows do not have) or schema version stops
+  the build with an assertion naming the key; an unknown key is a warning and is ignored.
+  What was taken in and what is in force is published as `/etc/h2s-shell/settings.json`.
+  Unset (the default), nothing is read and nothing published.
 - NixOS: the module's `programs.h2s-shell.pam.rules` (sudo and polkit) — or
   `pam.sudo.rules` and `pam.polkit.rules`, one list per service — set sudo's and polkit's
   `auth` rules as an ordered list of rows: fingerprint (`timeout` 1–600 s and `tries`
