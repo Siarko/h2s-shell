@@ -325,8 +325,7 @@ Singleton {
     // timeoutMs, onLine (a function or null) }
     function shellOptions(request) {
         const result = { problem: "", timeoutMs: shellRunMs, onLine: null };
-        if (request === undefined || request === null || typeof request !== "object")
-            return result;
+        // No request (null, not an object): readOnce reads every field as not given
         const read = CommandRules.readOnce(request, ["timeoutMs", "onLine"]);
         const limit = read.timeoutMs;
         if (limit !== undefined && limit !== null) {
