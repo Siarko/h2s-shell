@@ -11,7 +11,7 @@ QtObject {
     readonly property string migrationId: "1.0.0-widget-presets"
     readonly property string since: "1.0.0"
     readonly property string summary: "Widget profiles are now widget presets"
-    readonly property var scope: ["raw:widgetProfiles", "preset:*"]
+    readonly property var scope: ["read:raw:widgetProfiles", "preset:*"]
 
     // Older versions made the library whenever it was empty text, and only then
     function appliedBefore(config) {

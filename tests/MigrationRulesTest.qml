@@ -62,6 +62,7 @@ TestCase {
         _documentParts();
         _projection();
         _wholeLibrary();
+        _readPaths();
         _ownRecords();
         _runs();
         _failure();
@@ -148,6 +149,66 @@ TestCase {
         assertEqual(JSON.stringify(rules.parsePath("preset:*")), JSON.stringify({ kind: "preset", type: "*", name: "", key: "" }), "path: the whole preset library");
         assert(overlap(["preset:*"], ["preset:clock/a/format"]) && overlap(["preset:music"], ["preset:*"]) && !overlap(["preset:*"], ["setting:x"]),
                "overlap: the whole library overlaps every preset path, both ways, and nothing else");
+    }
+
+    // Paths a migration only reads ("read:"), and a setting pattern ("a.*.b")
+    function _readPaths() {
+        assertEqual(JSON.stringify(rules.parsePath("read:raw:gcal")), JSON.stringify({ kind: "raw", key: "gcal", read: true }), "read: a raw key to read");
+        assertEqual(JSON.stringify(rules.parsePath("read:setting:a.*")), JSON.stringify({ kind: "setting", prefix: "a.", key: "", read: true }), "read: a setting prefix to read");
+        for (const bad of ["read:*", "read:read:raw:x", "read:", "read:raw:profiles", "read:bad"])
+            assertEqual(rules.parsePath(bad), null, "read: " + bad + " is not one");
+        assertEqual(JSON.stringify(rules.parsePath("setting:widgets.*.popupMode")), JSON.stringify({ kind: "setting", prefix: "widgets.", key: "", pattern: "widgets.*.popupMode" }),
+                    "pattern: one part of a key");
+        for (const bad of ["setting:*.a", "setting:a.*.*", "setting:a.**.b", "setting:a.*.b c", "setting:a.*x.b"])
+            assertEqual(rules.parsePath(bad), null, "pattern: " + bad + " is not one");
+        const pattern = rules.parseScope(["setting:widgets.*.popupMode"]);
+        const doc = { raw: {}, profiles: [{ name: "Full", set: { "widgets.clock.popupMode": "c", "widgets.clock.size": 1, "widgets.popupMode": 2, "widgets.a.b.popupMode": 3, "widgetsX.c.popupMode": 4 } }],
+                      globals: { "widgets.music.popupMode": "h" }, presets: {}, files: {} };
+        assertEqual(JSON.stringify(Object.keys(rules.projection(doc, pattern).profiles[0].set)), JSON.stringify(["widgets.clock.popupMode"]), "pattern: only keys with one part in its place");
+        assertEqual(JSON.stringify(rules.projection(doc, pattern).globals), JSON.stringify({ "widgets.music.popupMode": "h" }), "pattern: … in the globals too");
+        const overlap = (a, b) => rules.scopesOverlap(rules.parseScope(a), rules.parseScope(b));
+        assert(overlap(["setting:widgets.*.popupMode"], ["setting:widgets.clock.popupMode"]) && !overlap(["setting:widgets.*.popupMode"], ["setting:bar.left"]),
+               "pattern: overlaps keys under its prefix, not others");
+        assert(!rules.parseScope(["raw:a", "read:raw:a"]).ok && !rules.parseScope(["setting:a.*", "read:setting:a.b"]).ok, "read: a path both read and written is refused");
+        assert(!overlap(["read:raw:a"], ["read:raw:a"]) && overlap(["read:raw:a"], ["raw:a"]) && overlap(["raw:a"], ["read:raw:a"]),
+               "read: two readers do not depend on each other; a reader and a writer do");
+
+        const reader = _migration("2026-11-25-r-reader", "2.2.0", ["setting:clock.*", "read:raw:gcal", "read:setting:theme.*"],
+                                  doc => { doc.profiles[0].set["clock.from"] = doc.raw.gcal.viewMode + "/" + doc.globals["theme.name"]; return doc; });
+        const read = rules.applyOne(reader, _document(), {}, []);
+        assert(read.ok && read.document.profiles[0].set["clock.from"] === "day/dark", "read: handed what it reads" + (read.ok ? "" : ": " + read.error));
+        assertEqual(read.document.raw.gcal.viewMode, "day", "read: … which stays");
+        for (const [change, what] of [[doc => { doc.raw.gcal.viewMode = "week"; }, "a raw key"], [doc => { delete doc.raw.gcal; }, "a removed raw key"],
+                                      [doc => { doc.globals["theme.name"] = "light"; }, "a setting"], [doc => { doc.globals["theme.other"] = 1; }, "a new setting under it"]]) {
+            const wrote = rules.applyOne(_migration("2026-11-25-r-writer", "2.2.0", ["setting:clock.*", "read:raw:gcal", "read:setting:theme.*"], doc => { change(doc); return doc; }), _document(), {}, []);
+            assert(!wrote.ok && wrote.error.includes("only reads"), "read: writing " + what + " it only reads fails" + (wrote.ok ? "" : " (" + wrote.error + ")"));
+        }
+        const failing = _migration("2026-11-25-r-failing", "2.2.0", ["setting:clock.*", "read:raw:gcal", "read:setting:theme.*"], doc => { throw new Error("broken"); });
+        const reset = rules.run([failing], _document(), { records: [], version: "2.2.0" });
+        assertEqual(reset.records.join(), "reset:2026-11-25-r-failing", "read: a failing reader is reset");
+        assert(reset.document.raw.gcal?.viewMode === "day" && reset.document.globals["theme.name"] === "dark" && !("clock.format" in reset.document.profiles[0].set),
+               "read: … only what it writes: what it reads stays");
+        const later = _migration("2026-11-25-r-later", "2.2.0", ["read:raw:gcal", "setting:battery.*"], doc => doc);
+        assertEqual(rules.run([failing, later], _document(), { records: [], version: "2.2.0" }).skipped.length, 0, "read: one that only reads the same is not skipped after it");
+
+        // The settings from before profiles: a failure resets the keys it writes, never the
+        // old sections it reads (the Google account's tokens among them) or other widget settings
+        const legacy = Migrations.all().find(migration => migration.migrationId === "1.0.0-legacy-settings");
+        const broken = _migration(legacy.migrationId, legacy.since, legacy.scope, doc => { throw new Error("broken"); }, { phase: "afterSeed" });
+        const old = rules.documentOf({
+            profiles: JSON.stringify([{ name: "Full", set: { "general.debug": true, "widgets.clock.popupMode": "hover", "widgets.music.size": 3, "bar.left": [], "bar.edge": "top" } }]),
+            globals: JSON.stringify({ "stt.debug": true, "widgets.example.popupMode": "click" }),
+            gcal: { refreshToken: "token", enabled: true }, bar: { content: { left: ["clock"] }, layout: { barHeight: 30 } },
+            widgetProfiles: "{\"clock\":{\"_popupMode\":\"hover\"}}", general: { debug: true }
+        }, {}).document;
+        const legacyReset = rules.run([broken], old, { records: [], version: "2.2.0" });
+        assertEqual(legacyReset.records.join(), "reset:1.0.0-legacy-settings", "legacy settings: a failure is reset");
+        assertEqual(JSON.stringify(legacyReset.document.profiles[0].set), JSON.stringify({ "widgets.music.size": 3, "bar.edge": "top" }),
+                    "legacy settings: … the keys it writes go, other settings stay");
+        assertEqual(JSON.stringify(legacyReset.document.globals), "{}", "legacy settings: … from the globals too");
+        assert(legacyReset.document.raw.gcal?.refreshToken === "token" && legacyReset.document.raw.bar?.layout?.barHeight === 30
+               && legacyReset.document.raw.widgetProfiles !== undefined && legacyReset.document.raw.general?.debug === true,
+               "legacy settings: … the old sections it reads stay, the Google account's tokens among them");
     }
 
     // The whole library in scope ("preset:*"): every type handed, reset, replaced

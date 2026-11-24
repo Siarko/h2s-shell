@@ -21,10 +21,13 @@ QtObject {
     // Full must exist: it runs once the profiles are seeded
     readonly property string phase: "afterSeed"
     readonly property string overwritesReason: "Full and the globals hold the defaults seeded before it runs; the old value is the user's choice"
+    // What it writes (the keys of the table: a failure resets only those), and the old
+    // sections it only reads
     readonly property var scope: _paths.map(entry => "setting:" + entry.key).concat([
-        "setting:bar.left", "setting:bar.center", "setting:bar.right", "setting:widgets.*",
-        "raw:general", "raw:media", "raw:lockscreen", "raw:notifications", "raw:stt", "raw:gcal",
-        "raw:bar", "raw:widgetProfiles"])
+        "setting:bar.left", "setting:bar.center", "setting:bar.right", "setting:widgets.hardware.popup",
+        "setting:widgets.*.popupMode",
+        "read:raw:general", "read:raw:media", "read:raw:lockscreen", "read:raw:notifications", "read:raw:stt",
+        "read:raw:gcal", "read:raw:bar", "read:raw:widgetProfiles"])
 
     // Keys whose old place is a plain path; `global`: pinned for every profile
     readonly property var _paths: [

@@ -277,12 +277,18 @@ Singleton {
     // "preset:<type>/<name>" (one preset),
     // "preset:<type>/*/<key>" (one key in every preset of the type),
     // "preset:<type>/<name>/<key>", "raw:<top-level key>", "file:<path>" (a relative path;
-    // "*" matches within one folder level), "*"
+    // "*" matches within one folder level), "*". "setting:<a>.*.<b>": "*" one part of the key
+    // between dots (its `prefix` the text before it, its `pattern` the whole). "read:<path>"
+    // (not "*"): handed to the migration to read, never written by it and never reset.
     function parsePath(text) {
         if (typeof text !== "string" || text.length > 256)
             return null;
         if (text === "*")
             return { kind: "whole" };
+        if (text.startsWith("read:")) {
+            const inner = parsePath(text.slice(5));
+            return inner && inner.kind !== "whole" && inner.read !== true ? Object.assign(inner, { read: true }) : null;
+        }
         const parts = /^([a-z]+):(.*)$/.exec(text);
         if (!parts)
             return null;
@@ -291,6 +297,10 @@ Singleton {
         if (kind === "setting") {
             if (rest.endsWith(".*") && _settingKey(rest.slice(0, -2)))
                 return { kind: "setting", prefix: rest.slice(0, -1), key: "" };
+            const star = rest.indexOf(".*.");
+            // The key with "x" for each "*" must be one: no "*" first, last or twice in a row
+            if (star !== -1 && _settingKey(rest.replace(/\.\*\./g, ".x.")))
+                return { kind: "setting", prefix: rest.slice(0, star + 1), key: "", pattern: rest };
             return _settingKey(rest) ? { kind: "setting", prefix: "", key: rest } : null;
         }
         if (kind === "preset") {
@@ -331,11 +341,32 @@ Singleton {
         const whole = paths.some(path => path.kind === "whole");
         if (whole && paths.length > 1)
             return refused("\"*\" stands alone");
+        const read = paths.filter(path => path.read === true);
+        if (read.some(path => paths.some(other => other.read !== true && pathsOverlap(path, other))))
+            return refused("a read: path overlaps one it writes");
         return { ok: true, problem: "", whole: whole, paths: paths };
     }
 
+    // Of a parsed scope, the paths it writes (and is reset on a failure), or those it only reads
+    function writable(scope) {
+        return Object.assign({}, scope, { paths: (scope?.paths ?? []).filter(path => path.read !== true) });
+    }
+
+    function readOnly(scope) {
+        return Object.assign({}, scope, { whole: false, paths: (scope?.paths ?? []).filter(path => path.read === true) });
+    }
+
+    function _settingMatches(key, path) {
+        if (path.key !== "")
+            return key === path.key;
+        if (path.pattern === undefined)
+            return key.startsWith(path.prefix);
+        const expression = "^" + path.pattern.split(".").map(part => part === "*" ? "[^.]+" : part).join("\\.") + "$";
+        return new RegExp(expression).test(key);
+    }
+
     function _settingIn(key, paths) {
-        return paths.some(path => path.kind === "setting" && (path.key !== "" ? key === path.key : key.startsWith(path.prefix)));
+        return paths.some(path => path.kind === "setting" && _settingMatches(key, path));
     }
 
     function _fileMatches(file, pattern) {
@@ -419,7 +450,7 @@ Singleton {
     function scopesOverlap(first, second) {
         if (!first?.ok || !second?.ok)
             return true;
-        return first.paths.some(a => second.paths.some(b => pathsOverlap(a, b)));
+        return first.paths.some(a => second.paths.some(b => (a.read !== true || b.read !== true) && pathsOverlap(a, b)));
     }
 
     // ---- The document ----
@@ -728,11 +759,15 @@ Singleton {
         const problem = resultProblem(result, handed, scope);
         if (problem !== "")
             return failed(problem);
+        const reading = readOnly(scope);
+        if (canonical(projection(result, reading)) !== canonical(projection(handed, reading)))
+            return failed("it changed what its scope only reads");
         const nextRecords = allRecords.filter(entry => !owned.includes(entry) || markers.includes(entry));
         for (const entry of markers)
             if (!nextRecords.includes(entry))
                 nextRecords.push(entry);
-        return { ok: true, error: "", document: _merged(document, result, scope), records: nextRecords };
+        // What it only reads is the same as handed: the document's stays
+        return { ok: true, error: "", document: _merged(document, withoutScope(result, reading), writable(scope)), records: nextRecords };
     }
 
     // ---- The run ----
@@ -804,7 +839,7 @@ Singleton {
                 report.changed = canonical(current) !== canonical(document);
                 return report;
             }
-            current = withoutScope(current, scope, true);
+            current = withoutScope(current, writable(scope), true);
             report.reset.push({ id: id, error: outcome.error });
             record(id, "reset:" + id);
             blocked.push({ id: id, scope: scope });

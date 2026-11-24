@@ -458,7 +458,9 @@ it is written, so a save made while they ran is kept. Each run's report is
 `Config.migrationReports`; under the test runner nothing is written.
 
 Each migration is a file in `singletons/migrations/` (its tables frozen in it: it never reads
-the live schema), registered in order in `Migrations.qml`. A migration that took over from
+the live schema), registered in order in `Migrations.qml`. Its `scope` names the paths it writes — a failure
+resets only those — and, prefixed `read:`, those it only reads: handed to it, never written
+(a change there is a failure) and never reset. A migration that took over from
 code older than the runner may say `appliedBefore(config)`: a config that code already
 migrated is neither run nor recorded; and `ownsRecord(entry)`: the per-key markers that code
 wrote in `migratedKeys` (`general.debug`, `default:<key>`) are its own, handed to it and
