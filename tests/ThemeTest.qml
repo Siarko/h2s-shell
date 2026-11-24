@@ -286,6 +286,15 @@ TestCase {
             { name: "Quiet", when: {}, set: {} },
             { name: "Power/save", when: {}, set: { "bar.layout.leftMargin": 300 } }
         ];
+        const due = { ready: true, readOnly: false, saveBlocked: false, profiles: "[]", pending: false, migratedKeys: ["bar.height"], marker: "theme.barLayout" };
+        assert(ThemeRules.barLayoutMigrationDue(due), "bar geometry migration: due once the config is read and writable");
+        assert(!ThemeRules.barLayoutMigrationDue(Object.assign({}, due, { saveBlocked: true })), "bar geometry migration: not while saves are blocked (its marker would never be saved)");
+        assert(!ThemeRules.barLayoutMigrationDue(Object.assign({}, due, { readOnly: true })), "bar geometry migration: not under the test runner");
+        assert(!ThemeRules.barLayoutMigrationDue(Object.assign({}, due, { ready: false })), "bar geometry migration: not before the config is read");
+        assert(!ThemeRules.barLayoutMigrationDue(Object.assign({}, due, { profiles: "" })), "bar geometry migration: not before the profiles exist");
+        assert(!ThemeRules.barLayoutMigrationDue(Object.assign({}, due, { pending: true })), "bar geometry migration: not twice at once");
+        assert(!ThemeRules.barLayoutMigrationDue(Object.assign({}, due, { migratedKeys: ["theme.barLayout"] })), "bar geometry migration: not once done");
+        assert(!ThemeRules.barLayoutMigrationDue(null), "bar geometry migration: no state, not due");
         const moved = ThemeRules.themesFromBarLayout(profiles, { "general.debug": true }, undefined, name => name === "Full");
         assertEqual(JSON.stringify(moved.themes.map(entry => entry.name)), JSON.stringify(["Full 2", "Power-save"]),
             "a theme per profile with geometry, under a free file name");

@@ -268,8 +268,9 @@ Singleton {
     readonly property string _barLayoutMigration: "theme.barLayout"
 
     function _migrateBarLayoutIfNeeded() {
-        if (!Config.ready || Config.readOnly || Config.profiles === "" || _pendingMigration !== null
-                || Config.migratedKeys.includes(_barLayoutMigration))
+        if (!ThemeRules.barLayoutMigrationDue({ ready: Config.ready, readOnly: Config.readOnly, saveBlocked: Config.saveBlocked,
+                                                 profiles: Config.profiles, pending: _pendingMigration !== null,
+                                                 migratedKeys: Config.migratedKeys, marker: _barLayoutMigration }))
             return;
         // Geometry from before profiles that never reached one (the per-key migration
         // marks the keys it copied)

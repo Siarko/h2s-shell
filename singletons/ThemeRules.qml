@@ -655,6 +655,17 @@ Singleton {
         return name;
     }
 
+    // Whether the bar-geometry migration (ThemeFiles) is to run now: the config read, writable
+    // (neither the test runner's read-only nor saves blocked — its marker would never be
+    // saved, and each start would make the themes again, under new names), the profiles
+    // there, none under way, not done. `state`: { ready, readOnly, saveBlocked, profiles
+    // (Config.profiles' text), pending, migratedKeys, marker }
+    function barLayoutMigrationDue(state) {
+        return state?.ready === true && state.readOnly !== true && state.saveBlocked !== true
+            && typeof state.profiles === "string" && state.profiles !== "" && !state.pending
+            && !Array.from(state.migratedKeys ?? []).includes(state.marker);
+    }
+
     // Moves the bar geometry from profiles into themes, once, so the bar looks the same in
     // every profile afterwards. Each profile that sets any `bar.layout.*` gets a theme named
     // after it holding those values, extending the theme of the nearest profile before it that

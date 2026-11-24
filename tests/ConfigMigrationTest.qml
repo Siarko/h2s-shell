@@ -158,6 +158,19 @@ TestCase {
             delete doc.raw.audio;
         return doc;
     }, { phase: "afterSeed" })
+    // After seeding, the whole config: refuses a config with a "boom" module turned off
+    readonly property var _seedWhole: _migration("1.0.0-testonly-seed-whole", ["*"], doc => {
+        if (Array.from(doc.raw.disabledModules ?? []).includes("boom"))
+            throw new Error("boom");
+        if (doc.raw.oldSection !== undefined) {
+            doc.globals["legacy.value"] = doc.raw.oldSection.value;
+            delete doc.raw.oldSection;
+        }
+        delete doc.files["themes/old.json"];
+        if (doc.files["themes/dark.json"])
+            doc.files["themes/dark.json"].touched = true;
+        return doc;
+    }, { phase: "afterSeed", wholeScopeReason: "a test" })
     readonly property var _dropOld: _migration("2026-11-25-testonly-drop-old", ["file:themes/*"], doc => {
         delete doc.files["themes/old.json"];
         return doc;
@@ -193,6 +206,7 @@ TestCase {
         _noRuntimeFolder();
         _pruning();
         _afterSeedPhase();
+        _afterSeedRaced();
         _readOnly();
         _clock.start();
     }
@@ -505,6 +519,38 @@ TestCase {
             assert(saved?.oldSection === undefined && saved?.audio?.appVolumes === "{}", "after-seed: a later save brings no removed key back");
             assertEqual(_json(_read(config.migrationReports.afterSeed.backup))?.oldSection?.value, 7, "after-seed: a backup of the file before it");
             assert(!config.runAfterSeed(), "after-seed: once per run");
+        });
+    }
+
+    // ---- After seeding, the config changed meanwhile and cannot be migrated again ----
+    function _afterSeedRaced() {
+        const dir = _scratch + "/after-seed-changed";
+        let config = null;
+        let darkAfterLoad = "";
+        _then("the changed after-seed case's folder", () => true, () => {
+            _write(dir + "/config.json", JSON.stringify({ oldSection: { value: 1 }, migratedKeys: [] }));
+            _write(dir + "/themes/dark.json", JSON.stringify({ height: 30 }));
+            _write(dir + "/themes/old.json", "{}");
+            config = _open(dir, [_theme, _seedWhole]);
+            config.load();
+        });
+        _then("the changed after-seed case read", () => config.reads === 1 && !config.migrationBusy, () => {
+            darkAfterLoad = _read(dir + "/themes/dark.json");
+            config.adapter.profiles = JSON.stringify([{ name: "Full", enabled: true, when: {}, set: {} }]);
+            assert(config.runAfterSeed() && config.migrationBusy, "changed after-seed: the run waits on its listing");
+            config.adapter.disabledModules = ["boom"];
+            config.saveStamped();
+        });
+        _then("the changed after-seed run ended", () => config.migrationReports.afterSeed !== null && !config.migrationBusy, () => {
+            assertEqual(_read(dir + "/themes/dark.json"), darkAfterLoad, "changed after-seed: no side file written");
+            assertEqual(_read(dir + "/themes/old.json"), "{}", "changed after-seed: no side file removed");
+            const written = _json(_read(dir + "/config.json"));
+            assertEqual(written?.oldSection?.value, 1, "changed after-seed: the config as saved meanwhile, not migrated");
+            assertEqual((written?.disabledModules ?? []).join(","), "boom", "changed after-seed: … with the change saved meanwhile");
+            assert(config.migrationReadOnly, "changed after-seed: saves blocked");
+            assertEqual(config.migrationReports.afterSeed.applied.length, 0, "changed after-seed: nothing reported applied");
+            assertEqual(config.adapter.disabledModules.join(","), "boom", "changed after-seed: the readers keep the content as it stands");
+            assert(_json(config.adapter.globals)?.["legacy.value"] === undefined, "changed after-seed: … not the first run's result");
         });
     }
 

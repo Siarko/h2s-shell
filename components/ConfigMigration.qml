@@ -260,6 +260,8 @@ QtObject {
     }
 
     function _writeSideFiles() {
+        if (_phase === "afterSeed" && typeof _source === "function" && !_againOnCurrent())
+            return;
         for (const file of Object.keys(_outcome.files)) {
             // As the theme files are written
             if (!_write(_dir + "/" + file, JSON.stringify(_outcome.files[file], null, 2) + "\n")) {
@@ -270,21 +272,32 @@ QtObject {
         _writeConfig();
     }
 
-    function _writeConfig() {
-        let config = _outcome.config;
-        // After seeding the config is the adapter's and may have been saved since the run
-        // began: the migrations run again, on the content as it stands now (the side files as
-        // read), so that nothing saved meanwhile is written over
-        if (_phase === "afterSeed" && typeof _source === "function") {
-            let raw = undefined;
-            try {
-                raw = JSON.parse(_source());
-            } catch (error) {}
-            const now = MigrationRules.startup(registry, raw, _files, _unreadable, _options());
-            config = now.write ? now.config : null;
-            if (now.write)
-                _outcome = Object.assign({}, now, { files: _outcome.files, removed: _outcome.removed });
+    // After seeding the config is the adapter's and may have been saved since the run began:
+    // the migrations run again, on the content as it stands now (the side files as read), just
+    // before anything but the backup is written, so that nothing saved meanwhile is written
+    // over. A second run that writes nothing, would write other side files, or needs a backup
+    // the first did not take is a failure: nothing more written, nothing applied, saves blocked.
+    function _againOnCurrent() {
+        let raw = undefined;
+        try {
+            raw = JSON.parse(_source());
+        } catch (error) {}
+        const now = MigrationRules.startup(registry, raw, _files, _unreadable, _options());
+        const sameFiles = JSON.stringify(Object.keys(now.files).sort()) === JSON.stringify(Object.keys(_outcome.files).sort())
+            && JSON.stringify(now.removed.slice().sort()) === JSON.stringify(_outcome.removed.slice().sort());
+        if (!now.write || now.readOnly || !sameFiles || (now.backup && _backup === "")) {
+            _outcome.report.applied = [];
+            _outcome.report.reset = [];
+            _failed("the config changed while the migrations ran and could not be migrated again"
+                    + (now.report.failure ? " (" + (now.report.failure.id || now.report.failure.error) + ")" : ""), true);
+            return false;
         }
+        _outcome = now;
+        return true;
+    }
+
+    function _writeConfig() {
+        const config = _outcome.config;
         if (config !== null && !_write(_file, MigrationRules.configText(config))) {
             _failed("could not write " + _file + ": " + _writeError);
             return;
@@ -320,10 +333,12 @@ QtObject {
 
     // A write failed: what is written stays (the records are not, so the run repeats), the
     // readers get the migrated config in memory, and nothing is saved this session
-    function _failed(problem) {
+    // `keepReaders`: the readers keep what they have (the config as it stands is newer than
+    // the run's result)
+    function _failed(problem, keepReaders) {
         console.warn("[Migrations] " + problem + ": the config is not saved until the next start");
         _outcome.report.problem = problem;
-        _finish(true, false, _outcome.config);
+        _finish(true, false, keepReaders === true ? null : _outcome.config);
     }
 
     // The view: a config not written, put where only the user can read it — the runtime
