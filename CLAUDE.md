@@ -168,8 +168,9 @@ ticks, cells respond to clicks, and popups toggle.
 `H2S_MOCKUP=<kind>/<name>` (`H2S_MOCKUP_SCENE=<scene>` opens a scene;
 `H2S_MOCKUP_SHOT=1` steps through the scenes headless). Its root is the kit's
 `MockupWindow` (`import qs.mockups.kit`), which holds the scene contract — `scenes`,
-`scene`, `subject`, `subjectRect` — and the shot protocol (`mockups/kit/MockupWindow.qml`).
-Folder names are lowercase with hyphens, so no `import qs.…` reaches them; `kit/` is the only
+`scene`, `subject`, `subjectRect` — and the shot protocol (`mockups/kit/MockupWindow.qml`). The entry isolates the process from
+the session it runs in (`singletons/Isolation.qml`): no module loads, no notification server
+is registered, nothing is sent, whatever environment it inherited. Folder names are lowercase with hyphens, so no `import qs.…` reaches them; `kit/` is the only
 importable folder. Three kinds:
 
 - `components/<name>`: one component in all its states (the component's file name in kebab

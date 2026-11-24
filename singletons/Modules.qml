@@ -255,7 +255,8 @@ Singleton {
 
     Component.onCompleted: {
         try {
-            const value = Quickshell.env("H2S_SHELL_MODULES");
+            // An isolated process (Isolation) loads no module, whatever it inherited
+            const value = Isolation.active ? "" : Quickshell.env("H2S_SHELL_MODULES");
             const safe = Quickshell.env("H2S_SHELL_SAFE_MODE") === "1";
             const runtime = Quickshell.env("XDG_RUNTIME_DIR");
             if (!Config.readOnly && typeof runtime === "string" && runtime.startsWith("/"))
@@ -306,10 +307,11 @@ Singleton {
                 _host.checkEnvironment = { PATH: TestSeams.moduleCheckPath + ":" + (Quickshell.env("PATH") ?? "") };
             if (TestSeams.moduleCheckMs > 0)
                 _host.checkTimeoutMs = TestSeams.moduleCheckMs;
-            // Module test mode: on in a test tree only (TestSeams). Off is fixed by the load
-            // itself; set here only when on, so tests-modules.qml can still turn it on for its
-            // own load (this one names no module there)
-            if (TestSeams.moduleTestMode)
+            // Module test mode: on in a test tree (TestSeams) or an isolated process
+            // (Isolation). Off is fixed by the load itself; set here only when on, so
+            // tests-modules.qml can still turn it on for its own load (this one names no
+            // module there)
+            if (TestSeams.moduleTestMode || Isolation.active)
                 _host.setTestMode(true);
             _host.load(typeof value === "string" ? value : "", {
                 safeMode: safe, searched: discovery.searched,

@@ -11,7 +11,8 @@ import qs.singletons.helper
 Singleton {
     id: root
 
-    readonly property string path: Quickshell.env("H2S_SHELL_HELPER") ?? ""
+    // None in an isolated process (Isolation)
+    readonly property string path: Isolation.active ? "" : (Quickshell.env("H2S_SHELL_HELPER") ?? "")
     // "missing" | "checking" | "ready" | "outdated" | "failed"
     readonly property string state: _read.state
     readonly property string version: _read.version

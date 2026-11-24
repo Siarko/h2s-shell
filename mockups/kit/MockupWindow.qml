@@ -21,10 +21,12 @@ import qs.components
 //                 several items (a side panel and a modal); ignored while it has no size
 //
 // Shooting (shooting, set by the entry): each scene in turn is set, three frames are
-// waited for (the first frame after a change can still show the scene before), and a line
+// waited for once the window is mapped (the first frame after a change can still show the
+// scene before), and a line
 //   MOCKUP-SHOT <i> <scene> <x>,<y> <w>x<h>
 // gives the subject's bounds; then the shooter calls `ipc call mockup next`. After the last
-// scene `finished` comes; an error (a bad scene list, a subject without a size) `failed`.
+// scene `finished` comes; an error (a bad scene list, a subject without a size, the shots
+// taking longer than shotLimitMs in all) `failed`.
 // On screen: the scene the entry names (H2S_MOCKUP_SCENE), else the first, and a row of
 // buttons under the content that switches between them.
 //
@@ -32,6 +34,9 @@ import qs.components
 // running ones apart):
 //   qs -p <tree>/mockup.qml ipc call mockup next   the next scene, after a shot: "" or why not
 //   qs -p <tree>/mockup.qml ipc call mockup name   the mockup's <kind>/<name>
+//   qs -p <tree>/mockup.qml ipc call mockup scene  the current scene
+// With several mockups running on one display, `qs ipc --id <instance id>` (or --pid) picks
+// one: the target is the same in all of them.
 PanelWindow {
     id: root
 
@@ -48,12 +53,14 @@ PanelWindow {
     // Set by the entry before start()
     property string mockupName: ""
     property bool shooting: false
+    property int shotLimitMs: 60000
 
     signal finished
     signal failed(string text)
 
     property int _index: -1
     property bool _waitingForNext: false
+    property bool _done: false
 
     // Why the scene list cannot be used, or ""
     function _scenesError() {
@@ -127,11 +134,15 @@ PanelWindow {
     function _next() {
         if (!shooting)
             return "not shooting";
+        if (_done)
+            return "finished";
         if (!_waitingForNext)
             return "no shot is waiting";
         _waitingForNext = false;
-        if (_index + 1 >= scenes.length)
+        if (_index + 1 >= scenes.length) {
+            _done = true;
             finished();
+        }
         else
             _show(_index + 1);
         return "";
@@ -165,10 +176,23 @@ PanelWindow {
         property int frames: 0
         running: false
         onTriggered: {
-            if (++frames < 3)
+            if (!root.backingWindowVisible || ++frames < 3)
                 return;
             running = false;
             root._shoot();
+        }
+    }
+
+    // The guard against a hang while shooting: a scene that never settles, a shooter that
+    // never calls next
+    Timer {
+        interval: root.shotLimitMs
+        running: root.shooting && root._index >= 0 && !root._done
+        onTriggered: {
+            root._done = true;
+            _settle.running = false;
+            root.failed("the shots took longer than " + root.shotLimitMs + " ms (at scene " + root._index + " '" + root.scene + "', "
+                        + (root._waitingForNext ? "waiting for next" : "settling") + ")");
         }
     }
 
@@ -201,6 +225,10 @@ PanelWindow {
 
         function name(): string {
             return root.mockupName;
+        }
+
+        function scene(): string {
+            return root.scene;
         }
     }
 }

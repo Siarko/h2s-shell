@@ -6,114 +6,124 @@ import QtQml
 
 Singleton {
     id: root
-    property alias notifications: server.trackedNotifications
+    // The server's notifications; in an isolated process (Isolation), where no server is
+    // registered on the session bus, an empty list
+    readonly property var notifications: _server.item?.trackedNotifications ?? _none
 
     // Map of notification id -> arrival timestamp string (hh:mm:ss)
     property var timestamps: ({})
     // Map of notification id -> string[] of extracted codes matching the notifications.codePatterns setting
     property var extractedCodes: ({})
 
-    NotificationServer {
-        id: server
+    ScriptModel {
+        id: _none
+        values: []
+    }
 
-        bodyHyperlinksSupported: true
-        bodyMarkupSupported: true
-        // Images in a body are not loaded (NotificationMarkup: a row linking to them)
-        bodyImagesSupported: false
-        actionIconsSupported: true
-        imageSupported: true
-        actionsSupported: true
-        // A reply typed on the card (NotificationReply), sent back with sendInlineReply
-        inlineReplySupported: true
+    LazyLoader {
+        id: _server
+        active: !Isolation.active
 
-        onNotification: notification => {
-            if (isShellNotification(notification)) {
-                // Nowhere to show it (a fullscreen window, ToastRules): dropped
-                if (Toasts.toastScreen === "")
+        NotificationServer {
+            bodyHyperlinksSupported: true
+            bodyMarkupSupported: true
+            // Images in a body are not loaded (NotificationMarkup: a row linking to them)
+            bodyImagesSupported: false
+            actionIconsSupported: true
+            imageSupported: true
+            actionsSupported: true
+            // A reply typed on the card (NotificationReply), sent back with sendInlineReply
+            inlineReplySupported: true
+
+            onNotification: notification => {
+                if (isShellNotification(notification)) {
+                    // Nowhere to show it (a fullscreen window, ToastRules): dropped
+                    if (Toasts.toastScreen === "")
+                        return;
+                    // Copy summary immediately — the notification object is not tracked
+                    // and may be freed by Quickshell before ShellNotificationHudItem reads it
+                    Toasts.shellQueue = Toasts.shellQueue.concat([{ summary: notification.summary }]);
                     return;
-                // Copy summary immediately — the notification object is not tracked
-                // and may be freed by Quickshell before ShellNotificationHudItem reads it
-                Toasts.shellQueue = Toasts.shellQueue.concat([{ summary: notification.summary }]);
-                return;
-            }
+                }
 
-            // Left running by the shell's own sender before a reload (the server hands its
-            // notifications to the new shell again): nothing will update or end it
-            if (NotificationRules.orphaned(notification.hints, Notifier.progressRun)) {
-                notification.dismiss();
-                return;
-            }
+                // Left running by the shell's own sender before a reload (the server hands its
+                // notifications to the new shell again): nothing will update or end it
+                if (NotificationRules.orphaned(notification.hints, Notifier.progressRun)) {
+                    notification.dismiss();
+                    return;
+                }
 
-            // Timestamp and codes first, tracking last: tracking adds the notification to
-            // the list, and a card created right then has to find both already there.
-            // Both maps are reassigned, not mutated — an in-place change emits no signal,
-            // so a card would never see a value that arrived after it.
-            var now = new Date();
-            var h = String(now.getHours()).padStart(2, '0');
-            var m = String(now.getMinutes()).padStart(2, '0');
-            var s = String(now.getSeconds()).padStart(2, '0');
-            var updatedTimestamps = Object.assign({}, timestamps);
-            updatedTimestamps[notification.id] = h + ":" + m + ":" + s;
-            timestamps = updatedTimestamps;
+                // Timestamp and codes first, tracking last: tracking adds the notification to
+                // the list, and a card created right then has to find both already there.
+                // Both maps are reassigned, not mutated — an in-place change emits no signal,
+                // so a card would never see a value that arrived after it.
+                var now = new Date();
+                var h = String(now.getHours()).padStart(2, '0');
+                var m = String(now.getMinutes()).padStart(2, '0');
+                var s = String(now.getSeconds()).padStart(2, '0');
+                var updatedTimestamps = Object.assign({}, timestamps);
+                updatedTimestamps[notification.id] = h + ":" + m + ":" + s;
+                timestamps = updatedTimestamps;
 
-            // Extract codes from summary + body using configured regex patterns
-            // In the body's text, not its markup: a link's address or an entity's digits
-            // are no code
-            var text = (notification.summary ?? "") + " " + NotificationMarkup.plainText(notification.body);
-            var codes = [];
-            var patterns = Profiles.value("notifications.codePatterns") ?? [];
-            for (var i = 0; i < patterns.length; i++) {
-                var pat = patterns[i];
-                if (!pat) continue;
-                try {
-                    var matches = text.match(new RegExp(pat, "g"));
-                    if (matches) {
-                        for (var j = 0; j < matches.length; j++) {
-                            if (codes.indexOf(matches[j]) < 0)
-                                codes.push(matches[j]);
+                // Extract codes from summary + body using configured regex patterns
+                // In the body's text, not its markup: a link's address or an entity's digits
+                // are no code
+                var text = (notification.summary ?? "") + " " + NotificationMarkup.plainText(notification.body);
+                var codes = [];
+                var patterns = Profiles.value("notifications.codePatterns") ?? [];
+                for (var i = 0; i < patterns.length; i++) {
+                    var pat = patterns[i];
+                    if (!pat) continue;
+                    try {
+                        var matches = text.match(new RegExp(pat, "g"));
+                        if (matches) {
+                            for (var j = 0; j < matches.length; j++) {
+                                if (codes.indexOf(matches[j]) < 0)
+                                    codes.push(matches[j]);
+                            }
+                        }
+                    } catch(e) {}
+                }
+                if (codes.length > 0) {
+                    var updatedCodes = Object.assign({}, extractedCodes);
+                    updatedCodes[notification.id] = codes;
+                    extractedCodes = updatedCodes;
+                }
+
+                notification.tracked = true;
+                // Its queue takes it when it can (ToastRules.accepts): toasts on, a screen for
+                // it, and not an ordinary one while the centre is open (seen there)
+                Toasts.enqueueHudNotification(notification);
+                // One arriving while the panel is open is seen as it comes
+                if (Toasts.hudPanelOpen)
+                    markSeen();
+                arrived();
+
+                // A sender replacing it (same id) changes it in place — no new notification
+                // comes, only new text
+                notification.summaryChanged.connect(() => root._replaced(notification));
+                notification.bodyChanged.connect(() => root._replaced(notification));
+                Toasts.watchAnnounces(notification);
+
+                // Said by id, for the shell's own sender (Notifier's handles). Its toast follows
+                // the closing itself (Toasts._watchToast)
+                const closedId = notification.id;
+                notification.closed.connect(reason => root.notificationClosed(closedId, reason));
+
+                // Remove timestamp and extracted codes when this notification is dismissed
+                notification.trackedChanged.connect(function () {
+                    if (!notification.tracked) {
+                        var remainingTimestamps = Object.assign({}, timestamps);
+                        delete remainingTimestamps[notification.id];
+                        timestamps = remainingTimestamps;
+                        if (extractedCodes[notification.id]) {
+                            var remaining = Object.assign({}, extractedCodes);
+                            delete remaining[notification.id];
+                            extractedCodes = remaining;
                         }
                     }
-                } catch(e) {}
+                });
             }
-            if (codes.length > 0) {
-                var updatedCodes = Object.assign({}, extractedCodes);
-                updatedCodes[notification.id] = codes;
-                extractedCodes = updatedCodes;
-            }
-
-            notification.tracked = true;
-            // Its queue takes it when it can (ToastRules.accepts): toasts on, a screen for
-            // it, and not an ordinary one while the centre is open (seen there)
-            Toasts.enqueueHudNotification(notification);
-            // One arriving while the panel is open is seen as it comes
-            if (Toasts.hudPanelOpen)
-                markSeen();
-            arrived();
-
-            // A sender replacing it (same id) changes it in place — no new notification
-            // comes, only new text
-            notification.summaryChanged.connect(() => root._replaced(notification));
-            notification.bodyChanged.connect(() => root._replaced(notification));
-            Toasts.watchAnnounces(notification);
-
-            // Said by id, for the shell's own sender (Notifier's handles). Its toast follows
-            // the closing itself (Toasts._watchToast)
-            const closedId = notification.id;
-            notification.closed.connect(reason => root.notificationClosed(closedId, reason));
-
-            // Remove timestamp and extracted codes when this notification is dismissed
-            notification.trackedChanged.connect(function () {
-                if (!notification.tracked) {
-                    var remainingTimestamps = Object.assign({}, timestamps);
-                    delete remainingTimestamps[notification.id];
-                    timestamps = remainingTimestamps;
-                    if (extractedCodes[notification.id]) {
-                        var remaining = Object.assign({}, extractedCodes);
-                        delete remaining[notification.id];
-                        extractedCodes = remaining;
-                    }
-                }
-            });
         }
     }
 

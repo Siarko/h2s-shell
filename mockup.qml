@@ -16,15 +16,24 @@ import qs.mockups.kit
 //                              instead of mockups/; nothing else is taken
 //   H2S_MOCKUP_SHOT=1          headless: every scene in turn, a MOCKUP-SHOT line each,
 //                              stepped by `ipc call mockup next`; then MOCKUP-DONE, exit 0
+//   H2S_MOCKUP_SHOT_LIMIT_MS   how long the shots may take in all (60000 by default), a
+//                              guard against a hang: then MOCKUP-ERROR
 //   H2S_MOCKUP_SCENE=<scene>   on screen: opens that scene
 //
 // Any error prints MOCKUP-ERROR <text> and exits with status 2.
 //
-// The configuration is read-only, the tree's files are not watched (a reload would start the
-// scenes again), and animations are instant.
+// The process is isolated from the session it runs in (Isolation: no module loads, no
+// notification server, nothing sent), the configuration is read-only, the tree's files are
+// not watched (a reload would start the scenes again), and animations are instant.
+//
+// Several mockups can run at once on one display: they share the config path, so a tool
+// addresses one with `qs ipc --id <instance id>` (the id `qs list` shows, also in the
+// "Saving logs to …/by-id/<id>/" line) or `--pid`, after asking each `ipc call mockup name`.
 ShellRoot {
     id: root
 
+    // First of all, before any singleton that reaches the session is made
+    readonly property bool _isolated: { Isolation.active = true; return true; }
     readonly property bool _configReadOnly: { Config.readOnly = true; return true; }
     readonly property bool _noReload: { Quickshell.watchFiles = false; return true; }
     readonly property bool _instant: { Theme.instantAnimations = true; return true; }
@@ -60,7 +69,8 @@ ShellRoot {
             _fail(name + ": " + component.errorString().replace(/\s+/g, " ").trim());
             return;
         }
-        const window = component.createObject(root, { mockupName: name, shooting: shooting });
+        // Hidden until its root is known to be a MockupWindow: nothing else is ever shown
+        const window = component.createObject(root, { visible: false });
         if (!window) {
             _fail(name + ": " + component.errorString().replace(/\s+/g, " ").trim());
             return;
@@ -71,13 +81,25 @@ ShellRoot {
             return;
         }
         _window = window;
+        window.mockupName = name;
+        window.shooting = shooting;
+        const limit = Number(Quickshell.env("H2S_MOCKUP_SHOT_LIMIT_MS") || 60000);
+        if (!(limit > 0)) {
+            _fail("H2S_MOCKUP_SHOT_LIMIT_MS is '" + Quickshell.env("H2S_MOCKUP_SHOT_LIMIT_MS") + "': a number of milliseconds");
+            return;
+        }
+        window.shotLimitMs = limit;
         window.finished.connect(() => {
             console.info("MOCKUP-DONE");
             root._exit(0);
         });
         window.failed.connect(text => _fail(name + ": " + text));
         const error = window.start(shooting ? "" : (Quickshell.env("H2S_MOCKUP_SCENE") ?? ""));
-        if (error !== "")
+        if (error !== "") {
+            window.destroy();
             _fail(name + ": " + error);
+            return;
+        }
+        window.visible = true;
     }
 }

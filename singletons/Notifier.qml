@@ -51,6 +51,8 @@ Singleton {
 
     // Record, never send (module test mode)
     property bool recordOnly: false
+    // Recording in an isolated process too (Isolation), whatever recordOnly says
+    readonly property bool _recording: recordOnly || Isolation.active
     // What send() was asked while recordOnly, oldest first, at most maxRecorded: frozen
     // { summary, body, appName, urgency, actions (the labels), format ("plain" or ""),
     // command (notify-send's argv) } — summary and body as sent (plain: made plain); a
@@ -322,7 +324,7 @@ Singleton {
     function _sendProgress(givenSummary, options) {
         _handles++;
         const handle = _handleComponent.createObject(null, {
-            number: _handles, recordOnly: recordOnly, runner: _runner, server: Notifications,
+            number: _handles, recordOnly: _recording, runner: _runner, server: Notifications,
             wanted: progressContent(givenSummary, options, progressRun, String(_handles)),
             callbacks: { actions: Array.isArray(options.actions) ? options.actions : [], onDismissed: options.onDismissed ?? null }
         });
@@ -335,7 +337,7 @@ Singleton {
 
     // Test mode: the open handle of that number (the `handle` of its records), or null
     function testHandle(number) {
-        return recordOnly ? (_liveHandles.find(live => live.number === number && live.recordOnly) ?? null) : null;
+        return _recording ? (_liveHandles.find(live => live.number === number && live.recordOnly) ?? null) : null;
     }
 
     // Progress handles kept for an owner (a module's handle) until they end: closed together
@@ -410,7 +412,7 @@ Singleton {
         const summary = ready.summary;
         const options = ready.options;
         const cmd = command(summary, options);
-        if (recordOnly) {
+        if (_recording) {
             recorded = recorded.concat([Object.freeze({
                 summary: String(summary ?? ""), body: String(options.body ?? ""), appName: String(options.appName ?? "H2S Shell"),
                 urgency: String(options.urgency ?? ""), actions: Object.freeze((Array.isArray(options.actions) ? options.actions : []).map(action => String(action?.label ?? ""))),
