@@ -330,6 +330,18 @@ TestCase {
             "Api.vpnsUp: fullTunnel, setsDns, routes; not reported is null");
         assert(Object.isFrozen(Api.vpnsUp) && Object.isFrozen(Api.vpnsUp[0]) && Object.isFrozen(Api.vpnsUp[0].routes) && Object.isFrozen(Api.localNetworks[0]),
                "… frozen, the routes too");
+        // (1.42) The list functions: the test kit's rows too, a new copy at each call
+        for (const [name, shared] of [["listNetworks", Api.networks], ["listLocalNetworks", Api.localNetworks], ["listVpnsUp", Api.vpnsUp],
+                                      ["listSlots", Api.slots], ["listAnchors", Api.anchors]]) {
+            const first = Api[name]();
+            const second = Api[name]();
+            assert(Array.isArray(first) && first.length > 0 && JSON.stringify(first) === JSON.stringify(shared),
+                   name + "() in test mode: the rows the property shows (" + JSON.stringify(first).slice(0, 80) + ")");
+            assert(first !== second && first[0] !== second[0] && !Object.isFrozen(first), name + "(): a new, unfrozen copy at each call");
+            first.push({ name: "made-up" });
+            first[0] = "changed";
+            assertEqual(JSON.stringify(Api[name]()), JSON.stringify(shared), name + "(): a change to one copy not in the next call");
+        }
         ModuleTestKit.setNetworks({ networksReady: false, localNetworksReady: false });
         assertEqual([Api.networksReady, Api.networks.length, Api.localNetworksReady].join(" "), "false 0 false", "… not read: ready false; each call from the defaults");
         const networkProblems = ModuleTestKit.setNetworks({ localNetworks: [{ device: "lo", kind: "other", address: "127.0.0.1/8" }],
@@ -338,6 +350,8 @@ TestCase {
         assertEqual(Api.localNetworks.length + " " + Api.vpnsUp[0].fullTunnel, "0 null", "… a loopback address left out, a wrong fullTunnel unknown");
         ModuleTestKit.clearRecords();
         assertEqual([Api.networksReady, Api.vpnsUp.length].join(" "), "true 0", "clearRecords(): the default network facts again");
+        assertEqual([Api.listNetworks().length, Api.listLocalNetworks().length, Api.listVpnsUp().length].join(" "), "0 0 0",
+                    "… and the list functions follow");
 
         // --- its widget's presets (API 1.3) ---
         assertEqual(module.presetValue("good", "", "label"), "G", "presetValue: no preset, the manifest's presetDefaults");

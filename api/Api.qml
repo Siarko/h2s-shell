@@ -28,11 +28,11 @@ import qs.singletons.network
 //                          placements, Api.system.distribution's facts, module.manifest's
 //                          lists and objects, a list in an Api.theme group: two reads are not
 //                          the same object, and a write into one does not stay. (The engine
-//                          lets a frozen list take push, writes to its indices and sort.) A
-//                          single value is a property; a list is a function (below)
-//   Lists                  (1.42) every list the API hands out comes from a function that
-//                          returns a new copy at each call, the caller's own: listSlots(),
-//                          listAnchors(), listNetworks(), listVpnsUp(), listLocalNetworks().
+//                          lets a frozen list take push, writes to its indices and sort.)
+//   Lists                  (1.42) a new list in the API is given only by a function that
+//                          returns a new copy at each call, the caller's own; the five lists
+//                          that were properties have one: listSlots(), listAnchors(),
+//                          listNetworks(), listVpnsUp(), listLocalNetworks().
 //                          Not frozen: sort it, extend it, write into it — no other caller sees
 //                          it, and the next call is the shell's list again. The rows and the
 //                          lists and objects inside them are plain and the caller's too (a
@@ -45,7 +45,10 @@ import qs.singletons.network
 //                          takes it through a ScriptModel of keys, as any changing list. The
 //                          old properties — Api.slots, Api.anchors, Api.networks, Api.vpnsUp,
 //                          Api.localNetworks — still hand out one frozen list every module
-//                          shares: copy it (slice()) before changing it
+//                          shares: copy it (slice()) before changing it. Not yet given through
+//                          functions: module.manifest's lists, module.programs and
+//                          module.uses, the lists in Api.theme's groups, what
+//                          Api.moduleStatus(id) answers
 //   Api.theme              the theme's tokens, read-only (api/ThemeTokens.qml)
 //   Api.listSlots()        (1.42; Api.slots the shared list, above) the slots the core
 //                          offers: [{ name, where, context, since }]. Once

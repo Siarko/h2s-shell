@@ -1425,8 +1425,9 @@ user can write there. It is never in a configuration backup as a whole: only the
 folders inside it that the manifest's `"backup": ["notes.db", "accounts"]` (API 1.37;
 relative paths, no `..`, at most 32) names.
 
-**Lists in the module API.** A single value is a property; a list is a function that returns
-a new copy at each call (API 1.42): `Api.listSlots()`, `Api.listAnchors()`,
+**Lists in the module API.** A single value is a property; a new list is given only by a
+function that returns a new copy at each call, and the five lists that were properties have
+one (API 1.42): `Api.listSlots()`, `Api.listAnchors()`,
 `Api.listNetworks()`, `Api.listVpnsUp()`, `Api.listLocalNetworks()`. The engine lets a frozen
 list take `push`, index writes and `sort`, so one list two modules read would carry one
 module's change to the other; each call instead parses the list's JSON text again
@@ -1436,8 +1437,10 @@ string notifies only when the content changed: a binding calling the function
 (`property var networks: Api.listNetworks()`) is evaluated again on a real change, not on a
 re-read that found the same, and its property's change signal is the module's. The older
 properties (`Api.slots`, `Api.anchors`, `Api.networks`, `Api.vpnsUp`, `Api.localNetworks`)
-still hand out one frozen list every module shares. `tests/ApiListsTest.qml` holds the
-functions to it.
+still hand out one frozen list every module shares. Not yet given through functions:
+`module.manifest`'s lists, `module.programs` and `module.uses`, the lists in `Api.theme`'s
+groups, what `Api.moduleStatus(id)` answers. `tests/ApiListsTest.qml` holds the functions to
+it.
 
 **Network facts.** `Api.listNetworks()` (the saved Wi-Fi and Ethernet networks, a Wi-Fi one
 only once its details are read, so a hotspot never shows) with `Api.networksReady`;

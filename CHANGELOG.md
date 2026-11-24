@@ -18,15 +18,17 @@ section to the new version and date.
 ### Module API
 The interface modules are written against (`qs.api`), versioned on its own
 (`Api.version`; its reference is `api/Api.qml`).
-- 1.42: every list the API hands out comes from a function that returns a new copy at each
-  call: `Api.listSlots()`, `Api.listAnchors()`, `Api.listNetworks()`, `Api.listVpnsUp()`,
+- 1.42: a list the API hands out as a property gets a function that returns a new copy at
+  each call, and new lists come only that way: `Api.listSlots()`, `Api.listAnchors()`, `Api.listNetworks()`, `Api.listVpnsUp()`,
   `Api.listLocalNetworks()`, with the rows of `Api.slots`, `Api.anchors`, `Api.networks`,
   `Api.vpnsUp` and `Api.localNetworks`. The copy is the caller's: not frozen, its rows and
   the lists inside them plain (`row.routes === row.routes`), so a module may sort or extend
   it and no other module, nor the next call, sees that. Called in a binding
   (`property var networks: Api.listNetworks()`), the binding is evaluated again when the
   list's content changes, not on a re-read that found the same. The five properties stay
-  for now and are still one frozen list every module shares.
+  for now and are still one frozen list every module shares. Not yet given through functions:
+  `module.manifest`'s lists, `module.programs` and `module.uses`, the lists in `Api.theme`'s
+  groups, what `Api.moduleStatus(id)` answers.
 - 1.41: a list or object inside the plain data the API hands out is a new frozen copy at
   each read (the routes in `Api.vpnsUp`'s rows, `Api.anchors`' placements,
   `Api.system.distribution`'s facts, `module.manifest`'s lists and objects, a list in an
