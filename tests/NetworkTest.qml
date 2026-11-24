@@ -58,7 +58,11 @@ TestCase {
         }
 
         // --- WifiManager._processWifiList ---
-        {
+        // The scan's list and the connecting state are shared with the suites beside it:
+        // put back as they were, however the case ends
+        const savedWifi = { networks: WifiManager.wifiNetworks, signal: WifiManager.wifiSignal,
+                            connecting: WifiManager.connecting, connectingTo: WifiManager.connectingTo };
+        try {
             WifiManager.connecting = true;
             WifiManager.connectingTo = "Home:5G";
             WifiManager._processWifiList([
@@ -78,6 +82,11 @@ TestCase {
             assertEqual(WifiManager.wifiSignal, 72, "wifi list: signal of the network in use");
             assert(!WifiManager.connecting && WifiManager.connectingTo === "",
                 "wifi list: connecting ends once the target is in use");
+        } finally {
+            WifiManager.wifiNetworks = savedWifi.networks;
+            WifiManager.wifiSignal = savedWifi.signal;
+            WifiManager.connecting = savedWifi.connecting;
+            WifiManager.connectingTo = savedWifi.connectingTo;
         }
 
         // --- Nmcli.wifiNetworks: the signal in use ---

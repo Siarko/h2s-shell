@@ -62,7 +62,7 @@ QtObject {
     }
 
     property FileView _suiteFile: FileView {
-        blockLoading: true
+        blockAllReads: true
         printErrors: false
     }
 
