@@ -924,7 +924,7 @@ TestCase {
                 return item;
             if (key === "session")
                 return rename(sessions, item);
-            if (["conversation", "token", "generation", "id"].includes(key))
+            if (["conversation", "token", "generation", "id", "watch", "heard"].includes(key))
                 return rename(ids, item);
             if (["askedAt", "startedAt"].includes(key))
                 return item - base;
@@ -1906,6 +1906,28 @@ TestCase {
         silence(passive, "fingerprint", 60000);
         assert(passive.state.passive.fingerprint.status === "running" && !has(passive.effects, "abortPam"),
                "18: a passive round that said the marker waits for a finger as long as it takes");
+
+        // pamStarted waits for the config read: the conversation's words may come first.
+        // One already heard is past pam_start and is never watched
+        const early = locked();
+        early.sendAll([markerMessage("fingerprint"), pamStarted("fingerprint", true)]);
+        assert(early.ignored === "already heard" && !("silent:fingerprint" in early.state.timers) && early.state.passive.fingerprint.watch === null,
+               "18: a pamStarted after the marker watches nothing");
+        silence(early, "fingerprint", 60000);
+        assert(early.state.passive.fingerprint.status === "running" && !has(early.effects, "abortPam"),
+               "18: … so a round that said the marker before pamStarted waits for a finger");
+        const earlyPrompt = locked(passwordOnly).sendAll(enter("pw"));
+        earlyPrompt.sendAll([passwordPrompt(), pamStarted("password", true)]);
+        assert(earlyPrompt.ignored === "already heard" && !("silent:password" in earlyPrompt.state.timers),
+               "18: a pamStarted after a prompt watches nothing");
+        const nextRound = locked();
+        nextRound.send(markerMessage("fingerprint"));
+        nextRound.send(pamCompleted("fingerprint", "failed"));
+        nextRound.send(timer("retry:fingerprint"), 60000);
+        nextRound.send(timer("settle:fingerprint"), 1000);
+        nextRound.send(pamStarted("fingerprint", true));
+        assert(conversationOf(nextRound.state, "fingerprint") !== null && "silent:fingerprint" in nextRound.state.timers,
+               "18: what was heard from one round does not keep the next from being watched");
 
         // An abort (the prompt, sleep, the end of the lock) ends the watch
         const asleep = locked();

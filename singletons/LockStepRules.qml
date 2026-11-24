@@ -296,7 +296,7 @@ Singleton {
             passive[method.name] = {
                 status: "unavailable", config: null, conversation: null, startedAt: null,
                 delay: 0, lastResult: "", errors: 0, revivals: 0, brokenBy: "", message: "", messageIsError: false,
-                settling: false, watch: null, silentDue: false, silentStarts: 0
+                settling: false, watch: null, silentDue: false, silentStarts: 0, heard: null
             };
         }
         return {
@@ -304,7 +304,7 @@ Singleton {
                        passwordSource: "none", lastResult: "", askedAt: null },
             password: {
                 status: "idle", conversation: null, config: null, question: "", answerVisible: false,
-                error: "", pamError: "", refusal: "", settling: false, avoid: null, watch: null, silentDue: false, silentStarts: 0
+                error: "", pamError: "", refusal: "", settling: false, avoid: null, watch: null, silentDue: false, silentStarts: 0, heard: null
             },
             passive: passive,
             prompt: { owner: null, awakeUntil: null, surfaces: [], fieldEpoch: 0 },

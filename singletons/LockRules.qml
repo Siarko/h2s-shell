@@ -833,7 +833,7 @@ Singleton {
         const refused = _checkConversation(transaction.state, event);
         if (refused !== "")
             return refused;
-        _heard(transaction, event.method);
+        _heard(transaction, event.method, event.conversation);
         const message = typeof event.message === "string" ? event.message.trim() : "";
         // The marker line's message only says that PAM got going: never shown
         if (message === LockStepRules.pamMarker && event.responseRequired !== true && event.messageIsError !== true)
@@ -885,7 +885,7 @@ Singleton {
         const refused = _checkConversation(transaction.state, event);
         if (refused !== "")
             return refused;
-        _heard(transaction, event.method);
+        _heard(transaction, event.method, event.conversation);
         const result = pamResults.includes(event.result) ? event.result : "error";
         const method = event.method;
         if (result === "success") {
@@ -989,14 +989,23 @@ Singleton {
             return refused;
         if (event.marked !== true)
             return "not marked";
+        // pamStarted waits for the config read, so the conversation's first words (the
+        // marker, a prompt) may come before it: one already heard is past pam_start, and
+        // its silence now is a module waiting (a finger), never to be started again
+        const region = event.method === "password" ? transaction.state.password : transaction.state.passive[event.method];
+        if (region.heard === event.conversation)
+            return "already heard";
         _setRegionOf(transaction, event.method, { watch: event.conversation, silentDue: false });
         LockStepRules.startTimer(transaction, "silent:" + event.method, transaction.state.settings.timings.firstWord);
     }
 
     // A word from the current conversation (the marker, any message, its result): its
-    // silence is no longer watched, and its silent starts are over
-    function _heard(transaction, method) {
+    // silence is no longer watched, and its silent starts are over. Remembered by its id
+    // (`heard`), for a pamStarted that comes after it
+    function _heard(transaction, method, conversation) {
         const region = method === "password" ? transaction.state.password : transaction.state.passive[method];
+        if (region.heard !== conversation)
+            _setRegionOf(transaction, method, { heard: conversation });
         if (region.watch === null && region.silentStarts === 0)
             return;
         _setRegionOf(transaction, method, { watch: null, silentDue: false, silentStarts: 0 });
