@@ -18,6 +18,12 @@ section to the new version and date.
 ### Module API
 The interface modules are written against (`qs.api`), versioned on its own
 (`Api.version`; its reference is `api/Api.qml`).
+- 1.41: a list or object inside the plain data the API hands out is a new frozen copy at
+  each read (the routes in `Api.vpnsUp`'s rows, `Api.anchors`' placements,
+  `Api.system.distribution`'s facts, `module.manifest`'s lists): a module that changes one
+  changes only its own copy. A list handed out as a value (`Api.networks`, `Api.vpnsUp`,
+  `Api.localNetworks`, `Api.slots`, `Api.anchors`) is shared by every module: copy it before
+  changing it.
 - 1.40: `Api.system.distribution`, frozen `{ ready, id, label, facts }`: which distribution
   the shell runs on (`"nixos"`, `"arch"`, `"generic"`; `""` while not known) and its static
   facts (where its programs, PAM files and polkit rules are, whether `/etc` is generated), a

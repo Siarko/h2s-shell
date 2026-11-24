@@ -117,7 +117,7 @@ TestCase {
         assertEqual(Api.moduleStatus(null), null, "… and for no id");
 
         // --- API version and slot table ---
-        assertEqual(Api.version, "1.40", "Api.version");
+        assertEqual(Api.version, "1.41", "Api.version");
         // (1.26) Its icon, as the shell draws it
         assertEqual(JSON.stringify(module.icon), JSON.stringify({ kind: "svg", glyph: "", url: Qt.resolvedUrl("../icon.svg").toString(), colors: "theme" }),
                     "module.icon: its SVG, by its file's URL, painted in the theme's colour");
@@ -608,6 +608,7 @@ TestCase {
             () => { arch.facts.etcManaged = true; },
             () => { arch.facts.pamDirectories.push("/tmp/pam.d"); },
             () => { arch.facts.pamDirectories[0] = "/tmp/pam.d"; },
+            () => { arch.facts.pamDirectories.sort((a, b) => a < b ? 1 : -1); },
             () => { delete arch.facts.label; },
             () => { Api.system.distribution = null; }
         ];
@@ -618,6 +619,7 @@ TestCase {
         }
         assertEqual([arch.id, arch.facts.etcManaged, arch.facts.pamDirectories.join(","), arch.facts.label, Api.system.distribution.id].join("|"),
                     "arch|false|/etc/pam.d,/usr/lib/pam.d|Arch Linux|arch", "… a module's writes change nothing, neither its copy nor the shell's");
+        assert(arch.facts.pamDirectories !== arch.facts.pamDirectories, "… a list a new copy at each read (the engine lets a frozen list take push)");
         const reachable = Object.keys(arch).map(key => arch[key]).concat(Object.keys(arch.facts).map(key => arch.facts[key]));
         assert(!reachable.some(value => typeof value === "function") && ["capability", "plan", "apply", "undo", "readInForce", "integration", "details"]
                .every(key => arch[key] === undefined && arch.facts[key] === undefined), "… only facts: no function, nothing of the integration's");

@@ -112,6 +112,7 @@ QtObject {
     property var _commandRules: CommandRulesTest {}
     property var _commandRunner: CommandRunnerTest {}
     property var _listKeyRules: ListKeyRulesTest {}
+    property var _readOnlyRules: ReadOnlyRulesTest {}
     property var _devRules: DevRulesTest {}
     property var _moduleDependencyRules: ModuleDependencyRulesTest {}
     property var _moduleUpdateRules: ModuleUpdateRulesTest {}

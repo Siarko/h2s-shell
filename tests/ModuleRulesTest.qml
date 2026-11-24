@@ -1824,6 +1824,12 @@ TestCase {
         // touches Api, here _version's Api.version, and VpnManager by VpnProvidersTest)
         const frozen = rules.frozenRows(JSON.stringify([{ name: "x", routes: ["10.0.0.0/8"] }]));
         assert(Object.isFrozen(frozen) && Object.isFrozen(frozen[0]) && Object.isFrozen(frozen[0].routes), "frozenRows: the list, its entries and the lists inside frozen");
+        assert(frozen[0].routes !== frozen[0].routes, "… a list inside an entry a new copy at each read (the engine lets a frozen list take push)");
+        try {
+            frozen[0].routes.push("192.168.0.0/16");
+            frozen[0].routes[0] = "0.0.0.0/0";
+        } catch (error) {}
+        assertEqual(frozen[0].routes.join(","), "10.0.0.0/8", "… so a push or an index write on one read is gone at the next");
         const upRow = rules.vpnUpRow("wg", "wireguard", "", { fullTunnel: true, setsDns: null, routes: ["0.0.0.0/0"] });
         assertEqual(JSON.stringify(Object.keys(upRow)), JSON.stringify(["name", "type", "provider", "fullTunnel", "setsDns", "routes"]), "vpnUpRow: the routing fields in every row");
     }

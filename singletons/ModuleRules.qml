@@ -46,7 +46,7 @@ Singleton {
     // (statusOf), and the change that removes it raises `apiFloor`. From that release on a
     // minor only adds: a removal needs a major version, after at least one release in which
     // the thing was listed as deprecated.
-    readonly property string apiVersion: "1.40"
+    readonly property string apiVersion: "1.41"
 
     // The oldest API version whose modules still run unchanged on this shell: a module
     // written for an older one is `incompatible`, with the reason (apiCompatibility), so a
@@ -1595,33 +1595,14 @@ Singleton {
         if (!isObject(facts))
             return Object.freeze({ ready: ready, id: "", label: "", facts: null });
         // Only a text, number, true/false or null is kept in the object; anything else (a list,
-        // and any object a fact may hold one day) is handed out as a new copy at each read: the
-        // engine lets a frozen array be pushed to and written by index, so a value kept in the
-        // object and shared by every read would not stay as read. The facts went through JSON
-        // above: nothing but plain data is left
-        const deepFrozen = value => {
-            if (value !== null && typeof value === "object") {
-                for (const key of Object.keys(value))
-                    deepFrozen(value[key]);
-                Object.freeze(value);
-            }
-            return value;
-        };
-        const shown = {};
-        for (const key of Object.keys(facts)) {
-            const value = facts[key];
-            if (value === null || typeof value !== "object")
-                shown[key] = value;
-            else {
-                const text = JSON.stringify(value);
-                Object.defineProperty(shown, key, { enumerable: true, get: () => deepFrozen(JSON.parse(text)) });
-            }
-        }
+        // and any object a fact may hold one day) is a getter returning a new copy at each read
+        // (ReadOnlyRules.copy: the engine lets a frozen list be changed)
+        const shown = ReadOnlyRules.copy(facts);
         return Object.freeze({
             ready: true,
             id: given.id,
             label: typeof facts.label === "string" ? facts.label : "",
-            facts: Object.freeze(shown)
+            facts: shown
         });
     }
 
@@ -1653,8 +1634,10 @@ Singleton {
         return { name: null, problems: ["not a distribution: " + show(value) + " (one of " + DistributionRules.ids.join(", ") + ", \"\" or null)"] };
     }
 
-    // A JSON text of a list of plain objects → that list, the list, each entry and the
-    // lists inside an entry frozen — what Api hands out (a module cannot change the core's copy)
+    // A JSON text of a list of plain objects → that list, read-only (ReadOnlyRules.copy): the
+    // list and each entry frozen, a list or object inside an entry a getter returning a new
+    // copy at each read — what Api hands out. The list itself is one value: whoever holds it
+    // shares it (the engine lets a frozen list take push and index writes)
     function frozenRows(text) {
         let rows = [];
         try {
@@ -1662,17 +1645,7 @@ Singleton {
         } catch (error) {
             rows = [];
         }
-        if (!Array.isArray(rows))
-            rows = [];
-        const freeze = value => {
-            if (value !== null && typeof value === "object") {
-                for (const key of Object.keys(value))
-                    freeze(value[key]);
-                Object.freeze(value);
-            }
-            return value;
-        };
-        return Object.freeze(rows.map(row => freeze(row)));
+        return Array.isArray(rows) ? ReadOnlyRules.copy(rows) : Object.freeze([]);
     }
 
     // ---- What a module hands the core at run time ----

@@ -71,14 +71,11 @@ QtObject {
         const shown = ModuleHandleHosts.hostOf(root._hostKey) && ModuleRules.has(ModuleHandleHosts.hostOf(root._hostKey).icons ?? {}, moduleId) ? ModuleHandleHosts.hostOf(root._hostKey).icons[moduleId] : null;
         return shown ? Object.freeze(Object.assign({}, shown)) : null;
     }
-    // Its manifest as the shell read and checked it (a frozen copy)
+    // Its manifest as the shell read and checked it (a read-only copy: each list or object in
+    // it a new copy at each read, ReadOnlyRules.copy)
     readonly property var manifest: {
         const read = ModuleHandleHosts.hostOf(root._hostKey) && directory !== "" ? ModuleHandleHosts.hostOf(root._hostKey).manifestOf(directory) : null;
-        try {
-            return read ? Object.freeze(JSON.parse(JSON.stringify(read))) : null;
-        } catch (error) {
-            return null;
-        }
+        return read ? ReadOnlyRules.copy(read) : null;
     }
 
     // ---- Its programs (API 1.9) ----

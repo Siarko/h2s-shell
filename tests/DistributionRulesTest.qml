@@ -105,6 +105,20 @@ TestCase {
             assert(facts !== null, id + ": distribution.json is valid");
             assert(facts !== null && Object.isFrozen(facts) && Object.isFrozen(facts.pamDirectories), id + ": frozen, its lists too");
         }
+        // Every reader holds the same facts, and the engine lets a frozen list take push, index
+        // writes and sort: each list is a new copy at each read, so a change is gone at the next
+        const facts = rules.manifest(shipped.arch, "arch");
+        const lists = Object.keys(facts).filter(key => Array.isArray(facts[key]));
+        const before = JSON.stringify(facts);
+        for (const key of lists) {
+            try {
+                facts[key].push("/tmp/x");
+                facts[key][0] = "/tmp/y";
+                facts[key].sort();
+            } catch (error) {}
+        }
+        assert(lists.length > 0 && lists.every(key => facts[key] !== facts[key]) && JSON.stringify(facts) === before,
+               "arch: every list (" + lists.join(", ") + ") a new copy at each read; push, index writes and sort do not stay");
         assertEqual(rules.manifest(shipped.arch, "nixos"), null, "an id that is not the directory's: refused");
         const arch = JSON.parse(shipped.arch);
         const changed = change => {

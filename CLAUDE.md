@@ -328,6 +328,14 @@ new kind.
   module is a frozen object of closures over the shell's internals, never properties holding
   them (no `_handle`, runner, server or token reachable). — A raw handle was reachable through
   a "private" property.
+- **`Object.freeze` does not protect a list in this engine:** a frozen (sealed,
+  non-extensible) list still takes `push(x)`, `list[i] = x` on an index it has and `sort()`,
+  silently, in strict mode too, and stays `Object.isFrozen`. A frozen object's properties
+  hold. So a list two readers reach is never one shared value: inside an object it is a
+  getter returning a new copy at each read (`ReadOnlyRules.copy`), or each reader gets its
+  own (a function's answer). Non-writable index properties, accessor elements and a `Proxy`
+  do not close it (sort still writes, a `Proxy` list is no model and no JSON list). — A
+  module could push a made-up row into lists every module reads.
 - **Animations stop when nothing shows them**: a running animation or timer is gated on the
   window and the item being visible (and on reduce motion). — Hidden windows kept animating
   every frame.

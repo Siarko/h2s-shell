@@ -9,7 +9,7 @@ import qs.singletons.network
 // The module API: everything a
 // module may use of the shell. A module imports `qs.api` and reaches:
 //
-//   Api.version            "1.40" — this shell's module API, "major.minor". A module's manifest
+//   Api.version            "1.41" — this shell's module API, "major.minor". A module's manifest
 //                          asks for one ("api"); it loads when the major is the same, this
 //                          minor is at least the one asked for, and the one asked for is not
 //                          below the shell's floor (ModuleRules.apiFloor: the oldest version
@@ -22,6 +22,14 @@ import qs.singletons.network
 //                          below it does not load, and says why. From that release on a
 //                          removal needs a major version, after at least one release that
 //                          listed the thing as deprecated.
+//   Read-only data         (1.41) what the API hands out as plain data is frozen, and a list
+//                          or object inside an object is a getter that returns a new copy at
+//                          each read: the routes in Api.vpnsUp's rows, Api.anchors'
+//                          placements, Api.system.distribution's facts, module.manifest's
+//                          lists. (The engine lets a frozen list take push, writes to its
+//                          indices and sort.) A list handed out as a value — Api.networks,
+//                          Api.vpnsUp, Api.localNetworks, Api.slots, Api.anchors — is the one
+//                          every module reads: copy it (slice()) before changing it
 //   Api.theme              the theme's tokens, read-only (api/ThemeTokens.qml)
 //   Api.slots              the slots the core offers: [{ name, where, context, since }]. Once
 //                          a slot's view is built from anchor blocks, a manifest's `slots`
@@ -1213,12 +1221,14 @@ Singleton {
         });
     }
 
-    // The slots the core offers in this API version (ModuleRules.slotTable, the reference)
-    readonly property var slots: Object.freeze(ModuleRules.slotTable.map(entry => Object.freeze(Object.assign({}, entry))))
+    // The slots the core offers in this API version (ModuleRules.slotTable, the reference),
+    // read-only (ReadOnlyRules.copy)
+    readonly property var slots: ReadOnlyRules.copy(ModuleRules.slotTable)
 
-    // (1.20) The anchors the core offers (ModuleRules.anchorTable, the reference), frozen
-    readonly property var anchors: Object.freeze(ModuleRules.anchorTable.map(row =>
-        Object.freeze(Object.assign({}, row, { placements: Object.freeze((row.placements ?? []).slice()) }))))
+    // (1.20) The anchors the core offers (ModuleRules.anchorTable, the reference), read-only:
+    // each row's placements a new copy at each read (ReadOnlyRules.copy)
+    readonly property var anchors: ReadOnlyRules.copy(ModuleRules.anchorTable.map(row =>
+        Object.assign({}, row, { placements: row.placements ?? [] })))
 
     // (1.3, 1.16) Network facts (above). Through a JSON text: a string property notifies only
     // when its value changes, so a module reacting to these is not woken by every re-read of

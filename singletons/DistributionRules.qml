@@ -130,9 +130,9 @@ Singleton {
         return { answered: true, known: true, values: Object.freeze({}) };
     }
 
-    // A distribution.json's text, from distributions/<id>/ → its facts, frozen (lists too), or
-    // null when it is no JSON object, misses a key or has another, or a value is not of its
-    // kind (see above), or `id` is not the directory's
+    // A distribution.json's text, from distributions/<id>/ → its facts, read-only (each list a
+    // new frozen copy at each read), or null when it is no JSON object, misses a key or has
+    // another, or a value is not of its kind (see above), or `id` is not the directory's
     function manifest(text, id) {
         if (typeof text !== "string" || text.length > maxFileLength || !isIdentifier(id))
             return null;
@@ -161,10 +161,12 @@ Singleton {
             && typeof parsed.polkitRulesInstallable === "boolean";
         if (!valid)
             return null;
+        // Read-only, each list a new copy at each read (ReadOnlyRules.copy): a frozen list
+        // would still take push and index writes, and every reader holds the same facts
         const facts = {};
         for (const key of _keys)
-            facts[key] = Array.isArray(parsed[key]) ? Object.freeze(parsed[key].slice()) : parsed[key];
-        return Object.freeze(facts);
+            facts[key] = parsed[key];
+        return ReadOnlyRules.copy(facts);
     }
 
     // What was read → frozen { ready, id, facts, how, problem, shipped }:
