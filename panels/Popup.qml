@@ -315,6 +315,29 @@ LazyLoader {
                 Modules.reportError(owner, "its popup panel's `opener` could not be set: " + error);
             }
         }
+        // Binds one input a panel may declare (`availableHeight`, `popupAnimating`) to the
+        // popup's value. Never throws, so the rest of the panel's setup goes on: one it
+        // declares readonly keeps its own value, said once — in the module's status for a
+        // module's panel, in the log for the shell's own
+        property var _panelInputsReported: ({})
+        function _bindPanelInput(item, name, value) {
+            if (typeof item[name] === "undefined")
+                return;
+            try {
+                item[name] = Qt.binding(value);
+            } catch (error) {
+                const owner = WidgetRegistry.popupModule(popupLoader.contentType);
+                const panel = String(contentLoader.source).split("/").pop() || popupLoader.contentType;
+                // The message only: the test runners count a printed TypeError as a defect
+                const line = panel + ": `" + name + "` could not be set: " + (error?.message ?? error);
+                if (owner !== "") {
+                    Modules.reportError(owner, "its popup panel " + line);
+                } else if (!_panelInputsReported[line]) {
+                    _panelInputsReported[line] = true;
+                    console.warn("Popup: " + line);
+                }
+            }
+        }
         // Deferred so the panel and its Repeaters are created on the main event loop, after
         // this window's incubation — see "The Repeater crash" in docs/ARCHITECTURE.md
         Component.onCompleted: Qt.callLater(() => {
@@ -660,10 +683,8 @@ LazyLoader {
                             contentLoader.height = item.fitsShownHeight === true
                                 ? Qt.binding(() => Math.max(0, popup.shownContentHeight))
                                 : Qt.binding(() => contentLoader.item ? contentLoader.item.implicitHeight : 0)
-                            if (typeof item.availableHeight !== "undefined")
-                                item.availableHeight = Qt.binding(() => popup.availableContentHeight)
-                            if (typeof item.popupAnimating !== "undefined")
-                                item.popupAnimating = Qt.binding(() => popup.animating)
+                            popup._bindPanelInput(item, "availableHeight", () => popup.availableContentHeight)
+                            popup._bindPanelInput(item, "popupAnimating", () => popup.animating)
                         }
                     }
 

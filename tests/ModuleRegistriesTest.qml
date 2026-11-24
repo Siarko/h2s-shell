@@ -46,6 +46,8 @@ TestCase {
     // The panel-opener fixture's singleton, and how often the suite's popup said opened()
     property var _openerState: null
     property int _openedCount: 0
+    // The panel-inputs fixture's singleton
+    property var _inputsState: null
 
     function _then(description, condition, action, timeoutMs) {
         _steps.push({ description: description, condition: condition, action: action, deadline: timeoutMs ?? 15000 });
@@ -538,6 +540,8 @@ TestCase {
         _then("its popup shows, opened from the entry on Alpha",
               () => _popup?.active === true && _popup.item?.showPopup === true && _openerState.panel !== null && _popup.item.animating === false, () => {
             assertEqual(_openerState.panel.opener, null, "a readonly opener: not given one at its first build");
+            assertEqual(JSON.stringify(Modules.status("panel-opener")?.errors), "[]",
+                        "… no error: it declares neither availableHeight nor popupAnimating, and neither was tried");
             const before = _openedCount;
             _widgetB.popupMode = "hover";
             _widgetB.hover(true);
@@ -553,7 +557,49 @@ TestCase {
             _dropBar();
             Modules.host.unload();
         });
-        _then("panel-opener unloaded", () => Modules.host.statuses.length === 0, () => {});
+        _then("panel-opener unloaded", () => Modules.host.statuses.length === 0, () => {
+            Modules.host.load([fixtures + "/panel-inputs"], {});
+        });
+
+        // A popup panel with `availableHeight` or `popupAnimating` declared readonly: the popup
+        // opens, the other input is still given, and the status names the panel and the input
+        // (ReadonlyOpenerPanel above declares neither: nothing was tried, no error)
+        _then("panel-inputs settles", _settled, () => {
+            assertEqual(Modules.status("panel-inputs")?.state, "loaded", "panel-inputs: loaded");
+            _makeBar("panel-inputs.height");
+            _inputsState = _widgetA.inputsState;
+            _widgetA.togglePopup(false);
+        });
+        _then("the panel with a readonly availableHeight shows",
+              () => _popup?.active === true && _popup.item?.showPopup === true && _inputsState.panel !== null && _popup.item.animating === false, () => {
+            const errors = Modules.status("panel-inputs")?.errors;
+            assertEqual(_inputsState.panel.availableHeight, 77, "a readonly availableHeight keeps its own value");
+            assert(_inputsState.sawAnimating, "… popupAnimating still given: true while the popup opened");
+            assertEqual(_inputsState.panel.popupAnimating, false, "… false once it is still");
+            assert(_has(errors, "ReadonlyHeightPanel.qml: `availableHeight` could not be set"),
+                   "… its status names the panel and the input: " + JSON.stringify(errors));
+            _widgetA.togglePopup(false);
+        });
+        _then("its popup closes", () => _popup?.active === false && _inputsState.panel === null, () => {
+            _dropBar();
+            _makeBar("panel-inputs.animating");
+            _widgetA.togglePopup(false);
+        });
+        _then("the panel with a readonly popupAnimating shows",
+              () => _popup?.active === true && _popup.item?.showPopup === true && _inputsState.panel !== null && _popup.item.animating === false, () => {
+            const errors = Modules.status("panel-inputs")?.errors;
+            assert(_inputsState.panel.availableHeight > 0 && _inputsState.panel.availableHeight === _popup.item.availableContentHeight,
+                   "availableHeight still given: the popup's (" + _inputsState.panel.availableHeight + ")");
+            assertEqual(_inputsState.panel.popupAnimating, false, "a readonly popupAnimating keeps its own value");
+            assert(_has(errors, "ReadonlyAnimatingPanel.qml: `popupAnimating` could not be set"),
+                   "… its status names the panel and the input: " + JSON.stringify(errors));
+            _widgetA.togglePopup(false);
+        });
+        _then("that popup closes", () => _popup?.active === false && _inputsState.panel === null, () => {
+            _dropBar();
+            Modules.host.unload();
+        });
+        _then("panel-inputs unloaded", () => Modules.host.statuses.length === 0, () => {});
 
         // The VPN slots (API 1.1): a module's provider (providerId = its id) fills them through
         // its manifest; a provider that is no module's keeps its own.

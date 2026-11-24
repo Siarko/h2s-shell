@@ -743,6 +743,8 @@ import qs.singletons.network
 //   popupAnimating         `property bool popupAnimating` — true while the popup opens,
 //                          closes, moves or resizes (a panel may leave out costly parts
 //                          meanwhile)
+//                          A readonly availableHeight or popupAnimating keeps its own value
+//                          (an error in its status names the panel); the other is still given
 //
 // CommandRunner (1.8): runs commands for a module. It is written under the module's main
 // object or one of its views; when that is destroyed (the module turned off) its runs are

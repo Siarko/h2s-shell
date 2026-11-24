@@ -170,6 +170,9 @@ The interface modules are written against (`qs.api`), versioned on its own
   Enter presses one, and Escape cancels a button's question; an unavailable button is passed
   over. Tab stays inside an open side panel and inside a toast, and a Settings page scrolls to
   the control Tab reaches.
+- A module's popup panel that declares `availableHeight` or `popupAnimating` readonly no
+  longer stops the popup giving it the other one: it keeps its own value, and the module's
+  status names the panel and the property.
 - The Arch installer: a checkout of a fork, or of another repository whose address contains
   this one's name, is no longer taken for an install ("Already installed"), but left alone
   with where it comes from (never its user or password); this repository is recognised in

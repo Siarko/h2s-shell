@@ -1,0 +1,13 @@
+{
+    "id": "panel-inputs",
+    "name": "Panel inputs fixture",
+    "version": "0.1.0",
+    "api": "1.15",
+    "description": "Two popup panels, each with one of the inputs the popup gives declared readonly: the popup still opens, the other input is still given, and the status names the panel and the input",
+    "widgets": [
+        { "type": "panel-inputs.height", "name": "Readonly height", "widget": "HeightWidget.qml", "popup": "panel-inputs.height",
+          "popupPanel": "ReadonlyHeightPanel.qml" },
+        { "type": "panel-inputs.animating", "name": "Readonly animating", "widget": "AnimatingWidget.qml", "popup": "panel-inputs.animating",
+          "popupPanel": "ReadonlyAnimatingPanel.qml" }
+    ]
+}
