@@ -4,8 +4,9 @@
 #
 # The fixture (tests/fixtures/settings-nixos/settings.json) gives the same options and the
 # same /etc files as the same values written as options by hand, and publishes what it took
-# in as /etc/h2s-shell/settings.json; a plain definition wins over the file's value; without
-# the file nothing changes and nothing is published. Then the refusals (a wrong version or
+# in as /etc/h2s-shell/settings.json; a definition of the configuration's own, plain or at
+# mkDefault, wins alone over the file's value, and sudo's and polkit's rules are one unit;
+# without the file, or with the shell off, nothing is read and nothing is published. Then the refusals (a wrong version or
 # value: an assertion naming the version or the key) and the warnings (a key the module does
 # not know: ignored, the rest still taken).
 { repo }:
@@ -86,17 +87,21 @@ let
   ) etcNames ++ [
     (result (lib.hasInfix "HibernateDelaySec=3h" (etcText fromFile "systemd/sleep.conf")) "the fixture: HibernateDelaySec=3h in sleep.conf" "")
     (result (published.version or null == 1) "/etc/h2s-shell/settings.json has the schema version" (builtins.toJSON published))
-    (result (published.settings or null == builtins.removeAttrs fixture [ "version" ]) "… and what the file gave, as it gave it" (builtins.toJSON (published.settings or null)))
+    (result (lib.attrNames (published.settings or { }) == lib.attrNames (builtins.removeAttrs fixture [ "version" ])
+             && (published.settings.idle or null) == fixture.idle && (published.settings.polkit or null) == fixture.polkit)
+      "… and what the file gave" (builtins.toJSON (published.settings or null)))
+    (result (lib.all (key: (published.settings.${key} or null) == (published.inForce.${key} or { })) [ "idle" "polkit" ]
+             && (published.settings.pam.rules or null) == (published.inForce.pam.rules or { })
+             && (published.settings.pam.polkit.rules or null) == (published.inForce.pam.polkit.rules or { }))
+      "… its rows with every field, as the options in force hold them" (builtins.toJSON published))
     (result ((published.inForce.idle.hibernateDelay or null) == "3h" && (published.inForce.polkit.rememberAdmin.minutes or null) == 15
              && (lib.head (published.inForce.pam.rules or [ { } ])).timeout or null == 10)
       "… and the options in force" (builtins.toJSON (published.inForce or null)))
     (result (etcText byHand "h2s-shell/settings.json" == "<absent>") "no settingsFile: /etc/h2s-shell/settings.json is absent" "")
-    (result (shown (options without) == shown (options (configOf { programs.h2s-shell.settingsFile = null; })))
-      "settingsFile = null: the options are as without it" "")
     (result (options without == { hibernateDelay = null; rules = null; sudoRules = null; polkitRules = null; enable = false; users = [ ]; minutes = 5; })
       "… the options' own defaults" (shown (options without)))
-    (result (lib.all (name: etcText without name == etcText (configOf { programs.h2s-shell.settingsFile = null; }) name) (etcNames ++ [ "h2s-shell/settings.json" ]))
-      "… and the same /etc files" "")
+    (result (ourWarnings without == [ ] && failedOf without == [ ] && etcText without "h2s-shell/settings.json" == "<absent>")
+      "… no warning or assertion of the file's, nothing published" (builtins.toJSON (ourWarnings without)))
   ];
 
   # A plain definition beside the file wins, and nothing clashes
@@ -113,9 +118,44 @@ let
       "a hand-written minutes wins; the file's users stay" (shown overridden.programs.h2s-shell.polkit.rememberAdmin))
     (result (map (row: row.method) overridden.programs.h2s-shell.pam.rules == [ "password" "system" ]) "hand-written pam.rules win over the file's" (shown overridden.programs.h2s-shell.pam.rules))
     (result (failedOf overridden == [ ]) "… and evaluation succeeds" (builtins.toJSON (failedOf overridden)))
+    (result (overridden.programs.h2s-shell.pam.polkit.rules == null)
+      "… and the file's pam.polkit.rules are not taken beside them" (shown overridden.programs.h2s-shell.pam.polkit.rules))
+    (result (lib.any (message: lib.hasInfix "\"pam.rules\", \"pam.polkit.rules\" are not taken" message && lib.hasInfix "sets programs.h2s-shell.pam.rules itself" message) (ourWarnings overridden))
+      "… a warning names the file's keys and the configuration's option" (builtins.toJSON (ourWarnings overridden)))
     (let p = builtins.fromJSON (etcText overridden "h2s-shell/settings.json");
      in result (p.settings.idle.hibernateDelay == "3h" && p.inForce.idle.hibernateDelay == "10min")
        "the published file tells the file's value from the one in force" (builtins.toJSON p))
+  ];
+
+  # A definition of the configuration's own at mkDefault (a profile's) wins alone too: no
+  # merge of lists, no clash of single values
+  defaulted = configOf {
+    programs.h2s-shell.settingsFile = fixturePath;
+    programs.h2s-shell.idle.hibernateDelay = lib.mkDefault "10min";
+    programs.h2s-shell.polkit.rememberAdmin.users = lib.mkDefault [ "kim" ];
+    programs.h2s-shell.pam.rules = lib.mkDefault [ { method = "password"; } { method = "system"; } ];
+  };
+  # The rules as one unit: the file's split rows beside the configuration's own pam.rules,
+  # and the configuration's own sudo or polkit rules beside the file's pam.rules
+  split = fileOf { version = 1; pam.sudo.rules = [ { method = "fingerprint"; } { method = "system"; } ]; pam.polkit.rules = [ { method = "password"; } { method = "system"; } ]; };
+  splitBeside = configOf { programs.h2s-shell.settingsFile = split; programs.h2s-shell.pam.rules = [ { method = "password"; } { method = "system"; } ]; };
+  sudoOwn = configOf { imports = [ (withFile { version = 1; pam.rules = [ { method = "fingerprint"; } { method = "system"; } ]; }) ]; programs.h2s-shell.pam.sudo.rules = [ { method = "password"; } { method = "system"; } ]; };
+  polkitOwn = configOf { imports = [ (withFile { version = 1; pam.rules = [ { method = "fingerprint"; } { method = "system"; } ]; }) ]; programs.h2s-shell.pam.polkit.rules = lib.mkDefault [ { method = "password"; } { method = "system"; } ]; };
+  methods = rows: if rows == null then null else map (row: row.method) rows;
+  pamOf = config: { rules = methods config.programs.h2s-shell.pam.rules; sudo = methods config.programs.h2s-shell.pam.sudo.rules; polkit = methods config.programs.h2s-shell.pam.polkit.rules; };
+  units = [
+    (result (defaulted.programs.h2s-shell.idle.hibernateDelay == "10min") "the configuration's mkDefault hibernateDelay wins alone, no clash" "")
+    (result (defaulted.programs.h2s-shell.polkit.rememberAdmin.users == [ "kim" ]) "the configuration's mkDefault users win alone, not merged with the file's" (builtins.toJSON defaulted.programs.h2s-shell.polkit.rememberAdmin.users))
+    (result (methods defaulted.programs.h2s-shell.pam.rules == [ "password" "system" ]) "the configuration's mkDefault pam.rules win alone, not merged with the file's rows" (builtins.toJSON (pamOf defaulted)))
+    (result (failedOf defaulted == [ ]) "… and evaluation succeeds" (builtins.toJSON (failedOf defaulted)))
+    (result (pamOf splitBeside == { rules = [ "password" "system" ]; sudo = null; polkit = null; }) "the file's sudo and polkit rules beside the configuration's pam.rules: none taken" (builtins.toJSON (pamOf splitBeside)))
+    (result (lib.any (lib.hasInfix "\"pam.sudo.rules\", \"pam.polkit.rules\" are not taken") (ourWarnings splitBeside)) "… a warning names them" (builtins.toJSON (ourWarnings splitBeside)))
+    (result (pamOf sudoOwn == { rules = null; sudo = [ "password" "system" ]; polkit = null; }) "the configuration's sudo rules beside the file's pam.rules: the file's not taken (polkit stays NixOS's)" (builtins.toJSON (pamOf sudoOwn)))
+    (result (lib.any (lib.hasInfix "sets programs.h2s-shell.pam.sudo.rules itself") (ourWarnings sudoOwn)) "… a warning names the configuration's option" (builtins.toJSON (ourWarnings sudoOwn)))
+    (result (pamOf polkitOwn == { rules = null; sudo = null; polkit = [ "password" "system" ]; }) "the configuration's mkDefault polkit rules beside the file's pam.rules: the file's not taken" (builtins.toJSON (pamOf polkitOwn)))
+    (result (failedOf sudoOwn == [ ] && failedOf polkitOwn == [ ] && failedOf splitBeside == [ ]) "… and evaluation succeeds" "")
+    (let config = configOf (withFile { version = 1; pam.sudo.rules = [ { method = "password"; } { method = "system"; } ]; });
+     in result (pamOf config == { rules = null; sudo = [ "password" "system" ]; polkit = null; } && ourWarnings config == [ ]) "the file's own sudo rules alone: taken, no warning" (builtins.toJSON (pamOf config)))
   ];
 
   refused = description: settings: expected:
@@ -149,7 +189,15 @@ let
     (let config = configOf (withFile { version = 2; idle.hibernateDelay = "3h"; });
      in result (config.programs.h2s-shell.idle.hibernateDelay == null) "a wrong version: none of the file's values is taken" "")
     (let config = configOf (withFile (v1 { idle.hibernateDelay = true; polkit.rememberAdmin.minutes = 15; }));
-     in result (config.programs.h2s-shell.idle.hibernateDelay == null) "a wrong value is never handed to its option" "")
+     in result (config.programs.h2s-shell.idle.hibernateDelay == null && config.programs.h2s-shell.polkit.rememberAdmin.minutes == 15)
+       "a wrong value is never handed to its option; the valid one beside it is" "")
+    (refused "a user name rememberAdmin refuses: refused, naming the key" (v1 { polkit.rememberAdmin.users = [ "alex" "-x" ]; }) "\"polkit.rememberAdmin.users\": \"-x\" is not a user name")
+    (let failed = failedOf (configOf { programs.h2s-shell.settingsFile = /. + "/nonexistent-h2s-shell/h2s-shell.json"; });
+     in result (lib.any (message: lib.hasInfix "programs.h2s-shell.settingsFile" message && lib.hasInfix "does not exist" message && lib.hasInfix "git add" message) failed)
+       "a file that does not exist: refused, naming the option and git add" (builtins.toJSON failed))
+    (let config = configOf { imports = [ (withFile { version = 2; }) ]; programs.h2s-shell.enable = lib.mkForce false; };
+     in result (failedOf config == [ ] && etcText config "h2s-shell/settings.json" == "<absent>")
+       "the shell not enabled: the file is not read, nothing published" (builtins.toJSON (failedOf config)))
   ];
   # The optional fingerprint row reaches pam.nix's own assertion, which names its option
   optionalRow =
@@ -165,5 +213,5 @@ let
     (result (!(lib.hasInfix "future" (etcText unknown "h2s-shell/settings.json"))) "… and the published file leaves the unknown out" (builtins.toJSON (etcText unknown "h2s-shell/settings.json")))
   ];
 in
-let lines = equivalence ++ overrides ++ refusals ++ [ optionalRow ] ++ warnings;
+let lines = equivalence ++ overrides ++ units ++ refusals ++ [ optionalRow ] ++ warnings;
 in lib.concatStringsSep "\n" ([ "count\t${toString (lib.length lines)}\t" ] ++ lines) + "\n"

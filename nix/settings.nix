@@ -2,8 +2,10 @@
 # configuration, which hands its path once (`programs.h2s-shell.settingsFile =
 # ./h2s-shell.json;` — a flake's pure evaluation reads nothing outside the flake, so there
 # is no default path). Its keys are this module's own option paths, and each value becomes
-# that option's definition at mkDefault: a plain definition in the configuration wins (the
-# owner's deliberate override) and the two never clash. Data only — `builtins.fromJSON`
+# that option's definition just below mkDefault (priority 1001): any definition in the
+# configuration, a plain one or a profile's mkDefault, wins alone (the owner's deliberate
+# override) and the two never clash or merge. sudo's and polkit's rules are one unit: when
+# the configuration sets any of them, none of the file's are taken (a warning names them). Data only — `builtins.fromJSON`
 # runs nothing — and every value is checked here before it reaches an option: a wrong
 # value or schema version is an assertion naming the key; a key this module does not know
 # (a newer shell's) is a warning and is ignored. What was taken in, and what is in force
@@ -13,6 +15,9 @@
 
 let
   cfg = config.programs.h2s-shell;
+  validUser = import ./user-name.nix lib;
+  # Just below mkDefault: every definition of the configuration's own wins over the file's
+  filePriority = 1001;
   opts = options.programs.h2s-shell;
   inherit (lib) types;
 
@@ -86,6 +91,8 @@ let
       "${shown value} is not a systemd time span (such as \"3h\" or \"1h 30min\")"
     else if path == [ "polkit" "rememberAdmin" "minutes" ] && (value < 1 || value > 60) then
       "${toString value} is not 1–60"
+    else if path == [ "polkit" "rememberAdmin" "users" ] && !(lib.all validUser value) then
+      "${shown (lib.findFirst (user: !(validUser user)) null value)} is not a user name (letters, digits, _ . -, not starting with - or ., at most a final $)"
     else null;
 
   none = { errors = [ ]; warnings = [ ]; taken = [ ]; };
@@ -107,6 +114,8 @@ let
   file = builtins.fromJSON (builtins.readFile cfg.settingsFile);
   result =
     if cfg.settingsFile == null then none
+    else if !(builtins.pathExists cfg.settingsFile) then
+      none // { errors = [ "the file does not exist (a flake in a git repository sees only the files git knows: `git add` it)." ]; }
     else if !builtins.isAttrs file then none // { errors = [ "the file is ${shown file}, not a JSON object." ]; }
     else if !(file ? version) then none // { errors = [ "the file has no \"version\" (this module reads schema version ${toString schemaVersion})." ]; }
     else if file.version != schemaVersion then
@@ -117,7 +126,23 @@ let
   takenAt = path: lib.findFirst (taken: taken.path == path) null result.taken;
   definition = path:
     let taken = takenAt path;
-    in { programs.h2s-shell = lib.setAttrByPath path (lib.mkIf (taken != null) (lib.mkDefault taken.value)); };
+    in { programs.h2s-shell = lib.setAttrByPath path (lib.mkIf (taken != null) (lib.mkOverride filePriority taken.value)); };
+
+  # The rules as one unit: a service without rules of its own falls back to `pam.rules`, so
+  # the file's rows mixed with the configuration's would make lists nobody wrote. Whether
+  # the configuration sets one is read from the options' priorities, so the file's rules are
+  # always defined while there is a file (null, the options' default, when it gives none):
+  # a condition on a definition of the same option would be a loop.
+  ownRules = lib.filter (path: (lib.getAttrFromPath path opts).highestPrio < filePriority) rowLeaves;
+  fileRules = lib.filter (path: takenAt path != null) rowLeaves;
+  rulesDefinition = path:
+    let taken = takenAt path;
+    in {
+      programs.h2s-shell = lib.setAttrByPath path (lib.mkIf (cfg.settingsFile != null)
+        (lib.mkOverride filePriority (if ownRules == [ ] && taken != null then taken.value else null)));
+    };
+  rulesWarnings = lib.optional (ownRules != [ ] && fileRules != [ ])
+    "the keys ${lib.concatMapStringsSep ", " (path: "\"${keyOf path}\"") fileRules} are not taken: the configuration sets ${lib.concatMapStringsSep ", " (path: "programs.h2s-shell.${keyOf path}") ownRules} itself, and sudo's and polkit's rules come from one place.";
 
   # An option's value as data: a submodule's value carries the module system's own
   # `_module`
@@ -126,9 +151,14 @@ let
     else if builtins.isList value then map data value
     else value;
   nested = entries: lib.foldl' (tree: entry: lib.recursiveUpdate tree (lib.setAttrByPath entry.path entry.value)) { } entries;
+  # A row as its option holds it: every field, with the defaults the file left out
+  filled = row: lib.mapAttrs (name: option: row.${name} or option.default) rowOptions;
+  asOption = taken: taken // lib.optionalAttrs (lib.elem taken.path rowLeaves && taken.value != null) {
+    value = map filled taken.value;
+  };
   published = {
     version = schemaVersion;
-    settings = nested result.taken;
+    settings = nested (map asOption result.taken);
     inForce = nested (map (path: { inherit path; value = data (lib.getAttrFromPath path cfg); }) leaves);
   };
 in
@@ -142,20 +172,22 @@ in
       (with a flake, inside it: pure evaluation reads nothing outside the flake). Its keys
       are this module's options (`idle.hibernateDelay`, `pam.rules`, `pam.sudo.rules`,
       `pam.polkit.rules`, `polkit.rememberAdmin.{enable,users,minutes}`) with a `version`;
-      each becomes the option's default, so a definition of your own wins. A wrong value or
+      each is taken just below mkDefault, so a definition of your own wins (any of
+      `pam.rules`, `pam.sudo.rules`, `pam.polkit.rules` of your own: none of the file's
+      rules are taken). A wrong value or
       version stops the build naming the key; a key this version does not know is a
       warning. What was taken in is published as /etc/h2s-shell/settings.json. null: no
       file is read.
     '';
   };
 
-  config = lib.mkMerge ([
+  config = lib.mkIf cfg.enable (lib.mkMerge ([
     {
       assertions = map (error: { assertion = false; message = "${where}: ${error}"; }) result.errors;
-      warnings = map (warning: "${where}: ${warning}") result.warnings;
-      environment.etc."h2s-shell/settings.json" = lib.mkIf (cfg.enable && cfg.settingsFile != null) {
+      warnings = map (warning: "${where}: ${warning}") (result.warnings ++ rulesWarnings);
+      environment.etc."h2s-shell/settings.json" = lib.mkIf (cfg.settingsFile != null) {
         text = builtins.toJSON published + "\n";
       };
     }
-  ] ++ map definition leaves);
+  ] ++ map definition (lib.subtractLists rowLeaves leaves) ++ map rulesDefinition rowLeaves));
 }

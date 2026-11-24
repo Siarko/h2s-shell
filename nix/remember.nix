@@ -33,7 +33,7 @@ let
   timeout = "${coreutils}/bin/timeout";
   program = "${coreutils}/bin/coreutils";
 
-  validUser = user: lib.stringLength user <= 256 && builtins.match "[A-Za-z0-9_][A-Za-z0-9_.-]*[$]?" user != null;
+  validUser = import ./user-name.nix lib;
 
   sha256 = text: builtins.hashString "sha256" text;
   ruleText = user:
