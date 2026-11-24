@@ -885,9 +885,10 @@ the lock screen's:
   step's words and its reply; the step itself is `scripts/root/pam-apply.sh`), `PamRuleViewRules` (what the list and the page show and
   allow: steps, chips, drops, the queue of writes, the modals' texts).
 - **I/O** — `singletons/io/PamTrial.qml` runs one PAM conversation as the user on a staged
-  copy of the candidate (a conversation that says nothing at all in its first seconds is
-  started again, at most three starts: Quickshell's PAM child, forked from the running
-  shell, can stay blocked in pam_start, `PamTrialRules.firstWordMs`); `distributions/arch/PamApply.qml`, the Arch integration's writer of
+  copy of the candidate (the staged service file starts with a pam_echo line whose message
+  proves pam_start returned: Quickshell's PAM child, forked from the running shell, can stay
+  blocked there; a conversation without it or any other word in its first seconds is started
+  again, at most three starts, `PamTrialRules.firstWordMs`; without pam_echo, never); `distributions/arch/PamApply.qml`, the Arch integration's writer of
   `pam.rules`, writes one service per run through `PrivilegedRuns.startShell`.
 - **Views** — `panels/settings/PamRuleList.qml` (one list of rows: it takes rows and emits
   the new list) and `panels/settings/PamRulesSection.qml` (the summary, the lists, Apply as a

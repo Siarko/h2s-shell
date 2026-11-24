@@ -194,10 +194,14 @@ TestCase {
         const textOf = () => typeof spec.text === "function" ? spec.text() : spec.text;
         _then(spec.label + ": the stand-ins set", () => _ready, () => {
             _ready = false;
-            _sh("printf '%s\\n' \"$2\" > \"$1/finger\"; printf '%s\\n' \"$3\" > \"$1/count\"; : > \"$1/log\"",
+            _sh("printf '%s\\n' \"$2\" > \"$1/finger\"; printf '%s\\n' \"$3\" > \"$1/count\"; : > \"$1/log\"; " + (spec.setup ?? ":"),
                 [_scratch, spec.finger ?? "no", String(spec.count ?? 0)], result => {
                 suite.assertEqual(result.code, 0, spec.label + ": stand-ins set");
                 suite._trial.firstWordMs = spec.firstWordMs ?? PamTrialRules.firstWordMs;
+                suite._trial.markerModule = spec.marker ? spec.marker() : suite._modules + "/pam_echo.so";
+                // Alongside the trial, not waited for (it ends within its own deadline)
+                if (spec.beside)
+                    suite._sh(spec.beside, [suite._scratch], () => {});
                 suite._trial.start(spec.service ?? "sudo", textOf());
                 suite._ready = true;
             });
@@ -227,8 +231,9 @@ TestCase {
             }
             _ready = false;
             const directory = _trial.state.staging;
+            const staged = "auth [default=ignore] " + _modules + "/pam_echo.so " + PamTrialRules.markerPrefix + directory.slice(-8) + "\n" + textOf();
             _sh("cd \"$1\" && stat -c '%a' . && for f in *; do printf '%s %s\\n' \"$f\" \"$(stat -c %a \"$f\")\"; done && printf '%s' \"$2\" | cmp -s - \"$3\" && echo same",
-                [directory, textOf(), spec.service ?? "sudo"], result => {
+                [directory, staged, spec.service ?? "sudo"], result => {
                 spec.atPrompt(result.stdout.split("\n"));
                 act();
                 suite._ready = true;
@@ -264,6 +269,7 @@ TestCase {
             _trial = _trialComponent.createObject(suite, {
                 filesCommand: [_scratch + "/tree/scripts/pam-files.sh"],
                 stagingParent: _scratch + "/run",
+                moduleDirectories: [_scratch + "/bin/", _modules + "/"],
                 environment: {
                     H2S_LOCK_SYSTEM_PAM_DIR: _scratch + "/etc",
                     H2S_LOCK_VENDOR_PAM_DIR: _scratch + "/usr",
@@ -273,6 +279,10 @@ TestCase {
             fingerFirst = _candidate("sudo", [fingerprint("sufficient"), fixed], "exec");
             assert(fingerFirst.includes("-auth sufficient " + _modules + "/pam_exec.so "), "the reader row written as -auth sufficient, swapped");
         });
+        // pam_echo.so looked for in the module directories, the first that has it
+        _then("the marker module found", () => _trial.markerModule !== "", () => {
+            assertEqual(_trial.markerModule, _modules + "/pam_echo.so", "pam_echo.so found in the module directories: the marker module");
+        });
 
         // A sufficient reader above the system's lines (the include followed and staged)
         _scenario({
@@ -280,7 +290,7 @@ TestCase {
             atPrompt: lines => {
                 assertEqual(lines[0], "700", "the staging directory is the user's alone");
                 assert(lines.includes("sudo 600") && lines.includes("system-auth 600"), "the candidate and the included system-auth staged, 0600: " + lines.join("|"));
-                assert(lines.includes("same"), "the staged sudo is the candidate byte for byte");
+                assert(lines.includes("same"), "the staged sudo is the marker line and the candidate, byte for byte");
             },
             check: (state, after) => {
                 outcome(state, "a reader that fails, then the right password: passed", "passed");
@@ -528,15 +538,33 @@ TestCase {
             check: state => outcome(state, "the plain word `required` with PAM_IGNORE lets in through the closing permit: why it is not written so", "passed")
         });
 
-        // A PAM child that says nothing (as one blocked in pam_start): a module first that
-        // waits in silence on its first run only; the conversation is started again
+        // A module first that waits in silence on its first run (stall.sh). After the
+        // marker (pam_echo, on top of the staged copy) that is a module waiting: never
+        // restarted, however long
+        const stalling = () => "#%PAM-1.0\nauth required " + _modules + "/pam_exec.so quiet " + _scratch + "/bin/stall.sh\nauth include system-auth\n";
         _scenario({
-            label: "silent start", firstWordMs: 3000, count: 0, answer: _password,
-            text: () => "#%PAM-1.0\nauth required " + _modules + "/pam_exec.so quiet " + _scratch + "/bin/stall.sh\nauth include system-auth\n",
+            label: "silent module", firstWordMs: 1500, count: 0, answer: _password, text: stalling,
+            setup: "echo '0 4' > \"$1/stall-count\"",
             check: (state, after) => {
-                outcome(state, "a conversation silent at its start, then started again: passed", "passed");
-                assertEqual(state.starts, 2, "… on its second start");
-                assertEqual(after.log, "stalled,stall passed,preauth 0,right,authsucc 0", "… the first child given up while it waited, the second through the include");
+                outcome(state, "a module silent for longer than firstWordMs after the marker: passed", "passed");
+                assertEqual(state.starts, 1, "… never started again");
+                assertEqual(after.log, "stalled,preauth 0,right,authsucc 0", "… the module waited, then on through the include");
+                assert(!state.messages.some(message => message.text.startsWith(PamTrialRules.markerPrefix)), "… the marker not among the messages");
+            }
+        });
+        // No marker (as a PAM child blocked in pam_start says none): the marker module is
+        // not there at the first start (a link made once stall.sh waits), so the first child
+        // says nothing; the conversation is started again, and the second says the marker
+        _scenario({
+            label: "silent start", firstWordMs: 4000, count: 0, answer: _password, text: stalling,
+            marker: () => _scratch + "/late/pam_echo.so",
+            setup: "echo '0 6' > \"$1/stall-count\"; rm -rf \"$1/late\"; mkdir \"$1/late\"",
+            beside: "for i in $(seq 200); do grep -q stalled \"$1/log\" && break; sleep 0.05; done; ln -s " + _modules + "/pam_echo.so \"$1/late/pam_echo.so\"",
+            check: (state, after) => {
+                outcome(state, "a start that said nothing, then started again: passed", "passed");
+                assert(state.starts >= 2, "… started again: " + state.starts);
+                assert(after.log.startsWith("stalled,") && after.log.endsWith(",stall passed,preauth 0,right,authsucc 0"),
+                       "… the first child given up while it waited, a later one through the include: " + after.log);
             }
         });
 
@@ -551,7 +579,7 @@ TestCase {
             atPrompt: lines => {
                 assertEqual(lines.slice(1).filter(line => line !== "" && line !== "same").join(","), "polkit-1 600,system-auth 600",
                             "polkit-1 and the system-auth its auth lines include staged");
-                assert(lines.includes("same"), "the staged polkit-1 is the candidate byte for byte");
+                assert(lines.includes("same"), "the staged polkit-1 is the marker line and the candidate, byte for byte");
             },
             check: (state, after) => {
                 outcome(state, "polkit-1, reader failing, right password: passed", "passed");
@@ -572,7 +600,7 @@ TestCase {
             "m=${LOCKTEST_PAM_MODULES:-}; pid=$$",
             "while [ -z \"$m\" ] && [ \"$pid\" -gt 1 ]; do lib=$(sed -n 's|.* \\(/.*/libpam\\.so\\.0[.0-9]*\\)$|\\1|p' \"/proc/$pid/maps\" 2> /dev/null | head -n 1);"
             + " [ -n \"$lib\" ] && m=$(dirname \"$lib\")/security; pid=$(awk '{ print $4 }' \"/proc/$pid/stat\"); done",
-            "for module in pam_exec pam_debug pam_permit pam_deny; do [ -e \"$m/$module.so\" ] || { echo \"no $module.so in '$m'\" >&2; exit 3; }; done",
+            "for module in pam_exec pam_debug pam_permit pam_deny pam_echo; do [ -e \"$m/$module.so\" ] || { echo \"no $module.so in '$m'\" >&2; exit 3; }; done",
             "case \"$m$s\" in *[!A-Za-z0-9._/+-]*) echo \"a path PAM cannot hold: $m $s\" >&2; exit 3 ;; esac",
             "b=" + bash,
             // pam_exec gives no PATH: builtins only
@@ -582,10 +610,10 @@ TestCase {
             + "preauth) echo \"preauth $count\" >> %s/log ;;\\n"
             + "authfail) count=$((count + 1)); echo $count > %s/count; echo \"authfail $count\" >> %s/log; exit 1 ;;\\n"
             + "authsucc) echo \"authsucc $count\" >> %s/log; echo 0 > %s/count ;;\\n*) exit 1 ;;\\nesac\\n' \"$b\" \"$s\" \"$s\" \"$s\" \"$s\" \"$s\" \"$s\" \"$s\" > \"$s/bin/counter.sh\"",
-            // Silent on its first run (a pipe nobody writes, for longer than the scenario's
-            // firstWordMs; it ends by itself), at once after
-            "mkfifo \"$s/stall-fifo\"; echo 0 > \"$s/stall-count\"",
-            "printf '#!%s\\nread -r n < %s/stall-count\\nif [ \"$n\" = 0 ]; then echo 1 > %s/stall-count; echo stalled >> %s/log; read -r -t 6 _ <> %s/stall-fifo; exit 0; fi\\necho \"stall passed\" >> %s/log\\n' \"$b\" \"$s\" \"$s\" \"$s\" \"$s\" \"$s\" > \"$s/bin/stall.sh\"",
+            // Silent on its first run (a pipe nobody writes, for the seconds stall-count says,
+            // longer than the scenario's firstWordMs; it ends by itself), at once after
+            "mkfifo \"$s/stall-fifo\"; echo '0 4' > \"$s/stall-count\"",
+            "printf '#!%s\\nread -r n wait < %s/stall-count\\nif [ \"$n\" = 0 ]; then echo 1 > %s/stall-count; echo stalled >> %s/log; read -r -t \"$wait\" _ <> %s/stall-fifo; exit 0; fi\\necho \"stall passed\" >> %s/log\\n' \"$b\" \"$s\" \"$s\" \"$s\" \"$s\" \"$s\" > \"$s/bin/stall.sh\"",
             "printf '#!%s\\nread -r answer < %s/finger\\necho \"finger $answer\" >> %s/log\\n[ \"$answer\" = ok ]\\n' \"$b\" \"$s\" \"$s\" > \"$s/bin/finger.sh\"",
             "chmod +x \"$s/bin/\"*.sh",
             // Arch's shape: sudo in /etc/pam.d, polkit-1 only in the vendor directory, system-auth of stand-ins

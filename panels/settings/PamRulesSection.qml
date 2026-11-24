@@ -41,6 +41,7 @@ ColumnLayout {
 
     PamTrial {
         id: _ownTrial
+        moduleDirectories: root.stacks?.facts?.moduleDirectories ?? []
         onLogLine: (level, message) => level === "warning" ? console.warn("[PamRules] " + message) : console.log("[PamRules] " + message)
     }
     // How this system makes the rules, and the integration's words and facts for them

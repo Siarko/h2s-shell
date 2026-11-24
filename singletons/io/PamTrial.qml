@@ -34,6 +34,12 @@ Scope {
     // How long a PAM conversation may say nothing before it is started again
     // (PamTrialRules.firstWordMs: a PAM child blocked in pam_start)
     property int firstWordMs: PamTrialRules.firstWordMs
+    // The distribution's PAM module directories (PamStacks' facts), where pam_echo.so is
+    // looked for: the staged copy's first line (PamTrialRules.stagedFiles)
+    property var moduleDirectories: []
+    // pam_echo.so's path, found in moduleDirectories ("": not there, or not looked for yet:
+    // nothing added, no restarts); a suite may set it
+    property string markerModule: ""
 
     // PamTrialRules' state of the current (or last) trial
     readonly property var state: _state
@@ -42,7 +48,7 @@ Scope {
 
     // A new trial of `text` as the service's file; ignored while one runs
     function start(service, text) {
-        _dispatch({ type: "start", service: service, text: text, parent: stagingParent, token: _token(), firstWordMs: firstWordMs });
+        _dispatch({ type: "start", service: service, text: text, parent: stagingParent, token: _token(), firstWordMs: firstWordMs, marker: markerModule });
     }
 
     // The user's answer to the question PAM asks in trial `trial`; `text` is used, not kept
@@ -110,6 +116,8 @@ Scope {
                 _context.respond(effect.text);
             break;
         case "abortPam":
+            // PamContext kills its child; what a module of it started (pam_exec's command)
+            // is not killed with it and ends on its own
             if (_conversation === effect.trial) {
                 _conversation = 0;
                 _context.abort();
@@ -180,9 +188,28 @@ Scope {
         onTriggered: root._dispatch({ type: "pamSilent", trial: trial, start: start })
     }
 
+    // pam_echo.so in the first of the module directories that has it
+    onModuleDirectoriesChanged: _findMarker()
+    property int _markerSearch: 0
+    function _findMarker() {
+        // A list handed in may arrive as a sequence, not an Array
+        const directories = Array.from(moduleDirectories ?? []).filter(directory => typeof directory === "string" && directory !== "");
+        const search = ++_markerSearch;
+        if (directories.length === 0) {
+            markerModule = "";
+            return;
+        }
+        _run(["sh", "-c", "for d do f=${d%/}/pam_echo.so; [ -f \"$f\" ] && { printf '%s\\n' \"$f\"; exit 0; }; done; exit 1", "sh"].concat(directories), (lines, result) => {
+            if (search === root._markerSearch)
+                root.markerModule = result.ok ? PamTrialRules.markerModule(lines[0] ?? "") : "";
+        });
+    }
+
     // Staging directories whose shell is gone (killed mid-trial) are removed; a running
     // shell's — another instance's, a test run's — and one without the shell's record are not
     Component.onCompleted: {
+        if (Array.from(moduleDirectories ?? []).length > 0)
+            _findMarker();
         if (stagingParent === "")
             return;
         _run(Array.from(stageCommand).concat(["sweep", stagingParent]), (lines, result) => {

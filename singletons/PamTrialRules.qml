@@ -42,18 +42,22 @@ Singleton {
     // PAM's messages kept for the view: the last ones, each cut to a length
     readonly property int maxMessages: 20
     readonly property int maxMessageLength: 300
-    // A conversation that says nothing at all (no message, no result) this long after it
-    // started is started again, at most `maxStarts` times in all, then the trial fails as a
-    // start that failed. Why: Quickshell forks its PAM child from the shell's running
-    // threads, and the child loads the modules (dlopen in pam_start); glibc does not reset
-    // the dynamic loader's write lock in a forked child, so a fork while another thread
-    // held it (dl_iterate_phdr, a dlopen or dlclose of its own) leaves the child blocked in
-    // pam_start for good, before any module ran. A new fork does not inherit that. Every
-    // module the shell writes speaks or ends at once (pam_unix asks, pam_fprintd and
-    // pam_u2f with `cue` say what to do, pam_faillock ends), so the silence is never a
-    // module waiting (a raw line of a module that waits in silence may fail the trial).
+    // A PAM child blocked in pam_start is started again. Quickshell forks its PAM child from
+    // the shell's running threads, and the child loads every module of the service inside
+    // pam_start (dlopen); glibc does not reset the dynamic loader's write lock in a forked
+    // child, so a fork while another thread held it (dl_iterate_phdr, a dlopen or dlclose of
+    // its own) leaves the child blocked there for good, before any module ran. A new fork
+    // does not inherit that. To tell it from a module that waits in silence (a key without
+    // `cue`, a face reader, a slow network), the staged copy of the service file — never the
+    // candidate the stacks, the comparisons and the write take — starts with a pam_echo
+    // line that says `markerPrefix` and the trial's token and answers ignore: it runs first,
+    // so its message proves that pam_start returned. A conversation from which neither it
+    // nor any other word came in `firstWordMs` is started again, at most `maxStarts` times
+    // in all, then the trial fails as "stalled"; after a word, never. Without pam_echo (not
+    // in the distribution's module directories) nothing is added and nothing is restarted.
     readonly property int firstWordMs: 8000
     readonly property int maxStarts: 3
+    readonly property string markerPrefix: "h2s-pam-trial.started."
 
     // Why a trial did not pass, by its reason code
     readonly property var texts: ({
@@ -61,6 +65,7 @@ Singleton {
         maxTries: "Too many tries.",
         error: "PAM could not run the new rules.",
         startFailed: "PAM could not start the new rules.",
+        stalled: "PAM did not start the trial. Try again.",
         unread: "A file the new rules include could not be read.",
         unparsable: "A line PAM cannot read.",
         control: "A character PAM cannot read.",
@@ -236,9 +241,10 @@ Singleton {
             // text, and PAM's own last error message ("" when it said none)
             reason: "", reasonText: "", pamReason: "",
             // The conversation's starts so far (each a new PAM child), whether PAM has said
-            // anything in the current one, and how long it may stay silent (the start
-            // event's firstWordMs, else firstWordMs)
-            starts: 0, heard: false, firstWordMs: firstWordMs
+            // anything in the current one, how long it may stay silent (the start event's
+            // firstWordMs, else firstWordMs), the pam_echo the staged copy starts with ("":
+            // none, no restarts) and the text it says
+            starts: 0, heard: false, firstWordMs: firstWordMs, marker: "", markerText: ""
         };
     }
 
@@ -267,12 +273,32 @@ Singleton {
         }
     }
 
-    // A new PAM child for the staged directory, watched until it first says something
+    // The pam_echo module a staged copy may start with: an absolute path PAM can hold (no
+    // white space, no "." or ".." step) naming pam_echo.so, else ""
+    function markerModule(path) {
+        const value = typeof path === "string" ? path : "";
+        if (!/^(\/[A-Za-z0-9_+-][A-Za-z0-9._+-]*)+\/pam_echo\.so$/.test(value))
+            return "";
+        return value.split("/").some(step => step === "." || step === "..") ? "" : value;
+    }
+
+    // The staged files: the service's own file with the marker line on top, when there is
+    // a marker; every other file, and the candidate everyone else compares, as they are
+    function stagedFiles(files, service, marker, markerText) {
+        if (marker === "")
+            return files;
+        return files.map(file => file.name !== service ? file
+            : { name: file.name, text: "auth [default=ignore] " + marker + " " + markerText + "\n" + file.text });
+    }
+
+    // A new PAM child for the staged directory, watched (with a marker) until it first says
+    // something
     function _startConversation(next, effects) {
         next.starts += 1;
         next.heard = false;
         effects.push({ type: "startPam", trial: next.trial, configDirectory: next.staging, config: next.service });
-        effects.push({ type: "watchPam", trial: next.trial, start: next.starts, ms: next.firstWordMs });
+        if (next.marker !== "")
+            effects.push({ type: "watchPam", trial: next.trial, start: next.starts, ms: next.firstWordMs });
     }
 
     function _readNext(next, effects, answer) {
@@ -289,14 +315,17 @@ Singleton {
         next.stack = step.stack;
         next.phase = "staging";
         next.staging = next.target;
-        effects.push({ type: "stage", trial: next.trial, parent: next.parent, directory: next.target, files: step.files });
+        effects.push({ type: "stage", trial: next.trial, parent: next.parent, directory: next.target,
+                       files: stagedFiles(step.files, next.service, next.marker, next.markerText) });
     }
 
     // One event → { state (a new object), effects [...] }. Events:
-    //   { type: "start", service, text, parent, token }   a new trial of `text` as
-    //                                              `service`, staged under `parent` in the
-    //                                              directory `token` names (eight letters or
-    //                                              digits; ignored while one runs)
+    //   { type: "start", service, text, parent, token, marker, firstWordMs }
+    //                                              a new trial of `text` as `service`, staged
+    //                                              under `parent` in the directory `token`
+    //                                              names (eight letters or digits; ignored
+    //                                              while one runs); `marker`: pam_echo.so's
+    //                                              path, or none (markerModule)
     //   { type: "filesRead", trial, lines, result, paths }   a pam-files.sh run
     //   { type: "staged", trial, lines, result }    the staging script's reply
     //   { type: "pamStartFailed", trial }           PamContext.start() refused
@@ -334,6 +363,8 @@ Singleton {
             const silence = Number(event.firstWordMs);
             if (isFinite(silence) && silence > 0)
                 next.firstWordMs = silence;
+            next.marker = markerModule(event.marker);
+            next.markerText = next.marker !== "" ? markerPrefix + String(event.token ?? "") : "";
             next.target = stagingDirectory(next.parent, event.token);
             if (!validName(next.service)) {
                 _fail(next, effects, "service");
@@ -388,6 +419,9 @@ Singleton {
             if (!current || next.phase !== "running")
                 break;
             next.heard = true;
+            // The staged copy's own first line: no message of the candidate's
+            if (next.marker !== "" && event.message === next.markerText && event.responseRequired !== true && event.messageIsError !== true)
+                break;
             const text = _cut(event.message);
             if (event.responseRequired === true) {
                 next.prompt = { text, visible: event.responseVisible === true };
@@ -422,11 +456,11 @@ Singleton {
             break;
         }
         case "pamSilent":
-            if (!current || next.phase !== "running" || next.heard || event.start !== next.starts)
+            if (!current || next.phase !== "running" || next.heard || next.marker === "" || event.start !== next.starts)
                 break;
             effects.push({ type: "abortPam", trial: next.trial });
             if (next.starts >= maxStarts) {
-                _fail(next, effects, "startFailed");
+                _fail(next, effects, "stalled");
                 break;
             }
             _startConversation(next, effects);
