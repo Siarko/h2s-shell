@@ -106,8 +106,16 @@ Singleton {
         console.log("[Profiles] Widget profiles are now widget presets")
     }
 
+    // The migrations that need the profiles (phase "afterSeed": Config.runAfterSeedMigrations),
+    // once they exist — seeded or read
+    function _afterSeedIfNeeded() {
+        if (Config.ready && Config.profiles !== "")
+            Config.runAfterSeedMigrations()
+    }
+
     Component.onCompleted: {
         _seedIfNeeded()
+        _afterSeedIfNeeded()
         _migrateIfNeeded()
         _migratePresetsIfNeeded()
         _applyPowerProfile()
@@ -118,10 +126,14 @@ Singleton {
         target: Config
         function onReadyChanged() {
             Qt.callLater(root._seedIfNeeded)
+            Qt.callLater(root._afterSeedIfNeeded)
             Qt.callLater(root._migrateIfNeeded)
             Qt.callLater(root._migratePresetsIfNeeded)
         }
-        function onProfilesChanged() { Qt.callLater(root._migrateIfNeeded) }
+        function onProfilesChanged() {
+            Qt.callLater(root._afterSeedIfNeeded)
+            Qt.callLater(root._migrateIfNeeded)
+        }
     }
 
     // PowerProfiles reads the daemon over D-Bus after startup; until then it reports

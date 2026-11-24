@@ -41,6 +41,37 @@ FileView {
         loadedText = kept;
     }
 
+    // The content as it stands (the adapter's, with the kept keys), as a save would write it
+    function currentText() {
+        const written = JSON.stringify(serialized());
+        const kept = MigrationRules.keepUndeclaredKeys(written, loadedText);
+        return kept !== "" ? kept : written;
+    }
+
+    // Sets the adapter's declared properties to `content`'s values (a plain object as the file
+    // would hold it; a declared JsonObject from an object, key by key): what another writer put
+    // in the file reaches the adapter without reading it again
+    function apply(content) {
+        if (adapter)
+            _apply(adapter, content);
+    }
+
+    function _apply(target, content) {
+        if (content === null || typeof content !== "object" || Array.isArray(content))
+            return;
+        const declared = _plain(target, true);
+        for (const key of Object.keys(content)) {
+            if (!Object.prototype.hasOwnProperty.call(declared, key))
+                continue;
+            if (_isQObject(target[key])) {
+                _apply(target[key], content[key]);
+                continue;
+            }
+            if (JSON.stringify(declared[key]) !== JSON.stringify(content[key]))
+                target[key] = content[key];
+        }
+    }
+
     // The adapter's content as JsonAdapter writes it: every property it declares (a QML
     // object's own properties, not objectName, no functions or signals), a JsonObject as an
     // object, a list as a list

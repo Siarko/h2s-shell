@@ -70,6 +70,7 @@ TestCase {
         _undeclaredKeys();
         _registry();
         _backups();
+        _startup();
         _helpers();
     }
 
@@ -524,12 +525,110 @@ TestCase {
         const manual = "config.json.bak-2026-10-01T09-00-00-000Z-manual";
         const kept = rules.backupsToKeep(names.concat([manual]), { neverPrune: [manual] });
         assert(kept.keep.includes(manual) && kept.keep.length === 11 && kept.delete.length === 3, "backups: one never to be pruned kept, not counted");
+        const unlisted = rules.backupsToKeep(names.concat([manual]), {});
+        assert(unlisted.keep.includes(manual) && unlisted.keep.length === 11 && unlisted.delete.length === 3, "backups: a manual one never pruned, not counted, unlisted too");
+        assertEqual(rules.backupName("2026-11-24T21:46:59.529Z", "migration"), "config.json.bak-2026-11-24T21-46-59-529Z-migration", "backup name: the stamp and the reason");
+        assertEqual(rules.backupName("2026-11-24T21:46:59.529Z", "other"), "config.json.bak-2026-11-24T21-46-59-529Z", "backup name: an unknown reason left out");
+        assertEqual(rules.backupName("yesterday", "migration"), "", "backup name: not a time, no name");
+        assertEqual(rules.backupsToKeep([rules.backupName("2026-11-24T21:46:59.529Z", "migration")], {}).keep.length, 1, "backup name: one pruning counts");
         const tie = rules.backupsToKeep(["config.json.bak-2026-10-01T10-00-00-000Z-manual", "config.json.bak-2026-10-01T10-00-00-000Z-restore",
                                          "config.json.bak-2026-10-01T10-00-00-000Z"], {});
         assertEqual(tie.keep.join(","), "config.json.bak-2026-10-01T10-00-00-000Z-restore,config.json.bak-2026-10-01T10-00-00-000Z-manual,config.json.bak-2026-10-01T10-00-00-000Z",
                     "backups: equal stamps ordered by name, the same each time");
     }
 
+
+    // What a run at start does (MigrationRules.startup), its phases, side files and text
+    function _startup() {
+        const afterSeed = _migration("1.0.0-old-section", "1.0.0", ["raw:oldSection"], doc => { delete doc.raw.oldSection; return doc; }, { phase: "afterSeed" });
+        const theme = _migration("2026-11-25-t-theme", "2.2.0", ["file:themes/*"], doc => { doc.files["themes/dark.json"].bar = 2; return doc; });
+        const deep = _migration("2026-11-25-d-deep", "2.2.0", ["file:a/*/c.json", "setting:clock.*"], doc => doc);
+        const ids = list => list.map(migration => migration.migrationId).join(",");
+        assertEqual(ids(rules.inPhase([_failing[0], afterSeed, theme], "load")), "2026-11-25-a-clock-format,2026-11-25-t-theme", "phase: no phase is the load phase");
+        assertEqual(ids(rules.inPhase([_failing[0], afterSeed, theme], "afterSeed")), "1.0.0-old-section", "phase: after seeding");
+        assertEqual(ids(rules.inPhase([afterSeed], "anything")), "", "phase: an unknown phase is the load phase");
+        assertEqual(rules.inPhase(null, "load").length, 0, "phase: no registry");
+        assertEqual(rules.sideFileDepth(_failing), 0, "side files: none named, nothing listed");
+        assertEqual(rules.sideFileDepth([theme]), 2, "side files: themes/* lies two levels down");
+        assertEqual(rules.sideFileDepth([theme, deep]), 3, "side files: the deepest counts");
+        assertEqual(rules.sideFilesIn([theme, deep], ["themes/dark.json", "themes/x/y.json", "a/b/c.json", "config.json", "a/b/d.json", 7]).join(","),
+                    "themes/dark.json,a/b/c.json", "side files: only those a scope names");
+        assertEqual(rules.sideFilesIn(null, ["themes/dark.json"]).length, 0, "side files: no registry, none");
+
+        const options = { version: "2.2.0" };
+        // Nothing pending: nothing written
+        const recorded = Object.assign(_raw(), { migratedKeys: _failing.map(m => m.migrationId) });
+        const idle = rules.startup(_failing, recorded, {}, [], options);
+        assert(!idle.write && !idle.readOnly && !idle.backup && idle.config === null, "startup: nothing pending, nothing written");
+        assertEqual(rules.startup([], _raw(), {}, [], options).write, false, "startup: an empty registry writes nothing");
+        assertEqual(rules.startup([], null, {}, [], options).write, false, "startup: an empty registry creates no config");
+        // Unreadable: nothing
+        const unread = rules.startup(_failing, "not an object", {}, [], options);
+        assert(!unread.write && !unread.readOnly && unread.report.applied.length === 0, "startup: a config that could not be read: nothing done");
+        assert(!rules.startup(_failing, undefined, {}, [], options).write && !rules.startup(_failing, [], {}, [], options).write, "startup: undefined or a list: nothing done");
+        // A new config: the baseline, every phase
+        const fresh = rules.startup(_failing.concat([afterSeed]), null, {}, [], options);
+        assert(fresh.write && fresh.report.fresh && !fresh.backup, "startup: a new config written without a backup");
+        assertEqual(fresh.config.migratedKeys.join(","), ids(_failing.concat([afterSeed])), "startup: … every id recorded, the after-seed one too");
+        assertEqual(fresh.report.applied.length, 0, "startup: … none run");
+        const freshKept = rules.startup(_failing, { gcal: { viewMode: "week" }, migratedKeys: ["x.y"] }, {}, [], options);
+        assertEqual(freshKept.config.gcal.viewMode, "week", "startup: a new config keeps what it holds");
+        assertEqual(freshKept.config.migratedKeys[0], "x.y", "startup: … and its records");
+        assert(!rules.startup(_failing, { migratedKeys: _failing.map(m => m.migrationId) }, {}, [], options).write, "startup: a new config with every id recorded: nothing written");
+        assert(!rules.startup([afterSeed], null, {}, [], { phase: "afterSeed", version: "2.2.0" }).report.fresh, "startup: no baseline after seeding");
+        // A run that writes
+        const ran = rules.startup(_failing, _raw(), {}, [], options);
+        assert(ran.write && ran.backup && !ran.readOnly, "startup: a run that changed something: written, a backup first");
+        assertEqual(ran.config.migratedKeys.join(","), "bar.height,default:lockscreen.lockNotificationDetail,2026-11-25-a-clock-format,reset:2026-11-25-x-music-popup,2026-11-25-z-battery-warn",
+                    "startup: the records written");
+        assertEqual(ran.config.writtenBy, "2.1.0", "startup: writtenBy kept");
+        assert(ran.config.futureSection.kept === true, "startup: an unknown key kept");
+        assertEqual(ran.report.reset[0].id, "2026-11-25-x-music-popup", "startup: the reset reported");
+        assertEqual(ran.report.skipped[0].id, "2026-11-25-y-music-compact", "startup: the skipped reported");
+        assertEqual(ran.report.applied.join(","), "2026-11-25-a-clock-format,2026-11-25-z-battery-warn", "startup: the applied reported");
+        assertEqual(ran.report.records.length, 5, "startup: the records reported");
+        assertEqual(ran.report.phase, "load", "startup: the phase reported");
+        const resetOnly = rules.startup([_failing[1]], Object.assign(_raw(), { widgetPresets: "" }), {}, [], options);
+        assert(resetOnly.write && resetOnly.backup, "startup: a scope reset takes a backup even when nothing changed");
+        const recordOnly = rules.startup([_migration("2026-11-25-n-nothing", "2.2.0", ["setting:none.*"], doc => doc)], _raw(), {}, [], options);
+        assert(recordOnly.write && !recordOnly.backup, "startup: only a record added: written, no backup");
+        const heldOnly = rules.startup([_failing[0]], Object.assign(_raw(), { migratedKeys: ["held:2026-11-25-a-clock-format@2.2.0"] }), {}, [], options);
+        assert(heldOnly.write === false && heldOnly.config === null && heldOnly.report.held[0] === "2026-11-25-a-clock-format", "startup: only a held one pending: nothing written, the hold reported");
+        // Side files
+        const files = { "themes/dark.json": { bar: 1 } };
+        const withFiles = rules.startup([theme], _raw(), files, [], options);
+        assertEqual(JSON.stringify(withFiles.files), JSON.stringify({ "themes/dark.json": { bar: 2 } }), "startup: side files to write");
+        assertEqual(withFiles.removed.length, 0, "startup: none to remove");
+        const removing = rules.startup([_migration("2026-11-25-r-remove", "2.2.0", ["file:themes/*"], doc => { delete doc.files["themes/dark.json"]; return doc; })], _raw(), files, [], options);
+        assertEqual(removing.removed.join(","), "themes/dark.json", "startup: a side file to remove");
+        const blocked = rules.startup([theme], _raw(), {}, ["themes/dark.json"], options);
+        assert(blocked.readOnly && !blocked.write && blocked.report.problem.includes("themes/dark.json"), "startup: a side file in scope that does not parse: read-only, nothing written");
+        assertEqual(blocked.report.failure.id, "", "startup: … a failure of no migration");
+        assert(!rules.startup(_failing, _raw(), {}, ["themes/dark.json"], options).readOnly, "startup: an unreadable file no pending scope names does not matter");
+        assert(!rules.startup([theme], Object.assign(_raw(), { migratedKeys: ["2026-11-25-t-theme"] }), {}, ["themes/dark.json"], options).readOnly,
+               "startup: … nor one only a done migration names");
+        // A config that cannot be made into a document
+        const broken = rules.startup(_failing, { profiles: "{", migratedKeys: [] }, {}, [], options);
+        assert(broken.readOnly && !broken.write && broken.report.problem !== "", "startup: a config that is no document: read-only, nothing written");
+        assert(!rules.startup(_failing, { profiles: "{", migratedKeys: _failing.map(m => m.migrationId) }, {}, [], options).readOnly, "startup: … unless nothing is pending");
+        // "*"
+        const whole = _migration("2026-11-25-w-whole", "2.2.0", ["*"], doc => { throw new Error("no"); }, { wholeScopeReason: "test" });
+        const stopped = rules.startup([_failing[0], whole], _raw(), {}, [], options);
+        assert(stopped.readOnly && !stopped.write && stopped.config === null && !stopped.backup, "startup: a failing \"*\": nothing written, read-only");
+        assert(stopped.view !== null && stopped.view.profiles.includes("clock.pattern"), "startup: … the readers' view holds the ones before it");
+        assertEqual(stopped.view.migratedKeys.join(","), "bar.height,default:lockscreen.lockNotificationDetail", "startup: … without their records");
+        assertEqual(rules.startup([whole], _raw(), {}, [], options).view, null, "startup: … no view when nothing changed");
+        assertEqual(stopped.report.failure.id, "2026-11-25-w-whole", "startup: … the failure reported");
+        // The after-seed phase
+        const oldConfig = Object.assign(_raw(), { oldSection: { a: 1 } });
+        assert(!rules.startup([afterSeed], oldConfig, {}, [], options).write, "startup: an after-seed migration not run in the load phase");
+        const seeded = rules.startup([_failing[0], afterSeed], Object.assign(oldConfig, { migratedKeys: ["2026-11-25-a-clock-format"] }), {}, [], { phase: "afterSeed", version: "2.2.0" });
+        assert(seeded.write && seeded.config.oldSection === undefined, "startup: after seeding it runs");
+        assertEqual(seeded.config.migratedKeys.join(","), "2026-11-25-a-clock-format,1.0.0-old-section", "startup: … and only the after-seed ones");
+        // The text
+        assertEqual(rules.configText({ b: 1, a: { d: [{ z: 1, y: 2 }], c: null } }), "{\n    \"a\": {\n        \"c\": null,\n        \"d\": [\n            {\n                \"y\": 2,\n                \"z\": 1\n            }\n        ]\n    },\n    \"b\": 1\n}\n",
+                    "config text: keys sorted at every level, four spaces, a final line break");
+    }
 
     function _helpers() {
         const document = {

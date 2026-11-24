@@ -223,6 +223,8 @@ The interface modules are written against (`qs.api`), versioned on its own
   Without polkit rules it works as before; set to true beside them, it stops the build.
 
 ### Fixed
+- Settings updates for a new version run before the shell reads the config, take one backup
+  per run, and keep only the newest ten automatic backups; backups made by hand are kept.
 - Settings a newer version of the shell wrote in the config file (at its top level and inside
   its sections, such as the Google account's) are no longer dropped when an older version
   saves it, and a config written by a newer version shows a warning under the bar.

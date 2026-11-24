@@ -765,6 +765,134 @@ Singleton {
         return report;
     }
 
+    // ---- At start ----
+
+    // The registered migrations of `phase`: "load" (before any reader sees the config; a
+    // migration naming no phase) or "afterSeed" (once the profiles exist)
+    function inPhase(registry, phase) {
+        const wanted = phase === "afterSeed" ? "afterSeed" : "load";
+        return (Array.isArray(registry) ? registry : []).filter(migration => (migration?.phase === "afterSeed" ? "afterSeed" : "load") === wanted);
+    }
+
+    // How many folder levels below the config's folder the side files of the registered
+    // migrations lie (file: paths): 0 when none has any, so nothing is listed
+    function sideFileDepth(registry) {
+        let depth = 0;
+        for (const migration of Array.isArray(registry) ? registry : [])
+            for (const path of parseScope(migration?.scope).paths)
+                if (path.kind === "file")
+                    depth = Math.max(depth, path.pattern.split("/").length);
+        return depth;
+    }
+
+    // Of the files listed in the config's folder (paths relative to it), those a registered
+    // migration's scope names: the side files a run reads
+    function sideFilesIn(registry, listed) {
+        const paths = [];
+        for (const migration of Array.isArray(registry) ? registry : [])
+            for (const path of parseScope(migration?.scope).paths)
+                if (path.kind === "file")
+                    paths.push(path);
+        return (Array.isArray(listed) ? listed : []).filter(file => typeof file === "string" && _fileIn(file, paths));
+    }
+
+    // What one run of the migrations at start does. `raw`: config.json parsed — null when there
+    // is none (or it is empty), anything but an object when it could not be read (then nothing
+    // is done: the config reports it). `files`: the side files read (path → content);
+    // `unreadable`: side files present that did not parse. `options`: { phase ("load" or
+    // "afterSeed"), version (the running shell's), context (handed to each migration) }.
+    // A new config (load phase only) records every registered id, none run. A config that
+    // cannot be made into a document, or a side file in a pending migration's scope that does
+    // not parse, is never migrated on a guess: nothing written, the session read-only. A run
+    // stopped by a failing "*" migration leaves `view`, the config as the migrations before it
+    // left it, for the readers, unwritten.
+    // → { write, readOnly, backup (some migration changed something or a scope was reset),
+    //   config (the content to write, an object) | null, view (an object) | null,
+    //   files: { path: content } to write, removed: [path], report: { phase, fresh, records,
+    //   applied, reset, skipped, held, failure, problem } }
+    function startup(registry, raw, files, unreadable, options) {
+        const phase = options?.phase === "afterSeed" ? "afterSeed" : "load";
+        const all = Array.isArray(registry) ? registry : [];
+        const report = { phase: phase, fresh: false, records: [], applied: [], reset: [], skipped: [], held: [], failure: null, problem: "" };
+        const outcome = { write: false, readOnly: false, backup: false, config: null, view: null, files: {}, removed: [], report: report };
+        if (raw !== null && !_object(raw))
+            return outcome;
+        const sideFiles = _object(files) ? files : {};
+        if (phase === "load" && isNewConfig(raw, all, sideFiles)) {
+            const records = _records(raw?.migratedKeys);
+            report.fresh = true;
+            report.records = baseline(all, records);
+            if (report.records.length !== records.length) {
+                outcome.write = true;
+                outcome.config = _copy(raw ?? {});
+                outcome.config.migratedKeys = report.records;
+            }
+            return outcome;
+        }
+        const parsed = documentOf(raw ?? {}, sideFiles);
+        const records = parsed.ok ? parsed.records : _records(raw?.migratedKeys);
+        report.records = records;
+        const ofPhase = inPhase(all, phase);
+        const due = pending(ofPhase, records);
+        if (due.length === 0)
+            return outcome;
+        const unread = (Array.isArray(unreadable) ? unreadable : [])
+            .filter(file => due.some(migration => _fileIn(file, parseScope(migration?.scope).paths)));
+        if (!parsed.ok || unread.length > 0) {
+            report.problem = !parsed.ok ? parsed.problem : unread[0] + " could not be read";
+            report.failure = { id: "", error: report.problem };
+            outcome.readOnly = true;
+            return outcome;
+        }
+        const result = run(ofPhase, parsed.document, { records: records, version: options?.version, context: options?.context });
+        report.applied = result.applied;
+        report.reset = result.reset;
+        report.skipped = result.skipped;
+        report.held = result.held;
+        report.failure = result.failure;
+        if (result.readOnly) {
+            outcome.readOnly = true;
+            if (result.changed)
+                outcome.view = rawOf(result.document, records, raw);
+            return outcome;
+        }
+        report.records = result.records;
+        if (!result.write)
+            return outcome;
+        outcome.write = true;
+        outcome.backup = result.changed || result.reset.length > 0;
+        outcome.config = rawOf(result.document, result.records, raw);
+        for (const file of result.filesWritten)
+            _put(outcome.files, file, _copy(result.document.files[file]));
+        outcome.removed = result.filesRemoved;
+        return outcome;
+    }
+
+    // config.json's text for `config` (an object): keys sorted at every level, as JsonAdapter
+    // writes them
+    function configText(config) {
+        const sorted = value => {
+            if (Array.isArray(value))
+                return value.map(item => sorted(item));
+            if (!_object(value))
+                return value;
+            const object = {};
+            for (const key of Object.keys(value).sort())
+                _put(object, key, sorted(value[key]));
+            return object;
+        };
+        return JSON.stringify(sorted(config), null, 4) + "\n";
+    }
+
+    // A config backup's name for the time `isoTime` (Date.toISOString()) and `reason` (one of
+    // backupReasons, or "" for none); "" for a time that is not one
+    function backupName(isoTime, reason) {
+        if (typeof isoTime !== "string" || !/^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z$/.test(isoTime))
+            return "";
+        const suffix = backupReasons.includes(reason) ? "-" + reason : "";
+        return "config.json.bak-" + isoTime.replace(/[:.]/g, "-") + suffix;
+    }
+
     // ---- The registry ----
 
     // What is wrong with the registry, each as a line ([] when nothing): an id that is not
@@ -810,9 +938,10 @@ Singleton {
 
     // Which config backups stay after a new one: of the names in the config's folder only
     // "config.json.bak-<stamp>" (and "-<reason>" after it, one of backupReasons) count; every
-    // other name is left alone. `options`: { written (the backup just written: always kept,
-    // whatever its stamp says — the clock may have gone back —, and counted), protect: [names]
-    // (one being restored from: kept, not counted), neverPrune: [names] (kept, not counted) }.
+    // other name is left alone. A manual backup ("-manual") is never pruned: kept, not
+    // counted. `options`: { written (the backup just written: always kept, whatever its stamp
+    // says — the clock may have gone back —, and counted), protect: [names] (one being
+    // restored from: kept, not counted), neverPrune: [names] (kept, not counted) }.
     // The rest by their stamps, newest first, fill up to `backupsKept`; equal stamps by name.
     // → { keep, delete } (newest first)
     function backupsToKeep(names, options) {
@@ -826,7 +955,7 @@ Singleton {
         const keep = [];
         const deleted = [];
         for (const name of backups) {
-            if (name === written || kept.includes(name)) {
+            if (name === written || kept.includes(name) || name.endsWith("-manual")) {
                 keep.push(name);
             } else if (room > 0) {
                 keep.push(name);

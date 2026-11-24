@@ -435,6 +435,22 @@ config written by a newer version (`writtenBy` newer, or migration records this 
 does not know, `MigrationRules.newerConfig`) gets one log line and a startup banner; it is
 never refused.
 
+Before the file is read, the settings migrations run on it (`components/ConfigMigration.qml`,
+deciding through `MigrationRules.startup`): `Config` builds, then one event-loop turn later
+`ConfigFile.load()` reads `config.json` and the side files the registered migrations
+(`singletons/Migrations.qml`) name, runs the pending ones of the load phase, and writes —
+one backup `config.json.bak-<stamp>-migration` first when something changed or a part was
+reset, then the side files, then the config with the records in `migratedKeys` — before
+the adapter reads the file and `Config.ready` turns true. A new config records every
+registered id without running any. A failing migration has its part reset to defaults and
+`reset:<id>` recorded; a failing whole-config (`*`) one, a config that is no document, or a
+side file in a pending migration's scope that does not parse leaves the files as they are
+and makes the session read-only (`Config.readOnly`), the readers seeing the migrated
+content in memory. After a backup, the automatic ones beyond the newest ten are deleted;
+manual ones (`-manual`) never. Migrations with `phase: "afterSeed"` run from `Profiles`
+once the profiles exist (`Config.runAfterSeedMigrations`). Each run's report is
+`Config.migrationReports`; under the test runner nothing is written.
+
 ### Version
 
 `singletons/Version.qml` holds the version number (semver) and what the settings sidebar

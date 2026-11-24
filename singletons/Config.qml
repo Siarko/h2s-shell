@@ -11,6 +11,8 @@ import qs.components
 // preference — the Google account and its tokens, remembered per-app volumes — plus the
 // widget preset library and the profiles themselves.
 //
+// Before the file is read the settings migrations run on it (ConfigFile.load: the registered
+// migrations pending, a backup, the result written), so no reader sees an unmigrated value.
 // A config written before profiles has its settings in sections this file no longer
 // declares; Profiles reads those from the raw file to migrate them. Saving keeps every
 // key the file holds that is not declared (JsonConfigFile), so what a newer
@@ -71,7 +73,10 @@ Singleton {
     // remembered, so a shell restarted while they are off turns them on again — and only them
     property alias screensOff: _adapter.screensOff
     // The file itself, for the backup taken before a migration
-    readonly property string path: _file.path
+    readonly property string path: _file.configPath
+    // The settings migrations' last runs, { load, afterSeed } (ConfigFile.migrationReports):
+    // what was applied, reset, skipped or held, the failure, the backup's path
+    readonly property alias migrationReports: _file.migrationReports
 
     // True once the file has been read (or found missing, so the defaults stand) —
     // before that every property still holds its default
@@ -81,7 +86,8 @@ Singleton {
     // not what the user chose — settings where that matters fail safe on it
     readonly property alias loadFailed: _file.loadFailed
     // Set by the test runner: the suites load the real config, and nothing they change
-    // may reach the user's file
+    // may reach the user's file. Also set when the migrations could not be run or written
+    // (ConfigFile.migrationReadOnly): the file stays as it is for the session.
     property bool readOnly: false
     property bool _refusedSave: false
 
@@ -106,7 +112,7 @@ Singleton {
         if (!ready || readOnly || _protect.running)
             return;
         // The path is a file:// URL (StandardPaths gives URLs); chmod needs a plain path
-        const file = _file.path.toString().replace(/^file:\/\//, "");
+        const file = _file.configPath.toString().replace(/^file:\/\//, "");
         _protect.command = ["sh", "-c", "chmod 700 \"$1\" && chmod 600 \"$1\"/config.json*", "sh",
                             file.substring(0, file.lastIndexOf("/"))];
         _protect.running = true;
@@ -114,8 +120,21 @@ Singleton {
 
     // The file can finish loading while this singleton is still being built, before a
     // change handler would see it, so check on completion as well
+    // The after-seed migrations (ConfigFile.runAfterSeed), from Profiles once the profiles
+    // exist; nothing until the file has been read
+    function runAfterSeedMigrations() {
+        if (ready)
+            _file.runAfterSeed();
+    }
+
     onReadyChanged: _protectFiles()
-    Component.onCompleted: Qt.callLater(_protectFiles)
+    // The migrations run before the file is read, one event-loop turn after this singleton is
+    // built: the test runner sets readOnly right after building it, before anything may be
+    // written
+    Component.onCompleted: Qt.callLater(() => {
+        _file.load();
+        _protectFiles();
+    })
 
     Process {
         id: _protect
@@ -125,7 +144,12 @@ Singleton {
 
     ConfigFile {
         id: _file
-        path: StandardPaths.writableLocation(StandardPaths.GenericConfigLocation) + "/h2s_shell/config.json"
+        configPath: StandardPaths.writableLocation(StandardPaths.GenericConfigLocation) + "/h2s_shell/config.json"
+        readOnly: root.readOnly
+        onMigrated: {
+            if (migrationReadOnly)
+                root.readOnly = true;
+        }
         onAdapterUpdated: _saveTimer.restart()
         onRead: {
             if (newerNotice.shown)

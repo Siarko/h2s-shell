@@ -1,4 +1,5 @@
 import QtQuick
+import Quickshell
 import Quickshell.Io
 import qs.singletons
 
@@ -27,7 +28,85 @@ JsonConfigFile {
     // it holds
     signal read
 
+    // ---- The settings migrations (ConfigMigration) ----
+
+    // config.json, for load(): the migrations run on it before it is read (a file:// URL or a
+    // path); "" when `path` is set directly
+    property string configPath: ""
+    // The migrations (Migrations.all(); a suite hands its own)
+    property var registry: Migrations.all()
+    // Nothing written: no migration result, no backup (the test runner)
+    property bool readOnly: false
+    // Where a config migrated in memory only is put for a moment, for the adapter to read
+    property string viewDir: (Quickshell.env("XDG_RUNTIME_DIR") || "/tmp")
+    // The last runs' reports, { load, afterSeed } (ConfigMigration's result.report; null for a
+    // phase not run): what the failure notice tells
+    property var migrationReports: ({ load: null, afterSeed: null })
+    // A run could not be written, or could not be made at all: the session must not save
+    property bool migrationReadOnly: false
+    readonly property bool migrationBusy: _migration.busy
+    property bool _afterSeedStarted: false
+    property string _viewPath: ""
+
+    // A run ended (its report in migrationReports), before its result is read
+    signal migrated(var result)
+    // The backups were pruned after a run that wrote one
+    signal backupsPruned
+
+    // The load phase: the pending migrations run on configPath, then the file (or, when the
+    // result was not written, the migrated content in memory) is read — `read` comes after it
+    function load() {
+        if (configPath === "" || !_migration.start("load", "")) {
+            if (configPath !== "")
+                path = configPath;
+        }
+    }
+
+    // The after-seed phase, once per run, once the profiles exist: the content as it stands
+    // is migrated, written, and put into the adapter. false while it cannot run yet.
+    function runAfterSeed() {
+        if (_afterSeedStarted || configPath === "" || _migration.running || !adapter || adapter.profiles === "")
+            return false;
+        _afterSeedStarted = true;
+        if (!_migration.start("afterSeed", currentText()))
+            _afterSeedStarted = false;
+        return _afterSeedStarted;
+    }
+
+    property ConfigMigration _migration: ConfigMigration {
+        configPath: root.configPath
+        registry: root.registry
+        readOnly: root.readOnly
+        version: root.version
+        viewDir: root.viewDir
+        onPruned: root.backupsPruned()
+        onFinished: result => {
+            const reports = Object.assign({}, root.migrationReports);
+            reports[result.phase] = result.report;
+            root.migrationReports = reports;
+            if (result.readOnly)
+                root.migrationReadOnly = true;
+            root.migrated(result);
+            if (result.phase === "load") {
+                root._viewPath = result.viewPath;
+                root.path = result.viewPath !== "" ? result.viewPath : root.configPath;
+                return;
+            }
+            if (result.text === "")
+                return;
+            if (result.written)
+                root.written(result.text);
+            root.apply(JSON.parse(result.text));
+        }
+    }
+
+
     onLoaded: {
+        // A migrated config shown in memory only: its file is not needed once read
+        if (_viewPath !== "" && path === _viewPath) {
+            _migration.dropView(_viewPath);
+            _viewPath = "";
+        }
         const content = text();
         loadFailed = ProfileRules.configReadFailed("", content);
         readError = "";
