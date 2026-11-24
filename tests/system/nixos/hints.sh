@@ -1,7 +1,7 @@
 # shellcheck shell=bash
 # Every option and package NixOS's facts name to the user (distributions/nixos/
 # distribution.json, its "packages": the shell's hints about a missing package) exists: the
-# option among a minimal system's options with the flake's module, the package in its
+# option (and the one a package goes in) among a minimal system's options with the flake's module, the package in its
 # nixpkgs. A name nixpkgs dropped or renamed fails here, not in a hint. Evaluates only:
 # builds nothing, links nothing, writes no lock file.
 need nix "evaluates the flake's NixOS module and its nixpkgs"
@@ -27,7 +27,8 @@ let
     + "\t" + name + ": the " + kind + " " + value + "\n";
   lines = name: entry:
     lib.optionalString (entry ? option) (line name "option" entry.option system.options)
-    + lib.optionalString (entry ? package) (line name "package" entry.package system.pkgs);
+    + lib.optionalString (entry ? package) (line name "package" entry.package system.pkgs)
+    + lib.optionalString (entry ? "in") (line name "option" entry."in" system.options);
 in
   lib.concatStrings (lib.mapAttrsToList lines hints)'
 text=$(nix --extra-experimental-features "nix-command flakes" eval --raw --impure --no-write-lock-file \
@@ -40,5 +41,5 @@ while IFS=$'\t' read -r verdict description; do
     count=$((count + 1))
     check "named to the user on NixOS: $description exists" test "$verdict" = ok
 done <<< "$text"
-# The font's option and package, the fingerprint's and the security key's options
-check "every hint's name checked ($count)" test "$count" -ge 4
+# The font's option, package and where it goes, the fingerprint's and the security key's options
+check "every hint's name checked ($count)" test "$count" -ge 5

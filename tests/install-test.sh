@@ -41,6 +41,7 @@ need script "gives each run of install.sh a terminal of its own, as it hands pac
 need setpriv "runs install.sh with no new privileges, so that nothing in it could become root"
 need timeout "ends a run that hangs"
 need awk "reads install.sh for ways around the stand-ins before it is run"
+need sed "makes the stand-in curl's other installer"
 for tool in bash mkdir dirname grep cat cp mv rm mktemp; do need "$tool" "install.sh uses it; linked into the private PATH"; done
 if [ ${#missing[@]} -gt 0 ]; then
     printf 'install-test.sh: %s\n' "${missing[@]}" >&2
@@ -50,6 +51,7 @@ SCRIPT=$(type -P script)
 SETPRIV=$(type -P setpriv)
 TIMEOUT=$(type -P timeout)
 BASH_PATH=$(type -P bash)
+SED_PATH=$(type -P sed)
 
 work=$(mktemp -d "${TMPDIR:-/tmp}/install-test.XXXXXX") || setup_error "cannot create a temp dir"
 trap 'rm -rf "$work"' EXIT
@@ -82,7 +84,8 @@ MARK="# a stand-in written by tests/install-test.sh"
 # there: sudo-status, git-clone-fails, git-remote-fails, git-clone-no-builtin (a clone
 # without builtin-modules/), git-clone-no-helper (a clone without scripts/build-helper.sh),
 # build-fails (the clone's stand-in build-helper.sh fails), fonts (what fc-list prints),
-# curl-fails (the fetch of the Arch installer fails).
+# curl-fails (the fetch of the Arch installer fails), curl-other-dispatch (the installer
+# fetched expects another hand-over version than the top-level script's).
 make_bin() {
     local bin=$1 control name
     control=$(dirname "$bin")/control
@@ -147,7 +150,11 @@ while [ \$# -gt 0 ]; do
     shift
 done
 [ -n "\$output" ] || exit 2
-cat '$ARCH_INSTALL' > "\$output"
+if [ -e "\$control/curl-other-dispatch" ]; then
+    '$SED_PATH' 's/^dispatch_known=1\$/dispatch_known=2/' '$ARCH_INSTALL' > "\$output"
+else
+    cat '$ARCH_INSTALL' > "\$output"
+fi
 STANDIN
     standin fc-list << 'STANDIN'
 echo "fc-list: $*" >> "$control/log"
@@ -278,18 +285,22 @@ os_release() {
     rm -f "$OS_ROOT/etc/os-release"
     [ "$1" = none ] || cp "$FIXTURES/$1.os-release" "$OS_ROOT/etc/os-release"
 }
-# run_install [piped | <arguments>…]: runs install.sh once in the case's surroundings — from
-# the file (given those arguments), or given to bash on its standard input, as
-# `curl … | bash` does. OUTPUT (both streams, as the terminal got them), STATUS.
+# run_install [piped | piped-in <dir> | <arguments>…]: runs install.sh once in the case's
+# surroundings — from the file (given those arguments), or given to bash on its standard
+# input, as `curl … | bash` does (piped-in: the plain name `bash`, found on PATH, run in
+# <dir>). OUTPUT (both streams, as the terminal got them), STATUS.
 run_install() {
     safe_bin "$BIN" || setup_error "the private PATH of $CASE is not safe; stopped before running install.sh"
     : > "$CONTROL/log"
     {
         echo "#!$BASH_PATH"
+        [ "${1:-}" = piped-in ] && printf 'cd %q || exit 99\n' "$2"
         printf 'exec env -i PATH=%q HOME=%q TMPDIR=%q' "$BIN" "$HOME_DIR" "$CASE/tmp"
         [ ${#EXTRA_ENV[@]} -gt 0 ] && printf ' %q' "${EXTRA_ENV[@]}"
         if [ "${1:-}" = piped ]; then
             printf ' %q --no-new-privs %q < %q\n' "$SETPRIV" "$BIN/bash" "$INSTALL"
+        elif [ "${1:-}" = piped-in ]; then
+            printf ' %q --no-new-privs bash < %q\n' "$SETPRIV" "$INSTALL"
         else
             printf ' %q --no-new-privs %q %q' "$SETPRIV" "$BIN/bash" "$INSTALL"
             [ $# -gt 0 ] && printf ' %q' "$@"
@@ -465,6 +476,8 @@ for system in nixos fedora linuxmint none; do
     for how in file piped; do
         start_case "system-$system-$how"
         os_release "$system"
+        # Without pacman: a system that has it gets the Arch installer (below)
+        [ "$system" = nixos ] || rm "$BIN/pacman"
         if [ "$how" = piped ]; then run_install piped; else run_install; fi
         check "$system ($how): exit 1" status_is 1
         check "$system ($how): nothing is run at all, nothing fetched" test ! -s "$CONTROL/log"
@@ -488,6 +501,39 @@ start_case system-endeavouros-update
 os_release endeavouros
 run_install --update
 check "EndeavourOS, an argument: handed to the Arch installer (--update without an install)" says "run this without --update first"
+
+start_case system-fedora-pacman
+os_release fedora
+run_install piped
+check "Fedora with pacman: warned, not refused" says "Warning: Fedora Linux 43 (Workstation Edition) is not detected as Arch-based (os-release), but it has pacman: continuing with the Arch installer."
+check "… the Arch installer runs" logged "$sudo_line"
+check "… and ends" status_is 0
+start_case update-any-system
+os_release fedora
+rm "$BIN/pacman"
+run_install --update
+check "--update from a checkout on a system the installer does not support: handed to the Arch installer" says "run this without --update first"
+check "… not refused" silent_on "supports only Arch Linux"
+
+# Piped, by the plain name bash, in a folder that holds a distributions/arch/install.sh: that
+# file is someone else's, and only the fetched installer runs
+start_case decoy
+mkdir -p "$CASE/cwd/distributions/arch"
+printf '%s\n' '#!/usr/bin/env bash' 'echo "decoy ran" >&2' 'exit 42' > "$CASE/cwd/distributions/arch/install.sh"
+run_install piped-in "$CASE/cwd"
+check "piped as plain bash, a distributions/arch/install.sh in the folder: it is not run" silent_on "decoy ran"
+check "… the installer is fetched" fetched_from_repository
+check "… and runs" status_is 0
+
+start_case other-dispatch
+: > "$CONTROL/curl-other-dispatch"
+run_install piped
+check "the fetched installer expects another hand-over: exit 1" status_is 1
+check "… says the two do not match" says "This Arch installer does not match the install.sh that ran it (hand-over 1, it knows 2)."
+grep -qx 'dispatch_version=1' "$DISPATCHER" && grep -qx 'dispatch_known=1' "$ARCH_INSTALL"
+check "the top-level script and the Arch installer of one checkout agree on the hand-over's version" test $? = 0
+check "… nothing but the fetch is run" test "$(grep -vc '^curl: ' "$CONTROL/log")" = 0
+check "… nothing is put in the home directory" test "$(home_tree)" = .
 
 start_case no-curl
 rm "$BIN/curl"

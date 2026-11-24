@@ -957,4 +957,4 @@ Beyond Quickshell and Qt 6, the shell shells out to:
 
 A JetBrainsMono Nerd Font is assumed for the glyphs (`Theme.fontFamily`); without any Nerd Font a
 warning under the bar says so and names the font as this system gets it (Arch: the package;
-NixOS: the module's option, or the package).
+NixOS: the module's option, or the package in `fonts.packages`).

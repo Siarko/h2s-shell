@@ -30,6 +30,15 @@
 
 set -euo pipefail
 
+# The top-level install.sh's hand-over this installer understands (its dispatch_version):
+# one fetched from the repository may be newer or older than the script that fetched it.
+# Run directly, without the top-level script, nothing is handed over.
+dispatch_known=1
+if [ -n "${H2S_INSTALL_DISPATCH:-}" ] && [ "$H2S_INSTALL_DISPATCH" != "$dispatch_known" ]; then
+    echo "This Arch installer does not match the install.sh that ran it (hand-over $H2S_INSTALL_DISPATCH, it knows $dispatch_known). Fetch install.sh again and run that." >&2
+    exit 1
+fi
+
 repository="https://github.com/Siarko/h2s-shell"
 target="${XDG_CONFIG_HOME:-$HOME/.config}/quickshell/default"
 builtin_target="${XDG_DATA_HOME:-$HOME/.local/share}/h2s-shell/builtin"

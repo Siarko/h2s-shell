@@ -139,7 +139,8 @@ has `distributions/<id>/distribution.json` (`nixos`, `arch`, and `generic` for a
 with what tells it (`matches`: os-release IDs; `markers`: paths such as `/etc/NIXOS`) and
 its facts (directories, whether `/etc` is generated, …), among them `packages`: how the
 system gets a package the shell names to the user — an option of its configuration on
-NixOS, a package name on Arch, plain names and never a command line.
+NixOS (and for a package, the option it goes in, such as `fonts.packages`), a package name
+on Arch, plain names and never a command line.
 `DistributionRules.packageHint(facts, name)` makes the sentence the views show (the font
 warning, the lock's ways to unlock); where the facts say nothing (`generic`) or the system is
 not known yet it is the neutral one, the package's upstream name and what it is for. `singletons/Distribution.qml`
@@ -2072,8 +2073,14 @@ another); nothing appears on screen and the real session cannot be reached. See 
 `install.sh` is a dispatcher: on Arch and systems based on it (os-release's `ID`, or a word of
 `ID_LIKE`, `arch`) it runs `distributions/arch/install.sh` — the one beside it in a
 checkout, or, given to bash on its standard input (`curl … | bash`), one it fetches from the
-repository into a temporary file; on every other system it says it does not support it and
-changes nothing.
+repository's master branch into a temporary file. That one may be newer than the script that
+fetched it, so the script hands over a version (`H2S_INSTALL_DISPATCH`) the installer
+refuses when it is not its own. Where the script was read from is taken outside any
+function: inside one bash names the caller (`bash` when piped), and the current folder would
+pass for a checkout. On another system that has `pacman` it warns and runs the Arch installer
+all the same; on NixOS and on systems without `pacman` it says it does not support them and
+changes nothing. `install.sh --update` from a checkout installs no package and runs on any
+system.
 
 `tests/install-test.sh` runs `install.sh` without letting it change anything: an empty
 environment, a private home directory and a `PATH` of one directory that holds recording
@@ -2096,9 +2103,12 @@ clone and at `--update` (by a stand-in `scripts/build-helper.sh` in the stand-in
 build that fails being a warning only. Which system it takes itself to be on comes from
 made-up os-release files (the fixtures of `tests/fixtures/distribution/`, read through a
 copy of `install.sh` whose one `os_release_root` line names a scratch tree): NixOS, Fedora,
-Linux Mint and none at all are refused with nothing run, EndeavourOS runs the Arch
-installer; given on standard input it fetches that installer once, over https, and leaves no
-temporary file. It runs on both systems.
+Linux Mint and none at all (without `pacman`) are refused with nothing run, Fedora with
+`pacman` is warned about and goes on, EndeavourOS runs the Arch installer, `--update` from a
+checkout runs on Fedora; given on standard input it fetches that installer once, over https,
+and leaves no temporary file — by the plain name `bash` in a folder holding a
+`distributions/arch/install.sh` too, which does not run — and a fetched installer that
+expects another hand-over version refuses. It runs on both systems.
 
 `tests/run-helper.sh` builds the helper into a temporary directory and runs it: `--version`
 (the shell's version and the protocol `HelperRules` speaks), a wrong subcommand, and a
@@ -2242,7 +2252,7 @@ trees, on either system.
   in the shell's tree, and the command hands that directory to the launcher
   (`H2S_SHELL_BUILTIN_MODULES`).
 - `layout`: the files the shell's code reads on NixOS are where it looks for them.
-- `hints`: every option and package NixOS's hints name (`distributions/nixos/distribution.json`,
+- `hints`: every option and package NixOS's hints name (and the option a package goes in) (`distributions/nixos/distribution.json`,
   `packages`) exists, evaluated: the option among a minimal system's options with the
   flake's module, the package in its nixpkgs.
 - `settings`: the module's `programs.h2s-shell.settingsFile` (`nix/settings.nix`),

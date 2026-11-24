@@ -14,7 +14,7 @@
     "polkitRulesDirectory": "/etc/polkit-1/rules.d",
     "polkitRulesInstallable": false,
     "packages": {
-        "nerdFont": { "option": "programs.h2s-shell.enable", "package": "nerd-fonts.jetbrains-mono" },
+        "nerdFont": { "option": "programs.h2s-shell.enable", "package": "nerd-fonts.jetbrains-mono", "in": "fonts.packages" },
         "fprintd": { "option": "services.fprintd.enable" },
         "pamU2f": { "option": "security.pam.u2f.enable" }
     }

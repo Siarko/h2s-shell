@@ -231,8 +231,9 @@ TestCase {
         try {
             hud.warnings.distributionFacts = { label: "Arch Linux", packages: { nerdFont: { package: "ttf-jetbrains-mono-nerd" } } };
             assertEqual(lastLine(), "On Arch Linux: the package ttf-jetbrains-mono-nerd.", "the font warning on Arch: the package's name");
-            hud.warnings.distributionFacts = { label: "NixOS", packages: { nerdFont: { option: "programs.h2s-shell.enable", package: "nerd-fonts.jetbrains-mono" } } };
-            assertEqual(lastLine(), "On NixOS: the option programs.h2s-shell.enable, or the package nerd-fonts.jetbrains-mono.", "… on NixOS: the option, or the package");
+            hud.warnings.distributionFacts = { label: "NixOS", packages: { nerdFont: { option: "programs.h2s-shell.enable", package: "nerd-fonts.jetbrains-mono", in: "fonts.packages" } } };
+            assertEqual(lastLine(), "On NixOS: the option programs.h2s-shell.enable, or the package nerd-fonts.jetbrains-mono in fonts.packages.",
+                        "… on NixOS: the option, or the package and where it goes");
             hud.warnings.distributionFacts = null;
             assertEqual(lastLine(), "From this system's packages: JetBrainsMono Nerd Font, for the shell's icons.", "… the system not known: the neutral hint");
             assert(font.body.startsWith("The shell's icons are Nerd Font glyphs"), "… after what is missing and why");

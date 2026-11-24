@@ -147,6 +147,11 @@ TestCase {
         assertEqual(changed(copy => copy.packages = []), null, "packages a list: refused");
         assertEqual(changed(copy => copy.packages.other = { package: "x" }), null, "a package the shell does not name: refused");
         assertEqual(changed(copy => copy.packages.fprintd = {}), null, "a package with neither option nor package: refused");
+        assertEqual(changed(copy => copy.packages.fprintd = { option: "services.fprintd.enable", in: "environment.systemPackages" }), null,
+                    "where the package goes, without a package: refused");
+        assertEqual(changed(copy => copy.packages.fprintd = { in: "environment.systemPackages" }), null, "… alone: refused");
+        assertEqual(rules.packageHint({ label: "X", packages: { fprintd: { package: "fprintd", in: "environment.systemPackages" } } }, "fprintd").text,
+                    "On X: the package fprintd in environment.systemPackages.", "a package and where it goes, without an option");
         assertEqual(changed(copy => copy.packages.fprintd = { package: "fprintd", command: "x" }), null, "a key other than option and package: refused");
         assertEqual(changed(copy => copy.packages.fprintd = { package: "sudo pacman -S fprintd" }), null, "a command line as the name: refused");
         assertEqual(changed(copy => copy.packages.fprintd = { option: "" }), null, "an empty name: refused");
@@ -300,8 +305,8 @@ TestCase {
         assertEqual(text("arch", "nerdFont"), "On Arch Linux: the package ttf-jetbrains-mono-nerd.", "Arch's font: its package name");
         assertEqual(text("arch", "fprintd"), "On Arch Linux: the package fprintd.", "Arch's fingerprint: fprintd");
         assertEqual(text("arch", "pamU2f"), "On Arch Linux: the package pam-u2f.", "Arch's security key: pam-u2f");
-        assertEqual(text("nixos", "nerdFont"), "On NixOS: the option programs.h2s-shell.enable, or the package nerd-fonts.jetbrains-mono.",
-                    "NixOS's font: the module's option (it adds the font), or the package");
+        assertEqual(text("nixos", "nerdFont"), "On NixOS: the option programs.h2s-shell.enable, or the package nerd-fonts.jetbrains-mono in fonts.packages.",
+                    "NixOS's font: the module's option (it adds the font), or the package and where it goes");
         assertEqual(text("nixos", "fprintd"), "On NixOS: the option services.fprintd.enable.", "NixOS's fingerprint: an option");
         assertEqual(text("nixos", "pamU2f"), "On NixOS: the option security.pam.u2f.enable.", "NixOS's security key: an option");
         assertEqual(text("generic", "fprintd"), "From this system's packages: fprintd, for the fingerprint reader.",
@@ -316,7 +321,7 @@ TestCase {
             }
         }
         const nixos = rules.packageHint(facts.nixos, "nerdFont");
-        assertEqual(nixos.option + " | " + nixos.package, "programs.h2s-shell.enable | nerd-fonts.jetbrains-mono", "the parts on their own too");
+        assertEqual(nixos.option + " | " + nixos.package + " | " + nixos.in, "programs.h2s-shell.enable | nerd-fonts.jetbrains-mono | fonts.packages", "the parts on their own too");
         assertEqual(rules.packageHint(facts.arch, "other"), null, "a package the shell does not name: no hint");
         assertEqual(rules.packageHint(facts.arch, undefined), null, "… no name: none");
     }

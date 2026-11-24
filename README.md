@@ -40,7 +40,8 @@ curl -fsSL https://raw.githubusercontent.com/Siarko/h2s-shell/master/install.sh 
 ```
 
 On Arch and systems based on it (EndeavourOS, …) it runs the Arch installer,
-`distributions/arch/install.sh`; on any other system it says so and changes nothing. It
+`distributions/arch/install.sh`; another system with pacman gets a warning and the same
+installer, and on NixOS or a system without pacman it says so and changes nothing. It
 installs the packages with pacman (asking first), clones the shell into
 `~/.config/quickshell/default` and copies its built-in modules to
 `~/.local/share/h2s-shell/builtin`, then prints the two things left to you: enabling the

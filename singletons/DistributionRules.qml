@@ -31,11 +31,12 @@ import Quickshell
 //   polkitRulesDirectory      where polkit's rules are read from, for the shell's own
 //   polkitRulesInstallable    whether the shell may install a rule file there
 //   packages                  how this system gets a package the shell names to the user:
-//                             { <one of `packages`' names>: { option, package } }, each of
-//                             the two a plain name (an option of the system's configuration,
-//                             a package of its repositories; no spaces, so never a command
-//                             line), at least one given; a name left out has the neutral
-//                             hint (packageHint)
+//                             { <one of `packages`' names>: { option, package, in } }, each a
+//                             plain name (an option of the system's configuration, a package
+//                             of its repositories, the option the package is listed in; no
+//                             spaces, so never a command line), option or package given, `in`
+//                             only with a package; a name left out has the neutral hint
+//                             (packageHint)
 //
 // Detection, one reading at start: H2S_DISTRIBUTION (a test seam, TestSeams.distribution)
 // names one and wins; else a distribution whose marker exists (one that cannot be read
@@ -201,15 +202,16 @@ Singleton {
             if (!Object.prototype.hasOwnProperty.call(packages, name) || entry === null || typeof entry !== "object" || Array.isArray(entry))
                 return false;
             const keys = Object.keys(entry);
-            return keys.length > 0 && keys.every(key => (key === "option" || key === "package") && _isPackageName(entry[key]));
+            return (keys.includes("option") || keys.includes("package")) && (!keys.includes("in") || keys.includes("package"))
+                && keys.every(key => (key === "option" || key === "package" || key === "in") && _isPackageName(entry[key]));
         });
     }
 
     // How this system gets package `name` (one of `packages`' names), for a hint to the user
-    // → frozen { name, upstream, purpose, option, package (each "" when not given), text },
+    // → frozen { name, upstream, purpose, option, package, in (each "" when not given), text },
     // or null for a name the shell does not know. `text` is one sentence: "On <label>: the
-    // option <option>, or the package <package>." where the facts say it (an option on NixOS,
-    // a package name on Arch); else, as on a system the shell has no distribution for or one
+    // option <option>, or the package <package> in <in>." where the facts say it (an option on
+    // NixOS, a package name on Arch); else, as on a system the shell has no distribution for or one
     // not known yet, the neutral "From this system's packages: <upstream>, <purpose>." Never
     // a command line.
     function packageHint(facts, name) {
@@ -219,11 +221,13 @@ Singleton {
         const given = facts?.packages?.[name] ?? null;
         const option = typeof given?.option === "string" ? given.option : "";
         const packageName = typeof given?.package === "string" ? given.package : "";
-        const ways = (option !== "" ? ["the option " + option] : []).concat(packageName !== "" ? ["the package " + packageName] : []);
+        const listedIn = packageName !== "" && typeof given?.in === "string" ? given.in : "";
+        const ways = (option !== "" ? ["the option " + option] : [])
+            .concat(packageName !== "" ? ["the package " + packageName + (listedIn !== "" ? " in " + listedIn : "")] : []);
         const label = typeof facts?.label === "string" ? facts.label : "";
         const text = ways.length > 0 && label !== "" ? "On " + label + ": " + ways.join(", or ") + "."
             : "From this system's packages: " + known.upstream + ", " + known.purpose + ".";
-        return Object.freeze({ name, upstream: known.upstream, purpose: known.purpose, option, package: packageName, text });
+        return Object.freeze({ name, upstream: known.upstream, purpose: known.purpose, option, package: packageName, in: listedIn, text });
     }
 
     // What was read → frozen { ready, id, facts, how, problem, shipped }:
