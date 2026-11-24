@@ -10,7 +10,8 @@
 #   - close picks only instances whose config is this tree's mockup.qml, by the name each
 #     answers over IPC: never another tree's mockup, never the shell, never an instance that
 #     answers no name (with -n the commands printed, without it `qs kill --pid` run);
-#   - open, -n: through Hyprland's exec when Hyprland is there, else setsid; an instance
+#   - open, -n: through Hyprland's exec when Hyprland is there, else setsid; a scene name
+#     a shell would read (; & | $( ) `) refused before any command is built; an instance
 #     already running is said, --restart closes it first;
 #   - open, run: the entry starts with every inherited H2S_* variable dropped (the shell's
 #     H2S_SHELL_MODULES, a stray H2S_MOCKUP_SHOT), H2S_MOCKUP and the scene set, the rest of
@@ -135,7 +136,7 @@ check "$(has close-none 'components/clock is not running' && ! log_of close-none
 
 echo "open"
 tool open-hypr HYPRLAND_INSTANCE_SIGNATURE=test -- -n open clock --scene ticking
-dispatch=$(printf '%q' "hl.dsp.exec_cmd(\"'$TOOL' __exec tests/fixtures/mockups components/clock ticking\")")
+dispatch=$(printf '%q' "hl.dsp.exec_cmd(\"'$TOOL' '__exec' 'tests/fixtures/mockups' 'components/clock' 'ticking'\")")
 check "$(has open-hypr "hyprctl dispatch $dispatch" && [ ! -s "$work/state-open-hypr/hyprctl.log" ]; echo $?)" "-n under Hyprland: the exec dispatch printed, of this tool's __exec with the scene, nothing run"
 tool open-setsid -- -n open components/clock
 check "$(has open-setsid "setsid -f $TOOL __exec tests/fixtures/mockups components/clock"; echo $?)" "-n without Hyprland: setsid printed"
@@ -145,6 +146,10 @@ tool open-restart HYPRLAND_INSTANCE_SIGNATURE=test -- -n open good --restart
 check "$(has open-restart 'qs kill --pid 4194301' && has open-restart 'hyprctl dispatch'; echo $?)" "--restart: closed, then started"
 tool open-badscene -- -n open clock --scene 'a b'
 check "$([ "${status[open-badscene]}" = 2 ]; echo $?)" "a scene with whitespace is refused (status ${status[open-badscene]})"
+for hostile in 'x;id' 'x&&id' 'x|id' '$(id)' 'x`id`'; do
+    tool open-hostile HYPRLAND_INSTANCE_SIGNATURE=test -- -n open clock --scene "$hostile"
+    check "$([ "${status[open-hostile]}" = 2 ] && ! has open-hostile hyprctl && ! has open-hostile setsid; echo $?)" "a scene a shell would read ($hostile) is refused before any command is built (status ${status[open-hostile]})"
+done
 tool open-run H2S_SHELL_MODULES=/modules H2S_SHELL_HELPER=/helper H2S_MOCKUP_SHOT=1 KEPT=yes -- open components/clock --scene ticking
 envs=$work/state-open-run/env.txt
 check "$([ -f "$envs" ] && grep -q -x 'H2S_MOCKUP=components/clock' "$envs" && grep -q -x 'H2S_MOCKUP_SCENE=ticking' "$envs" \

@@ -56,6 +56,7 @@ if [ "${1:-}" = __exec ] || { [ "${1:-}" = -n ] && [ "${2:-}" = __exec ]; }; the
     shift
     [ $# -ge 2 ] || { echo "mockup.sh: __exec <base> <kind>/<name> [<scene>]" >&2; exit 2; }
     exec_base=$1 name=$2 scene=${3:-}
+    [ -z "$scene" ] || [[ "$scene" =~ ^[A-Za-z0-9_-]+$ ]] || { echo "mockup.sh: __exec: scene '$scene'" >&2; exit 2; }
     [[ "$exec_base" =~ ^(mockups|tests/fixtures/mockups)$ ]] || { echo "mockup.sh: __exec: base '$exec_base'" >&2; exit 2; }
     [[ "$name" =~ ^(components|views|planning)/[a-z0-9-]+$ ]] || { echo "mockup.sh: __exec: name '$name'" >&2; exit 2; }
     unset_args=()
@@ -85,7 +86,9 @@ while [ $# -gt 0 ]; do
         --restart) restart=1; shift ;;
         --scene)
             scene=${2:-}
-            [[ "$scene" =~ ^[^[:space:]/\"\'\\]+$ ]] || { echo "mockup.sh: --scene needs a scene name (no whitespace, '/', quotes or '\\')" >&2; exit 2; }
+            # The scene goes into the command line Hyprland runs through a shell: letters,
+            # digits, "_" and "-" only, never a character a shell reads
+            [[ "$scene" =~ ^[A-Za-z0-9_-]+$ ]] || { echo "mockup.sh: --scene needs a scene name of letters, digits, '_' and '-'" >&2; exit 2; }
             shift 2
             ;;
         -h | --help) sed -n '2,36p' "$SELF"; exit 0 ;;
@@ -216,7 +219,8 @@ cmd_open() {
         kill_pids "${pids[@]}"
     fi
     if [ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ] && command -v hyprctl > /dev/null; then
-        command="'$SELF' __exec $base $name${scene:+ $scene}"
+        command="'$SELF' '__exec' '$base' '$name'"
+        [ -z "$scene" ] || command="$command '$scene'"
         run hyprctl dispatch "hl.dsp.exec_cmd(\"$command\")"
     elif [ "$dry" = 1 ]; then
         printf 'setsid -f %q __exec %q %q%s >/dev/null 2>&1 </dev/null\n' "$SELF" "$base" "$name" "${scene:+ $scene}"
