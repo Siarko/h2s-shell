@@ -16,8 +16,10 @@ singletons/PrivilegedRules.qml	< -> <=	#1	if (code >= 0xd800 && code <= 0xdbff &
 # reason: an empty argv has argv[0] undefined, never "", so length >= 0 decides nothing more
 singletons/PrivilegedRules.qml	> -> >=	#1	if (problem !== "" && Array.isArray(argv) && argv.length > 0 && argv[0] === ""
 
-# reason: argv[argv.length] is undefined, and unprintable(undefined) reads the text
-# "undefined": printable, so the extra turn never refuses
+# reason: the caller's argv is a real array (argvSnapshot(…, true).words), so argv[argv.length]
+# is undefined, and unprintable(undefined) reads the text "undefined": printable, so the extra
+# turn never refuses; with an array-like holding a word past its length the mutant only
+# refuses more
 singletons/PrivilegedRules.qml	< -> <=	#1	for (let i = 0; i < argv.length; i++) {
 
 # reason: mode 0 has no setuid bit, so whether it passes mode >= 0 does not change the answer
