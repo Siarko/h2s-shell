@@ -37,7 +37,7 @@ TestCase {
         const applied = plan({ op: "apply", reading: reading(), candidate: candidate() });
         assertEqual(applied.refusal, null, "apply: planned");
         assertEqual(show(applied.argv), show(head.concat(["apply", folder, "flake.nix", "laptop", sha(old), sha(text), drv, out, text])),
-                    "apply: the three files' text, the base, the folder, entry, host, the file read, the candidate's hash, what was built, the candidate");
+                    "apply: the files' text, the base, the folder, entry, host, the file read, the candidate's hash, what was built, the candidate");
         assertEqual(show(applied.expected), show({ op: "apply", folder, current: sha(old), sha256: sha(text) }), "apply: what the reply must say");
         assertEqual(applied.what, "Write h2s-shell.json in " + folder + " and switch NixOS to the system built for laptop",
                     "apply: the prompt names the folder and the host");

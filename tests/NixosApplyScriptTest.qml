@@ -3,8 +3,8 @@ import Quickshell
 import Quickshell.Io
 import qs.singletons
 
-// The root step of applying a NixOS build (scripts/root/nixos-apply.sh, after replace-lib.sh
-// and replace-file.sh, the text exactly the three files joined) run for real, but as the
+// The root step of applying a NixOS build (scripts/root/nixos-apply.sh, after replace-lib.sh,
+// replace-file.sh and nixos-toplevel.sh, the text exactly the four files joined) run for real, but as the
 // user: through the shell's trusted timeout as the stand-in for the shell's runs as
 // administrator does (no pkexec), under a scratch base holding the system's places, with the
 // stand-in nix, nix-env, systemd-run and switch-to-configuration of tests/fixtures/
@@ -16,7 +16,9 @@ import qs.singletons
 // not built; the profile not set (the old file back); the activation's exit 4 and a failed
 // one; switch on a folder others may write in (nothing written), its file not the candidate;
 // create, and again; restore, a backup not there, a name not a backup's; one run at a time;
-// the caller's PATH and NIX_PATH not used; and each argument refusal.
+// the caller's PATH and NIX_PATH not used; build (as root: its words and environment, nix's
+// progress passed on, nothing written; nix failed, an answer that is no build, classic, a
+// folder others may write in, the hash); and each argument refusal.
 TestCase {
     id: suite
     suiteName: "NixosApplyScript"
@@ -64,6 +66,7 @@ TestCase {
         }
         // Every case starts from the stand-ins' answers for success and an empty record
         const reset = "set -e; cd \"$1\"; : > log/calls; : > ctl/eval.err; echo 0 > ctl/eval.code; echo 0 > ctl/switch.code; echo 0 > ctl/nix-env.code; : > ctl/nix-env.touch; echo 0 > ctl/valid.code; echo 3 > ctl/active.code; echo 0 > ctl/systemd-run.code; "
+            + ": > ctl/build.err; echo 0 > ctl/build.code; printf '[{\"drvPath\":\"%s\",\"outputs\":{\"out\":\"%s\"}}]\\n' \"$2\" \"$3\" > ctl/build.out; "
             + "printf '%s %s\\n' \"$2\" \"$3\" > ctl/eval.out; put() { printf '%s' \"$1\" > etc/nixos/h2s-shell.json; }; ";
         _exec(["sh", "-c", reset + (next.setup ?? ""), "sh", _scratch, _drv, _out], code => {
             suite.assertEqual(code, 0, next.name + ": set up");
@@ -136,7 +139,7 @@ TestCase {
             assertEqual(state.profile, "system-2-link", "apply: the profile at the new generation");
             assertEqual(_names(state.calls), "nix,nix-vars,nix-home,nix-candidate,nix-store,systemctl,nix-env,systemd-run,switch",
                         "apply: evaluated, checked, then the profile set, then switched, in that order");
-            assertEqual(state.calls[0], "nix eval --raw --impure --extra-experimental-features nix-command flakes --expr EXPR",
+            assertEqual(state.calls[0], "nix eval --raw --impure --extra-experimental-features nix-command flakes --expr EXPR --apply APPLY",
                         "apply: the evaluation's words (a flake: no -I)");
             assertEqual(state.calls[1], "nix-vars flake=path:" + _folder + " host=laptop nixpath=unset override=yes",
                         "apply: path: for a folder without git, the host, no NIX_PATH, the shell's file overridden");
@@ -244,7 +247,7 @@ TestCase {
               _apply("absent", _second, { folder: S + "/etc/classic", entry: "configuration.nix", host: "-" }), (run, state) => {
             assert(run.last.startsWith("applied 7 "), "classic: applied: " + run.last);
             assertEqual(state.calls[0], "nix eval --raw --impure --extra-experimental-features nix-command flakes -I nixpkgs=/nix/store/abc-source -I nixos-config="
-                        + S + "/etc/classic/configuration.nix --expr EXPR", "classic: the system's nixpkgs and the configuration, each by -I");
+                        + S + "/etc/classic/configuration.nix --expr EXPR --apply APPLY", "classic: the system's nixpkgs and the configuration, each by -I");
             assertEqual(state.calls[1], "nix-vars flake= host= nixpath=unset override=yes", "classic: no flake");
         }, { folder: S + "/etc/classic" });
         _case("classic, another entry", "printf 'x' > etc/classic/machine.nix",
@@ -262,6 +265,53 @@ TestCase {
               _refused("nixpath", "nixpkgs not a plain path"), { folder: S + "/etc/classic" });
         _case("flake without flake.nix", "", _apply(_sha(_third), _second, { folder: S + "/etc/classic" }),
               _refused("entry", "flake.nix not in the folder"), { folder: S + "/etc/classic" });
+        // build: the system built as root, for a root-owned configuration only; nothing written
+        // but the store, nix's progress passed on
+        const progressLine = "@nix {\"action\":\"start\",\"id\":1,\"level\":3,\"parent\":0,\"text\":\"building x\",\"type\":105}";
+        _case("build", "printf '%s\\n' '" + progressLine + "' > ctl/build.err",
+              ["build", _folder, "flake.nix", "laptop", _sha(_third), _third], (run, state) => {
+            assertEqual(run.code + " " + run.last, "0 built " + _drv + " " + _out, "build: built, its drvPath and out path");
+            assertEqual(run.stdout.trim(), run.last, "build: the last line on stdout too");
+            assertEqual(state.calls[0], "nix build --impure --extra-experimental-features nix-command flakes --log-format internal-json -v --no-link --json --expr EXPR",
+                        "build: nix build of nixos_toplevel, no link, its progress as internal-json");
+            assertEqual(state.calls[1], "nix-vars flake=path:" + _folder + " host=laptop nixpath=unset override=yes", "build: the flake, the host, the override");
+            assertEqual(state.calls[2], "nix-home [safe]  directory = " + _folder + " ", "build: the folder a safe directory for nix's git");
+            assertEqual(state.calls[3], "nix-candidate h2s-shell.json " + _sha(_third), "build: the candidate, by the shell's file's name");
+            assertEqual(_names(state.calls), "nix,nix-vars,nix-home,nix-candidate", "build: nothing but nix");
+            assert(run.stderr.includes(progressLine), "build: nix's progress passed on");
+            assertEqual(JSON.stringify(state.listing), JSON.stringify(["flake.nix", "h2s-shell.json"]), "build: nothing written in the folder");
+        });
+        _case("build, nix failed", "echo 1 > ctl/build.code; printf 'error: opening file: Permission denied\\n' > ctl/build.err",
+              ["build", _folder, "flake.nix", "laptop", _sha(_third), _third], (run, state) => {
+            assertEqual(run.code + " " + run.last, "1 failed build", "build: nix failed — failed build");
+            assert(run.stderr.includes("Permission denied"), "build: nix's error passed on");
+        });
+        _case("build, an answer that is no build", "printf 'built\\n' > ctl/build.out",
+              ["build", _folder, "flake.nix", "laptop", _sha(_third), _third], (run, state) => {
+            assertEqual(run.code + " " + run.last, "1 failed build", "build: nix's answer not one derivation in the store — failed build");
+        });
+        _case("build, paths outside the store", "printf '[{\"drvPath\":\"/x/a.drv\",\"outputs\":{\"out\":\"/x/b\"}}]\\n' > ctl/build.out",
+              ["build", _folder, "flake.nix", "laptop", _sha(_third), _third], (run, state) => {
+            assertEqual(run.code + " " + run.last, "1 failed build", "build: paths outside the store — failed build");
+        });
+        _case("build, classic", "printf 'export NIX_PATH=\"nixpkgs=/nix/store/abc-source\"\\n' > etc/set-environment",
+              ["build", S + "/etc/classic", "configuration.nix", "-", _sha(_third), _third], (run, state) => {
+            assertEqual(run.code + " " + run.last, "0 built " + _drv + " " + _out, "build, classic: built");
+            assertEqual(state.calls[0], "nix build --impure --extra-experimental-features nix-command flakes -I nixpkgs=/nix/store/abc-source -I nixos-config="
+                        + S + "/etc/classic/configuration.nix --log-format internal-json -v --no-link --json --expr EXPR", "build, classic: each by -I");
+        }, { folder: S + "/etc/classic" });
+        _case("build, a folder others may write in", "mkdir -p home/open; chmod 775 home/open; : > home/open/flake.nix",
+              ["build", S + "/home/open", "flake.nix", "laptop", _sha(_third), _third], (run, state) => {
+            assertEqual(run.code + " " + run.last, "3 refused owner", "build: only a configuration that is root's alone");
+            assertEqual(state.calls.length, 0, "build: nix not run");
+        }, { folder: S + "/home/open" });
+        _case("build, the candidate not its hash", "", ["build", _folder, "flake.nix", "laptop", _sha(_second), _third], (run, state) => {
+            assertEqual(run.code + " " + run.last, "3 refused hash", "build: the candidate's hash checked");
+            assertEqual(state.calls.length, 0, "build: … before nix runs");
+        });
+        _case("build, a word short", "", ["build", _folder, "flake.nix", "laptop", _sha(_third)], _refused("arguments", "build, a word short"));
+        _case("build, classic with a host", "", ["build", S + "/etc/classic", "configuration.nix", "laptop", _sha(_third), _third],
+              _refused("arguments", "build, classic with a host"), { folder: S + "/etc/classic" });
         // A folder others may write in: switch only
         _case("switch", "mkdir -p home/cfg; chmod 775 home/cfg; : > home/cfg/flake.nix; printf '%s' '" + _second + "' > home/cfg/h2s-shell.json",
               ["switch", S + "/home/cfg", "flake.nix", "laptop", _sha(_second), _drv, _out, _second], (run, state) => {
@@ -431,7 +481,7 @@ TestCase {
         if (!selected)
             return;
         _exec(["cat", "--", Quickshell.shellDir + "/scripts/root/replace-lib.sh", Quickshell.shellDir + "/scripts/root/replace-file.sh",
-               Quickshell.shellDir + "/scripts/root/nixos-apply.sh"], (code, stdout) => suite._script = code === 0 ? stdout : "");
+               Quickshell.shellDir + "/scripts/root/nixos-toplevel.sh", Quickshell.shellDir + "/scripts/root/nixos-apply.sh"], (code, stdout) => suite._script = code === 0 ? stdout : "");
         const tree = "set -e; umask 022; S=$1; F=$2; mkdir -p \"$S/etc/nixos\" \"$S/run/current-system/sw/bin\" \"$S/nix/var/nix/profiles\" \"$S/ctl\" \"$S/log\" \"$3/bin\"; "
             + "for t in nix nix-env nix-store systemctl systemd-run; do cp \"$F/$t\" \"$S/run/current-system/sw/bin/\"; done; cp \"$F/switch-to-configuration\" \"$3/bin/\"; "
             + ": > \"$S/etc/nixos/flake.nix\"; ln -s /nowhere \"$S/nix/var/nix/profiles/system-1-link\"; ln -s system-1-link \"$S/nix/var/nix/profiles/system\"";

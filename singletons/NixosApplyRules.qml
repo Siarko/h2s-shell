@@ -7,8 +7,9 @@ import QtQuick
 // op from the configuration as read (NixosConfigRules.reading) and the candidate the user
 // built, and its reply read into an outcome the page can show. Pure.
 //
-// The root step is scripts/root/nixos-apply.sh after replace-lib.sh and replace-file.sh
-// (`scriptFiles`), files in the shell's tree that the shell reads at the click and hands as
+// The root step is scripts/root/nixos-apply.sh after replace-lib.sh, replace-file.sh and
+// nixos-toplevel.sh (the system a build makes, shared with the user's build: NixBuildRules)
+// — `scriptFiles` —, files in the shell's tree that the shell reads at the click and hands as
 // text to the system's /bin/sh through its runs as administrator (PrivilegedRuns.startShell):
 // never run by path, every run asks the password (or passes within a remembered
 // authorization). Its places are fixed in the file, under the folder its first argument
@@ -38,7 +39,7 @@ Singleton {
     readonly property var _placeNames: ["bin", "profile", "store", "backups"]
 
     // The root step's files in scripts/root/, joined in this order (RootScriptRules.script)
-    readonly property var scriptFiles: ["replace-lib.sh", "replace-file.sh", "nixos-apply.sh"]
+    readonly property var scriptFiles: ["replace-lib.sh", "replace-file.sh", "nixos-toplevel.sh", "nixos-apply.sh"]
 
     // How long a run may take: an evaluation and an activation
     readonly property int timeoutMs: 30 * 60 * 1000

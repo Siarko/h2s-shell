@@ -1,0 +1,11 @@
+{
+    "id": "nixos-build",
+    "name": "NixOS build fixture",
+    "version": "0.1.0",
+    "api": "1.41",
+    "description": "Runs the shell's NixOS build (distributions/nixos/NixosBuild.qml) on a stand-in nix and, for a build as root, on its stand-in pkexec, in module test mode (tests/fixtures/modules)",
+    "main": "Main.qml",
+    "optionalPrograms": ["pkexec", "dismiss"],
+    "testPrograms": "tests/programs",
+    "tests": ["tests/NixosBuildTest.qml"]
+}

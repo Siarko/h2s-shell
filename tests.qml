@@ -63,6 +63,7 @@ QtObject {
     property var _etcFilesRules: EtcFilesRulesTest {}
     property var _nixosConfigRules: NixosConfigRulesTest {}
     property var _nixosConfigurationReading: NixosConfigurationReadingTest {}
+    property var _nixBuildRules: NixBuildRulesTest {}
     property var _nixosApplyRules: NixosApplyRulesTest {}
     property var _nixosApplyLive: NixosApplyLiveTest {}
     property var _nixosApplyScript: NixosApplyScriptTest {}

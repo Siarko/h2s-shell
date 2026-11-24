@@ -1,0 +1,57 @@
+#!/bin/sh
+# Stand-in for nix in the user's build (tests/fixtures/modules/nixos-build): copied into
+# <scratch>/bin/, it records its words (the expression as EXPR) and the environment it was
+# handed in <scratch>/log/calls, then answers as <scratch>/ctl/mode says:
+#   build   the real build's lines (build.jsonl) on stderr, nix's --json answer on stdout,
+#           the out-link made; exit 0
+#   fail    the evaluation that failed on a file git does not know; exit 1
+#   denied  a file the user may not read; exit 1
+#   hang    a line, then waits with a child of its own (both pids in <scratch>/ctl/pids);
+#           told to stop, it prints a late line first
+# A build of a store path (`build … --out-link <link> -- <path>`, the user's own GC root
+# for a root build) makes the link and exits 0.
+here=$(cd "$(dirname "$0")/.." && pwd)
+fixtures=$(cat "$here/ctl/fixtures")
+previous=; link=; dashdash=no; path=
+{
+  printf 'nix'
+  for word in "$@"; do
+    if [ "$previous" = --expr ]; then word=EXPR; fi
+    printf ' %s' "$word"
+    [ "$previous" = --out-link ] && link=$word
+    [ "$dashdash" = yes ] && path=$word
+    [ "$word" = -- ] && dashdash=yes
+    previous=$word
+  done
+  printf '\n'
+  printf 'nix-env flake=%s host=%s candidate=%s home=%s nixpath=%s nixconfig=%s\n' "${H2S_FLAKE-unset}" "${H2S_HOST-unset}" \
+    "${H2S_CANDIDATE-unset}" "${HOME-unset}" "${NIX_PATH-unset}" "${NIX_CONFIG-unset}"
+  [ -n "${H2S_CANDIDATE-}" ] && printf 'nix-candidate %s\n' "$(cat "$H2S_CANDIDATE")"
+  case "${HOME-}" in "$here"/*) [ -f "$HOME/.gitconfig" ] && printf 'nix-gitconfig %s\n' "$(tr '\n\t' '  ' < "$HOME/.gitconfig")";; esac
+} >> "$here/log/calls"
+if [ "$dashdash" = yes ]; then
+  ln -s "$path" "$link"
+  exit 0
+fi
+case "$(cat "$here/ctl/mode")" in
+build)
+  cat "$fixtures/build.jsonl" >&2
+  ln -s "$(sed -n 's/.*"out":"\([^"]*\)".*/\1/p' "$fixtures/build.json")" "$link"
+  cat "$fixtures/build.json"
+  exit 0;;
+fail)
+  cat "$fixtures/dry-run-untracked-error.jsonl" >&2
+  exit 1;;
+denied)
+  printf '%s\n' '@nix {"action":"msg","level":0,"msg":"error: opening file '"'"'/etc/nixos/secret.nix'"'"': Permission denied"}' >&2
+  exit 1;;
+hang)
+  sleep 600 &
+  child=$!
+  trap 'printf "%s\n" "@nix {\"action\":\"msg\",\"level\":3,\"msg\":\"late line\"}" >&2; exit 143' TERM
+  printf '%s %s\n' "$$" "$child" > "$here/ctl/pids"
+  printf '%s\n' '@nix {"action":"msg","level":3,"msg":"waiting"}' >&2
+  wait "$child"
+  exit 1;;
+esac
+exit 2

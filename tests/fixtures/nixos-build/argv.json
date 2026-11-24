@@ -1,0 +1,19 @@
+{
+    "about": "The user's build as NixBuildRules.plan gives it (tests/NixBuildRulesTest.qml checks it word for word) and as tests/system/nixos/build.sh runs it, with --dry-run, against the root step's evaluation. @NIX@ the nix program, @SCRATCH@ the private folder, @FOLDER@ the configuration's real folder, @HOST@ the flake's host, @NIXPKGS@ the system's nixpkgs, @EXPR@ nixos_toplevel.",
+    "flake": {
+        "argv": ["env", "-u", "NIX_PATH", "-u", "NIX_CONFIG", "@NIX@", "build", "--impure", "--extra-experimental-features", "nix-command flakes",
+                 "--log-format", "internal-json", "-v", "--json", "--out-link", "@SCRATCH@/result", "--expr", "@EXPR@"],
+        "environment": { "H2S_FLAKE": "path:@FOLDER@", "H2S_HOST": "@HOST@", "H2S_CANDIDATE": "@SCRATCH@/h2s-shell.json" }
+    },
+    "git": {
+        "argv": ["env", "-u", "NIX_PATH", "-u", "NIX_CONFIG", "@NIX@", "build", "--impure", "--extra-experimental-features", "nix-command flakes",
+                 "--log-format", "internal-json", "-v", "--json", "--out-link", "@SCRATCH@/result", "--expr", "@EXPR@"],
+        "environment": { "H2S_FLAKE": "git+file://@FOLDER@", "H2S_HOST": "@HOST@", "H2S_CANDIDATE": "@SCRATCH@/h2s-shell.json" }
+    },
+    "classic": {
+        "argv": ["env", "-u", "NIX_PATH", "-u", "NIX_CONFIG", "@NIX@", "build", "--impure", "--extra-experimental-features", "nix-command flakes",
+                 "-I", "nixpkgs=@NIXPKGS@", "-I", "nixos-config=@FOLDER@/configuration.nix",
+                 "--log-format", "internal-json", "-v", "--json", "--out-link", "@SCRATCH@/result", "--expr", "@EXPR@"],
+        "environment": { "H2S_FLAKE": "", "H2S_HOST": "", "H2S_CANDIDATE": "@SCRATCH@/h2s-shell.json" }
+    }
+}

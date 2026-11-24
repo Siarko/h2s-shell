@@ -109,8 +109,11 @@ scripts/nm-config-files.sh unit:NmConfigFilesTest unit:IntegrationChangeTest uni
 scripts/root/pam-apply.sh unit:PamApplyTest unit:PamRulesPageTest
 scripts/root/remember-install.sh unit:RememberInstallTest unit:RememberAdminPageTest
 scripts/root/vpn-lockdown-install.sh unit:VpnLockdownInstallTest unit:DistributionContractTest
-scripts/root/nixos-apply.sh unit:NixosApplyScriptTest modules:all
-tests/fixtures/nixos-apply/* unit:NixosApplyScriptTest
+scripts/root/nixos-apply.sh unit:NixosApplyScriptTest modules:all self:tests/run-system.sh
+scripts/root/nixos-toplevel.sh unit:NixosApplyScriptTest unit:NixBuildRulesTest modules:all self:tests/run-system.sh
+scripts/nixos-build-files.sh modules:all
+tests/fixtures/nixos-apply/* unit:NixosApplyScriptTest modules:all
+tests/fixtures/nixos-build/* unit:NixBuildRulesTest modules:all self:tests/run-system.sh
 scripts/vpn-lockdown-check.sh unit:VpnLockdownInstallTest unit:NetworkTest
 scripts/h2s-vpn-lockdown unit:VpnLockdownInstallTest unit:NetworkTest
 tests/test-tree.sh unit:TestTreeTest lock:all

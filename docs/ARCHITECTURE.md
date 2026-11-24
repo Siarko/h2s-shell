@@ -219,6 +219,20 @@ configuration of the user's the password authorizes running code any of the user
 could have changed, as activating it does; its messages are not passed back to the shell
 there.
 
+The build itself runs as the user, without a password (`distributions/nixos/NixosBuild.qml`,
+its decisions in `NixBuildRules`): `nix build` of the same system the root step evaluates —
+one description, `nixos_toplevel` in `scripts/root/nixos-toplevel.sh`, which the root step
+joins before its own text and the user's build reads out of that file, with the same inputs
+(the flake's reference `git+file://` where the folder holds a `.git`, `path:` otherwise; for
+a classic configuration the system's own nixpkgs and the configuration by `-I`). Its
+candidate and the GC root that keeps the built system until it is applied live in a private
+folder under `$XDG_RUNTIME_DIR`; nix's `internal-json` progress becomes the phase and the
+last lines; Cancel ends nix's process group. A repository root owns is built with a scratch
+`HOME` whose git configuration names it safe. A configuration the user cannot build (a file
+only root may read) is built by the root step's `build`, asked only by the click that starts
+the build. `tests/system/nixos/build.sh` checks, evaluating only, that the user's build, the
+root step's evaluation and the real configuration give the same drvPath.
+
 #### NixOS
 
 `/etc/NIXOS` makes it `nixos`, whatever os-release says. `/etc` is generated: the integration

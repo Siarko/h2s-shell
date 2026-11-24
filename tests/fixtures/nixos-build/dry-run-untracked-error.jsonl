@@ -1,0 +1,46 @@
+@nix {"action":"msg","level":4,"msg":"evaluating file '«nix-internal»/derivation-internal.nix'"}
+@nix {"action":"msg","level":1,"msg":"\u001b[35;1mwarning:\u001b[0m Git tree '/tmp/h2s-spike.Gl0N7D/revconf' is dirty"}
+@nix {"action":"msg","level":4,"msg":"evaluating file '/tmp/h2s-spike.Gl0N7D/revconf/flake.nix'"}
+@nix {"action":"start","id":15838761350856704,"level":5,"parent":0,"text":"copying '/tmp/h2s-spike.Gl0N7D/revconf/' to the store","type":0}
+@nix {"action":"stop","id":15838761350856704}
+@nix {"action":"msg","level":4,"msg":"evaluating file '/nix/store/bxlw67anya9qgajbkdlrkm312r7phhyv-source/flake.nix'"}
+@nix {"action":"msg","level":4,"msg":"evaluating file '«flakes-internal»/call-flake.nix'"}
+@nix {"action":"msg","level":4,"msg":"evaluating file '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/flake.nix'"}
+@nix {"action":"msg","level":4,"msg":"evaluating file '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/lib/default.nix'"}
+@nix {"action":"msg","level":4,"msg":"evaluating file '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/lib/fixed-points.nix'"}
+@nix {"action":"msg","level":4,"msg":"evaluating file '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/lib/flake-version-info.nix'"}
+@nix {"action":"msg","level":4,"msg":"evaluating file '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/nixos/lib/eval-config.nix'"}
+@nix {"action":"msg","level":4,"msg":"evaluating file '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/lib/trivial.nix'"}
+@nix {"action":"msg","level":4,"msg":"evaluating file '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/nixos/lib/default.nix'"}
+@nix {"action":"msg","level":4,"msg":"evaluating file '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/lib/attrsets.nix'"}
+@nix {"action":"msg","level":4,"msg":"evaluating file '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/nixos/lib/eval-config-minimal.nix'"}
+@nix {"action":"msg","level":4,"msg":"evaluating file '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/lib/modules.nix'"}
+@nix {"action":"msg","level":4,"msg":"evaluating file '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/lib/lists.nix'"}
+@nix {"action":"msg","level":4,"msg":"evaluating file '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/nixos/modules/module-list.nix'"}
+@nix {"action":"msg","level":4,"msg":"evaluating file '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/nixos/modules/config/appstream.nix'"}
+@nix {"action":"msg","level":4,"msg":"evaluating file '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/nixos/modules/config/console.nix'"}
+@nix {"action":"msg","level":4,"msg":"evaluating file '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/lib/debug.nix'"}
+@nix {"action":"msg","level":4,"msg":"evaluating file '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/nixos/modules/config/debug-info.nix'"}
+@nix {"action":"msg","level":4,"msg":"evaluating file '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/nixos/modules/config/fanout.nix'"}
+@nix {"action":"msg","level":4,"msg":"evaluating file '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/nixos/modules/config/fonts/fontconfig.nix'"}
+@nix {"action":"msg","level":4,"msg":"evaluating file '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/nixos/modules/config/fonts/fontdir.nix'"}
+@nix {"action":"msg","level":4,"msg":"evaluating file '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/nixos/modules/config/fonts/ghostscript.nix'"}
+@nix {"action":"msg","level":4,"msg":"evaluating file '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/nixos/modules/config/fonts/packages.nix'"}
+@nix {"action":"msg","level":4,"msg":"evaluating file '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/nixos/modules/config/getaddrinfo.nix'"}
+@nix {"action":"msg","level":4,"msg":"evaluating file '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/nixos/modules/config/gtk/gtk-icon-cache.nix'"}
+@nix {"action":"msg","level":4,"msg":"evaluating file '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/nixos/modules/config/i18n.nix'"}
+@nix {"action":"msg","level":4,"msg":"evaluating file '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/nixos/modules/config/iproute2.nix'"}
+@nix {"action":"msg","level":4,"msg":"evaluating file '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/nixos/modules/config/ldap.nix'"}
+@nix {"action":"msg","level":4,"msg":"evaluating file '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/nixos/modules/config/ldso.nix'"}
+@nix {"action":"msg","level":4,"msg":"evaluating file '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/nixos/modules/config/locale.nix'"}
+@nix {"action":"msg","level":4,"msg":"evaluating file '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/nixos/modules/config/malloc.nix'"}
+@nix {"action":"msg","level":4,"msg":"evaluating file '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/nixos/modules/config/mysql.nix'"}
+@nix {"action":"msg","level":4,"msg":"evaluating file '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/nixos/modules/config/networking.nix'"}
+@nix {"action":"msg","level":4,"msg":"evaluating file '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/nixos/modules/config/nix-channel.nix'"}
+@nix {"action":"msg","level":4,"msg":"evaluating file '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/nixos/modules/config/nix-flakes.nix'"}
+@nix {"action":"msg","level":4,"msg":"evaluating file '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/nixos/modules/config/nix-remote-build.nix'"}
+@nix {"action":"msg","level":4,"msg":"evaluating file '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/nixos/modules/config/nix.nix'"}
+@nix {"action":"msg","level":4,"msg":"evaluating file '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/nixos/modules/config/nsswitch.nix'"}
+@nix {"action":"start","id":15838761350856705,"level":5,"parent":0,"text":"copying '«path:/tmp/h2s-spike.Gl0N7D/h2s-shell?lastModified=1795522894&narHash=sha256-L9chsvH%2BokDYxL06CcbEg%2BmsrORn1wKlx0q0IAEmg%2Bo%3D»/' to the store","type":0}
+@nix {"action":"stop","id":15838761350856705}
+@nix {"action":"msg","column":null,"file":null,"level":0,"line":null,"msg":"\u001b[31;1merror:\u001b[0m\n       … while calling the '\u001b[35;1mhead\u001b[0m' builtin\n         \u001b[34;1mat \u001b[35;1m/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/lib/attrsets.nix:1717:13\u001b[0m:\n         1716|           if length values == 1 || pred here (elemAt values 1) (head values) then\n         1717|             head values\n             |             \u001b[31;1m^\u001b[0m\n         1718|           else\n\n       … while evaluating the attribute '\u001b[35;1mvalue\u001b[0m'\n         \u001b[34;1mat \u001b[35;1m/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/lib/modules.nix:1167:7\u001b[0m:\n         1166|     // {\n         1167|       value = addErrorContext \"while evaluating the option `${showOption loc}':\" value;\n             |       \u001b[31;1m^\u001b[0m\n         1168|       inherit (res.defsFinal') highestPrio;\n\n       … while evaluating the option `system.build.toplevel':\n\n       … while evaluating definitions from `/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/nixos/modules/system/activation/top-level.nix':\n\n       \u001b[35;1m(stack trace truncated; use '--show-trace' to show the full, detailed trace)\u001b[0m\n\n       \u001b[31;1merror:\u001b[0m\n       Failed assertions:\n       - programs.h2s-shell.settingsFile (/nix/store/bxlw67anya9qgajbkdlrkm312r7phhyv-source/h2s-shell.json): the file does not exist (a flake in a git repository sees only the files git knows: `git add` it).","raw_msg":"\nFailed assertions:\n- programs.h2s-shell.settingsFile (/nix/store/bxlw67anya9qgajbkdlrkm312r7phhyv-source/h2s-shell.json): the file does not exist (a flake in a git repository sees only the files git knows: `git add` it)."}

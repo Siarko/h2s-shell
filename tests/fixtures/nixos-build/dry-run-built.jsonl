@@ -1,0 +1,102 @@
+@nix {"action":"msg","level":4,"msg":"evaluating file '«nix-internal»/derivation-internal.nix'"}
+@nix {"action":"start","id":15838125695696896,"level":4,"parent":0,"text":"copying \"/etc/nixos\" to the store","type":0}
+@nix {"action":"stop","id":15838125695696896}
+@nix {"action":"msg","level":4,"msg":"evaluating file '/nix/store/va8lz5h7zf93kpfwlc24xflgpycigvic-source/flake.nix'"}
+@nix {"action":"msg","level":4,"msg":"evaluating file '/nix/store/va8lz5h7zf93kpfwlc24xflgpycigvic-source/flake.nix'"}
+@nix {"action":"msg","level":4,"msg":"evaluating file '«flakes-internal»/call-flake.nix'"}
+@nix {"action":"msg","level":4,"msg":"evaluating file '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/flake.nix'"}
+@nix {"action":"msg","level":4,"msg":"evaluating file '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/lib/default.nix'"}
+@nix {"action":"msg","level":4,"msg":"evaluating file '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/lib/fixed-points.nix'"}
+@nix {"action":"msg","level":4,"msg":"evaluating file '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/lib/flake-version-info.nix'"}
+@nix {"action":"msg","level":4,"msg":"evaluating file '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/nixos/lib/eval-config.nix'"}
+@nix {"action":"msg","level":4,"msg":"evaluating file '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/lib/trivial.nix'"}
+@nix {"action":"msg","level":4,"msg":"evaluating file '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/nixos/lib/default.nix'"}
+@nix {"action":"msg","level":4,"msg":"evaluating file '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/lib/attrsets.nix'"}
+@nix {"action":"msg","level":4,"msg":"evaluating file '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/nixos/lib/eval-config-minimal.nix'"}
+@nix {"action":"msg","level":4,"msg":"evaluating file '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/lib/modules.nix'"}
+@nix {"action":"msg","level":4,"msg":"evaluating file '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/lib/lists.nix'"}
+@nix {"action":"msg","level":4,"msg":"evaluating file '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/nixos/modules/module-list.nix'"}
+@nix {"action":"msg","level":4,"msg":"evaluating file '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/nixos/modules/config/appstream.nix'"}
+@nix {"action":"msg","level":4,"msg":"evaluating file '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/nixos/modules/config/console.nix'"}
+@nix {"action":"msg","level":4,"msg":"evaluating file '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/lib/debug.nix'"}
+@nix {"action":"msg","level":4,"msg":"evaluating file '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/nixos/modules/config/debug-info.nix'"}
+@nix {"action":"msg","level":4,"msg":"evaluating file '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/nixos/modules/config/fanout.nix'"}
+@nix {"action":"msg","level":4,"msg":"evaluating file '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/nixos/modules/config/fonts/fontconfig.nix'"}
+@nix {"action":"msg","level":4,"msg":"evaluating file '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/nixos/modules/config/fonts/fontdir.nix'"}
+@nix {"action":"msg","level":4,"msg":"evaluating file '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/nixos/modules/config/fonts/ghostscript.nix'"}
+@nix {"action":"msg","level":4,"msg":"evaluating file '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/nixos/modules/config/fonts/packages.nix'"}
+@nix {"action":"msg","level":4,"msg":"evaluating file '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/nixos/modules/config/getaddrinfo.nix'"}
+@nix {"action":"msg","level":4,"msg":"evaluating file '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/nixos/modules/config/gtk/gtk-icon-cache.nix'"}
+@nix {"action":"msg","level":4,"msg":"evaluating file '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/nixos/modules/config/i18n.nix'"}
+@nix {"action":"msg","level":4,"msg":"evaluating file '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/nixos/modules/config/iproute2.nix'"}
+@nix {"action":"msg","level":4,"msg":"evaluating file '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/nixos/modules/config/ldap.nix'"}
+@nix {"action":"msg","level":4,"msg":"evaluating file '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/nixos/modules/config/ldso.nix'"}
+@nix {"action":"msg","level":4,"msg":"evaluating file '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/nixos/modules/config/locale.nix'"}
+@nix {"action":"msg","level":4,"msg":"evaluating file '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/nixos/modules/config/malloc.nix'"}
+@nix {"action":"msg","level":4,"msg":"evaluating file '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/nixos/modules/config/mysql.nix'"}
+@nix {"action":"msg","level":4,"msg":"evaluating file '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/nixos/modules/config/networking.nix'"}
+@nix {"action":"msg","level":4,"msg":"evaluating file '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/nixos/modules/config/nix-channel.nix'"}
+@nix {"action":"msg","level":4,"msg":"evaluating file '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/nixos/modules/config/nix-flakes.nix'"}
+@nix {"action":"msg","level":4,"msg":"evaluating file '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/nixos/modules/config/nix-remote-build.nix'"}
+@nix {"action":"msg","level":4,"msg":"evaluating file '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/nixos/modules/config/nix.nix'"}
+@nix {"action":"msg","level":4,"msg":"evaluating file '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/nixos/modules/config/nsswitch.nix'"}
+@nix {"action":"start","id":15838125695696897,"level":5,"parent":0,"text":"copying '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/pkgs/by-name/ni/nixos-init' to the store","type":0}
+@nix {"action":"stop","id":15838125695696897}
+@nix {"action":"start","id":15838125695696898,"level":5,"parent":0,"text":"copying '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/pkgs/development/libraries/qt-6/hooks/fix-qt-builtin-paths.sh' to the store","type":0}
+@nix {"action":"stop","id":15838125695696898}
+@nix {"action":"start","id":15838125695696899,"level":5,"parent":0,"text":"copying '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/pkgs/development/libraries/qt-6/hooks/fix-qt-module-paths.sh' to the store","type":0}
+@nix {"action":"stop","id":15838125695696899}
+@nix {"action":"start","id":15838125695696900,"level":5,"parent":0,"text":"copying '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/pkgs/development/libraries/qt-6/hooks/fix-qt-builtin-paths.sh' to the store","type":0}
+@nix {"action":"stop","id":15838125695696900}
+@nix {"action":"start","id":15838125695696901,"level":5,"parent":0,"text":"copying '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/pkgs/development/libraries/qt-6/hooks/fix-qt-module-paths.sh' to the store","type":0}
+@nix {"action":"stop","id":15838125695696901}
+@nix {"action":"start","id":15838125695696902,"level":5,"parent":0,"text":"copying '/nix/store/p7yx739q7ips4f9a1a26k509id1kd85i-source/pkgs/development/tools/haskell/ghc-settings-edit' to the store","type":0}
+@nix {"action":"stop","id":15838125695696902}
+@nix {"action":"start","id":15838125695696903,"level":5,"parent":0,"text":"copying '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/pkgs/development/tools/haskell/ghc-settings-edit' to the store","type":0}
+@nix {"action":"stop","id":15838125695696903}
+@nix {"action":"start","id":15838125695696904,"level":5,"parent":0,"text":"copying '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/pkgs/build-support/node/prefetch-npm-deps' to the store","type":0}
+@nix {"action":"stop","id":15838125695696904}
+@nix {"action":"start","id":15838125695696905,"level":5,"parent":0,"text":"copying '/nix/store/p7yx739q7ips4f9a1a26k509id1kd85i-source/pkgs/development/libraries/qt-6/hooks/fix-qt-builtin-paths.sh' to the store","type":0}
+@nix {"action":"stop","id":15838125695696905}
+@nix {"action":"start","id":15838125695696906,"level":5,"parent":0,"text":"copying '/nix/store/p7yx739q7ips4f9a1a26k509id1kd85i-source/pkgs/development/libraries/qt-6/hooks/fix-qt-module-paths.sh' to the store","type":0}
+@nix {"action":"stop","id":15838125695696906}
+@nix {"action":"start","id":15838125695696907,"level":5,"parent":0,"text":"copying '/nix/store/p7yx739q7ips4f9a1a26k509id1kd85i-source/pkgs/development/tools/haskell/ghc-settings-edit' to the store","type":0}
+@nix {"action":"stop","id":15838125695696907}
+@nix {"action":"start","id":15838125695696908,"level":5,"parent":0,"text":"copying '/nix/store/p7yx739q7ips4f9a1a26k509id1kd85i-source/pkgs/development/libraries/qt-6/hooks/fix-qt-builtin-paths.sh' to the store","type":0}
+@nix {"action":"stop","id":15838125695696908}
+@nix {"action":"start","id":15838125695696909,"level":5,"parent":0,"text":"copying '/nix/store/p7yx739q7ips4f9a1a26k509id1kd85i-source/pkgs/development/libraries/qt-6/hooks/fix-qt-module-paths.sh' to the store","type":0}
+@nix {"action":"stop","id":15838125695696909}
+@nix {"action":"start","id":15838125695696910,"level":5,"parent":0,"text":"copying '/nix/store/p7yx739q7ips4f9a1a26k509id1kd85i-source/pkgs/build-support/node/prefetch-npm-deps' to the store","type":0}
+@nix {"action":"stop","id":15838125695696910}
+@nix {"action":"start","id":15838125695696911,"level":5,"parent":0,"text":"copying '/nix/store/j6as2wc8iz49k22hwgiijpxrf2in2q40-source' to the store","type":0}
+@nix {"action":"stop","id":15838125695696911}
+@nix {"action":"start","id":15838125695696912,"level":5,"parent":0,"text":"copying '/nix/store/p7yx739q7ips4f9a1a26k509id1kd85i-source/pkgs/build-support/node/prefetch-npm-deps' to the store","type":0}
+@nix {"action":"stop","id":15838125695696912}
+@nix {"action":"start","id":15838125695696913,"level":5,"parent":0,"text":"copying '/nix/store/bjylvbj0070dqq2nrvxygwshpznlyvyi-source' to the store","type":0}
+@nix {"action":"stop","id":15838125695696913}
+@nix {"action":"start","id":15838125695696914,"level":5,"parent":0,"text":"copying '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/pkgs/development/libraries/qt-6/hooks/fix-qt-builtin-paths.sh' to the store","type":0}
+@nix {"action":"stop","id":15838125695696914}
+@nix {"action":"start","id":15838125695696915,"level":5,"parent":0,"text":"copying '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/pkgs/development/libraries/qt-6/hooks/fix-qt-module-paths.sh' to the store","type":0}
+@nix {"action":"stop","id":15838125695696915}
+@nix {"action":"start","id":15838125695696916,"level":5,"parent":0,"text":"copying '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/pkgs/development/libraries/qt-6/hooks/fix-qt-builtin-paths.sh' to the store","type":0}
+@nix {"action":"stop","id":15838125695696916}
+@nix {"action":"start","id":15838125695696917,"level":5,"parent":0,"text":"copying '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/pkgs/development/libraries/qt-6/hooks/fix-qt-module-paths.sh' to the store","type":0}
+@nix {"action":"stop","id":15838125695696917}
+@nix {"action":"start","id":15838125695696918,"level":5,"parent":0,"text":"copying '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/pkgs/by-name/ni/nixos-firewall-tool' to the store","type":0}
+@nix {"action":"stop","id":15838125695696918}
+@nix {"action":"start","id":15838125695696919,"level":5,"parent":0,"text":"copying '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/lib' to the store","type":0}
+@nix {"action":"stop","id":15838125695696919}
+@nix {"action":"start","id":15838125695696920,"level":5,"parent":0,"text":"copying '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source' to the store","type":0}
+@nix {"action":"stop","id":15838125695696920}
+@nix {"action":"start","id":15838125695696921,"level":5,"parent":0,"text":"copying '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/pkgs/pkgs-lib' to the store","type":0}
+@nix {"action":"stop","id":15838125695696921}
+@nix {"action":"start","id":15838125695696922,"level":5,"parent":0,"text":"copying '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/pkgs/by-name/ni/nixos-render-docs/src' to the store","type":0}
+@nix {"action":"stop","id":15838125695696922}
+@nix {"action":"start","id":15838125695696923,"level":5,"parent":0,"text":"copying '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/pkgs/misc/documentation-highlighter' to the store","type":0}
+@nix {"action":"stop","id":15838125695696923}
+@nix {"action":"start","id":15838125695696924,"level":5,"parent":0,"text":"copying '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/nixos/doc/manual' to the store","type":0}
+@nix {"action":"stop","id":15838125695696924}
+@nix {"action":"start","id":15838125695696925,"level":5,"parent":0,"text":"copying '/nix/store/42h7k7nz90k8hi5qd9mr2ijnfvbircz4-source/pkgs/by-name/sw/switch-to-configuration-ng' to the store","type":0}
+@nix {"action":"stop","id":15838125695696925}
+@nix {"action":"start","id":15838160055435264,"level":6,"parent":0,"text":"querying info about missing paths","type":0}
+@nix {"action":"stop","id":15838160055435264}

@@ -1,7 +1,8 @@
 # shellcheck shell=sh
 # The root step of applying a NixOS build: the shell's settings file (<folder>/h2s-shell.json)
-# written, and the system the user built switched to. Joined after replace-lib.sh and
-# replace-file.sh and run as `sh -c <text> sh <base> <arguments>…`; never run by path. Its
+# written, and the system the user built switched to; and the build itself, for a
+# configuration the user cannot build. Joined after replace-lib.sh,
+# replace-file.sh and nixos-toplevel.sh, and run as `sh -c <text> sh <base> <arguments>…`; never run by path. Its
 # places are fixed here, under <base> ("" for the system: take_base):
 #   the tools        /run/current-system/sw/bin/{nix,nix-env,nix-store,systemctl,systemd-run}
 #   the profile      /nix/var/nix/profiles/system (its links system-<n>-link)
@@ -16,6 +17,7 @@
 #   switch  <folder> <entry> <host | -> <candidate sha256> <drvPath> <out path>
 #           <candidate JSON>
 #   restore <folder> <backup name> <current sha256 | absent>
+#   build   <folder> <entry> <host | -> <candidate sha256> <candidate JSON>
 # <entry> is flake.nix (a flake, <host> its nixosConfigurations name) or the classic
 # configuration's file in the folder (<host> -). create, apply and restore write, and only
 # where every folder of the real path is root's and nobody else may write in it; switch
@@ -38,8 +40,16 @@
 # activating it does. For switch the evaluation's messages are not passed on (they could
 # carry what such code read as root); for apply its last lines precede `refused evaluation`.
 #
+# build builds that system as root (nix build of nixos_toplevel, no link: the user's own
+# build of the store path then holds it), for a root-owned configuration only (the same
+# folder checks as a write), when the user's build cannot read it. It writes nothing but the
+# store; its nix's progress (internal-json) passes on on stderr as it comes.
+#
 # The last line, on stdout and stderr:
 #   created <sha256> <backup>                       exit 0
+#   built <drvPath> <out path>                      exit 0 (build)
+#   failed build                                    exit 1 (build: nix failed; its lines
+#                                                   before say why)
 #   applied <generation> <backup | ->               exit 0
 #   applied-with-errors <generation> <backup | ->   exit 4 (switch-to-configuration's 4:
 #                                                   some units did not start)
@@ -87,20 +97,8 @@ work=
 trap 'end_status=$?; clean_up; [ -z "$work" ] || rm -rf -- "$work"
   case "$end_status" in 126|127) say "failed unknown ${backup_name:--}"; exit 1;; esac' EXIT
 
-# The configuration's system with the candidate in place of the shell's file, its drvPath
-# and out path on one line. Its inputs come from the environment (nix eval --impure):
-# H2S_FLAKE (the flake's reference; "" for classic, <nixos-config> then), H2S_HOST,
-# H2S_CANDIDATE (the candidate file's path). The user's build evaluates the same.
-nixos_toplevel='let
-  flake = builtins.getEnv "H2S_FLAKE";
-  candidate = /. + builtins.getEnv "H2S_CANDIDATE";
-  configured = if flake != ""
-    then (builtins.getFlake flake).nixosConfigurations.${builtins.getEnv "H2S_HOST"}
-    else import <nixpkgs/nixos/lib/eval-config.nix> { system = builtins.currentSystem; modules = [ <nixos-config> ]; };
-  toplevel = (configured.extendModules {
-    modules = [ ({ lib, ... }: { programs.h2s-shell.settingsFile = lib.mkForce candidate; }) ];
-  }).config.system.build.toplevel;
-in toplevel.drvPath + " " + toplevel.outPath + "\n"'
+# The system the user built is nixos_toplevel (nixos-toplevel.sh, joined before this file),
+# evaluated here with the same inputs as the user's build.
 
 is_host() { case "$1" in ''|*[!A-Za-z0-9_-]*) return 1;; esac; [ ${#1} -le 253 ]; }
 is_entry() { case "$1" in ''|[!A-Za-z0-9_]*|*[!A-Za-z0-9._-]*) return 1;; *.nix) ;; *) return 1;; esac; [ ${#1} -le 255 ]; }
@@ -167,18 +165,6 @@ tool() {
   if [ ! -f "$bin/$1" ] || [ ! -x "$bin/$1" ]; then refuse tools; fi
 }
 
-# system_nixpkgs: the nixpkgs entry of the system's own NIX_PATH, in $nixpkgs
-system_nixpkgs() {
-  nix_path=$(sed -n 's/^export NIX_PATH="\(.*\)"$/\1/p' "$base/etc/set-environment" 2> /dev/null | head -n 1) || nix_path=
-  nixpkgs=
-  while [ -n "$nix_path" ]; do
-    nix_entry=${nix_path%%:*}
-    case "$nix_path" in *:*) nix_path=${nix_path#*:};; *) nix_path=;; esac
-    case "$nix_entry" in nixpkgs=*) nixpkgs=${nix_entry#nixpkgs=}; break;; esac
-  done
-  is_plain "$nixpkgs" || refuse nixpath
-}
-
 # evaluate <entry> <host | -> <json> <sha256>: the configuration with the candidate, as
 # root; refused unless it is the system the user built ($want_drv, $want_out), and built
 evaluate() {
@@ -186,23 +172,15 @@ evaluate() {
   printf '%s' "$eval_text" > "$work/candidate/$prefix" || refuse write
   got=$(hash_of "$work/candidate/$prefix") || refuse write
   [ "$got" = "$eval_sha" ] || refuse hash
-  if [ "$eval_entry" = flake.nix ]; then
-    [ -f "$folder/flake.nix" ] || refuse entry
-    flake=path:$folder
-    if [ -e "$folder/.git" ]; then flake=git+file://$folder; fi
+  toplevel_inputs "$folder" "$eval_entry" "$eval_host"
+  if [ -n "$flake" ]; then
     # nix's git opens a repository only of the one running, unless it is a safe directory
     printf '[safe]\n\tdirectory = %s\n' "$folder" > "$work/home/.gitconfig" || refuse write
     set --
   else
-    [ -f "$folder/$eval_entry" ] || refuse entry
-    system_nixpkgs
-    flake=; eval_host=
-    set -- -I "nixpkgs=$nixpkgs" -I "nixos-config=$folder/$eval_entry"
+    set -- -I "nixpkgs=$nixpkgs" -I "nixos-config=$nixos_config"
   fi
-  if ! env -i PATH="$PATH" HOME="$work/home" XDG_CACHE_HOME="$base/root/.cache" LC_ALL=C \
-      H2S_FLAKE="$flake" H2S_HOST="$eval_host" H2S_CANDIDATE="$work/candidate/$prefix" \
-      "$bin/nix" eval --raw --impure --extra-experimental-features 'nix-command flakes' "$@" \
-      --expr "$nixos_toplevel" > "$work/result" 2> "$work/log" < /dev/null; then
+  if ! toplevel_paths "$bin/nix" "$work/home" "$base/root/.cache" "$work/candidate/$prefix" "$@" > "$work/result" 2> "$work/log"; then
     if [ "$op" = apply ]; then tail -n 40 -- "$work/log" >&2 || :; fi
     refuse evaluation
   fi
@@ -322,6 +300,35 @@ switch)
   check_user_file "$target" "$candidate_sha"
   evaluate "$2" "$3" "$json" "$candidate_sha"
   activate -;;
+build)
+  [ $# -eq 5 ] || refuse arguments
+  candidate_sha=$4; json=$5
+  check_text "$json" "$candidate_sha"
+  check_entry "$2" "$3"
+  take_folder "$1"; folder_safe
+  tool nix
+  start_work
+  printf '%s' "$json" > "$work/candidate/$prefix" || refuse write
+  got=$(hash_of "$work/candidate/$prefix") || refuse write
+  [ "$got" = "$candidate_sha" ] || refuse hash
+  toplevel_inputs "$folder" "$2" "$3"
+  if [ -n "$flake" ]; then
+    printf '[safe]\n\tdirectory = %s\n' "$folder" > "$work/home/.gitconfig" || refuse write
+    set --
+  else
+    set -- -I "nixpkgs=$nixpkgs" -I "nixos-config=$nixos_config"
+  fi
+  code=0
+  env -i PATH="$PATH" HOME="$work/home" XDG_CACHE_HOME="$base/root/.cache" LC_ALL=C \
+    H2S_FLAKE="$flake" H2S_HOST="$toplevel_host" H2S_CANDIDATE="$work/candidate/$prefix" \
+    "$bin/nix" build --impure --extra-experimental-features 'nix-command flakes' "$@" \
+    --log-format internal-json -v --no-link --json --expr "$nixos_toplevel" > "$work/result" < /dev/null || code=$?
+  if [ "$code" != 0 ]; then say "failed build"; exit 1; fi
+  # [{"drvPath":"<drv>","outputs":{"out":"<out>"}}]: nix's own JSON, one derivation
+  built_drv=$(sed -n 's/^\[{"drvPath":"\([^"]*\)","outputs":{"out":"\([^"]*\)"}}\]$/\1/p' "$work/result")
+  built_out=$(sed -n 's/^\[{"drvPath":"\([^"]*\)","outputs":{"out":"\([^"]*\)"}}\]$/\2/p' "$work/result")
+  is_store_path "$built_drv" drv && is_store_path "$built_out" out || { say "failed build"; exit 1; }
+  say "built $built_drv $built_out";;
 restore)
   [ $# -eq 3 ] || refuse arguments
   [ "$3" = absent ] || is_hash "$3" || refuse arguments
