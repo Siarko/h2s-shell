@@ -664,7 +664,9 @@ itself: the page says the blocking needs its script installed. When the installe
 still asks (its rule does not apply), a question opened by an automatic run is closed at
 once and nothing runs by itself; with another polkit agent, whose question the shell cannot
 see, an automatic run that pkexec ends refused or unanswered stops the automatic runs the
-same way. "Apply again" runs it on a click, with its question. What
+same way. "Apply again" runs it on a click, with its question; a run on a click that needs
+no password, or the page opened again, lets it switch by itself again. While the blocking is
+wanted but nothing may switch it, a notification says so once. What
 was switched on in which boot is kept in Config. "Password-free blocking" shows the state,
 the script and the rule in full; how it is installed is the distribution's
 (`network.vpnLockdown`; elsewhere "Not supported on this distribution.").
