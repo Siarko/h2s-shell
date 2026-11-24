@@ -49,6 +49,7 @@ part brief 0 "" 1
 part after-bad 0 "" "" "end bad"
 part bad-after-good 1 "" "" "end good"
 part slower 0 "" 30
+part bad-late 1 "" 1.1
 
 # run "<name>|<stand-in>"… [-- options…]: OUTPUT, STATUS, and which stand-ins ran
 run() {
@@ -108,7 +109,7 @@ check "all pass: says passed" says "^run-all.sh: passed$"
 
 run "first|good" "second|bad" "third|good-too" -- -j 1
 check "a part fails (-j 1): status 1" status_is 1
-check "a part fails: it is named FAIL, with its command and its kept log" says "^  FAIL     second (status 1, .*) — $work/bad; log: $kept_logs/[0-9]*-[0-9]*-[0-9]*/01.log$"
+check "a part fails: it is named FAIL, with its command and its kept log" says "^  FAIL     second (status 1, .*) — $work/bad; log: $kept_logs/[0-9]\{8\}-[0-9]\{6\}-[0-9]\+/01.log$"
 kept_log=$(sed -n 's/^  FAIL     second .*; log: //p' <<< "$OUTPUT")
 check "… the kept log holds its output, after the run" bash -c '[ "$(cat "$1")" = "output of bad" ]' _ "$kept_log"
 check "… the logs of the parts that passed are not kept" bash -c '[ "$(ls "$(dirname "$1")")" = 01.log ]' _ "$kept_log"
@@ -169,15 +170,18 @@ check "a part cannot be set up: its log kept" says "^  NOT RUN  first — it cou
 check "a part cannot be set up: the others still run" ran_set no-tool good
 check "a part cannot be set up: does not say passed" silent_on "run-all.sh: passed"
 
-run "first|no-tool" "second|bad"
+# The second part ends over a second after the first: both still in the run's one directory
+run "first|no-tool" "second|bad-late"
 check "one cannot be set up, one fails: status 1" status_is 1
 check "… both logs kept, in one directory" bash -c '[ "$(sed -n "s/.*; log: \(.*\)\/0[01]\.log$/\1/p" <<< "$1" | sort -u | wc -l)" = 1 ] && [ "$(grep -c "; log: " <<< "$1")" = 2 ]' _ "$OUTPUT"
-# Kept logs of 25 earlier runs: the oldest go, the newest 20 runs' stay
+# Kept logs of 25 earlier runs, two days old but for the oldest one: the other old ones
+# beyond the newest 20 go, a young one stays
 rm -rf "$kept_logs"
-for day in $(seq 10 34); do mkdir -p "$kept_logs/200001$day-000000-1"; done
+for day in $(seq 10 34); do mkdir -p "$kept_logs/200001$day-000000-1"; touch -d "2 days ago" "$kept_logs/200001$day-000000-1"; done
+touch "$kept_logs/20000110-000000-1"
 run "first|bad"
-check "kept logs: the newest 20 runs' stay, this one's among them" \
-    bash -c '[ "$(ls "$1" | wc -l)" = 20 ] && [ ! -e "$1/20000115-000000-1" ] && [ -e "$1/20000116-000000-1" ] && [ -f "$1/$(ls "$1" | sort | tail -n 1)/00.log" ]' _ "$kept_logs"
+check "kept logs: beyond the newest 20 runs' the old ones go, a young one stays, this one's kept" \
+    bash -c '[ "$(ls "$1" | wc -l)" = 21 ] && [ -e "$1/20000110-000000-1" ] && [ ! -e "$1/20000115-000000-1" ] && [ -e "$1/20000116-000000-1" ] && [ -f "$1/$(ls "$1" | sort | tail -n 1)/00.log" ]' _ "$kept_logs"
 
 run "first|slow" "second|good" "lock bed|bed"
 bed_alone() { in_order "end good" "start bed" && in_order "end slow" "start bed" "end bed"; }

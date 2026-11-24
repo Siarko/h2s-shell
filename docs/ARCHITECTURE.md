@@ -1918,8 +1918,8 @@ system without a set, a part left out, not reached or ended. A part that
 did not run is never counted as passed; the exit status is 0 only when every part ran and
 passed, 1 when one failed, 2 when one could not be set up. The log of a part that failed or
 could not be set up outlives the run, its path on the part's line
-(`${XDG_CACHE_HOME:-~/.cache}/h2s-shell-tests/run-all/<date-time>/`, the newest 20 runs'
-kept), so that a failure seen once can still be read. `tests/run-all-selftest.sh`
+(`${XDG_CACHE_HOME:-~/.cache}/h2s-shell-tests/run-all/<date-time>-<pid>/`, the time in UTC;
+the newest 20 runs' kept, and any younger than a day), so that a failure seen once can still be read. `tests/run-all-selftest.sh`
 checks that verdict against made-up parts. The deploy check, `tests/device/deploy-check.sh`,
 is run by hand against a running shell after it was updated: it reads the module host's
 and the Tailscale module's state over the shell's IPC (reads only; no `tailscale` command)

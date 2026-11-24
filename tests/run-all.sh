@@ -61,9 +61,9 @@
 # system without a set), one left out by --quick, one not reached after a failure, one
 # ended because another failed. A part that did not run to its end is never counted as
 # passed. The log of a part that failed or could not be set up is kept, named on its line,
-# under ${XDG_CACHE_HOME:-~/.cache}/h2s-shell-tests/run-all/<date-time>/ (the newest 20
-# runs' kept); the others go with the run. Without --keep-going a failure starts nothing more and ends the parts still
-# running (they are named NOT RUN, ended); the lock bed then does not run.
+# under ${XDG_CACHE_HOME:-~/.cache}/h2s-shell-tests/run-all/<date-time>-<pid>/ (UTC; the
+# newest 20 runs' kept, and any younger than a day); the others go with the run.
+# Without --keep-going a failure starts nothing more and ends the parts still running (they are named NOT RUN, ended); the lock bed then does not run.
 #
 # Exit status: 0 when every part ran and passed (with --quick: every part but the lock
 # bed); 1 when a part failed; 2 when none failed but one could not be set up, or for a
@@ -255,15 +255,15 @@ trap 'end_running; print_ready; echo; echo "run-all.sh: interrupted; the parts s
 # read afterwards); kept_note "; log: <path>", or empty when it cannot be kept
 kept="" kept_note=""
 keep_log() {
-    local base=${XDG_CACHE_HOME:-$HOME/.cache}/h2s-shell-tests/run-all copy old
+    local base=${XDG_CACHE_HOME:-${HOME:-/tmp}/.cache}/h2s-shell-tests/run-all copy old
     kept_note=""
     [ -f "$logs/$1" ] || return 0
     if [ -z "$kept" ]; then
-        kept=$base/$(date +%Y%m%d-%H%M%S)-$$
+        kept=$base/$(date -u +%Y%m%d-%H%M%S)-$$
         mkdir -p "$kept" 2> /dev/null || { kept=""; return 0; }
-        # The newest 20 runs' logs stay (names sort by their time)
+        # The newest 20 runs' logs stay (names sort by their time), and any younger than a day
         for old in $(find "$base" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort -r | tail -n +21); do
-            rm -rf -- "${base:?}/$old"
+            [ -z "$(find "$base/$old" -maxdepth 0 -mmin +1440)" ] || rm -rf -- "${base:?}/$old"
         done
     fi
     copy=$kept/$(printf '%02d' "$1").log

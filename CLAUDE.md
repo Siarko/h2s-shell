@@ -71,7 +71,8 @@ bed last and alone; it stops at the first failing part
 (`--keep-going` goes on) and ends with a summary naming every part PASS, FAIL or NOT RUN with
 the reason and its seconds — read it: a part that could not be set up is not a pass. The log
 of a part that failed or could not be set up is kept, its path on the part's line
-(`~/.cache/h2s-shell-tests/run-all/<date-time>/`, the newest 20 runs'), so that a one-off
+(`~/.cache/h2s-shell-tests/run-all/<date-time>-<pid>/`, the newest 20 runs' and any younger
+than a day), so that a one-off
 failure can be read afterwards. Measured
 on a 32-thread machine: the unit suites about 15 s, `--quick` about 26 s, the full set about
 2.5 minutes, of which the lock bed about 125 s; where memory allows three shards at once, the
