@@ -744,6 +744,32 @@ TestCase {
                     "Api.module(id) (in 2 files): use `Api.moduleStatus(id)` for another module's state, and its `exports` through `uses`" + tightening,
                     "a suite counts too");
 
+        // --- (1.42) the five lists every module shared: listed among the deprecations ---
+        const lists = [["networks", "listNetworks", "networksReady"], ["vpnsUp", "listVpnsUp", "vpnsUpCount"],
+                       ["localNetworks", "listLocalNetworks", "localNetworksReady"], ["slots", "listSlots", "slotsTable"],
+                       ["anchors", "listAnchors", "anchorsNow"]];
+        for (const [name, call, longer] of lists) {
+            const line = "Api." + name + " (in Main.qml): use `Api." + call + "()`, a copy of its own at each call" + tightening;
+            assertEqual(JSON.stringify(ModuleSourceRules.codeDeprecations({ "Main.qml": "QtObject {\n    property var a: Api." + name + "\n}\n" })),
+                        JSON.stringify([line]), "Api." + name + ": listed, with the file and the list…() function to use");
+            assertEqual(ModuleSourceRules.codeDeprecations({ "Main.qml": "QtObject { property int n: Api ?. " + name + ".length }" }).join("|"), line,
+                        "… Api." + name + " spaced, optional, then read on: found");
+            assertEqual(ModuleSourceRules.codeDeprecations({ "lib/u.js": ".import qs.api as A\nfunction f() { return A.Api." + name + "; }\n" }).length, 1,
+                        "… Api." + name + " in a script, through its import's name: found");
+            assertEqual(ModuleSourceRules.codeDeprecations({
+                            "Main.qml": "// Api." + name + " in a comment\n/* Api." + name + " */\nQtObject {\n"
+                                        + "    property string a: \"Api." + name + "\"\n    property string b: `x Api." + name + "`\n"
+                                        + "    property var c: Api." + call + "()\n    property var d: Api." + longer + "\n"
+                                        + "    property var e: myApi." + name + "\n    property var f: Api." + name + "$x\n    property var g: other." + name + "\n}\n"
+                        }).length, 0,
+                        "Api." + name + " not counted: comments, strings, Api." + call + "(), Api." + longer + ", another object's " + name);
+        }
+        assertEqual(ModuleSourceRules.codeDeprecations({ "A.qml": "QtObject { property var a: Api.networks; property var b: Api.vpnsUp }",
+                                                         "B.qml": "QtObject { property var a: Api.networks }" }).join("|"),
+                    "Api.networks (in 2 files): use `Api.listNetworks()`, a copy of its own at each call" + tightening
+                    + "|Api.vpnsUp (in A.qml): use `Api.listVpnsUp()`, a copy of its own at each call" + tightening,
+                    "several lists: one line each, in the order of deprecatedCode, with how many files");
+
         // --- precedence: the first id wins ---
         const order = ModuleMergeRules.precedence([{ directory: "/home/m/ts", id: "tailscale" }, { directory: "/sys/m/x", id: "" },
                                         { directory: "/sys/m/ts", id: "tailscale" }, { directory: "/sys/m/y", id: "" },

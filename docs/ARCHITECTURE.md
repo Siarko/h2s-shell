@@ -1437,7 +1437,10 @@ string notifies only when the content changed: a binding calling the function
 (`property var networks: Api.listNetworks()`) is evaluated again on a real change, not on a
 re-read that found the same, and its property's change signal is the module's. The older
 properties (`Api.slots`, `Api.anchors`, `Api.networks`, `Api.vpnsUp`, `Api.localNetworks`)
-still hand out one frozen list every module shares. Not yet given through functions:
+still hand out one frozen list every module shares; they are deprecated: a module whose code
+reads one has it listed among its `deprecations` (`ModuleSourceRules.codeDeprecations`, which
+does not count `Api.networksReady` or `Api.localNetworksReady`), and they go with the shell's
+next tightening. Not yet given through functions:
 `module.manifest`'s lists, `module.programs` and `module.uses`, the lists in `Api.theme`'s
 groups, what `Api.moduleStatus(id)` answers. `tests/ApiListsTest.qml` holds the functions to
 it.

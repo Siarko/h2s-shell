@@ -45,7 +45,9 @@ import qs.singletons.network
 //                          takes it through a ScriptModel of keys, as any changing list. The
 //                          old properties — Api.slots, Api.anchors, Api.networks, Api.vpnsUp,
 //                          Api.localNetworks — still hand out one frozen list every module
-//                          shares: copy it (slice()) before changing it. Not yet given through
+//                          shares: copy it (slice()) before changing it. They are deprecated
+//                          (listed in the module's deprecations where its code reads one) and
+//                          go with the shell's next tightening. Not yet given through
 //                          functions: module.manifest's lists, module.programs and
 //                          module.uses, the lists in Api.theme's groups, what
 //                          Api.moduleStatus(id) answers

@@ -32,7 +32,19 @@ Singleton {
         { what: "Api.module(id)", pattern: /(?:^|[^\w$])Api\s*\.\s*module\s*\(/,
           use: "`Api.moduleStatus(id)` for another module's state, and its `exports` through `uses`" },
         { what: "module.host", pattern: /(?:^|[^\w$])(?:module|moduleAt\s*\((?:[^()]|\([^()]*\))*\))\s*\??\.\s*host\b/,
-          use: "the handle's own properties and qs.api (in a suite, ModuleTestKit)", removed: "1.36" }
+          use: "the handle's own properties and qs.api (in a suite, ModuleTestKit)", removed: "1.36" },
+        // (API 1.42) The lists every module shared: a read, not a call, of the property
+        // itself (`Api.networksReady` and `Api.listNetworks()` are other names)
+        { what: "Api.networks", pattern: /(?:^|[^\w$])Api\s*\??\.\s*networks(?![\w$])/,
+          use: "`Api.listNetworks()`, a copy of its own at each call" },
+        { what: "Api.vpnsUp", pattern: /(?:^|[^\w$])Api\s*\??\.\s*vpnsUp(?![\w$])/,
+          use: "`Api.listVpnsUp()`, a copy of its own at each call" },
+        { what: "Api.localNetworks", pattern: /(?:^|[^\w$])Api\s*\??\.\s*localNetworks(?![\w$])/,
+          use: "`Api.listLocalNetworks()`, a copy of its own at each call" },
+        { what: "Api.slots", pattern: /(?:^|[^\w$])Api\s*\??\.\s*slots(?![\w$])/,
+          use: "`Api.listSlots()`, a copy of its own at each call" },
+        { what: "Api.anchors", pattern: /(?:^|[^\w$])Api\s*\??\.\s*anchors(?![\w$])/,
+          use: "`Api.listAnchors()`, a copy of its own at each call" }
     ]
 
     // ---- What a module file's root object declares ----

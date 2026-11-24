@@ -18,6 +18,9 @@ section to the new version and date.
 ### Module API
 The interface modules are written against (`qs.api`), versioned on its own
 (`Api.version`; its reference is `api/Api.qml`).
+- 1.42: `Api.networks`, `Api.vpnsUp`, `Api.localNetworks`, `Api.slots` and `Api.anchors`
+  are deprecated: a module whose code reads one has it listed among its `deprecations`, with
+  its `list…()` function to use instead; they go with the shell's next tightening.
 - 1.42: a list the API hands out as a property gets a function that returns a new copy at
   each call, and new lists come only that way: `Api.listSlots()`, `Api.listAnchors()`, `Api.listNetworks()`, `Api.listVpnsUp()`,
   `Api.listLocalNetworks()`, with the rows of `Api.slots`, `Api.anchors`, `Api.networks`,
