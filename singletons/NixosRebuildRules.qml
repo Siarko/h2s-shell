@@ -37,6 +37,7 @@ Singleton {
         running: "A change to NixOS is already running.",
         request: "The new settings could not be checked.",
         nothingToUndo: "There is no Apply to undo.",
+        fileChanged: "h2s-shell.json changed since the last Apply: nothing to undo.",
         notNow: "Not possible now.",
         other: "That is not the system that was built.",
         notCancellable: "A build with your password cannot be stopped.",
@@ -101,7 +102,8 @@ Singleton {
     // `event` (each answer of a process carries `run`, the run it was started for):
     //   announce { request }   the Apply: the announcing modal with that candidate
     //   undo { reading }        Undo of the last Apply: its file before as the candidate,
-    //                           keyed to the configuration as read now
+    //                           keyed to the configuration as read now; refused unless the
+    //                           file still holds what that Apply wrote
     //   build                   the Build click in the modal (as root where needsRoot says)
     //   built { run, outcome }  the build ended (NixBuildRules.outcome / rootOutcome)
     //   cancel                  Cancel, while a build as the user runs
@@ -136,6 +138,13 @@ Singleton {
             const last = current.last;
             if (last?.previous === null || last?.previous === undefined)
                 return refuse("nothingToUndo");
+            // Only while the file still holds what that Apply wrote: a later Apply that failed
+            // after writing, an edit by hand or a new Create would otherwise be overwritten
+            // unseen. (The backups the root step keeps are root's alone: the user cannot read
+            // them to offer them instead.)
+            const file = event.reading?.file;
+            if (event.reading?.configuration?.found === true && (file?.state !== "present" || file.sha256 !== last.wrote))
+                return refuse("fileChanged");
             const subjectNow = subject({ key: last.key, value: last.previous.value, text: last.previous.text, reading: event.reading,
                                          previous: { value: last.value, text: last.text } }, true);
             return subjectNow === null ? refuse("request") : _announced(current, subjectNow);
@@ -198,7 +207,10 @@ Singleton {
                 return { state: _with(current, { phase: "built" }), actions: [], refused: "" };
             const kind = ["applied", "appliedWithErrors", "changed"].includes(outcome?.kind) ? outcome.kind : "failed";
             const ended = Object.assign({}, outcome ?? {}, { kind, error: String(outcome?.error || (kind === "failed" ? texts.failed : "")) });
-            return _ended(current, ended, kind === "applied" || kind === "appliedWithErrors" ? { last: current.subject } : {});
+            // The last Apply, with what the shell's file holds after it (the candidate: root wrote
+            // it, or the user's file held it, as the root step checked)
+            return _ended(current, ended, kind === "applied" || kind === "appliedWithErrors"
+                          ? { last: _with(current.subject, { wrote: PamEditRules.sha256(current.subject.text) }) } : {});
         }
         case "setting":
             if (!busy(current) || event.key !== current.subject.key || current.stale)

@@ -194,18 +194,37 @@ TestCase {
         assert(step(built.state, { type: "applied", run: 1, outcome: ends[0][0] }).state === built.state, "… none running: nothing");
 
         // ---- Undo ----
-        const after = reading({ file: { path: folder + "/h2s-shell.json", state: "present", sha256: "d".repeat(64) } });
+        // The file as read now holds what the Apply wrote
+        const holding = text => reading({ file: { path: folder + "/h2s-shell.json", state: "present", sha256: PamEditRules.sha256(text) } });
+        const after = holding(request().text);
+        assertEqual(applied.state.last.wrote, PamEditRules.sha256(request().text), "applied: what it wrote kept for Undo");
         const undone = step(applied.state, { type: "undo", reading: after });
         assertEqual(show([undone.state.phase, undone.state.subject.undo, undone.state.subject.value, undone.state.subject.text, undone.state.subject.previous.value,
                           types(undone)]), show(["announced", true, "2h", request().previous.text, "3h", ""]),
                     "Undo: the last Apply's file before as the candidate, announced (the Undo modal), nothing runs");
-        assertEqual(undone.state.subject.sha256, "d".repeat(64), "… keyed to the file as read now");
+        assertEqual(undone.state.subject.sha256, PamEditRules.sha256(request().text), "… keyed to the file as read now");
+        // The file no longer holds what the Apply wrote (a later failed Apply, an edit by hand,
+        // Create again): Undo would overwrite that, so it is refused
+        const edited = step(applied.state, { type: "undo", reading: holding("{\"version\":1,\"by\":\"hand\"}") });
+        assert(edited.state === applied.state && edited.refused === "fileChanged", "Undo: the file changed since the Apply: refused");
+        assertEqual(rules.refusal("fileChanged").text, rules.texts.fileChanged, "… with its text");
+        assertEqual(step(applied.state, { type: "undo", reading: reading({ file: { state: "absent" } }) }).refused, "fileChanged", "Undo: the file gone: refused");
+        assertEqual(step(applied.state, { type: "undo", reading: reading({ file: { state: "unread", sha256: "" } }) }).refused, "fileChanged", "Undo: the file unread: refused");
+        const laterFailed = walk([{ type: "announce", request: request({ value: "4h", text: "{\"version\":1,\"idle\":{\"hibernateDelay\":\"4h\"}}" }) }, { type: "build" },
+                                  { type: "built", run: 3, outcome: builtOutcome }, { type: "applyNow", drvPath: drv },
+                                  { type: "applied", run: 4, outcome: { ok: false, kind: "failed", error: "f" } }], applied.state);
+        assertEqual(laterFailed.state.last.value, "3h", "a later failed Apply: the last Apply is still the one before");
+        assertEqual(step(laterFailed.state, { type: "undo", reading: holding("{\"version\":1,\"idle\":{\"hibernateDelay\":\"4h\"}}") }).refused, "fileChanged",
+                    "… and Undo, the file holding what the failed one wrote: refused");
         assertEqual(step(applied.state, { type: "undo" }).refused, "request", "Undo without a reading: refused");
         assertEqual(step(applied.state, { type: "undo", reading: reading({ configuration: { found: false } }) }).refused, "request", "Undo with no configuration: refused");
         const undoBuilt = walk([{ type: "build" }, { type: "built", run: 3, outcome: builtOutcome }], undone.state);
         assertEqual(undoBuilt.state.phase + " " + types(undoBuilt), "built notify", "… the same chain: build, built and the notification");
         assertEqual(walk([{ type: "applyNow", drvPath: drv }, { type: "applied", run: 4, outcome: ends[0][0] }], undoBuilt.state).state.last.value, "2h",
                     "… applied: the undo is now the last Apply, its own before the value it undid");
+        const undoApplied = walk([{ type: "applyNow", drvPath: drv }, { type: "applied", run: 4, outcome: ends[0][0] }], undoBuilt.state).state;
+        assertEqual(step(undoApplied, { type: "undo", reading: holding(request().previous.text) }).state.subject.text, request().text,
+                    "… and an Undo of the undo, the file holding what it wrote: the value it undid");
         assertEqual(step(idle, { type: "undo", reading: after }).refused, "nothingToUndo", "Undo with no Apply: refused");
         const noPrevious = walk([{ type: "announce", request: request({ previous: null }) }, { type: "build" }, { type: "built", run: 1, outcome: builtOutcome },
                                  { type: "applyNow", drvPath: drv }, { type: "applied", run: 2, outcome: ends[0][0] }]);
