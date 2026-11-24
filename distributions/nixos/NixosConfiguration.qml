@@ -26,7 +26,8 @@ QtObject {
     property string nixPath: Quickshell.env("NIX_PATH") ?? ""
     property var readCommand: [Quickshell.shellDir + "/scripts/nixos-config.sh"]
     property string git: "git"
-    // Added to the reading's environment (a suite's stand-in programs on PATH)
+    // Added to the reading's and git's environment (a suite's stand-in programs on PATH, or
+    // variables git must not see)
     property var environment: ({})
 
     // A read is under way
@@ -85,7 +86,7 @@ QtObject {
                     killAfterMs: 1000,
                     maxOutputBytes: 65536,
                     keepOutput: false,
-                    environment: { GIT_TERMINAL_PROMPT: "0", GIT_OPTIONAL_LOCKS: "0" },
+                    environment: Object.assign({}, root.environment ?? {}, { GIT_TERMINAL_PROMPT: "0", GIT_OPTIONAL_LOCKS: "0" }),
                     done: gitResult => {
                         if (generation === root._generation)
                             root._finish(NixosConfigRules.withGit(reading, gitResult));

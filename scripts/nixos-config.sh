@@ -22,9 +22,14 @@
 #   chain TAB <path> TAB <part> TAB <uid> TAB <mode>
 #                                     each folder of the real path from / down to it, its
 #                                     owner and octal mode (stat); <uid> "unknown" when it
-#                                     cannot be read, then
-#   chainend TAB <path> TAB ok | unknown      unknown: the real path could not be found, or
-#                                     holds a tab or a line break
+#                                     cannot be read
+#                                     — first those of each folder that holds a link met
+#                                     on the way (whoever may write one may point the path
+#                                     elsewhere), the real path's own last — then
+#   chainend TAB <path> TAB ok | unknown      unknown: the real path could not be found, holds
+#                                     a tab or a line break, or takes more than 40 links
+#   gitdir <path>                     as real and chain, for a .git's own place: the folder,
+#                                     or the folder a .git file names (gitdir: …)
 #   list TAB <folder> TAB <name>      each entry of the folder (names with a tab or a line
 #                                     break left out), then
 #   listend TAB <folder> TAB ok | unreadable
@@ -126,19 +131,14 @@ real() {
     fi
 }
 
-chain() {
-    local path=$1 resolved part rest owner
-    if ! resolved=$(resolve "$path"); then
-        printf 'chainend\t%s\tunknown\n' "$path"
-        return
-    fi
-    part=/
-    rest=${resolved#/}
+# parts <key> <real path>: a chain record for each folder of the path, / down to it
+parts() {
+    local key=$1 part=/ rest=${2#/} owner
     while :; do
         if owner=$(stat -c '%u %a' -- "$part" 2> /dev/null); then
-            printf 'chain\t%s\t%s\t%s\t%s\n' "$path" "$part" "${owner% *}" "${owner#* }"
+            printf 'chain\t%s\t%s\t%s\t%s\n' "$key" "$part" "${owner% *}" "${owner#* }"
         else
-            printf 'chain\t%s\t%s\tunknown\tunknown\n' "$path" "$part"
+            printf 'chain\t%s\t%s\tunknown\tunknown\n' "$key" "$part"
         fi
         [ -z "$rest" ] && break
         if [ "$part" = / ]; then
@@ -151,7 +151,86 @@ chain() {
             *) rest= ;;
         esac
     done
-    printf 'chainend\t%s\tok\n' "$path"
+}
+
+# walk <path>: resolves the path one part at a time, following at most 40 links; sets
+# walk_final (the real path) and walk_holders (the real folders that hold a link passed on
+# the way: whoever may write one of them may point the path elsewhere). Fails when a part is
+# missing, a link cannot be read or there are too many.
+walk() {
+    local rest=${1#/} prefix= part target hops=0
+    walk_holders=()
+    while [ -n "$rest" ]; do
+        part=${rest%%/*}
+        case "$rest" in
+            */*) rest=${rest#*/} ;;
+            *) rest= ;;
+        esac
+        case "$part" in
+            "" | .) continue ;;
+            ..) prefix=${prefix%/*}; continue ;;
+        esac
+        if [ -L "$prefix/$part" ]; then
+            hops=$((hops + 1))
+            [ "$hops" -le 40 ] || return 1
+            target=$(readlink -- "$prefix/$part") && [ -n "$target" ] || return 1
+            walk_holders+=("${prefix:-/}")
+            case "$target" in
+                /*) prefix=; rest=${target#/}${rest:+/$rest} ;;
+                *) rest=$target${rest:+/$rest} ;;
+            esac
+        elif [ -e "$prefix/$part" ]; then
+            prefix=$prefix/$part
+        else
+            return 1
+        fi
+    done
+    walk_final=${prefix:-/}
+}
+
+# chain_of <key> <path>: the chains of every folder holding a link on the way, then the real
+# path's own, all under <key>; the real path's last, so its last part is the real path
+chain_of() {
+    local key=$1 path=$2 resolved holder
+    if ! resolved=$(resolve "$path") || ! walk "$path" || [ "$walk_final" != "$resolved" ]; then
+        printf 'chainend\t%s\tunknown\n' "$key"
+        return
+    fi
+    for holder in "${walk_holders[@]}"; do
+        case "$holder" in
+            *$'\t'* | *$'\n'*) printf 'chainend\t%s\tunknown\n' "$key"; return ;;
+        esac
+    done
+    for holder in "${walk_holders[@]}"; do
+        parts "$key" "$holder"
+    done
+    parts "$key" "$resolved"
+    printf 'chainend\t%s\tok\n' "$key"
+}
+
+chain() {
+    chain_of "$1" "$1"
+}
+
+# gitdir <path>: a .git's own place — the folder itself, or the folder a .git file names
+# ("gitdir: <path>", relative to the file's folder) — its real path and chain under <path>
+gitdir() {
+    local path=$1 line target resolved
+    target=$path
+    if [ -f "$path" ]; then
+        IFS= read -r line < "$path" 2> /dev/null || line=
+        case "$line" in
+            "gitdir: "/*) target=${line#gitdir: } ;;
+            "gitdir: "?*) target=$(dirname "$path")/${line#gitdir: } ;;
+            *) printf 'real\t%s\tunknown\n' "$path"; printf 'chainend\t%s\tunknown\n' "$path"; return ;;
+        esac
+    fi
+    if resolved=$(resolve "$target"); then
+        printf 'real\t%s\t%s\n' "$path" "$resolved"
+    else
+        printf 'real\t%s\tunknown\n' "$path"
+    fi
+    chain_of "$path" "$target"
 }
 
 list() {
@@ -195,7 +274,7 @@ while [ $# -ge 2 ]; do
         *$'\t'* | *$'\n'*) continue ;;
     esac
     case "$op" in
-        exists | file | real | chain | list | link) "$op" "$path" ;;
+        exists | file | real | chain | gitdir | list | link) "$op" "$path" ;;
         uid) printf 'uid\t%s\n' "$(id -u)" ;;
     esac
 done

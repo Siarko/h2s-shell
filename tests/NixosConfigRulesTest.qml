@@ -218,7 +218,13 @@ TestCase {
         assertEqual(readingOf(usual, changed(connected, spec => spec.files["/etc/hostname"] = "unreadable")).facts[3].value, "Unknown", "the Host fact unknown");
 
         // ── git ──
-        assertEqual(JSON.stringify(rules.gitArgv("git", "/srv/cfg", "root")),
+        const gitTail = argv => argv.slice(argv.indexOf("git"));
+        const cleared = rules.gitArgv("git", "/srv/cfg", "root");
+        assertEqual(cleared[0], "env", "git started through env, which takes away the variables that redirect it");
+        for (const name of ["GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_CEILING_DIRECTORIES", "GIT_CONFIG_PARAMETERS", "GIT_CONFIG_COUNT",
+                            "GIT_CONFIG_GLOBAL", "GIT_CONFIG_SYSTEM", "GIT_COMMON_DIR", "GIT_EXEC_PATH", "GIT_OBJECT_DIRECTORY"])
+            assert(cleared.indexOf(name) > 0 && cleared[cleared.indexOf(name) - 1] === "-u", "… " + name + " taken away");
+        assertEqual(JSON.stringify(gitTail(rules.gitArgv("git", "/srv/cfg", "root"))),
                     JSON.stringify(["git", "-c", "core.fsmonitor=false", "-c", "safe.directory=/srv/cfg", "--no-optional-locks", "-C", "/srv/cfg", "ls-files", "--error-unmatch", "--", "h2s-shell.json"]),
                     "git asked read only, its repository named safe");
         assertEqual(rules.gitArgv("git", "/srv/my cfg", "root").length + rules.gitArgv("", "/srv/cfg", "root").length, 0, "no plain folder or no git: not asked");
@@ -227,7 +233,10 @@ TestCase {
         assertEqual(rules.gitAnswer({ ok: false, code: 128 }) + " " + rules.gitAnswer({ ok: false, code: 1, timedOut: true })
                     + " " + rules.gitAnswer({ ok: false, code: 1, failedToStart: true }) + " " + rules.gitAnswer(null),
                     "unknown unknown unknown unknown", "anything else: unknown");
-        const inGit = changed(connected, spec => spec.exists["/etc/nixos/.git"] = "present");
+        const inGit = changed(connected, spec => {
+            spec.exists["/etc/nixos/.git"] = "present";
+            spec.chains["/etc/nixos/.git"] = { real: "/etc/nixos/.git", parts: rootChain.concat([["/etc/nixos/.git", "0", "755"]]) };
+        });
         reading = readingOf(usual, inGit);
         assertEqual(reading.git + " " + reading.gitKnowsFile + " " + reading.facts[2].value, "present unknown Yes", "a .git beside it: in git, not asked yet");
         assertEqual(rules.withGit(reading, { ok: true, code: 0 }).gitKnowsFile, "tracked", "git's answer added");
@@ -292,12 +301,17 @@ TestCase {
         assertEqual(joined(usual).includes("sha256"), false, "the file's sha256 comes with its read, not a second read");
 
         // ── git: never a repository's own programs, safe.directory only for root's or the user's ──
-        assertEqual(JSON.stringify(rules.gitArgv("git", "/srv/cfg", "user")),
+        assertEqual(JSON.stringify(gitTail(rules.gitArgv("git", "/srv/cfg", "user"))),
                     JSON.stringify(["git", "-c", "core.fsmonitor=false", "--no-optional-locks", "-C", "/srv/cfg", "ls-files", "--error-unmatch", "--", "h2s-shell.json"]),
                     "the user's repository: no safe.directory, the fsmonitor program off");
         assertEqual(rules.gitArgv("git", "/srv/cfg", "").length + rules.gitArgv("git", "/srv/cfg", undefined).length, 0, "anyone else's: git not asked");
         assertEqual(readingOf(usual, inGit).gitAccess, "root", "a root-owned chain: root's repository");
         const owned = uid => readingOf(usual, changed(inGit, spec => spec.chains["/etc/nixos"].parts[2] = ["/etc/nixos", uid, "755"])).gitAccess;
+        assertEqual(readingOf(usual, changed(inGit, spec => spec.chains["/etc/nixos/.git"].parts[3] = ["/etc/nixos/.git", "1000", "755"])).gitAccess, "",
+                    "root's folder, its .git the user's: not root's repository, git not asked");
+        assertEqual(readingOf(usual, changed(inGit, spec => delete spec.chains["/etc/nixos/.git"])).gitAccess, "",
+                    "root's folder, its .git's chain unknown: git not asked");
+        assert(joined(usual).includes("gitdir /etc/nixos/.git"), "the .git's own place asked (a folder, or what a .git file names)");
         assertEqual(owned("1000"), "user", "the folder the user's: their repository");
         assertEqual(owned("1001"), "", "the folder another account's: no safe.directory, git not asked");
         assertEqual(readingOf(usual, changed(inGit, spec => { spec.chains["/etc/nixos"].parts[2] = ["/etc/nixos", "1000", "755"]; delete spec.uid; })).gitAccess,

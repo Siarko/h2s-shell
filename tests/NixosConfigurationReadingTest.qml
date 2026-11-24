@@ -45,7 +45,7 @@ TestCase {
             ": > $s/etc/pam.d/h2s-shell-password; : > $s/run/current-system/sw/bin/h2s-shell",
             // Stand-in gits: each answers its code only to the exact read-only words for its folder, else 2
             "mkdir -p $d/bin",
-            "stand_in() { printf '#!/bin/sh\\n[ \"$*\" = \"%s--no-optional-locks -C %s ls-files --error-unmatch -- h2s-shell.json\" ] || exit 2\\nexit %s\\n' \"$4\" \"$2\" \"$3\" > $d/bin/$1; chmod +x $d/bin/$1; }",
+            "stand_in() { printf '#!/bin/sh\\n[ -z \"${GIT_DIR+x}${GIT_WORK_TREE+x}${GIT_CONFIG_COUNT+x}\" ] || exit 3\\n[ \"$*\" = \"%s--no-optional-locks -C %s ls-files --error-unmatch -- h2s-shell.json\" ] || exit 2\\nexit %s\\n' \"$4\" \"$2\" \"$3\" > $d/bin/$1; chmod +x $d/bin/$1; }",
             "off='-c core.fsmonitor=false '",
             "stand_in git-tracked $d/connected/etc/nixos 0 \"$off\"; stand_in git-untracked $d/chosen 1 \"$off\"; stand_in git-broken $d/chosen 128 \"$off\"",
             "stand_in git-root $d/rootowned/etc/nixos 0 \"$off-c safe.directory=$d/rootowned/etc/nixos \"",
@@ -54,6 +54,15 @@ TestCase {
             "cp -a $d/connected $d/rootowned",
             // /etc/nixos a link to a folder whose name holds a line break: its real path is unknown
             "s=$d/oddlink; mkdir -p $s/etc \"$d/odd\nname\"; : > \"$d/odd\nname/flake.nix\"; ln -s \"$d/odd\nname\" $s/etc/nixos",
+            // A stand-in stat that says what is under a folder named userland is the user's, all else root's
+            "printf '#!/bin/sh\\ncase \"$4\" in *userland*) echo 1000 755 ;; *) echo 0 755 ;; esac\\n' > $d/rootbin/pathstat",
+            "mkdir -p $d/pathbin; mv $d/rootbin/pathstat $d/pathbin/stat; chmod +x $d/pathbin/stat",
+            // flake.nix a link to a link in a user's folder, which leads back to a root folder
+            "s=$d/hops; mkdir -p $s/etc/nixos $d/userland $d/realcfg; : > $d/realcfg/flake.nix",
+            "ln -s $d/userland/l $s/etc/nixos/flake.nix; ln -s $d/realcfg/flake.nix $d/userland/l",
+            // A root folder whose .git is a file naming a git folder in a user's folder
+            "s=$d/gitfile; mkdir -p $s/etc/nixos $d/userland/gd; : > $s/etc/nixos/flake.nix; printf 'gitdir: %s\\n' $d/userland/gd > $s/etc/nixos/.git",
+            "stand_in git-gitfile $s/etc/nixos 0 \"$off-c safe.directory=$s/etc/nixos \"",
             "sha256sum $d/connected/etc/nixos/h2s-shell.json | cut -d' ' -f1 > $d/sha256"
         ].join("\n"), [_scratch, json, published], code => {
             suite.assertEqual(code, 0, "the made-up trees are written");
@@ -71,7 +80,12 @@ TestCase {
 
     function _start() {
         const base = name => _scratch + "/" + name;
-        _make("connected", { base: base("connected"), git: _scratch + "/bin/git-tracked" });
+        // Variables that would point git at another repository, inherited: git must not see them
+        _make("connected", { base: base("connected"), git: _scratch + "/bin/git-tracked",
+                             environment: { GIT_DIR: "/nowhere", GIT_WORK_TREE: "/nowhere", GIT_CONFIG_COUNT: "1" } });
+        const pathStat = { PATH: _scratch + "/pathbin:" + (Quickshell.env("PATH") ?? "") };
+        _make("hops", { base: base("hops"), environment: pathStat });
+        _make("gitfile", { base: base("gitfile"), git: _scratch + "/bin/git-gitfile", environment: pathStat });
         _make("linked", { base: base("linked") });
         _make("empty", { base: base("empty") });
         _make("locked", { base: base("locked"), chosenFolder: _scratch + "/chosen", chosenHost: "laptop", git: _scratch + "/bin/git-untracked" });
@@ -126,6 +140,13 @@ TestCase {
         assertEqual(answer.owner + " " + answer.rootWrites + " " + answer.homeWarning + " " + answer.gitAccess, "root true false root",
                     "a root-owned tree (a stand-in stat): root writes, no warning, root's repository");
         assertEqual(answer.gitKnowsFile, "tracked", "git asked with safe.directory for root's repository, the fsmonitor program off");
+
+        answer = reading("hops");
+        assertEqual(answer.owner + " " + answer.rootWrites + " " + answer.homeWarning, "yours false true",
+                    "flake.nix reached through a link in the user's folder: yours, though every target is root's");
+        answer = reading("gitfile");
+        assertEqual(answer.owner + " " + answer.gitAccess + " " + answer.gitKnowsFile, "root  unknown",
+                    "a root folder whose .git file names a git folder of the user's: git not asked");
 
         answer = reading("oddlink");
         assertEqual(answer.configuration.found + " '" + answer.real + "' " + answer.owner, "true '' unknown",

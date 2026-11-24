@@ -101,6 +101,7 @@ Singleton {
             for (const name of ["flake.nix", "configuration.nix", ".git"])
                 ask("exists", folder + "/" + name);
             ask("file", folder + "/" + fileName);
+            ask("gitdir", folder + "/.git");
             // What root builds and reads, each through its own links: the entry files and the
             // shell's file count in the owner chain as much as the folder
             for (const path of [folder, folder + "/flake.nix", folder + "/configuration.nix", folder + "/" + fileName]) {
@@ -321,29 +322,41 @@ Singleton {
         return owners.includes("yours") ? "yours" : owners.includes("unknown") ? "unknown" : "root";
     }
 
-    // Whose repository git may be asked about → "root" (a root-owned chain: named safe, as git
-    // would otherwise refuse a repository not the user's), "user" (the folder the user's own:
+    // Whose repository git may be asked about → "root" (the folder's and its .git's own place
+    // — the folder, or what a .git file names — both with root-owned chains: named safe, as
+    // git would otherwise refuse a repository not the user's), "user" (the folder the user's own:
     // git's own ownership check stands) or "" (anyone else's: git is not asked — a repository
     // another account can write could name programs git runs)
     function gitAccess(raw, folder) {
         if (ownerChain(raw, folder) === "root")
-            return "root";
+            return ownerChain(raw, folder + "/.git") === "root" ? "root" : "";
         const parts = raw?.chain?.[folder]?.parts ?? [];
         const own = parts.length > 0 ? parts[parts.length - 1].uid : "";
         return typeof raw?.uid === "string" && raw.uid !== "" && own === raw.uid ? "user" : "";
     }
 
-    // The check whether git knows the shell's file — read only: the repository's own
+    // The check whether git knows the shell's file — read only, started through env without
+    // gitRedirects: the repository's own
     // fsmonitor program never run (core.fsmonitor from the command line wins over the
     // repository's config; ls-files reads no file contents, so no filter or textconv runs,
     // and runs no hooks), safe.directory only for root's repository (`access` gitAccess's), no
     // optional locks so nothing refreshes the index; a flake in git sees only the files git
     // knows. [] when the folder is not plain or git may not be asked.
+    // git's variables that would point it at another repository, index, config or set of
+    // programs than the folder's: taken away from what the shell inherited
+    readonly property var gitRedirects: ["GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR", "GIT_OBJECT_DIRECTORY",
+        "GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_NAMESPACE", "GIT_CEILING_DIRECTORIES", "GIT_DISCOVERY_ACROSS_FILESYSTEM",
+        "GIT_CONFIG", "GIT_CONFIG_PARAMETERS", "GIT_CONFIG_COUNT", "GIT_CONFIG_GLOBAL", "GIT_CONFIG_SYSTEM", "GIT_EXEC_PATH",
+        "GIT_TEMPLATE_DIR", "GIT_REPLACE_REF_BASE", "GIT_NO_REPLACE_OBJECTS", "GIT_GRAFT_FILE", "GIT_SHALLOW_FILE", "GIT_ATTR_SOURCE"]
+
     function gitArgv(git, realFolder, access) {
         if (!plainPath(realFolder) || typeof git !== "string" || git === "" || (access !== "root" && access !== "user"))
             return [];
-        return [git, "-c", "core.fsmonitor=false"].concat(access === "root" ? ["-c", "safe.directory=" + realFolder] : [])
-            .concat(["--no-optional-locks", "-C", realFolder, "ls-files", "--error-unmatch", "--", fileName]);
+        const unset = [];
+        for (const name of gitRedirects)
+            unset.push("-u", name);
+        return ["env"].concat(unset).concat([git, "-c", "core.fsmonitor=false"].concat(access === "root" ? ["-c", "safe.directory=" + realFolder] : [])
+            .concat(["--no-optional-locks", "-C", realFolder, "ls-files", "--error-unmatch", "--", fileName]));
     }
 
     // git's answer → "tracked", "untracked" (it ran and does not know the file) or "unknown"
