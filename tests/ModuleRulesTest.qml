@@ -1588,6 +1588,21 @@ TestCase {
             listRead[0] = "/tmp/bin";
         } catch (error) {}
         assertEqual(known.facts.programDirectories.join(","), "/run/current-system/sw/bin", "… a list changed after reading it: the next read is as before (a new copy each time)");
+        const nested = rules.apiDistribution({ ready: true, id: "nixos", facts: { id: "nixos", label: "NixOS", paths: { bin: ["/run/x"] }, count: 2, none: null } });
+        const objectRead = nested.facts.paths;
+        try {
+            objectRead.bin.push("/tmp/bin");
+            objectRead.bin[0] = "/tmp/bin";
+            objectRead.extra = 1;
+        } catch (error) {}
+        assertEqual(JSON.stringify(nested.facts), JSON.stringify({ id: "nixos", label: "NixOS", paths: { bin: ["/run/x"] }, count: 2, none: null }),
+                    "… an object fact (lists inside it too): a new copy at each read, writes to one read do not stay");
+        assert(nested.facts.paths !== nested.facts.paths && Object.isFrozen(nested.facts.paths), "… a new frozen copy each time");
+        const shapes = Object.keys(nested.facts).map(key => {
+            const descriptor = Object.getOwnPropertyDescriptor(nested.facts, key);
+            return key + ":" + (descriptor.get !== undefined ? "get" : "value");
+        });
+        assertEqual(shapes.join(","), "id:value,label:value,paths:get,count:value,none:value", "… only a list or object behind a getter; texts, numbers and null kept as values");
         assertEqual(JSON.stringify(rules.apiDistribution({ ready: false, id: "", facts: null })), unknownDistribution(false), "apiDistribution: not answered → not ready, unknown");
         assertEqual(JSON.stringify(rules.apiDistribution({ ready: true, id: "", facts: null, problem: "x" })), unknownDistribution(true), "… answered without a distribution → ready, unknown");
         assertEqual(JSON.stringify(rules.apiDistribution({ ready: false, id: "nixos", facts: nixosFacts })), unknownDistribution(false), "… an id before it is ready → unknown");

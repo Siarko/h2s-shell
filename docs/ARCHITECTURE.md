@@ -1373,8 +1373,8 @@ switches, read when asked. A reading that failed or says something unexpected is
 `singletons/Distribution.qml` detected it: frozen `{ ready, id, label, facts }`, `ready` once
 the detection has answered, `id` and `label` `""` and `facts` `null` while it is not known or
 could not be told. `facts` is a frozen copy of the distribution's `distribution.json`
-(`ModuleRules.apiDistribution`); nothing of its integration (capability, plan, apply,
-undo) is reachable through it. A module that differs by system reads it instead of checking
+(`ModuleRules.apiDistribution`; a list a new copy at each read); nothing of its integration
+(capability, plan, apply, undo) is reachable through it. A module that differs by system reads it instead of checking
 for `/etc/NIXOS` or reading os-release itself.
 - NixOS: `id` `"nixos"`, `etcManaged` true (`/etc` is generated from the configuration),
   programs under `/run/current-system/sw/bin`, setuid wrappers in `/run/wrappers/bin`.
@@ -1743,10 +1743,9 @@ blocked ("" | "locked" | "busy"), error }`; it returns `{ open, cancel() }`.
   user's data home. A module's suites see test mode through `ModuleTestKit` (`qs.tests`):
   `setEnabled`, `status`, `widgetEntries`, `opened`, `notified`, `setNow`, `setSystem`
   (the facts `Api.system` tells; never moves `module.dataDirectory`), `setDistribution`
-(the distribution `Api.system.distribution` names, as `H2S_DISTRIBUTION` names it to the
-shell: `"nixos"`, `"arch"`, `"generic"` with its facts from the tree's files, `""` unknown,
-`null` — the default — not answered), `setNetworks` (the
-  network facts: by default read and empty), `dataHome`, `chooserCalls`, `chooserOpen`,
+  (the distribution `Api.system.distribution` names, as `H2S_DISTRIBUTION` names it to the
+  shell: `"nixos"`, `"arch"`, `"generic"` with its facts from the tree's files, `""` unknown,
+  `null` — the default — not answered), `setNetworks` (the network facts: by default read and empty), `dataHome`, `chooserCalls`, `chooserOpen`,
   `answerChooser(moduleId, paths)`, `cancelChooser(moduleId)`, `setChooserLocked` (the
   file chooser; an open call and its lock are reset before each suite), `clearRecords`
   (shared by every module's suites), and for runs as

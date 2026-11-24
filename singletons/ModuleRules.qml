@@ -1576,7 +1576,7 @@ Singleton {
 
     // Api.system.distribution from a detection as Distribution has it ({ ready, id, facts })
     // → frozen { ready, id, label, facts }: ready once the detection has answered; id, label
-    // and facts (a copy of the distribution's facts, frozen; each list a new copy at each read)
+    // and facts (a copy of the distribution's facts, frozen; a list or object a new copy at each read)
     // only when it named a distribution, else "", "" and null — unknown, never a default
     // system. Only the facts: nothing of the integration (capability, plan, apply, undo) is
     // reachable through it
@@ -1594,15 +1594,28 @@ Singleton {
         }
         if (!isObject(facts))
             return Object.freeze({ ready: ready, id: "", label: "", facts: null });
-        // A list is handed out as a new copy at each read: the engine lets a frozen array be
-        // pushed to and written by index, so a list kept in the object would not stay as read
+        // Only a text, number, true/false or null is kept in the object; anything else (a list,
+        // and any object a fact may hold one day) is handed out as a new copy at each read: the
+        // engine lets a frozen array be pushed to and written by index, so a value kept in the
+        // object and shared by every read would not stay as read. The facts went through JSON
+        // above: nothing but plain data is left
+        const deepFrozen = value => {
+            if (value !== null && typeof value === "object") {
+                for (const key of Object.keys(value))
+                    deepFrozen(value[key]);
+                Object.freeze(value);
+            }
+            return value;
+        };
         const shown = {};
         for (const key of Object.keys(facts)) {
             const value = facts[key];
-            if (Array.isArray(value))
-                Object.defineProperty(shown, key, { enumerable: true, get: () => Object.freeze(value.slice()) });
-            else
+            if (value === null || typeof value !== "object")
                 shown[key] = value;
+            else {
+                const text = JSON.stringify(value);
+                Object.defineProperty(shown, key, { enumerable: true, get: () => deepFrozen(JSON.parse(text)) });
+            }
         }
         return Object.freeze({
             ready: true,
