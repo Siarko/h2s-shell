@@ -156,6 +156,62 @@ Singleton {
         return { values: values, setBy: setBy, active: active };
     }
 
+    // The schema types whose value is a number, kept within the entry's min/max
+    readonly property var numberTypes: ["number", "slider", "interval"]
+
+    // A stored value of a number setting as the shell uses it. The config file can be edited
+    // by hand, so it may hold a number outside the schema's range, or no number at all: the
+    // shell then uses the nearest bound, or the default, and says so (`note`) — the file
+    // itself is left as the user wrote it. Undefined (not set) and the values of other
+    // types pass unchanged.
+    // Returns { value, corrected, note }.
+    function checkedNumber(entry, stored) {
+        if (!entry || !numberTypes.includes(entry.type) || stored === undefined)
+            return { value: stored, corrected: false, note: "" };
+        const shown = _storedText(stored);
+        if (typeof stored !== "number" || !isFinite(stored))
+            return { value: entry.default, corrected: true,
+                     note: "Set to " + shown + " in the config file, not a number: the default " + entry.default + " is used" };
+        if (typeof entry.min === "number" && stored < entry.min)
+            return { value: entry.min, corrected: true,
+                     note: "Set to " + shown + " in the config file, below the minimum " + entry.min + ": " + entry.min + " is used" };
+        if (typeof entry.max === "number" && stored > entry.max)
+            return { value: entry.max, corrected: true,
+                     note: "Set to " + shown + " in the config file, above the maximum " + entry.max + ": " + entry.max + " is used" };
+        return { value: stored, corrected: false, note: "" };
+    }
+
+    // `values` (key → value, as resolve gives them) with every number setting of `entries`
+    // checked by checkedNumber. Inputs are not modified.
+    // Returns { values, corrections: [{ key, stored, used, note }] }.
+    function withinRanges(entries, values) {
+        const checked = Object.assign({}, values);
+        const corrections = [];
+        for (const entry of entries ?? []) {
+            if (!(entry.key in checked))
+                continue;
+            const result = checkedNumber(entry, checked[entry.key]);
+            if (!result.corrected)
+                continue;
+            corrections.push({ key: entry.key, stored: checked[entry.key], used: result.value, note: result.note });
+            checked[entry.key] = result.value;
+        }
+        return { values: checked, corrections: corrections };
+    }
+
+    // A stored value as a note shows it: hand-written, so on one line and capped
+    function _storedText(stored) {
+        let text;
+        try {
+            text = JSON.stringify(stored) ?? String(stored);
+        } catch (error) {
+            text = String(stored);
+        }
+        text = text.replace(/\s+/g, " ");
+        return text.length > 40 ? text.slice(0, 39) + "…" : text;
+    }
+
+
     // Copies settings from their place in the old config into profiles, once per key
     // For every schema entry with a `legacy` location
     // whose key is not in `migratedKeys` yet: an always-global setting goes into the

@@ -69,7 +69,11 @@ Item {
 
     readonly property var entry: SettingsSchema.entry(key)
     readonly property bool inherits: ownValue === undefined
-    readonly property var shownValue: global ? Profiles.effectiveGlobals[key] : (inherits ? inheritedValue : ownValue)
+    // The value as stored, and as the shell uses it: a number setting outside its range, or
+    // not a number, is shown at the value in use, with a note saying what the file holds
+    readonly property var _storedValue: global ? Profiles.effectiveGlobals[key] : (inherits ? inheritedValue : ownValue)
+    readonly property var _checked: ProfileRules.checkedNumber(entry, _storedValue)
+    readonly property var shownValue: _checked.value
     // Shown dimmed: the value is not this profile's own
     readonly property bool _dimmed: inherits && !global
     // The value as a field's text — only a number or a string: the hidden fields of other
@@ -408,6 +412,18 @@ Item {
             color: root.hintColor
         }
 
+        Text {
+            objectName: "rangeNote"
+            visible: root._checked.note !== ""
+            width: parent.width
+            wrapMode: Text.WordWrap
+            text: root._checked.note
+            textFormat: Text.PlainText
+            font.family: Theme.fontFamily
+            font.pixelSize: Theme.fontSizeSmall
+            color: Theme.warning
+        }
+
         // Number: a whole number within the schema's range, with its unit (pills where the
         // schema offers presets)
         Row {
@@ -424,7 +440,8 @@ Item {
                 input.inputMethodHints: Qt.ImhDigitsOnly
                 input.validator: IntValidator { bottom: root.entry?.min ?? 0; top: root.entry?.max ?? 2147483647 }
                 onEditingFinished: {
-                    if (acceptableInput && parseInt(text) !== root.shownValue)
+                    // Against the stored value: typing the value in use over a corrected one writes it
+                    if (acceptableInput && parseInt(text) !== root._storedValue)
                         root.edited(parseInt(text));
                 }
                 onEditingChanged: if (!editing) text = Qt.binding(() => root._asText)

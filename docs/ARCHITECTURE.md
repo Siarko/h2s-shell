@@ -342,6 +342,11 @@ Settings live in **shell profiles**.
   `Profiles.value(key)`** in a binding — it follows profile switches. It also seeds new
   configs with Full and Power save, applies the system power profile, and migrates old
   configs once. Facts can be simulated with `qs ipc call profiles simulate '{…}'`.
+  A number setting (`number`, `slider`, `interval`, a module's too) reaches `value()`
+  within its schema's `min`/`max`: a stored value outside them is used at the nearest
+  bound, one that is not a number at the default (`ProfileRules.checkedNumber`). The
+  config file keeps what was written; the shell logs a warning naming the setting and the
+  stored value once, and its editor shows the value in use with a note.
 - Settings pages edit the profile picked in the settings sidebar through
   `panels/settings/SchemaSettingEditor.qml`, which shows where a value comes from
   (set here, inherited from a profile above, default, global) with a pin and a reset.
@@ -850,6 +855,8 @@ and the methods script's),
 methods script take themselves to be on, counted only together with
 `H2S_LOCK_SYSTEM_PAM_DIR` — so both systems' answers are tested on every machine),
 `H2S_DISTRIBUTION_HOLD` (a file while which `Distribution` does not answer),
+`H2S_SHELL_TEST_SETTING_RANGES=off` (number settings used as stored, outside their schema's
+range too — so the lock bed's idle timeouts can be seconds; the bed sets it for every test),
 `H2S_LOCK_TEST_RELOAD=1` (an IPC target `locktest` whose `reload(hard)` asks for
 `Quickshell.reload()`, which nothing in the shell calls), `H2S_LOCK_LEDS_DIR` (where the
 Caps Lock LEDs are read, `/sys/class/leds` otherwise), `H2S_LOCK_TEST_TIMINGS` (JSON

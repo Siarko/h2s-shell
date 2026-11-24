@@ -111,6 +111,7 @@ Singleton {
         _migrateIfNeeded()
         _migratePresetsIfNeeded()
         _applyPowerProfile()
+        _reportRangeCorrections()
     }
 
     Connections {
@@ -410,7 +411,29 @@ Singleton {
 
     readonly property var _resolved: ProfileRules.resolve(SettingsSchema.defaults, profiles, facts, effectiveGlobals)
 
-    readonly property var effective: _resolved.values
+    // Number settings outside their schema's range, or not numbers, as the shell uses them
+    // (ProfileRules.withinRanges): for modules' settings too, which share the schema. The
+    // config file keeps what the user wrote.
+    // (A test tree may turn this off, TestSeams.settingRangesOff: its timeouts are seconds.)
+    readonly property var _checked: TestSeams.settingRangesOff ? { values: _resolved.values, corrections: [] }
+                                                               : ProfileRules.withinRanges(SettingsSchema.entries, _resolved.values)
+    readonly property var effective: _checked.values
+    // The values corrected, [{ key, stored, used, note }]
+    readonly property var rangeCorrections: _checked.corrections
+
+    // Logged once per stored value, not at every change of the profiles: key → that value
+    property var _rangeReported: ({})
+    onRangeCorrectionsChanged: _reportRangeCorrections()
+    function _reportRangeCorrections() {
+        const reported = {};
+        for (const correction of rangeCorrections) {
+            const stored = JSON.stringify(correction.stored) ?? String(correction.stored);
+            if (_rangeReported[correction.key] !== stored)
+                console.warn("[Profiles] " + correction.key + ": " + correction.note);
+            reported[correction.key] = stored;
+        }
+        _rangeReported = reported;
+    }
     // Names of the profiles in effect, in order
     readonly property var activeProfiles: _resolved.active
 

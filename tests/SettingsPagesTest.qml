@@ -364,6 +364,16 @@ TestCase {
             assert(infoArea !== null && infoArea.lit !== undefined && tip.shown === infoArea.lit,
                    "the tip follows the icon's pointer area (lit: a tap shows it too)");
             assert(!infoOf(editorOf("notifications.movableToasts")).visible, "a row without info shows no icon");
+
+            // A number stored outside its range: the control shows the value in use, with a note
+            const critical = editorOf(queueKeys[0]);
+            const noteOf = editor => _find(editor, item => item.objectName === "rangeNote", true);
+            assert(noteOf(critical) !== null && !noteOf(critical).visible, "a value within its range: no note");
+            _globalsPin.use({ "notifications.criticalToastLimit": 9 });
+            assertEqual(critical.shownValue, 3, "stored above the maximum: shown at the maximum");
+            assertEqual(noteOf(critical).visible ? noteOf(critical).text : "",
+                        "Set to 9 in the config file, above the maximum 3: 3 is used", "… with a note saying what the file holds");
+            assertEqual(JSON.parse(Config.globals)["notifications.criticalToastLimit"], 9, "… the stored value left as it was");
         } finally {
             _globalsPin.restore();
             page.destroy();

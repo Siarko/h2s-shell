@@ -393,6 +393,7 @@ value, one set to a value that cannot be used is ignored (and named in the log).
 | `H2S_SHELL_TEST_MODULE_NOTIFY` | `TestSeams` | `1`: in module test mode notifications are sent all the same (to the bed's private bus), not only recorded |
 | `H2S_FAKE_VPN_PROVIDER` | `TestSeams` | `1`: the stand-in VPN provider (`tests/FakeVpnProvider.qml`, IPC target `fakevpn`) |
 | `H2S_DISTRIBUTION_HOLD` | `TestSeams` | an absolute path: while a file is there, `Distribution` does not answer (`fallback-wait.sh`) |
+| `H2S_SHELL_TEST_SETTING_RANGES` | `TestSeams` | `off`: number settings are used as stored, outside their schema's range too (`Profiles`), so idle timeouts can be seconds; `stack_start` sets it for every test |
 | `H2S_LAUNCHER_TEST_TIMINGS` | `seams.sh` | the launcher's pauses, `first=S lockwait=S`, and `discoveryhang=S` |
 
 When any of the QML ones is in force the shell logs `[TestSeams] test bed: <names>`, and

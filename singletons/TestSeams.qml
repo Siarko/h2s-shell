@@ -31,6 +31,9 @@ Singleton {
     readonly property string distribution: ""
     // A file while which Distribution does not answer (DistributionReader): "" — none
     readonly property string distributionHold: ""
+    // Number settings used as stored, outside their schema's range too (Profiles): off — kept
+    // within it
+    readonly property bool settingRangesOff: false
     // Module test mode (ModuleHost.testMode): off
     readonly property bool moduleTestMode: false
     // The names of the seams in force, and whether there is any

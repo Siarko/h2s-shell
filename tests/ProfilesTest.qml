@@ -38,6 +38,8 @@ TestCase {
         }
         assert(SettingsSchema.entries.some(entry => entry.info !== undefined), "an entry has an info text (the resident hide)");
 
+        _numberRanges();
+
         // --- the system profile is the shell's behaviour before profiles ---
         // Temperatures were 5 s (CPU) and 2 s (GPU); one rate since profiles, at 2 s.
         assertEqual(Profiles.value("polling.hardware.interval"), 2000, "hardware every 2 s");
@@ -331,6 +333,67 @@ TestCase {
     // written to the file after the first read is seen. The file is put back as it was; one
     // that was not there is removed again (until then it is empty, which every reader takes
     // as no file).
+    property GlobalsPin _globalsPin: GlobalsPin {}
+
+    // A number setting is used within its schema's range whatever the config file holds; the
+    // file keeps what the user wrote (ProfileRules.checkedNumber, withinRanges)
+    function _numberRanges() {
+        const entry = { key: "system.rememberAdminMinutes", type: "number", min: 1, max: 60, default: 5 };
+        const check = stored => ProfileRules.checkedNumber(entry, stored);
+        assertEqual(JSON.stringify(check(30)), JSON.stringify({ value: 30, corrected: false, note: "" }), "within the range: as stored");
+        assert(check(1).value === 1 && !check(1).corrected && check(60).value === 60 && !check(60).corrected, "on a bound: as stored");
+        assertEqual(JSON.stringify(check(0)), JSON.stringify({ value: 1, corrected: true, note: "Set to 0 in the config file, below the minimum 1: 1 is used" }),
+                    "below the minimum: the minimum, said");
+        assertEqual(JSON.stringify(check(120)), JSON.stringify({ value: 60, corrected: true, note: "Set to 120 in the config file, above the maximum 60: 60 is used" }),
+                    "above the maximum: the maximum, said");
+        assertEqual(JSON.stringify(check("30")), JSON.stringify({ value: 5, corrected: true, note: "Set to \"30\" in the config file, not a number: the default 5 is used" }),
+                    "a string: the default, said");
+        assert(check(NaN).value === 5 && check(NaN).corrected && check(Infinity).value === 5 && check(null).value === 5
+               && check(true).value === 5 && check([3]).value === 5 && check({}).value === 5, "NaN, infinity, null, a bool, a list, an object: the default");
+        assertEqual(check(undefined).value, undefined, "missing: nothing to correct");
+        assert(!check(undefined).corrected && check(undefined).note === "", "… and nothing said");
+        assertEqual(check("x".repeat(100)).note.length, "Set to  in the config file, not a number: the default 5 is used".length + 40,
+                    "a long stored text: capped in the note");
+        assert(!/\n/.test(check("a\nb").note), "… and on one line");
+        assertEqual(ProfileRules.checkedNumber({ type: "slider", min: -360, max: 360, default: 0 }, -400).value, -360, "a slider: within its range");
+        assertEqual(ProfileRules.checkedNumber({ type: "interval", min: 0, max: 600000, default: 2000 }, -1).value, 0, "an interval: within its range");
+        assertEqual(ProfileRules.checkedNumber({ type: "number", default: 3 }, 1e9).value, 1e9, "no min or max: any number");
+        assertEqual(ProfileRules.checkedNumber({ type: "number", min: 2, default: 3 }, 1).value, 2, "only a min: kept to it");
+        assertEqual(ProfileRules.checkedNumber({ type: "enum", default: 60 }, "x").value, "x", "another type: not touched");
+        assertEqual(ProfileRules.checkedNumber(null, 120).value, 120, "a key without an entry: not touched");
+
+        const entries = [entry, { key: "a.text", type: "string", default: "" }, { key: "a.gone", type: "slider", min: 0, max: 1, default: 0 }];
+        const values = { "system.rememberAdminMinutes": 120, "a.text": 7 };
+        const result = ProfileRules.withinRanges(entries, values);
+        assertEqual(JSON.stringify(result.values), JSON.stringify({ "system.rememberAdminMinutes": 60, "a.text": 7 }), "withinRanges: numbers corrected, the rest as given");
+        assertEqual(JSON.stringify(result.corrections.map(each => [each.key, each.stored, each.used])), JSON.stringify([["system.rememberAdminMinutes", 120, 60]]),
+                    "… each correction listed with what was stored and what is used");
+        assertEqual(values["system.rememberAdminMinutes"], 120, "… the input left as it was");
+
+        // Every number setting of the schema, the modules' included: its default within its range
+        for (const each of SettingsSchema.entries) {
+            if (ProfileRules.numberTypes.includes(each.type))
+                assert(!ProfileRules.checkedNumber(each, each.default).corrected, each.key + ": its default is a number within its range");
+        }
+        assertEqual(Profiles.rangeCorrections.length, 0, "the suites' config: nothing corrected");
+
+        // Through Profiles.value, the one place every reader goes through
+        const before = Profiles.value("system.rememberAdminMinutes");
+        try {
+            _globalsPin.use({ "system.rememberAdminMinutes": 0 });
+            assertEqual(Profiles.value("system.rememberAdminMinutes"), 1, "Profiles.value: stored below the minimum, the minimum");
+            _globalsPin.use({ "system.rememberAdminMinutes": 120 });
+            assertEqual(Profiles.value("system.rememberAdminMinutes"), 60, "… above the maximum, the maximum");
+            _globalsPin.use({ "system.rememberAdminMinutes": "ten" });
+            assertEqual(Profiles.value("system.rememberAdminMinutes"), 5, "… not a number, the default");
+            assertEqual(JSON.stringify(Profiles.rangeCorrections.map(each => each.key)), JSON.stringify(["system.rememberAdminMinutes"]), "… listed as corrected");
+            assertEqual(JSON.parse(Config.globals)["system.rememberAdminMinutes"], "ten", "… the stored value left as the user wrote it");
+        } finally {
+            _globalsPin.restore();
+        }
+        assertEqual(Profiles.value("system.rememberAdminMinutes"), before, "put back: as before");
+    }
+
     property FileView _configOnDisk: FileView {
         blockAllReads: true
         blockWrites: true
