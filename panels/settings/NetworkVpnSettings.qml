@@ -445,7 +445,7 @@ Item {
                         : VpnLockdown.state === "working" ? "Switching…"
                         : VpnLockdown.state === "failed" ? VpnLockdown.failure
                         : VpnLockdown.state === "missing"
-                            ? (VpnLockdown.helperState === "asks" ? "Not switched: the script asked for a password, and nothing asks by itself. Apply again to give it."
+                            ? (VpnLockdown.helperState === "asks" ? "Not switched: the script asked for a password, and nothing asks by itself. Apply again to give it; once a run needs none, or this page opens again, it switches by itself again."
                                : VpnLockdown.mode === "unavailable" ? VpnLockdown.capability.reason
                                : VpnLockdown.loaded && !VpnLockdown.wanted
                                    ? "Still blocking from before: the script must be installed to switch it off."
@@ -461,6 +461,8 @@ Item {
                     // the installed script runs
                     visible: VpnLockdown.installedFound && (VpnLockdown.mismatched || (VpnLockdown.wanted && VpnLockdown.state === "on"))
                     label: "Apply again"
+                    // One switch at a time: a click while one runs would be lost
+                    available: !VpnLockdown.switching
                     tooltip: "Load the rules anew: the VPN servers' addresses found again"
                     onClicked: VpnLockdown.apply()
                 }
@@ -536,7 +538,7 @@ Item {
                         : VpnLockdown.helperState === "asks" ? "Installed, but a password was still asked for: its polkit rule does not apply."
                         : VpnLockdown.helperState === "norule" ? "The script is there (" + VpnLockdown.installedAt + "), but no polkit rule for "
                             + VpnLockdown.user + ": it does not run by itself."
-                        : VpnLockdown.helperState === "folder" ? "An older install is at " + VpnLockdown.installedAt + ": it is not used. Remove that folder as administrator to install this one."
+                        : VpnLockdown.helperState === "folder" ? "An older install is at " + VpnLockdown.installedAt + ", with its rule /etc/polkit-1/rules.d/49-h2s-vpn-lockdown.rules: it is not used. Remove both as administrator to install this one."
                         : VpnLockdown.helperState === "unsafe" ? "The file at " + VpnLockdown.installedAt + " is not root's alone: it is never run."
                         : "Not installed: the blocking does not run."
                     font.family: Theme.fontFamily
@@ -607,7 +609,8 @@ Item {
                     available: VpnLockdown.installBusy === ""
                     label: "Remove…"
                     fontSize: Theme.fontSizeBody
-                    confirmLabel: "Remove the script and its rule?"
+                    // Without the script the shell cannot switch loaded rules off
+                    confirmLabel: VpnLockdown.loaded ? "Remove? The blocking then stays on until a restart." : "Remove the script and its rule?"
                     cancelTip: "Keep them"
                     onConfirmed: VpnLockdown.uninstall()
                 }

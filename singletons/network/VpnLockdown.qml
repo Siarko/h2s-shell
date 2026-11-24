@@ -186,6 +186,8 @@ Singleton {
     // ── Looking at the script ──
     // Once the distribution is known (its places); the page asks again when shown
     function checkScript(): void {
+        // Looked at afresh: a question seen before is not held against the script any more
+        installedAsks = false;
         Distribution.whenReady(() => _userRead.request());
     }
 
@@ -261,8 +263,10 @@ Singleton {
     // A password asked for while the installed script runs: its rule does not apply. The
     // question that is this run's (PolkitRules.announces: pkexec's, quoting its command) is
     // closed at once when the run started by itself — nothing asks without a click — and
-    // nothing runs by itself after that until the script is checked again. Another polkit
-    // agent's question cannot be closed from here; it is still told apart afterwards.
+    // nothing runs by itself after that until the script is checked again (the page shown,
+    // "Check again", an install) or a run on a click goes through without a question.
+    // Another polkit agent's question cannot be seen or closed from here: a run by itself that
+    // pkexec ends refused or unanswered counts the same (VpnLockdownRules.asksAfter).
     Connections {
         target: Authentication
         function onFlowChanged() {
@@ -270,6 +274,7 @@ Singleton {
             if (answer === "")
                 return;
             root.installedAsks = true;
+            root._promptSeen = true;
             if (answer === "close") {
                 console.warn("[VpnLockdown] the installed script asked for a password: its polkit rule does not apply; the question is closed");
                 Authentication.flow.cancelAuthenticationRequest();
@@ -280,10 +285,13 @@ Singleton {
     // itself (not the user's click)
     property var _running: []
     property bool _runningByItself: false
+    // A question was seen during the run under way
+    property bool _promptSeen: false
 
     // A refusal is for the moment it was given: wanted or not again, it is asked afresh
     onWantedChanged: {
         _refused = "";
+        _toldMissing = false;
         _schedule();
     }
     onExpectedStatusChanged: _schedule()
@@ -413,9 +421,18 @@ Singleton {
             _askedAtStart = true;
             _askStatus();
         } else if (step === "missing") {
-            // Nothing may run by itself: said on the page, nothing asked
+            // Nothing may run by itself: said on the page, nothing asked; told once while
+            // wanted, so the blocking never fails open unnoticed
             state = "missing";
             failure = "";
+            if (wanted && !_toldMissing) {
+                _toldMissing = true;
+                const notice = VpnLockdownRules.missingNotice(helperState);
+                Notifier.send(notice.summary, { body: notice.body });
+            }
+        } else if (step === "keep") {
+            if (state === "missing")
+                state = loaded ? "on" : "off";
         } else if (step === "no-nft") {
             state = "failed";
             failure = "nftables is not installed: the blocking needs it.";
@@ -432,6 +449,12 @@ Singleton {
             failure = "";
         }
     }
+
+    // Told that the blocking is wanted but nothing may switch it (once per wanted)
+    property bool _toldMissing: false
+
+    // A switch is under way (the page's "Apply again" waits for it)
+    readonly property bool switching: state === "asking" || state === "working" || _resolve.running || _action.busy
 
     // Whether what is loaded differs from what is wanted (the page offers "Apply again")
     readonly property bool mismatched: checked && state !== "asking" && state !== "working"
@@ -475,9 +498,18 @@ Singleton {
         const command = ["pkexec", installedAt].concat(scriptArguments);
         _running = command.slice(1);
         _runningByItself = byItself;
+        _promptSeen = false;
         _action.run(command, result => {
+            const promptSeen = root._promptSeen;
             root._running = [];
             root._runningByItself = false;
+            root._promptSeen = false;
+            // A run on a click that went through without a question: the rule applies again,
+            // and the blocking switches by itself again
+            if (!byItself && result.ok && !promptSeen && root.installedAsks) {
+                console.log("[VpnLockdown] the installed script ran without a password again: it switches by itself again");
+                root.installedAsks = false;
+            }
             // A question this shell could not see (another agent's): nothing more by itself
             if (VpnLockdownRules.asksAfter(result, byItself) && !root.installedAsks) {
                 console.warn("[VpnLockdown] the installed script asked for a password (pkexec " + result.code + "): nothing runs by itself until it is checked again");

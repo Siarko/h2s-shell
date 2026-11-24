@@ -632,6 +632,18 @@ TestCase {
                         "lockdown: … not even on a click: the shell's own copy is never run");
             assertEqual(VpnLockdownRules.lockdownNextStep(Object.assign({}, missing, { wanted: false })), "missing", "lockdown: on from before, not wanted, nothing installed — said, nothing run");
             assertEqual(VpnLockdownRules.lockdownNextStep(Object.assign({}, missing, { wanted: false, status: "off" })), "idle", "lockdown: … off and not wanted — idle");
+            assertEqual(VpnLockdownRules.lockdownNextStep(Object.assign({}, missing, { rulesVersion: 4 })), "keep",
+                        "lockdown: nothing installed, the rules on already as wanted (before Remove) — kept, nothing said missing");
+            assertEqual(VpnLockdownRules.lockdownNextStep(lockFacts({ passwordFree: false, rulesVersion: 4 })), "keep",
+                        "lockdown: a password asked, the rules as wanted (a click switched them) — kept, not missing");
+            assertEqual(VpnLockdownRules.lockdownNextStep(lockFacts({ passwordFree: false, rulesVersion: 4, expectedStatus: "on 0 - -" })), "missing",
+                        "lockdown: … the wanted rules changed — missing");
+            assertEqual(VpnLockdownRules.lockdownNextStep(lockFacts({ passwordFree: false, rulesVersion: 3 })), "missing",
+                        "lockdown: … rules older than the installed script — a switch due, missing");
+            assertEqual(JSON.stringify(VpnLockdownRules.missingNotice("asks")), JSON.stringify({ summary: "Not blocking traffic outside the VPN",
+                        body: "The blocking's script asked for a password. Apply again in Settings → System → Network → VPN." }), "lockdown notice: the script asks");
+            assertEqual(VpnLockdownRules.missingNotice("none").body, "The blocking needs its script installed: Settings → System → Network → VPN.",
+                        "lockdown notice: not installed");
             // Installed, but its rule does not apply (a password was asked, or no rule)
             const asks = lockFacts({ passwordFree: false, askedAtStart: false, status: "off" });
             assertEqual(VpnLockdownRules.lockdownNextStep(asks), "missing", "lockdown: installed, a password would be asked — not run by itself");

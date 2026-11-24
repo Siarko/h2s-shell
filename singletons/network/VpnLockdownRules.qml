@@ -104,8 +104,13 @@ Singleton {
         if (!facts.ready || facts.busy)
             return "wait";
         const on = String(facts.status ?? "").startsWith("on");
-        if (facts.installed !== true || (facts.passwordFree !== true && facts.force !== true))
-            return facts.wanted || on ? "missing" : "idle";
+        // Nothing may run by itself: "missing" only when a switch is due; rules already as
+        // wanted (switched on by a click, or before the script was removed) are kept
+        if (facts.installed !== true || (facts.passwordFree !== true && facts.force !== true)) {
+            if (facts.wanted)
+                return lockdownCurrent(facts.status, facts.rulesVersion, facts.expectedStatus, facts.scriptVersion) ? "keep" : "missing";
+            return on ? "missing" : "idle";
+        }
         if (facts.passwordFree === true && !facts.askedAtStart && !facts.force)
             return "ask";
         if (facts.wanted) {
@@ -180,6 +185,17 @@ Singleton {
     // itself after it, so the other agent's question is not raised again and again.
     function asksAfter(result, byItself) {
         return byItself === true && (result?.code === 126 || result?.code === 127);
+    }
+
+    // What the shell tells, once, when the blocking is wanted but nothing may switch it by
+    // itself (`helperState` VpnLockdown's) → { summary, body }
+    function missingNotice(helperState) {
+        return {
+            summary: "Not blocking traffic outside the VPN",
+            body: helperState === "asks"
+                ? "The blocking's script asked for a password. Apply again in Settings → System → Network → VPN."
+                : "The blocking needs its script installed: Settings → System → Network → VPN."
+        };
     }
 
     // The install's two files as pam-files.sh answered (PamStackRules.filesAnswer's each) →

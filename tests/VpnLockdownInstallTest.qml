@@ -46,6 +46,8 @@ TestCase {
     property int _uid: -1
     property bool _holderEnded: true
     property bool _heldSeen: false
+    // A link in /tmp, outside the scratch folder (removed at the end)
+    readonly property string _tmpLink: "/tmp/h2s-vpn-lockdown-link-" + Date.now()
 
     property Component _installComponent: Component {
         VpnLockdownInstall {}
@@ -110,9 +112,9 @@ TestCase {
               (code, stdout, stderr) => suite._direct = { code: code, stdout: stdout, stderr: stderr.trim() });
     }
 
-    function _shell(script, done) {
+    function _shell(script, done, more) {
         _ready = false;
-        _exec(["sh", "-c", script, "sh", _scratch], code => {
+        _exec(["sh", "-c", script, "sh", _scratch].concat(more ?? []), code => {
             suite.assertEqual(code, 0, "set up: " + script);
             suite._ready = true;
             done?.();
@@ -318,6 +320,21 @@ TestCase {
         });
         _then("checked an older install's folder", () => _check !== null, () => {
             assertEqual(_check.folder + " " + _check.installedFound + " " + _check.unsafe, "true false false", "the check: a folder at the place — an older install, never run");
+            // A link of the user's on the way to a script root holds: /tmp (root's, sticky) holds
+            // the link, which leads to the system's /bin
+            _shell("ln -s /bin \"$2\"", null, [_tmpLink]);
+        });
+        _then("a link of the user's in /tmp", () => _ready, () => _runCheck(0, "alex", _tmpLink + "/sh"));
+        _then("checked through a link of the user's", () => _check !== null, () => {
+            assertEqual(_check.installedFound + " " + _check.unsafe, "false true", "the check: root's script reached through a link the user made — unsafe");
+            _runCheck(0, "alex", "/bin/sh");
+        });
+        _then("checked the system's own path", () => _check !== null, () => {
+            assertEqual(_check.installedFound + " " + _check.unsafe, "true false", "the check: the same script by the system's own path — installed");
+            _shell("sed -i 's/polkit.Result.YES/polkit.Result.NO/' \"$1/usr/share/polkit-1/rules.d/49-h2s-vpn-lockdown.rules\"", () => suite._runCheck(suite._uid, "alex"));
+        });
+        _then("checked a rule that does not grant", () => _check !== null && _ready, () => {
+            assertEqual(_check.rule + " " + _check.installedFound, "false true", "the check: a rule naming the script and the user but not granting — no rule");
         });
         _clock.start();
         _exec(["id", "-u"], (code, stdout) => {
@@ -380,7 +397,7 @@ TestCase {
     function _end() {
         _install?.destroy();
         // A holder still waiting is let go before the folder goes
-        _exec(["sh", "-c", "touch \"$1/release\" 2> /dev/null; rm -rf -- \"$1\"", "sh", _scratch], () => suite.finish());
+        _exec(["sh", "-c", "touch \"$1/release\" 2> /dev/null; rm -rf -- \"$1\"; rm -f -- \"$2\"", "sh", _scratch, _tmpLink], () => suite.finish());
     }
 
     function _exec(command, done) {

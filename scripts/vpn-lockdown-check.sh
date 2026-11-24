@@ -15,7 +15,7 @@
 #   unsafe <version>     a script is there, but not so: never run
 #   folder               a folder at the script's place (an older install's layout): never run
 #   rule yes             a polkit rule file in the rule folder names the installed script and
-#                        the user
+#                        the user, and grants (polkit.Result.YES)
 #   nft                  one of the nft places is an executable
 #
 # Links are followed (NixOS's profile links into its store). Nothing is written, nothing run
@@ -45,12 +45,22 @@ held_folder() {
     [ $((mode & 022)) -eq 0 ] || [ $((mode & 01000)) -ne 0 ]
 }
 
-# Every folder above a path held
+# Root or the owner owns the path itself (a link: the link, not what it leads to)
+owned() {
+    local uid
+    uid=$(stat -c '%u' -- "$1" 2> /dev/null) || return 1
+    [ "$uid" = "$owner" ] || [ "$uid" = 0 ]
+}
+
+# Every folder above a path held, and each part of the path as given owned: a link on the
+# way that someone else made could be pointed elsewhere
 ancestors_held() {
     local path=$1
+    owned "$path" || return 1
     while [ "$path" != / ] && [ -n "$path" ]; do
         path=$(dirname -- "$path")
         held_folder "$path" || return 1
+        owned "$path" || return 1
     done
 }
 
@@ -68,7 +78,8 @@ elif [ -n "$installed" ] && [ -e "$installed" ]; then
 fi
 if [ -n "$installed" ] && [ -n "$rules" ]; then
     for file in "$rules"/*.rules; do
-        if grep -qsF -- "\"$installed\"" "$file" && grep -qsF -- "subject.user == \"$user\"" "$file"; then
+        if grep -qsF -- "\"$installed\"" "$file" && grep -qsF -- "subject.user == \"$user\"" "$file" \
+            && grep -qsF -- "polkit.Result.YES" "$file"; then
             echo "rule yes"
             break
         fi
