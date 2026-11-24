@@ -30,6 +30,14 @@ TestCase {
     readonly property var _kinds: IntegrationRules.kinds.concat(["no.such.kind", "toString"])
     // A value each defined kind takes
     readonly property var _values: ({ "sleep.hibernateDelay": 10800 })
+    // Stand-ins for the merged readings: the system's own file sets each kind
+    readonly property var _merged: ({ "sleep.hibernateDelay": ["sh", "-c", "printf '# /etc/systemd/sleep.conf\\n[Sleep]\\nHibernateDelaySec=2h\\n'"] })
+    // What each shipped integration answers per defined kind (mode, undo, inForce)
+    readonly property var _expectedModes: ({
+        arch: { "sleep.hibernateDelay": "apply undo inForce" },
+        nixos: { "sleep.hibernateDelay": "copy - inForce" },
+        generic: { "sleep.hibernateDelay": "unavailable - -" }
+    })
 
     property var _integrations: []
     // Per integration id: the runs its stand-in was handed
@@ -75,6 +83,9 @@ TestCase {
             assert(IntegrationRules.valid(capability), label + "a valid capability: " + JSON.stringify(capability));
             assert(capability.known, label + "… known (an integration's answer)");
             const defined = IntegrationRules.kinds.includes(kind);
+            if (defined)
+                assertEqual([capability.mode, capability.undo ? "undo" : "-", capability.inForce ? "inForce" : "-"].join(" "), _expectedModes[id]?.[kind],
+                            label + "the expected mode");
             if (!defined)
                 assertEqual(capability.mode, "unavailable", label + "a kind the shell does not define: unavailable");
             if (capability.mode === "unavailable")
@@ -102,6 +113,14 @@ TestCase {
                 assertEqual(integration.plan(kind, "x").refusal?.code, "value", label + "a value it does not take: refused");
             }
 
+            // Before any change: nothing to put back
+            const undone = integration.undo(kind, { done: _counter(id + " undo " + kind) });
+            assert(typeof undone?.started === "boolean" && (undone.started ? undone.refusal === null : typeof undone.refusal?.text === "string"),
+                   label + "undo answers: " + JSON.stringify(undone));
+            assert(!undone.started, label + "… nothing undone before a change");
+            assertEqual(undone.refusal.code, capability.undo ? "noUndo" : capability.mode === "unavailable" ? "unavailable" : capability.mode === "apply" ? "noUndo" : "mode",
+                        label + "… refused for its reason");
+
             const applied = integration.apply(kind, value, { done: _counter(id + " apply " + kind) });
             assert(typeof applied?.started === "boolean" && (applied.started ? applied.refusal === null : typeof applied.refusal?.text === "string"),
                    label + "apply answers: " + JSON.stringify(applied));
@@ -111,14 +130,6 @@ TestCase {
             if (capability.mode === "unavailable")
                 assertEqual(applied.refusal.text, capability.reason, label + "… refused with the reason");
 
-            const undone = integration.undo(kind, { done: _counter(id + " undo " + kind) });
-            assert(typeof undone?.started === "boolean" && (undone.started ? undone.refusal === null : typeof undone.refusal?.text === "string"),
-                   label + "undo answers: " + JSON.stringify(undone));
-            // Apply is under way, or nothing was changed: nothing to put back yet
-            assert(!undone.started, label + "… nothing undone before a change");
-            if (!capability.undo)
-                assert(["mode", "noUndo", "unavailable"].includes(undone.refusal.code), label + "… no Undo: refused (" + undone.refusal.code + ")");
-
             integration.readInForce(kind, _counter(id + " readInForce " + kind));
             _expected.push(id + " readInForce " + kind);
         }
@@ -127,8 +138,8 @@ TestCase {
     function runAsync() {
         _then("the scratch folder made, the shell's timeout looked up", () => _ready && CommandTools.known, () => {
             _integrations = [
-                _arch.createObject(suite, { start: _standIn("arch"), base: _scratch }),
-                _nixos.createObject(suite),
+                _arch.createObject(suite, { start: _standIn("arch"), base: _scratch, inForceCommands: _merged }),
+                _nixos.createObject(suite, { inForceCommands: _merged }),
                 _generic.createObject(suite)
             ];
             assertEqual(_integrations.map(integration => integration.distribution).sort().join(" "), DistributionRules.ids.slice().sort().join(" "),
@@ -148,12 +159,18 @@ TestCase {
             for (const integration of _integrations) {
                 for (const kind of _kinds) {
                     const answer = (_answers[integration.distribution + " readInForce " + kind] ?? [])[0];
-                    assert(["set", "absent", "unknown"].includes(answer?.state), integration.distribution + " " + kind + ": what is in force, " + JSON.stringify(answer));
+                    assert(IntegrationRules.validInForce(answer), integration.distribution + " " + kind + ": what is in force, " + JSON.stringify(answer));
                     if (!integration.capability(kind).inForce)
-                        assertEqual(answer.state, "unknown", integration.distribution + " " + kind + ": … unknown where it is not read");
+                        assertEqual(JSON.stringify(answer), JSON.stringify(IntegrationRules.inForceUnknown()), integration.distribution + " " + kind + ": … unknown where it is not read");
                 }
             }
             assertEqual((_answers["arch apply sleep.hibernateDelay"] ?? [])[0]?.quiet, true, "arch: the hibernation delay's apply ran (its prompt dismissed)");
+            const archDelay = (_answers["arch readInForce sleep.hibernateDelay"] ?? [])[0];
+            assertEqual(JSON.stringify(archDelay), JSON.stringify({ state: "set", value: 7200, from: "/etc/systemd/sleep.conf", elsewhere: "/etc/systemd/sleep.conf",
+                                                                   file: { state: "absent", text: null, sha256: "absent", ours: false } }),
+                        "arch: the delay in force, set elsewhere, and the shell's own file (none in the scratch tree)");
+            const nixosDelay = (_answers["nixos readInForce sleep.hibernateDelay"] ?? [])[0];
+            assertEqual(nixosDelay?.elsewhere + " " + nixosDelay?.value + " " + nixosDelay?.file, "/etc/systemd/sleep.conf 7200 null", "nixos: the delay in force, no file of the shell's");
             assertEqual(JSON.stringify(_runs), JSON.stringify({ arch: ["Change the time before hibernating"] }),
                         "runs as administrator: only arch's applied kind, once; none from nixos or generic");
             // Distribution forwards to the integration of the system it answered
@@ -164,12 +181,15 @@ TestCase {
             assertEqual(Distribution.integration?.distribution ?? "(none)", id === "" ? "(none)" : id, "Distribution's integration: the answered distribution's");
             for (const shipped of DistributionRules.ids)
                 assertEqual(Distribution._integrations[shipped]?.distribution, shipped, "Distribution has " + shipped + "'s integration");
-            for (const kind of _kinds) {
-                const expected = id === "" ? IntegrationRules.unknownCapability() : Distribution._integrations[id].capability(kind);
-                assertEqual(JSON.stringify(Distribution.capability(kind)), JSON.stringify(expected), "Distribution's " + kind + ": its integration's answer");
-                assertEqual(JSON.stringify(Distribution.plan(kind, _values[kind] ?? 1)), JSON.stringify(id === "" ? { preview: null, refusal: IntegrationRules.refusal("unknown") }
-                            : Distribution._integrations[id].plan(kind, _values[kind] ?? 1)), "… and plan");
+            for (const kind of IntegrationRules.kinds) {
+                const capability = Distribution.capability(kind);
+                assertEqual([capability.mode, capability.undo ? "undo" : "-", capability.inForce ? "inForce" : "-"].join(" "),
+                            id === "" ? "unavailable - -" : _expectedModes[id][kind], "Distribution's " + kind + ": the answered distribution's mode");
+                assertEqual(capability.known, id !== "", "… known once answered");
             }
+            const delay = Distribution.plan("sleep.hibernateDelay", 600);
+            const plans = { arch: "/etc/systemd/sleep.conf.d/h2s-shell.conf", nixos: HibernateRules.nixosOption + " = 600;", generic: "unavailable", "": "unknown" };
+            assertEqual(delay.preview?.files?.[0]?.path ?? delay.preview?.snippet ?? delay.refusal?.code, plans[id], "… its plan: the distribution's");
         });
         _clock.start();
         _exec(["sh", "-c", "mkdir -p \"$1/etc/systemd\" && chmod 755 \"$1/etc/systemd\"", "sh", _scratch], code => {

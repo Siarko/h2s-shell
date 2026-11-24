@@ -20,8 +20,18 @@ import QtQuick
 //     known    false only while the distribution is not known (Distribution's answer)
 //   plan(kind, value) → { preview, refusal }
 //     preview  "apply": { files: [{ path, text }] }; "copy": { option, snippet }
-//   apply / undo → { started, refusal }; readInForce → { state ("set", "absent", "unknown"),
-//     value, ours (the file is the shell's) }
+//   apply / undo → { started, refusal }
+//   readInForce → what the system uses, read as the system merges it (inForceCommand), and
+//     the shell's own file: { state, value, from, elsewhere, file }
+//     state      "set" (a file sets it), "default" (none does: the system's own default),
+//                "unknown" (not read, or not understood)
+//     value      the value in force ("set"), else null
+//     from       the file whose setting is in force ("" for none or not known)
+//     elsewhere  `from` when it is not the shell's own file: the user's or the system's own
+//                setting, which the shell shows ("Set in <file>") and never overrides unasked
+//     file       the shell's own file (EtcFilesRules.inForce's answer: its text, sha256 and
+//                whether it is exactly the shell's), the `current` to hand apply; null where
+//                the shell writes nothing
 Singleton {
     id: root
 
@@ -130,25 +140,48 @@ Singleton {
         return answer.undo ? null : refusal("noUndo");
     }
 
-    // What is in force, from the kind's file as read (EtcFilesRules.inForce's answer) →
-    // { state, value, ours }
-    function inForceOf(kind, current) {
-        if (current?.state === "absent")
-            return { state: "absent", value: null, ours: false };
-        if (current?.state !== "text")
-            return { state: "unknown", value: null, ours: false };
-        if (kind === "sleep.hibernateDelay") {
-            const delay = HibernateRules.hibernateDelay(current.text);
-            if (delay.state === "set")
-                return { state: "set", value: delay.seconds, ours: current.ours === true };
-            if (delay.state === "unset")
-                return { state: "absent", value: null, ours: current.ours === true };
-        }
-        return { state: "unknown", value: null, ours: current.ours === true };
+    // The command that prints the kind's setting as the system merges it (every file it
+    // reads, in its order, each under a `# <path>` line), or null for a kind without one
+    function inForceCommand(kind) {
+        if (kind === "sleep.hibernateDelay")
+            return ["systemd-analyze", "--no-pager", "cat-config", "systemd/sleep.conf"];
+        return null;
+    }
+
+    // What is in force: `merged` inForceCommand's output (null: not read), `own` the shell's
+    // own file as read (EtcFilesRules.inForce's answer; null where it writes none) →
+    // { state, value, from, elsewhere, file }
+    function inForceOf(kind, merged, own) {
+        const file = own !== null && typeof own === "object" ? own : null;
+        if (kind !== "sleep.hibernateDelay" || typeof merged !== "string")
+            return Object.assign(inForceUnknown(), { file });
+        const delay = HibernateRules.hibernateDelay(merged);
+        if (delay.state !== "set" && delay.state !== "unset")
+            return Object.assign(inForceUnknown(), { file });
+        // A file that put systemd's default back (an empty assignment) is a setting too
+        const from = typeof delay.file === "string" ? delay.file : "";
+        return {
+            state: delay.state === "set" ? "set" : "default",
+            value: delay.state === "set" ? delay.seconds : null,
+            from,
+            elsewhere: from !== "" && from !== EtcFilesRules.files[kind] ? from : "",
+            file
+        };
     }
 
     // Nothing in force can be told
     function inForceUnknown() {
-        return { state: "unknown", value: null, ours: false };
+        return { state: "unknown", value: null, from: "", elsewhere: "", file: null };
+    }
+
+    // Whether an answer is readInForce's as the contract has it
+    function validInForce(answer) {
+        if (answer === null || typeof answer !== "object" || !["set", "default", "unknown"].includes(answer.state))
+            return false;
+        if (typeof answer.from !== "string" || typeof answer.elsewhere !== "string" || (answer.elsewhere !== "" && answer.elsewhere !== answer.from))
+            return false;
+        if (answer.file !== null && (typeof answer.file !== "object" || !["text", "absent", "unknown"].includes(answer.file.state)))
+            return false;
+        return answer.state === "set" ? answer.value !== null && answer.value !== undefined : answer.value === null;
     }
 }

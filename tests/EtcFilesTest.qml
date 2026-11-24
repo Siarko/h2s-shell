@@ -57,6 +57,13 @@ TestCase {
     function _start(request, done) {
         if (_answer === "throw")
             throw new Error("no queue");
+        if (_answer === "answerThenThrow") {
+            // Answers at once, twice, then throws
+            const dismissed = { ok: false, code: 126, stdout: "", stderr: "", dismissed: true, refused: false, cancelled: false, blocked: "", error: "" };
+            done(dismissed);
+            done(dismissed);
+            throw new Error("after answering");
+        }
         _runs.push({ what: request.what, argv: Array.from(request.argv) });
         if (_answer === "dismissed") {
             Qt.callLater(() => done({ ok: false, code: 126, stdout: "", stderr: "", dismissed: true, refused: false, cancelled: false, blocked: "", error: "" }));
@@ -149,6 +156,12 @@ TestCase {
         });
         _then("the file read after Undo", () => _shellOutput !== "", () => {
             assertEqual(_shellOutput, "[0]" + _first, "… the file as it was");
+            // The shell's file edited by hand: the user's now
+            _outcome = null;
+            _sh("printf '# mine\\n' >> \"$1/etc/systemd/sleep.conf.d/h2s-shell.conf\"", () => suite._write(suite._second));
+        });
+        _then("a write over the shell's file edited by hand answered", () => _outcome !== null, () => {
+            assertEqual(_outcome.ok + " " + _outcome.refused + " " + _outcome.current?.ours, "false other false", "an edit of the shell's file: not replaced without asking");
             _sh("printf '%s' '" + _foreign + "' > \"$1/etc/systemd/sleep.conf.d/h2s-shell.conf\"");
         });
         _then("a file not the shell's put in place", () => _shellOutput !== "", () => {
@@ -201,8 +214,18 @@ TestCase {
                 assert(!_files.busy, "… not left busy");
                 assertEqual(_files.run({ what: "x", argv: ["/bin/true"], reply: () => ({ ok: true }), readBack: [], done: () => {} }), "start", "… run() too");
                 assert(!_files.busy, "… nor by run()");
+                _answer = "answerThenThrow";
+                let answers = 0;
+                assertEqual(_files.run({ what: "x", argv: ["/bin/true"], reply: result => ({ ok: result.dismissed !== true }), readBack: [], done: () => answers++ }), "",
+                            "a queue that answers, then throws: the answer stands");
+                assertEqual(answers + " " + _files.busy, "1 false", "… taken once, not busy");
                 _answer = "run";
-                suite._directChecks();
+                assertEqual(_files.run({ what: "x", argv: ["/bin/true"], reply: () => { throw new Error("bad reply"); }, readBack: [], done: () => answers++ }), "",
+                            "an answer that cannot be read: started");
+                suite._then("… the unreadable answer handed over", () => answers === 2, () => {
+                    assert(!_files.busy, "an answer that could not be read: not left busy");
+                    suite._directChecks();
+                });
             });
         });
         _clock.start();
@@ -228,6 +251,10 @@ TestCase {
             { words: [_scratch, "write", "pam.rules", sum, "absent", _first], id: null, want: "refused arguments", why: "a kind it does not know: refused" },
             { words: [_scratch, "write", _kind, PamEditRules.sha256(_foreign), "absent", _foreign], id: null, want: "refused arguments", why: "a text without the marker: refused" },
             { words: [_scratch, "write", _kind, sum, "absent", _first.slice(0, -1)], id: null, want: "refused arguments", why: "a text without its last line break: refused" },
+            { words: [_scratch, "write", _kind, PamEditRules.sha256(_first + "# more\n"), "absent", _first + "# more\n"], id: null, want: "refused arguments",
+              why: "the shell's text with a line added: refused" },
+            { words: [_scratch, "write", _kind, PamEditRules.sha256(_first.replace("10800", "010800")), "absent", _first.replace("10800", "010800")], id: null,
+              want: "refused arguments", why: "a value with a leading zero: refused" },
             { words: [_scratch, "write", _kind, PamEditRules.sha256(_second), PamEditRules.sha256(_second), _first], id: null, want: "refused hash",
               why: "bytes that are not the sha256 given: refused" },
             { words: [_scratch, "undo", _kind, "h2s-shell.conf.x", "absent"], id: null, want: "refused arguments", why: "a backup name not its own: refused" },

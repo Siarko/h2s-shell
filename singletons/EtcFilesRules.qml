@@ -14,14 +14,16 @@ import QtQuick
 // fixed in it, one per change kind, under the folder its first argument names — "" for the
 // system, the only one it takes as root —; it refuses before changing anything when the file
 // changed since the shell read it (its sha256, or that there was none), the file is a link,
-// a folder written in is a link, not root's or writable by others, the text is not one the
-// shell writes (`marker` first, at most `maxBytes`, a line break last) or not the bytes the
-// shell computed, or another run holds the kind's lock. It keeps the file it replaces as a
-// backup (`<file name>.<UTC time>`, `.absent` for none; every one kept) and says what is in
-// force.
+// a folder written in is a link, not root's or writable by others, the text is not exactly
+// one the shell writes for the kind (`shellText`) or not the bytes the shell computed, or
+// another run holds the kind's lock. It keeps the file it replaces as a backup (`<file
+// name>.<UTC time>`, `.absent` for none; every one kept) and says what is in force. Undo
+// puts a backup's content back; the file it writes is root's, mode 0644, whatever the
+// replaced file's owner and mode were.
 //
-// Never overriding what the user set: a file the shell did not write (no marker) is
-// replaced only when the request says so (`replace`), after the user was told. Pure.
+// Never overriding what the user set: a file that is not exactly a text the shell writes —
+// another's, or the shell's edited by hand — is replaced or removed only when the request
+// says so (`replace`), after the user was told. Pure.
 Singleton {
     id: root
 
@@ -113,6 +115,18 @@ Singleton {
             && _utf8Length(text) <= maxBytes && !/[\u0000-\u0008\u000b-\u001f\u007f]/.test(text);
     }
 
+    // Whether `text` is exactly what the shell writes as the kind's file, for the value it
+    // holds (the template etc-files.sh checks too); a hand edit, however small, is not
+    function shellText(kind, text) {
+        if (!validText(text))
+            return false;
+        if (kind === "sleep.hibernateDelay") {
+            const value = /^HibernateDelaySec=([1-9][0-9]{0,8})\n$/m.exec(text);
+            return value !== null && HibernateRules.dropInText(Number(value[1])) === text;
+        }
+        return false;
+    }
+
     function _utf8Length(text) {
         let length = 0;
         for (const character of text) {
@@ -122,17 +136,12 @@ Singleton {
         return length;
     }
 
-    // Whether a file's text is one the shell wrote (its marker first)
-    function ours(text) {
-        return typeof text === "string" && text.startsWith(marker);
-    }
-
-    // The file as read (PamStackRules.filesAnswer's answer for its path: { text }, { absent },
-    // { unreadable }, or nothing) → { state ("text", "absent" or "unknown"), text, sha256
-    // ("absent" for none, "" unknown), ours }
-    function inForce(answer) {
+    // The kind's file as read (PamStackRules.filesAnswer's answer for its path: { text },
+    // { absent }, { unreadable }, or nothing) → { state ("text", "absent" or "unknown"), text,
+    // sha256 ("absent" for none, "" unknown), ours (exactly a text the shell writes) }
+    function inForce(answer, kind) {
         if (typeof answer?.text === "string")
-            return { state: "text", text: answer.text, sha256: PamEditRules.sha256(answer.text), ours: ours(answer.text) };
+            return { state: "text", text: answer.text, sha256: PamEditRules.sha256(answer.text), ours: shellText(kind, answer.text) };
         if (answer?.absent === true)
             return { state: "absent", text: null, sha256: "absent", ours: false };
         return { state: "unknown", text: null, sha256: "", ours: false };
@@ -173,17 +182,18 @@ Singleton {
         return { argv: [shell, "-c", script, "sh", base], refusal: null };
     }
 
-    // The file as the shell read it (inForce's answer) → its sha256 or "absent", or "" when
-    // it was not read
-    function _currentOf(current) {
-        if (current?.state === "text" && isHash(current.sha256))
-            return current.sha256;
-        return current?.state === "absent" ? "absent" : "";
+    // The file as the shell read it (inForce's answer) → { sha256 (or "absent"; "" when it
+    // was not read), ours }, both taken from its text, never from what the caller says of it
+    function _currentOf(kind, current) {
+        if (current?.state === "text" && typeof current.text === "string")
+            return { sha256: PamEditRules.sha256(current.text), ours: shellText(kind, current.text) };
+        // Not a text: nothing of it is the shell's, and `ours` is never asked
+        return { sha256: current?.state === "absent" ? "absent" : "" };
     }
 
     // The root step that writes `request.text` as the kind's file: `request` { kind, text,
-    // current (inForce's answer for the file as read), replace (true: the user was told the
-    // file is not the shell's) }; `scripts` the texts of scriptFiles as read. → { argv
+    // current (inForce's answer for the file as read: its text decides), replace (true: the
+    // user was told the file is not exactly the shell's) }; `scripts` the texts of scriptFiles as read. → { argv
     // ([shell, "-c", script, "sh", base, "write", kind, sha256, current, text]), expected (for
     // reply), refusal (null or { code, text }) }
     function writeArgv(shell, request, base, live, scripts) {
@@ -191,15 +201,16 @@ Singleton {
         const start = _start(shell, kind, base, live, scripts);
         if (start.refusal !== null)
             return start;
-        if (!validText(request?.text))
+        if (!shellText(kind, request?.text))
             return _refused("text");
-        const current = _currentOf(request?.current);
+        const read = _currentOf(kind, request?.current);
+        const current = read.sha256;
         if (current === "")
             return _refused("unread");
         const want = PamEditRules.sha256(request.text);
         if (current === want)
             return _refused("unchanged");
-        if (current !== "absent" && request.current.ours !== true && request?.replace !== true)
+        if (current !== "absent" && !read.ours && request?.replace !== true)
             return _refused("other");
         return {
             argv: start.argv.concat(["write", kind, want, current, request.text]),
@@ -215,12 +226,13 @@ Singleton {
         const start = _start(shell, kind, base, live, scripts);
         if (start.refusal !== null)
             return start;
-        const current = _currentOf(request?.current);
+        const read = _currentOf(kind, request?.current);
+        const current = read.sha256;
         if (current === "")
             return _refused("unread");
         if (current === "absent")
             return _refused("unchanged");
-        if (request.current.ours !== true && request?.replace !== true)
+        if (!read.ours && request?.replace !== true)
             return _refused("other");
         return {
             argv: start.argv.concat(["remove", kind, current]),
@@ -277,7 +289,7 @@ Singleton {
     // What a run that did not say it was done left, the file read again afterwards (inForce's
     // answer) → "unchanged", "done" (what the run was to leave), "other" or "unknown" (not read)
     function afterFailure(current, expected) {
-        const found = _currentOf(current);
+        const found = _currentOf(expected?.kind, current).sha256;
         if (found === "")
             return "unknown";
         if (found === expected?.before)

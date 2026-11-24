@@ -16,7 +16,7 @@ TestCase {
         const text = HibernateRules.dropInText(10800);
         const other = "[Sleep]\nHibernateDelaySec=1h\n";
         const absent = { state: "absent", sha256: "absent" };
-        const read = content => rules.inForce({ text: content });
+        const read = content => rules.inForce({ text: content }, kind);
         const code = plan => plan.refusal?.code ?? "";
 
         // ── The places ──
@@ -48,9 +48,21 @@ TestCase {
                     "… each character's UTF-8 length, at every boundary");
         assertEqual(JSON.stringify(read(text)), JSON.stringify({ state: "text", text, sha256: sha(text), ours: true }), "a file read: its text, sha256, the shell's");
         assertEqual(read(other).ours, false, "… a file without the marker: not the shell's");
-        assertEqual(JSON.stringify(rules.inForce({ absent: true })), JSON.stringify({ state: "absent", text: null, sha256: "absent", ours: false }), "no file");
+        // Only exactly what the shell writes is the shell's: a hand edit is the user's
+        const edited = [text.replace("10800", "3h"), text + "# mine\n", text.replace("[Sleep]", "[Sleep] "), text.replace("10800", "010800"),
+                        HibernateRules.dropInText(0), rules.marker + "\n[Sleep]\nHibernateDelaySec=10800\n"];
+        for (const hand of edited) {
+            assert(!rules.shellText(kind, hand) && !read(hand).ours, "an edit of the shell's file: not the shell's (" + JSON.stringify(hand) + ")");
+            assertEqual(rules.writeArgv("/bin/sh", { kind, text: HibernateRules.dropInText(600), current: read(hand) }, "", true, scripts).refusal?.code, "other",
+                        "… not replaced unasked");
+        }
+        assert(rules.shellText(kind, HibernateRules.dropInText(1)) && rules.shellText(kind, HibernateRules.dropInText(999999999)), "the shell's text, whatever the value");
+        assert(!rules.shellText(kind, HibernateRules.dropInText(1000000000)), "… a value longer than the script takes: not");
+        assert(!rules.shellText("pam.rules", text) && !rules.shellText(kind, null), "another kind's, or none: not");
+        assertEqual(rules.inForce({ text }, "pam.rules").ours, false, "… read for another kind: not the shell's");
+        assertEqual(JSON.stringify(rules.inForce({ absent: true }, kind)), JSON.stringify({ state: "absent", text: null, sha256: "absent", ours: false }), "no file");
         for (const unknown of [{ unreadable: true }, null, undefined, {}])
-            assertEqual(JSON.stringify(rules.inForce(unknown)), JSON.stringify({ state: "unknown", text: null, sha256: "", ours: false }),
+            assertEqual(JSON.stringify(rules.inForce(unknown, kind)), JSON.stringify({ state: "unknown", text: null, sha256: "", ours: false }),
                         "not read: unknown (" + JSON.stringify(unknown) + ")");
 
         // ── Write ──
@@ -69,6 +81,12 @@ TestCase {
         assertEqual(rules.writeArgv("/bin/sh", { kind, text, current: read(other), replace: true }, "", true, scripts).argv?.[8], sha(other),
                     "… with `replace` (the user told): written over it");
         assertEqual(code(rules.writeArgv("/bin/sh", { kind, text, current: read(other), replace: "yes" }, "", true, scripts)), "other", "… only `replace` true");
+        const claimed = { state: "text", text: other, sha256: sha(older), ours: true };
+        assertEqual(code(rules.writeArgv("/bin/sh", { kind, text, current: claimed }, "", true, scripts)), "other",
+                    "the caller saying the file is the shell's: its text decides");
+        assertEqual(rules.writeArgv("/bin/sh", { kind, text, current: claimed, replace: true }, "", true, scripts).argv?.[8], sha(other), "… and its sha256 is the text's");
+        assertEqual(code(rules.removeArgv("/bin/sh", { kind, current: claimed }, "", true, scripts)), "other", "… for a removal too");
+        assertEqual(code(rules.writeArgv("/bin/sh", { kind, text: text + "# more\n", current: absent }, "", true, scripts)), "text", "a text that is not exactly the shell's: refused");
         for (const unread of [{ state: "unknown", sha256: "" }, null, undefined, { state: "text", sha256: "x" }])
             assertEqual(code(rules.writeArgv("/bin/sh", { kind, text, current: unread }, "", true, scripts)), "unread", "the file not read: refused (" + JSON.stringify(unread) + ")");
         assertEqual(code(rules.writeArgv("/bin/sh", { kind, text: other, current: absent }, "", true, scripts)), "text", "a text the shell does not write: refused");
@@ -142,7 +160,7 @@ TestCase {
         assertEqual(rules.afterFailure(absent, expected), "unchanged", "a run cut short, the file as before: unchanged");
         assertEqual(rules.afterFailure(read(text), expected), "done", "… as the run was to leave it: done");
         assertEqual(rules.afterFailure(read(other), expected), "other", "… neither: other");
-        assertEqual(rules.afterFailure(rules.inForce({ unreadable: true }), expected), "unknown", "… not read: unknown");
+        assertEqual(rules.afterFailure(rules.inForce({ unreadable: true }, kind), expected), "unknown", "… not read: unknown");
         assertEqual(rules.afterFailure(read(text), plan.expected), "unchanged", "undo cut short, the file as the change left it: unchanged");
         assertEqual(rules.afterFailure(absent, plan.expected), "other", "… anything else: other (an undo expects no one state)");
     }

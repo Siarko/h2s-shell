@@ -8,6 +8,6 @@ import qs.singletons
 Integration {
     distribution: "nixos"
     table: ({
-        "sleep.hibernateDelay": { mode: "copy", option: HibernateRules.nixosOption }
+        "sleep.hibernateDelay": { mode: "copy", inForce: true, option: HibernateRules.nixosOption }
     })
 }

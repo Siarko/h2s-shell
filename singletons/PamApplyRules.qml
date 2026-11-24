@@ -60,6 +60,7 @@ Singleton {
         paths: "Not a place the shell writes PAM files to.",
         busy: "A change is already being saved.",
         script: "The shell's script for this could not be read.",
+        start: "The run could not be started.",
         // By the root step
         arguments: "The request was not valid.",
         system: "The PAM folder is not there.",

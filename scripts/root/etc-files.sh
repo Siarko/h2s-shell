@@ -11,13 +11,29 @@
 #   write  <kind> <sha256 of the text> <current sha256 | absent> <text>
 #   remove <kind> <current sha256>
 #   undo   <kind> <backup name> <current sha256 | absent>
-# A text is the shell's: its first line the marker, at most max_bytes, ending in a line
-# break; the file written must have the sha256 the shell computed. Its last line on success,
+# A text is exactly the kind's template for the value it holds (shell_text; EtcFilesRules'
+# shellText), so a run writes nothing but the shell's own file; the file written must have
+# the sha256 the shell computed. Undo puts a backup's content back as a file of root's,
+# mode 0644. Its last line on success,
 # on stdout and stderr: `written|removed|restored <kind> <sha256 in force | absent> <backup
 # made>`; a refusal: `refused <code>` on stderr, exit 3.
 [ $# -ge 1 ] || refuse arguments
 take_base "$1"; shift
-marker='# Written by h2s-shell'; max_bytes=65536
+max_bytes=65536
+# shell_text <text>: the kind's template for the value in it, exactly ($kind set)
+shell_text() {
+  [ ${#1} -le "$max_bytes" ] || return 1
+  case "$kind" in
+  sleep.hibernateDelay)
+    seconds=${1##*HibernateDelaySec=}; seconds=${seconds%"$newline"}
+    case "$seconds" in ''|0*|*[!0-9]*) return 1;; esac
+    [ ${#seconds} -le 9 ] || return 1
+    [ "$1" = "# Written by h2s-shell: Settings, When away, Hibernate$newline[Sleep]${newline}HibernateDelaySec=$seconds$newline" ];;
+  *) return 1;;
+  esac
+}
+newline='
+'
 [ $# -ge 2 ] || refuse arguments
 mode=$1; kind=$2; shift 2
 case "$kind" in
@@ -32,10 +48,7 @@ write)
   want=$1; current=$2; text=$3
   is_hash "$want" || refuse arguments
   [ "$current" = absent ] || is_hash "$current" || refuse arguments
-  [ ${#text} -le "$max_bytes" ] || refuse arguments
-  case "$text" in "$marker"*) ;; *) refuse arguments;; esac
-  case "$text" in *'
-') ;; *) refuse arguments;; esac;;
+  shell_text "$text" || refuse arguments;;
 remove)
   [ $# -eq 1 ] || refuse arguments
   current=$1

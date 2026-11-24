@@ -54,24 +54,45 @@ QtObject {
 
     function _queue(job) {
         const queue = start ?? ((request, done) => PrivilegedRuns.startShell(request, done));
+        // The queue's answer is taken once: a second call, or one after the queue threw, is
+        // dropped
+        let answered = false;
+        const finish = outcome => {
+            root._busy = false;
+            job.done(outcome);
+        };
         try {
             queue({ what: job.what, argv: job.argv }, result => {
-                const outcome = job.reply(result);
+                if (answered)
+                    return;
+                answered = true;
+                let outcome;
+                try {
+                    outcome = job.reply(result);
+                } catch (error) {
+                    console.warn("[EtcFiles] the run's answer could not be read: " + error);
+                    outcome = { ok: false, quiet: false, error: "the answer could not be read" };
+                }
                 const paths = Array.from(job.readBack ?? []);
                 if (outcome.ok || paths.length === 0) {
-                    root._busy = false;
-                    job.done(outcome);
+                    finish(outcome);
                     return;
                 }
                 root._readFiles(paths, answers => {
-                    job.after?.(answers, outcome);
-                    root._busy = false;
-                    job.done(outcome);
+                    try {
+                        job.after?.(answers, outcome);
+                    } finally {
+                        finish(outcome);
+                    }
                 });
             });
         } catch (error) {
-            // Nothing will answer: not left busy for good
             console.warn("[EtcFiles] the run could not be started: " + error);
+            // Answered before it threw: that answer stands (and was handed over)
+            if (answered)
+                return "";
+            // Nothing will answer: not left busy for good
+            answered = true;
             _busy = false;
             return "start";
         }
@@ -100,7 +121,7 @@ QtObject {
     // always answered later, once; "unknown" for a kind it does not know
     function read(kind, done) {
         if (!EtcFilesRules.knows(kind)) {
-            Qt.callLater(() => done(EtcFilesRules.inForce(null)));
+            Qt.callLater(() => done(EtcFilesRules.inForce(null, kind)));
             return;
         }
         const path = EtcFilesRules.fileOf(kind, base);
@@ -119,13 +140,14 @@ QtObject {
             done: result => {
                 const answer = PamStackRules.filesAnswer(lines, result, [path]).answers[path];
                 Qt.callLater(() => runner.destroy());
-                done(EtcFilesRules.inForce(answer));
+                done(EtcFilesRules.inForce(answer, kind));
             }
         });
     }
 
-    // Write `text` as the kind's file. `handlers` { current (read's answer the user saw; left
-    // out: read now), replace (true: replace a file the shell did not write, the user told),
+    // Write `text` as the kind's file. `handlers` { current (read's answer the user saw, its
+    // text deciding; left out: read now), replace (true: replace a file that is not exactly
+    // the shell's, the user told),
     // done (outcome → nothing: EtcFilesRules.reply's, with `file` afterFailure's when not ok,
     // or a refusal found after the read { ok: false, refused, error }) } → { started,
     // refusal (null or { code, text }) }
@@ -194,7 +216,7 @@ QtObject {
             argv: plan.argv,
             reply: result => EtcFilesRules.reply(result, plan.expected),
             readBack: [path],
-            after: (answers, outcome) => outcome.file = EtcFilesRules.afterFailure(EtcFilesRules.inForce(answers[path]), plan.expected),
+            after: (answers, outcome) => outcome.file = EtcFilesRules.afterFailure(EtcFilesRules.inForce(answers[path], kind), plan.expected),
             done: outcome => {
                 if (outcome.ok) {
                     const last = Object.assign({}, root._last);

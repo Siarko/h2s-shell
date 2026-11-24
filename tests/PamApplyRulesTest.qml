@@ -55,6 +55,7 @@ TestCase {
         for (const unread of [null, [], ["shared\n", ""], ["shared\n", null], ["shared", "own\n"], ["shared\n"].concat([undefined])])
             assertEqual(code(apply.applyArgv("/bin/sh", sudoRequest(), live, true, unread)), "script", "a file not read: refused (" + JSON.stringify(unread) + ")");
         assertEqual(apply.refusal("script").text, "The shell's script for this could not be read.", "… with a plain reason");
+        assertEqual(apply.refusal("start").text, "The run could not be started.", "a run that could not be queued: its own reason");
         assertEqual(JSON.stringify(plan.expected), JSON.stringify({ mode: "write", service: "sudo", sha256: edit.sha256(sudoBuilt.text),
                                                                     before: edit.sha256(archSudo), after: edit.sha256(sudoBuilt.text) }),
                     "… what the reply must say");

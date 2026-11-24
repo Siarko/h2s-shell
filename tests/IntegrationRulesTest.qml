@@ -81,14 +81,38 @@ TestCase {
         assertEqual(rules.refusal("x").text, rules.texts.value, "… an unknown code: the value's");
 
         // ── what is in force ──
-        const read = text => EtcFilesRules.inForce({ text });
-        assertEqual(show(rules.inForceOf(kind, read(HibernateRules.dropInText(600)))), show({ state: "set", value: 600, ours: true }), "the shell's drop-in: its delay");
-        assertEqual(show(rules.inForceOf(kind, read("[Sleep]\nHibernateDelaySec=2h\n"))), show({ state: "set", value: 7200, ours: false }), "… a file not the shell's");
-        assertEqual(show(rules.inForceOf(kind, read("[Sleep]\n#nothing\n"))), show({ state: "absent", value: null, ours: false }), "… no delay in it: absent");
-        assertEqual(show(rules.inForceOf(kind, read("[Sleep]\nHibernateDelaySec=soon\n"))), show({ state: "unknown", value: null, ours: false }), "… one not understood: unknown");
-        assertEqual(show(rules.inForceOf(kind, EtcFilesRules.inForce({ absent: true }))), show({ state: "absent", value: null, ours: false }), "no file: absent");
-        assertEqual(show(rules.inForceOf(kind, EtcFilesRules.inForce({ unreadable: true }))), show({ state: "unknown", value: null, ours: false }), "not read: unknown");
-        assertEqual(rules.inForceOf("no.kind", read(HibernateRules.dropInText(600))).state, "unknown", "another kind: unknown");
-        assertEqual(show(rules.inForceUnknown()), show({ state: "unknown", value: null, ours: false }), "nothing told");
+        const own = EtcFilesRules.inForce({ text: HibernateRules.dropInText(600) }, kind);
+        const merged = (...files) => files.map(([path, body]) => "# " + path + "\n" + body).join("\n");
+        const ownPath = "/etc/systemd/sleep.conf.d/h2s-shell.conf";
+        assertEqual(show(rules.inForceCommand(kind)), show(["systemd-analyze", "--no-pager", "cat-config", "systemd/sleep.conf"]),
+                    "the delay as systemd merges sleep.conf and its drop-ins");
+        assertEqual(rules.inForceCommand("no.kind"), null, "… none for another kind");
+        assertEqual(show(rules.inForceOf(kind, merged(["/usr/lib/systemd/sleep.conf", "[Sleep]\n#HibernateDelaySec=\n"], [ownPath, "[Sleep]\nHibernateDelaySec=600\n"]), own)),
+                    show({ state: "set", value: 600, from: ownPath, elsewhere: "", file: own }), "set by the shell's own drop-in: not elsewhere");
+        assertEqual(show(rules.inForceOf(kind, merged(["/etc/systemd/sleep.conf", "[Sleep]\nHibernateDelaySec=2h\n"]), own)),
+                    show({ state: "set", value: 7200, from: "/etc/systemd/sleep.conf", elsewhere: "/etc/systemd/sleep.conf", file: own }),
+                    "set by another file: in force, and set elsewhere (shown, never overridden unasked)");
+        assertEqual(show(rules.inForceOf(kind, merged([ownPath, "[Sleep]\nHibernateDelaySec=600\n"], ["/etc/systemd/sleep.conf.d/zz.conf", "[Sleep]\nHibernateDelaySec=\n"]), own)),
+                    show({ state: "default", value: null, from: "/etc/systemd/sleep.conf.d/zz.conf", elsewhere: "/etc/systemd/sleep.conf.d/zz.conf", file: own }),
+                    "systemd's default put back by a later file: that file's setting");
+        assertEqual(show(rules.inForceOf(kind, merged(["/usr/lib/systemd/sleep.conf", "[Sleep]\n#HibernateDelaySec=\n"]), null)),
+                    show({ state: "default", value: null, from: "", elsewhere: "", file: null }), "no file sets it: systemd's default, nothing elsewhere; no file of the shell's");
+        assertEqual(show(rules.inForceOf(kind, merged(["/etc/systemd/sleep.conf", "[Sleep]\nHibernateDelaySec=soon\n"]), own)),
+                    show({ state: "unknown", value: null, from: "", elsewhere: "", file: own }), "a value not understood: unknown");
+        assertEqual(show(rules.inForceOf(kind, null, own)), show({ state: "unknown", value: null, from: "", elsewhere: "", file: own }), "not read: unknown, the shell's file still told");
+        assertEqual(rules.inForceOf(kind, null, undefined).file, null, "no file of the shell's handed: null");
+        assertEqual(rules.inForceOf(kind, null, "text").file, null, "… nor for one that is no answer");
+        assertEqual(rules.inForceOf("no.kind", merged([ownPath, "[Sleep]\nHibernateDelaySec=600\n"]), null).state, "unknown", "another kind: unknown");
+        assertEqual(show(rules.inForceUnknown()), show({ state: "unknown", value: null, from: "", elsewhere: "", file: null }), "nothing told");
+        for (const answer of [rules.inForceUnknown(), rules.inForceOf(kind, merged(["/etc/systemd/sleep.conf", "[Sleep]\nHibernateDelaySec=2h\n"]), own)])
+            assert(rules.validInForce(answer), "a valid answer: " + show(answer));
+        const set = { state: "set", value: 1, from: "/a", elsewhere: "/a", file: null };
+        for (const [why, bad] of [["no state", Object.assign({}, set, { state: "absent" })], ["set without a value", Object.assign({}, set, { value: null })],
+                                  ["a value by default", Object.assign({}, set, { state: "default" })], ["elsewhere not where it is from", Object.assign({}, set, { elsewhere: "/b" })],
+                                  ["no from", Object.assign({}, set, { from: undefined })], ["a file that is none", Object.assign({}, set, { file: { state: "x" } })],
+                                  ["no elsewhere", Object.assign({}, set, { elsewhere: null })], ["nothing", null],
+                                  ["a state that is none, nothing else wrong", { state: "absent", value: null, from: "", elsewhere: "", file: null }],
+                                  ["no from, nothing else wrong", { state: "default", value: null, from: undefined, elsewhere: "", file: null }]])
+            assert(!rules.validInForce(bad), "not valid: " + why);
     }
 }
