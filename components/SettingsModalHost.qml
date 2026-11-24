@@ -10,8 +10,9 @@ import qs.singletons
 //     checks   checkboxes, [{ key, label }], unchecked each time it opens
 //     content  an optional Component under them; its item's `values`, when it has one, are
 //              added to the answer's
-//     buttons  [{ id, label, kind, cancel }] — always one cancel, last; none but the cancel:
-//              the modal informs (ApiElementRules.modalButtons)
+//     buttons  [{ id, label, kind, cancel, privileged }] — always one cancel, last; none but
+//              the cancel: the modal informs (ApiElementRules.modalButtons); `privileged`
+//              marks one that asks for an administrator's password (PrivilegedMark)
 //     subject  the ids the question acts on; `withdraw(subject)` closes it when they go
 //   onAnswer(answer): { button, cancelled, reason, values, subject } — `button` the id of
 //     the button clicked, "cancel" when cancelled; `reason` "button", "close" (×),

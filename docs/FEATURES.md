@@ -941,6 +941,18 @@ written as you, without), then add `programs.h2s-shell.settingsFile = ./h2s-shel
 in a folder that is yours (or behind a link into one) is warned about once: any program you
 run can change what NixOS builds as root.
 
+A setting applied through the configuration opens the modal "Rebuild NixOS" (Undo's: "Undo
+the last Apply"); its Build builds the new system as you, without a password, and opens the
+window's side panel: the steps "Build, as you", "Your password" and "Switch", nix's phase with
+a progress bar and the elapsed time, nix's last lines with Copy all, and Cancel build. Closing
+the panel does not stop the build; the NixOS page shows where the run is, with Show (the panel
+again) and Undo of the last Apply. Built, the panel says "Built in …" with "Apply now": only
+that click asks for the administrator password, and the switch then cannot be cancelled. The
+outcome follows: applied (the generation now in use), applied with errors, the build failed
+(nix's last lines; Apply again), the configuration changed since the build, or cancelled. A
+configuration only root can build (a file only root may read) shows the lock on Build: that
+click asks for the password, and that build cannot be cancelled.
+
 #### Arch
 
 The page is not listed (nor on any other system).

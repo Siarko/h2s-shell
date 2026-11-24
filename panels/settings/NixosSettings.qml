@@ -25,6 +25,8 @@ Flickable {
     // choose, acknowledgeHome) and Create (create, busy)
     property var configuration: Nixos.configuration
     property var creator: Nixos.creator
+    // The window's way to the rebuild (NixosRebuildFlow): the run's line, Show, Undo
+    property var flow: null
     property var copyText: text => {
         Quickshell.clipboardText = text;
     }
@@ -34,6 +36,20 @@ Flickable {
 
     readonly property var reading: (configuration?.revision, configuration?.current() ?? null)
     readonly property var view: NixosViewRules.view(reading, configuration?.busy === true || creator?.busy === true)
+    readonly property var _rebuild: flow?.rebuild ?? null
+    readonly property var _rebuildState: _rebuild?.state ?? NixosRebuildRules.initial()
+    // The run's clock: once a second while a build counts and the page shows
+    property real _now: _rebuild?.clock?.() ?? 0
+    readonly property bool _counting: NixosRebuildViewRules.counting(_rebuildState) && root.visible && (root.Window.window?.visible ?? false)
+    on_CountingChanged: if (_counting) _now = _rebuild?.clock?.() ?? 0
+    Timer {
+        interval: 1000
+        repeat: true
+        running: root._counting
+        onTriggered: root._now = root._rebuild?.clock?.() ?? 0
+    }
+    readonly property var rebuildLine: NixosRebuildViewRules.pageLine(_rebuildState, _rebuild?.times ?? null, _now)
+    readonly property bool undoOffered: NixosRebuildViewRules.canUndo(_rebuildState)
     // What the last Create said ("" nothing)
     property string createNote: ""
     property bool copied: false
@@ -84,7 +100,8 @@ Flickable {
     }
 
     function _tone(tone) {
-        return tone === "success" ? Theme.success : tone === "warning" ? Theme.warning : Theme.textMuted;
+        return tone === "success" ? Theme.success : tone === "warning" ? Theme.warning : tone === "error" ? Theme.error
+            : tone === "accent" ? Theme.accent : tone === "privileged" ? Theme.privileged : Theme.textMuted;
     }
 
     component Label: Text {
@@ -343,6 +360,50 @@ Flickable {
                 objectName: "nixos:lineCaption"
                 text: root.view.setup.lineCaption
             }
+        }
+
+        // The rebuild's line: where the run is, Show (the panel), Undo of the last Apply
+        RowLayout {
+            objectName: "nixos:rebuild"
+            visible: root.flow !== null && (root.rebuildLine.shown || root.undoOffered)
+            Layout.fillWidth: true
+            Layout.topMargin: 14
+            spacing: 8
+            Rectangle {
+                visible: root.rebuildLine.shown
+                Layout.alignment: Qt.AlignTop
+                Layout.topMargin: 5
+                implicitWidth: 10
+                implicitHeight: 10
+                radius: 5
+                color: root._tone(root.rebuildLine.tone)
+            }
+            Label {
+                objectName: "nixos:rebuildLine"
+                Layout.fillWidth: true
+                text: root.rebuildLine.text
+            }
+            SmallButton {
+                objectName: "nixos:rebuildShow"
+                visible: root.rebuildLine.shown && !(root.flow?.panelOpen ?? false)
+                label: "Show"
+                fontSize: Theme.fontSizeSmall
+                onClicked: root.flow.showPanel()
+            }
+            SmallButton {
+                objectName: "nixos:undo"
+                visible: root.undoOffered
+                label: "Undo"
+                fontSize: Theme.fontSizeSmall
+                tooltip: "Puts back the shell's previous settings and rebuilds"
+                onClicked: root.flow.undo()
+            }
+        }
+        Hint {
+            objectName: "nixos:rebuildNote"
+            visible: root.flow !== null && text !== "" && !(root.flow?.panelOpen ?? false)
+            color: Theme.warning
+            text: root.flow?.note ?? ""
         }
     }
 }

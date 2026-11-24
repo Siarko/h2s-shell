@@ -261,7 +261,8 @@ Singleton {
     // but the cancel the modal only informs (`informing`): its one button, labelled
     // `cancelLabel` (else "OK") unless the cancel given has a label, closes it as the "×"
     // does. A button that is not an object or has no label is left out; not an array: no
-    // buttons of its own.
+    // buttons of its own. `privileged` (true only when given as true, never on the cancel):
+    // the button's answer asks for an administrator's password, and it carries the mark.
     function modalButtons(buttons, cancelLabel) {
         const given = (Array.isArray(buttons) ? buttons : [])
             .filter(button => button !== null && typeof button === "object" && oneLine(button.label) !== "");
@@ -270,14 +271,14 @@ Singleton {
             const label = oneLine(button.label);
             const id = oneLine(button.id);
             const kind = typeof button.kind === "string" && button.kind !== "" ? button.kind : "normal";
-            return { id: id !== "" && id !== "cancel" ? id : label, label: label, kind: kind, cancel: false };
+            return { id: id !== "" && id !== "cancel" ? id : label, label: label, kind: kind, cancel: false, privileged: button.privileged === true };
         });
         const cancelGiven = given.find(isCancel) ?? null;
         const informing = own.length === 0;
         const fallback = oneLine(cancelLabel) !== "" ? oneLine(cancelLabel) : (informing ? "OK" : "Cancel");
         const cancelKind = cancelGiven && typeof cancelGiven.kind === "string" && cancelGiven.kind !== "" ? cancelGiven.kind
             : (informing ? "normal" : "cancel");
-        const cancel = { id: "cancel", label: cancelGiven ? oneLine(cancelGiven.label) : fallback, kind: cancelKind, cancel: true };
+        const cancel = { id: "cancel", label: cancelGiven ? oneLine(cancelGiven.label) : fallback, kind: cancelKind, cancel: true, privileged: false };
         return { buttons: own.concat([cancel]), informing: informing };
     }
 

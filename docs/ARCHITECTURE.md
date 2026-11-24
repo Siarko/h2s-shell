@@ -248,6 +248,11 @@ the Build click of a configuration only root can build, and Apply now, which act
 candidate it built (the value, the file's sha256 read, the drvPath), never on what is current
 at the click. A screen lock changes nothing: a build goes on to built. Undo of the last Apply
 goes through the same chain with the file as it was before.
+The Settings window shows it through `panels/settings/NixosRebuildFlow.qml`: the announcing
+and Undo modals through its `modalHost`, and one `SideDrawer` with
+`panels/settings/NixosRebuildPanel.qml` over whichever page applied, so every page that
+applies through NixOS opens the same panel; closing it only hides it. What they show is
+`NixosRebuildViewRules`'; Apply now is the only control that calls the root run.
 
 #### NixOS
 

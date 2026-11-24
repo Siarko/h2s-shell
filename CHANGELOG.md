@@ -82,6 +82,13 @@ The interface modules are written against (`qs.api`), versioned on its own
   configuration asks the administrator password at that click; one of yours is written
   without), then the line `programs.h2s-shell.settingsFile = ./h2s-shell.json;` to add once,
   with Copy. A configuration in your own folder is warned about once.
+- NixOS: applying through the configuration — a modal announces the rebuild ("Rebuild
+  NixOS"; Undo's "Undo the last Apply"), the new system is built as you without a password,
+  and the Settings window's side panel shows the steps, progress, elapsed time and nix's last
+  lines, with Cancel build. When it is built the panel says "Built in … " with "Apply now":
+  only that click asks for the password and switches. Closing the panel does not stop the
+  build; the NixOS page shows where it is, with Show and Undo. A configuration only root can
+  build carries the lock on its Build button.
 - Settings → System → Authentication: "Sign-in rules" for sudo and administrator prompts
   (polkit) — what is in force as steps, rows of methods (fingerprint, security key,
   password, a raw PAM line) tried from the top with their control words and details, one list

@@ -150,6 +150,19 @@ FloatingWindow {
     // Where a page asks a question that needs more than a button's word (SettingsModalHost.ask)
     readonly property alias modalHost: _modalHost
 
+    // The rebuild of NixOS as the window shows it: the announcing and Undo modals, the side
+    // panel. Only on NixOS does it reach the Nixos singleton (made on first use)
+    readonly property alias nixosRebuild: _nixosRebuild
+    readonly property alias rebuildDrawer: _rebuildDrawer
+    readonly property bool _onNixos: NixosViewRules.pageShown(Distribution.detection.id)
+    NixosRebuildFlow {
+        id: _nixosRebuild
+        rebuild: root._onNixos ? Nixos.rebuild : null
+        configuration: root._onNixos ? Nixos.configuration : null
+        modalHost: root.modalHost
+    }
+    Component { id: _rebuildPanelComp; NixosRebuildPanel { flow: _nixosRebuild } }
+
     // The open page, by id
     property string selectedPage: "general"
     // Not `_page`: that is the id of the Loader showing it, which a bare name would reach
@@ -622,6 +635,19 @@ FloatingWindow {
                     NumberAnimation { target: _page; property: "opacity"; from: 0; to: 1; duration: Theme.duration("enter"); easing: Theme.curve("enter") }
                     NumberAnimation { target: _pageShift; property: "y"; from: 12; to: 0; duration: Theme.duration("enter"); easing: Theme.curve("enter") }
                 }
+
+                // The rebuild of NixOS: one panel over whichever page applied through NixOS.
+                // Closing it never stops the run (NixosRebuildFlow.panelRequested)
+                SideDrawer {
+                    id: _rebuildDrawer
+                    objectName: "nixosRebuildDrawer"
+                    anchors.fill: parent
+                    open: _nixosRebuild.panelOpen && _nixosRebuild.rebuild !== null
+                    title: NixosRebuildViewRules.title(_nixosRebuild.state)
+                    panelWidth: ApiElementRules.sidePanelWidth("l", width, Theme.sidePanelWidths)
+                    content: _rebuildPanelComp
+                    onRequested: event => _nixosRebuild.panelRequested(event)
+                }
             }
         }
         // A click anywhere takes the focus from a field (but on the field itself)
@@ -678,7 +704,7 @@ FloatingWindow {
     Component { id: networkWifiComp; NetworkWifiSettings {} }
     Component { id: networkEthernetComp; NetworkEthernetSettings {} }
     Component { id: networkVpnComp; NetworkVpnSettings {} }
-    Component { id: nixosComp; NixosSettings {} }
+    Component { id: nixosComp; NixosSettings { flow: root.nixosRebuild } }
     Component { id: modulesComp; ModulesSettings { modalHost: root.modalHost } }
     Component { id: sttComp;           SttSettings           { editIndex: root.editIndex } }
     Component { id: curvesComp;        CurvesSettings {} }

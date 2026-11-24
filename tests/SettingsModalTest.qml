@@ -189,6 +189,8 @@ TestCase {
         assertEqual(shape(rules.modalButtons([null, 3, { label: "" }, { kind: "delete" }, { id: "cancel", label: "Drop", kind: "delete" }])),
             "Drop/Drop/delete cancel/Cancel/cancel/cancel", "… no object or no label: left out; an action may not take the cancel's id");
         assertEqual(rules.modalButtons([{ label: "Go\nnow" }]).buttons[0].label, "Go now", "… labels on one line");
+        assertEqual(rules.modalButtons([{ label: "Build", privileged: true }, { label: "Later", privileged: "yes" }, { label: "No", cancel: true, privileged: true }])
+            .buttons.map(button => button.privileged).join(" "), "true false false", "… privileged only when said so, never the cancel");
 
         assertEqual(JSON.stringify(rules.modalBody(["One", { text: "Two", strong: true }, "", null, { text: "a\nb" }])),
             JSON.stringify([{ text: "One", strong: false }, { text: "Two", strong: true }, { text: "a b", strong: false }]),
@@ -247,7 +249,8 @@ TestCase {
 
         assert(_click("modalCheck:data"), "the checkbox clicked");
         assert(_until(() => host.modal.values.data === true), "… checked");
-        assert(_until(() => _find(host.modal, "modalButton:0").x + _find(host.modal, "modalButton:0").width < _find(host.modal, "modalButton:1").x),
+        const leftOf = name => _find(host.modal, name).mapToItem(host.modal, 0, 0).x;
+        assert(_until(() => leftOf("modalButton:0") + _find(host.modal, "modalButton:0").width < leftOf("modalButton:1")),
             "the buttons laid out, Remove before Keep");
         assert(_click("modalButton:0"), "Remove clicked");
         assert(_until(() => answers.length === 1), "… answered once");

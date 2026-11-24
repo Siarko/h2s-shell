@@ -45,6 +45,9 @@ TestCase {
     property var _state: null
     property bool _ready: false
     property int _opened: 0
+    // The run's clock: each read one second later
+    property int _ticks: 0
+    property real _builtAt: 0
 
     property NixosBuild builder: NixosBuild {
         paths: suite._paths
@@ -55,6 +58,7 @@ TestCase {
     property NixosRebuild rebuild: NixosRebuild {
         builder: suite.builder
         writer: suite.writer
+        clock: () => ++suite._ticks * 1000
         onOpened: suite._opened++
     }
     property NixosCreate creator: NixosCreate {
@@ -209,6 +213,8 @@ TestCase {
         _then("built while locked", () => rebuild.phase === "built" && !builder.busy, () => {
             ModuleTestKit.setSessionLocked(false);
             assertEqual(rebuild.state.subject.outPath, _realOut, "built: the system built, keyed");
+            assert(rebuild.times.started > 0 && rebuild.times.built > rebuild.times.started && rebuild.times.ended === 0,
+                   "… the times: started building, built, not ended");
             assertEqual(builder.held, _realOut, "… held for Apply now");
             assertEqual(_builtNotices().length, 1, "… the notification: " + NixosRebuildRules.texts.built);
             assertEqual(JSON.stringify(_builtNotices()[0].actions), JSON.stringify(["Open"]), "… its one action");
@@ -284,6 +290,7 @@ TestCase {
         });
         _then("built by root", () => rebuild.phase === "built" && !builder.busy, () => {
             assertEqual(rebuild.state.subject.drvPath + " " + rebuild.state.subject.outPath, _drv + " " + _out, "built by the root step: keyed");
+            _builtAt = rebuild.times.built;
             assertEqual(_builtNotices().length, 1, "… the notification");
             _opened = 0;
             assertEqual(ModuleTestKit.pressNotificationAction(_builtNotices()[0].handle, "default"), "", "its action pressed");
@@ -297,6 +304,7 @@ TestCase {
         _then("the dismissed prompt answered", () => rebuild.phase === "built" && !writer.busy && ModuleTestKit.privilegedIdle, () => {
             writer.testShell = "";
             assertEqual(rebuild.state.error, "", "a dismissed prompt: quiet, back to built");
+            assertEqual(rebuild.times.built, _builtAt, "… the build's time kept");
             _look();
         });
         _then("looked at", () => _state !== null, () => {
@@ -306,6 +314,7 @@ TestCase {
         _then("the root run going", () => rebuild.phase === "switching" || rebuild.phase === "applied", () => {});
         _then("applied", () => rebuild.phase === "applied" && !writer.busy && !builder.busy, () => {
             assertEqual(rebuild.state.outcome.generation, 2, "applied: generation 2");
+            assert(rebuild.times.built === _builtAt && rebuild.times.ended > rebuild.times.built, "… the run's end timed after its build");
             assert(rebuild.lines.includes("activating the configuration..."), "… the root run's lines kept");
             assert(!creator.busy, "… Create free again");
             _look();

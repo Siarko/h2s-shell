@@ -419,11 +419,19 @@ TestCase {
             assertEqual(window.selectedPage, "authentication", "… also through openAt");
         }
         assertEqual(Nixos.configuration.revision + " " + Nixos.configuration.busy, "0 false", "off NixOS nothing read the configuration");
+        assertEqual((window.nixosRebuild.rebuild === null) + " " + window.rebuildDrawer.open, "true false", "… and the rebuild not reached: no run, no panel");
         assert(answer("nixos"), "the distribution answers nixos");
         assertEqual([rowOf("nixos")?.visible, window.pages.some(page => page.id === "nixos"), Shell.settingsPageIds.includes("nixos")].join(" "),
                     "true true true", "… the page listed on NixOS");
         window.selectedPage = "nixos";
         assertEqual(window.selectedPage + " " + window._currentPage.id, "nixos nixos", "… and opened by id");
+        // The window's one rebuild panel: the run's, opened by its notification's action
+        assertEqual((window.nixosRebuild.rebuild === Nixos.rebuild) + " " + window.rebuildDrawer.open, "true false", "… the rebuild reached, its panel closed");
+        Nixos.rebuild.opened();
+        assert(_until(() => window.rebuildDrawer.open && window.rebuildDrawer.objectName === "nixosRebuildDrawer"), "… the run's open: the window's panel opens");
+        assertEqual(window.rebuildDrawer.title, "Applying: rebuilding NixOS", "… titled for the run");
+        window.nixosRebuild.panelRequested("closeButton");
+        assertEqual(window.rebuildDrawer.open + " " + Nixos.rebuild.phase, "false idle", "… closed again, the run untouched");
         // The window is hidden: the page is built but not shown, so it reads nothing
         assert(answer("arch"), "the distribution answers arch while the page is open");
         assertEqual(window.selectedPage + " " + window._currentPage.id, "authentication authentication", "… the page leaves: System's first page");

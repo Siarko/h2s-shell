@@ -35,7 +35,8 @@ Item {
     // the panel's inner width. When its item has a `values` object, the host adds it to the
     // answer's.
     property Component content: null
-    // Buttons: [{ id, label, kind, cancel }] (ApiElementRules.modalButtons)
+    // Buttons: [{ id, label, kind, cancel, privileged }] (ApiElementRules.modalButtons);
+    // `privileged` marks a button whose answer asks for an administrator's password
     property var buttons: []
     property string cancelLabel: ""
     // "s" or "m" (Theme.modal's widths)
@@ -233,13 +234,22 @@ Item {
                 spacing: Theme.modal.spacing / 2
                 Repeater {
                     model: ScriptModel { values: root.buttonList.map((button, index) => String(index)) }
-                    SmallButton {
+                    // A button whose answer asks for an administrator's password carries the mark
+                    RowLayout {
+                        id: _buttonRow
                         required property string modelData
-                        readonly property var button: root.buttonList[Number(modelData)] ?? { label: "", kind: "normal" }
-                        objectName: "modalButton:" + modelData
-                        label: button.label
-                        kind: button.kind
-                        onClicked: root.answered(Number(modelData))
+                        readonly property var button: root.buttonList[Number(modelData)] ?? { label: "", kind: "normal", privileged: false }
+                        spacing: 4
+                        PrivilegedMark {
+                            objectName: "modalMark:" + _buttonRow.modelData
+                            visible: _buttonRow.button.privileged === true
+                        }
+                        SmallButton {
+                            objectName: "modalButton:" + _buttonRow.modelData
+                            label: _buttonRow.button.label
+                            kind: _buttonRow.button.kind
+                            onClicked: root.answered(Number(_buttonRow.modelData))
+                        }
                     }
                 }
             }
