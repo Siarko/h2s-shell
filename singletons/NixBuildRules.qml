@@ -61,6 +61,7 @@ Singleton {
         failed: "The build failed.",
         timedOut: "The build did not end within 2 hours.",
         rootTimedOut: "The build did not end within an hour.",
+        rootFailed: "The build as administrator failed.",
         start: "The build could not be started.",
         unclear: "The build's answer could not be read.",
         hold: "The built system could not be kept for Apply now.",
@@ -422,7 +423,8 @@ Singleton {
     // The root step's build ended (PrivilegedRules' result, the progress state, rootPlan's
     // expected) → as outcome; quiet when nothing ran (a prompt dismissed, polkit's refusal,
     // the session locked). Only its last line counts, with its exit code: `built <drv> <out>`
-    // exit 0, `failed build` exit 1, `refused <code>` exit 3.
+    // exit 0, `failed build` exit 1 (a fixed text: the root step passes on only nix's progress,
+    // never its messages, which could quote what only root may read), `refused <code>` exit 3.
     function rootOutcome(result, state, expected) {
         const lastLine = text => String(text ?? "").trim().split("\n").pop().trim().split(" ");
         const said = lastLine(result?.stderr);
@@ -431,7 +433,7 @@ Singleton {
                 && NixosApplyRules.storePath(said[2], expected?.store, false))
             return _ended("built", "", state, { drvPath: said[1], outPath: said[2] });
         if (code === 1 && said.length === 2 && said[0] === "failed" && said[1] === "build")
-            return _ended("failed", failureReason(state), state);
+            return _ended("failed", "rootFailed", state);
         if (code === 3 && said.length === 2 && said[0] === "refused" && /^[a-z]+$/.test(said[1]))
             return _ended("failed", said[1], state);
         const cancelled = result?.cancelled === true;

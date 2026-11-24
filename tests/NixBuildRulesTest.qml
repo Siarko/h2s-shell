@@ -360,8 +360,9 @@ TestCase {
         assertEqual(root({ code: 0, stderr: "built " + drv + " /elsewhere/x" }).reason, "unclear", "root: a path outside the store is no build");
         assertEqual(root({ code: 0, stderr: "built " + drv }).reason, "unclear", "root: a line short of a path");
         const denied = _replay(rules, _msg(0, "error: opening file '/etc/nixos/secret.nix': Permission denied"));
-        assertEqual(root({ code: 1, stderr: "failed build" }, denied).reason, "needsRoot", "root: failed, the reason from nix's lines");
-        assertEqual(root({ code: 1, stderr: "failed build" }).reason, "failed", "root: failed");
+        const rootFailed = root({ code: 1, stderr: "failed build" }, denied);
+        assertEqual(show([rootFailed.reason, rootFailed.error]), show(["rootFailed", "The build as administrator failed."]),
+                    "root: failed — a fixed text: the root step passes on nothing of nix's error");
         const refusedOwner = root({ code: 3, stderr: "refused owner" });
         assertEqual(show([refusedOwner.kind, refusedOwner.reason, refusedOwner.error]), show(["failed", "owner", NixosApplyRules.texts.owner]), "root: a refusal, its text");
         assertEqual(root({ code: 3, stderr: "refused owner" }).error, NixosApplyRules.texts.owner, "root: a refusal's text, the root step's");

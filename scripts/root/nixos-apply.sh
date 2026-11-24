@@ -8,6 +8,7 @@
 #   the profile      /nix/var/nix/profiles/system (its links system-<n>-link)
 #   the store        /nix/store
 #   nixpkgs          the nixpkgs= entry of NIX_PATH in /etc/set-environment (classic only)
+#   the GC root      /nix/var/nix/gcroots/h2s-shell/build (build: the system it built)
 #   the backups      /var/lib/h2s-shell/nixos-backup/ (`h2s-shell.json.<UTC time>`,
 #                    `.absent` when there was no file; root 0700, every one kept)
 # Its arguments (a folder is plain and absolute; its real path is used, under <base>):
@@ -40,10 +41,16 @@
 # activating it does. For switch the evaluation's messages are not passed on (they could
 # carry what such code read as root); for apply its last lines precede `refused evaluation`.
 #
-# build builds that system as root (nix build of nixos_toplevel, no link: the user's own
-# build of the store path then holds it), for a root-owned configuration only (the same
-# folder checks as a write), when the user's build cannot read it. It writes nothing but the
-# store; its nix's progress (internal-json) passes on on stderr as it comes.
+# build builds that system as root (nix build of nixos_toplevel), for a root-owned
+# configuration only (the same folder checks as a write, the entry file too), when the user's
+# build cannot read it. It writes nothing but the store and one GC root in root's own place,
+# which holds what it built until the user's own GC root for it is made and is replaced by
+# the next build (so at most one system is kept by it). Of nix's output only its progress
+# passes on, on stderr as it comes (activities started and stopped, without their texts, and
+# their counts): nix's messages and the builds' lines could quote files only root may read.
+#
+# Wherever root evaluates a flake in git, nix's git is told the folder is safe only when its
+# .git is a real folder (not a link, not a gitdir: file) of root's alone; else refused (owner).
 #
 # The last line, on stdout and stderr:
 #   created <sha256> <backup>                       exit 0
@@ -165,6 +172,32 @@ tool() {
   if [ ! -f "$bin/$1" ] || [ ! -x "$bin/$1" ]; then refuse tools; fi
 }
 
+# safe_file <file>: no link, a file, the owner's, nobody else may write in it
+safe_file() {
+  if [ -L "$1" ] || [ ! -f "$1" ]; then refuse owner; fi
+  facts=$(stat -c '%u %a' -- "$1") || refuse owner
+  [ "${facts%% *}" = "$owner" ] || refuse owner
+  [ $((0${facts#* } & 022)) -eq 0 ] || refuse owner
+}
+
+# trust_git: the folder named a safe directory for nix's git, in root's scratch HOME — where
+# it holds a .git, only when that is a real folder of the owner's that nobody else may write
+# in (a link or a gitdir: file could lead to a repository, and a configuration of git, that
+# is not root's)
+trust_git() {
+  if [ -e "$folder/.git" ] || [ -L "$folder/.git" ]; then safe_dir "$folder/.git"; fi
+  printf '[safe]\n\tdirectory = %s\n' "$folder" > "$work/home/.gitconfig" || refuse write
+}
+
+# progress_only: nix's internal-json reduced to its progress — activities of the build
+# started (their texts dropped) and stopped, and their counts (numbers only); nothing else
+progress_only() {
+  sed -n \
+    -e 's/^@nix {"action":"start",.*"id":\([0-9]*\),"level":[0-9]*,"parent":[0-9]*,"text":.*,"type":\(10[2-58]\)}$/@nix {"action":"start","id":\1,"level":0,"parent":0,"text":"","type":\2}/p' \
+    -e '/^@nix {"action":"stop","id":[0-9]*}$/p' \
+    -e '/^@nix {"action":"result","fields":\[[0-9,]*\],"id":[0-9]*,"type":10[56]}$/p'
+}
+
 # evaluate <entry> <host | -> <json> <sha256>: the configuration with the candidate, as
 # root; refused unless it is the system the user built ($want_drv, $want_out), and built
 evaluate() {
@@ -173,9 +206,11 @@ evaluate() {
   got=$(hash_of "$work/candidate/$prefix") || refuse write
   [ "$got" = "$eval_sha" ] || refuse hash
   toplevel_inputs "$folder" "$eval_entry" "$eval_host"
+  # A configuration root writes in: its entry file root's alone too
+  if [ "$op" = apply ]; then safe_file "$folder/$eval_entry"; fi
   if [ -n "$flake" ]; then
     # nix's git opens a repository only of the one running, unless it is a safe directory
-    printf '[safe]\n\tdirectory = %s\n' "$folder" > "$work/home/.gitconfig" || refuse write
+    trust_git
     set --
   else
     set -- -I "nixpkgs=$nixpkgs" -I "nixos-config=$nixos_config"
@@ -312,18 +347,22 @@ build)
   got=$(hash_of "$work/candidate/$prefix") || refuse write
   [ "$got" = "$candidate_sha" ] || refuse hash
   toplevel_inputs "$folder" "$2" "$3"
+  safe_file "$folder/$2"
   if [ -n "$flake" ]; then
-    printf '[safe]\n\tdirectory = %s\n' "$folder" > "$work/home/.gitconfig" || refuse write
+    trust_git
     set --
   else
     set -- -I "nixpkgs=$nixpkgs" -I "nixos-config=$nixos_config"
   fi
-  code=0
-  env -i PATH="$PATH" HOME="$work/home" XDG_CACHE_HOME="$base/root/.cache" LC_ALL=C \
-    H2S_FLAKE="$flake" H2S_HOST="$toplevel_host" H2S_CANDIDATE="$work/candidate/$prefix" \
-    "$bin/nix" build --impure --extra-experimental-features 'nix-command flakes' "$@" \
-    --log-format internal-json -v --no-link --json --expr "$nixos_toplevel" > "$work/result" < /dev/null || code=$?
-  if [ "$code" != 0 ]; then say "failed build"; exit 1; fi
+  roots=$base/nix/var/nix/gcroots/h2s-shell
+  mkdir -p -- "$roots" || refuse write
+  safe_dir "$roots"
+  ( env -i PATH="$PATH" HOME="$work/home" XDG_CACHE_HOME="$base/root/.cache" LC_ALL=C \
+      H2S_FLAKE="$flake" H2S_HOST="$toplevel_host" H2S_CANDIDATE="$work/candidate/$prefix" \
+      "$bin/nix" build --impure --extra-experimental-features 'nix-command flakes' "$@" \
+      --log-format internal-json --out-link "$roots/build" --json --expr "$nixos_toplevel" > "$work/result" < /dev/null \
+      || echo "$?" > "$work/code" ) 2>&1 | progress_only >&2
+  if [ -e "$work/code" ]; then say "failed build"; exit 1; fi
   # [{"drvPath":"<drv>","outputs":{"out":"<out>"}}]: nix's own JSON, one derivation
   built_drv=$(sed -n 's/^\[{"drvPath":"\([^"]*\)","outputs":{"out":"\([^"]*\)"}}\]$/\1/p' "$work/result")
   built_out=$(sed -n 's/^\[{"drvPath":"\([^"]*\)","outputs":{"out":"\([^"]*\)"}}\]$/\2/p' "$work/result")

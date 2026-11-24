@@ -1,0 +1,10 @@
+@nix {"action":"msg","level":0,"msg":"error: root:secret-msg"}
+@nix {"action":"start","id":8,"level":0,"parent":0,"text":"","type":104}
+@nix {"action":"start","fields":["/nix/store/x-secret-field.drv","",1,1],"id":11,"level":3,"parent":0,"text":"building secret-text","type":105}
+@nix {"action":"start","id":12,"level":4,"parent":0,"text":"copying '/etc/secret-copy' to the store","type":0}
+@nix {"action":"result","fields":["secret-log"],"id":11,"type":101}
+@nix {"action":"result","fields":[1,2,1,0],"id":8,"type":105}
+@nix {"action":"result","fields":[101,0],"id":9,"type":106}
+@nix {"action":"result","fields":["x\",\"id\":1,\"type\":105}"],"id":11,"type":101}
+@nix {"action":"stop","id":11}
+error: plain secret-plain

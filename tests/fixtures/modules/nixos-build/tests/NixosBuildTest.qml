@@ -317,8 +317,8 @@ TestCase {
             _look();
         });
         _then("looked at", () => _state !== null, () => {
-            assertEqual(_state.calls[0], "nix build --impure --extra-experimental-features nix-command flakes --log-format internal-json -v --no-link --json --expr EXPR",
-                        "as root: the root step's nix build");
+            assertEqual(_state.calls[0], "nix build --impure --extra-experimental-features nix-command flakes --log-format internal-json --out-link "
+                        + _scratch + "/nix/var/nix/gcroots/h2s-shell/build --json --expr EXPR", "as root: the root step's nix build, held by root's GC root");
             assertEqual(_state.calls[_state.calls.length - 2], "nix build --extra-experimental-features nix-command flakes --out-link " + _private + "/result -- " + _rootOut,
                         "as root: then the user's own GC root for it");
             assertEqual(_state.link, _rootOut, "as root: the GC root in the private folder");

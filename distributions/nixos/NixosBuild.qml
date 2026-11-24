@@ -17,8 +17,9 @@ import qs.singletons.io
 // A configuration the user cannot build (NixBuildRules.needsRootBefore, or a build that failed
 // with reason "needsRoot") is built by the root step's `build` (scripts/root/, read at the
 // click and run as text through PrivilegedRuns.startShell) — only when the caller passes
-// `asRoot`, which only the click on the build button carries; it cannot be cancelled, and the
-// user's own GC root for what it built is made right after it.
+// `asRoot`, which only the click on the build button carries; it cannot be cancelled, root's
+// own GC root holds what it built (the root step passes on only nix's progress), and the
+// user's own GC root for it is made right after it.
 //
 // The test seams take effect only in module test mode (a fixture suite's): `testPkexec` (as
 // NixosApply's), and with it `testShell`, `testScriptsDirectory`, `testNix`, `testScratch` and

@@ -16,9 +16,11 @@ import qs.singletons
 // not built; the profile not set (the old file back); the activation's exit 4 and a failed
 // one; switch on a folder others may write in (nothing written), its file not the candidate;
 // create, and again; restore, a backup not there, a name not a backup's; one run at a time;
-// the caller's PATH and NIX_PATH not used; build (as root: its words and environment, nix's
-// progress passed on, nothing written; nix failed, an answer that is no build, classic, a
-// folder others may write in, the hash); and each argument refusal.
+// the caller's PATH and NIX_PATH not used; build (as root: its words and environment, its GC
+// root, only nix's progress passed on, nothing written; nix failed and nothing of its error
+// passed on, an answer that is no build, classic, a folder others may write in, the hash);
+// a .git that is a link, a gitdir: file or others may write in, and an entry file others may
+// write in or a link, refused for build and apply; and each argument refusal.
 TestCase {
     id: suite
     suiteName: "NixosApplyScript"
@@ -266,25 +268,59 @@ TestCase {
         _case("flake without flake.nix", "", _apply(_sha(_third), _second, { folder: S + "/etc/classic" }),
               _refused("entry", "flake.nix not in the folder"), { folder: S + "/etc/classic" });
         // build: the system built as root, for a root-owned configuration only; nothing written
-        // but the store, nix's progress passed on
-        const progressLine = "@nix {\"action\":\"start\",\"id\":1,\"level\":3,\"parent\":0,\"text\":\"building x\",\"type\":105}";
-        _case("build", "printf '%s\\n' '" + progressLine + "' > ctl/build.err",
+        // but the store and its GC root; of nix's output only its progress passed on (no
+        // message, no build line, no text: they could quote what only root may read)
+        const progress = ["@nix {\"action\":\"start\",\"id\":8,\"level\":0,\"parent\":0,\"text\":\"\",\"type\":104}",
+                          "@nix {\"action\":\"start\",\"id\":11,\"level\":0,\"parent\":0,\"text\":\"\",\"type\":105}",
+                          "@nix {\"action\":\"result\",\"fields\":[1,2,1,0],\"id\":8,\"type\":105}",
+                          "@nix {\"action\":\"result\",\"fields\":[101,0],\"id\":9,\"type\":106}",
+                          "@nix {\"action\":\"stop\",\"id\":11}"];
+        _case("build", "cp '" + _fixtures + "/build-output' ctl/build.err",
               ["build", _folder, "flake.nix", "laptop", _sha(_third), _third], (run, state) => {
             assertEqual(run.code + " " + run.last, "0 built " + _drv + " " + _out, "build: built, its drvPath and out path");
             assertEqual(run.stdout.trim(), run.last, "build: the last line on stdout too");
-            assertEqual(state.calls[0], "nix build --impure --extra-experimental-features nix-command flakes --log-format internal-json -v --no-link --json --expr EXPR",
-                        "build: nix build of nixos_toplevel, no link, its progress as internal-json");
+            assertEqual(state.calls[0], "nix build --impure --extra-experimental-features nix-command flakes --log-format internal-json --out-link "
+                        + S + "/nix/var/nix/gcroots/h2s-shell/build --json --expr EXPR",
+                        "build: nix build of nixos_toplevel, its progress as internal-json, held by a GC root in root's own place until the user's");
             assertEqual(state.calls[1], "nix-vars flake=path:" + _folder + " host=laptop nixpath=unset override=yes", "build: the flake, the host, the override");
             assertEqual(state.calls[2], "nix-home [safe]  directory = " + _folder + " ", "build: the folder a safe directory for nix's git");
             assertEqual(state.calls[3], "nix-candidate h2s-shell.json " + _sha(_third), "build: the candidate, by the shell's file's name");
             assertEqual(_names(state.calls), "nix,nix-vars,nix-home,nix-candidate", "build: nothing but nix");
-            assert(run.stderr.includes(progressLine), "build: nix's progress passed on");
+            assertEqual(JSON.stringify(run.stderr.trim().split("\n")), JSON.stringify(progress.concat([run.last])),
+                        "build: nix's progress passed on, and nothing else of its output");
             assertEqual(JSON.stringify(state.listing), JSON.stringify(["flake.nix", "h2s-shell.json"]), "build: nothing written in the folder");
         });
-        _case("build, nix failed", "echo 1 > ctl/build.code; printf 'error: opening file: Permission denied\\n' > ctl/build.err",
+        _case("build, nix failed", "echo 1 > ctl/build.code; cp '" + _fixtures + "/build-output' ctl/build.err",
               ["build", _folder, "flake.nix", "laptop", _sha(_third), _third], (run, state) => {
             assertEqual(run.code + " " + run.last, "1 failed build", "build: nix failed — failed build");
-            assert(run.stderr.includes("Permission denied"), "build: nix's error passed on");
+            assert(!run.stderr.includes("secret") && !run.stdout.includes("secret"), "build: nix's error not passed on: " + run.stderr);
+        });
+        // nix's git trusts only a .git that is a folder of root's alone; the entry file the same
+        _case("build, .git a link", "mkdir -p etc/real-git; ln -s ../real-git etc/nixos/.git",
+              ["build", _folder, "flake.nix", "laptop", _sha(_third), _third], _refused("owner", "build, .git a link"));
+        _case("build, .git a file naming another folder", "rm etc/nixos/.git; printf 'gitdir: %s/etc/real-git\\n' \"$1\" > etc/nixos/.git",
+              ["build", _folder, "flake.nix", "laptop", _sha(_third), _third], _refused("owner", "build, .git a gitdir: file"));
+        _case("build, .git others may write in", "rm etc/nixos/.git; mkdir etc/nixos/.git; chmod 775 etc/nixos/.git",
+              ["build", _folder, "flake.nix", "laptop", _sha(_third), _third], _refused("owner", "build, .git group-writable"));
+        _case("apply, .git a link", "rmdir etc/nixos/.git; ln -s ../real-git etc/nixos/.git; put '" + _third + "'",
+              () => _apply(_sha(_third), _second), _refused("owner", "apply (root's evaluation), .git a link"));
+        _case("build, a .git of root's alone", "rm etc/nixos/.git; mkdir etc/nixos/.git",
+              ["build", _folder, "flake.nix", "laptop", _sha(_third), _third], (run, state) => {
+            assertEqual(run.code + " " + run.last, "0 built " + _drv + " " + _out, "build, a .git of root's: built");
+            assertEqual(state.calls[2], "nix-home [safe]  directory = " + _folder + " ", "build, git: named safe");
+        });
+        _case("build, the entry others may write in", "rmdir etc/nixos/.git; chmod 664 etc/nixos/flake.nix",
+              ["build", _folder, "flake.nix", "laptop", _sha(_third), _third], _refused("owner", "build, flake.nix group-writable"));
+        _case("build, the entry a link", "chmod 644 etc/nixos/flake.nix; mv etc/nixos/flake.nix etc/real-flake.nix; ln -s ../real-flake.nix etc/nixos/flake.nix",
+              ["build", _folder, "flake.nix", "laptop", _sha(_third), _third], _refused("owner", "build, flake.nix a link"));
+        _case("apply, the entry others may write in", "rm etc/nixos/flake.nix; mv etc/real-flake.nix etc/nixos/flake.nix; chmod 666 etc/nixos/flake.nix; put '" + _third + "'",
+              () => _apply(_sha(_third), _second), (run, state) => {
+            _refused("owner", "apply, flake.nix writable by others")(run, state);
+            assertEqual(state.file, _third, "apply, entry refused: nothing written");
+        });
+        _case("build, the entry put right", "chmod 644 etc/nixos/flake.nix; put '" + _second + "'",
+              ["build", _folder, "flake.nix", "laptop", _sha(_third), _third], (run, state) => {
+            assertEqual(run.code + " " + run.last, "0 built " + _drv + " " + _out, "build: built again");
         });
         _case("build, an answer that is no build", "printf 'built\\n' > ctl/build.out",
               ["build", _folder, "flake.nix", "laptop", _sha(_third), _third], (run, state) => {
@@ -298,7 +334,7 @@ TestCase {
               ["build", S + "/etc/classic", "configuration.nix", "-", _sha(_third), _third], (run, state) => {
             assertEqual(run.code + " " + run.last, "0 built " + _drv + " " + _out, "build, classic: built");
             assertEqual(state.calls[0], "nix build --impure --extra-experimental-features nix-command flakes -I nixpkgs=/nix/store/abc-source -I nixos-config="
-                        + S + "/etc/classic/configuration.nix --log-format internal-json -v --no-link --json --expr EXPR", "build, classic: each by -I");
+                        + S + "/etc/classic/configuration.nix --log-format internal-json --out-link " + S + "/nix/var/nix/gcroots/h2s-shell/build --json --expr EXPR", "build, classic: each by -I");
         }, { folder: S + "/etc/classic" });
         _case("build, a folder others may write in", "mkdir -p home/open; chmod 775 home/open; : > home/open/flake.nix",
               ["build", S + "/home/open", "flake.nix", "laptop", _sha(_third), _third], (run, state) => {
