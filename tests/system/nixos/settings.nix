@@ -79,10 +79,10 @@ let
       "${shown (options fromFile)} vs ${shown (options byHand)}")
     (result (failedOf fromFile == [ ] && ourWarnings fromFile == [ ]) "the fixture: no assertion fails, no warning of the file's" (builtins.toJSON (failedOf fromFile ++ ourWarnings fromFile)))
   ] ++ map (service:
-    result (pamText fromFile service == pamText byHand service) "the fixture: ${service}'s PAM file is the hand-written options'" (pamText fromFile service)
+    result (pamText fromFile service == pamText byHand service) "the fixture: ${service}'s PAM file is the hand-written options'" (builtins.toJSON (pamText fromFile service))
   ) [ "sudo" "polkit-1" ] ++ map (name:
     result (etcText fromFile name == etcText byHand name && etcText fromFile name != "<absent>")
-      "the fixture: /etc/${name} is the hand-written options'" (etcText fromFile name)
+      "the fixture: /etc/${name} is the hand-written options'" (builtins.toJSON (etcText fromFile name))
   ) etcNames ++ [
     (result (lib.hasInfix "HibernateDelaySec=3h" (etcText fromFile "systemd/sleep.conf")) "the fixture: HibernateDelaySec=3h in sleep.conf" "")
     (result (published.version or null == 1) "/etc/h2s-shell/settings.json has the schema version" (builtins.toJSON published))
@@ -108,7 +108,7 @@ let
   };
   overrides = [
     (result (overridden.programs.h2s-shell.idle.hibernateDelay == "10min" && lib.hasInfix "HibernateDelaySec=10min" (etcText overridden "systemd/sleep.conf"))
-      "a hand-written hibernateDelay wins over the file's" (etcText overridden "systemd/sleep.conf"))
+      "a hand-written hibernateDelay wins over the file's" (builtins.toJSON (etcText overridden "systemd/sleep.conf")))
     (result (overridden.programs.h2s-shell.polkit.rememberAdmin.minutes == 30 && overridden.programs.h2s-shell.polkit.rememberAdmin.users == [ "alex" ])
       "a hand-written minutes wins; the file's users stay" (shown overridden.programs.h2s-shell.polkit.rememberAdmin))
     (result (map (row: row.method) overridden.programs.h2s-shell.pam.rules == [ "password" "system" ]) "hand-written pam.rules win over the file's" (shown overridden.programs.h2s-shell.pam.rules))
@@ -162,7 +162,7 @@ let
     (result (lib.any (lib.hasInfix "the key \"pam.bogus\"") (ourWarnings unknown)) "an unknown key under pam: a warning naming it" "")
     (result (lib.any (lib.hasInfix "the key \"polkit.rememberAdmin.later\"") (ourWarnings unknown)) "an unknown key under polkit.rememberAdmin: a warning naming it" "")
     (result (failedOf unknown == [ ] && unknown.programs.h2s-shell.idle.hibernateDelay == "2h") "… evaluation succeeds and the known keys are taken" (builtins.toJSON (failedOf unknown)))
-    (result (!(lib.hasInfix "future" (etcText unknown "h2s-shell/settings.json"))) "… and the published file leaves the unknown out" (etcText unknown "h2s-shell/settings.json"))
+    (result (!(lib.hasInfix "future" (etcText unknown "h2s-shell/settings.json"))) "… and the published file leaves the unknown out" (builtins.toJSON (etcText unknown "h2s-shell/settings.json")))
   ];
 in
 let lines = equivalence ++ overrides ++ refusals ++ [ optionalRow ] ++ warnings;
