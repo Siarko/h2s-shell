@@ -392,14 +392,14 @@ TestCase {
 
         // --- sha256 over UTF-8: the pairs at the ends of their range, lone halves (three bytes
         // each, as the text holds them), each length of encoding, the message length's bytes ---
-        assertEqual(edit.sha256("𐀀"), "31237b174ba6047a15db0d343ad9550da611b7b7bce867a23522f81a05df3eda", "sha256: U+10000, the first pair");
-        assertEqual(edit.sha256("􏿿"), "708b8add9f6b5b556a07b72973b10ff9a3ec30e002034ef24aa076fab4b40e50", "… U+10FFFF, the last");
+        assertEqual(edit.sha256("\uD800\uDC00"), "31237b174ba6047a15db0d343ad9550da611b7b7bce867a23522f81a05df3eda", "sha256: U+10000, the first pair");
+        assertEqual(edit.sha256("\uDBFF\uDFFF"), "708b8add9f6b5b556a07b72973b10ff9a3ec30e002034ef24aa076fab4b40e50", "… U+10FFFF, the last");
         assertEqual(edit.sha256("a\uDC00"), "107a312e54e2dabe1d66698cc55de2e34e5d4e4d2cefc974fd62c950fb9e4b3c", "… a lone low half after a letter");
         assertEqual(edit.sha256("\uDC00\uDC00"), "6035f60642992e7c5549131e315ed79dad70f70b43888ebcaeca782e20838bb0", "… two low halves: no pair");
         assertEqual(edit.sha256("\uD800a"), "03dce54308610046523796eb99cb0594879248bb5413ba974304eb0db89f3f32", "… a high half before a letter");
-        assertEqual(edit.sha256("\uD800"), "d46a7e697cf1cbf9b513a4aac6df8dd58e4ed0b097055c82d1f1ec0dfe5225a6", "… a high half before U+E000: no pair");
-        assertEqual(edit.sha256("\u0080ࠀ"), "cf4642876148ad12467c45f386e9d2fac9933bc860320fa844ada0c19b70acf7", "… U+0080 and U+0800, the first of two and three bytes");
-        assertEqual(edit.sha256("€"), "c4cc90ed3d26f12d4b08a75140970a7904035c31cbb4515a83f19b9003c00d1d", "… a three-byte character");
+        assertEqual(edit.sha256("\uD800\uE000"), "d46a7e697cf1cbf9b513a4aac6df8dd58e4ed0b097055c82d1f1ec0dfe5225a6", "… a high half before U+E000: no pair");
+        assertEqual(edit.sha256("\u0080\u0800"), "cf4642876148ad12467c45f386e9d2fac9933bc860320fa844ada0c19b70acf7", "… U+0080 and U+0800, the first of two and three bytes");
+        assertEqual(edit.sha256("\u20AC"), "c4cc90ed3d26f12d4b08a75140970a7904035c31cbb4515a83f19b9003c00d1d", "… a three-byte character");
         assertEqual(edit.sha256("a".repeat(8192)), "dd4e6730520932767ec0a9e33fe19c4ce24399d6eba4ff62f13013c9ed30ef87", "… 8 KiB: the length's third byte");
         assertEqual(edit.sha256("a".repeat(2097152)), "5256ec18f11624025905d057d6befb03d77b243511ac5f77ed5e0221ce6d84b5", "… 2 MiB: the length's fourth byte");
 

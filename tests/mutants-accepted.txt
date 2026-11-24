@@ -51,8 +51,8 @@ singletons/PrivilegedRules.qml	1 -> 2	#1	const mode = typeof verdict?.mode === "
 # passes, so it is never paired either way
 singletons/PamEditRules.qml	< -> <=	#2	if (code >= 0xd800 && code < 0xdc00 && i + 1 < text.length) {
 
-# reason: the length's high word is the byte count over 2^29: 0 for any text under 512 MiB, and
-# every shift of 0 is 0
+# reason: the high word is the byte count over 2^29, under 256 for any text a JS string can hold
+# (< 128 GiB), so every shift of 8 or more gives 0 either way
 singletons/PamEditRules.qml	24 -> 25	#1	bytes.push((high >>> 24) & 255, (high >>> 16) & 255, (high >>> 8) & 255, high & 255,
 singletons/PamEditRules.qml	16 -> 17	#1	bytes.push((high >>> 24) & 255, (high >>> 16) & 255, (high >>> 8) & 255, high & 255,
 singletons/PamEditRules.qml	8 -> 9	#1	bytes.push((high >>> 24) & 255, (high >>> 16) & 255, (high >>> 8) & 255, high & 255,
@@ -96,10 +96,9 @@ singletons/PamEditRules.qml	>= -> >	#1	const inBlock = index => block !== null &
 singletons/PamEditRules.qml	<= -> <	#1	const inBlock = index => block !== null && block.complete && index >= block.beginLine - 1 && index <= block.endLine - 1;
 singletons/PamEditRules.qml	1 -> 2	#2	const inBlock = index => block !== null && block.complete && index >= block.beginLine - 1 && index <= block.endLine - 1;
 
-# reason: a text whose first line is empty is no file of ours to changes() (notOurs, returned
-# before the hash), and to _ownRest's callers only through build, which refuses such a file
-# (R6), and state, which asks vendorChanged only of a file not changed: a newline at 0 never
-# reaches these
+# reason: a newline at 0 means an empty first line, which is no marker line: changes() returns
+# notOurs before the hash, and _ownRest returns null before the slice (PamStackRules.writtenBy
+# reads only the first line), so the slice is never taken at 0
 singletons/PamEditRules.qml	< -> <=	#1	if ((written[1] ?? "") !== sha256(newline < 0 ? "" : text.slice(newline + 1)))
 singletons/PamEditRules.qml	0 -> 1	#1	if ((written[1] ?? "") !== sha256(newline < 0 ? "" : text.slice(newline + 1)))
 singletons/PamEditRules.qml	< -> <=	#1	return newline < 0 ? "" : text.slice(newline + 1);

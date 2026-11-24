@@ -135,6 +135,8 @@ TestCase {
         assertEqual(rules.ownBlock("# END h2s-shell\n").complete, false, "an end alone: not complete");
         assertEqual(rules.ownBlock("auth include system-auth\n"), null, "no markers: no block");
         assertEqual(rules.writtenBy("\n#%PAM-1.0\n# Written by h2s-shell x\n"), null, "Written by only as the first line");
+        assertEqual(rules.writtenBy("\n# Written by h2s-shell x\n#%PAM-1.0\n"), null, "… a blank line before it: not written by us");
+        assertEqual(JSON.stringify(rules.writtenBy("# Written by h2s-shell x\r\n#%PAM-1.0\n")), "{\"hash\":\"x\"}", "… the first line, a CR before its newline");
 
         // --- NixOS: generated, absolute store paths, one directory ---
         const nixosPolkit = "# Account management.\n"

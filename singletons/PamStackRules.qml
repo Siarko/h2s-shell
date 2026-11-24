@@ -230,15 +230,12 @@ Singleton {
     }
 
     // The hash in a whole file written by the shell (polkit-1 shadowing the vendor file):
-    // its first non-empty line `# Written by h2s-shell <sha256>`. null when not such a file.
+    // its first line `# Written by h2s-shell <sha256>`, as the shell writes it and as
+    // PamEditRules.changes reads it. null when not such a file.
     function writtenBy(text) {
-        for (const line of String(text ?? "").split("\n")) {
-            if (line.trim() === "")
-                continue;
-            const match = line.match(/^\s*#\s*Written by h2s-shell(?:\s+(\S+))?\s*$/);
-            return match ? { hash: match[1] ?? "" } : null;
-        }
-        return null;
+        const first = String(text ?? "").split("\n")[0];
+        const match = first.match(/^\s*#\s*Written by h2s-shell(?:\s+(\S+))?\s*$/);
+        return match ? { hash: match[1] ?? "" } : null;
     }
 
     // ── A whole stack ──
