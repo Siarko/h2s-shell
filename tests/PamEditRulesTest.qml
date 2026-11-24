@@ -382,5 +382,116 @@ TestCase {
         snippet = edit.optionsSnippet(option, [raw("r1", "auth sufficient /nix/store/abc-pam_ldap/lib/security/pam_ldap.so"), fixed], false, nixos({}));
         assert(snippet.ok && snippet.text.includes("module = \"/nix/store/abc-pam_ldap/lib/security/pam_ldap.so\";")
                && snippet.warnings.some(item => item.code === "W11"), "NixOS: a store path written out is allowed, with a warning");
+        snippet = edit.optionsSnippet(option, [raw("r1", "auth [success=done default=die] /run/current-system/sw/lib/security/pam_ldap.so"), fixed], false, nixos({}));
+        assert(!snippet.ok && snippet.refusals.some(item => item.code === "R8" && item.text === edit.optionsRawText), "NixOS: a bracketed raw line cannot be an option");
+        snippet = edit.optionsSnippet(option, [raw("r1", "auth sufficient /run/current-system/sw/lib/security/pam_ldap.so [query=x]"), fixed], false, nixos({}));
+        assert(!snippet.ok && snippet.refusals.some(item => item.code === "R8" && item.text === edit.optionsRawText),
+               "NixOS: … nor a bracketed argument, the first one included");
+        snippet = edit.optionsSnippet(option, [row("r1", "bogus", "sufficient"), fixed], false, nixos({}));
+        assert(!snippet.ok && snippet.refusals.some(item => item.code === "R8" && item.text === rules.texts.R4method), "NixOS: an unknown kind of row has no option");
+
+        // --- sha256 over UTF-8: the pairs at the ends of their range, lone halves (three bytes
+        // each, as the text holds them), each length of encoding, the message length's bytes ---
+        assertEqual(edit.sha256("𐀀"), "31237b174ba6047a15db0d343ad9550da611b7b7bce867a23522f81a05df3eda", "sha256: U+10000, the first pair");
+        assertEqual(edit.sha256("􏿿"), "708b8add9f6b5b556a07b72973b10ff9a3ec30e002034ef24aa076fab4b40e50", "… U+10FFFF, the last");
+        assertEqual(edit.sha256("a\uDC00"), "107a312e54e2dabe1d66698cc55de2e34e5d4e4d2cefc974fd62c950fb9e4b3c", "… a lone low half after a letter");
+        assertEqual(edit.sha256("\uDC00\uDC00"), "6035f60642992e7c5549131e315ed79dad70f70b43888ebcaeca782e20838bb0", "… two low halves: no pair");
+        assertEqual(edit.sha256("\uD800a"), "03dce54308610046523796eb99cb0594879248bb5413ba974304eb0db89f3f32", "… a high half before a letter");
+        assertEqual(edit.sha256("\uD800"), "d46a7e697cf1cbf9b513a4aac6df8dd58e4ed0b097055c82d1f1ec0dfe5225a6", "… a high half before U+E000: no pair");
+        assertEqual(edit.sha256("\u0080ࠀ"), "cf4642876148ad12467c45f386e9d2fac9933bc860320fa844ada0c19b70acf7", "… U+0080 and U+0800, the first of two and three bytes");
+        assertEqual(edit.sha256("€"), "c4cc90ed3d26f12d4b08a75140970a7904035c31cbb4515a83f19b9003c00d1d", "… a three-byte character");
+        assertEqual(edit.sha256("a".repeat(8192)), "dd4e6730520932767ec0a9e33fe19c4ce24399d6eba4ff62f13013c9ed30ef87", "… 8 KiB: the length's third byte");
+        assertEqual(edit.sha256("a".repeat(2097152)), "5256ec18f11624025905d057d6befb03d77b243511ac5f77ed5e0221ce6d84b5", "… 2 MiB: the length's fourth byte");
+
+        // --- edges of reading and writing ---
+        assertEqual(edit.controlWord(null), "", "no line: no word");
+        const fpLine = "-auth sufficient pam_fprintd.so timeout=10 max-tries=3";
+        const fpBlock = edit.blockText([fpLine, "auth requisite pam_deny.so"]).join("\n");
+        assertEqual(edit.build("account include system-auth", [fingerprint("r1")], facts()).text, "account include system-auth\n" + fpBlock,
+                    "no auth lines, no final newline: the block after the last line");
+        assertEqual(edit.build("account include system-auth\n", [fingerprint("r1")], facts()).text, "account include system-auth\n" + fpBlock + "\n",
+                    "… with a final newline: before it");
+        assertEqual(edit.build("", [fingerprint("r1")], facts()).text, fpBlock + "\n", "an empty file: the block and a final newline");
+        assertEqual(JSON.stringify(edit.build(null, [fingerprint("r1"), fixed], facts())),
+                    JSON.stringify({ ok: false, text: null, remove: false, refusals: [{ code: "unread", row: -1, id: "", text: edit.reasonTexts.unread }], warnings: [] }),
+                    "a refusal of the file: not ok, no text, nothing removed, for the list");
+        refused = edit.build(archSudo, [], facts());
+        assert(refused.ok === false && refused.text === null && refused.remove === false, "a refusal of the rows: not ok, no text, nothing removed");
+        assertEqual(codes(edit.build(42, [fingerprint("r1"), fixed], polkit())).join(" "), "unread", "polkit-1 handed something not a text: refused");
+        assertEqual(edit.build(null, [fingerprint("r1"), fixed], polkit({ replace: "abc" })).ok, true, "no polkit-1 of ours: a Replace hash has nothing to act on");
+        // Lines numbered from 1, the file as 0
+        assertEqual(JSON.stringify(edit.changes(null, "sudo").reasons), JSON.stringify([{ reason: "unread", line: 0, text: edit.reasonTexts.unread }]),
+                    "not read: the file");
+        assertEqual(edit.changes(vendorPolkit, "polkit-1").reasons[0].line, 0, "not ours: the file");
+        assertEqual(edit.changes("\n# Written by h2s-shell 0", "polkit-1").reasons.map(item => item.reason + ":" + item.line).join(" "), "notOurs:0",
+                    "a polkit-1 whose first line is empty: not ours, the marker must be the first line");
+        const reasonsOf = text => edit.changes(text, "sudo").reasons.map(item => item.reason + ":" + item.line).join(" ");
+        assertEqual(edit.changes(polkitText.replace("account    include", "account  include"), "polkit-1").reasons.map(item => item.reason + ":" + item.line).join(" "),
+                    "fileHash:1", "our polkit-1 changed outside the block: its first line");
+        assertEqual(reasonsOf(archSudo + "auth sometimes pam_unix.so\n"), "unparsable:5", "a line PAM cannot read: its line");
+        assertEqual(reasonsOf(archSudo.replace("auth\t\tinclude", "auth sufficient pam_fprintd.so\nauth\t\tinclude")), "fingerprint:2", "a fingerprint line: its line");
+        assertEqual(reasonsOf(sudoText.replace("# BEGIN", "auth sufficient pam_fprintd.so\n# BEGIN")), "fingerprint:2", "… right above our block: outside it");
+        assertEqual(reasonsOf(sudoText + "# END h2s-shell\n"), "block:4 fingerprint:3", "a second end marker: the block broken, its lines outside");
+        assertEqual(reasonsOf(archSudo + "# END h2s-shell\n"), "block:0", "an end marker alone: the block broken, no line to mark");
+        assertEqual(reasonsOf("auth include system-auth\nauth required pam_env.so \\"), "unparsable:2", "a line continued past the end of the file");
+        // A line continued with a backslash is one line, all of it taken in
+        const continued = "auth sufficient pam_ldap.so \\\n    use_first_pass\nauth include system-auth\n";
+        const joined = PamStackRules.logicalLines(continued)[0].text;
+        const continuedRows = edit.adopt(continued, "sudo", facts());
+        assertEqual(JSON.stringify(continuedRows.rows.map(item => [item.method, item.details.text ?? ""])), JSON.stringify([["raw", joined], ["system", ""]]),
+                    "a continued line taken in: one raw row of the whole line");
+        built = edit.build(continued, continuedRows.rows, facts({ replace: continuedRows.hash }));
+        assert(built.ok && !built.text.includes("\\") && built.text.split("use_first_pass").length === 2, "… replaced: neither of its physical lines left outside the block");
+        assertEqual(edit.adopt("auth sufficient pam_ldap.so \\\n    use_first_pass", "sudo", facts()).rows[0].details.text, joined, "… on the last line too");
+        // Details at the ends of their ranges
+        assertEqual(JSON.stringify(edit.adopt("-auth sufficient pam_fprintd.so timeout=1 max-tries=1\n", "sudo", facts()).rows[0].details),
+                    JSON.stringify({ timeout: 1, tries: 1 }), "the lowest timeout and tries: a reader row");
+        assertEqual(JSON.stringify(edit.adopt("-auth sufficient pam_fprintd.so timeout=600 max-tries=20\n", "sudo", facts()).rows[0].details),
+                    JSON.stringify({ timeout: 600, tries: 20 }), "the highest: a reader row");
+        for (const outOfRange of ["-auth sufficient pam_fprintd.so timeout=601", "-auth sufficient pam_fprintd.so max-tries=21",
+                                  "-auth sufficient pam_fprintd.so timeout=0"])
+            assertEqual(edit.adopt(outOfRange + "\n", "sudo", facts()).rows[0].method, "raw", "a detail out of range in the editor's form stays raw: " + outOfRange);
+        // The block read back: the closing alone, comments and blank lines
+        assertEqual(JSON.stringify(edit.rows(permitBlock(["auth requisite pam_deny.so"]), "sudo", facts())), "[]", "a block of the deny line alone: the closing, no rows");
+        assertEqual(readIds(edit.rows(permitBlock(permitLines.slice(0, -1).concat(permitLines.slice(-2))), "sudo", facts())),
+                    "fingerprint:required password:sufficient raw:", "a permit line before the closing: one closing taken, the other line a raw row");
+        const notedBlock = "#%PAM-1.0\n# BEGIN h2s-shell 0\n" + fpLine + "\n# a note\n\nbogus\n# END h2s-shell\nauth include system-auth\n";
+        assertEqual(readIds(edit.rows(notedBlock, "sudo", facts())), "fingerprint:sufficient raw: system:", "comments and blank lines in the block are no rows, a one-word line is");
+        // Taking in
+        const noSystemLines = edit.adopt("auth sufficient pam_unix.so try_first_pass\nauth include system-auth\n", "sudo", facts({ systemLines: { "sudo": [] } }));
+        assertEqual(noSystemLines.rows.map(item => item.method).join(" ") + " " + noSystemLines.fixed, "password raw false",
+                    "no system's lines named: no fixed row, each auth line a row");
+        const mixedKinds = edit.adopt("auth sometimes pam_unix.so\naccount sometimes pam_unix.so\nauth sufficient pam_ldap.so\n-auth sufficient pam_u2f.so cue\n"
+                                      + "auth include system-auth\n", "sudo", facts());
+        assertEqual(mixedKinds.rows.map(item => item.method + ":" + (item.details.text ?? "")).join(" "),
+                    "raw:auth sometimes pam_unix.so raw:auth sufficient pam_ldap.so securityKey: system:",
+                    "an auth line PAM cannot read is a raw row; another phase's stays where it is");
+        assertEqual(mixedKinds.own + "/" + mixedKinds.raw, "1/2", "… one own row, two raw");
+        const strayBegin = "# BEGIN h2s-shell 0\nauth sufficient pam_unix.so try_first_pass\nauth include system-auth\n";
+        const strayRows = edit.adopt(strayBegin, "sudo", facts());
+        built = edit.build(strayBegin, strayRows.rows, facts({ replace: strayRows.hash }));
+        assert(built.ok && !edit.changes(built.text, "sudo").changed && built.text.split("# BEGIN").length === 2, "a stray begin marker taken in: gone, one block");
+        // Where a replaced file's block goes
+        const accountOnly = "account required pam_unix.so\n";
+        built = edit.build(accountOnly, [fingerprint("r1")], facts({ replace: edit.sha256(accountOnly) }));
+        assertEqual(built.text, accountOnly + fpBlock + "\n", "replaced, no auth lines: the block before the final newline");
+        const oneLine = "auth sufficient pam_ldap.so\naccount required pam_unix.so\n";
+        built = edit.build(oneLine, [fingerprint("r1")], facts({ replace: edit.sha256(oneLine) }));
+        assertEqual(built.text, fpBlock + "\naccount required pam_unix.so\n", "replaced, one auth line: the block in its place");
+        const systemOnly = "auth include system-auth\n";
+        built = edit.build(systemOnly, [fingerprint("r1"), fixed], facts({ replace: edit.sha256(systemOnly) }));
+        assertEqual(built.text, edit.blockText([fpLine]).join("\n") + "\n" + systemOnly, "replaced, the system's lines first: the block above them");
+        // The vendor file against ours
+        assertEqual(edit.vendorChanged("auth sufficient pam_permit.so\n", vendorPolkit), false, "a polkit-1 not ours: nothing said of the vendor file");
+        assertEqual(edit.vendorChanged(polkitText, null), false, "the vendor file not read: nothing said");
+        assertEqual(edit.vendorChanged(edit.writtenMarker + " " + edit.sha256(vendorPolkit) + "\n" + vendorPolkit, vendorPolkit), false,
+                    "ours without a block, the vendor file as copied");
+        assertEqual(edit.vendorChanged(edit.build(replaced, [fixed], polkit()).text, vendorPolkit), false, "… after a Replace, without a block");
+        const aboveRest = edit.replacedMarker + "\nauth include system-auth\n" + edit.blockText([fpLine]).join("\n") + "\naccount include system-auth\n";
+        assertEqual(edit.vendorChanged(edit.writtenMarker + " " + edit.sha256(aboveRest) + "\n" + aboveRest, vendorPolkit), false,
+                    "after a Replace, an auth line right above our block is compared too");
+        assertEqual(edit.state(polkitText, "polkit-1", polkit()).vendorChanged, false, "the state: the vendor file as copied");
+        assertEqual(edit.state(polkitText.replace("account    include", "account  include"), "polkit-1", polkit()).vendorChanged, false,
+                    "… our file changed by hand: changed, not the vendor file");
     }
 }

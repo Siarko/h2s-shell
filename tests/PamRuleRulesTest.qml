@@ -493,5 +493,14 @@ TestCase {
         const items = listWide.reduce((all, result) => all.concat(result.refusals, result.warnings), []).filter(item => ["R1", "R3", "R5", "W1", "W8"].includes(item.code));
         assertEqual(items.map(item => item.code).filter((code, i, all) => all.indexOf(code) === i).sort().join(" "), "R1 R3 R5 W1 W8", "(each list-wide code made)");
         assert(items.every(item => item.row === -1 && item.id === ""), "list-wide items name row −1: " + JSON.stringify(items.map(item => [item.code, item.row])));
+
+        // A password row with an unknown word decides nothing, even where the permit closes
+        const unknownWord = [password("r1", "bogus"), fingerprint("r2", "required")];
+        assertEqual(codes(unknownWord, arch()).join(" "), "R4 W1 W2", "a password row with an unknown word: refused, and no password in the list");
+        // The fixed row first is still the fixed row for W13 (its place is R4's)
+        assertEqual(codes([fixed, raw("r2", "auth required pam_ldap.so")], arch()).includes("W13"), false, "the fixed row first: no W13");
+        // A raw key line refused for its place is not judged for what it lets in
+        const bareKey = [raw("r1", "auth sufficient pam_u2f.so alwaysok"), fixed];
+        assertEqual(codes(bareKey, arch(nixos())).join(" "), "R8", "NixOS: a bare pam_u2f with alwaysok is refused for its name, nothing more");
     }
 }

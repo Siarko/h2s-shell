@@ -46,3 +46,83 @@ singletons/PrivilegedRules.qml	false -> true	#1	head.otherOpen = false;
 # reason: a mode of one octal digit (0 to 7) never has the setuid bit (04000), so refusing it
 # ({2,5}) or reading it ({1,5}) gives the same answer
 singletons/PrivilegedRules.qml	1 -> 2	#1	const mode = typeof verdict?.mode === "string" && /^[0-7]{1,5}$/.test(verdict.mode) ? parseInt(verdict.mode, 8) : -1;
+
+# reason: a high half last in the text: charCodeAt(text.length) is NaN, which no range test
+# passes, so it is never paired either way
+singletons/PamEditRules.qml	< -> <=	#2	if (code >= 0xd800 && code < 0xdc00 && i + 1 < text.length) {
+
+# reason: the length's high word is the byte count over 2^29: 0 for any text under 512 MiB, and
+# every shift of 0 is 0
+singletons/PamEditRules.qml	24 -> 25	#1	bytes.push((high >>> 24) & 255, (high >>> 16) & 255, (high >>> 8) & 255, high & 255,
+singletons/PamEditRules.qml	16 -> 17	#1	bytes.push((high >>> 24) & 255, (high >>> 16) & 255, (high >>> 8) & 255, high & 255,
+singletons/PamEditRules.qml	8 -> 9	#1	bytes.push((high >>> 24) & 255, (high >>> 16) & 255, (high >>> 8) & 255, high & 255,
+
+# reason: only words[0..63] are ever read: a longer array, words[16] read from the next block's
+# bytes and then overwritten by the schedule loop, or a words[64] computed after the last one,
+# change no word the rounds read
+singletons/PamEditRules.qml	64 -> 65	#1	const words = new Array(64);
+singletons/PamEditRules.qml	< -> <=	#1	for (let i = 0; i < 16; i++) {
+singletons/PamEditRules.qml	16 -> 17	#1	for (let i = 0; i < 16; i++) {
+singletons/PamEditRules.qml	< -> <=	#1	for (let i = 16; i < 64; i++) {
+singletons/PamEditRules.qml	64 -> 65	#1	for (let i = 16; i < 64; i++) {
+
+# reason: _sameRowWords is called only by _ownRow, on the written line and on a module line
+# whose control word isControl accepted: both have at least three words and a non-empty word, so
+# neither part of the condition can be false
+singletons/PamEditRules.qml	> -> >=	#1	if (words.length > 1 && word !== "")
+singletons/PamEditRules.qml	1 -> 2	#1	if (words.length > 1 && word !== "")
+singletons/PamEditRules.qml	&& -> ||	#1	if (words.length > 1 && word !== "")
+
+# reason: -1 is only compared with >= 0 or < 0 by the callers (_firstAuthIndex in build,
+# _systemRun in _adoptPlan and _systemProblem): -2 answers the same
+singletons/PamEditRules.qml	1 -> 2	#1	return -1;
+singletons/PamEditRules.qml	1 -> 2	#2	return -1;
+singletons/PamEditRules.qml	1 -> 2	#3	return -1;
+singletons/PamEditRules.qml	1 -> 2	#1	return after.every(span => PamStackRules.parseLine(span.text).directive !== undefined) ? i : -1;
+
+# reason: parseLine gives a line with an error nothing else, so no module; a line with a module
+# never has an error, and one without (an include) has no control word isControl takes: either
+# grouping refuses the same lines
+singletons/PamEditRules.qml	|| -> &&	#1	if (line.error !== undefined || line.module === undefined || !PamRuleRules.isControl(word))
+singletons/PamEditRules.qml	|| -> &&	#2	if (line.error !== undefined || line.module === undefined || !PamRuleRules.isControl(word))
+
+# reason: an error line has no module, and a line without a module that parses (include,
+# substack, @include) has no simple control word, so the line after the && refuses it anyway
+singletons/PamEditRules.qml	|| -> &&	#1	if (line.error !== undefined || line.module === undefined || line.optional || line.controlKind !== "simple"
+
+# reason: the markers of a complete block are removed by _isMarker anyway and are comments,
+# never spans: whether inBlock counts the begin or the end line changes nothing
+singletons/PamEditRules.qml	>= -> >	#1	const inBlock = index => block !== null && block.complete && index >= block.beginLine - 1 && index <= block.endLine - 1;
+singletons/PamEditRules.qml	<= -> <	#1	const inBlock = index => block !== null && block.complete && index >= block.beginLine - 1 && index <= block.endLine - 1;
+singletons/PamEditRules.qml	1 -> 2	#2	const inBlock = index => block !== null && block.complete && index >= block.beginLine - 1 && index <= block.endLine - 1;
+
+# reason: a text whose first line is empty is no file of ours to changes() (notOurs, returned
+# before the hash), and to _ownRest's callers only through build, which refuses such a file
+# (R6), and state, which asks vendorChanged only of a file not changed: a newline at 0 never
+# reaches these
+singletons/PamEditRules.qml	< -> <=	#1	if ((written[1] ?? "") !== sha256(newline < 0 ? "" : text.slice(newline + 1)))
+singletons/PamEditRules.qml	0 -> 1	#1	if ((written[1] ?? "") !== sha256(newline < 0 ? "" : text.slice(newline + 1)))
+singletons/PamEditRules.qml	< -> <=	#1	return newline < 0 ? "" : text.slice(newline + 1);
+singletons/PamEditRules.qml	0 -> 1	#1	return newline < 0 ? "" : text.slice(newline + 1);
+
+# reason: the line compared at the edge is the block's begin or end marker: a comment, never a
+# span, so whether it counts as outside changes nothing
+singletons/PamEditRules.qml	< -> <=	#1	const outside = block === null || !block.complete || span.start + 1 < block.beginLine || span.start + 1 > block.endLine;
+singletons/PamEditRules.qml	1 -> 2	#2	const outside = block === null || !block.complete || span.start + 1 < block.beginLine || span.start + 1 > block.endLine;
+singletons/PamEditRules.qml	> -> >=	#1	const outside = block === null || !block.complete || span.start + 1 < block.beginLine || span.start + 1 > block.endLine;
+singletons/PamEditRules.qml	< -> <=	#1	|| span.start + 1 < block.beginLine || span.start + 1 > block.endLine);
+singletons/PamEditRules.qml	1 -> 2	#2	|| span.start + 1 < block.beginLine || span.start + 1 > block.endLine);
+singletons/PamEditRules.qml	> -> >=	#1	|| span.start + 1 < block.beginLine || span.start + 1 > block.endLine);
+
+# reason: atOnce is set for every own row and every raw line that parses; it keeps its first
+# value only for the fixed row (which always decides), an unknown kind and a raw line that does
+# not parse (both refused and of no method), and no check reads it there
+singletons/PamRuleRules.qml	false -> true	#2	const role = { method: "unknown", raw: false, atOnce: false, okOnSuccess: false, fails: false,
+
+# reason: an own row's (and the fixed row's) credential stays "unknown", never "no", so the
+# credential test alone already passes every row the method and raw tests pass
+singletons/PamRuleRules.qml	|| -> &&	#1	const asks = role => role.fails && !role.denies && (role.method === "system" || !role.raw || role.credential !== "no")
+
+# reason: at i === fixedIndex the row is the fixed row, never a password row, so fixedIndex >= i
+# adds no row
+singletons/PamRuleRules.qml	> -> >=	#1	if (role.method === "password" && !role.raw && list[i].control === "sufficient" && fixedIndex > i)
