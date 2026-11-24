@@ -2,9 +2,10 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import qs.singletons
+import qs.distributions.arch
 import qs.singletons.io
 
-// Apply and Undo (singletons/io/PamApply.qml), the root step run for real —
+// Apply and Undo (distributions/arch/PamApply.qml), the root step run for real —
 // scripts/root/replace-lib.sh, replace-file.sh and pam-apply.sh, the text handed over exactly
 // the three files joined — but through a stand-in for the shell's runs as administrator: the suite's `start`
 // runs the words as the user, under a scratch base holding the PAM folder, the vendor folder
@@ -46,6 +47,8 @@ TestCase {
     property string _answer: "run"
     property var _held: null
     property var _outcome: null
+    // The outcomes handed to a run's own `done`
+    property var _handed: []
     property var _read: null
     property bool _ready: false
 
@@ -86,7 +89,7 @@ TestCase {
     }
 
     function _facts(service) {
-        return { system: "arch", service: service, fingerprint: "ready", securityKey: "ready", faillockPresent: true,
+        return { service: service, fingerprint: "ready", securityKey: "ready", faillockPresent: true,
                  faillock: { deny: 3, failInterval: 900, unlockTime: 600 },
                  otherService: [{ id: "o1", method: "password", control: "sufficient", details: { counted: false } }, PamRuleRules.fixedRow()],
                  vendorText: _vendorPolkit };
@@ -234,7 +237,7 @@ TestCase {
 
             _apply = _applyComponent.createObject(suite, { start: suite._start, paths: _paths });
             _apply.finished.connect(outcome => suite._outcome = outcome);
-            const started = _apply.apply(request);
+            const started = _apply.apply(request, { done: outcome => suite._handed = suite._handed.concat([outcome]) });
             assertEqual(JSON.stringify(started), JSON.stringify({ started: true, refusal: null }), "sudo's new rules: started");
             assertEqual(_runs[0].what, "Change the sign-in rules for sudo", "… the run's purpose");
             assertEqual(_runs[0].argv[0], "/bin/sh", "… the system's shell");
@@ -244,6 +247,8 @@ TestCase {
         _then("sudo written", () => _outcome !== null, () => {
             assertEqual(_outcome.ok + " " + _outcome.kind + " " + _outcome.sha256, "true written " + edit.sha256(_sudoBuilt.text), "written, its hash in force");
             assert(PamApplyRules.validBackup("sudo", _outcome.backup) && !_outcome.backup.endsWith(".absent"), "… a backup of sudo: " + _outcome.backup);
+            assert(_handed.length === 1 && ["ok", "kind", "service", "sha256", "backup", "file"].every(name => _handed[0][name] === _outcome[name]),
+                   "… handed to the run's own done once, the same outcome");
             _sudoOutcome = _outcome;
             _look();
         });
@@ -322,7 +327,7 @@ TestCase {
         _then("sudo removed", () => _direct !== null, () => {
             assertEqual(_direct.stderr, "refused arguments", "a removal of sudo: refused");
             _outcome = null;
-            assert(_apply.undo({ service: "sudo", backup: _sudoOutcome.backup, currentSha256: _sudoOutcome.sha256 }).started, "Undo: started");
+            assert(_apply.undo({ from: _sudoOutcome }).started, "Undo: started");
             assertEqual(_runs[_runs.length - 1].what, "Undo the change to the sign-in rules for sudo", "… the run's purpose");
         });
         _then("undone", () => _outcome !== null, () => {
@@ -360,7 +365,7 @@ TestCase {
             assert(_outcome.backup.startsWith("polkit-1.") && _outcome.backup.endsWith(".absent"), "… its backup: there was none (" + _outcome.backup + ")");
             const written = _outcome;
             _outcome = null;
-            assert(_apply.undo({ service: "polkit-1", backup: written.backup, currentSha256: written.sha256 }).started, "its Undo: started");
+            assert(_apply.undo({ from: written }).started, "its Undo: started");
         });
         _then("polkit undone", () => _outcome !== null, () => {
             assertEqual(_outcome.ok + " " + _outcome.sha256, "true absent", "Undo of a backup of no file: our file removed");
@@ -423,7 +428,7 @@ TestCase {
             const held = _outcome;
             _answer = "lost";
             _outcome = null;
-            assert(_apply.undo({ service: "sudo", backup: held.backup, currentSha256: held.sha256 }).started, "an Undo whose answer is lost: started");
+            assert(_apply.undo({ from: held }).started, "an Undo whose answer is lost: started");
         });
         _then("the lost Undo answered", () => _outcome !== null, () => {
             assertEqual(_outcome.ok + " " + _outcome.file, "false other", "its answer lost: not ok, the file read again is not as before");

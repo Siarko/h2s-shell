@@ -305,7 +305,8 @@ Singleton {
     // store, so a store path's file name says nothing about what the module does. Not known
     // (no list): no place is the system's, every path warns
     readonly property string storeDirectory: "/nix/store/"
-    // libpam's own modules: NixOS's libpam finds these, and only these, by bare name
+    // libpam's own modules: where the system's libpam finds these, and only these, by bare
+    // name (`facts.bareModules` "libpam": NixOS's), every other module needs its full path
     readonly property var libpamModules: ["pam_access", "pam_canonicalize_user", "pam_debug", "pam_deny", "pam_echo",
         "pam_env", "pam_exec", "pam_faildelay", "pam_faillock", "pam_filter", "pam_ftp", "pam_group",
         "pam_issue", "pam_keyinit", "pam_lastlog", "pam_limits", "pam_listfile", "pam_localuser",
@@ -435,14 +436,15 @@ Singleton {
             return result(null, "Jumps or resets", "unknown", "R8", "No jumps or reset in a raw line.");
         const reads = [line.optional ? "-auth" : "auth", line.control, line.moduleName].join(" · ");
         const method = _rawMethods[line.moduleName] ?? "unknown";
-        const nixos = facts?.system === "nixos";
+        const libpamOnly = facts?.bareModules === "libpam";
         const module = line.module;
         if (module.includes("/")) {
             const warning = _placeWarning(module, Array.isArray(facts?.moduleDirectories) ? facts.moduleDirectories : []);
             if (warning)
                 return result(line, reads, method, null, "", warning);
-        } else if (nixos && !libpamModules.includes(module)) {
-            return result(line, reads, method, "R8", "Needs the module's full path on NixOS.");
+        } else if (libpamOnly && !libpamModules.includes(module)) {
+            return result(line, reads, method, "R8", typeof facts?.texts?.modulePath === "string" && facts.texts.modulePath !== ""
+                          ? facts.texts.modulePath : texts.R8path);
         }
         return result(line, reads, method, null, "");
     }
@@ -461,6 +463,7 @@ Singleton {
         R5: "Keep a password in sudo or in administrator prompts: one is the way to repair the other.",
         R6: "Changed outside the shell. Replace it to edit here.",
         R8: "Not a PAM line.",
+        R8path: "Needs the module's full path.",
         R9: "This line lets anyone in.",
         R1deny: "This line refuses everyone: nobody would get in.",
         W1: "Only the reader lets you in. If it breaks, use the other service, su or a root console.",
@@ -637,8 +640,10 @@ Singleton {
         return _analyse(list, service, facts).roles.some(role => (role.method === "password" || role.method === "system") && role.decides);
     }
 
-    // Every refusal and warning for one service's rows. `facts`: { system ("nixos" / …),
-    // moduleDirectories (the distribution's PAM module directories; none: not known), service ("sudo" / "polkit-1"), fingerprint, securityKey ("ready" / "absent" /
+    // Every refusal and warning for one service's rows. `facts`: { bareModules ("libpam":
+    // only libpam's own modules are found by bare name; else any in the module directories),
+    // texts (the distribution integration's words: `modulePath`, the refusal of a bare name
+    // libpam would not find), moduleDirectories (the distribution's PAM module directories; none: not known), service ("sudo" / "polkit-1"), fingerprint, securityKey ("ready" / "absent" /
     // "unknown"), u2f (the system's pam_u2f settings: { rows, conf }, PamStackRules'
     // u2fOptions each; absent: not read yet, no key line judged by them), faillockPresent (the system's rules count with pam_faillock), faillock
     // (PamStackRules.faillockConfig's numbers, or null), otherService (the other service's

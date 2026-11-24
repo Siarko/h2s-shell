@@ -1,6 +1,6 @@
 # sudo's and polkit's `auth` rules, as options of the shell's module: /etc/pam.d is generated
 # on NixOS, so the shell's rule editor gives its rules as these options to copy into the
-# system's configuration (PamEditRules.nixosSnippet writes them). Each row
+# system's configuration (PamEditRules.optionsSnippet writes them). Each row
 # becomes one or more of NixOS's PAM rules, above NixOS's own; the checks that can be made
 # from the configuration are assertions and warnings, as the editor's are refusals and
 # warnings (PamRuleRules.check). tests/PamNixosModuleTest.qml checks the names and ranges

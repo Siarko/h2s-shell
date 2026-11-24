@@ -5,7 +5,7 @@ import qs.singletons
 // pam_faillock in system-auth, our polkit-1 over the vendor file, the closing lines, round
 // trips (every text parses back through PamStackRules.stack to the same auth lines; adding
 // then removing gives the original bytes), a hand-made file taken in, changed-by-hand
-// detection, the NixOS snippets
+// detection, the module options to copy (as NixOS's integration has them)
 TestCase {
     suiteName: "PamEditRules"
 
@@ -33,7 +33,7 @@ TestCase {
         const vendorPolkit = "#%PAM-1.0\n\nauth       include      system-auth\naccount    include      system-auth\n"
             + "password   include      system-auth\nsession    include      system-auth\n";
         const files = systemAuth => ({ "/etc/pam.d/system-auth": systemAuth, "/usr/lib/pam.d/polkit-1": vendorPolkit });
-        const facts = more => Object.assign({ system: "arch", service: "sudo", fingerprint: "ready", securityKey: "ready",
+        const facts = more => Object.assign({ service: "sudo", fingerprint: "ready", securityKey: "ready",
                                               faillockPresent: true, faillock: { deny: 3, failInterval: 900, unlockTime: 600 },
                                               otherService: [password("o1"), rules.fixedRow()], vendorText: vendorPolkit }, more ?? {});
         const polkit = more => facts(Object.assign({ service: "polkit-1" }, more ?? {}));
@@ -355,29 +355,31 @@ TestCase {
         assertEqual(edit.adopt("auth sufficient pam_u2f.so cue authfile=/etc/u2f\nauth include system-auth\n", "sudo", facts()).rows[0].method, "raw",
                     "a key line with its own authfile stays raw");
 
-        // --- NixOS snippets ---
-        let snippet = edit.nixosSnippet([fingerprint("r1"), fixed], false, { fingerprint: "ready" });
+        // --- module options (NixOS's: only libpam's own modules by bare name) ---
+        const nixos = more => Object.assign({ bareModules: "libpam", moduleDirectories: ["/run/current-system/sw/lib/security/"] }, more ?? {});
+        const option = "programs.h2s-shell.pam";
+        let snippet = edit.optionsSnippet(option, [fingerprint("r1"), fixed], false, nixos({ fingerprint: "ready" }));
         assertEqual(snippet.text, "programs.h2s-shell.pam = {\n  rules = [\n"
                     + "    { method = \"fingerprint\"; control = \"sufficient\"; timeout = 10; tries = 3; }\n"
                     + "    { method = \"system\"; }\n  ];\n};\n", "NixOS: one list for both");
-        snippet = edit.nixosSnippet({ sudo: [key("r1", "sufficient", true), password("r2", "required"), fixed],
+        snippet = edit.optionsSnippet(option, { sudo: [key("r1", "sufficient", true), password("r2", "required"), fixed],
                                       polkit: [raw("r1", "auth sufficient /run/current-system/sw/lib/security/pam_ldap.so use_first_pass"), fixed] },
-                                    true, { securityKey: "ready" });
+                                    true, nixos({ securityKey: "ready" }));
         assertEqual(snippet.text, "programs.h2s-shell.pam = {\n  sudo.rules = [\n"
                     + "    { method = \"securityKey\"; control = \"sufficient\"; pin = true; }\n"
                     + "    { method = \"password\"; control = \"required\"; counted = false; }\n"
                     + "    { method = \"system\"; }\n  ];\n  polkit.rules = [\n"
                     + "    { method = \"raw\"; control = \"sufficient\"; module = \"/run/current-system/sw/lib/security/pam_ldap.so\"; args = [ \"use_first_pass\" ]; }\n"
                     + "    { method = \"system\"; }\n  ];\n};\n", "NixOS: one list per service, a raw line with its full path");
-        snippet = edit.nixosSnippet([raw("r1", "-auth sufficient /run/current-system/sw/lib/security/pam_ldap.so"), fixed], false, {});
+        snippet = edit.optionsSnippet(option, [raw("r1", "-auth sufficient /run/current-system/sw/lib/security/pam_ldap.so"), fixed], false, nixos({}));
         assert(!snippet.ok && snippet.text === null && snippet.refusals[0].code === "R8", "NixOS: a -auth raw line cannot be an option");
-        snippet = edit.nixosSnippet([row("r1", "fingerprint", "sufficient", { timeout: -1, tries: -1 }), fixed], false, { fingerprint: "ready" });
+        snippet = edit.optionsSnippet(option, [row("r1", "fingerprint", "sufficient", { timeout: -1, tries: -1 }), fixed], false, nixos({ fingerprint: "ready" }));
         assert(snippet.ok && snippet.text.includes("{ method = \"fingerprint\"; control = \"sufficient\"; timeout = -1; tries = -1; }"), "NixOS: no limit is -1");
-        snippet = edit.nixosSnippet({ sudo: [], polkit: [fixed] }, true, {});
+        snippet = edit.optionsSnippet(option, { sudo: [], polkit: [fixed] }, true, nixos({}));
         assert(!snippet.ok && snippet.refusals.some(item => item.code === "R3" && item.service === "sudo"), "NixOS: an empty list refused, with its service");
-        snippet = edit.nixosSnippet([raw("r1", "auth sufficient pam_ldap.so"), fixed], false, {});
+        snippet = edit.optionsSnippet(option, [raw("r1", "auth sufficient pam_ldap.so"), fixed], false, nixos({}));
         assert(!snippet.ok && snippet.refusals.some(item => item.code === "R8"), "NixOS: a bare third-party module refused");
-        snippet = edit.nixosSnippet([raw("r1", "auth sufficient /nix/store/abc-pam_ldap/lib/security/pam_ldap.so"), fixed], false, {});
+        snippet = edit.optionsSnippet(option, [raw("r1", "auth sufficient /nix/store/abc-pam_ldap/lib/security/pam_ldap.so"), fixed], false, nixos({}));
         assert(snippet.ok && snippet.text.includes("module = \"/nix/store/abc-pam_ldap/lib/security/pam_ldap.so\";")
                && snippet.warnings.some(item => item.code === "W11"), "NixOS: a store path written out is allowed, with a warning");
     }

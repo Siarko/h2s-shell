@@ -2,8 +2,10 @@ import QtQuick
 import Quickshell
 import qs.distributions
 import qs.singletons
+import qs.singletons.io
 
-// Apply and Undo of the PAM rules on Arch: one run as administrator per service, the root
+// Apply and Undo of the PAM rules on Arch (ArchIntegration's writer of "pam.rules", which
+// Integration's apply and undo hand the change to): one run as administrator per service, the root
 // step's files (PamApplyRules.scriptFiles, in scripts/root/) read from the shell's tree at the
 // click and their text run by the system's /bin/sh — never run by path. Apply follows a passed
 // trial (the user's click on Apply started both); Undo is a click of its own. What may run and
@@ -20,7 +22,8 @@ QtObject {
     id: root
 
     // After each started run: PamApplyRules.applyReply's outcome; when not ok, its `file`
-    // is PamApplyRules.afterFailure's answer for the file read again
+    // is PamApplyRules.afterFailure's answer for the file read again. The run's own
+    // `handlers.done`, when given, has it first
     signal finished(var outcome)
 
     // (request { what, argv }, done(result)) → nothing; done once with PrivilegedRules' result
@@ -33,17 +36,23 @@ QtObject {
     readonly property bool busy: _files.busy
 
     // Apply one service's new rules. `request`: PamApplyRules.applyArgv's (service, built,
-    // currentText, vendorText, trial). → { started, refusal (null or { code, text }) }
-    function apply(request) {
-        return _run(PamApplyRules.applyArgv(shell, request, paths, start === null, _scripts.read()), PamApplyRules.what("apply", String(request?.service ?? "")));
+    // currentText, vendorText, trial); `handlers` { done (outcome → nothing, once) }. →
+    // { started, refusal (null or { code, text }) }
+    function apply(request, handlers) {
+        return _run(PamApplyRules.applyArgv(shell, request, paths, start === null, _scripts.read()), PamApplyRules.what("apply", String(request?.service ?? "")),
+                    handlers?.done);
     }
 
-    // Put a backup back. `request`: PamApplyRules.undoArgv's (service, backup, currentSha256)
-    function undo(request) {
-        return _run(PamApplyRules.undoArgv(shell, request, paths, start === null, _scripts.read()), PamApplyRules.what("undo", String(request?.service ?? "")));
+    // Put back what an Apply replaced. `handlers` { from (that Apply's outcome: its service,
+    // backup, and sha256 — what it left in force), done }
+    function undo(handlers) {
+        const from = handlers?.from;
+        const request = { service: from?.service, backup: from?.backup, currentSha256: from?.sha256 };
+        return _run(PamApplyRules.undoArgv(shell, request, paths, start === null, _scripts.read()), PamApplyRules.what("undo", String(request.service ?? "")),
+                    handlers?.done);
     }
 
-    function _run(plan, what) {
+    function _run(plan, what, done) {
         if (_files.busy)
             return { started: false, refusal: PamApplyRules.refusal("busy") };
         if (plan.refusal !== null)
@@ -55,7 +64,13 @@ QtObject {
             reply: result => PamApplyRules.applyReply(result, plan.expected),
             readBack: [path],
             after: (answers, outcome) => outcome.file = PamApplyRules.afterFailure(answers[path], plan.expected),
-            done: outcome => root.finished(outcome)
+            done: outcome => {
+                try {
+                    done?.(outcome);
+                } finally {
+                    root.finished(outcome);
+                }
+            }
         });
         return code === "" ? { started: true, refusal: null } : { started: false, refusal: PamApplyRules.refusal(code) };
     }

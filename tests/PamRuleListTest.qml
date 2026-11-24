@@ -20,7 +20,7 @@ TestCase {
     // Its window takes the keyboard, as other suites' do
     ownProcess: true
 
-    readonly property var facts: ({ system: "arch", service: "sudo", fingerprint: "ready", securityKey: "absent",
+    readonly property var facts: ({ service: "sudo", fingerprint: "ready", securityKey: "absent",
                                     faillockPresent: true, faillock: { deny: 3, failInterval: 900, unlockTime: 600 } })
     property var rows: []
     property int edits: 0
@@ -209,8 +209,9 @@ TestCase {
                     "Counted | Not counted", "… a password: counted or not");
         assertEqual(rules.chips(password("p", true), { faillockPresent: false }).length, 0, "… where the system does not count: no chip");
         assertEqual(rules.chips(fixed, facts).join(","), "Counts: 3 wrong in 15 min lock 10 min", "… the fixed row: faillock's numbers");
-        assertEqual(rules.chips(fixed, { system: "nixos", faillockPresent: false }).join(","), "NixOS's rules", "… on NixOS without faillock");
-        assertEqual(rules.chips(fixed, { system: "arch", faillockPresent: false }).length, 0, "… elsewhere without faillock: none");
+        assertEqual(rules.chips(fixed, { texts: { systemRow: "NixOS's rules" }, faillockPresent: false }).join(","), "NixOS's rules",
+                    "… without faillock: whose rules, where the integration names them");
+        assertEqual(rules.chips(fixed, { texts: {}, faillockPresent: false }).length, 0, "… elsewhere without faillock: none");
         assertEqual(rules.chips(raw("x", "auth sufficient pam_ldap.so"), facts).join(","), "Not checked", "… a raw line: not checked");
         assertEqual(rules.chips(null, facts).length, 0, "… no row: none");
 

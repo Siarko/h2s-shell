@@ -11,7 +11,8 @@ import qs.singletons
 // IntegrationRules), run over each shipped one — a new distribution passes it first. For every
 // change kind the shell defines, and kinds it does not: capability answers a valid mode (an
 // applied kind is one EtcFiles writes; unavailable carries a reason); plan answers a preview
-// by the mode or a refusal; apply, undo and readInForce answer — apply and undo at once, and
+// by the mode or a refusal; details answer the feature's words and facts (none where
+// unavailable); apply, undo and readInForce answer — apply and undo at once, and
 // `done` exactly once when started, never when not; readInForce once, later. The generic
 // integration is safe while the system is unknown to the shell: nothing offered, nothing run,
 // nothing read. Each shipped distribution has its integration in Distribution, and
@@ -29,7 +30,19 @@ TestCase {
     // Every kind the shell defines, and two it does not
     readonly property var _kinds: IntegrationRules.kinds.concat(["no.such.kind", "toString"])
     // A value each defined kind takes
-    readonly property var _values: ({ "sleep.hibernateDelay": 10800, "network.connectivityUri": "http://nmcheck.gnome.org/check_network_status.txt" })
+    readonly property var _values: ({ "sleep.hibernateDelay": 10800, "network.connectivityUri": "http://nmcheck.gnome.org/check_network_status.txt",
+                                      "pam.rules": _pamValue })
+    // The sign-in rules as the editor holds them: the system's row alone, Arch's files
+    readonly property string _vendorPolkit: "#%PAM-1.0\n\nauth       include      system-auth\naccount    include      system-auth\n"
+    readonly property var _pamValue: {
+        const facts = service => ({ service, writes: true, fingerprint: "absent", securityKey: "absent", moduleDirectories: [],
+                                    otherService: [PamRuleRules.fixedRow()], vendorText: _vendorPolkit });
+        return { split: false,
+                 "sudo": { rows: [PamRuleRules.fixedRow()], facts: facts("sudo"), currentText: "#%PAM-1.0\nauth\t\tinclude\t\tsystem-auth\n" },
+                 "polkit-1": { rows: [PamRuleRules.fixedRow()], facts: facts("polkit-1"), currentText: null } };
+    }
+    // An apply of a kind with a trial, as one step whose trial did not pass
+    readonly property var _untried: ({ service: "sudo", built: { ok: true, text: "auth include system-auth\n", remove: false }, currentText: "", trial: null })
     // Stand-ins for the merged readings: the system's own file sets each kind
     readonly property var _merged: ({
         "sleep.hibernateDelay": ["sh", "-c", "printf '# /etc/systemd/sleep.conf\\n[Sleep]\\nHibernateDelaySec=2h\\n'"],
@@ -38,9 +51,9 @@ TestCase {
     })
     // What each shipped integration answers per defined kind (mode, undo, inForce)
     readonly property var _expectedModes: ({
-        arch: { "sleep.hibernateDelay": "apply undo inForce", "network.connectivityUri": "apply undo inForce" },
-        nixos: { "sleep.hibernateDelay": "copy - inForce", "network.connectivityUri": "copy - inForce" },
-        generic: { "sleep.hibernateDelay": "unavailable - -", "network.connectivityUri": "unavailable - -" }
+        arch: { "sleep.hibernateDelay": "apply undo inForce", "network.connectivityUri": "apply undo inForce", "pam.rules": "apply undo -" },
+        nixos: { "sleep.hibernateDelay": "copy - inForce", "network.connectivityUri": "copy - inForce", "pam.rules": "copy - -" },
+        generic: { "sleep.hibernateDelay": "unavailable - -", "network.connectivityUri": "unavailable - -", "pam.rules": "unavailable - -" }
     })
 
     property var _integrations: []
@@ -95,7 +108,14 @@ TestCase {
             if (capability.mode === "unavailable")
                 assert(capability.reason !== "", label + "unavailable, with its reason: " + capability.reason);
             if (capability.mode === "apply")
-                assert(EtcFilesRules.knows(kind) && integration.files !== null, label + "applied: a file EtcFiles writes");
+                assert((EtcFilesRules.knows(kind) && integration.files !== null) || (integration.writers[kind] ?? null) !== null,
+                       label + "applied: a file EtcFiles writes, or the kind's own writer");
+            const details = integration.details(kind);
+            assert(details !== null && typeof details === "object" && typeof details.facts === "object" && details.facts !== null
+                   && typeof details.texts === "object" && details.texts !== null && Object.keys(details.texts).every(name => typeof details.texts[name] === "string"),
+                   label + "details answer: " + JSON.stringify(details));
+            if (capability.mode === "unavailable")
+                assertEqual(JSON.stringify(details), JSON.stringify({ texts: {}, facts: {} }), label + "… none where unavailable");
             if (id === "generic")
                 assertEqual(capability.mode + "|" + capability.reason, "unavailable|" + IntegrationRules.unsupported, label + "generic: not supported");
 
@@ -108,8 +128,13 @@ TestCase {
             } else {
                 assertEqual(planned.refusal, null, label + "a value it takes: planned");
                 if (capability.mode === "apply") {
-                    assertEqual(planned.preview.files[0].path, EtcFilesRules.files[kind], label + "… the file it writes");
-                    assert(EtcFilesRules.validText(planned.preview.files[0].text), label + "… a text EtcFiles writes");
+                    assert(planned.preview.files.length > 0 && planned.preview.files.every(file => file.path.startsWith("/") && (typeof file.text === "string" || file.text === null)),
+                           label + "… the files it writes: " + JSON.stringify(planned.preview.files));
+                    assert(typeof planned.preview.backups === "string" && planned.preview.backups.startsWith("/"), label + "… where it keeps them: " + planned.preview.backups);
+                    if (EtcFilesRules.knows(kind)) {
+                        assertEqual(planned.preview.files[0].path, EtcFilesRules.files[kind], label + "… the file EtcFiles writes");
+                        assert(EtcFilesRules.validText(planned.preview.files[0].text), label + "… a text EtcFiles writes");
+                    }
                 } else if (capability.mode === "copy") {
                     assert(planned.preview.option !== "" && planned.preview.snippet.startsWith(planned.preview.option + " "), label + "… the option and the line to copy: "
                            + planned.preview.snippet);
@@ -140,10 +165,12 @@ TestCase {
         assertEqual(undone.refusal.code, capability.undo ? "noUndo" : capability.mode === "unavailable" ? "unavailable" : capability.mode === "apply" ? "noUndo" : "mode",
                     label + "… refused for its reason");
 
-        const applied = integration.apply(kind, value, { done: _counter(id + " apply " + kind) });
+        const applied = integration.apply(kind, capability.trial ? _untried : value, { done: _counter(id + " apply " + kind) });
         assert(typeof applied?.started === "boolean" && (applied.started ? applied.refusal === null : typeof applied.refusal?.text === "string"),
                label + "apply answers: " + JSON.stringify(applied));
-        assertEqual(applied.started, capability.mode === "apply", label + "… started only where the shell applies");
+        assertEqual(applied.started, capability.mode === "apply" && !capability.trial, label + "… started only where the shell applies (and a trial passed)");
+        if (capability.trial)
+            assertEqual(applied.refusal.code, "notTried", label + "… a change with a trial, not tried: refused");
         if (applied.started)
             _expected.push(id + " apply " + kind);
         if (capability.mode === "unavailable")
@@ -210,6 +237,10 @@ TestCase {
             assertEqual((_answers["nixos readInForce network.connectivityUri"] ?? [])[0]?.file?.state, "absent",
                         "nixos: the shell's own file read too, for Write anyway");
             assertEqual(_integrations[1].capability("network.connectivityUri").anyway, true, "nixos: the address written anyway when asked");
+            const nixosPam = _integrations[1].details("pam.rules");
+            assertEqual(nixosPam.facts.bareModules + " " + ["where", "pending", "copyTitle", "after", "systemRow", "modulePath"].every(name => (nixosPam.texts[name] ?? "") !== ""),
+                        "libpam true", "nixos: the sign-in rules' words, and only libpam's own modules by bare name");
+            assertEqual(_integrations[0].busy, false, "arch: nothing runs any more");
             // Distribution forwards to the integration of the system it answered
             Distribution.whenReady(() => suite._facade = true);
         });

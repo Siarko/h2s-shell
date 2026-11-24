@@ -764,6 +764,9 @@ in on its own) and by `pam_u2f.conf`. Settings that cannot be read — the file,
 system this is or where the file is not known — or a settings file a raw line names itself,
 are a warning too. "Show
 file" shows the file that would be written, the shell's lines in the accent colour.
+What the page offers is the distribution integration's (`pam.rules`): Apply on Arch, the
+options to copy on NixOS; on a distribution the shell does not know, only what is in force
+and the lock screen's switches, with "Not supported on this distribution."
 
 #### NixOS
 

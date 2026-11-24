@@ -2,6 +2,9 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import qs.components
+import qs.distributions.arch
+import qs.distributions.generic
+import qs.distributions.nixos
 import qs.singletons
 import qs.singletons.io
 import qs.panels.settings
@@ -9,11 +12,12 @@ import qs.panels.settings
 // The sign-in rules section (panels/settings/PamRulesSection.qml) under clicks, and the page
 // rules it draws (PamRuleViewRules): what is in force as steps, the split switch and its
 // question, a check shown, the generated file, Apply through a trial and the writes, Undo, a
-// file changed by hand and Replace, the NixOS snippet, the lock screen's switches.
+// file changed by hand and Replace, the NixOS options to copy, the lock screen's switches — each
+// as the distribution integration (Arch's, NixOS's, the generic one) says the rules are made.
 //
 // Stand-ins only: the stacks are read by the suite from scratch folders (PamStackRules on
 // their texts), the trial is a stand-in that passes for one password, and the writes are
-// PamApply's real root step run as the user on the scratch folders (as tests/PamApplyTest.qml
+// Arch's integration's PamApply, its real root step run as the user on the scratch folders (as tests/PamApplyTest.qml
 // runs it). Never /etc, PAM, pkexec or the shell's settings. Opens a small window for a
 // moment, an ordinary one that takes the keyboard, in the runner's headless compositor.
 TestCase {
@@ -106,10 +110,15 @@ TestCase {
         }
     }
 
-    property var _applier: null
-    property Component _applierComponent: Component {
-        PamApply {}
+    // The integrations the section asks: Arch's with its runs going to the stand-in under the
+    // scratch base, NixOS's, the generic one; `_integration` the one in use
+    property ArchIntegration _archIntegration: ArchIntegration {
+        start: (request, done) => suite._start(request, done)
+        base: suite._scratch
     }
+    property var _integration: null
+    property NixosIntegration _nixosIntegration: NixosIntegration {}
+    property GenericIntegration _genericIntegration: GenericIntegration {}
 
     // The stand-in for the shell's runs as administrator: the words run as the user
     // How the next run ends: "" (it runs), "refuse" (the root step refuses: the file changed),
@@ -173,7 +182,7 @@ TestCase {
             width: 840
             stacks: suite._stacks
             trial: suite._trial
-            applier: suite._applier
+            integration: suite._integration
             modalHost: host
             settingValue: key => suite._settings[key]
             writeSetting: (key, value) => {
@@ -365,16 +374,35 @@ TestCase {
                     "sudo:fingerprint>password | Administrator prompts:not known", "… different or not known: two rows");
         assertEqual(rules.computerHas({ fingerprint: "ready", securityKey: "absent" }), "a finger enrolled · no security key registered", "computerHas");
         assertEqual(rules.computerHas({}), "fingerprint not known · security key not known", "… not known");
-        assertEqual(JSON.stringify(rules.writtenTo(true, "/etc/pam.d")), JSON.stringify({ label: "Set through", text: "the NixOS module" }), "writtenTo: NixOS");
-        assertEqual(rules.writtenTo(false, "/etc/pam.d").text, "/etc/pam.d/sudo and /etc/pam.d/polkit-1", "… Arch: the files");
+        const said = (integration, directory) => {
+            const texts = rules.modeTexts(integration.capability("pam.rules"), integration.details("pam.rules").texts, directory);
+            return [texts.label, texts.where, texts.pending, texts.copyTitle, texts.after, texts.reason].join(" | ");
+        };
+        assertEqual(said(_nixosIntegration, "/etc/pam.d"), "Set through | the NixOS module | The rows below take effect after nixos-rebuild switch. | "
+                    + "Add to your NixOS configuration | After nixos-rebuild switch this page shows the new rules. | ", "modeTexts: NixOS's integration's words");
+        assertEqual(said(_archIntegration, "/etc/pam.d"), "Written to | /etc/pam.d/sudo and /etc/pam.d/polkit-1 | The rows below are not in force until Apply. |  |  | ",
+                    "… Arch: the files, Apply");
+        assertEqual(said(_genericIntegration, "/etc/pam.d"), " |  |  |  |  | " + IntegrationRules.unsupported, "… elsewhere: why not");
+        assertEqual(rules.modeTexts(IntegrationRules.unknownCapability(), {}, "").reason, IntegrationRules.unknown, "… while the system is not known: so");
+        assertEqual(rules.modeTexts(_archIntegration.capability("pam.rules"), {}, "/x").where + " | " + rules.modeTexts(_archIntegration.capability("pam.rules"), {}, "").where,
+                    "/x/sudo and /x/polkit-1 | /etc/pam.d/sudo and /etc/pam.d/polkit-1", "… the folder read, else /etc/pam.d");
+        const given = rules.serviceFacts({ writes: true, bareModules: "libpam", texts: { systemRow: "r" } }, "sudo", null, null, [], undefined, false);
+        assertEqual(JSON.stringify([given.writes, given.bareModules, given.texts]), JSON.stringify([true, "libpam", { systemRow: "r" }]),
+                    "serviceFacts: the integration's writes, bare modules and words");
+        const plain = rules.serviceFacts({ writes: 1, bareModules: 2, texts: null }, "sudo", null, null, [], undefined, false);
+        assertEqual(JSON.stringify([plain.writes, plain.bareModules, plain.texts]), JSON.stringify([false, "", {}]), "… none given (or not of their kind): none");
+        assertEqual(JSON.stringify(rules.serviceFacts({ texts: "x" }, "sudo", null, null, [], undefined, false).texts), "{}", "… words that are no object: none");
 
         const files = rules.filesOf({ "/e/sudo": { text: "s" }, "/e/polkit-1": { absent: true }, "/v/polkit-1": { unreadable: true } }, ["/e", "/v"]);
         assertEqual(JSON.stringify([files.sudo, files.polkit, files.vendorPolkit]), JSON.stringify(["s", null, undefined]), "filesOf: a text, none there, not read");
-        assertEqual(rules.inForceOf(undefined, "sudo", "v", { system: "arch" }).known, false, "inForceOf: a file not read is not known");
-        assertEqual(rules.inForceOf(null, "polkit-1", undefined, { system: "arch" }).known, false, "… polkit's own file not read: not known");
-        assertEqual(rules.inForceOf(null, "polkit-1", _vendorPolkit, { system: "arch" }).rows.map(row => row.id).join(","), "system", "… no polkit-1 of ours: the fixed row");
-        assert(rules.inForceOf(_handSudo, "sudo", _vendorPolkit, { system: "arch" }).changed, "… a hand-made line: changed by hand");
-        assertEqual(rules.inForceOf(_handSudo, "sudo", undefined, { system: "nixos" }).changed, false, "… NixOS: never changed by hand");
+        assertEqual(rules.inForceOf(undefined, "sudo", "v", { writes: true }).known, false, "inForceOf: a file not read is not known");
+        assertEqual(rules.inForceOf(null, "polkit-1", undefined, { writes: true }).known, false, "… polkit's own file not read: not known");
+        assertEqual(rules.inForceOf(null, "polkit-1", _vendorPolkit, { writes: true }).rows.map(row => row.id).join(","), "system", "… no polkit-1 of ours: the fixed row");
+        assert(rules.inForceOf(_handSudo, "sudo", _vendorPolkit, { writes: true }).changed, "… a hand-made line: changed by hand");
+        assertEqual(rules.inForceOf(_handSudo, "sudo", undefined, { writes: false }).changed, false, "… where the shell writes no file: never changed by hand");
+        assertEqual(JSON.stringify(rules.inForceOf(_handSudo, "sudo", undefined, { writes: false })),
+                    JSON.stringify({ known: true, changed: false, reasons: [], rows: [PamRuleRules.fixedRow()], adopted: null, vendorChanged: false }),
+                    "… known: the fixed row alone, polkit's own file not changed");
 
         const fixed = PamRuleRules.fixedRow();
         const finger = { id: "r1", method: "fingerprint", control: "sufficient", details: { timeout: 10, tries: 3 } };
@@ -389,7 +417,7 @@ TestCase {
         assertEqual(on.ask + " " + on.editor.sudo.length + " " + on.editor.polkit.length, "false 2 2", "… on: both start as the shared list");
         assertEqual(rules.splitToggled({ split: true, sudo: [fixed], polkit: [fixed] }).ask, false, "… off with the same lists: no question");
 
-        const facts = service => ({ system: "arch", service, fingerprint: "ready", securityKey: "absent", faillockPresent: true,
+        const facts = service => ({ writes: true, service, fingerprint: "ready", securityKey: "absent", faillockPresent: true,
                                     otherService: [finger, fixed], vendorText: _vendorPolkit });
         const queue = rules.applyQueue({ "sudo": { rows: [finger, fixed], currentText: _sudo, facts: facts("sudo") },
                                          "polkit-1": { rows: [finger, fixed], currentText: null, facts: facts("polkit-1") } });
@@ -431,7 +459,7 @@ TestCase {
                     "password:true:false fingerprint:false:true securityKey:false:false", "unlockRows: the password always, a missing key off");
         assertEqual(unlock[2].hint, "No key registered", "… with its reason");
         const u2fRead = { rows: { known: true, alwaysok: true, nouserok: false, touchOff: false }, conf: null, lock: null };
-        const sudoFacts = rules.serviceFacts({ nixos: true, fingerprint: "ready", securityKey: "ready", u2f: u2fRead }, "sudo", null, null, [], undefined, false);
+        const sudoFacts = rules.serviceFacts({ writes: false, fingerprint: "ready", securityKey: "ready", u2f: u2fRead }, "sudo", null, null, [], undefined, false);
         assertEqual(sudoFacts.u2f, u2fRead, "serviceFacts: the system's pam_u2f settings handed to the checks");
         assert(PamRuleRules.codes(PamRuleRules.check([{ id: "r1", method: "securityKey", control: "sufficient", details: { pin: false, cue: true } }, PamRuleRules.fixedRow()], sudoFacts)).includes("W15"),
                "… so an own key row with the system's alwaysok is warned about");
@@ -484,7 +512,7 @@ TestCase {
                          + "printf '%s' \"$4\" > \"$1/usr/lib/pam.d/polkit-1\"", "sh", suite._scratch, suite._sudo, suite._systemAuth, suite._vendorPolkit], () => ready = true);
         });
         assert(_until(() => ready), "the scratch folders made");
-        _applier = _applierComponent.createObject(suite, { start: suite._start, paths: suite._paths });
+        _integration = _archIntegration;
         assert(_reread(), "the stacks read");
 
         _window.visible = true;
@@ -587,7 +615,7 @@ TestCase {
         assert(_until(() => _modalTitle() === "Saved in part", 15000), "polkit refused after sudo: saved in part");
         const partial = _all(host.modal, "modalLine").map(line => line.text);
         assert(partial.some(text => text === "Written: sudo. Not written: administrator prompts."), "… what was written and what not: " + partial.join(" | "));
-        assert(partial.some(text => text.startsWith("Undo puts back " + _paths.backups + "/sudo.")), "… what Undo puts back");
+        assert(partial.some(text => text.startsWith("Undo puts back " + PamApplyRules.livePaths.backups + "/sudo.")), "… what Undo puts back");
         assert(_modalClick("modalButton:0") && _until(() => !host.open), "OK");
         assert(_until(() => _visible(_item("undo")) && section.lastWrite.length === 1), "Undo offered for sudo");
         assert(_until(() => section.editor.split && _texts("warning").some(text => text === PamRuleRules.texts.W8)), "… the lists left different: said");
@@ -642,8 +670,9 @@ TestCase {
 
         // --- NixOS ---
         _nixos = true;
+        _integration = _nixosIntegration;
         assert(_reread(), "read as NixOS");
-        assert(_until(() => _visible(_item("nixosSnippet"))), "the module's options shown");
+        assert(_until(() => _visible(_item("optionsSnippet"))), "the module's options shown");
         assert(_until(() => Object.keys(section.replacing).length === 0 && !section.changed), "… the file taken in gone with its rows: nothing to replace there");
         assert(!_visible(_item("apply")), "… no Apply");
         const startsNixos = _trial.starts;
@@ -654,6 +683,20 @@ TestCase {
         assert(_click("copy") && _until(() => _copied.indexOf("programs.h2s-shell.pam") === 0), "Copy");
         assertEqual(_item("copy").label, "Copied", "… said");
         assert(_texts("pendingLine")[0].indexOf("nixos-rebuild") >= 0, "… in force after a rebuild");
+        assertEqual(_item("writtenTo").text, "the NixOS module", "… set through the module");
+
+        // --- a distribution the shell has no integration for ---
+        _nixos = false;
+        _integration = _genericIntegration;
+        assert(_reread(), "read on another distribution");
+        assert(_until(() => _visible(_item("unavailable"))), "why nothing is changed here shown");
+        assertEqual(_item("unavailable").text, IntegrationRules.unsupported, "… not supported");
+        assert(!_visible(_item("apply")) && !_visible(_item("optionsSnippet")) && !_visible(_item("splitSwitch")) && _item("list:shared") === null,
+               "… no Apply, nothing to copy, no lists");
+        assert(!_visible(_item("writtenTo")), "… nowhere the rules would go");
+        const startsGeneric = _trial.starts;
+        section.apply();
+        assertEqual(_trial.starts, startsGeneric, "… nor does apply() try anything");
 
         // --- the lock screen's switches ---
         const fingerprint = _item("unlock:fingerprint");

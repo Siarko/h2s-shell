@@ -91,7 +91,8 @@ Singleton {
         case "system":
             if (facts?.faillockPresent === true)
                 return [PamRuleRules.faillockSummary(facts.faillock)];
-            return facts?.system === "nixos" ? ["NixOS's rules"] : [];
+            // Whose rules the system's row stands for, where the integration names them
+            return typeof facts?.texts?.systemRow === "string" && facts.texts.systemRow !== "" ? [facts.texts.systemRow] : [];
         }
         return [];
     }
@@ -243,12 +244,23 @@ Singleton {
         return finger + " · " + key;
     }
 
-    // Where the rules go: { label, text }
-    function writtenTo(nixos, directory) {
-        if (nixos === true)
-            return { label: "Set through", text: "the NixOS module" };
-        const folder = String(directory ?? "") !== "" ? String(directory) : "/etc/pam.d";
-        return { label: "Written to", text: folder + "/sudo and " + folder + "/polkit-1" };
+    // What the page says by how this system makes the rules (`capability`, `texts`: the
+    // distribution integration's capability and details of "pam.rules"; `directory` the first
+    // PAM folder read): { label, where (where the rules go), pending (the line while the
+    // editor differs from what is in force), copyTitle, after (under the options to copy),
+    // reason (why nothing can be changed here; "" when it can) }
+    function modeTexts(capability, texts, directory) {
+        const words = texts ?? {};
+        const said = key => typeof words[key] === "string" ? words[key] : "";
+        const none = { label: "", where: "", pending: "", copyTitle: "", after: "", reason: "" };
+        if (capability?.mode === "apply") {
+            const folder = String(directory ?? "") !== "" ? String(directory) : "/etc/pam.d";
+            return Object.assign(none, { label: "Written to", where: folder + "/sudo and " + folder + "/polkit-1",
+                                         pending: "The rows below are not in force until Apply." });
+        }
+        if (capability?.mode === "copy" || capability?.mode === "declare")
+            return Object.assign(none, { label: "Set through", where: said("where"), pending: said("pending"), copyTitle: said("copyTitle"), after: said("after") });
+        return Object.assign(none, { reason: String(capability?.reason ?? "") !== "" ? String(capability.reason) : IntegrationRules.unknown });
     }
 
     // The texts a reading holds for the page (PamStacks' `files`, `directories`): sudo's file,
@@ -274,9 +286,11 @@ Singleton {
 
     // A service's file in force for the page: PamEditRules.state's answer, or not known when
     // the file (or polkit's own file) was not read — PamEditRules takes a missing text for
-    // "no file". On NixOS the shell writes no file: the fixed row alone, nothing changed by hand.
+    // "no file". Where the shell writes no file (`facts.writes` not true: the system's
+    // configuration makes them, or nothing is changed here): the fixed row alone, nothing
+    // changed by hand.
     function inForceOf(text, service, vendorText, facts) {
-        if (facts?.system === "nixos")
+        if (facts?.writes !== true)
             return { known: true, changed: false, reasons: [], rows: [PamRuleRules.fixedRow()], adopted: null, vendorChanged: false };
         if (text === undefined || (service === "polkit-1" && typeof vendorText !== "string"))
             return { known: false, changed: false, reasons: [], rows: null, adopted: null, vendorChanged: false };
@@ -284,11 +298,15 @@ Singleton {
     }
 
     // A service's facts for PamRuleRules.check and PamEditRules.build: the machine's (`base`:
-    // { nixos, moduleDirectories, fingerprint, securityKey, u2f }), its faillock (`faillock`: PamStacks' settings or
-    // null; present: the stack counts), the other service's rows, polkit's vendor text
+    // { moduleDirectories, fingerprint, securityKey, u2f, and from the distribution
+    // integration's "pam.rules": writes (it applies them), bareModules, texts }), its
+    // faillock (`faillock`: PamStacks' settings or null; present: the stack counts), the other
+    // service's rows, polkit's vendor text
     function serviceFacts(base, service, stack, faillock, otherRows, vendorText, changedByHand) {
         return {
-            system: base?.nixos === true ? "nixos" : "arch",
+            writes: base?.writes === true,
+            bareModules: typeof base?.bareModules === "string" ? base.bareModules : "",
+            texts: base?.texts !== null && typeof base?.texts === "object" ? base.texts : {},
             moduleDirectories: Array.isArray(base?.moduleDirectories) ? base.moduleDirectories : [],
             service,
             fingerprint: base?.fingerprint ?? "unknown",

@@ -3,8 +3,9 @@ import qs.singletons
 
 // IntegrationRules: an integration's table read as capabilities (a kind not defined, not
 // named or named wrongly is unavailable with a reason; only an applied kind is tried or
-// undone), what a valid answer is, the plan per mode, when apply and undo may start, and
-// what is in force from a file read
+// undone), what a valid answer is, the feature's details, the plan per mode (the sign-in
+// rules' files and options included), when apply and undo may start, and what is in force
+// from a file read
 TestCase {
     suiteName: "IntegrationRules"
 
@@ -14,7 +15,7 @@ TestCase {
         const show = answer => JSON.stringify(answer);
         const unavailable = reason => show({ mode: "unavailable", trial: false, undo: false, inForce: false, anyway: false, reason, known: true });
 
-        assertEqual(show(rules.kinds), show(["sleep.hibernateDelay", "network.connectivityUri"]), "the change kinds the shell defines");
+        assertEqual(show(rules.kinds), show(["sleep.hibernateDelay", "network.connectivityUri", "pam.rules"]), "the change kinds the shell defines");
         assertEqual(show(rules.modes), show(["apply", "declare", "copy", "unavailable"]), "the modes");
 
         // ── capability ──
@@ -67,8 +68,9 @@ TestCase {
         assertEqual(rules.textOf(kind, 600), HibernateRules.dropInText(600), "the drop-in's text");
         assertEqual(rules.textOf("no.kind", 600), "", "… none for another kind");
         const applied = { [kind]: { mode: "apply" } };
-        assertEqual(show(rules.plan(applied, kind, 600)), show({ preview: { files: [{ path: "/etc/systemd/sleep.conf.d/h2s-shell.conf", text: HibernateRules.dropInText(600) }] }, refusal: null }),
-                    "applied: the file and its text");
+        assertEqual(show(rules.plan(applied, kind, 600)), show({ preview: { files: [{ path: "/etc/systemd/sleep.conf.d/h2s-shell.conf", text: HibernateRules.dropInText(600) }],
+                                                                     backups: "/var/lib/h2s-shell/backup/" + kind }, refusal: null }),
+                    "applied: the file and its text, and where its backups go");
         const copied = { [kind]: { mode: "copy", option: HibernateRules.nixosOption, hint: "Set it there." } };
         assertEqual(show(rules.plan(copied, kind, 600)), show({ preview: { option: HibernateRules.nixosOption, snippet: HibernateRules.nixosOption + " = 600;",
                                                                            hint: "Set it there." }, refusal: null }),
@@ -151,7 +153,8 @@ TestCase {
         assertEqual(rules.textOf(uri, address), ConnectivityRules.text(address), "its file's text");
         assertEqual(rules.textOf(uri, ""), "", "… none for no address");
         const ownUri = "/etc/NetworkManager/conf.d/90-h2s-connectivity.conf";
-        assertEqual(show(rules.plan({ [uri]: { mode: "apply" } }, uri, address)), show({ preview: { files: [{ path: ownUri, text: ConnectivityRules.text(address) }] }, refusal: null }),
+        assertEqual(show(rules.plan({ [uri]: { mode: "apply" } }, uri, address)), show({ preview: { files: [{ path: ownUri, text: ConnectivityRules.text(address) }],
+                                                                                           backups: "/var/lib/h2s-shell/backup/" + uri }, refusal: null }),
                     "applied: the shell's conf.d file and its text");
         assertEqual(rules.plan({ [uri]: { mode: "copy", option: "o.p" } }, uri, address).preview.snippet, "o.p = \"" + address + "\";", "copied: the option set to the quoted address");
         assertEqual(rules.plan({ [uri]: { mode: "copy", option: "o.p" } }, uri, "").preview.snippet, "", "… nothing to copy for no address");
@@ -180,5 +183,50 @@ TestCase {
                "… a valid answer");
         for (const answer of [rules.inForceOf(uri, nm([later, ["[connectivity]", "uri="]]), null), rules.inForceOf(uri, nm([lib, ["[connectivity]", "uri=http://a/"]]), null)])
             assert(rules.validInForce(answer), "a valid answer: " + show(answer));
+
+        // ── details ──
+        const pam = "pam.rules";
+        assertEqual(show(rules.details({ [pam]: { mode: "copy", texts: { where: "w", count: 3 }, facts: { bareModules: "libpam" } } }, pam)),
+                    show({ texts: { where: "w" }, facts: { bareModules: "libpam" } }), "details: the entry's words (strings only) and facts");
+        assertEqual(show(rules.details({ [pam]: { mode: "apply" } }, pam)), show({ texts: {}, facts: {} }), "… none named: none");
+        assertEqual(show(rules.details({ [pam]: { mode: "unavailable", texts: { where: "w" }, facts: { a: 1 } } }, pam)), show({ texts: {}, facts: {} }),
+                    "… unavailable: none");
+        assertEqual(show(rules.details({ [pam]: { mode: "copy", texts: ["w"], facts: [1] } }, pam)), show({ texts: {}, facts: {} }), "… lists are neither");
+        const entry = { mode: "copy", option: "programs.h2s-shell.pam", facts: { bareModules: "libpam" } };
+        const detailsFacts = rules.details({ [pam]: entry }, pam).facts;
+        detailsFacts.bareModules = "x";
+        assertEqual(entry.facts.bareModules, "libpam", "… a copy: the table is not changed through it");
+
+        // ── the sign-in rules' plan ──
+        const fixed = PamRuleRules.fixedRow();
+        const ldap = { id: "r1", method: "raw", control: "", details: { text: "auth sufficient pam_ldap.so" } };
+        const vendor = "#%PAM-1.0\n\nauth       include      system-auth\naccount    include      system-auth\n";
+        const sudoText = "#%PAM-1.0\nauth\t\tinclude\t\tsystem-auth\naccount\t\tinclude\t\tsystem-auth\n";
+        const pamFacts = (service, more) => Object.assign({ service, writes: true, fingerprint: "absent", securityKey: "absent", moduleDirectories: ["/usr/lib/security/"],
+                                                             otherService: [fixed], vendorText: vendor }, more ?? {});
+        const value = (rows, more) => ({ split: false, "sudo": { rows, facts: pamFacts("sudo", more), currentText: sudoText },
+                                         "polkit-1": { rows, facts: pamFacts("polkit-1", more), currentText: null } });
+        assert(rules.validValue(pam, value([fixed])), "validValue: the editor's lists");
+        for (const bad of [null, "x", { split: 1, "sudo": {}, "polkit-1": {} }, Object.assign(value([fixed]), { "polkit-1": { rows: "r", facts: {} } }),
+                           Object.assign(value([fixed]), { "sudo": { rows: [], facts: null } })])
+            assert(!rules.validValue(pam, bad), "… not: " + show(bad));
+        const pamApplied = rules.plan({ [pam]: { mode: "apply", trial: true, undo: true } }, pam, value([fixed]));
+        assertEqual(pamApplied.preview.files.map(file => file.path).join(" ") + " | " + pamApplied.preview.backups,
+                    "/etc/pam.d/sudo /etc/pam.d/polkit-1 | /var/lib/h2s-shell/pam-backup", "plan, applied: both services' files, the PAM backups");
+        assertEqual(pamApplied.preview.files[0].text, PamEditRules.build(sudoText, [fixed], pamFacts("sudo")).text, "… sudo's file as PamEditRules builds it");
+        assertEqual(pamApplied.preview.files[1].text, "", "… no polkit-1 of the shell's: polkit's own file in force (removed)");
+        assertEqual(rules.plan({ [pam]: { mode: "apply" } }, pam, value([ldap, fixed], { bareModules: "libpam" })).preview.files.map(file => file.text).join(","),
+                    ",", "… rows a check refuses: no files (null)");
+        assertEqual(rules.plan({ [kind]: { mode: "apply" } }, kind, 600).preview.backups, "/var/lib/h2s-shell/backup/" + kind, "… an EtcFiles kind: its backups' folder");
+        const pamCopied = rules.plan({ [pam]: entry }, pam, value([fixed], { bareModules: "libpam" }));
+        assertEqual(pamCopied.preview.snippet, PamEditRules.optionsSnippet("programs.h2s-shell.pam", [fixed], false, pamFacts("sudo", { bareModules: "libpam" })).text,
+                    "plan, copied: the module's options under the integration's option");
+        assert(pamCopied.preview.snippet.startsWith("programs.h2s-shell.pam = {\n  rules = ["), "… one list for both");
+        const splitValue = Object.assign(value([fixed], { bareModules: "libpam" }), { split: true });
+        splitValue["polkit-1"] = { rows: [ldap, fixed], facts: pamFacts("polkit-1", { bareModules: "libpam" }), currentText: null };
+        assertEqual(rules.plan({ [pam]: entry }, pam, splitValue).preview.snippet, "", "… a list a check refuses (a bare module libpam would not find): nothing to copy");
+        splitValue["polkit-1"].rows = [fixed];
+        assert(rules.plan({ [pam]: entry }, pam, splitValue).preview.snippet.includes("polkit.rules = ["), "… split: one list per service");
+        assertEqual(rules.plan({ [pam]: entry }, pam, "x").refusal.code, "value", "… not the editor's lists: refused");
     }
 }

@@ -53,6 +53,14 @@ Singleton {
         return integration?.capability(kind) ?? IntegrationRules.unknownCapability();
     }
 
+    // The feature's words and facts on this system (IntegrationRules.details)
+    function details(kind) {
+        return integration?.details(kind) ?? { texts: {}, facts: {} };
+    }
+
+    // A change of the system's integration runs
+    readonly property bool busy: integration?.busy === true
+
     function plan(kind, value) {
         return integration?.plan(kind, value) ?? { preview: null, refusal: IntegrationRules.refusal("unknown") };
     }

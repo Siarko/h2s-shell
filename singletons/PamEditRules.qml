@@ -12,8 +12,9 @@ import QtQuick
 // Here: how each row is written (`-auth` for a sufficient reader or key, the counted
 // pattern, the closing lines), reading the block back into rows, taking in a hand-made file
 // (`adopt`: lines the editor writes become rows, everything else a raw row in its place,
-// non-auth lines kept), noticing a file changed by hand, and the NixOS module options for
-// the same rows. Pure: texts are handed in, nothing is read or written. No text is made for
+// non-auth lines kept), noticing a file changed by hand, and the shell's module options for
+// the same rows where the system's configuration sets them (the distribution integration's
+// "copy" preview of "pam.rules"). Pure: texts are handed in, nothing is read or written. No text is made for
 // rows PamRuleRules.check refuses.
 Singleton {
     id: root
@@ -679,13 +680,13 @@ Singleton {
         return { ok: true, text, remove: false, refusals: [], warnings: checked.warnings };
     }
 
-    // ── NixOS ──
+    // ── Module options (a system whose configuration writes the PAM files) ──
 
     function _nixString(value) {
         return "\"" + String(value).replace(/\\/g, "\\\\").replace(/"/g, "\\\"").replace(/\$\{/g, "\\${") + "\"";
     }
 
-    readonly property string nixosRawText: "The module's options take a plain auth line with one of the four words."
+    readonly property string optionsRawText: "The module's options take a plain auth line with one of the four words."
 
     // One row as the module's attribute set: { text } or { refusal }
     function _nixRow(row) {
@@ -710,7 +711,7 @@ Singleton {
             const original = _words(text);
             if (line.error !== undefined || line.module === undefined || line.optional || line.controlKind !== "simple"
                     || original.slice(3).some(word => word.startsWith("[")))
-                return { refusal: nixosRawText };
+                return { refusal: optionsRawText };
             fields.push("method = \"raw\";", "control = " + _nixString(line.control) + ";", "module = " + _nixString(line.module) + ";",
                         "args = [" + line.args.map(argument => " " + _nixString(argument)).join("") + " ];");
         } else {
@@ -719,11 +720,13 @@ Singleton {
         return { text: "{ " + fields.join(" ") + " }" };
     }
 
-    // The shell's module options for the rows: `rows` one list (sudo and polkit), or
-    // with `split` { sudo, polkit } (or "polkit-1") one per service. `facts` as for check
-    // (system "nixos" assumed), the other service's rows filled in. → { ok, text,
-    // refusals, warnings }, each item with its `service`; no text while one is refused.
-    function nixosSnippet(rows, split, facts) {
+    // The shell's module options for the rows, under `option` (the integration's name for
+    // them): `rows` one list (sudo and polkit), or with `split` { sudo, polkit } (or
+    // "polkit-1") one per service. `facts` as for check (the system's: its module
+    // directories, which modules libpam finds by bare name), the other service's rows filled
+    // in. → { ok, text, refusals, warnings }, each item with its `service`; no text while one
+    // is refused.
+    function optionsSnippet(option, rows, split, facts) {
         const lists = split === true
             ? { "sudo": rows?.sudo, "polkit-1": rows?.["polkit-1"] ?? rows?.polkit }
             : { "sudo": rows, "polkit-1": rows };
@@ -732,7 +735,7 @@ Singleton {
         const blocks = [];
         for (const service of services) {
             const list = Array.isArray(lists[service]) ? lists[service] : [];
-            const known = Object.assign({ system: "nixos" }, facts ?? {}, { service, otherService: lists[PamRuleRules.otherService(service)] });
+            const known = Object.assign({}, facts ?? {}, { service, otherService: lists[PamRuleRules.otherService(service)] });
             const checked = PamRuleRules.check(list, known);
             refusals.push(...checked.refusals.map(item => Object.assign({ service }, item)));
             warnings.push(...checked.warnings.map(item => Object.assign({ service }, item)));
@@ -749,6 +752,6 @@ Singleton {
         }
         if (refusals.length > 0)
             return { ok: false, text: null, refusals, warnings };
-        return { ok: true, text: "programs.h2s-shell.pam = {\n" + blocks.join("\n") + "\n};\n", refusals, warnings };
+        return { ok: true, text: String(option) + " = {\n" + blocks.join("\n") + "\n};\n", refusals, warnings };
     }
 }

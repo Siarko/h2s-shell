@@ -170,7 +170,13 @@ kept as a backup in `/var/lib/h2s-shell/backup/<kind>/` that Undo puts back — 
 a file of root's with mode 0644, not the replaced file's owner and mode — and a file that is
 not exactly what the shell writes (another's, or the shell's edited by hand) replaced only
 when the request says the user was told. Its `run` is also how the PAM editor and
-the remembered authorization queue their own root steps. A feature reaches a kind through
+the remembered authorization queue their own root steps. A kind changed in steps has its own
+writer in the integration's `writers` in place of `EtcFiles`' files: the sign-in rules
+(`pam.rules`) on Arch are tried first and written one service per run by
+`distributions/arch/PamApply.qml`, `apply` handing it one service's step and `undo` the
+outcome of the write it puts back. `details(kind)` gives a feature the integration's words
+and facts for a kind (NixOS's for `pam.rules`: where the rules are set, when they take
+effect, that its libpam finds only its own modules by bare name). A feature reaches a kind through
 `singletons/io/IntegrationChange.qml` (the capability, what is in force, the user's Apply and
 Undo, one at a time) and decides what to offer in its own Rules: the hibernation delay's
 `HibernateRules.delayOffer`, the connectivity check's address's `ConnectivityRules.offer`. A
@@ -179,6 +185,9 @@ configuration makes `/etc`, when the user asks (warned, without Undo). After the
 check's file changes, the root step has NetworkManager read its configuration again (its
 `nmcli` at a fixed place); when that fails, its `warning:` lines reach the outcome
 (`EtcFilesRules.reply`'s `warnings`) and the user is told.
+`plan` previews the change: the files and where their backups go for `apply` (the sign-in
+rules' two files as `PamEditRules.build` makes them), the option's text for `copy` (the
+sign-in rules' module options, `PamEditRules.optionsSnippet`).
 `tests/DistributionContractTest.qml` holds every integration to the same answers.
 
 #### NixOS
@@ -848,18 +857,21 @@ the lock screen's:
   `scripts/pam-files.sh`) reads the stacks, pam_faillock's settings, the files' texts and
   what the computer has; `PamStackRules` decides, pure.
 - **Rules** — pure, each with its suite: `PamRuleRules` (the rows, control words, details
-  and every check), `PamEditRules` (rows to a file and back, a file changed by hand, the NixOS
-  options), `PamTrialRules` (what a trial stages and its lifetime), `PamApplyRules` (the root
+  and every check), `PamEditRules` (rows to a file and back, a file changed by hand, the module
+  options to copy), `PamTrialRules` (what a trial stages and its lifetime), `PamApplyRules` (the root
   step's words and its reply; the step itself is `scripts/root/pam-apply.sh`), `PamRuleViewRules` (what the list and the page show and
   allow: steps, chips, drops, the queue of writes, the modals' texts).
 - **I/O** — `singletons/io/PamTrial.qml` runs one PAM conversation as the user on a staged
-  copy of the candidate; `singletons/io/PamApply.qml` writes one service per run through
-  `PrivilegedRuns.startShell` (Arch only).
+  copy of the candidate; `distributions/arch/PamApply.qml`, the Arch integration's writer of
+  `pam.rules`, writes one service per run through `PrivilegedRuns.startShell`.
 - **Views** — `panels/settings/PamRuleList.qml` (one list of rows: it takes rows and emits
   the new list) and `panels/settings/PamRulesSection.qml` (the summary, the lists, Apply as a
-  trial then the writes, Undo, Replace, the NixOS options, the lock screen's switches). The
-  section takes its stacks, trial and applier as properties: `tests/PamRulesPageTest.qml`
-  hands it stand-ins and runs the real root step as the user on scratch folders.
+  trial then the writes, Undo, Replace, the options to copy, the lock screen's switches), by
+  the distribution integration's capability of `pam.rules`: Apply where it is `apply`, the
+  plan's options where it is `copy`, the reason and no lists where it is `unavailable`. The
+  section takes its stacks, trial and integration as properties: `tests/PamRulesPageTest.qml`
+  hands it stand-ins and the shipped integrations, Arch's running the real root step as the
+  user on scratch folders.
 
 Apply runs a trial of the first service's candidate, and a write per service whose file
 changes; a trial stands for the other service when its auth lines are the same

@@ -22,7 +22,7 @@ TestCase {
         const archSudo = "#%PAM-1.0\nauth\t\tinclude\t\tsystem-auth\naccount\t\tinclude\t\tsystem-auth\nsession\t\tinclude\t\tsystem-auth\n";
         const vendorPolkit = "#%PAM-1.0\n\nauth       include      system-auth\naccount    include      system-auth\n"
             + "password   include      system-auth\nsession    include      system-auth\n";
-        const facts = service => ({ system: "arch", service, fingerprint: "ready", securityKey: "ready", faillockPresent: true,
+        const facts = service => ({ service, fingerprint: "ready", securityKey: "ready", faillockPresent: true,
                                     faillock: { deny: 3, failInterval: 900, unlockTime: 600 },
                                     otherService: [password("o1"), fixed], vendorText: vendorPolkit });
         const answers = { "/etc/pam.d/system-auth": { text: systemAuth } };

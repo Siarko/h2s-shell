@@ -93,6 +93,9 @@ The interface modules are written against (`qs.api`), versioned on its own
   with the field emptied says "Default" (it removes the shell's file).
 - Settings → When away → Hibernate: a delay of yours that the shell's drop-in overrides is
   shown ("Set in <file>: <time>; the shell's file overrides it").
+- Settings → System → Authentication, sign-in rules: on a distribution the shell does not
+  know, the rules are not edited there (no Apply, no lists): "Not supported on this
+  distribution." Arch and NixOS are as before.
 - The machine's u2f settings are no longer changed: a security key row of
   `programs.h2s-shell.pam` keeps `nouserok`, `alwaysok`, `userpresence`, `interactive` and
   `pinverification` from `security.pam.u2f.settings` instead of stripping them or stopping

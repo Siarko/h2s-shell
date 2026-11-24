@@ -5,7 +5,7 @@ import qs.singletons
 // The NixOS module's PAM options (nix/pam.nix) against the editor's rules, from their text:
 // the methods, control words, detail ranges and libpam's own modules agree with
 // PamRuleRules'. And the case set tests/system/nixos/pam.sh evaluates on NixOS
-// (tests/fixtures/pam-nixos/cases.json): each case's options are PamEditRules.nixosSnippet's
+// (tests/fixtures/pam-nixos/cases.json): each case's options are PamEditRules.optionsSnippet's
 // for its rows, and its lines are PamEditRules' lines for the same rows — written as NixOS
 // writes them (no `-auth`: the module comes from its package; a module by its file name) —
 // so the module's lines there are compared with the editor's. And the comment nix/module.nix
@@ -50,7 +50,7 @@ TestCase {
 
     function _facts(machine, service) {
         return {
-            system: "nixos", service,
+            bareModules: "libpam", moduleDirectories: ["/run/current-system/sw/lib/security/"], service,
             fingerprint: machine?.fprintd === true ? "ready" : "absent",
             securityKey: machine?.u2f === true ? "ready" : "absent",
             faillockPresent: machine?.logFailures === true
@@ -113,7 +113,7 @@ TestCase {
         for (const testCase of cases) {
             const split = testCase.split === true;
             const lists = split ? { "sudo": testCase.rows.sudo, "polkit-1": testCase.rows.polkit } : { "sudo": testCase.rows, "polkit-1": testCase.rows };
-            const snippet = PamEditRules.nixosSnippet(testCase.rows, split, _facts(testCase.machine, "sudo"));
+            const snippet = PamEditRules.optionsSnippet("programs.h2s-shell.pam", testCase.rows, split, _facts(testCase.machine, "sudo"));
             assert(snippet.ok, testCase.name + ": the editor makes options for it: " + JSON.stringify(snippet.refusals));
             assertEqual(snippet.text, testCase.snippet, testCase.name + ": its options are the editor's");
             for (const service of ["sudo", "polkit-1"]) {

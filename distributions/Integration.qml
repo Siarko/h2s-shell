@@ -8,9 +8,12 @@ import qs.singletons.io
 // is one of these with its table; Distribution forwards to the one the system is.
 //
 // `table` names each change kind it offers ({ <kind>: { mode, trial, undo, inForce, anyway,
-// reason, option, hint } }); a kind it does not name is unavailable. A kind it applies, or
-// writes anyway when the user asks, is written by `files` (EtcFiles; null where nothing is
-// written). Every function answers: apply and undo
+// reason, option, hint, texts, facts } }); a kind it does not name is unavailable. A kind it
+// applies, or writes anyway when the user asks, is written by `files` (EtcFiles; null where
+// nothing is written), or by its own writer in `writers` ({ <kind>: an object with apply(value,
+// handlers), undo(handlers) and busy }: a change made in steps, such as the PAM rules after
+// their trial; the value is one step, which the writer's own rules check). Every function
+// answers: apply and undo
 // at once with { started, refusal } and, when started, `handlers.done` once later;
 // readInForce always later, once.
 QtObject {
@@ -20,12 +23,19 @@ QtObject {
     property string distribution: ""
     property var table: ({})
     property EtcFiles files: null
+    property var writers: ({})
+    // A change of this integration's runs (EtcFiles' or a writer's)
+    readonly property bool busy: files?.busy === true || Object.keys(writers).some(kind => writers[kind]?.busy === true)
     // Per kind, the command readInForce runs in place of IntegrationRules.inForceCommand's (a
     // suite's stand-in)
     property var inForceCommands: ({})
 
     function capability(kind) {
         return IntegrationRules.capability(table, kind);
+    }
+
+    function details(kind) {
+        return IntegrationRules.details(table, kind);
     }
 
     function plan(kind, value) {
@@ -41,6 +51,8 @@ QtObject {
         const refusal = IntegrationRules.applyRefusal(capability(kind), handlers?.anyway === true);
         if (refusal !== null)
             return { started: false, refusal };
+        if (_writerOf(kind) !== null)
+            return _writerOf(kind).apply(value, handlers);
         const planned = plan(kind, value);
         if (planned.refusal !== null)
             return { started: false, refusal: planned.refusal };
@@ -50,11 +62,17 @@ QtObject {
         return text === "" ? files.remove(kind, handlers) : files.write(kind, text, handlers);
     }
 
-    // `handlers` { from (the outcome of the change undone; left out: the last one), done }
+    // `handlers` { from (the outcome of the change undone; left out: the last one — a
+    // writer's kind needs it), done }
     function undo(kind, handlers) {
         const refusal = IntegrationRules.undoRefusal(capability(kind));
         if (refusal !== null)
             return { started: false, refusal };
+        if (_writerOf(kind) !== null) {
+            if (handlers?.from === null || typeof handlers?.from !== "object")
+                return { started: false, refusal: IntegrationRules.refusal("noUndo") };
+            return _writerOf(kind).undo(handlers);
+        }
         if (files === null)
             return { started: false, refusal: IntegrationRules.refusal("mode") };
         return files.undo(kind, handlers);
@@ -92,6 +110,10 @@ QtObject {
                 answer();
             });
         }
+    }
+
+    function _writerOf(kind) {
+        return Object.prototype.hasOwnProperty.call(writers, kind) && writers[kind] ? writers[kind] : null;
     }
 
     property CommandRunner _runner: CommandRunner {}

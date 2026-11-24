@@ -9,20 +9,23 @@ import qs.singletons.io
 // who you are, and under it the lock screen's ways to unlock. At the top what is in force, as
 // steps (PamStacks' stacks), what the computer has and where the rules go; the switch for
 // separate rules per service; a PamRuleList per list with its checks (PamRuleRules.check);
-// "Show file" (PamEditRules.build's text). On Arch: Apply (a trial of the new rules as the
-// user, PamTrial, then one write as administrator per service, PamApply), Reset, Undo; a file
-// changed outside the shell is shown read-only with "Read again" and "Replace…". On NixOS:
-// the module's options to paste (PamEditRules.nixosSnippet). Decisions are PamRuleViewRules';
-// nothing here reads a file itself, and nothing asks for a password without a click.
+// What can be done with them is the distribution integration's capability of "pam.rules":
+// where the shell applies them (Arch), Apply (a trial of the new rules as the user, PamTrial,
+// then one write as administrator per service through the integration), Reset, Undo, "Show
+// file" (the plan's files); a file changed outside the shell is shown read-only with "Read
+// again" and "Replace…". Where the system's configuration sets them (NixOS): the plan's
+// options to paste. Elsewhere, or while the system is not known: the reason, nothing to edit.
+// Decisions are PamRuleViewRules'; nothing here reads a file itself, and nothing asks for a
+// password without a click.
 ColumnLayout {
     id: root
 
     // The I/O, handed in by a suite as stand-ins: PamStacks (reading, facts, sudo, polkit,
-    // faillock, directories, files, refresh), a trial (start, respond, cancel, state) and an
-    // applier (apply, undo, busy, paths, finished)
+    // faillock, directories, files, refresh), a trial (start, respond, cancel, state) and the
+    // distribution's integration (capability, details, plan, apply, undo, busy)
     property var stacks: PamStacks
     property var trial: _ownTrial
-    property var applier: _ownApplier
+    property var integration: Distribution
     // Where questions are asked (SettingsModalHost)
     property var modalHost: null
     // The lock screen's settings, read and written
@@ -39,20 +42,23 @@ ColumnLayout {
         id: _ownTrial
         onLogLine: (level, message) => level === "warning" ? console.warn("[PamRules] " + message) : console.log("[PamRules] " + message)
     }
-    PamApply {
-        id: _ownApplier
-    }
-
-    readonly property var _base: stacks?.facts ?? ({})
-    readonly property bool nixos: _base.nixos === true
+    // How this system makes the rules, and the integration's words and facts for them
+    readonly property var capability: integration?.capability("pam.rules") ?? IntegrationRules.unknownCapability()
+    readonly property string mode: capability.mode
+    readonly property var _details: integration?.details("pam.rules") ?? ({ texts: {}, facts: {} })
+    readonly property var _modeTexts: PamRuleViewRules.modeTexts(capability, _details.texts, stacks?.directories?.[0])
+    readonly property var _base: Object.assign({}, stacks?.facts ?? {}, {
+        writes: mode === "apply",
+        bareModules: typeof _details.facts?.bareModules === "string" ? _details.facts.bareModules : "",
+        texts: _details.texts
+    })
     readonly property var _files: PamRuleViewRules.filesOf(stacks?.files, stacks?.directories)
-    readonly property var _machine: ({ system: nixos ? "nixos" : "arch", moduleDirectories: _base.moduleDirectories ?? [],
-                                       fingerprint: _base.fingerprint, securityKey: _base.securityKey })
+    readonly property var _machine: ({ writes: _base.writes, bareModules: _base.bareModules, texts: _base.texts,
+                                       moduleDirectories: _base.moduleDirectories ?? [], fingerprint: _base.fingerprint, securityKey: _base.securityKey })
     readonly property var _inForce: ({
         "sudo": PamRuleViewRules.inForceOf(_files.sudo, "sudo", _files.vendorPolkit, _machine),
         "polkit-1": PamRuleViewRules.inForceOf(_files.polkit, "polkit-1", _files.vendorPolkit, _machine)
     })
-    readonly property string _backups: applier?.paths?.backups ?? PamApplyRules.livePaths.backups
 
     // The editor's lists ({ split, shared, sudo, polkit }), null before the first reading;
     // set from what is in force at the first reading, on Reset and after a write
@@ -64,11 +70,33 @@ ColumnLayout {
     readonly property var _lists: editor ? PamRuleRules.listsFor(editor) : ({ "sudo": [], "polkit-1": [] })
     readonly property bool changed: editor !== null
         && (PamRuleViewRules.pending(editor, _inForce["sudo"].rows, _inForce["polkit-1"].rows) || Object.keys(replacing).length > 0)
+    // The user changed the editor since it was last set from what is in force
+    property bool _edited: false
 
     function _reset() {
         replacing = ({});
         editor = PamRuleViewRules.editorFrom(_inForce["sudo"].rows, _inForce["polkit-1"].rows);
         copied = false;
+        _edited = false;
+    }
+
+    // The system's way changed (known at last): an editor the user has not touched follows
+    // what is in force as this way reads it
+    onModeChanged: if (editor !== null && !_edited) _reset()
+
+    // What the change would be (the integration's plan): the files to write where the shell
+    // applies the rules, the options to copy where the system's configuration sets them
+    readonly property var _plan: editor === null || mode === "unavailable" ? null : integration?.plan("pam.rules", {
+        split: editor.split === true,
+        "sudo": { rows: _lists["sudo"], facts: factsFor("sudo"), currentText: _files.sudo },
+        "polkit-1": { rows: _lists["polkit-1"], facts: factsFor("polkit-1"), currentText: _files.polkit }
+    }) ?? null
+    readonly property var _preview: _plan?.preview ?? null
+    readonly property string _backups: typeof _preview?.backups === "string" ? _preview.backups : ""
+    // A service's file as the plan would write it: its text, "" removed, null none
+    function _plannedText(service) {
+        const file = (_preview?.files ?? []).find(item => String(item?.path ?? "").endsWith("/" + service));
+        return file === undefined ? null : file.text;
     }
 
     // A reading came: the editor follows what is in force unless it holds changes
@@ -141,6 +169,7 @@ ColumnLayout {
             next.polkit = rows;
         editor = next;
         copied = false;
+        _edited = true;
     }
     // A list is read-only while a file it writes was changed by hand and not taken in
     function _handOf(key) {
@@ -161,11 +190,14 @@ ColumnLayout {
         const toggled = PamRuleViewRules.splitToggled(editor);
         if (!toggled.ask) {
             editor = toggled.editor;
+            _edited = true;
             return;
         }
         _ask(PamRuleViewRules.joinSpec, answer => {
-            if (!answer.cancelled && answer.button === "join")
+            if (!answer.cancelled && answer.button === "join") {
                 root.editor = PamRuleViewRules.splitToggled(root.editor).editor;
+                root._edited = true;
+            }
         });
     }
 
@@ -203,6 +235,7 @@ ColumnLayout {
                 next.polkit = adoptedRows;
             }
             root.editor = next;
+            root._edited = true;
         });
     }
 
@@ -215,7 +248,7 @@ ColumnLayout {
     function _idleFlow() {
         return { phase: "", items: [], index: 0, question: 0, trialId: -1, passed: null, outcomes: [], shared: false };
     }
-    readonly property bool _busy: _flow.phase !== "" || (applier?.busy === true)
+    readonly property bool _busy: _flow.phase !== "" || (integration?.busy === true)
     // What the last Apply wrote and Undo has not put back: its outcomes
     property var lastWrite: []
     property string status: ""
@@ -228,7 +261,7 @@ ColumnLayout {
     // A page closed while a write runs drops its outcome: the run goes on as administrator,
     // and the page reads what is in force again when it shows next (PageShown).
     function apply() {
-        if (_busy || !editor || nixos)
+        if (_busy || !editor || mode !== "apply")
             return;
         notice = "";
         const inputs = {};
@@ -298,18 +331,11 @@ ColumnLayout {
     function _write(item) {
         _flow = Object.assign({}, _flow, { phase: "writing" });
         status = "Saving " + PamRuleViewRules.progress(_flow.index, _flow.items.length, item.service) + "…";
-        const started = applier.apply({ service: item.service, built: item.built, currentText: item.currentText,
-                                        vendorText: item.vendorText, trial: _flow.passed });
+        const started = integration.apply("pam.rules", { service: item.service, built: item.built, currentText: item.currentText,
+                                                         vendorText: item.vendorText, trial: _flow.passed },
+                                          { done: outcome => root._written(outcome) });
         if (!started.started)
             _stop(started.refusal?.text ?? "", item.service, "", true);
-    }
-
-    Connections {
-        target: root.applier
-        ignoreUnknownSignals: true
-        function onFinished(outcome) {
-            root._written(outcome);
-        }
     }
 
     function _written(outcome) {
@@ -391,7 +417,7 @@ ColumnLayout {
             return;
         }
         status = "Undoing " + PamRuleViewRules.progress(_flow.index, _flow.items.length, outcome.service) + "…";
-        const started = applier.undo({ service: outcome.service, backup: outcome.backup, currentSha256: outcome.sha256 });
+        const started = integration.undo("pam.rules", { from: outcome, done: answer => root._written(answer) });
         if (!started.started)
             _undoStopped(started.refusal?.text ?? "");
     }
@@ -664,7 +690,7 @@ ColumnLayout {
                     visible: root.changed
                     Layout.fillWidth: true
                     color: Theme.warning
-                    text: root.nixos ? "The rows below take effect after nixos-rebuild switch." : "The rows below are not in force until Apply."
+                    text: root._modeTexts.pending
                 }
             }
             Caption { text: "This computer has"; Layout.alignment: Qt.AlignTop | Qt.AlignLeft; wrapMode: Text.NoWrap }
@@ -678,13 +704,16 @@ ColumnLayout {
                 color: Theme.textSecondary
             }
             Caption {
-                text: PamRuleViewRules.writtenTo(root.nixos, root.stacks?.directories?.[0]).label
+                visible: root._modeTexts.label !== ""
+                text: root._modeTexts.label
                 Layout.alignment: Qt.AlignTop | Qt.AlignLeft
                 wrapMode: Text.NoWrap
             }
             Caption {
+                objectName: "writtenTo"
+                visible: root._modeTexts.label !== ""
                 Layout.fillWidth: true
-                text: PamRuleViewRules.writtenTo(root.nixos, root.stacks?.directories?.[0]).text
+                text: root._modeTexts.where
             }
         }
     }
@@ -692,7 +721,7 @@ ColumnLayout {
     SwitchRow {
         objectName: "splitSwitch"
         Layout.topMargin: 6
-        visible: root.editor !== null
+        visible: root.editor !== null && root.mode !== "unavailable"
         label: "Separate rules for administrator prompts"
         hint: "Off: one list for sudo and administrator prompts."
         checked: root.editor?.split === true
@@ -737,7 +766,7 @@ ColumnLayout {
                         label: "Replace…"
                         kind: "warning"
                         fontSize: Theme.fontSizeSmall
-                        available: root.nixos === false && _hand.state.adopted !== null
+                        available: root.mode === "apply" && _hand.state.adopted !== null
                         onClicked: root.askReplace(_hand.modelData)
                     }
                 }
@@ -759,7 +788,7 @@ ColumnLayout {
 
     // The lists, each with its checks
     Repeater {
-        model: ScriptModel { values: root.editor !== null ? root._listKeys : [] }
+        model: ScriptModel { values: root.editor !== null && root.mode !== "unavailable" ? root._listKeys : [] }
         ColumnLayout {
             id: _listBlock
             required property string modelData
@@ -798,9 +827,18 @@ ColumnLayout {
         }
     }
 
-    // Arch: Apply, Reset, Undo, the file
+    // Nothing to change here: why
+    Caption {
+        objectName: "unavailable"
+        visible: root.mode === "unavailable"
+        Layout.fillWidth: true
+        Layout.topMargin: 8
+        text: root._modeTexts.reason
+    }
+
+    // Where the shell applies the rules: Apply, Reset, Undo, the file
     RowLayout {
-        visible: !root.nixos && root.editor !== null
+        visible: root.mode === "apply" && root.editor !== null
         Layout.fillWidth: true
         Layout.topMargin: 8
         spacing: 6
@@ -838,7 +876,7 @@ ColumnLayout {
     }
     Caption {
         objectName: "status"
-        visible: !root.nixos && root.editor !== null
+        visible: root.mode === "apply" && root.editor !== null
         Layout.fillWidth: true
         color: root.status === "" && root.notice !== "" ? Theme.warning : Theme.textMuted
         text: root.status !== "" ? root.status
@@ -849,29 +887,25 @@ ColumnLayout {
 
     // The generated files, read-only
     Repeater {
-        model: ScriptModel { values: root.showFile && !root.nixos && root.editor !== null ? (root.editor.split ? ["sudo", "polkit-1"] : ["sudo"]) : [] }
+        model: ScriptModel { values: root.showFile && root.mode === "apply" && root.editor !== null ? (root.editor.split ? ["sudo", "polkit-1"] : ["sudo"]) : [] }
         FileBox {
             required property string modelData
-            readonly property var built: PamEditRules.build(modelData === "sudo" ? root._files.sudo : root._files.polkit,
-                                                            root._lists[modelData], root.factsFor(modelData))
+            readonly property var planned: root._plannedText(modelData)
             objectName: "preview:" + modelData
             Layout.topMargin: 4
             title: (root.stacks?.directories?.[0] ?? "/etc/pam.d") + "/" + modelData + " — generated, read-only"
                    + (modelData === "sudo" && !root.editor.split ? " (administrator prompts: the same lines)" : "")
-            lines: built.ok && built.text !== null ? PamRuleViewRules.previewLines(built.text)
-                 : built.ok && built.remove ? [{ text: "polkit's own file, as it comes", kind: "system" }]
+            lines: typeof planned === "string" && planned !== "" ? PamRuleViewRules.previewLines(planned)
+                 : planned === "" ? [{ text: "polkit's own file, as it comes", kind: "system" }]
                  : [{ text: "No file while a check refuses the rows.", kind: "marker" }]
         }
     }
 
-    // NixOS: the module's options to paste
+    // Where the system's configuration sets the rules: the options to paste
     Rectangle {
-        readonly property var snippet: root.editor !== null && root.nixos
-            ? PamEditRules.nixosSnippet(root.editor.split ? { sudo: root.editor.sudo, polkit: root.editor.polkit } : root.editor.shared,
-                                        root.editor.split, root.factsFor("sudo"))
-            : null
-        objectName: "nixosSnippet"
-        visible: root.nixos && root.editor !== null
+        readonly property string snippet: root.mode === "copy" && typeof root._preview?.snippet === "string" ? root._preview.snippet : ""
+        objectName: "optionsSnippet"
+        visible: root.mode === "copy" && root.editor !== null
         Layout.fillWidth: true
         Layout.topMargin: 8
         implicitHeight: _nixColumn.implicitHeight + 20
@@ -885,14 +919,14 @@ ColumnLayout {
             spacing: 6
             RowLayout {
                 Layout.fillWidth: true
-                Caption { text: "Add to your NixOS configuration"; Layout.fillWidth: true }
+                Caption { text: root._modeTexts.copyTitle; Layout.fillWidth: true }
                 SmallButton {
                     objectName: "copy"
                     label: root.copied ? "Copied" : "Copy"
                     fontSize: Theme.fontSizeSmall
-                    available: parent.parent.parent.snippet?.ok === true
+                    available: parent.parent.parent.snippet !== ""
                     onClicked: {
-                        root.copyText(parent.parent.parent.snippet.text);
+                        root.copyText(parent.parent.parent.snippet);
                         root.copied = true;
                     }
                 }
@@ -900,19 +934,19 @@ ColumnLayout {
             Text {
                 objectName: "snippetText"
                 Layout.fillWidth: true
-                text: parent.parent.snippet?.ok === true ? parent.parent.snippet.text : "No snippet while a check refuses the rows."
+                text: parent.parent.snippet !== "" ? parent.parent.snippet : "No snippet while a check refuses the rows."
                 textFormat: Text.PlainText
                 wrapMode: Text.WrapAnywhere
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeSmall
-                color: parent.parent.snippet?.ok === true ? Theme.textPrimary : Theme.textMuted
+                color: parent.parent.snippet !== "" ? Theme.textPrimary : Theme.textMuted
             }
         }
     }
     Caption {
-        visible: root.nixos && root.editor !== null
+        visible: root.mode === "copy" && root.editor !== null && text !== ""
         Layout.fillWidth: true
-        text: "After nixos-rebuild switch this page shows the new rules."
+        text: root._modeTexts.after
     }
 
     // The lock screen's ways to unlock: the shell's own settings, changed at once

@@ -28,6 +28,8 @@ TestCase {
 
     readonly property string _scratch: (Quickshell.env("XDG_RUNTIME_DIR") || "/tmp") + "/h2s-integration-change-test-" + Date.now()
     readonly property string _kind: "sleep.hibernateDelay"
+    // A reading's answer held past its object's end
+    property var _late: null
     readonly property string _path: EtcFilesRules.files[_kind]
 
     property var _arch: null
@@ -136,7 +138,14 @@ TestCase {
             pending[1]({ state: "set", value: 7200 });
             pending[0]({ state: "set", value: 3600 });
             assertEqual(held.inForce?.value, 7200, "two readings: the later one's answer kept, the earlier one's dropped");
+            held.read();
+            _late = pending[2];
             held.destroy();
+        });
+        _then("the object with a reading under way gone", () => _late !== null, () => {
+            // Its answer comes after it is gone: dropped, nothing thrown
+            _late({ state: "set", value: 60 });
+            _late = null;
             _sh("ls -A \"$1/etc/systemd/sleep.conf.d\"");
         });
         _then("the folder looked at", () => _shellOutput !== "", () => {

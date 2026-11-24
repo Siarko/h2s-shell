@@ -21,8 +21,13 @@ import QtQuick
 //              configuration makes /etc, when the user asks (apply's `handlers.anyway`;
 //              warned, the user's choice), with no Undo
 //     known    false only while the distribution is not known (Distribution's answer)
+//   details(kind) → { texts, facts }: what a feature's view says and decides by on this
+//     system, from the integration's table (its words, e.g. where the setting is made and
+//     when it takes effect; facts the feature's checks need); both {} where unavailable
 //   plan(kind, value) → { preview, refusal }
-//     preview  "apply": { files: [{ path, text ("" removes the file) }] }; "copy", "declare": { option, snippet,
+//     preview  "apply": { files: [{ path, text ("" removes the file; null: no file while
+//              the value's checks refuse) }], backups (the folder each change is kept in) };
+//              "copy", "declare": { option, snippet ("" while the value's checks refuse),
 //              hint (the integration's words naming where the setting is made) }
 //   apply / undo → { started, refusal }
 //   readInForce → what the system uses, read as the system merges it (inForceCommand), and
@@ -46,7 +51,7 @@ Singleton {
     id: root
 
     // The change kinds the shell defines, each with how its value is checked
-    readonly property var kinds: ["sleep.hibernateDelay", "network.connectivityUri"]
+    readonly property var kinds: ["sleep.hibernateDelay", "network.connectivityUri", "pam.rules"]
     readonly property var modes: ["apply", "declare", "copy", "unavailable"]
 
     // The reason of a kind the integration does not offer
@@ -90,6 +95,24 @@ Singleton {
                  inForce: entry.inForce === true, anyway: !applied && entry.anyway === true, reason: "", known: true };
     }
 
+    // The feature's words and facts on this system: the table entry's `texts` (strings) and
+    // `facts` (an object), copied; {} for each where the kind is unavailable or names none
+    function details(table, kind) {
+        const none = { texts: {}, facts: {} };
+        if (capability(table, kind).mode === "unavailable")
+            return none;
+        const entry = table[kind];
+        const texts = {};
+        const given = entry.texts !== null && typeof entry.texts === "object" && !Array.isArray(entry.texts) ? entry.texts : {};
+        for (const name of Object.keys(given)) {
+            if (typeof given[name] === "string")
+                texts[name] = given[name];
+        }
+        const facts = entry.facts !== null && typeof entry.facts === "object" && !Array.isArray(entry.facts)
+            ? JSON.parse(JSON.stringify(entry.facts)) : {};
+        return { texts, facts };
+    }
+
     // Whether an answer is a capability as the contract has it
     function valid(answer) {
         if (answer === null || typeof answer !== "object" || !modes.includes(answer.mode))
@@ -108,6 +131,13 @@ Singleton {
         // "": the shell's file removed, the system's own address in force again
         if (kind === "network.connectivityUri")
             return value === "" || (typeof value === "string" && ConnectivityRules.isUri(value));
+        // The sign-in rules as the editor holds them: { split, sudo: { rows, facts, currentText },
+        // "polkit-1": { … } } (currentText: the service's file as read; facts: PamRuleRules.check's)
+        if (kind === "pam.rules")
+            return value !== null && typeof value === "object" && typeof value.split === "boolean"
+                && PamRuleRules.services.every(service => value[service] !== null && typeof value[service] === "object"
+                                               && Array.isArray(value[service].rows) && value[service].facts !== null
+                                               && typeof value[service].facts === "object");
         return false;
     }
 
@@ -120,12 +150,38 @@ Singleton {
         return "";
     }
 
-    // The line to copy for a kind set by an option: `option` its name
+    // The files an applied kind writes: [{ path, text ("" removes it; null: none while the
+    // value's checks refuse) }]
+    function filesOf(kind, value) {
+        if (kind !== "pam.rules")
+            return [{ path: EtcFilesRules.files[kind] ?? "", text: textOf(kind, value) }];
+        // One file per service, as PamEditRules builds it: our polkit-1 removed when polkit's
+        // own file would be in force again
+        return PamRuleRules.services.map(service => {
+            const entry = value[service];
+            const built = PamEditRules.build(entry.currentText, entry.rows, entry.facts);
+            const text = built.ok !== true ? null : built.remove === true ? "" : typeof built.text === "string" ? built.text : null;
+            return { path: PamApplyRules.livePaths.system + "/" + service, text };
+        });
+    }
+
+    // The folder an applied kind's changes are kept in, each a backup Undo puts back
+    function backupsOf(kind) {
+        return kind === "pam.rules" ? PamApplyRules.livePaths.backups : EtcFilesRules.backupsOf(kind, "");
+    }
+
+    // The line to copy for a kind set by an option: `option` its name ("" while the value's
+    // checks refuse it)
     function snippetOf(kind, option, value) {
         if (kind === "sleep.hibernateDelay")
             return option + " = " + value + ";";
         if (kind === "network.connectivityUri" && value !== "")
             return option + " = \"" + value + "\";";
+        if (kind === "pam.rules") {
+            const rows = value.split ? { sudo: value["sudo"].rows, polkit: value["polkit-1"].rows } : value["sudo"].rows;
+            const made = PamEditRules.optionsSnippet(option, rows, value.split, value["sudo"].facts);
+            return made.ok === true ? made.text : "";
+        }
         return "";
     }
 
@@ -137,7 +193,7 @@ Singleton {
         if (!validValue(kind, value))
             return { preview: null, refusal: refusal("value") };
         if (answer.mode === "apply")
-            return { preview: { files: [{ path: EtcFilesRules.files[kind] ?? "", text: textOf(kind, value) }] }, refusal: null };
+            return { preview: { files: filesOf(kind, value), backups: backupsOf(kind) }, refusal: null };
         const option = String(table[kind].option ?? "");
         return { preview: { option, snippet: snippetOf(kind, option, value), hint: String(table[kind].hint ?? "") }, refusal: null };
     }

@@ -40,6 +40,9 @@ QtObject {
         const ask = () => {
             const number = ++root._reads;
             root.integration.readInForce(root.kind, answer => {
+                // An answer after this object is gone (a page closed, its runner torn down)
+                if (!root)
+                    return;
                 if (number === root._reads)
                     root._inForce = answer;
             });
@@ -58,7 +61,7 @@ QtObject {
         if (_busy !== "")
             return { started: false, refusal: EtcFilesRules.refusal("busy") };
         _busy = "apply";
-        const handlers = { replace: request?.replace === true, anyway: request?.anyway === true, done: outcome => root._finish("apply", outcome) };
+        const handlers = { replace: request?.replace === true, anyway: request?.anyway === true, done: outcome => root?._finish("apply", outcome) };
         if (request?.current !== undefined && request?.current !== null)
             handlers.current = request.current;
         // Before the run: its answer may come at once
@@ -80,7 +83,7 @@ QtObject {
         _busy = "undo";
         // Before the run: its answer may come at once
         _forget();
-        const started = _started(integration.undo(kind, { from: _last, done: outcome => root._finish("undo", outcome) }));
+        const started = _started(integration.undo(kind, { from: _last, done: outcome => root?._finish("undo", outcome) }));
         if (!started.started) {
             _busy = "";
             read();

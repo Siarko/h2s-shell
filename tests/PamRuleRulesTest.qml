@@ -15,17 +15,20 @@ TestCase {
         const raw = (id, text) => ({ id, method: "raw", control: "", details: { text } });
         const fixed = rules.fixedRow();
         // The module directories as the distributions' facts have them (handed in by the
-        // page): Arch's, or NixOS's with `system: "nixos"`, unless the case names its own
+        // page): Arch's, unless the case names its own; NixOS's with what its integration
+        // says of "pam.rules" (only libpam's own modules by bare name, and its words), nixos()
         const archModules = ["/usr/lib/security/", "/lib/security/", "/usr/lib64/security/", "/lib64/security/"];
         const nixosModules = ["/run/current-system/sw/lib/security/"];
         const arch = (more) => {
-            const facts = Object.assign({ system: "arch", service: "sudo", fingerprint: "ready", securityKey: "ready",
+            const facts = Object.assign({ service: "sudo", fingerprint: "ready", securityKey: "ready",
                                           faillockPresent: true, faillock: { deny: 3, failInterval: 900, unlockTime: 600 },
                                           otherService: [rules.fixedRow()] }, more ?? {});
             if (!("moduleDirectories" in (more ?? {})))
-                facts.moduleDirectories = facts.system === "nixos" ? nixosModules : archModules;
+                facts.moduleDirectories = archModules;
             return facts;
         };
+        const nixos = (more) => Object.assign({ moduleDirectories: nixosModules, bareModules: "libpam",
+                                                texts: { modulePath: "Needs the module's full path on NixOS." } }, more ?? {});
         const codes = (rows, facts) => rules.codes(rules.check(rows, facts));
         const has = (rows, facts, code) => codes(rows, facts).includes(code);
 
@@ -136,16 +139,16 @@ TestCase {
         assert(has([raw("r1", "auth sufficient /home/user/pam_evil.so"), fixed], arch(), "W12"), "W12: a module from the home");
         assert(has([raw("r1", "auth sufficient /usr/lib/security/../../../tmp/x.so"), fixed], arch(), "W12"), "W12: … through ..");
         assert(has([raw("r1", "auth sufficient lib/../../tmp/x.so"), fixed], arch(), "W12"), "W12: … a relative path");
-        assert(has([raw("r1", "auth sufficient /nix/store/abc-pam_ldap/../../../home/u/x.so"), fixed], arch({ system: "nixos" }), "W12"),
+        assert(has([raw("r1", "auth sufficient /nix/store/abc-pam_ldap/../../../home/u/x.so"), fixed], arch(nixos()), "W12"),
                "W12: … out of the store through ..");
         assert(rules.check([raw("r1", "auth sufficient /home/user/pam_evil.so"), fixed], arch()).refusals.length === 0,
                "a module from another place is allowed: a warning, no refusal");
         assert(has([raw("r1", "auth sufficient /nix/store/abc-pam_ldap/lib/security/pam_ldap.so"), fixed], arch(), "W11"), "W11: a store path on Arch");
         assert(!has([raw("r1", "auth sufficient /usr/lib/security/pam_ldap.so"), fixed], arch(), "W12")
                && !has([raw("r1", "auth sufficient /usr/lib/security/pam_ldap.so"), fixed], arch(), "W11"), "W11/W12 not: the system's folder");
-        assert(!has([raw("r1", "auth sufficient /run/current-system/sw/lib/security/pam_ldap.so"), fixed], arch({ system: "nixos" }), "W12"),
+        assert(!has([raw("r1", "auth sufficient /run/current-system/sw/lib/security/pam_ldap.so"), fixed], arch(nixos()), "W12"),
                "W12 not: the system profile on NixOS");
-        assert(has([raw("r1", "auth sufficient /usr/lib/security/pam_ldap.so"), fixed], arch({ system: "nixos" }), "W12"),
+        assert(has([raw("r1", "auth sufficient /usr/lib/security/pam_ldap.so"), fixed], arch(nixos()), "W12"),
                "W12: Arch's folder on NixOS");
         assert(has([raw("r1", "auth sufficient /usr/lib/security/pam_ldap.so"), fixed], arch({ moduleDirectories: [] }), "W12")
                && has([raw("r1", "auth sufficient /usr/lib/security/pam_ldap.so"), fixed], arch({ moduleDirectories: undefined }), "W12"),
@@ -154,17 +157,17 @@ TestCase {
                "W12 not: a folder the facts name, whatever it is");
         assert(has([raw("r1", "auth sufficient /opt/pamx/pam_ldap.so"), fixed], arch({ moduleDirectories: ["/opt/pam"] }), "W12"),
                "W12: a folder named without its \"/\" is no place (it would take /opt/pamx for /opt/pam)");
-        assert(has([raw("r1", "auth sufficient /nix/store/abc-evil/lib/security/pam_unix.so"), fixed], arch({ system: "nixos" }), "W11"),
+        assert(has([raw("r1", "auth sufficient /nix/store/abc-evil/lib/security/pam_unix.so"), fixed], arch(nixos()), "W11"),
                "W11: any other store path on NixOS, whatever its file is called");
-        assert(has([raw("r1", "auth sufficient /nix/store/abc-evil/lib/security/pam_unix.so")], arch({ system: "nixos", otherService: [] }), "R1"),
+        assert(has([raw("r1", "auth sufficient /nix/store/abc-evil/lib/security/pam_unix.so")], arch(nixos({ otherService: [] })), "R1"),
                "… and it is no password (anyone can add to the store): no way in");
-        assert(has([raw("r1", "auth sufficient /nix/store/abc-evil/lib/security/pam_ldap.so"), fixed], arch({ system: "nixos" }), "W4"),
+        assert(has([raw("r1", "auth sufficient /nix/store/abc-evil/lib/security/pam_ldap.so"), fixed], arch(nixos()), "W4"),
                "… not checked either: W4");
-        let placed = rules.check([raw("r1", "auth sufficient " + store + "-pam_ldap-186/lib/security/pam_ldap.so"), fixed], arch({ system: "nixos" }))
+        let placed = rules.check([raw("r1", "auth sufficient " + store + "-pam_ldap-186/lib/security/pam_ldap.so"), fixed], arch(nixos()))
             .warnings.find(warning => warning.code === "W11");
         assertEqual(placed.text, "A path in the Nix store changes with an update or a garbage collection: use ${pkgs.pam_ldap} instead.",
                     "W11 names the package where the path says it");
-        placed = rules.check([raw("r1", "auth sufficient /nix/store/abc-pam_ldap/lib/security/pam_ldap.so"), fixed], arch({ system: "nixos" }))
+        placed = rules.check([raw("r1", "auth sufficient /nix/store/abc-pam_ldap/lib/security/pam_ldap.so"), fixed], arch(nixos()))
             .warnings.find(warning => warning.code === "W11");
         assertEqual(placed.text, rules.texts.W11, "… and none where it does not (no hash)");
         assertEqual(rules.storePackage(store + "-linux-pam-1.6.1/lib/security/pam_unix.so"), "linux-pam", "a package's name: up to the version");
@@ -172,7 +175,7 @@ TestCase {
         assertEqual(rules.storePackage("/nix/store/short-pam_u2f/lib/security/pam_u2f.so"), "", "… not a store path's name: none");
         assert(has([raw("r1", "auth required /nix/store/abc-x/lib/security/pam_deny.so"), password("r2"), fixed], arch(), "R1"),
                "R1: a pam_deny from another place is judged by its name (a name may refuse, never trust)");
-        assert(has([raw("r1", "auth sufficient /nix/store/abc-linux-pam-1.7.2/lib/security/pam_permit.so"), fixed], arch({ system: "nixos" }), "R9")
+        assert(has([raw("r1", "auth sufficient /nix/store/abc-linux-pam-1.7.2/lib/security/pam_permit.so"), fixed], arch(nixos()), "R9")
                && has([raw("r1", "auth sufficient /etc/pam_permit.so"), fixed], arch(), "R9"), "R9: pam_permit from another place, by its name");
         assert(!has([raw("r1", "auth sufficient /home/u/pam_unix.so")], arch({ otherService: [] }), "R9")
                && has([raw("r1", "auth sufficient /home/u/pam_unix.so")], arch({ otherService: [] }), "R1"), "… while pam_unix from another place is no password");
@@ -189,10 +192,13 @@ TestCase {
         for (const bad of ["account required pam_unix.so", "auth sufficient", "auth include system-auth", "@include common-auth",
                            "auth required pam_unix.so\nauth sufficient pam_permit.so", "auth [sucess=done] pam_unix.so"])
             assert(has([raw("r1", bad), fixed], arch(), "R8"), "R8: " + JSON.stringify(bad));
-        assert(has([raw("r1", "auth sufficient pam_ldap.so"), fixed], arch({ system: "nixos" }), "R8"), "R8: a bare module name on NixOS");
-        assertEqual(rules.rawLine("auth sufficient pam_fprintd.so", { system: "nixos" }).refusal.text, "Needs the module's full path on NixOS.",
-                    "… with its text");
-        assert(!has([raw("r1", "auth required pam_env.so"), fixed], arch({ system: "nixos" }), "R8"), "R8 not: libpam's own module by name on NixOS");
+        assert(has([raw("r1", "auth sufficient pam_ldap.so"), fixed], arch(nixos()), "R8"), "R8: a bare module name on NixOS");
+        assertEqual(rules.rawLine("auth sufficient pam_fprintd.so", nixos()).refusal.text, "Needs the module's full path on NixOS.",
+                    "… with the integration's text");
+        assertEqual(rules.rawLine("auth sufficient pam_fprintd.so", nixos({ texts: {} })).refusal.text, "Needs the module's full path.",
+                    "… or the general one");
+        assertEqual(rules.rawLine("auth sufficient pam_ldap.so", { bareModules: "" }).refusal, null, "… not where libpam finds any module by name");
+        assert(!has([raw("r1", "auth required pam_env.so"), fixed], arch(nixos()), "R8"), "R8 not: libpam's own module by name on NixOS");
         assert(!has([raw("r1", "-auth [success=done default=ignore] pam_ldap.so use_first_pass"), fixed], arch(), "R8"), "R8 not: a bracketed auth line");
         assert(has([raw("r1", "auth [success=done default=ignore] pam_permit.so"), fixed], arch(), "R9"), "R9: success=done");
         assert(has([raw("r1", "auth [default=done default=bad] pam_permit.so"), fixed], arch(), "R9"), "R9: the first default is libpam's (done)");
@@ -374,7 +380,7 @@ TestCase {
         assert(!has([fingerprint("r2"), password("r1", "sufficient", true), fixed], arch(), "W3"), "W3 not: the reader above it");
         assert(has([raw("r1", "auth sufficient pam_ldap.so"), fixed], arch(), "W4"), "W4: a module the checks do not know");
         assert(!has([raw("r1", "auth sufficient pam_unix.so try_first_pass"), fixed], arch(), "W4"), "W4 not: a raw pam_unix line");
-        assert(!has([raw("r1", "auth sufficient pam_ldap.so"), fixed], arch({ system: "nixos" }), "W4"), "W4 not: a refused line");
+        assert(!has([raw("r1", "auth sufficient pam_ldap.so"), fixed], arch(nixos()), "W4"), "W4 not: a refused line");
         // W13: an unknown module's required line where nothing below decides
         result = rules.check([password("r1", "sufficient"), raw("r2", "auth required /usr/lib/security/pam_ldap.so")], arch());
         found = result.warnings.find(warning => warning.code === "W13");
@@ -396,7 +402,7 @@ TestCase {
             assert(!has([password("r1"), raw("r2", "auth [success=ok ignore=" + action + " default=bad] pam_ldap.so")], arch(), "W13"),
                    "W13 not: ignore=" + action + " (in auth PAM_IGNORE then stays the result, a failure)");
         assert(!has([password("r1"), raw("r2", "auth required pam_unix.so")], arch(), "W13"), "W13 not: a module the shell knows");
-        assert(!has([password("r1"), raw("r2", "auth required pam_ldap.so")], arch({ system: "nixos" }), "W13"), "W13 not: a refused line");
+        assert(!has([password("r1"), raw("r2", "auth required pam_ldap.so")], arch(nixos()), "W13"), "W13 not: a refused line");
         // W14: no time limit on a reader above a password
         const endless = fingerprint("r1", "sufficient", { timeout: -1 });
         result = rules.check([endless, fixed], arch());
