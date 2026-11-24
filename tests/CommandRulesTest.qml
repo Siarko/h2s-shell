@@ -148,6 +148,11 @@ TestCase {
                     "no setpriv found: the command as it is — never inside a timeout it would outlive");
         assert(!rules.wraps(undefined, 30000) && !rules.wraps({}, 30000) && !rules.wraps({ timeout: "/usr/bin/timeout" }, 30000)
                && !rules.wraps(tools, 0) && rules.wraps(tools, 1), "wrapped: a limit and both programs");
+        assert(rules.wrappedLine(rules.commandLine(["ls"], tools, 30000, 3000)) && rules.wrappedLine(["timeout", "-k", "1", "2", "ls"]),
+               "the wrapped line known from the line alone: started by timeout -k (its group the runner kills when it goes)");
+        assert(!rules.wrappedLine(rules.commandLine(["ls"], tools, 0, 3000, true)) && !rules.wrappedLine(["ls", "-k"]) && !rules.wrappedLine(["/usr/bin/timeout", "5", "ls"])
+               && !rules.wrappedLine(["/usr/bin/mytimeout", "-k"]) && !rules.wrappedLine([]) && !rules.wrappedLine(undefined),
+               "… not behind setpriv alone, bare, timeout without -k, another program, nothing");
         assert(rules.guards(tools, 1) && !rules.guards(tools, 0) && rules.guards(tools, 0, true) && rules.guards({ setpriv: "/usr/bin/setpriv" }, 1, true)
                && !rules.guards({ setpriv: "/usr/bin/setpriv" }, 1) && !rules.guards({ timeout: "/usr/bin/timeout", setpriv: "" }, 0, true) && !rules.guards(undefined, 0, true),
                "guarded (setpriv in front): wrapped, or endWithShell where setpriv was found");

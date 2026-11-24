@@ -225,6 +225,15 @@ Singleton {
         return _found(tools?.timeout) && _found(tools?.setpriv) && timeoutMs > 0;
     }
 
+    // Whether a command line is commandLine's wrapped form, started by `timeout -k`: that
+    // `timeout` leads a process group of its own, which holds what the command started
+    // (the group a runner that goes away kills whole). Read from the line alone, as a
+    // Process keeps it when nothing else of its run can be read any more.
+    function wrappedLine(command) {
+        const words = Array.from(command ?? []);
+        return /(^|\/)timeout$/.test(String(words[0])) && words[1] === "-k";
+    }
+
     // Whether `setpriv` stands in front of a run (`tools` as for wraps): inside `timeout`
     // (wraps), and for a run that asks to end with the shell (`endWithShell`) whenever
     // `setpriv` was found, with a limit or without. Any other run without a limit is

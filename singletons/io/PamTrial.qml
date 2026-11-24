@@ -190,9 +190,12 @@ Scope {
 
     // Destroyed mid-trial (the page closed): the runner's runs end with it (a staging run
     // among them, killed), so the staging directory — made or being made — is removed by a
-    // command of its own
+    // command of its own. Not where Qt dropped the trial's properties before this runs (an
+    // object waiting for a deferred delete whose JavaScript wrapper the collector took first):
+    // `_state` then reads undefined, and nothing here knows the directory any more.
     Component.onDestruction: {
-        if (_state.staging !== "")
-            Quickshell.execDetached(Array.from(stageCommand).concat(["remove", _state.parent, _state.staging]));
+        const state = _state;
+        if (state && state.staging !== "")
+            Quickshell.execDetached(Array.from(stageCommand).concat(["remove", state.parent, state.staging]));
     }
 }

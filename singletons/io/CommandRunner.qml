@@ -90,7 +90,9 @@ QtObject {
         _dispatch(job, { type: name });
     }
     property var _deferred: []
-    property bool _gone: false
+    // False once the runner is being destroyed — and also where Qt dropped its properties
+    // (onDestruction): a bool that cannot be read reads false
+    property bool _live: true
     readonly property bool _toolsKnown: tools?.known === true
 
     function start(argv, options) {
@@ -124,7 +126,7 @@ QtObject {
                 return job.state.phase !== "done";
             },
             cancel: function () {
-                if ((job.state.phase !== "done" || job.queued) && !root._gone)
+                if ((job.state.phase !== "done" || job.queued) && root._live)
                     root._cancel(job);
             }
         };
@@ -136,7 +138,7 @@ QtObject {
             armedAt: Object.freeze(Object.assign({}, job.timings.armedAt)),
             fired: Object.freeze(Object.assign({}, job.timings.fired))
         }) });
-        if (_gone) {
+        if (!_live) {
             job.state.phase = "done";
             return handle;
         }
@@ -244,7 +246,7 @@ QtObject {
     }
 
     function _line(job, stream, line) {
-        if (job.muted || job.state.phase === "done" || _gone)
+        if (job.muted || job.state.phase === "done" || !_live)
             return;
         // Enough to know setpriv's own message (CommandRules.result)
         if (stream === "stderr")
@@ -258,7 +260,7 @@ QtObject {
         }
         _call(job, stream === "stdout" ? "onStdout" : "onStderr", line + "\n");
         // A callback may have cancelled the run, or destroyed the runner
-        if (!job.onLine || job.muted || _gone)
+        if (!job.onLine || job.muted || !_live)
             return;
         const cut = CommandRules.kept("", line, limit);
         job.truncated = job.truncated || cut.truncated;
@@ -271,7 +273,7 @@ QtObject {
             return;
         }
         _jobs = _jobs.filter(other => other !== job);
-        if (_gone)
+        if (!_live)
             return;
         const result = CommandRules.result(job.state, {
             stdout: job.stdout, stderr: job.stderr, truncated: job.truncated, lastStderr: job.lastStderr,
@@ -293,7 +295,7 @@ QtObject {
         const deferred = _deferred;
         _deferred = [];
         for (const job of deferred) {
-            if (_gone)
+            if (!_live)
                 return;
             job.queued = false;
             if (job.refusal !== "") {
@@ -307,7 +309,10 @@ QtObject {
 
     property Timer _flush: Timer {
         interval: 0
-        onTriggered: root._flushDeferred()
+        onTriggered: {
+            if (root._live)
+                root._flushDeferred();
+        }
     }
 
     property Component _runComponent: Component {
@@ -315,53 +320,89 @@ QtObject {
             id: run
             property var job: null
 
+            // The run while the runner takes its reports: none once the runner is going, nor
+            // where Qt dropped its properties or the run's (onDestruction) — nor once its
+            // `root` is gone, as it is while a Process reports from its own destruction
+            function _job() {
+                return root && root._live && run.job ? run.job : null;
+            }
+            function _read(stream, text) {
+                const job = run._job();
+                if (job)
+                    root._read(job, stream, text);
+            }
+            function _event(event) {
+                const job = run._job();
+                if (job)
+                    root._dispatch(job, event);
+            }
+            function _timer(name) {
+                const job = run._job();
+                if (job)
+                    root._fired(job, name);
+            }
+
             property Process process: Process {
                 // Line by line: Quickshell decodes what a parser hands over as one piece,
                 // so raw reads would break a character whose bytes come in two of them
                 stdout: SplitParser {
                     splitMarker: "\n"
-                    onRead: text => root._read(run.job, "stdout", text)
+                    onRead: text => run._read("stdout", text)
                 }
                 stderr: SplitParser {
                     splitMarker: "\n"
-                    onRead: text => root._read(run.job, "stderr", text)
+                    onRead: text => run._read("stderr", text)
                 }
-                onExited: (exitCode, exitStatus) => root._dispatch(run.job, { type: "exited", code: exitCode, crashed: exitStatus !== 0 })
+                onExited: (exitCode, exitStatus) => run._event({ type: "exited", code: exitCode, crashed: exitStatus !== 0 })
                 onRunningChanged: {
                     if (!running)
-                        root._dispatch(run.job, { type: "stopped" });
+                        run._event({ type: "stopped" });
+                }
+
+                // Destroyed with its command still running (the runner went): ended at once,
+                // with KILL — nobody is left to send one later. Its own properties alone,
+                // which Qt keeps while the runner's and the run's may be gone. The destroyed
+                // Process takes its child with it, which for a wrapped run is `timeout`, and
+                // the command dies with that (commandLine); what the command started itself
+                // is in the process group `timeout` leads, so that group gets a KILL too
+                // (through `kill`: a Process can only signal its own child).
+                Component.onDestruction: {
+                    if (!running)
+                        return;
+                    const pid = Number(processId);
+                    if (CommandRules.wrappedLine(command) && pid > 1)
+                        Quickshell.execDetached(["kill", "-KILL", "--", "-" + pid]);
+                    signal(9);
                 }
             }
             property Timer watchdog: Timer {
-                onTriggered: root._fired(run.job, "watchdog")
+                onTriggered: run._timer("watchdog")
             }
             property Timer kill: Timer {
-                onTriggered: root._fired(run.job, "kill")
+                onTriggered: run._timer("kill")
             }
         }
     }
 
     // The runner is destroyed (a module turned off): nothing is called from here on, and
-    // its runs are ended at once, with KILL — nobody is left to send one later. The
-    // destroyed Process takes its child with it, which for a wrapped run is `timeout`,
-    // and the command dies with that (commandLine); what the command started itself is in
-    // the process group `timeout` leads, so that group gets a KILL too (through `kill`: a
-    // Process can only signal its own child). When the shell itself ends or reloads
-    // nothing here runs: then the command dying with `timeout` is all there is.
+    // its runs' processes end with KILL as they are destroyed with it (_runComponent). When
+    // the shell itself ends or reloads nothing here runs: then the command dying with
+    // `timeout` is all there is.
+    //
+    // An object waiting for a deferred delete (destroy(), an item a Loader let go) whose
+    // JavaScript wrapper the collector took first — an owner made without a parent, say —
+    // has lost its properties by now: each reads as undefined, null or false, and a write
+    // finds nothing to write to. Then there is nothing to mark here (`_live` reads false
+    // already) and the runs end from their own Processes all the same.
     Component.onDestruction: {
-        _gone = true;
-        for (const job of _jobs) {
+        const jobs = _jobs;
+        if (!Array.isArray(jobs))
+            return;
+        _live = false;
+        for (const job of jobs) {
             job.muted = true;
             job.queued = false;
-            const wrapped = job.state.wrapped;
             job.state = Object.assign({}, job.state, { phase: "done" });
-            const process = job.item?.process;
-            if (!process?.running)
-                continue;
-            const processId = process.processId;
-            if (wrapped && typeof processId === "number" && processId > 1)
-                Quickshell.execDetached(["kill", "-KILL", "--", "-" + processId]);
-            process.signal(9);
         }
         _jobs = [];
     }

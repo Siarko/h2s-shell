@@ -2,6 +2,7 @@ import QtQuick
 import qs.singletons
 import qs.singletons.io as Io
 import qs.api as Api
+import qs.distributions.arch
 
 // The command runner (singletons/io/CommandRunner.qml) against `sh -c` scripts: answers,
 // output, time limits with coreutils' `timeout` and without, cancelling, a runner that goes.
@@ -173,6 +174,10 @@ TestCase {
     readonly property string _parentProgram: "tr '\\0' '\\n' < /proc/$PPID/cmdline | head -n 1"
     // A script that tells it runs, shrugs TERM off, and goes on until it is killed
     readonly property string _stubborn: "trap '' TERM; echo \"$$\"; while :; do sleep 0.05; done"
+    // The same, printing a line every 50 ms
+    readonly property string _ticking: "trap '' TERM; echo \"$$\"; while :; do echo tick; sleep 0.05; done"
+    // The same, telling instead the pid of a child it started, which shrugs TERM off too
+    readonly property string _tickingParent: "trap '' TERM; (trap '' TERM; while :; do sleep 0.05; done) & echo \"$!\"; while :; do echo tick; sleep 0.05; done"
     // Ends when the process is gone
     readonly property string _untilGone: "while kill -0 \"$1\" 2>/dev/null; do sleep 0.05; done; echo gone"
 
@@ -548,6 +553,105 @@ TestCase {
                 assert(!record.handle.running, name + ": … the handle says it is not running");
                 record.handle.cancel();
             }
+            _parentless();
+        });
+    }
+
+    // ---- a runner without a parent, or under an owner without one ----
+    // Destroyed idle or mid-run, by its own destroy() or with its owner: no error or warning
+    // logged (the unit runner fails on a TypeError), the scripts ended, nothing called after.
+    property Component _owner: Component {
+        QtObject {
+            id: owner
+            property var tools: CommandTools
+            property Io.CommandRunner runner: Io.CommandRunner {
+                tools: owner.tools
+            }
+        }
+    }
+
+    function _parentless() {
+        _runnerComponent.createObject(null).destroy();
+        _owner.createObject(null).destroy();
+        const doomed = [];
+        // Wrapped: the pid checked is of what the script started (in the group `timeout`
+        // leads); bare: of the script itself
+        const kinds = [{ name: "Wrapped", tools: CommandTools, script: _tickingParent, timeoutMs: 60000 }, { name: "Bare", tools: _noTimeout, script: _ticking, timeoutMs: 0 }];
+        for (const kind of kinds) {
+            const runner = _runnerComponent.createObject(null, { tools: kind.tools });
+            doomed.push({ name: "lone" + kind.name, destroyed: runner });
+            _start("lone" + kind.name, runner, ["sh", "-c", kind.script], { killAfterMs: 200, timeoutMs: kind.timeoutMs });
+        }
+        for (const kind of kinds) {
+            const owner = _owner.createObject(null, { tools: kind.tools });
+            doomed.push({ name: "owned" + kind.name, destroyed: owner });
+            _start("owned" + kind.name, owner.runner, ["sh", "-c", kind.script], { killAfterMs: 200, timeoutMs: kind.timeoutMs });
+        }
+        const names = doomed.map(entry => entry.name);
+        _then("the parentless runners' scripts run", () => names.every(name => _runs[name].lines.length >= 2), () => {
+            for (const entry of doomed) {
+                const record = _runs[entry.name];
+                record.pid = record.lines[0][0];
+                assert(/^[0-9]+$/.test(record.pid), entry.name + ": the script runs (" + record.pid + ")");
+                entry.destroyed.destroy();
+                record.linesAtEnd = record.lines.length;
+                _start(entry.name + "Pid", bare, ["sh", "-c", _untilGone, "sh", record.pid], { timeoutMs: 8000 });
+            }
+            doomed.length = 0;
+        });
+        _then("the parentless runners' scripts are gone", () => _answered.apply(null, names.map(name => name + "Pid")), () => {
+            for (const name of names) {
+                const record = _runs[name];
+                assertEqual(_runs[name + "Pid"].result.stdout.trim() + " " + _runs[name + "Pid"].result.timedOut, "gone false",
+                            name + ": destroyed mid-run without a parent, its script (which shrugs TERM off) is ended, with what it started");
+                assertEqual(record.answers + " " + record.lines.length, "0 " + record.linesAtEnd,
+                            name + ": … no answer and no line handed over after (its script printed on)");
+                assert(!record.handle.running, name + ": … the handle says it is not running");
+                record.handle.cancel();
+            }
+            _collected();
+        });
+    }
+
+    // Owners made without a parent and destroyed while the collector runs: one whose wrapper
+    // the collector takes before its deferred delete has lost its runners' properties by the
+    // time their handlers run (each reads as undefined, null or false). An integration is such
+    // an owner (a runner of its own, another in its EtcFiles); the first made after a full
+    // collection is the one taken, here and in the suite where this was found. One of them
+    // mid-run, its caller keeping no handle: ended, nothing called after.
+    property Component _integration: Component {
+        ArchIntegration {}
+    }
+    property var _busyOwner: null
+
+    function _collected() {
+        const record = { answers: 0, lines: [] };
+        _runs.collected = record;
+        _busyOwner = _integration.createObject(null);
+        _busyOwner.files._runner.start(["sh", "-c", _ticking], {
+            killAfterMs: 200,
+            onLine: line => record.lines.push(line),
+            done: () => record.answers++
+        });
+        _then("the busy owner's script runs", () => record.lines.length >= 2, () => {
+            record.pid = record.lines[0];
+            gc();
+            _busyOwner.destroy();
+            _busyOwner = null;
+            record.linesAtEnd = record.lines.length;
+            for (let round = 0; round < 30; round++) {
+                _integration.createObject(null).destroy();
+                // Garbage enough for the collector to run while the owners wait to be deleted
+                const garbage = [];
+                for (let i = 0; i < 30000; i++)
+                    garbage.push({ index: i, list: [i] });
+            }
+            _start("collectedPid", bare, ["sh", "-c", _untilGone, "sh", record.pid], { timeoutMs: 8000 });
+        });
+        _then("the busy owner's script is gone", () => _answered("collectedPid"), () => {
+            assertEqual(_runs.collectedPid.result.stdout.trim() + " " + _runs.collectedPid.result.timedOut, "gone false",
+                        "an owner without a parent destroyed while the collector runs: its runner's script is ended");
+            assertEqual(record.answers + " " + record.lines.length, "0 " + record.linesAtEnd, "… no answer and no line handed over after");
             _actionAndQuery();
         });
     }
