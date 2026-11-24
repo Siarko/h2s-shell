@@ -440,15 +440,21 @@ deciding through `MigrationRules.startup`): `Config` builds, then one event-loop
 `ConfigFile.load()` reads `config.json` and the side files the registered migrations
 (`singletons/Migrations.qml`) name, runs the pending ones of the load phase, and writes —
 one backup `config.json.bak-<stamp>-migration` first when something changed or a part was
-reset, then the side files, then the config with the records in `migratedKeys` — before
-the adapter reads the file and `Config.ready` turns true. A new config records every
+reset (the side files the run overwrites or removes kept beside it in
+`backup-side-files/<backup>/`, all of it readable by the user only), then the side files,
+then the config with the records in `migratedKeys`, and only then removes side files —
+before the adapter reads the file and `Config.ready` turns true. A new config records every
 registered id without running any. A failing migration has its part reset to defaults and
-`reset:<id>` recorded; a failing whole-config (`*`) one, a config that is no document, or a
-side file in a pending migration's scope that does not parse leaves the files as they are
-and makes the session read-only (`Config.readOnly`), the readers seeing the migrated
-content in memory. After a backup, the automatic ones beyond the newest ten are deleted;
+`reset:<id>` recorded; a failing whole-config (`*`) one, a config that is no document, a
+side file in a pending migration's scope that does not parse, or a write that fails leaves
+the files as they are and blocks saving for the session (`Config.saveBlocked`; read by the
+save only — `Config.readOnly` stays the test runner's). The readers then see the migrated
+content in memory, through a copy in the runtime folder (`XDG_RUNTIME_DIR`, mode 600,
+removed once read; without a runtime folder no copy is made and the file is read as it is).
+After a backup, the automatic ones beyond the newest ten are deleted with their side files;
 manual ones (`-manual`) never. Migrations with `phase: "afterSeed"` run from `Profiles`
-once the profiles exist (`Config.runAfterSeedMigrations`). Each run's report is
+once the profiles exist (`Config.runAfterSeedMigrations`), on the config as it stands when
+it is written, so a save made while they ran is kept. Each run's report is
 `Config.migrationReports`; under the test runner nothing is written.
 
 ### Version

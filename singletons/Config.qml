@@ -86,9 +86,12 @@ Singleton {
     // not what the user chose — settings where that matters fail safe on it
     readonly property alias loadFailed: _file.loadFailed
     // Set by the test runner: the suites load the real config, and nothing they change
-    // may reach the user's file. Also set when the migrations could not be run or written
-    // (ConfigFile.migrationReadOnly): the file stays as it is for the session.
+    // may reach the user's file
     property bool readOnly: false
+    // The migrations could not be run or written (ConfigFile.migrationReadOnly): the file
+    // stays as it is for the session — changes take effect, they are not saved. Only the save
+    // reads it; everything else runs as normal (readOnly means the test runner)
+    readonly property bool saveBlocked: _file.migrationReadOnly
     property bool _refusedSave: false
 
     signal saved
@@ -146,10 +149,6 @@ Singleton {
         id: _file
         configPath: StandardPaths.writableLocation(StandardPaths.GenericConfigLocation) + "/h2s_shell/config.json"
         readOnly: root.readOnly
-        onMigrated: {
-            if (migrationReadOnly)
-                root.readOnly = true;
-        }
         onAdapterUpdated: _saveTimer.restart()
         onRead: {
             if (newerNotice.shown)
@@ -167,6 +166,9 @@ Singleton {
         id: _saveTimer
         interval: 1000
         onTriggered: {
+            // Not while the migrations hold the file (they said so in the log)
+            if (root.saveBlocked)
+                return;
             // Never from the test runners, never over a file that could not be read
             // (ProfileRules.configSaveAllowed)
             if (!ProfileRules.configSaveAllowed(root.readOnly, root.loadFailed)) {

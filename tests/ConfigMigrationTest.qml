@@ -98,7 +98,12 @@ TestCase {
 
     // A folder listed: an object whose `names` is null until `ls` answered
     function _list(dir) {
-        const process = _lister.createObject(suite, { command: ["ls", "-1A", "--", dir] });
+        return _run(["ls", "-1A", "--", dir]);
+    }
+
+    // A command run: an object whose `names` (its output lines) is null until it ended
+    function _run(command) {
+        const process = _lister.createObject(suite, { command: command });
         process.running = true;
         return process;
     }
@@ -142,14 +147,21 @@ TestCase {
                                                    doc => MigrationHelpers.mapValue(doc, "battery.warn", value => Math.max(value, 25)))
     readonly property var _whole: _migration("2026-11-25-w-everything", ["*"], doc => { throw new Error("broken whole"); },
                                              { wholeScopeReason: "a test" })
-    readonly property var _afterSeed: _migration("1.0.0-testonly-legacy", ["raw:oldSection", "setting:legacy.*"], doc => {
+    readonly property var _afterSeed: _migration("1.0.0-testonly-legacy", ["raw:oldSection", "raw:audio", "setting:legacy.*"], doc => {
         if (doc.raw.oldSection !== undefined) {
             if (doc.globals["legacy.value"] === undefined)
                 doc.globals["legacy.value"] = doc.raw.oldSection.value;
             delete doc.raw.oldSection;
         }
+        // A declared key removed
+        if (doc.raw.audio?.appVolumes === "{\"old\":1}")
+            delete doc.raw.audio;
         return doc;
     }, { phase: "afterSeed" })
+    readonly property var _dropOld: _migration("2026-11-25-testonly-drop-old", ["file:themes/*"], doc => {
+        delete doc.files["themes/old.json"];
+        return doc;
+    })
 
     // An old config, written by hand (its spacing is not what a save writes, so a rewrite shows)
     readonly property string _oldText: '{"profiles": "[{\\"name\\":\\"Full\\",\\"enabled\\":true,\\"when\\":{},\\"set\\":{\\"testonly.old\\":\\"a\\",\\"battery.warn\\":20}}]",\n'
@@ -176,6 +188,9 @@ TestCase {
         _failing();
         _wholeScope();
         _unreadableSideFile();
+        _sideFileBackup();
+        _failedWrite();
+        _noRuntimeFolder();
         _pruning();
         _afterSeedPhase();
         _readOnly();
@@ -319,6 +334,7 @@ TestCase {
             assert(config.adapter.profiles.includes("testonly.new"), "\"*\" failure: the readers see the migrations before it, in memory");
             assert(config.adapter.profiles.includes("\"battery.warn\":20"), "\"*\" failure: none after it run");
             assertEqual(config.adapter.migratedKeys.join(","), "bar.height", "\"*\" failure: no record added");
+            assert(!config.readOnly, "\"*\" failure: readOnly (the test runner's, read by the lock guard and the rest) left alone; only the save is blocked");
             listing = _list(dir);
         });
         _then("the whole-scope folder listed", () => listing.names !== null, () => {
@@ -342,6 +358,82 @@ TestCase {
             assertEqual(_read(dir + "/themes/dark.json"), "{ not json", "unreadable side file: left as it is");
             assert(config.migrationReadOnly, "unreadable side file: the session read-only");
             assert(String(config.migrationReports.load?.problem).includes("themes/dark.json"), "unreadable side file: the report names it");
+        });
+    }
+
+    // ---- Side files overwritten or removed: kept with the backup, removed after the config ----
+    function _sideFileBackup() {
+        const dir = _scratch + "/side-backup";
+        const darkText = JSON.stringify({ accent: "#88c0d0", height: 30 });
+        const oldText = "{\"old\": true}";
+        let config = null;
+        let modes = null;
+        let sideDir = "";
+        _then("the side-file backup case's folder", () => true, () => {
+            _write(dir + "/config.json", _oldText);
+            _write(dir + "/themes/dark.json", darkText);
+            _write(dir + "/themes/old.json", oldText);
+            config = _open(dir, [_theme, _dropOld]);
+            config.load();
+        });
+        _then("the side-file backup case read", () => config.reads === 1 && !config.migrationBusy, () => {
+            const backup = config.migrationReports.load?.backup ?? "";
+            sideDir = dir + "/backup-side-files/" + backup.replace(/^.*\//, "");
+            assertEqual(_read(dir + "/themes/old.json"), "", "side files: the removed one gone");
+            assertEqual(_read(sideDir + "/themes/old.json"), oldText, "side files: … kept with the run's backup");
+            assertEqual(_read(sideDir + "/themes/dark.json"), darkText, "side files: an overwritten one kept with the backup as it was");
+            assertEqual((_json(_read(dir + "/config.json"))?.migratedKeys ?? []).join(","), "bar.height,2026-11-25-testonly-theme,2026-11-25-testonly-drop-old",
+                        "side files: the config with its records written");
+            modes = _run(["stat", "-c", "%a %n", "--", backup, sideDir, sideDir + "/themes/old.json"]);
+        });
+        _then("the backups' modes read", () => modes.names !== null, () => {
+            assertEqual(modes.names.map(line => line.split(" ")[0]).join(","), "600,700,600", "side files: the backup and its side files readable by the user only");
+        });
+    }
+
+    // ---- A write that fails: nothing removed, the session read-only, the result in memory ----
+    function _failedWrite() {
+        const dir = _scratch + "/failed-write";
+        let config = null;
+        let locked = null;
+        let unlocked = null;
+        _then("the failed-write case's folder", () => true, () => {
+            _write(dir + "/config.json", _oldText);
+            _write(dir + "/themes/old.json", "{}");
+            locked = _run(["chmod", "500", "--", dir]);
+        });
+        _then("the failed-write folder made read-only", () => locked.names !== null, () => {
+            config = _open(dir, [_rename, _dropOld]);
+            config.load();
+        });
+        _then("the failed-write case read", () => config.reads === 1 && !config.migrationBusy, () => {
+            assertEqual(_read(dir + "/config.json"), _oldText, "failed write: config.json byte-identical");
+            assertEqual(_read(dir + "/themes/old.json"), "{}", "failed write: no side file removed before the config is written");
+            assert(config.migrationReadOnly && !config.readOnly, "failed write: saves blocked, nothing else");
+            assert(config.migrationReports.load?.problem !== "", "failed write: the problem reported");
+            assert(config.adapter.profiles.includes("testonly.new"), "failed write: the readers see the result in memory");
+            unlocked = _run(["chmod", "700", "--", dir]);
+        });
+        _then("the failed-write folder writable again", () => unlocked.names !== null, () => {});
+    }
+
+    // ---- No runtime folder: no copy anywhere, the file read as it is ----
+    function _noRuntimeFolder() {
+        const dir = _scratch + "/no-runtime";
+        let config = null;
+        let listing = null;
+        _then("the no-runtime-folder case's folder", () => true, () => {
+            _write(dir + "/config.json", _oldText);
+            config = _open(dir, [_rename, _whole], { viewDir: "" });
+            config.load();
+        });
+        _then("the no-runtime-folder case read", () => config.reads === 1 && !config.migrationBusy, () => {
+            assert(config.migrationReadOnly, "no runtime folder: read-only");
+            assert(config.adapter.profiles.includes("testonly.old"), "no runtime folder: the file read as it is, no copy made");
+            listing = _list(dir);
+        });
+        _then("the no-runtime-folder folder listed", () => listing.names !== null, () => {
+            assertEqual(listing.names.join(","), "config.json", "no runtime folder: nothing written beside the config");
         });
     }
 
@@ -382,8 +474,8 @@ TestCase {
         const dir = _scratch + "/after-seed";
         let config = null;
         _then("the after-seed case's folder", () => true, () => {
-            _write(dir + "/config.json", JSON.stringify({ oldSection: { value: 7 }, migratedKeys: [], writtenBy: "0.9.0" }));
-            config = _open(dir, [_rename, _afterSeed]);
+            _write(dir + "/config.json", JSON.stringify({ oldSection: { value: 7 }, audio: { appVolumes: "{\"old\":1}" }, migratedKeys: [], writtenBy: "0.9.0" }));
+            config = _open(dir, [_rename, _theme, _afterSeed]);
             config.load();
         });
         _then("the after-seed case read", () => config.reads === 1 && !config.migrationBusy, () => {
@@ -391,15 +483,26 @@ TestCase {
             assert(!config.runAfterSeed(), "after-seed: not before the profiles exist");
             config.adapter.profiles = JSON.stringify([{ name: "Full", enabled: true, when: {}, set: {} }]);
             assert(config.runAfterSeed(), "after-seed: run once the profiles exist");
+            assert(config.migrationBusy, "after-seed: the run waits on its listing of side files");
+            // Saved while the run goes on
+            config.adapter.disabledModules = ["concurrent"];
+            config.saveStamped();
         });
         _then("the after-seed run ended", () => config.migrationReports.afterSeed !== null && !config.migrationBusy, () => {
             const written = _json(_read(dir + "/config.json"));
             assert(written !== null && written.oldSection === undefined, "after-seed: its result written");
             assertEqual(_json(written?.globals ?? "")?.["legacy.value"], 7, "after-seed: … the value moved");
             assertEqual(_json(written?.profiles ?? "")?.[0]?.name, "Full", "after-seed: … with the profiles as they stand");
-            assertEqual((written?.migratedKeys ?? []).join(","), "2026-11-25-testonly-rename,1.0.0-testonly-legacy", "after-seed: recorded after the load phase's");
+            assertEqual((written?.migratedKeys ?? []).join(","), "2026-11-25-testonly-rename,2026-11-25-testonly-theme,1.0.0-testonly-legacy", "after-seed: recorded after the load phase's");
+            assertEqual((written?.disabledModules ?? []).join(","), "concurrent", "after-seed: a change saved while it ran kept");
+            assert(written?.audio === undefined, "after-seed: the declared key it removed not written");
+            assertEqual(config.adapter.audio.appVolumes, "{}", "after-seed: … and back at its default in the adapter, not brought back");
+            assertEqual(config.adapter.disabledModules.join(","), "concurrent", "after-seed: the adapter keeps the change saved meanwhile");
             assertEqual(_json(config.adapter.globals)?.["legacy.value"], 7, "after-seed: the reader sees it");
-            assertEqual(config.adapter.migratedKeys.join(","), "2026-11-25-testonly-rename,1.0.0-testonly-legacy", "after-seed: the records in the adapter");
+            assertEqual(config.adapter.migratedKeys.join(","), "2026-11-25-testonly-rename,2026-11-25-testonly-theme,1.0.0-testonly-legacy", "after-seed: the records in the adapter");
+            config.saveStamped();
+            const saved = _json(_read(dir + "/config.json"));
+            assert(saved?.oldSection === undefined && saved?.audio?.appVolumes === "{}", "after-seed: a later save brings no removed key back");
             assertEqual(_json(_read(config.migrationReports.afterSeed.backup))?.oldSection?.value, 7, "after-seed: a backup of the file before it");
             assert(!config.runAfterSeed(), "after-seed: once per run");
         });

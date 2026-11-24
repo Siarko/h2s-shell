@@ -38,7 +38,9 @@ JsonConfigFile {
     // Nothing written: no migration result, no backup (the test runner)
     property bool readOnly: false
     // Where a config migrated in memory only is put for a moment, for the adapter to read
-    property string viewDir: (Quickshell.env("XDG_RUNTIME_DIR") || "/tmp")
+    // — the runtime folder, private to the user; none without it (never a shared folder: the
+    // config holds the Google tokens)
+    property string viewDir: Quickshell.env("XDG_RUNTIME_DIR") || ""
     // The last runs' reports, { load, afterSeed } (ConfigMigration's result.report; null for a
     // phase not run): what the failure notice tells
     property var migrationReports: ({ load: null, afterSeed: null })
@@ -47,6 +49,8 @@ JsonConfigFile {
     readonly property bool migrationBusy: _migration.busy
     property bool _afterSeedStarted: false
     property string _viewPath: ""
+    // The declared keys' defaults: what a key the after-seed run removed goes back to
+    property ConfigAdapter _defaults: ConfigAdapter {}
 
     // A run ended (its report in migrationReports), before its result is read
     signal migrated(var result)
@@ -68,7 +72,7 @@ JsonConfigFile {
         if (_afterSeedStarted || configPath === "" || _migration.running || !adapter || adapter.profiles === "")
             return false;
         _afterSeedStarted = true;
-        if (!_migration.start("afterSeed", currentText()))
+        if (!_migration.start("afterSeed", () => root.currentText()))
             _afterSeedStarted = false;
         return _afterSeedStarted;
     }
@@ -80,6 +84,14 @@ JsonConfigFile {
         version: root.version
         viewDir: root.viewDir
         onPruned: root.backupsPruned()
+        // Taken at once: a save before the run ends keeps what the run wrote, and a key it
+        // removed stays removed
+        onConfigWritten: (phase, text) => {
+            if (phase !== "afterSeed")
+                return;
+            root.written(text);
+            root.apply(JSON.parse(text), root._plain(root._defaults, true));
+        }
         onFinished: result => {
             const reports = Object.assign({}, root.migrationReports);
             reports[result.phase] = result.report;
@@ -92,11 +104,9 @@ JsonConfigFile {
                 root.path = result.viewPath !== "" ? result.viewPath : root.configPath;
                 return;
             }
-            if (result.text === "")
-                return;
-            if (result.written)
-                root.written(result.text);
-            root.apply(JSON.parse(result.text));
+            // Not written (read-only): the migrated content in memory only
+            if (result.text !== "" && !result.written)
+                root.apply(JSON.parse(result.text), root._plain(root._defaults, true));
         }
     }
 
@@ -122,6 +132,10 @@ JsonConfigFile {
         read();
     }
     onLoadFailed: error => {
+        if (_viewPath !== "" && path === _viewPath) {
+            _migration.dropView(_viewPath);
+            _viewPath = "";
+        }
         loadFailed = ProfileRules.configReadFailed(error === FileViewError.FileNotFound ? "missing" : "error", "");
         readError = loadFailed ? FileViewError.toString(error) : "";
         acknowledgedModulesInFile = false;

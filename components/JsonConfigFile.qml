@@ -50,25 +50,34 @@ FileView {
 
     // Sets the adapter's declared properties to `content`'s values (a plain object as the file
     // would hold it; a declared JsonObject from an object, key by key): what another writer put
-    // in the file reaches the adapter without reading it again
-    function apply(content) {
+    // in the file reaches the adapter without reading it again. A declared key `content` lacks
+    // takes its value from `defaults` (the adapter's content when new), so a removed key stays
+    // removed.
+    function apply(content, defaults) {
         if (adapter)
-            _apply(adapter, content);
+            _apply(adapter, content, defaults);
     }
 
-    function _apply(target, content) {
-        if (content === null || typeof content !== "object" || Array.isArray(content))
+    function _isPlainObject(value) {
+        return value !== null && typeof value === "object" && !Array.isArray(value);
+    }
+
+    function _apply(target, content, defaults) {
+        if (!_isPlainObject(content))
             return;
+        const fallback = _isPlainObject(defaults) ? defaults : {};
         const declared = _plain(target, true);
-        for (const key of Object.keys(content)) {
-            if (!Object.prototype.hasOwnProperty.call(declared, key))
+        for (const key of Object.keys(declared)) {
+            const has = Object.prototype.hasOwnProperty.call(content, key);
+            if (!has && !Object.prototype.hasOwnProperty.call(fallback, key))
                 continue;
             if (_isQObject(target[key])) {
-                _apply(target[key], content[key]);
+                _apply(target[key], has ? content[key] : {}, fallback[key]);
                 continue;
             }
-            if (JSON.stringify(declared[key]) !== JSON.stringify(content[key]))
-                target[key] = content[key];
+            const value = has ? content[key] : fallback[key];
+            if (JSON.stringify(declared[key]) !== JSON.stringify(value))
+                target[key] = value;
         }
     }
 

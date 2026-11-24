@@ -6,12 +6,13 @@ import qs.singletons
 // one): reads the config (the load phase: the file as it is on disk; the after-seed phase:
 // the text it is handed) and the side files the registered migrations name, asks
 // MigrationRules.startup what to do, and does it — the backup first (only when something
-// changed or a scope was reset), the side files, then the config with the records, each
-// write atomic —; then prunes the config backups to the newest automatic ones
-// (MigrationRules.backupsToKeep). Read-only (the test runner): nothing written, no backup,
-// nothing pruned; what the migrations made is handed back for the readers only. A write that
-// fails leaves the rest unwritten (the records last: the run repeats at the next start) and
-// the session read-only.
+// changed or a scope was reset; with the side files it overwrites or removes, readable by
+// the user only), the side files, then the config with the records, each write atomic, and
+// only then the side files it removes —; then prunes the config backups to the newest
+// automatic ones (MigrationRules.backupsToKeep). Read-only (the test runner): nothing
+// written, no backup, nothing pruned; what the migrations made is handed back for the
+// readers only. A write that fails leaves the rest unwritten (the records last: the run
+// repeats at the next start) and saving blocked for the session.
 QtObject {
     id: root
 
@@ -21,8 +22,9 @@ QtObject {
     property var registry: []
     property bool readOnly: false
     property string version: Version.number
-    // Where a config migrated in memory only is put for the adapter to read (removed once read)
-    property string viewDir: "/tmp"
+    // Where a config migrated in memory only is put for the adapter to read (removed once
+    // read): a private folder (the runtime folder); "" for none, and then none is made
+    property string viewDir: ""
     // A run goes on (until `finished`)
     readonly property bool running: _phase !== ""
     readonly property bool busy: running || _pruneLister.running || _pruneRemover.running
@@ -34,6 +36,9 @@ QtObject {
     signal finished(var result)
     // The backups were pruned after a run that wrote one
     signal pruned
+    // config.json now holds `text`, written by the run of `phase` (before `finished`: side
+    // files may still be removed)
+    signal configWritten(string phase, string text)
 
     property string _phase: ""
     property var _outcome: null
@@ -41,6 +46,11 @@ QtObject {
     property string _diskText: ""
     property var _raw: null
     property bool _pruneAgain: false
+    property var _source: null
+    property var _files: ({})
+    property var _unreadable: []
+    // The side files as read (path → text): what their backups hold
+    property var _sideTexts: ({})
     property string _writeError: ""
 
     readonly property string _file: {
@@ -83,18 +93,27 @@ QtObject {
         return _writeError === "";
     }
 
-    // Starts a run: `phase` "load" reads config.json itself, "afterSeed" takes `text`, the
-    // config as it stands. A run asked for while one goes on is refused (false).
-    function start(phase, text) {
+    // Starts a run: `phase` "load" reads config.json itself; "afterSeed" calls `source()` for
+    // the config as it stands — at the start, and again when the config is written. A run
+    // asked for while one goes on is refused (false).
+    function start(phase, source) {
         if (_phase !== "" || _file === "")
             return false;
         _phase = phase === "afterSeed" ? "afterSeed" : "load";
+        _source = _phase === "afterSeed" && typeof source === "function" ? source : null;
+        _sideTexts = {};
+        _written = null;
         _diskText = _read(_file);
-        const source = _phase === "load" ? _diskText : (typeof text === "string" ? text : "");
+        let text = "";
+        if (_phase === "load")
+            text = _diskText;
+        else if (_source !== null)
+            text = String(_source() ?? "");
+        const source0 = text;
         _raw = null;
-        if (source.trim() !== "") {
+        if (source0.trim() !== "") {
             try {
-                _raw = JSON.parse(source);
+                _raw = JSON.parse(source0);
             } catch (error) {
                 _raw = undefined;
             }
@@ -134,9 +153,11 @@ QtObject {
 
     function _readSideFiles(names) {
         const files = {};
+        const texts = {};
         const unreadable = [];
         for (const name of names) {
             const text = _read(_dir + "/" + name);
+            Object.defineProperty(texts, name, { value: text, enumerable: true, writable: true, configurable: true });
             try {
                 const value = JSON.parse(text);
                 Object.defineProperty(files, name, { value: value, enumerable: true, writable: true, configurable: true });
@@ -144,40 +165,94 @@ QtObject {
                 unreadable.push(name);
             }
         }
+        _sideTexts = texts;
         _decide(files, unreadable);
     }
 
     function _decide(files, unreadable) {
-        _outcome = MigrationRules.startup(registry, _raw, files, unreadable, { phase: _phase, version: version, context: { version: version } });
+        _files = files;
+        _unreadable = unreadable;
+        _outcome = MigrationRules.startup(registry, _raw, files, unreadable, _options());
         _backup = "";
         _log(_outcome);
         if (!_outcome.write || readOnly) {
-            const shown = _outcome.view ?? (_outcome.write ? _outcome.config : null);
+            const shown = _outcome.view ?? (_outcome.write && !_outcome.report.fresh ? _outcome.config : null);
             _finish(_outcome.readOnly, false, shown);
             return;
         }
-        if (_outcome.backup) {
-            const name = MigrationRules.backupName(new Date().toISOString(), "migration");
-            // The file as it is on disk: what the run started from
-            if (!_write(_dir + "/" + name, _diskText)) {
-                _failed("could not write the backup " + _dir + "/" + name + ": " + _writeError);
-                return;
-            }
-            _backup = _dir + "/" + name;
-            console.log("[Migrations] Backup of the config before the run:", _backup);
-        }
-        // FileView does not create folders
+        // FileView does not create folders; the backup's side files go into a folder named
+        // after it (not "config.json…": the config's files get mode 600, a folder could not
+        // be entered then), private like the backup
         const folders = [_dir];
         for (const file of Object.keys(_outcome.files))
-            folders.push((_dir + "/" + file).replace(/\/[^\/]*$/, ""));
-        _mkdir.command = ["mkdir", "-p", "--"].concat(folders);
-        _mkdir.running = true;
+            folders.push(_parent(_dir + "/" + file));
+        if (_outcome.backup) {
+            _backup = _dir + "/" + MigrationRules.backupName(new Date().toISOString(), "migration");
+            for (const file of _backedUpSideFiles())
+                folders.push(_parent(_sideBackup(_backup) + "/" + file));
+        }
+        _prepare.command = ["sh", "-c", "umask 077 && mkdir -p -- \"$@\"", "sh"].concat(folders);
+        _prepare.running = true;
     }
 
-    property Process _mkdir: Process {
+    // The folder holding the side files of the backup at `path`
+    function _sideBackup(path) {
+        return _dir + "/backup-side-files/" + path.substring(path.lastIndexOf("/") + 1);
+    }
+
+    function _options() {
+        return { phase: _phase, version: version, context: { version: version } };
+    }
+
+    function _parent(path) {
+        return path.replace(/\/[^\/]*$/, "");
+    }
+
+    // The side files the run overwrites or removes that are there now: kept with the backup
+    function _backedUpSideFiles() {
+        return Object.keys(_outcome.files).concat(_outcome.removed)
+            .filter(file => Object.prototype.hasOwnProperty.call(_sideTexts, file));
+    }
+
+    property Process _prepare: Process {
         onExited: code => {
             if (code !== 0) {
                 root._failed("could not create the config's folders");
+                return;
+            }
+            root._writeBackup();
+        }
+    }
+
+    function _writeBackup() {
+        if (_backup === "") {
+            _writeSideFiles();
+            return;
+        }
+        // The file as it is on disk: what the run started from
+        if (!_write(_backup, _diskText)) {
+            const path = _backup;
+            _backup = "";
+            _failed("could not write the backup " + path + ": " + _writeError);
+            return;
+        }
+        const sideFiles = _backedUpSideFiles();
+        for (const file of sideFiles) {
+            if (!_write(_sideBackup(_backup) + "/" + file, _sideTexts[file])) {
+                _failed("could not back up " + file + ": " + _writeError);
+                return;
+            }
+        }
+        console.log("[Migrations] Backup of the config before the run:", _backup);
+        // It holds the Google tokens: readable by the user only, whatever the folder's mode
+        _protect.command = ["chmod", "-R", "go-rwx", "--", _backup].concat(sideFiles.length > 0 ? [_sideBackup(_backup)] : []);
+        _protect.running = true;
+    }
+
+    property Process _protect: Process {
+        onExited: code => {
+            if (code !== 0) {
+                root._failed("could not restrict the backup's permissions");
                 return;
             }
             root._writeSideFiles();
@@ -192,31 +267,55 @@ QtObject {
                 return;
             }
         }
+        _writeConfig();
+    }
+
+    function _writeConfig() {
+        let config = _outcome.config;
+        // After seeding the config is the adapter's and may have been saved since the run
+        // began: the migrations run again, on the content as it stands now (the side files as
+        // read), so that nothing saved meanwhile is written over
+        if (_phase === "afterSeed" && typeof _source === "function") {
+            let raw = undefined;
+            try {
+                raw = JSON.parse(_source());
+            } catch (error) {}
+            const now = MigrationRules.startup(registry, raw, _files, _unreadable, _options());
+            config = now.write ? now.config : null;
+            if (now.write)
+                _outcome = Object.assign({}, now, { files: _outcome.files, removed: _outcome.removed });
+        }
+        if (config !== null && !_write(_file, MigrationRules.configText(config))) {
+            _failed("could not write " + _file + ": " + _writeError);
+            return;
+        }
+        _written = config;
+        if (config !== null)
+            configWritten(_phase, MigrationRules.configText(config));
+        // Side files removed last, once the records are written (each is in the backup)
         if (_outcome.removed.length > 0) {
             _remover.command = ["rm", "-f", "--"].concat(_outcome.removed.map(file => _dir + "/" + file));
             _remover.running = true;
             return;
         }
-        _writeConfig();
+        _done();
     }
+
+    property var _written: null
 
     property Process _remover: Process {
         onExited: code => {
             if (code !== 0)
-                root._failed("could not remove " + root._outcome.removed.join(", "));
-            else
-                root._writeConfig();
+                console.warn("[Migrations] could not remove " + root._outcome.removed.join(", ") + ": left where they are");
+            root._done();
         }
     }
 
-    function _writeConfig() {
-        if (!_write(_file, MigrationRules.configText(_outcome.config))) {
-            _failed("could not write " + _file + ": " + _writeError);
-            return;
-        }
-        _finish(false, true, _outcome.config);
-        if (_backup !== "")
-            _prune();
+    function _done() {
+        const backup = _backup;
+        _finish(false, _written !== null, _written);
+        if (backup !== "")
+            _prune(backup);
     }
 
     // A write failed: what is written stays (the records are not, so the run repeats), the
@@ -227,19 +326,53 @@ QtObject {
         _finish(true, false, _outcome.config);
     }
 
+    // The view: a config not written, put where only the user can read it — the runtime
+    // folder (private by definition), never a shared one; without one the readers get the
+    // file as it is
     function _finish(readOnlySession, written, config) {
         const text = config ? MigrationRules.configText(config) : "";
-        let viewPath = "";
+        const report = Object.assign({}, _outcome.report, { backup: _backup });
+        _result = { phase: _phase, report: report, readOnly: readOnlySession, written: written, text: text, viewPath: "" };
         if (!written && text !== "" && _phase === "load") {
-            viewPath = viewDir + "/h2s-shell-config-view-" + Date.now() + "-" + Math.floor(Math.random() * 1e9) + ".json";
+            if (!viewDir.startsWith("/")) {
+                console.warn("[Migrations] no runtime folder for the migrated config: it is read as it is on disk");
+                _emit();
+                return;
+            }
+            const viewPath = viewDir + "/h2s-shell-config-view-" + Date.now() + "-" + Math.floor(Math.random() * 1e9) + ".json";
             if (!_write(viewPath, text)) {
                 console.warn("[Migrations] could not put the migrated config in " + viewPath + ": " + _writeError);
-                viewPath = "";
+                _emit();
+                return;
             }
+            _viewProtect.path = viewPath;
+            _viewProtect.command = ["chmod", "600", "--", viewPath];
+            _viewProtect.running = true;
+            return;
         }
-        const report = Object.assign({}, _outcome.report, { backup: _backup });
-        const result = { phase: _phase, report: report, readOnly: readOnlySession, written: written, text: text, viewPath: viewPath };
+        _emit();
+    }
+
+    property var _result: null
+
+    property Process _viewProtect: Process {
+        property string path: ""
+        onExited: code => {
+            if (code === 0) {
+                root._result.viewPath = path;
+            } else {
+                console.warn("[Migrations] could not restrict " + path + ": the migrated config is read as it is on disk");
+                root.dropView(path);
+            }
+            root._emit();
+        }
+    }
+
+    function _emit() {
+        const result = _result;
+        _result = null;
         _phase = "";
+        _source = null;
         finished(result);
     }
 
@@ -280,13 +413,13 @@ QtObject {
 
     // ---- Pruning ----
 
-    function _prune() {
+    function _prune(backup) {
+        _pruneLister.written = backup.substring(backup.lastIndexOf("/") + 1);
         if (_pruneLister.running || _pruneRemover.running) {
             _pruneAgain = true;
             return;
         }
         _pruneAgain = false;
-        _pruneLister.written = _backup.substring(_backup.lastIndexOf("/") + 1);
         _pruneLister.command = ["ls", "-1A", "--", _dir];
         _pruneLister.running = true;
     }
@@ -306,7 +439,11 @@ QtObject {
                 return;
             }
             console.log("[Migrations] Older backups removed:", plan.delete.join(", "));
-            root._pruneRemover.command = ["rm", "-f", "--"].concat(plan.delete.map(name => root._dir + "/" + name));
+            // Each with the folder of side files it holds, if any
+            const paths = [];
+            for (const name of plan.delete)
+                paths.push(root._dir + "/" + name, root._sideBackup(root._dir + "/" + name));
+            root._pruneRemover.command = ["rm", "-rf", "--"].concat(paths);
             root._pruneRemover.running = true;
         }
     }
@@ -317,7 +454,7 @@ QtObject {
 
     function _prunedOne() {
         if (_pruneAgain) {
-            _prune();
+            _prune(_dir + "/" + _pruneLister.written);
             return;
         }
         pruned();
