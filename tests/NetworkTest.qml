@@ -653,6 +653,15 @@ TestCase {
                    "lockdown: not ready, no nftables, not wanted while on (refused before), off");
             assertEqual(VpnLockdownRules.lockdownNextStep(lockFacts({ status: "off" })), "on", "lockdown: wanted and off — switched on");
             assertEqual(VpnLockdownRules.lockdownNextStep(lockFacts({ wanted: false, refused: "off", force: true })), "off", "lockdown: Apply again while not wanted, off refused before — switched off");
+            assertEqual(VpnLockdownRules.lockdownArguments({ vpnInterfaces: ["wg0"], servers: ["1.2.3.4"] }).join(" "), "on 0 wg0 1.2.3.4", "lockdown: one interface, one server");
+            const manyInterfaces = Array.from({ length: 33 }, (_, i) => "wg" + (100 + i));
+            assertEqual(VpnLockdownRules.lockdownArguments({ vpnInterfaces: manyInterfaces }).slice(2, 3)[0].split(",").length, 32, "lockdown: 33 interfaces — the script's 32 kept");
+            assert(VpnLockdownRules.lockdownCurrent("on 1 - -", undefined, "on 1 - -", 1) === false && VpnLockdownRules.lockdownCurrent("on 1 - -", 0, "on 1 - -", undefined) === true,
+                   "lockdown: current — a version not known counts as 0");
+            assertEqual(JSON.stringify(VpnLockdownRules.checkReply([])),
+                        JSON.stringify({ script: 0, installed: 0, installedFound: false, unsafe: false, rule: false, nft: false }), "lockdown check: nothing read — nothing found");
+            assertEqual(JSON.stringify(VpnLockdownRules.checkReply(["script 4 x", "unsafe 4 x", "installed 4"])),
+                        JSON.stringify({ script: 0, installed: 4, installedFound: true, unsafe: false, rule: false, nft: false }), "lockdown check: lines with more words — not taken");
             // The check's lines
             assertEqual(JSON.stringify(VpnLockdownRules.checkReply(["script 4", "installed 3", "rule yes", "nft"])),
                         JSON.stringify({ script: 4, installed: 3, installedFound: true, unsafe: false, rule: true, nft: true }), "lockdown check: all found");
