@@ -130,28 +130,45 @@ stack_stop() {
     PROCESS_GROUPS=()
     # A process stopped at the memory cap: said, and the test fails (its scope is cleared
     # from the service manager by the look)
-    local index capped="" start_failure
+    local index stack_failed="" start_failure
     for index in "${!CAP_LOGS[@]}"; do
         if start_failure=$(memory_cap_start_failed "${CAP_LOGS[$index]}"); then
             printf '    FAIL %s: the process logging to %s could not be started under the memory cap: %s\n' \
                 "${LOCKTEST_TEST_ID##*/}" "${CAP_LOGS[$index]##*/}" "$start_failure"
-            capped=1
+            stack_failed=1
             continue
         fi
         memory_cap_hit "${CAP_UNITS[$index]}" 1 "${CAP_LOGS[$index]}" || continue
         printf '    FAIL %s: the process logging to %s %s\n' "${LOCKTEST_TEST_ID##*/}" "${CAP_LOGS[$index]##*/}" "$(memory_cap_note)"
-        capped=1
+        stack_failed=1
     done
     CAP_UNITS=() CAP_LOGS=()
+    # Restarts of a PAM start that said nothing (the shell's "PAM said nothing in" lines). A
+    # real stuck start (Quickshell's fork inside pam_start) is rare: one in a scenario is
+    # said and let pass; more mean the guard restarts what it should not (a lost marker, a
+    # word not counted), unless the scenario's subject is the restart
+    # (PAM_SILENT_STARTS_EXPECTED=1)
+    local silent_starts
+    silent_starts=$(grep -ac "PAM said nothing in" "$WORK/shell.log" 2> /dev/null)
+    if [ "${silent_starts:-0}" -gt 0 ] && [ "${PAM_SILENT_STARTS_EXPECTED:-0}" != 1 ]; then
+        if [ "$silent_starts" -gt 1 ]; then
+            printf '    FAIL %s: the shell restarted %s silent PAM starts (shell.log: "PAM said nothing in")\n' \
+                "${LOCKTEST_TEST_ID##*/}" "$silent_starts"
+            stack_failed=1
+        else
+            printf '    NOTE %s: one PAM start said nothing and was started again (shell.log: "PAM said nothing in")\n' \
+                "${LOCKTEST_TEST_ID##*/}"
+        fi
+    fi
     if memory_cap_slice_gone; then
         printf '    FAIL %s: the run'"'"'s memory budget (%s) had ended: the stack ran outside it\n' \
             "${LOCKTEST_TEST_ID##*/}" "$MEMORY_CAP_SLICE"
-        capped=1
+        stack_failed=1
     fi
     memory_cap_finish
     # The dir itself is run.sh's to remove (also when this bash is killed)
     rm -rf "${RUN:?}"/* 2> /dev/null
-    [ -z "$capped" ] || exit 1
+    [ -z "$stack_failed" ] || exit 1
 }
 trap stack_stop EXIT
 trap 'exit 1' INT TERM
@@ -325,11 +342,13 @@ stack_start() {
     # the shell's 8 s and the settle after it would outlast the 10 s a check waits for an
     # unlock, so a stuck start (rare, and seen only under load) failed the test. Shorter
     # here: a start restarted early only costs a start, no module having run.
-    case "$timings" in
-        *'"firstWord"'*) ;;
-        "" | "{}" | "{ }") timings='{"firstWord": 3000}' ;;
-        *) timings="{\"firstWord\": 3000, ${timings#*\{}" ;;
-    esac
+    timings=$(python3 -I -c '
+import json, sys
+timings = json.loads(sys.argv[1] or "{}")
+if not isinstance(timings, dict):
+    sys.exit("--timings: not a JSON object")
+timings.setdefault("firstWord", 3000)
+print(json.dumps(timings))' "$timings") || abort "stack_start: --timings is not a JSON object: $timings"
     local keymap_file=$TOOLS/share/keymaps/$keymap.xkb
     [ -f "$keymap_file" ] || abort "stack_start: no keymap $keymap (the tool set's share/keymaps)"
     [ -z "$settings" ] || write_settings "$settings"

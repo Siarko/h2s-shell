@@ -340,7 +340,9 @@ test writes one: `caps_led 1|0|none` (`caps-keypad.sh`).
 seconds (`fingerprint-timeout.sh`). Unset, the shell keeps its own, but for `firstWord`: 3 s
 unless a test gives it, so that a PAM start stuck before any module ran (the test stacks
 start with the lock's marker line, as the shipped ones do) is started again well inside the
-10 s a check waits for an unlock.
+10 s a check waits for an unlock. Such a restart leaves a "PAM said nothing in" line in the
+shell's log: one in a scenario is said (a `NOTE` line) and let pass, more fail it, unless the
+scenario's subject is the restart (`PAM_SILENT_STARTS_EXPECTED=1`, `pam-silent-start.sh`).
 
 ## The test tree
 

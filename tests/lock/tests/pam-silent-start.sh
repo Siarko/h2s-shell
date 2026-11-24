@@ -9,6 +9,8 @@
 # killed; it links the marker in, so the next start says the marker and goes on. Without the
 # restart the first start would wait for the lock's 90 s verify time-out.
 
+# Its subject is the restart: stack_stop does not count these as unexpected
+PAM_SILENT_STARTS_EXPECTED=1
 stack_start --methods "password=password-stall" --timings '{"firstWord":2000}'
 echo before > "$WORK/pam/stall/mode"
 
