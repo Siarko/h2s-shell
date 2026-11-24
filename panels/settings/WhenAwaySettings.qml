@@ -53,12 +53,20 @@ Flickable {
     // the timeline and the line under the times show (the pills keep the profile's time)
     readonly property var _hibernateInEffect: HibernateRules.inEffect(_hibernate, _hibernation.delay)
     // With sleep on, the profile's time after sleeping is not the system's delay: said, with
-    // Apply (or, on NixOS, the module's option)
+    // what this system lets the shell do about it
     readonly property bool _delayDiffers: _config.sleepAfter > 0 && HibernateRules.delayDiffers(_hibernation.delay, _hibernate.after)
-    // What the last Apply wrote (Idle.hibernateDelayWritten), and the file that wins over it
-    // when the delay read back is still another: named, and no Apply while it does
-    property int delayWritten: Idle.hibernateDelayWritten
-    readonly property string _delayOverride: HibernateRules.delayOverride(_hibernation.delay, delayWritten)
+    // The distribution's answers for the delay (Idle's), handed in by a suite
+    property var delayCapability: Idle.hibernateDelayCapability
+    property var delayInForce: Idle.hibernateDelayInForce
+    property string delayBusy: Idle.hibernateDelayBusy
+    property bool delayUndoable: Idle.hibernateDelayUndoable
+    // The option to set where the system's configuration sets the delay
+    property string delayOption: Distribution.plan("sleep.hibernateDelay", _hibernate.after).preview?.option ?? ""
+    // What the section offers under the times: its line, Apply and Undo, labels and effects
+    readonly property var _delayOffer: HibernateRules.delayOffer({
+        delay: _hibernation.delay, picked: _hibernate.after, differs: _delayDiffers, capability: delayCapability, option: delayOption,
+        inForce: delayInForce, busy: delayBusy, undoable: delayUndoable
+    }, seconds => Format.duration(seconds))
     readonly property var _monitorMap: _edited("lockscreen.monitorIdle")
     // The map comes from a profile above, or the default: its cards' choices dimmed
     readonly property bool _mapInherited: !("lockscreen.monitorIdle" in Profiles.effectiveGlobals)
@@ -188,7 +196,10 @@ Flickable {
     // What logind allows may have changed since the start (a polkit rule, a new kernel): read
     // each time the page shows
     PageShown {
-        onBecameShown: Idle.refreshSleepSupport()
+        onBecameShown: {
+            Idle.refreshSleepSupport();
+            Idle.readHibernateDelay();
+        }
     }
     function _showRequested() {
         if (section !== "")
@@ -580,27 +591,48 @@ Flickable {
                     Layout.bottomMargin: 4
                 }
                 // With sleep on the delay is the system's, one per machine: a time that differs
-                // is said, with Apply where the shell may write it (the password asked on the
-                // click), or the NixOS option's name
+                // is said, with what the distribution lets the shell do (Apply, the password
+                // asked on the click; the option to set; why not), and Undo after an Apply
                 RowLayout {
                     objectName: "hibernateDelay"
-                    visible: root._delayDiffers
+                    visible: root._delayOffer.shown
                     Layout.fillWidth: true
                     spacing: 8
                     Hint {
                         objectName: "hibernateDelayLine"
-                        text: HibernateRules.delayLine(root._hibernation.delay, root._hibernation.nixos ?? null, seconds => Format.duration(seconds),
-                                                       root._delayOverride, root._hibernate.after)
+                        text: root._delayOffer.line
                         Layout.fillWidth: true
                     }
                     SmallButton {
                         objectName: "hibernateApply"
-                        visible: root._hibernation.nixos === false && root._delayOverride === ""
-                        label: Idle.hibernateDelayApplying ? "Applying…" : "Apply"
+                        visible: root._delayOffer.apply.shown && !root._delayOffer.apply.asks
+                        label: root._delayOffer.apply.label
                         kind: "save"
-                        available: !Idle.hibernateDelayApplying
+                        available: root._delayOffer.apply.available
                         fontSize: Theme.fontSizeSmall
-                        onClicked: Idle.applyHibernateDelay(root._hibernate.after)
+                        onClicked: Idle.applyHibernateDelay(root._delayOffer.apply.request)
+                    }
+                    // The shell's file changed outside it: Apply replaces it only on a second click
+                    DeleteButton {
+                        objectName: "hibernateReplace"
+                        visible: root._delayOffer.apply.shown && root._delayOffer.apply.asks
+                        kind: "save"
+                        label: root._delayOffer.apply.label
+                        confirmLabel: root._delayOffer.apply.question
+                        available: root._delayOffer.apply.available
+                        fontSize: Theme.fontSizeSmall
+                        // The question is about this file and this time: another resets it
+                        readonly property string subject: JSON.stringify(root._delayOffer.apply.request)
+                        onSubjectChanged: asking = false
+                        onConfirmed: Idle.applyHibernateDelay(root._delayOffer.apply.request)
+                    }
+                    SmallButton {
+                        objectName: "hibernateUndo"
+                        visible: root._delayOffer.undo.shown
+                        label: root._delayOffer.undo.label
+                        available: root._delayOffer.undo.available
+                        fontSize: Theme.fontSizeSmall
+                        onClicked: Idle.undoHibernateDelay()
                     }
                 }
             }

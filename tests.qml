@@ -62,6 +62,7 @@ QtObject {
     property var _distributionUnknown: DistributionUnknownTest {}
     property var _etcFilesRules: EtcFilesRulesTest {}
     property var _etcFiles: EtcFilesTest {}
+    property var _integrationChange: IntegrationChangeTest {}
     property var _distributionContract: DistributionContractTest {}
     property var _integrationRules: IntegrationRulesTest {}
     property var _notifier: NotifierTest {}
@@ -138,7 +139,6 @@ QtObject {
     property var _wlopmScreenPowerReading: WlopmScreenPowerReadingTest {}
     property var _logindIdleBlockReading: LogindIdleBlockReadingTest {}
     property var _logindSleepReading: LogindSleepReadingTest {}
-    property var _hibernateDelayWriter: HibernateDelayWriterTest {}
     property var _pamStackRules: PamStackRulesTest {}
     property var _pamStacksReading: PamStacksReadingTest {}
     property var _helper: HelperTest {}

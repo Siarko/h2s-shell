@@ -555,8 +555,9 @@ TestCase {
     }
 
     // The Hibernate section and the hibernation on the timeline, with logind's answers and
-    // what was read handed to the page. The Apply is never clicked here (it would ask for the
-    // password for real): HibernateDelayWriterTest runs it on a stand-in
+    // what was read handed to the page, and the distribution's answers for the delay (Arch's,
+    // NixOS's, generic's capability). The Apply is never clicked here (it would ask for the
+    // password for real): IntegrationChangeTest runs it on a stand-in
     function _whenAwayHibernate(page, named, editorIn, timeline) {
         const caption = () => _find(timeline, item => item.objectName === "timelineCaption").text;
         const labels = () => timeline.labels.map(label => label.text).join(" | ");
@@ -605,31 +606,58 @@ TestCase {
                     "… the line under them: what will happen, the system's 2 h, until Apply");
         // (`visible` of what a Reveal holds follows its slide, which a synchronous suite never sees)
         assert(page._delayDiffers, "3 h picked, the system's 2 h: said");
+        const kind = "sleep.hibernateDelay";
+        const capabilityOf = table => IntegrationRules.capability(table, kind);
+        const absent = { state: "absent", text: null, sha256: "absent", ours: false };
+        const inForce = extra => Object.assign({ state: "set", value: 7200, from: "/etc/systemd/sleep.conf", elsewhere: "", file: absent }, extra ?? {});
+        page.delayCapability = capabilityOf({ [kind]: { mode: "apply", undo: true, inForce: true } });
+        page.delayInForce = inForce();
+        page.delayBusy = "";
+        page.delayUndoable = false;
         assertEqual(named("hibernateDelayLine").text, "Picked 3 h; the system now hibernates after 2 h. Apply to change it.",
                     "… the picked time takes effect after Apply");
         const apply = named("hibernateApply");
-        assert(page._hibernation.nixos === false && apply.label === "Apply" && apply.kind === "save" && apply.available, "… with Apply");
+        const replace = named("hibernateReplace");
+        const undo = named("hibernateUndo");
+        assert(page._delayOffer.apply.shown && !page._delayOffer.apply.asks && apply.label === "Apply" && apply.kind === "save" && apply.available,
+               "… with Apply");
+        assertEqual(JSON.stringify(page._delayOffer.apply.request), JSON.stringify({ seconds: 10800, current: absent, replace: false }), "… its effect");
         assertEqual(labels(), "Sleep 30 min | Hibernate 2 h 30 min", "the timeline: the sleep, then the hibernation the system will make");
         assertEqual(caption(), "No lock when idle. Sleeps at 30 min, hibernates 2 h later.", "… its line");
-        page.sleepSupport = facts({}, { nixos: true });
+        page.delayBusy = "apply";
+        assert(apply.label === "Applying\u2026" && !apply.available, "applying: said, not clickable");
+        page.delayBusy = "";
+        page.delayUndoable = true;
+        assert(page._delayOffer.undo.shown && undo.label === "Undo" && undo.available, "after an Apply: Undo");
+        page.delayUndoable = false;
+        // The user's own file sets it: shown, not overridden
+        page.delayInForce = inForce({ elsewhere: "/etc/systemd/sleep.conf" });
+        assertEqual(named("hibernateDelayLine").text, "Picked 3 h. Set in /etc/systemd/sleep.conf: 2 h.", "set in another file: named with its value");
+        assert(!page._delayOffer.apply.shown, "… and no Apply over it");
+        // The shell's own file changed outside it: Apply asks
+        const edited = { state: "text", text: "[Sleep]\nHibernateDelaySec=1h\n", sha256: "b".repeat(64), ours: false };
+        page.delayInForce = inForce({ from: EtcFilesRules.files[kind], file: edited });
+        assert(page._delayOffer.apply.asks && replace.label === "Apply" && replace.confirmLabel === "Replace?" && replace.kind === "save",
+               "the shell's file edited by hand: Apply asks first");
+        replace.asking = true;
+        page.delayInForce = inForce({ from: EtcFilesRules.files[kind], file: Object.assign({}, edited, { sha256: "c".repeat(64) }) });
+        assert(!replace.asking, "… the question dropped when the file read is another");
+        page.delayInForce = inForce();
+        // NixOS: the option; generic: why not
+        page.delayCapability = capabilityOf({ [kind]: { mode: "copy", inForce: true, option: HibernateRules.nixosOption } });
+        page.delayOption = HibernateRules.nixosOption;
         assertEqual(named("hibernateDelayLine").text,
                     "Picked 3 h; the system now hibernates after 2 h. On NixOS it is the option programs.h2s-shell.idle.hibernateDelay.",
                     "NixOS: the option named");
-        assert(page._hibernation.nixos === true, "… no Apply (/etc is generated)");
-        page.sleepSupport = facts({}, { nixos: null });
+        assert(!page._delayOffer.apply.shown, "… no Apply (/etc is generated)");
+        page.delayCapability = capabilityOf({});
+        assertEqual(named("hibernateDelayLine").text, "Picked 3 h; the system now hibernates after 2 h. Not supported on this distribution.",
+                    "generic: not supported, no Apply");
+        page.delayCapability = IntegrationRules.unknownCapability();
         assertEqual(named("hibernateDelayLine").text, "Picked 3 h; the system now hibernates after 2 h.",
-                    "whether this is NixOS not read: no Apply promised");
-        // The shell wrote 3 h; another drop-in sorting after its own still says 2 h
-        page.sleepSupport = facts({}, { delay: { state: "set", seconds: 7200, file: "/etc/systemd/sleep.conf.d/zz-tlp.conf" } });
-        page.delayWritten = 10800;
-        assertEqual(named("hibernateDelayLine").text,
-                    "Picked 3 h; the system now hibernates after 2 h. /etc/systemd/sleep.conf.d/zz-tlp.conf sets it after the shell's own file, so Apply cannot change it.",
-                    "a file winning over the shell's: named");
-        assertEqual(labels(), "Sleep 30 min | Hibernate 2 h 30 min", "… the timeline shows what that file makes happen");
-        assertEqual(page._delayOverride, "/etc/systemd/sleep.conf.d/zz-tlp.conf", "… and no Apply while it does");
-        page.delayWritten = -1;
-        assertEqual(page._delayOverride, "", "nothing written in this run: Apply offered as before");
-        page.delayWritten = Qt.binding(() => Idle.hibernateDelayWritten);
+                    "the distribution not known: no Apply promised");
+        page.delayCapability = capabilityOf({ [kind]: { mode: "apply", undo: true, inForce: true } });
+        page.delayInForce = inForce({ state: "default", value: null, from: "" });
         page.sleepSupport = facts({}, { delay: { state: "unset" } });
         assertEqual(named("hibernateDelayLine").text, "Picked 3 h; the system's delay is not set (systemd's default). Apply to change it.",
                     "the system's delay not set: said, Apply offered");
@@ -649,6 +677,11 @@ TestCase {
         assert(page.showSection("hibernate"), "the hibernation's section shown on request");
         page.sleepSupport = Qt.binding(() => Idle.sleepSupport);
         page.sleepBlockers = Qt.binding(() => Idle.sleepBlockers);
+        page.delayCapability = Qt.binding(() => Idle.hibernateDelayCapability);
+        page.delayInForce = Qt.binding(() => Idle.hibernateDelayInForce);
+        page.delayBusy = Qt.binding(() => Idle.hibernateDelayBusy);
+        page.delayUndoable = Qt.binding(() => Idle.hibernateDelayUndoable);
+        page.delayOption = Qt.binding(() => Distribution.plan(kind, page._hibernate.after).preview?.option ?? "");
     }
 
     // The first item under `item` that `matches`; `withResources` also looks at its

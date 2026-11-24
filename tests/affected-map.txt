@@ -101,7 +101,6 @@ scripts/root/replace-file.sh unit:PamApplyTest unit:PamRulesPageTest unit:EtcFil
 scripts/root/etc-files.sh unit:EtcFilesTest unit:DistributionContractTest
 scripts/root/pam-apply.sh unit:PamApplyTest unit:PamRulesPageTest
 scripts/root/remember-install.sh unit:RememberInstallTest unit:RememberAdminPageTest
-scripts/root/hibernate-delay.sh unit:HibernateDelayWriterTest
 tests/test-tree.sh unit:TestTreeTest lock:all
 tests/lock-closure.sh unit:ModuleRegistriesTest
 tests/affected.sh self:tests/affected-selftest.sh

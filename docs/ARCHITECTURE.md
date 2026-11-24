@@ -166,8 +166,11 @@ only the kind's exact template), the file as read checked before it is replaced,
 kept as a backup in `/var/lib/h2s-shell/backup/<kind>/` that Undo puts back — its content, as
 a file of root's with mode 0644, not the replaced file's owner and mode — and a file that is
 not exactly what the shell writes (another's, or the shell's edited by hand) replaced only
-when the request says the user was told. Its `run` is also how the PAM editor,
-the remembered authorization and the hibernation delay queue their own root steps.
+when the request says the user was told. Its `run` is also how the PAM editor and
+the remembered authorization queue their own root steps. A feature reaches a kind through
+`singletons/io/IntegrationChange.qml` (the capability, what is in force, the user's Apply and
+Undo, one at a time) and decides what to offer in its own Rules: the hibernation delay's
+`HibernateRules.delayOffer`.
 `tests/DistributionContractTest.qml` holds every integration to the same answers.
 
 #### NixOS
@@ -662,13 +665,12 @@ launcher agree on the contract described under "Recovery" below):
   `LogindSleep` also reads `CanHibernate`, `CanSuspendThenHibernate`, and what explains a
   "na" or tells the delay without root (`/proc/swaps`, `/proc/meminfo`, the kernel's lockdown,
   `/sys/power/resume`, `/proc/cmdline`, whether this is NixOS (`Distribution`), `systemd-analyze cat-config
-  systemd/sleep.conf`), parsed by `HibernateRules`. The page's Apply of the delay is the one
-  write: `singletons/io/HibernateDelayWriter.qml` reads the fixed `/bin/sh` script
-  `scripts/root/hibernate-delay.sh` and hands its text (`HibernateRules.applyArgv`) to
-  `PrivilegedRuns.startShell` (the shell's own runs as administrator, in
-  the one queue, announced in the prompt as the shell's — "Shell: h2s-shell" and its purpose,
-  `PolkitRules.announcement`'s `shell` —, refused when a module's code asks), which writes the drop-in beside its place and
-  renames it in. IPC: `idle state` (JSON, with the monitors' ids) and
+  systemd/sleep.conf`), parsed by `HibernateRules`. The page's Apply and Undo of the delay
+go through the distribution's integration (`Idle`'s `IntegrationChange` for the kind
+`sleep.hibernateDelay`; on Arch `EtcFiles` writes the drop-in, through
+`PrivilegedRuns.startShell`, the shell's own runs as administrator, announced in the prompt as
+the shell's — "Shell: h2s-shell" and its purpose, `PolkitRules.announcement`'s `shell` —,
+refused when a module's code asks). IPC: `idle state` (JSON, with the monitors' ids) and
   `idle setMonitorTimes <id> <json|default>` (one monitor's entry in
   `lockscreen.monitorIdle`, `IdleRules.withMonitorTimes`).
 - **Adapters** — `singletons/lock/`, thin: I/O to events, effects to I/O, no decisions.

@@ -72,6 +72,11 @@ The interface modules are written against (`qs.api`), versioned on its own
   reloads when it changes.
 
 ### Changed
+- Settings → When away → Hibernate: Apply of the system's delay keeps the file it replaces
+  as a backup, and Undo puts it back. A delay set in another file (your own sleep.conf or a
+  drop-in) is shown as "Set in <file>: <value>" and never overwritten; a hand-edited copy of
+  the shell's own file is replaced only after Apply asks again ("Replace?"). On a
+  distribution the shell does not know, no Apply: "Not supported on this distribution."
 - The machine's u2f settings are no longer changed: a security key row of
   `programs.h2s-shell.pam` keeps `nouserok`, `alwaysok`, `userpresence`, `interactive` and
   `pinverification` from `security.pam.u2f.settings` instead of stripping them or stopping

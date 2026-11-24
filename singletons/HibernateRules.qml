@@ -6,17 +6,16 @@ import QtQuick
 // Hibernation, what can be read of it without root and the one thing written: pure. The
 // reasons it is not possible (the swap tables, the kernel's lockdown, a resume device), the
 // system's delay before a sleep turns into hibernation (sleep.conf's HibernateDelaySec, as
-// `systemd-analyze cat-config` prints it), and the drop-in the Hibernate section's Apply
-// writes through the shell's runs as administrator (singletons/io/HibernateDelayWriter.qml).
+// `systemd-analyze cat-config` prints it), the drop-in's text the Hibernate section's Apply
+// writes where the distribution lets the shell apply it (IntegrationRules' kind
+// "sleep.hibernateDelay", distributions/EtcFiles.qml), and what that section offers.
 Singleton {
     id: root
 
-    // The drop-in the shell owns, in the directory systemd reads sleep.conf's drop-ins from
-    readonly property string dropInDirectory: "/etc/systemd/sleep.conf.d"
-    readonly property string dropInName: "h2s-shell.conf"
     // The delays the Apply writes (seconds): the Hibernate section's times
     readonly property var delayRange: ({ minimum: 60, maximum: 86400 })
-    // The NixOS module's option for the delay (/etc is generated there: nothing is written)
+    // The NixOS module's option for the delay (/etc is generated there: nothing is written;
+    // distributions/nixos/NixosIntegration.qml)
     readonly property string nixosOption: "programs.h2s-shell.idle.hibernateDelay"
 
     // ---- What is read ----
@@ -146,21 +145,6 @@ Singleton {
         return String(text ?? "").replace(/[\u0000-\u001f\u007f]+/g, " ").replace(/\s+/g, " ").trim().slice(0, length);
     }
 
-    // The file that keeps the shell's drop-in from taking effect, or "": after the shell
-    // wrote `written` (seconds; anything else: no write), the delay read back is another,
-    // set (or unset) last by a file that is not the shell's own drop-in — one sorting after
-    // it, or in another directory systemd reads. Apply cannot win against it
-    function delayOverride(delay, written) {
-        if (!Number.isInteger(written) || written <= 0)
-            return "";
-        if (delay?.state !== "set" && delay?.state !== "unset")
-            return "";
-        if (delay.state === "set" && delay.seconds === written)
-            return "";
-        const file = typeof delay.file === "string" ? delay.file : "";
-        return file !== "" && file !== dropInDirectory + "/" + dropInName ? file : "";
-    }
-
     // ---- What the page says ----
 
     // Why the shell cannot hibernate the computer here, as the Hibernate section's line; ""
@@ -215,22 +199,73 @@ Singleton {
         return !(delay?.state === "set" && delay.seconds === seconds);
     }
 
-    // The line under the times while they differ: the time picked (`picked`, seconds) and
-    // what the system does now — the picked time takes effect only after Apply —, then by
-    // system: Apply where /etc is the machine's own (`nixos` false), the option on NixOS
-    // (true), neither while that was not read (null); with `override` (delayOverride's
-    // file), the file that wins over Apply
-    function delayLine(delay, nixos, durationOf, override, picked) {
+    // What the Hibernate section offers under the times while sleep is on, its labels and
+    // their effects in one answer. `given` { delay (hibernateDelay()'s, as last read), picked
+    // (the time picked, seconds), differs (sleep on and the picked time is not the system's:
+    // delayDiffers), capability (the distribution's for "sleep.hibernateDelay":
+    // IntegrationRules.capability's), option (the option to set, plan's preview, where the
+    // system's configuration sets it), inForce (readInForce's answer; null before one), busy
+    // ("apply" or "undo" while one runs, else ""), undoable (a change of the shell's in this
+    // run that Undo puts back) } → { shown, line, apply: { shown, asks, label, question,
+    // available, request: { seconds, current, replace } | null }, undo: { shown, label,
+    // available } }.
+    //
+    // By the capability's mode: "apply" offers Apply — never over a setting made in another
+    // file (the user's or the system's own: named with its value, no Apply), over the
+    // shell's own file changed outside it only as a question; and only once what is in
+    // force was read, the shell's file as the user saw it being what the change is checked
+    // against (`current`). "copy" and "declare" name the option; "unavailable" says why
+    // (nothing while the distribution is not known). The line says first the time picked and
+    // what the system does now — the picked time takes effect only after Apply
+    function delayOffer(given, durationOf) {
         const label = typeof durationOf === "function" ? durationOf : seconds => seconds + " s";
+        const capability = given?.capability ?? {};
+        const busy = typeof given?.busy === "string" ? given.busy : "";
+        const undoShown = capability.mode === "apply" && capability.undo === true && given?.undoable === true;
+        const offer = {
+            shown: given?.differs === true || undoShown,
+            line: "",
+            apply: { shown: false, asks: false, label: busy === "apply" ? "Applying…" : "Apply", question: "Replace?", available: busy === "",
+                     request: null },
+            undo: { shown: undoShown, label: "Undo", available: busy === "" }
+        };
+        if (given?.differs !== true)
+            return offer;
+        const delay = given?.delay;
+        const picked = given?.picked;
         const now = "Picked " + label(picked) + "; "
             + (delay?.state === "set" ? "the system now hibernates after " + label(delay.seconds) + "."
                : delay?.state === "unset" ? "the system's delay is not set (systemd's default)."
                : "the system's delay could not be read.");
-        if (nixos === true)
-            return now + " On NixOS it is the option " + nixosOption + ".";
-        if (typeof override === "string" && override !== "")
-            return now + " " + override + " sets it after the shell's own file, so Apply cannot change it.";
-        return nixos === false ? now + " Apply to change it." : now;
+        if (capability.mode === "copy" || capability.mode === "declare") {
+            offer.line = now + " On NixOS it is the option " + String(given?.option ?? "") + ".";
+            return offer;
+        }
+        if (capability.mode !== "apply") {
+            const reason = capability.known === true && typeof capability.reason === "string" ? capability.reason : "";
+            offer.line = reason !== "" ? now + " " + reason : now;
+            return offer;
+        }
+        const inForce = given?.inForce ?? null;
+        const elsewhere = typeof inForce?.elsewhere === "string" ? inForce.elsewhere : "";
+        if (elsewhere !== "") {
+            offer.line = "Picked " + label(picked) + ". Set in " + elsewhere + ": "
+                + (inForce.state === "set" ? label(inForce.value) : "systemd's default") + ".";
+            return offer;
+        }
+        const file = inForce?.file ?? null;
+        if ((inForce?.state !== "set" && inForce?.state !== "default") || file === null || typeof file !== "object"
+                || (file.state !== "text" && file.state !== "absent")) {
+            offer.line = now;
+            return offer;
+        }
+        const replace = file.state === "text" && file.ours !== true;
+        offer.apply.shown = true;
+        offer.apply.asks = replace;
+        offer.apply.request = { seconds: picked, current: file, replace };
+        offer.line = now + (replace ? " " + EtcFilesRules.files["sleep.hibernateDelay"] + " was changed outside the shell: Apply replaces it."
+                                    : " Apply to change it.");
+        return offer;
     }
 
     // The hibernation as it will happen (`hibernate`: IdleRules.config's): with sleep on, the
@@ -245,45 +280,8 @@ Singleton {
 
     // ---- The Apply ----
 
-    // The root step of the Apply: scripts/root/hibernate-delay.sh (`scriptFiles`), a file in
-    // the shell's tree the shell reads and hands as text to the system's /bin/sh — never run by
-    // path. The drop-in's place is fixed in it, under the folder its first argument names ("" for
-    // the system, the only one it takes as root; a suite's stand-in: a scratch folder); the
-    // delay is its second. It checks both, writes the drop-in beside its place and renames it
-    // there (never half a file), and says what it wrote.
-    readonly property var scriptFiles: ["hibernate-delay.sh"]
-
-    // `base`: "" or a plain absolute path outside /etc, /usr and /var; `scripts`: the texts of scriptFiles as read →
-    // [shell, "-c", script, "sh", base, seconds], or null for a delay outside delayRange, a base
-    // that is neither, or a script not read
-    function applyArgv(shell, seconds, base, scripts) {
-        if (typeof shell !== "string" || !shell.startsWith("/"))
-            return null;
-        if (!Number.isInteger(seconds) || seconds < delayRange.minimum || seconds > delayRange.maximum)
-            return null;
-        if (base !== "" && (!RootScriptRules.plainPath(base) || ["/etc", "/usr", "/var"].some(top => base === top || base.startsWith(top + "/"))))
-            return null;
-        const script = RootScriptRules.script(scripts);
-        if (script === "")
-            return null;
-        return [shell, "-c", script, "sh", base, String(seconds)];
-    }
-
-    // The drop-in's text as the script writes it
+    // The drop-in's text as the shell writes it (EtcFilesRules.shellText checks a file against it)
     function dropInText(seconds) {
         return "# Written by h2s-shell: Settings, When away, Hibernate\n[Sleep]\nHibernateDelaySec=" + seconds + "\n";
-    }
-
-    // The run's answer (PrivilegedRules' result: ok, dismissed, refused, stdout, stderr,
-    // error) → { ok, quiet, error }: ok only when it ran and said it wrote this delay; quiet
-    // for a prompt dismissed or a run refused or cancelled (the queue and the prompt said so,
-    // or the user chose it); `error` for the log and the notice
-    function applyOutcome(result, seconds) {
-        if (result?.ok === true && String(result.stdout ?? "").trim().split("\n").pop() === "written " + seconds)
-            return { ok: true, quiet: false, error: "" };
-        if (result?.dismissed === true || result?.refused === true || result?.cancelled === true || (result?.blocked ?? "") !== "")
-            return { ok: false, quiet: true, error: "" };
-        const said = String(result?.error || String(result?.stderr ?? "").trim().split("\n").pop() || "").replace(/[\u0000-\u001f\u007f]+/g, " ").trim();
-        return { ok: false, quiet: false, error: said !== "" ? said.slice(0, 200) : "exit code " + (result?.code ?? -1) };
     }
 }

@@ -18,8 +18,9 @@ import qs.singletons.io as Io
 // logind answers CanSuspend "yes", read at the start and when the settings page opens) and
 // the hibernation (SuspendThenHibernate in its place with sleep on, Hibernate with it off —
 // on logind's "yes" to that one), the command entries' commands (those whose "go" ran kept
-// across a restart, in a file of the runtime directory). The Hibernate section's Apply of
-// the system's delay goes through here too (HibernateDelayWriter). The screensaver interface
+// across a restart, in a file of the runtime directory). The Hibernate section's Apply and
+// Undo of the system's delay go through here too, through the distribution's integration
+// (IntegrationChange). The screensaver interface
 // (org.freedesktop.ScreenSaver, the helper's: ScreenSaverClient) brings the apps keeping the
 // screen on and their activity, and is told the screensaver's state. One Timer runs to the
 // rules' next deadline; nothing here decides when.
@@ -77,21 +78,36 @@ Singleton {
     // idleAction: { action, after } | null, hibernation: { swaps, memoryInUse, lockdown,
     // resume, delay, nixos } } (LockParseRules.sleepSupport)
     readonly property var sleepSupport: _logindSleep.support
-    // The Apply of the system's delay before hibernating is under way
-    readonly property bool hibernateDelayApplying: _delayWriter.busy
-    // The delay the last Apply of this run wrote (seconds), -1 none: what the page compares
-    // the delay read back with, to name a file that wins over the shell's
-    readonly property int hibernateDelayWritten: _delayWritten
-    property int _delayWritten: -1
+    // The system's delay before a sleep turns into hibernation, as a change the distribution
+    // makes (IntegrationRules' "sleep.hibernateDelay"): what this system can do for it, what
+    // is in force (readInForce's answer, null until read), "apply" or "undo" while one runs,
+    // and whether Undo can put back a change of this run
+    readonly property var hibernateDelayCapability: _delayChange.capability
+    readonly property var hibernateDelayInForce: _delayChange.inForce
+    readonly property string hibernateDelayBusy: _delayChange.busy
+    readonly property bool hibernateDelayUndoable: _delayChange.undoable
 
-    // The Hibernate section's Apply (the user's click): the system's delay before a sleep
-    // turns into hibernation set to `seconds`, through a run as administrator (polkit asks
-    // for the password). Not on NixOS, where /etc is generated (the module's option instead).
-    // → false when not started
-    function applyHibernateDelay(seconds) {
-        if (_logindSleep.support.hibernation?.nixos !== false)
-            return false;
-        return _delayWriter.apply(seconds);
+    // Read what is in force for the delay (the settings page, when it shows)
+    function readHibernateDelay() {
+        _delayChange.read();
+    }
+
+    // The Hibernate section's Apply (the user's click; polkit asks for the password):
+    // `request` HibernateRules.delayOffer's { seconds, current, replace } → false when not
+    // started (said in the log)
+    function applyHibernateDelay(request) {
+        const started = _delayChange.apply(request?.seconds, { current: request?.current, replace: request?.replace === true });
+        if (!started.started)
+            _log("warning", "the system's delay before hibernating not set: " + started.refusal?.text);
+        return started.started;
+    }
+
+    // The Hibernate section's Undo: the delay's file as it was before this run's last Apply
+    function undoHibernateDelay() {
+        const started = _delayChange.undo();
+        if (!started.started)
+            _log("warning", "the system's delay before hibernating not put back: " + started.refusal?.text);
+        return started.started;
     }
     // The sleep the shell asked for is under way and the settings leave it unlocked (no lock
     // before sleep, no idle lock before it): the sleep notice does not count it
@@ -603,15 +619,14 @@ Singleton {
         }
     }
 
-    Io.HibernateDelayWriter {
-        id: _delayWriter
-        onApplied: (seconds, ok, quiet, error) => {
-            if (ok) {
-                root._log("info", "the system's delay before hibernating set to " + seconds + " s");
-                root._delayWritten = seconds;
-            }
-            else if (!quiet)
-                root._log("warning", "the system's delay before hibernating not set: " + error);
+    Io.IntegrationChange {
+        id: _delayChange
+        kind: "sleep.hibernateDelay"
+        onFinished: (mode, outcome) => {
+            if (outcome?.ok === true)
+                root._log("info", mode === "undo" ? "the system's delay before hibernating put back" : "the system's delay before hibernating changed");
+            else if (outcome?.quiet !== true)
+                root._log("warning", "the system's delay before hibernating not " + (mode === "undo" ? "put back" : "set") + ": " + (outcome?.error ?? ""));
             // What is in force now, whichever way it went
             _logindSleep.refresh();
         }

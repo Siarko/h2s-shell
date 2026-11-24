@@ -1,12 +1,100 @@
 import QtQuick
+import qs.distributions.arch
+import qs.distributions.generic
+import qs.distributions.nixos
 import qs.singletons
 
 // Hibernation's reading and writing rules (singletons/HibernateRules.qml): the swap tables,
 // memory, lockdown and resume reads, systemd time spans, sleep.conf's delay through its
-// drop-ins, the reason shown when it is not possible, the page's delay line and the Apply's
-// command and its answer.
+// drop-ins, the reason shown when it is not possible, the drop-in's text, and what the
+// Hibernate section offers by each shipped distribution's capability (Arch applies, NixOS
+// names the option, generic says why not) and what is in force.
 TestCase {
     suiteName: "HibernateRules"
+
+    property Component _arch: Component {
+        ArchIntegration {}
+    }
+    property Component _nixos: Component {
+        NixosIntegration {}
+    }
+    property Component _generic: Component {
+        GenericIntegration {}
+    }
+
+    // The offer under the times, from the integrations' own capabilities
+    function _offers(rules, duration) {
+        const kind = "sleep.hibernateDelay";
+        const json = value => JSON.stringify(value);
+        const made = [_arch.createObject(null), _nixos.createObject(null), _generic.createObject(null)];
+        const [arch, nixos, generic] = made.map(integration => integration.capability(kind));
+        const option = made[1].plan(kind, 10800).preview.option;
+        made.forEach(integration => integration.destroy());
+        const ours = "/etc/systemd/sleep.conf.d/h2s-shell.conf";
+        const absent = { state: "absent", text: null, sha256: "absent", ours: false };
+        const shells = { state: "text", text: rules.dropInText(3600), sha256: "a".repeat(64), ours: true };
+        const edited = { state: "text", text: "[Sleep]\nHibernateDelaySec=1h\n", sha256: "b".repeat(64), ours: false };
+        const read = (file, extra) => Object.assign({ state: "set", value: 7200, from: "/etc/systemd/sleep.conf", elsewhere: "", file }, extra ?? {});
+        const set = { state: "set", seconds: 7200 };
+        const offer = (extra) => rules.delayOffer(Object.assign({ delay: set, picked: 10800, differs: true, capability: arch, option: "",
+                                                                    inForce: read(absent), busy: "", undoable: false }, extra ?? {}), duration);
+
+        // Arch: Apply, its effect the request it shows
+        let answer = offer();
+        assertEqual(answer.line, "Picked 3 h; the system now hibernates after 2 h. Apply to change it.", "Arch: the picked time after Apply");
+        assert(answer.shown && answer.apply.shown && !answer.apply.asks && answer.apply.label === "Apply" && answer.apply.available, "… Apply offered");
+        assertEqual(json(answer.apply.request), json({ seconds: 10800, current: absent, replace: false }),
+                    "… its effect: the time picked, checked against the file as read, nothing replaced");
+        assert(!answer.undo.shown, "… no Undo before a change");
+        answer = offer({ inForce: read(shells, { from: ours }) });
+        assert(answer.apply.shown && !answer.apply.asks && answer.apply.request.current === shells, "the shell's own file sets it: Apply over it, no question");
+        assertEqual(offer({ delay: { state: "unset" }, inForce: read(absent, { state: "default", value: null, from: "" }) }).line,
+                    "Picked 3 h; the system's delay is not set (systemd's default). Apply to change it.", "unset: said, Apply offered");
+        // Set elsewhere: shown, never overridden
+        answer = offer({ inForce: read(absent, { elsewhere: "/etc/systemd/sleep.conf" }) });
+        assertEqual(answer.line, "Picked 3 h. Set in /etc/systemd/sleep.conf: 2 h.", "set in the user's own file: named with its value");
+        assert(answer.shown && !answer.apply.shown && answer.apply.request === null, "… no Apply over it");
+        answer = offer({ inForce: read(absent, { state: "default", value: null, from: "/run/x.conf", elsewhere: "/run/x.conf" }) });
+        assertEqual(answer.line, "Picked 3 h. Set in /run/x.conf: systemd's default.", "… a file putting the default back: named too");
+        assert(!answer.apply.shown, "… no Apply");
+        // The shell's file changed outside it: the question first
+        answer = offer({ inForce: read(edited, { from: ours }) });
+        assertEqual(answer.line, "Picked 3 h; the system now hibernates after 2 h. " + ours + " was changed outside the shell: Apply replaces it.",
+                    "the shell's file edited by hand: warned");
+        assert(answer.apply.shown && answer.apply.asks && answer.apply.question === "Replace?", "… Apply asks first");
+        assertEqual(json(answer.apply.request), json({ seconds: 10800, current: edited, replace: true }), "… and replaces only that file as read");
+        // What is in force not read: no Apply (another file may set it)
+        for (const inForce of [null, read(absent, { state: "unknown", value: null, from: "" }), read(null), read({ state: "unknown", text: null, sha256: "", ours: false })]) {
+            answer = offer({ inForce });
+            assert(answer.shown && !answer.apply.shown, "not read: no Apply (" + json(inForce) + ")");
+            assertEqual(answer.line, "Picked 3 h; the system now hibernates after 2 h.", "… nothing promised");
+        }
+        assertEqual(offer({ delay: { state: "unknown" }, inForce: null }).line, "Picked 3 h; the system's delay could not be read.", "unread: said");
+        // Busy, Undo
+        answer = offer({ busy: "apply" });
+        assert(answer.apply.label === "Applying\u2026" && !answer.apply.available, "applying: said, not again");
+        answer = offer({ undoable: true });
+        assert(answer.undo.shown && answer.undo.label === "Undo" && answer.undo.available, "after an Apply: Undo");
+        answer = offer({ undoable: true, differs: false });
+        assert(answer.shown && answer.undo.shown && !answer.apply.shown && answer.line === "", "… shown when the times agree now, alone");
+        assert(!offer({ undoable: true, busy: "undo" }).undo.available, "… not while one runs");
+        assert(!offer({ differs: false }).shown, "the same time, nothing to undo: nothing shown");
+        // NixOS: the option to set
+        answer = offer({ capability: nixos, option });
+        assertEqual(answer.line, "Picked 3 h; the system now hibernates after 2 h. On NixOS it is the option programs.h2s-shell.idle.hibernateDelay.",
+                    "NixOS: the option named");
+        assert(!answer.apply.shown && !answer.apply.asks && answer.apply.request === null && !offer({ capability: nixos, option, undoable: true }).undo.shown,
+               "… no Apply, no question, no Undo");
+        assert(!offer({ capability: nixos, option, inForce: read(absent, { elsewhere: "/etc/systemd/sleep.conf" }) }).line.startsWith("Picked 3 h. Set in"),
+               "… its generated sleep.conf is no setting of the user's to name");
+        // Generic, and the distribution not known
+        answer = offer({ capability: generic });
+        assertEqual(answer.line, "Picked 3 h; the system now hibernates after 2 h. Not supported on this distribution.", "generic: why not");
+        assert(!answer.apply.shown && !offer({ capability: generic, undoable: true }).undo.shown, "… no Apply, no Undo");
+        answer = offer({ capability: IntegrationRules.unknownCapability() });
+        assertEqual(answer.line, "Picked 3 h; the system now hibernates after 2 h.", "not known yet: nothing promised");
+        assert(!answer.apply.shown, "… no Apply");
+    }
 
     function run() {
         const rules = HibernateRules;
@@ -125,20 +213,7 @@ TestCase {
         assert(rules.delayDiffers({ state: "set", seconds: 7200 }, 10800), "another time: Apply");
         assert(rules.delayDiffers({ state: "unset" }, 7200), "unset: Apply");
         assert(rules.delayDiffers({ state: "unknown" }, 7200), "unread: Apply");
-        assertEqual(rules.delayLine({ state: "set", seconds: 7200 }, false, duration, "", 10800),
-                    "Picked 3 h; the system now hibernates after 2 h. Apply to change it.", "Arch: the picked time after Apply");
-        assertEqual(rules.delayLine({ state: "set", seconds: 7200 }, null, duration, "", 10800), "Picked 3 h; the system now hibernates after 2 h.",
-                    "whether this is NixOS not read: neither Apply nor the option promised");
-        assertEqual(rules.delayLine({ state: "set", seconds: 7200 }, false, duration, "/run/systemd/sleep.conf.d/z.conf", 10800),
-                    "Picked 3 h; the system now hibernates after 2 h. /run/systemd/sleep.conf.d/z.conf sets it after the shell's own file, so Apply cannot change it.",
-                    "another file wins: named, no Apply promised");
-        assertEqual(rules.delayLine({ state: "set", seconds: 7200 }, true, duration, "", 10800),
-                    "Picked 3 h; the system now hibernates after 2 h. On NixOS it is the option programs.h2s-shell.idle.hibernateDelay.",
-                    "NixOS: the option");
-        assertEqual(rules.delayLine({ state: "unset" }, false, duration, "", 10800),
-                    "Picked 3 h; the system's delay is not set (systemd's default). Apply to change it.", "unset: said");
-        assertEqual(rules.delayLine({ state: "unknown" }, false, duration, "", 10800),
-                    "Picked 3 h; the system's delay could not be read. Apply to change it.", "unread: said");
+        _offers(rules, duration);
         // What will happen: the system's delay with sleep on, until Apply
         const fromSleep = { on: true, from: "sleep", at: 1800, after: 10800 };
         assertEqual(JSON.stringify(rules.inEffect(fromSleep, { state: "set", seconds: 7200, file: "x" })),
@@ -150,55 +225,12 @@ TestCase {
         assertEqual(rules.inEffect(fromLock, { state: "set", seconds: 60, file: "x" }), fromLock, "sleep off: the shell's own time, the delay does not apply");
         assertEqual(rules.inEffect(null, { state: "set", seconds: 60 }), null, "nothing given: nothing");
 
-        // ---- a file that wins over the shell's drop-in ----
-        const ours = "/etc/systemd/sleep.conf.d/h2s-shell.conf";
-        const other = "/etc/systemd/sleep.conf.d/zz-tlp.conf";
-        assertEqual(rules.delayOverride({ state: "set", seconds: 7200, file: other }, 10800), other, "written 3 h, read 2 h from another file: that file");
-        assertEqual(rules.delayOverride({ state: "unset", file: other }, 10800), other, "… put back to unset by another file: that file");
-        assertEqual(rules.delayOverride({ state: "set", seconds: 10800, file: other }, 10800), "", "read as written: nothing wins over it");
-        assertEqual(rules.delayOverride({ state: "set", seconds: 7200, file: ours }, 10800), "", "the shell's own file read otherwise: not another's");
-        assertEqual(rules.delayOverride({ state: "set", seconds: 7200, file: "" }, 10800), "", "no file named: none to name");
-        assertEqual(rules.delayOverride({ state: "unknown" }, 10800), "", "not read: no claim");
-        assertEqual(rules.delayOverride({ state: "unset" }, 10800), "", "unset without an assignment: no file");
-        for (const written of [-1, 0, null, undefined, 1.5])
-            assertEqual(rules.delayOverride({ state: "set", seconds: 7200, file: other }, written), "", "nothing written (" + written + "): no claim");
-        assertEqual(rules.delayOverride({ state: "set", seconds: 7200, file: other }, 1), other, "written one second: a write");
-
-        // ---- the Apply ----
-        const scripts = ["script\n"];
-        const argv = rules.applyArgv("/bin/sh", 10800, "", scripts);
-        assertEqual(json(argv.slice(0, 2).concat(argv.slice(3))), json(["/bin/sh", "-c", "sh", "", "10800"]),
-                    "the script's arguments: the base (\"\": the system's drop-in folder, fixed in the script) and the delay");
-        assertEqual(argv[2], "script\n", "… the script: the file's text as read");
-        assertEqual(json(rules.scriptFiles), json(["hibernate-delay.sh"]), "… of hibernate-delay.sh");
-        assertEqual(json(rules.applyArgv("/bin/sh", 10800, "/run/user/1000/t", scripts).slice(4)), json(["/run/user/1000/t", "10800"]),
-                    "a stand-in's base: a scratch folder");
-        assert(rules.applyArgv("/bin/sh", 60, "", scripts) !== null && rules.applyArgv("/bin/sh", 86400, "", scripts) !== null,
-               "a minute and a day: the ends of the range, taken");
-        for (const bad of [[ "sh", 10800, "" ], [ "/bin/sh", 59, "" ], [ "/bin/sh", 86401, "" ], [ "/bin/sh", 7200.5, "" ],
-                           [ "/bin/sh", "7200", "" ], [ "/bin/sh", 7200, "tmp" ], [ "/bin/sh", 7200, "/tmp/../root" ],
-                           [ "/bin/sh", 7200, "/tmp/x y" ], [ "/bin/sh", 7200, "/tmp/$(id)" ], [ "/bin/sh", 7200, null ], [ "/bin/sh", 7200, "/tmp/" ],
-                           [ "/bin/sh", 7200, "/etc" ], [ "/bin/sh", 7200, "/usr/x" ], [ "/bin/sh", 7200, "/var/tmp/x" ]])
-            assertEqual(rules.applyArgv(bad[0], bad[1], bad[2], scripts), null, "refused: " + JSON.stringify(bad));
-        for (const unread of [null, [], [""], ["script"], [null]])
-            assertEqual(rules.applyArgv("/bin/sh", 10800, "", unread), null, "the script not read: refused (" + JSON.stringify(unread) + ")");
+        // ---- the Apply's text ----
         assertEqual(rules.dropInText(10800), "# Written by h2s-shell: Settings, When away, Hibernate\n[Sleep]\nHibernateDelaySec=10800\n",
                     "the drop-in's text");
         assertEqual(json(rules.hibernateDelay(rules.dropInText(10800))), json({ state: "set", seconds: 10800, file: "" }), "… read back as written");
         assertEqual(json(rules.hibernateDelay("# /etc/systemd/sleep.conf.d/h2s-shell.conf\n" + rules.dropInText(10800))),
                     json({ state: "set", seconds: 10800, file: "/etc/systemd/sleep.conf.d/h2s-shell.conf" }),
                     "… under cat-config's path line: its own first line is no path");
-        assertEqual(json(rules.applyOutcome({ ok: true, stdout: "written 10800\n" }, 10800)), json({ ok: true, quiet: false, error: "" }), "written");
-        assertEqual(rules.applyOutcome({ ok: true, stdout: "written 7200\n" }, 10800).ok, false, "another delay said: not ok");
-        assertEqual(rules.applyOutcome({ ok: true, stdout: "" }, 10800).ok, false, "nothing said: not ok");
-        for (const quiet of [{ dismissed: true }, { refused: true }, { cancelled: true }, { blocked: "locked" }])
-            assertEqual(json(rules.applyOutcome(Object.assign({ ok: false, code: 126 }, quiet), 10800)), json({ ok: false, quiet: true, error: "" }),
-                        "quiet: " + json(quiet));
-        assertEqual(rules.applyOutcome({ ok: false, code: 1, stderr: "mkdir: cannot create\nmv: read-only file system\n", error: "" }, 10800).error,
-                    "mv: read-only file system", "a failure: its last line");
-        assertEqual(json(rules.applyOutcome({ ok: false, code: 3, stderr: "", error: "" }, 10800)), json({ ok: false, quiet: false, error: "exit code 3" }),
-                    "a failure without words: said, not quiet");
-        assertEqual(rules.applyOutcome({}, 10800).error, "exit code -1", "no answer at all: no code");
-        assertEqual(rules.applyOutcome({ ok: false, error: "pkexec could not be started" }, 10800).error, "pkexec could not be started", "the runner's error");
     }
 }
