@@ -769,7 +769,7 @@ Singleton {
             return null;
         let due;
         if (state.forced) {
-            const gap = sleepAfter - (config.saverAfter ?? 0);
+            const gap = sleepAfter - config.saverAfter;
             due = state.forcedAt + (gap > 0 ? gap : sleepAfter) * 1000;
         } else {
             due = state.idleSince + sleepAfter * 1000;
@@ -1311,7 +1311,9 @@ Singleton {
         // counts from the switch
         const sleepAfter = machineAfter(config);
         if (next.sleepAfterSeen !== null && next.sleepAfterSeen !== sleepAfter) {
-            const before = _sleepAt(next, { sleepAfter: next.sleepAfterSeen, lockAfter: config.lockAfter }, true);
+            // (the old time as the whole computer's stage, the rest as now: a forced
+            // screensaver's sleep counts from the force less the screensaver's time either way)
+            const before = _sleepAt(next, Object.assign({}, config, { sleepAfter: next.sleepAfterSeen, hibernateAfter: 0 }), true);
             const after = _sleepAt(next, config, true);
             if (after !== null && after <= now && !(before !== null && before <= now))
                 next.sleepSince = now;

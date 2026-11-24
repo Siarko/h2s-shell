@@ -166,6 +166,9 @@ The interface modules are written against (`qs.api`), versioned on its own
   Without polkit rules it works as before; set to true beside them, it stops the build.
 
 ### Fixed
+- With the screensaver started by hand (or by an app), changing the sleep time while an app
+  was blocking the sleep no longer puts the sleep off by the whole new time: it comes once the
+  block goes.
 - Buttons can be used from the keyboard: Tab reaches them (a ring shows which), Space or
   Enter presses one, and Escape cancels a button's question; an unavailable button is passed
   over. Tab stays inside an open side panel and inside a toast, and a Settings page scrolls to

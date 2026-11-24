@@ -1718,6 +1718,15 @@ TestCase {
         blockedSwitch.reconfigure(2000000, _with(values, { sleepTimeout: 1700 }));
         blockedSwitch.at(2010000, { type: "logindIdleBlock", held: false, sleepHeld: false });
         assertEqual(blockedSwitch.actions, "sleep:unlocked", "a time changed while a block held the sleep due: asked once the block goes");
+        // Forced: the old time's due moment counts from the force, less the screensaver's time
+        // (25 min after a force at 1 s), as the new one's does — due before the switch, not put off
+        const forcedValues = _with(values, { screensaverEnabled: true, screensaverTimeout: 300 });
+        const forcedSwitch = _machine(forcedValues, ["lcd"], true, "yes").at(1000, { type: "force" })
+            .at(1501000, { type: "logindSleepBlock", held: true });
+        forcedSwitch.reconfigure(1600000, _with(forcedValues, { sleepTimeout: 1700 }));
+        forcedSwitch.at(1610000, { type: "logindIdleBlock", held: false, sleepHeld: false });
+        assertEqual(forcedSwitch.actions, "sleep:unlocked",
+                    "forced: a time changed while a block held the sleep due: asked once the block goes, not counted from the switch");
         const firstStep = _machine(values, ["lcd"], true, "yes").idle(1800000, 0).sleepDeadline();
         assertEqual(firstStep.actions, "sleep:unlocked", "a sleep due at the step that makes the idle known: asked");
         const forcedFirst = _machine(_with(values, { screensaverEnabled: true, screensaverTimeout: 1800 }), ["lcd"], true, "yes")
