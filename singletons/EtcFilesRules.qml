@@ -275,13 +275,14 @@ Singleton {
 
     // The root step's reply (PrivilegedRules' result) for what writeArgv / removeArgv /
     // undoArgv expected → { ok, quiet, mode, kind, sha256 (in force now; "absent" for no
-    // file), backup (the backup made), refused (the root step's code), error, file ("done"
-    // when ok; otherwise "" here — EtcFiles reads the file again and sets afterFailure's
+    // file), backup (the backup made), refused (the root step's code), error, warnings (the
+    // root step's `warning: ` lines on stderr, without the word: what went wrong after the
+    // file was written, e.g. NetworkManager not reading it again), file ("done" when ok; otherwise "" here — EtcFiles reads the file again and sets afterFailure's
     // answer) }. ok only when its last line, on stdout or stderr, says it did what was asked,
     // for that kind, with the expected hash.
     function reply(result, expected) {
         const outcome = { ok: false, quiet: false, mode: String(expected?.mode ?? ""), kind: String(expected?.kind ?? ""), sha256: "", backup: "",
-                          refused: "", error: "", file: "" };
+                          refused: "", error: "", file: "", warnings: _warnings(result?.stderr) };
         const word = { write: "written", remove: "removed", undo: "restored" }[expected?.mode] ?? "";
         const lastOf = text => String(text ?? "").trim().split("\n").pop().trim();
         const done = line => {
@@ -294,6 +295,13 @@ Singleton {
         if (said !== null)
             return Object.assign(outcome, { ok: true, sha256: said[3], backup: said[4], file: "done" });
         return Object.assign(outcome, RootScriptRules.failure(result, texts));
+    }
+
+    // The `warning: ` lines of a root step's stderr, without the word, at most 4, each one
+    // line of at most 200 characters
+    function _warnings(stderr) {
+        return String(stderr ?? "").split("\n").map(line => line.trim()).filter(line => line.startsWith("warning: "))
+            .slice(0, 4).map(line => line.slice("warning: ".length).replace(/[\u0000-\u001f\u007f]+/g, " ").slice(0, 200));
     }
 
     // What a run that did not say it was done left, the file read again afterwards (inForce's

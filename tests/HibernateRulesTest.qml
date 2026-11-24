@@ -49,6 +49,16 @@ TestCase {
         assert(!answer.undo.shown, "… no Undo before a change");
         answer = offer({ inForce: read(shells, { from: ours }) });
         assert(answer.apply.button === "plain" && answer.apply.request.current === shells, "the shell's own file sets it: Apply over it, no question");
+        const overriding = read(shells, { from: ours, shadowed: { from: "/etc/systemd/sleep.conf", value: 3600 } });
+        answer = offer({ inForce: overriding });
+        assertEqual(answer.line, "Picked 3 h; the system now hibernates after 2 h. Set in /etc/systemd/sleep.conf: 1 h; the shell's file overrides it. Apply to change it.",
+                    "the shell's drop-in over the user's sleep.conf: the user's setting said");
+        answer = offer({ differs: false, inForce: overriding });
+        assert(answer.shown && answer.apply.button === "none", "… said with nothing to apply too");
+        assertEqual(answer.line, "Set in /etc/systemd/sleep.conf: 1 h; the shell's file overrides it.", "… alone");
+        assertEqual(offer({ differs: false, inForce: read(shells, { from: ours, shadowed: { from: "/etc/systemd/sleep.conf", value: null } }) }).line,
+                    "Set in /etc/systemd/sleep.conf: systemd's default; the shell's file overrides it.", "… the default put back there: said so");
+        assert(!offer({ differs: false, capability: nixos, inForce: overriding }).shown, "… only where the shell applies");
         assertEqual(offer({ delay: { state: "unset" }, inForce: read(absent, { state: "default", value: null, from: "" }) }).line,
                     "Picked 3 h; the system's delay is not set (systemd's default). Apply to change it.", "unset: said, Apply offered");
         // Set in a file read after the shell's: shown, Apply could not win

@@ -135,6 +135,7 @@ QtObject {
     property var _sleepNoticeRules: SleepNoticeRulesTest {}
     property var _hibernateRules: HibernateRulesTest {}
     property var _connectivityRules: ConnectivityRulesTest {}
+    property var _nmConfigFiles: NmConfigFilesTest {}
     property var _monitorRules: MonitorRulesTest {}
     property var _screenPowerReading: ScreenPowerReadingTest {}
     property var _wlopmScreenPowerReading: WlopmScreenPowerReadingTest {}

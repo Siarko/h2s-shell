@@ -26,7 +26,7 @@ import QtQuick
 //              hint (the integration's words naming where the setting is made) }
 //   apply / undo → { started, refusal }
 //   readInForce → what the system uses, read as the system merges it (inForceCommand), and
-//     the shell's own file: { state, value, from, elsewhere, file, afterOwn }
+//     the shell's own file: { state, value, from, elsewhere, file, afterOwn, shadowed }
 //     state      "set" (a file sets it), "default" (none does: the system's own default),
 //                "unknown" (not read, or not understood)
 //     value      the value in force ("set"), else null
@@ -36,6 +36,9 @@ import QtQuick
 //     afterOwn   `elsewhere` is read after the shell's own file: a change of the shell's
 //                cannot take effect over it (false when `elsewhere` is "", or the shell's
 //                file would be read after it: then the shell may override it, asked)
+//     shadowed   when the shell's own file is in force: the last setting read before it,
+//                { from, value (null: the system's default put back) } — the user's or the
+//                system's, which the shell's file overrides and the shell shows; else null
 //     file       the shell's own file (EtcFilesRules.inForce's answer: its text, sha256 and
 //                whether it is exactly the shell's), the `current` to hand apply; null where
 //                the shell writes nothing
@@ -167,7 +170,7 @@ Singleton {
 
     // What is in force: `merged` inForceCommand's output (null: not read), `own` the shell's
     // own file as read (EtcFilesRules.inForce's answer; null where it writes none) →
-    // { state, value, from, elsewhere, file, afterOwn }
+    // { state, value, from, elsewhere, file, afterOwn, shadowed }
     function inForceOf(kind, merged, own) {
         const file = own !== null && typeof own === "object" ? own : null;
         if (kind === "network.connectivityUri" && typeof merged === "string")
@@ -186,8 +189,21 @@ Singleton {
             from,
             elsewhere,
             file,
-            afterOwn: elsewhere !== "" && HibernateRules.readAfterDropIn(elsewhere)
+            afterOwn: elsewhere !== "" && HibernateRules.readAfterDropIn(elsewhere),
+            shadowed: from === EtcFilesRules.files[kind] ? _delayBefore(merged, from) : null
         };
+    }
+
+    // The delay set before the shell's own drop-in (`own`) in systemd's merged reading, or null
+    function _delayBefore(merged, own) {
+        const lines = merged.split("\n");
+        const at = lines.findIndex(line => /^#\s*(\/\S.*)$/.exec(line.trim())?.[1] === own);
+        if (at < 0)
+            return null;
+        const before = HibernateRules.hibernateDelay(lines.slice(0, at).join("\n"));
+        if ((before.state !== "set" && before.state !== "unset") || typeof before.file !== "string" || before.file === "")
+            return null;
+        return { from: before.file, value: before.state === "set" ? before.seconds : null };
     }
 
     // The connectivity check's address in force (ConnectivityRules.setting); one from the
@@ -199,12 +215,12 @@ Singleton {
         const own = EtcFilesRules.files["network.connectivityUri"];
         const elsewhere = setting.state === "set" && setting.from !== own ? setting.from : "";
         return { state: setting.state, value: setting.value, from: setting.from, elsewhere, file,
-                 afterOwn: elsewhere !== "" && ConnectivityRules.readAfterOwn(elsewhere) };
+                 afterOwn: elsewhere !== "" && ConnectivityRules.readAfterOwn(elsewhere), shadowed: setting.shadowed };
     }
 
     // Nothing in force can be told
     function inForceUnknown() {
-        return { state: "unknown", value: null, from: "", elsewhere: "", file: null, afterOwn: false };
+        return { state: "unknown", value: null, from: "", elsewhere: "", file: null, afterOwn: false, shadowed: null };
     }
 
     // Whether an answer is readInForce's as the contract has it
@@ -216,6 +232,9 @@ Singleton {
         if (answer.file !== null && (typeof answer.file !== "object" || !["text", "absent", "unknown"].includes(answer.file.state)))
             return false;
         if (typeof answer.afterOwn !== "boolean" || (answer.afterOwn && answer.elsewhere === ""))
+            return false;
+        if (answer.shadowed !== null && (typeof answer.shadowed !== "object" || typeof answer.shadowed.from !== "string" || answer.shadowed.from === ""
+                                         || answer.elsewhere !== "" || answer.shadowed.value === undefined))
             return false;
         return answer.state === "set" ? answer.value !== null && answer.value !== undefined : answer.value === null;
     }

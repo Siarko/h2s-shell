@@ -6,11 +6,17 @@
 #   nm-config-files.sh [<base>]
 #
 # The files under <base> (none: the system's own; a suite: a scratch folder), named by their
-# place on the system:
-#   /usr/lib/NetworkManager/conf.d/*.conf, /run/NetworkManager/conf.d/*.conf,
-#   /etc/NetworkManager/NetworkManager.conf, /etc/NetworkManager/conf.d/*.conf
-# each folder by name (C locale), names starting with "." skipped, a name in a later folder
-# hiding the same name in an earlier one (NetworkManager.conf(5)). One record per file:
+# place on the system, as NetworkManager's nm-config.c reads them:
+#   the packages' folder: /usr/lib/NetworkManager/conf.d/*.conf, or where there is none,
+#     /run/current-system/sw/lib/NetworkManager/conf.d/*.conf (NixOS: the system's packages'
+#     lib/NetworkManager/conf.d; NetworkManager reads its own package's, which is in it);
+#   /run/NetworkManager/conf.d/*.conf;
+#   the main file: /etc/NetworkManager/nm-system-settings.conf when it is there, else
+#     /etc/NetworkManager/NetworkManager.conf;
+#   /etc/NetworkManager/conf.d/*.conf
+# each folder by name (bytes, C locale), every name ending in ".conf" — hidden ones too, and
+# whatever kind of file it is —, a name in a later folder hiding the same name in an earlier
+# one. One record per file:
 #
 #   file TAB <path> TAB text        its lines follow, each after a "|", then
 #   end TAB <path>
@@ -21,7 +27,7 @@
 # Nothing is written, nothing run as root.
 set -u
 export LC_ALL=C
-shopt -s nullglob
+shopt -s nullglob dotglob
 
 base=${1:-}
 max_bytes=65536
@@ -65,6 +71,7 @@ names() {
 }
 
 lib=/usr/lib/NetworkManager/conf.d
+[ -e "$base$lib" ] || [ -L "$base$lib" ] || lib=/run/current-system/sw/lib/NetworkManager/conf.d
 run=/run/NetworkManager/conf.d
 etc=/etc/NetworkManager/conf.d
 lib_names=$(names "$lib")
@@ -86,7 +93,8 @@ while IFS=$'\t' read -r kind name; do
     [ "$kind" = name ] || continue
     has "$etc_names" "$name" || record "$run/$name"
 done <<< "$run_names"
-main=/etc/NetworkManager/NetworkManager.conf
+main=/etc/NetworkManager/nm-system-settings.conf
+[ -e "$base$main" ] || [ -L "$base$main" ] || main=/etc/NetworkManager/NetworkManager.conf
 if [ -e "$base$main" ] || [ -L "$base$main" ]; then
     record "$main"
 fi

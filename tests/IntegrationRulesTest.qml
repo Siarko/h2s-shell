@@ -102,33 +102,44 @@ TestCase {
                     "the delay as systemd merges sleep.conf and its drop-ins");
         assertEqual(rules.inForceCommand("no.kind", "/s"), null, "… none for another kind");
         assertEqual(show(rules.inForceOf(kind, merged(["/usr/lib/systemd/sleep.conf", "[Sleep]\n#HibernateDelaySec=\n"], [ownPath, "[Sleep]\nHibernateDelaySec=600\n"]), own)),
-                    show({ state: "set", value: 600, from: ownPath, elsewhere: "", file: own, afterOwn: false }), "set by the shell's own drop-in: not elsewhere");
+                    show({ state: "set", value: 600, from: ownPath, elsewhere: "", file: own, afterOwn: false, shadowed: null }), "set by the shell's own drop-in: not elsewhere");
+        assertEqual(JSON.stringify(rules.inForceOf(kind, merged(["/etc/systemd/sleep.conf", "[Sleep]\nHibernateDelaySec=2h\n"], [ownPath, "[Sleep]\nHibernateDelaySec=600\n"]), own).shadowed),
+                    JSON.stringify({ from: "/etc/systemd/sleep.conf", value: 7200 }), "the shell's drop-in in force: the setting it overrides, shown");
+        assertEqual(JSON.stringify(rules.inForceOf(kind, merged(["/etc/systemd/sleep.conf", "[Sleep]\nHibernateDelaySec=\n"], [ownPath, "[Sleep]\nHibernateDelaySec=600\n"]), own).shadowed),
+                    JSON.stringify({ from: "/etc/systemd/sleep.conf", value: null }), "… systemd's default put back there: that too");
+        assertEqual(rules.inForceOf(kind, merged(["/etc/systemd/sleep.conf", "[Sleep]\nHibernateDelaySec=2h\n"], [ownPath, "[Sleep]\nHibernateDelaySec=600\n"],
+                                                 ["/etc/systemd/sleep.conf.d/zz.conf", "[Sleep]\nHibernateDelaySec=1h\n"]), own).shadowed, null, "… none when another file wins");
         assertEqual(show(rules.inForceOf(kind, merged(["/etc/systemd/sleep.conf", "[Sleep]\nHibernateDelaySec=2h\n"]), own)),
-                    show({ state: "set", value: 7200, from: "/etc/systemd/sleep.conf", elsewhere: "/etc/systemd/sleep.conf", file: own, afterOwn: false }),
+                    show({ state: "set", value: 7200, from: "/etc/systemd/sleep.conf", elsewhere: "/etc/systemd/sleep.conf", file: own, afterOwn: false, shadowed: null }),
                     "set by another file read before the shell's: in force, set elsewhere (shown, overridden only asked)");
         assertEqual(show(rules.inForceOf(kind, merged([ownPath, "[Sleep]\nHibernateDelaySec=600\n"], ["/etc/systemd/sleep.conf.d/zz.conf", "[Sleep]\nHibernateDelaySec=\n"]), own)),
-                    show({ state: "default", value: null, from: "/etc/systemd/sleep.conf.d/zz.conf", elsewhere: "/etc/systemd/sleep.conf.d/zz.conf", file: own, afterOwn: true }),
+                    show({ state: "default", value: null, from: "/etc/systemd/sleep.conf.d/zz.conf", elsewhere: "/etc/systemd/sleep.conf.d/zz.conf", file: own, afterOwn: true, shadowed: null }),
                     "systemd's default put back by a later file: that file's setting, read after the shell's");
         assertEqual(show(rules.inForceOf(kind, merged(["/usr/lib/systemd/sleep.conf", "[Sleep]\n#HibernateDelaySec=\n"]), null)),
-                    show({ state: "default", value: null, from: "", elsewhere: "", file: null, afterOwn: false }), "no file sets it: systemd's default, nothing elsewhere; no file of the shell's");
+                    show({ state: "default", value: null, from: "", elsewhere: "", file: null, afterOwn: false, shadowed: null }), "no file sets it: systemd's default, nothing elsewhere; no file of the shell's");
         assertEqual(show(rules.inForceOf(kind, merged(["/etc/systemd/sleep.conf", "[Sleep]\nHibernateDelaySec=soon\n"]), own)),
-                    show({ state: "unknown", value: null, from: "", elsewhere: "", file: own, afterOwn: false }), "a value not understood: unknown");
-        assertEqual(show(rules.inForceOf(kind, null, own)), show({ state: "unknown", value: null, from: "", elsewhere: "", file: own, afterOwn: false }), "not read: unknown, the shell's file still told");
+                    show({ state: "unknown", value: null, from: "", elsewhere: "", file: own, afterOwn: false, shadowed: null }), "a value not understood: unknown");
+        assertEqual(show(rules.inForceOf(kind, null, own)), show({ state: "unknown", value: null, from: "", elsewhere: "", file: own, afterOwn: false, shadowed: null }), "not read: unknown, the shell's file still told");
         assertEqual(rules.inForceOf(kind, null, undefined).file, null, "no file of the shell's handed: null");
         assertEqual(rules.inForceOf(kind, null, "text").file, null, "… nor for one that is no answer");
         assertEqual(rules.inForceOf("no.kind", merged([ownPath, "[Sleep]\nHibernateDelaySec=600\n"]), null).state, "unknown", "another kind: unknown");
-        assertEqual(show(rules.inForceUnknown()), show({ state: "unknown", value: null, from: "", elsewhere: "", file: null, afterOwn: false }), "nothing told");
+        assertEqual(show(rules.inForceUnknown()), show({ state: "unknown", value: null, from: "", elsewhere: "", file: null, afterOwn: false, shadowed: null }), "nothing told");
         for (const answer of [rules.inForceUnknown(), rules.inForceOf(kind, merged(["/etc/systemd/sleep.conf", "[Sleep]\nHibernateDelaySec=2h\n"]), own)])
             assert(rules.validInForce(answer), "a valid answer: " + show(answer));
-        const set = { state: "set", value: 1, from: "/a", elsewhere: "/a", file: null, afterOwn: true };
+        const set = { state: "set", value: 1, from: "/a", elsewhere: "/a", file: null, afterOwn: true, shadowed: null };
         for (const [why, bad] of [["no state", Object.assign({}, set, { state: "absent" })], ["set without a value", Object.assign({}, set, { value: null })],
                                   ["a value by default", Object.assign({}, set, { state: "default" })], ["elsewhere not where it is from", Object.assign({}, set, { elsewhere: "/b" })],
                                   ["no from", Object.assign({}, set, { from: undefined })], ["a file that is none", Object.assign({}, set, { file: { state: "x" } })],
                                   ["no elsewhere", Object.assign({}, set, { elsewhere: null })], ["nothing", null],
                                   ["no afterOwn", Object.assign({}, set, { afterOwn: undefined })],
+                                  ["overridden while set elsewhere", Object.assign({}, set, { afterOwn: false, shadowed: { from: "/b", value: 1 } })],
+                                  ["overridden, from nowhere", { state: "set", value: 1, from: "/a", elsewhere: "", file: null, afterOwn: false, shadowed: { from: "", value: 1 } }],
+                                  ["overridden, no value", { state: "set", value: 1, from: "/a", elsewhere: "", file: null, afterOwn: false, shadowed: { from: "/b" } }],
+                                  ["overridden, from not a path", { state: "set", value: 1, from: "/a", elsewhere: "", file: null, afterOwn: false, shadowed: { from: 5, value: 1 } }],
+                                  ["overridden, not an object", { state: "set", value: 1, from: "/a", elsewhere: "", file: null, afterOwn: false, shadowed: "x" }],
                                   ["read after the shell's with nothing elsewhere", Object.assign({}, set, { from: "", elsewhere: "" })],
-                                  ["a state that is none, nothing else wrong", { state: "absent", value: null, from: "", elsewhere: "", file: null, afterOwn: false }],
-                                  ["no from, nothing else wrong", { state: "default", value: null, from: undefined, elsewhere: "", file: null, afterOwn: false }]])
+                                  ["a state that is none, nothing else wrong", { state: "absent", value: null, from: "", elsewhere: "", file: null, afterOwn: false, shadowed: null }],
+                                  ["no from, nothing else wrong", { state: "default", value: null, from: undefined, elsewhere: "", file: null, afterOwn: false, shadowed: null }]])
             assert(!rules.validInForce(bad), "not valid: " + why);
         // ── the connectivity check's address ──
         const uri = "network.connectivityUri";
@@ -149,20 +160,24 @@ TestCase {
         const ownFile = EtcFilesRules.inForce({ text: ConnectivityRules.text(address) }, uri);
         const lib = "/usr/lib/NetworkManager/conf.d/20-connectivity.conf";
         assertEqual(show(rules.inForceOf(uri, nm([lib, ["[connectivity]", "uri=http://ping.archlinux.org/nm-check.txt"]]), ownFile)),
-                    show({ state: "default", value: null, from: lib, elsewhere: "", file: ownFile, afterOwn: false }),
+                    show({ state: "default", value: null, from: lib, elsewhere: "", file: ownFile, afterOwn: false, shadowed: null }),
                     "set only by the distribution's package: its default, not elsewhere");
         assertEqual(show(rules.inForceOf(uri, nm([lib, ["[connectivity]", "uri=http://a/"]], [ownUri, ["[connectivity]", "uri=" + address]]), ownFile)),
-                    show({ state: "set", value: address, from: ownUri, elsewhere: "", file: ownFile, afterOwn: false }), "set by the shell's own file");
+                    show({ state: "set", value: address, from: ownUri, elsewhere: "", file: ownFile, afterOwn: false, shadowed: null }), "set by the shell's own file");
         const main = "/etc/NetworkManager/NetworkManager.conf";
         assertEqual(show(rules.inForceOf(uri, nm([main, ["[connectivity]", "uri=http://mine/"]]), ownFile)),
-                    show({ state: "set", value: "http://mine/", from: main, elsewhere: main, file: ownFile, afterOwn: false }),
+                    show({ state: "set", value: "http://mine/", from: main, elsewhere: main, file: ownFile, afterOwn: false, shadowed: null }),
                     "set in NetworkManager.conf: elsewhere, read before the shell's file");
         const later = "/etc/NetworkManager/conf.d/99-mine.conf";
         assertEqual(show(rules.inForceOf(uri, nm([ownUri, ["[connectivity]", "uri=" + address]], [later, ["[connectivity]", "uri="]]), ownFile)),
-                    show({ state: "set", value: "", from: later, elsewhere: later, file: ownFile, afterOwn: true }),
+                    show({ state: "set", value: "", from: later, elsewhere: later, file: ownFile, afterOwn: true, shadowed: null }),
                     "emptied by a later conf.d file: elsewhere, read after the shell's");
         assertEqual(show(rules.inForceOf(uri, "file\t" + main + "\tunreadable\ndone\n", ownFile)),
-                    show({ state: "unknown", value: null, from: "", elsewhere: "", file: ownFile, afterOwn: false }), "a file not read: unknown");
+                    show({ state: "unknown", value: null, from: "", elsewhere: "", file: ownFile, afterOwn: false, shadowed: null }), "a file not read: unknown");
+        assertEqual(JSON.stringify(rules.inForceOf(uri, nm([main, ["[connectivity]", "uri=http://mine/"]], [ownUri, ["[connectivity]", "uri=" + address]]), ownFile).shadowed),
+                    JSON.stringify({ from: main, value: "http://mine/" }), "the shell's file in force: the user's address it overrides, shown");
+        assert(rules.validInForce(rules.inForceOf(uri, nm([main, ["[connectivity]", "uri=http://mine/"]], [ownUri, ["[connectivity]", "uri=" + address]]), ownFile)),
+               "… a valid answer");
         for (const answer of [rules.inForceOf(uri, nm([later, ["[connectivity]", "uri="]]), null), rules.inForceOf(uri, nm([lib, ["[connectivity]", "uri=http://a/"]]), null)])
             assert(rules.validInForce(answer), "a valid answer: " + show(answer));
     }

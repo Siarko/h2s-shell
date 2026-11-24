@@ -162,7 +162,7 @@ what the system really uses, read as the system merges it (for the hibernation d
 distribution's packaged `/usr/lib/NetworkManager/conf.d` counting as the default), and which file sets it: a setting from any
 file but the shell's own is the user's or the system's, shown as set there and never
 overridden unasked; `afterOwn` says whether that file is read after the shell's (a change of
-the shell's cannot take effect over it) or before (the shell's would win: it asks first). Where `/etc` is the
+the shell's cannot take effect over it) or before (the shell's would win: it asks first). When the shell's own file is in force, `shadowed` names the setting read before it that it overrides, which the feature shows too. Where `/etc` is the
 machine's own, `distributions/EtcFiles.qml` writes the shell's files there: one root step
 (`scripts/root/etc-files.sh`, whose files are fixed in it, one per kind, and which writes
 only the kind's exact template), the file as read checked before it is replaced, the old one
@@ -177,7 +177,8 @@ Undo, one at a time) and decides what to offer in its own Rules: the hibernation
 `copy` kind may also say `anyway`: the shell still writes its file where the system's
 configuration makes `/etc`, when the user asks (warned, without Undo). After the connectivity
 check's file changes, the root step has NetworkManager read its configuration again (its
-`nmcli` at a fixed place).
+`nmcli` at a fixed place); when that fails, its `warning:` lines reach the outcome
+(`EtcFilesRules.reply`'s `warnings`) and the user is told.
 `tests/DistributionContractTest.qml` holds every integration to the same answers.
 
 #### NixOS

@@ -350,7 +350,7 @@ Flickable {
                 text: _current
                 problem: text !== "" && !NetworkRules.isConnectivityUri(text)
                 input.inputMethodHints: Qt.ImhUrlCharactersOnly | Qt.ImhNoPredictiveText | Qt.ImhNoAutoUppercase
-                onAccepted: if (root._uriOffer.save.button === "plain") _uriSave.clicked(); else if (root._uriOffer.copy.shown) _uriCopy.clicked()
+                onAccepted: if (root._uriOffer.enter === "save") _uriSave.clicked(); else if (root._uriOffer.enter === "copy") _uriCopy.clicked()
                 onEditingChanged: if (!editing && text === _current) text = Qt.binding(() => _current)
             }
             // Root always: the address is in NetworkManager's configuration (pkexec)

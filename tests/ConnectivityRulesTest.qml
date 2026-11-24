@@ -32,6 +32,7 @@ TestCase {
         assert(rules.isUri(address) && rules.isUri("https://example.com:8443/x"), "http and https, a port, a path");
         for (const wrong of ["ftp://x/y", "http://x/a b", "http://x/a\nuri=evil", "http://x/\"q", "http://x/a\\b", "http://", "http://x:/", ""])
             assert(!rules.isUri(wrong), "not an address: " + json(wrong));
+        assert(!rules.isUri("http://x/a\u0001b") && !rules.isUri("http://x/a\u007fb"), "… nor one with a control character (the root step refuses it too)");
         assertEqual(rules.text(address), "# Written by h2s-shell (Settings > System > Network)\n[connectivity]\nuri=" + address + "\n",
                     "the shell's file, as it has always written it");
         assert(rules.shellText(rules.text(address)), "… is the shell's");
@@ -45,21 +46,41 @@ TestCase {
                                      ["/etc/NetworkManager/conf.d/20-connectivity.conf", false], ["/etc/NetworkManager/conf.d/90-a.conf", false],
                                      ["/etc/NetworkManager/NetworkManager.conf", false], ["/run/NetworkManager/conf.d/99-x.conf", false],
                                      ["/usr/lib/NetworkManager/conf.d/99-x.conf", false], ["/somewhere/else.conf", true],
-                                     [EtcFilesRules.files[rules.kind], false]])
+                                     [EtcFilesRules.files[rules.kind], false], ["/etc/NetworkManager/nm-system-settings.conf", false],
+                                     ["/run/current-system/sw/lib/NetworkManager/conf.d/99-x.conf", false]])
             assertEqual(rules.readAfterOwn(path), after, "read after the shell's file: " + path + " → " + after);
 
         // ── NetworkManager's files merged ──
         const record = (path, lines) => "file\t" + path + "\ttext\n" + lines.map(line => "|" + line + "\n").join("") + "end\t" + path + "\n";
         const main = "/etc/NetworkManager/NetworkManager.conf";
-        assertEqual(json(rules.setting(record(main, ["[main]", "dns=default"]) + "done\n")), json({ state: "default", value: null, from: "" }), "no file sets it: the default");
+        assertEqual(json(rules.setting(record(main, ["[main]", "dns=default"]) + "done\n")), json({ state: "default", value: null, from: "", shadowed: null }), "no file sets it: the default");
         assertEqual(json(rules.setting(record(main, ["  # uri=http://no/", "[connectivity]", " uri = http://a/ ", "[main]", "uri=http://not/", "[connectivity]", "uri=http://b/"]) + "done\n")),
-                    json({ state: "set", value: "http://b/", from: main }), "comments, blanks, other groups; a group repeated is the same group, its last value wins");
+                    json({ state: "set", value: "http://b/", from: main, shadowed: null }), "comments, blanks, other groups; a group repeated is the same group, its last value wins");
         assertEqual(json(rules.setting(record(main, ["[connectivity]", "uri=http://a/"]) + record("/etc/NetworkManager/conf.d/50.conf", ["[connectivity]", "enabled=false"]) + "done\n")),
-                    json({ state: "set", value: "http://a/", from: main }), "a later file without the address leaves it");
+                    json({ state: "set", value: "http://a/", from: main, shadowed: null }), "a later file without the address leaves it");
         assertEqual(rules.setting(record(main, ["[connectivity]", "uri=http://a/"]) + record("/etc/NetworkManager/conf.d/50.conf", ["[connectivity]", "uri="]) + "done\n").value,
                     "", "a later file empties it");
         assertEqual(json(rules.setting(record("/usr/lib/NetworkManager/conf.d/20-connectivity.conf", ["[connectivity]", "uri=http://ping.archlinux.org/nm-check.txt"]) + "done\n")),
-                    json({ state: "default", value: null, from: "/usr/lib/NetworkManager/conf.d/20-connectivity.conf" }), "only the distribution's package: its default");
+                    json({ state: "default", value: null, from: "/usr/lib/NetworkManager/conf.d/20-connectivity.conf", shadowed: null }), "only the distribution's package: its default");
+        const ours = EtcFilesRules.files[rules.kind];
+        assertEqual(json(rules.setting(record(main, ["[connectivity]", "uri=http://mine/"]) + record(ours, ["[connectivity]", "uri=http://shell/"]) + "done\n")),
+                    json({ state: "set", value: "http://shell/", from: ours, shadowed: { from: main, value: "http://mine/" } }),
+                    "the shell's file in force: the user's address it overrides");
+        assertEqual(rules.setting(record("/usr/lib/NetworkManager/conf.d/20-connectivity.conf", ["[connectivity]", "uri=http://pkg/"])
+                                  + record(ours, ["[connectivity]", "uri=http://shell/"]) + "done\n").shadowed, null, "… only the package's default: nothing overridden to show");
+        assertEqual(rules.setting(record(main, ["[connectivity]", "uri=http://mine/"]) + record(ours, ["[connectivity]", "uri=http://shell/"])
+                                  + record("/etc/NetworkManager/conf.d/99.conf", ["[connectivity]", "uri=http://last/"]) + "done\n").shadowed, null, "… another file wins: none");
+        assertEqual(rules.setting(record("/run/current-system/sw/lib/NetworkManager/conf.d/20.conf", ["[connectivity]", "uri=http://pkg/"]) + "done\n").state, "default",
+                    "NixOS's packages' conf.d: the default too");
+        for (const [enable, state] of [["false", "default"], ["No", "default"], ["0", "default"], ["true", "set"], ["yes", "set"], ["nm-version-min:1.2", "unknown"]])
+            assertEqual(rules.setting(record("/etc/NetworkManager/conf.d/50.conf", ["[connectivity]", "uri=http://a/", "[.config]", "enable=" + enable]) + "done\n").state, state,
+                        "a conf.d file with [.config] enable=" + enable + ": " + state);
+        assertEqual(rules.setting(record(main, ["[connectivity]", "uri=http://a/", "[.config]", "enable=false"]) + "done\n").state, "set",
+                    "… the main file is never skipped");
+        assertEqual(rules.setting(record("/etc/NetworkManager/conf.d/50.conf", ["[main]", "enable=false", "[connectivity]", "uri=http://a/"]) + "done\n").state, "set",
+                    "… `enable` in another group: not that");
+        assertEqual(rules.setting(record("/etc/NetworkManager/conf.d/50.conf", ["[connectivity]", "uri=http://a/", "[.config]", "garbage", "enable=false"]) + "done\n").state,
+                    "default", "… a line that is no key there passed over");
         for (const [why, output] of [["not finished", record(main, [])], ["a file unreadable", "file\t" + main + "\tunreadable\ndone\n"],
                                      ["a folder not listed", "unknown\t/etc/NetworkManager/conf.d cannot be listed\ndone\n"], ["a record not closed", "file\t" + main + "\ttext\n|x\ndone\n"],
                                      ["a line after the end", "done\nfile\t" + main + "\ttext\n"], ["an end of another file", "file\t" + main + "\ttext\nend\t/x\ndone\n"],
@@ -145,6 +166,17 @@ TestCase {
         answer = offer({ inForce: read(edited, { state: "set", value: "http://mine/", from: main, elsewhere: main }) });
         assertEqual(answer.save.question, "Replace?", "both: the file's question");
         assertEqual(answer.hint, base + " Set in " + main + ": http://mine/. " + ours + " was changed outside the shell: Save replaces it.", "… both said");
+        // The user's own setting the shell's file overrides: shown, Default puts it back
+        const overridden = read(shells, { state: "set", value: "http://old/", from: ours, shadowed: { from: main, value: "http://mine/" } });
+        answer = offer({ inForce: overridden });
+        assertEqual(answer.hint, base + " Set in " + main + ": http://mine/; the shell's file overrides it.", "the shell's file over the user's: said");
+        assert(answer.save.button === "plain", "… Save asks nothing (the shell's file wins already)");
+        answer = offer({ field: "", current: "http://old/", inForce: overridden });
+        assert(answer.save.label === "Default" && answer.save.available && answer.save.button === "plain", "… Default puts the user's back");
+        assertEqual(offer({ inForce: read(shells, { state: "set", value: "http://old/", from: ours, shadowed: { from: main, value: null } }) }).hint,
+                    base + " Set in " + main + ": the default; the shell's file overrides it.", "… a setting of the default: said so");
+        assertEqual(answer.enter, "save", "Enter: a plain Save");
+        assertEqual(offer({ inForce: read(absent, { state: "set", value: "http://mine/", from: main, elsewhere: main }) }).enter, "", "… never a question's first click");
         answer = offer({ field: "ftp://x" });
         assert(!answer.save.available, "not an address: nothing to save");
         assertEqual(answer.hint, "An http:// or https:// address, without spaces or quotes.", "… said what it takes");
@@ -160,6 +192,10 @@ TestCase {
                     "… what it means");
         assertEqual(json(answer.anyway.request), json({ uri: address, current: absent, replace: false, anyway: true }), "… its effect: written anyway");
         assertEqual(answer.hint, "The address it fetches now and then.", "… the line under it");
+        assertEqual(answer.enter, "copy", "… Enter copies the line, never writes");
+        assertEqual(offer({ capability: nixos, current: "http://old/" }).anyway.label, "Write anyway", "… another address over one in use: Write anyway");
+        answer = offer({ capability: nixos, field: "", current: "http://old/", inForce: read(shells, { state: "set", value: "http://old/", from: ours }) });
+        assert(answer.anyway.label === "Default" && answer.anyway.available && answer.anyway.request.uri === "", "… the field emptied: Default, removing the shell's file");
         answer = offer({ capability: nixos, inForce: read(absent, { state: "set", value: "http://cfg/", from: main, elsewhere: main }) });
         assert(answer.anyway.button === "ask" && answer.anyway.question === "Use the shell's value instead?", "set in the system's configuration: Write anyway asks");
         assertEqual(answer.hint, "The address it fetches now and then. Set in " + main + ": http://cfg/.", "… named");
@@ -178,6 +214,17 @@ TestCase {
         answer = offer({ capability: IntegrationRules.unknownCapability() });
         assert(!answer.save.shown && !answer.copy.shown, "not known: nothing offered");
         assertEqual(answer.hint, "The address it fetches now and then.", "… nothing promised");
+        assertEqual(offer({ capability: generic }).enter, "", "… Enter does nothing");
+
+        // After a change
+        const what = "Setting the connectivity check's address";
+        assertEqual(rules.notice(what, { ok: true, warnings: [] }), null, "done: nothing to say");
+        assertEqual(json(rules.notice(what, { ok: true, warnings: ["no nmcli: NetworkManager did not read its configuration again"] })),
+                    json({ title: "NetworkManager did not take the change", body: "no nmcli: NetworkManager did not read its configuration again\nIt takes it when it starts again." }),
+                    "done, NetworkManager not told: said");
+        assertEqual(json(rules.notice(what, { ok: false, quiet: false, error: "The file changed since it was read: read it again." })),
+                    json({ title: what + " failed", body: "The file changed since it was read: read it again." }), "failed: said why");
+        assertEqual(rules.notice(what, { ok: false, quiet: true, error: "" }), null, "the prompt dismissed: nothing");
         assertEqual(json([arch.mode, arch.undo, nixos.mode, nixos.anyway, generic.mode]), json(["apply", true, "copy", true, "unavailable"]),
                     "the integrations: Arch applies with Undo, NixOS copies or writes anyway, generic not");
     }

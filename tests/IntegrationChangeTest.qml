@@ -157,10 +157,13 @@ TestCase {
         _then("the Save answered", () => _finished.length === 1, () => {
             assertEqual(_finished[0].mode + " " + _finished[0].outcome.ok, "apply true", "saved: " + JSON.stringify(_finished[0].outcome));
             assertEqual(_runs[_runs.length - 1], "Change the connectivity check's address", "… the prompt's reason");
+            assertEqual(JSON.stringify(_finished[0].outcome.warnings), "[]", "… NetworkManager told: no warning");
         });
         _then("read again: the shell's own file in force", () => uriRead("set", "text")() && _uriChange.inForce.from !== main, () => {
             assertEqual([_uriChange.inForce.value, _uriChange.inForce.from, _uriChange.inForce.elsewhere, _uriChange.inForce.file.ours].join(" "),
                         _address + " " + EtcFilesRules.files[_uriKind] + "  true", "the address from the shell's file, exactly its text, nothing elsewhere");
+            assertEqual(JSON.stringify(_uriChange.inForce.shadowed), JSON.stringify({ from: main, value: "http://mine/" }),
+                        "… the user's address in NetworkManager.conf it overrides, told");
             _sh("cat \"$1/nmcli.log\"");
         });
         _then("NetworkManager's stand-in looked at", () => _shellOutput !== "", () => {
@@ -171,7 +174,7 @@ TestCase {
             assertEqual(_finished[1].mode + " " + _finished[1].outcome.ok, "undo true", "put back: " + JSON.stringify(_finished[1].outcome));
         });
         _then("read again: NetworkManager.conf's address", () => uriRead("set", "absent")() && _uriChange.inForce.elsewhere === main, () => {
-            _sh("cat \"$1/nmcli.log\"");
+            _sh("cat \"$1/nmcli.log\"; printf '#!/bin/sh\\nexit 1\\n' > \"$1/usr/bin/nmcli\"");
         });
         _then("NetworkManager's stand-in looked at again", () => _shellOutput !== "", () => {
             assertEqual(_shellOutput, "[0]general reload conf\ngeneral reload conf\n", "… and again after Undo");
@@ -188,11 +191,21 @@ TestCase {
         });
         _then("the write answered", () => _finished.length === 3, () => {
             assertEqual(_finished[2].outcome.ok, true, "written: " + JSON.stringify(_finished[2].outcome));
-            assert(!_anywayChange.undoable || _anywayChange.capability.undo === false, "… no Undo offered for it");
-            _sh("cat \"$1/etc/NetworkManager/conf.d/90-h2s-connectivity.conf\"");
+            assertEqual(JSON.stringify(_finished[2].outcome.warnings), JSON.stringify(["NetworkManager did not read its configuration again"]),
+                        "… NetworkManager's nmcli failing: a warning in the outcome");
+            assertEqual(_anywayChange.undo().refusal?.code, "mode", "… no Undo of it");
+            _sh("cat \"$1/etc/NetworkManager/conf.d/90-h2s-connectivity.conf\"; rm \"$1/usr/bin/nmcli\"");
         });
         _then("the file looked at", () => _shellOutput !== "", () => {
             assertEqual(_shellOutput, "[0]" + ConnectivityRules.text(_address), "… the shell's file for the address");
+        });
+        _then("NixOS's reading again", () => _anywayChange.inForce !== null && _anywayChange.inForce.file?.state === "text", () => {
+            assert(_anywayChange.apply("", { current: _anywayChange.inForce.file, anyway: true }).started, "NixOS: the file removed when asked");
+        });
+        _then("the removal answered", () => _finished.length === 4, () => {
+            assertEqual(_finished[3].outcome.ok + " " + _finished[3].outcome.mode, "true remove", "removed: " + JSON.stringify(_finished[3].outcome));
+            assertEqual(JSON.stringify(_finished[3].outcome.warnings), JSON.stringify(["no nmcli: NetworkManager did not read its configuration again"]),
+                        "… no nmcli at all: that warning");
         });
         _clock.start();
         _sh("set -e; umask 022; mkdir -p \"$1/etc/systemd\" \"$1/etc/NetworkManager\" \"$1/usr/lib/NetworkManager/conf.d\" \"$1/usr/bin\";"

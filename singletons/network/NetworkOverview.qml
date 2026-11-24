@@ -371,8 +371,9 @@ Singleton {
         id: _uriChange
         kind: ConnectivityRules.kind
         onFinished: (mode, outcome) => {
-            if (outcome?.ok !== true && outcome?.quiet !== true)
-                Notifier.send(root._uriWhat + " failed", { body: outcome?.error ?? "" });
+            const notice = ConnectivityRules.notice(root._uriWhat, outcome);
+            if (notice !== null)
+                Notifier.send(notice.title, { body: notice.body });
             // The address NetworkManager uses now, whichever way it went
             root.refresh();
         }

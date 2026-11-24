@@ -244,15 +244,19 @@ Singleton {
         const busy = typeof given?.busy === "string" ? given.busy : "";
         const path = EtcFilesRules.files["sleep.hibernateDelay"];
         const undoShown = capability.mode === "apply" && capability.undo === true && given?.undoable === true;
+        // The user's or the system's own setting the shell's drop-in overrides: always said
+        const shadowed = capability.mode === "apply" && given?.inForce?.elsewhere === "" && typeof given?.inForce?.shadowed?.from === "string"
+            ? given.inForce.shadowed : null;
+        const overrides = shadowed === null ? ""
+            : "Set in " + shadowed.from + ": " + (shadowed.value === null ? "systemd's default" : label(shadowed.value)) + "; the shell's file overrides it.";
         const offer = {
-            shown: given?.differs === true || undoShown,
+            shown: given?.differs === true || undoShown || shadowed !== null,
             line: "",
             apply: { button: "none", label: busy === "apply" ? "Applying…" : "Apply", question: "", available: busy === "", request: null },
             undo: { shown: undoShown, label: "Undo", available: busy === "" }
         };
         if (given?.differs !== true) {
-            if (undoShown)
-                offer.line = "Undo puts back " + path + " as it was before the last Apply.";
+            offer.line = [overrides, undoShown ? "Undo puts back " + path + " as it was before the last Apply." : ""].filter(part => part !== "").join(" ");
             return offer;
         }
         const delay = given?.delay;
@@ -287,7 +291,7 @@ Singleton {
         if (elsewhere !== "")
             offer.line = setThere + "." + edited;
         else
-            offer.line = now + (readable ? (replace ? edited : " Apply to change it.") : "");
+            offer.line = now + (overrides !== "" ? " " + overrides : "") + (readable ? (replace ? edited : " Apply to change it.") : "");
         if (!readable)
             return offer;
         offer.apply.button = elsewhere !== "" || replace ? "ask" : "plain";

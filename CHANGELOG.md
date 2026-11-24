@@ -87,6 +87,12 @@ The interface modules are written against (`qs.api`), versioned on its own
   is replaced or removed only after it asks again ("Replace?", "Remove?"). The distribution's
   packaged address (Arch's 20-connectivity.conf) counts as the default, not as set elsewhere.
   On a distribution the shell does not know, no Save: "Not supported on this distribution."
+  An address of yours that the shell's file overrides is shown too ("Set in <file>:
+  <address>; the shell's file overrides it"; Default puts yours back), and a notification says
+  when the file was written but NetworkManager did not read it again. On NixOS, "Write anyway"
+  with the field emptied says "Default" (it removes the shell's file).
+- Settings → When away → Hibernate: a delay of yours that the shell's drop-in overrides is
+  shown ("Set in <file>: <time>; the shell's file overrides it").
 - The machine's u2f settings are no longer changed: a security key row of
   `programs.h2s-shell.pam` keeps `nouserok`, `alwaysok`, `userpresence`, `interactive` and
   `pinverification` from `security.pam.u2f.settings` instead of stripping them or stopping

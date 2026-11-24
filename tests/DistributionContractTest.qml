@@ -197,7 +197,7 @@ TestCase {
             assertEqual((_answers["arch apply sleep.hibernateDelay"] ?? [])[0]?.quiet, true, "arch: the hibernation delay's apply ran (its prompt dismissed)");
             const archDelay = (_answers["arch readInForce sleep.hibernateDelay"] ?? [])[0];
             assertEqual(JSON.stringify(archDelay), JSON.stringify({ state: "set", value: 7200, from: "/etc/systemd/sleep.conf", elsewhere: "/etc/systemd/sleep.conf",
-                                                                   file: { state: "absent", text: null, sha256: "absent", ours: false }, afterOwn: false }),
+                                                                   file: { state: "absent", text: null, sha256: "absent", ours: false }, afterOwn: false, shadowed: null }),
                         "arch: the delay in force, set elsewhere (read before the shell's file), and the shell's own file (none in the scratch tree)");
             const nixosDelay = (_answers["nixos readInForce sleep.hibernateDelay"] ?? [])[0];
             assertEqual(nixosDelay?.elsewhere + " " + nixosDelay?.value + " " + nixosDelay?.file, "/etc/systemd/sleep.conf 7200 null", "nixos: the delay in force, no file of the shell's");
@@ -205,7 +205,7 @@ TestCase {
                         "runs as administrator: only arch's applied kinds, once each; none from nixos or generic");
             assertEqual(JSON.stringify((_answers["arch readInForce network.connectivityUri"] ?? [])[0]),
                         JSON.stringify({ state: "set", value: "http://mine/", from: "/etc/NetworkManager/NetworkManager.conf", elsewhere: "/etc/NetworkManager/NetworkManager.conf",
-                                         file: { state: "absent", text: null, sha256: "absent", ours: false }, afterOwn: false }),
+                                         file: { state: "absent", text: null, sha256: "absent", ours: false }, afterOwn: false, shadowed: null }),
                         "arch: the address in force, set in NetworkManager.conf (read before the shell's file), and the shell's own file");
             assertEqual((_answers["nixos readInForce network.connectivityUri"] ?? [])[0]?.file?.state, "absent",
                         "nixos: the shell's own file read too, for Write anyway");

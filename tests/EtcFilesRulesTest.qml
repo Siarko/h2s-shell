@@ -154,8 +154,11 @@ TestCase {
         const line = "written " + kind + " " + sha(text) + " h2s-shell.conf.20261124T101500Z.absent";
         let outcome = rules.reply(result("x\n" + line + "\n"), expected);
         assertEqual(JSON.stringify(outcome), JSON.stringify({ ok: true, quiet: false, mode: "write", kind, sha256: sha(text), backup: "h2s-shell.conf.20261124T101500Z.absent",
-                                                             refused: "", error: "", file: "done" }), "its last line: done, what is in force, the backup");
+                                                             refused: "", error: "", file: "done", warnings: [] }), "its last line: done, what is in force, the backup");
         assertEqual(rules.reply(result("", { ok: false, code: 141, stderr: line + "\n" }), expected).ok, true, "… on stderr, whatever the exit");
+        assertEqual(JSON.stringify(rules.reply(result(line + "\n", { stderr: "noise\n  warning: no nmcli: not read\u0001 again\n" + line + "\n" }), expected).warnings),
+                    JSON.stringify(["no nmcli: not read  again"]), "… the root step's warnings before it, without the word, on one line");
+        assertEqual(rules.reply(result(line + "\n", { stderr: "warning: a\n".repeat(9) }), expected).warnings.length, 4, "… at most four");
         assertEqual(rules.reply(result(line.replace("written", "restored")), expected).ok, false, "another mode's word: not done");
         assertEqual(rules.reply(result(line.replace(sha(text), sha(older))), expected).ok, false, "another hash: not done");
         assertEqual(rules.reply(result(line.replace(kind, "pam.rules")), expected).ok, false, "another kind: not done");
