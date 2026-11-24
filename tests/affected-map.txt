@@ -149,6 +149,8 @@ tests/fixtures/mockups/* self:tests/run-mockups-selftest.sh self:tests/mockup-se
 tests/mockup.sh self:tests/mockup-selftest.sh
 # The migration harness's test-only migration and its fixture, read by path
 tests/fixtures/migrations-testonly/* unit:MigrationsTest
+# The golden outputs of the startup migrations, read by path
+tests/fixtures/migrations-golden/* unit:MigrationsGoldenTest
 flake.nix self:tests/run-system.sh
 flake.lock self:tests/run-system.sh unit:QuickshellPinTest
 nix/* self:tests/run-system.sh

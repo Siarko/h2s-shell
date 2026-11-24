@@ -1,0 +1,24 @@
+{
+    "themes/Full.json": {
+        "extends": "default",
+        "colors": {
+            "accent": "#a3be8c"
+        }
+    },
+    "themes/Full 2.json": {
+        "extends": "default",
+        "bar": {
+            "barHeight": 32,
+            "leftMargin": 6,
+            "rightMargin": 6,
+            "reservedSpace": 36
+        }
+    },
+    "themes/Night.json": {
+        "extends": "Full 2",
+        "bar": {
+            "barHeight": 28,
+            "reservedSpace": 36
+        }
+    }
+}

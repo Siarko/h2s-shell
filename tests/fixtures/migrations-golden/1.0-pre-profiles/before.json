@@ -1,0 +1,91 @@
+{
+    "general": {
+        "debug": true,
+        "fetch_debug": false
+    },
+    "media": {
+        "visualizerStyle": "bars",
+        "visualizerLayout": "vertical"
+    },
+    "lockscreen": {
+        "screensaverEnabled": true,
+        "screensaverTimeout": 420,
+        "fadeInDuration": 900,
+        "fadeOutDuration": 300,
+        "notificationsOnScreensaver": false,
+        "lockscreenEnabled": true,
+        "lockscreenTimeout": 600,
+        "notificationsOnLock": true,
+        "screensaverExecCmd": false,
+        "screensaverExecSleep": "",
+        "screensaverExecWakeup": ""
+    },
+    "notifications": {
+        "codePatterns": [
+            "\\d{6}"
+        ]
+    },
+    "stt": {
+        "previewEnabled": false,
+        "previewWidth": 240,
+        "finalLingerMs": 1500,
+        "showPending": true,
+        "pauseMusicWhileDictating": false,
+        "socketPath": "/run/user/1000/example-stt.sock",
+        "debug": false
+    },
+    "gcal": {
+        "enabled": true,
+        "debug": false,
+        "viewMode": "week",
+        "clientId": "example-client-id",
+        "clientSecret": "",
+        "accessToken": "",
+        "refreshToken": "",
+        "tokenExpiry": 0,
+        "enabledCalendarIds": [
+            "example-calendar"
+        ]
+    },
+    "calendar": {
+        "datetimeFormat": "ddd d MMM"
+    },
+    "audio": {
+        "appVolumes": "{}"
+    },
+    "bar": {
+        "content": {
+            "left": [
+                "power",
+                "workspaces"
+            ],
+            "leftProfiles": "[\"\",\"only_special\"]",
+            "center": [
+                "clock"
+            ],
+            "centerProfiles": "[]",
+            "right": [
+                "music",
+                "hardware",
+                "sound",
+                "notifications"
+            ],
+            "rightProfiles": "[\"\",\"compact\"]"
+        },
+        "layout": {
+            "barHeight": 34,
+            "reservedSpace": 40,
+            "topOffset": 4,
+            "leftMargin": 8,
+            "rightMargin": 8,
+            "leftPadding": 6,
+            "rightPadding": 6,
+            "radiusTopLeft": 12,
+            "radiusTopRight": 12,
+            "radiusBottomLeft": 0,
+            "radiusBottomRight": 0
+        }
+    },
+    "widgetProfiles": "{\"workspaces\":{\"default\":{\"showEmpty\":false},\"only_special\":{\"specialOnly\":true}},\"clock\":{\"default\":{\"format\":\"HH:mm\"},\"_popupMode\":\"hover\"},\"hardware\":{\"compact\":{\"items\":[\"cpu\",\"ram\"]},\"full\":{\"items\":[\"cpu\",\"gpu\",\"ram\",\"disk\"]},\"_popup\":[\"cpu\",\"gpu\"],\"_labels\":{\"cpu\":\"Processor\"},\"_capsuleLabels\":{\"cpu\":\"C\",\"ram\":\"M\"},\"_popupLabels\":{\"gpu\":\"Graphics\"}},\"music\":{\"_popupMode\":\"click\"},\"sound\":{\"_popupMode\":\"none\"}}",
+    "profiles": "[{\"name\":\"Full\",\"enabled\":true,\"when\":{},\"set\":{\"general.debug\":false,\"general.fetchDebug\":false,\"media.visualizerStyle\":\"waveform\",\"media.visualizerLayout\":\"horizontal\",\"media.hiddenPlayers\":[],\"media.coverColors\":false,\"media.coverRounding\":33,\"media.coverRotation\":0,\"lockscreen.screensaverEnabled\":false,\"lockscreen.screensaverTimeout\":300,\"lockscreen.fadeInDuration\":800,\"lockscreen.fadeOutDuration\":400,\"lockscreen.notificationsOnScreensaver\":true,\"lockscreen.commandEntries\":[{\"id\":\"dark\",\"moment\":\"dark\",\"monitors\":null,\"go\":\"\",\"back\":\"\"}],\"lockscreen.screensaverNotificationDetail\":\"full\",\"lockscreen.perMonitor\":false,\"lockscreen.monitorIdle\":{},\"lockscreen.screenOffEnabled\":false,\"lockscreen.screenOffTimeout\":600,\"lockscreen.lockscreenEnabled\":false,\"lockscreen.lockAfter\":600,\"lockscreen.lockedScreenOffTimeout\":60,\"lockscreen.lockOnSleep\":false,\"lockscreen.sleepEnabled\":false,\"lockscreen.sleepTimeout\":1800,\"lockscreen.hibernateEnabled\":false,\"lockscreen.hibernateTimeout\":7200,\"lockscreen.notificationsOnLock\":true,\"lockscreen.lockNotificationDetail\":\"app\",\"lockscreen.offerFingerprint\":true,\"lockscreen.offerSecurityKey\":true,\"notifications.codePatterns\":[\"\\\\d{4,8}\"],\"stt.previewEnabled\":true,\"stt.previewWidth\":180,\"stt.finalLingerMs\":2500,\"stt.showPending\":true,\"stt.pauseMusicWhileDictating\":true,\"stt.socketPath\":\"\",\"stt.debug\":false,\"gcal.enabled\":true,\"gcal.debug\":false,\"bar.edge\":\"top\",\"bar.verticalText\":\"rotated\",\"bar.left\":[{\"type\":\"power\",\"preset\":\"\"},{\"type\":\"settings\",\"preset\":\"\"},{\"type\":\"workspaces\",\"preset\":\"\"}],\"bar.center\":[{\"type\":\"clock\",\"preset\":\"\"}],\"bar.right\":[{\"type\":\"music\",\"preset\":\"\"},{\"type\":\"sound\",\"preset\":\"\"},{\"type\":\"bluetooth\",\"preset\":\"\"},{\"type\":\"tray\",\"preset\":\"\"},{\"type\":\"network\",\"preset\":\"\"},{\"type\":\"notifications\",\"preset\":\"\"}],\"widgets.hardware.popup\":{\"sources\":null,\"labels\":{}},\"notifications.toasts\":true,\"notifications.followSenderTime\":true,\"notifications.toastDuration\":5,\"notifications.toastLayout\":\"queue\",\"notifications.toastColumnSize\":3,\"notifications.criticalToastLimit\":1,\"notifications.stayingToastLimit\":1,\"notifications.residentHide\":false,\"notifications.movableToasts\":true,\"notifications.toastScreen\":\"\",\"notifications.toastFullscreen\":\"show\",\"notifications.toastFullscreenScreen\":\"\",\"system.polkitAgent\":\"\",\"system.rememberAdminMinutes\":5,\"modules.autoUpdate\":\"manual\",\"system.vpnWithNetworks\":{},\"system.vpnLockdownAlways\":false,\"system.vpnLockdownNetworks\":[],\"system.vpnLockdownLan\":false,\"system.vpnLockdownServers\":[],\"wallpaper.enabled\":false,\"wallpaper.source\":\"\",\"wallpaper.depth\":2,\"wallpaper.fit\":\"cover\",\"wallpaper.background\":\"#000000\",\"wallpaper.backgroundFromImage\":false,\"wallpaper.mode\":\"fixed\",\"wallpaper.scope\":\"everywhere\",\"wallpaper.interval\":0,\"wallpaper.subset\":[],\"wallpaper.assignments\":{},\"wallpaper.pinned\":{},\"wallpaper.weekdays\":[\"\",\"\",\"\",\"\",\"\",\"\",\"\"],\"appearance.theme\":\"default\",\"appearance.iconTheme\":\"\",\"animation.speed\":100,\"animation.reduceMotion\":false,\"polling.hardware.interval\":2000,\"polling.hardware.gpuSampling\":\"averaged\",\"polling.temperatures.interval\":2000,\"polling.disk.interval\":10000,\"polling.network.interval\":2000,\"polling.visualizer.fps\":60,\"graphs.heartbeat\":true,\"system.powerProfile\":\"balanced\",\"widgets.power.popupMode\":\"click\",\"widgets.clock.popupMode\":\"click\",\"widgets.music.popupMode\":\"click\",\"widgets.sound.popupMode\":\"click\",\"widgets.bluetooth.popupMode\":\"click\",\"widgets.network.popupMode\":\"click\",\"widgets.notifications.popupMode\":\"click\",\"widgets.hardware.popupMode\":\"click\",\"widgets.battery.popupMode\":\"click\"}},{\"name\":\"Power save\",\"enabled\":true,\"when\":{\"all\":[{\"fact\":\"power.onBattery\",\"is\":true}]},\"set\":{\"polling.hardware.interval\":10000,\"polling.hardware.gpuSampling\":\"single\",\"polling.temperatures.interval\":30000,\"polling.disk.interval\":0,\"polling.network.interval\":10000,\"graphs.heartbeat\":false,\"polling.visualizer.fps\":15,\"system.powerProfile\":\"power-saver\"}}]"
+}

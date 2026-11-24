@@ -1,0 +1,17 @@
+{
+    "themes/Full.json": {
+        "extends": "default",
+        "bar": {
+            "barHeight": 30,
+            "radiusTopLeft": 10,
+            "topOffset": 2
+        }
+    },
+    "themes/Power save.json": {
+        "extends": "Full",
+        "bar": {
+            "barHeight": 26,
+            "topOffset": 2
+        }
+    }
+}

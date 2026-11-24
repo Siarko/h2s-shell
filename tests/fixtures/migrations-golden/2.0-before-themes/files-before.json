@@ -1,0 +1,8 @@
+{
+    "themes/Full.json": {
+        "extends": "default",
+        "colors": {
+            "accent": "#a3be8c"
+        }
+    }
+}
