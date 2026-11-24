@@ -137,7 +137,9 @@ tests/fixtures/helper/* unit:HelperTest
 tests/run-mockups.sh self:tests/run-mockups-selftest.sh
 mockup.qml self:tests/run-mockups-selftest.sh mockup:all
 mockups/kit/* self:tests/run-mockups-selftest.sh mockup:all
-tests/fixtures/mockups/* self:tests/run-mockups-selftest.sh
+tests/fixtures/mockups/* self:tests/run-mockups-selftest.sh self:tests/mockup-selftest.sh
+# The mockups' screen tool
+tests/mockup.sh self:tests/mockup-selftest.sh
 flake.nix self:tests/run-system.sh
 flake.lock self:tests/run-system.sh unit:QuickshellPinTest
 nix/* self:tests/run-system.sh

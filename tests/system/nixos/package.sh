@@ -20,7 +20,7 @@ check "the package builds" test -n "$out" -a -d "$out"
 number=$(sed -n 's/.*readonly property string number: "\([^"]*\)".*/\1/p' "$REPO/singletons/Version.qml")
 check "its version is singletons/Version.qml's ($number)" test -n "$number" -a "${out#*-h2s-shell-}" = "$number"
 check "it holds the shell" test -f "$out/share/h2s-shell/shell.qml"
-for left_out in tests/lock docs helper mockups mockup.qml tests/mockup.sh tests/run-mockups.sh tests/fixtures/mockups; do
+for left_out in tests/lock docs helper mockups mockup.qml tests/mockup.sh tests/mockup-selftest.sh tests/run-mockups.sh tests/fixtures/mockups; do
     check "$left_out is not in it" test ! -e "$out/share/h2s-shell/$left_out"
 done
 check "it has the h2s-shell command" test -x "$out/bin/h2s-shell"

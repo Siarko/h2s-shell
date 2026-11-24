@@ -106,6 +106,7 @@ stdenvNoCC.mkDerivation {
       ../tests/run-mockups.sh
       ../tests/run-mockups-selftest.sh
       ../tests/mockup.sh
+      ../tests/mockup-selftest.sh
       ../tests/fixtures/mockups
       # A local `nix build` leaves this link; building from a checkout would copy it in
       ../result

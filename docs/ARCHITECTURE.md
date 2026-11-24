@@ -2340,6 +2340,16 @@ takes the system as `tests/run-system.sh` does and says which mode it took. A pl
 mockup is never run by a test. With no component or view mockup in the tree there is
 nothing to check, and the part passes saying so.
 
+On a screen, `tests/mockup.sh` lists the tree's mockups (`*` on a running one), opens one
+(`open <name> [--scene <s>] [--restart]`: through Hyprland's exec when Hyprland is there,
+else detached; the entry starts with every inherited `H2S_*` variable dropped), closes them
+(only instances whose config is this tree's `mockup.qml`, picked by the name each answers
+over IPC), and `review <name>` runs the comparison and shows each differing scene's old, new
+and diff images: inline through `kitten icat` in a terminal that draws the kitty graphics
+protocol, else their paths. `approve <name>` hands the run to `tests/run-mockups.sh
+--approve`; `-n` prints the commands. `tests/mockup-selftest.sh`, a part of `--quick`, checks
+it on a stand-in `qs`, `hyprctl` and `kitten`.
+
 #### NixOS
 
 The mockups run `--load-only`: each reaches every scene with no error, and nothing is
