@@ -24,7 +24,9 @@ QtObject {
     readonly property var _named: ({
         "WifiManager": () => ({ "WifiManager.wifiNetworks": WifiManager.wifiNetworks,
                                 "WifiManager.connecting": WifiManager.connecting,
-                                "WifiManager.connectingTo": WifiManager.connectingTo }),
+                                "WifiManager.connectingTo": WifiManager.connectingTo,
+                                "WifiManager.wifiSignal": WifiManager.wifiSignal,
+                                "WifiManager.wifiEnabled": WifiManager.wifiEnabled }),
         "NetworkProfiles": () => ({ "NetworkProfiles.profiles": NetworkProfiles.profiles,
                                     "NetworkProfiles.wifi": NetworkProfiles.wifi,
                                     "NetworkProfiles.savesReconnecting": NetworkProfiles.savesReconnecting,
