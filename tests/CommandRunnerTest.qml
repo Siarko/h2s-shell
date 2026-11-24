@@ -606,7 +606,8 @@ TestCase {
                             name + ": destroyed mid-run without a parent, its script (which shrugs TERM off) is ended, with what it started");
                 assertEqual(record.answers + " " + record.lines.length, "0 " + record.linesAtEnd,
                             name + ": … no answer and no line handed over after (its script printed on)");
-                assert(!record.handle.running, name + ": … the handle says it is not running");
+                assert(!record.handle.running, name + ": … its handle, kept past the runner (gone, `root` null), says it is not running");
+                // … and its cancel() does nothing (a throw fails the step)
                 record.handle.cancel();
             }
             _collected();
@@ -617,8 +618,10 @@ TestCase {
     // the collector takes before its deferred delete has lost its runners' properties by the
     // time their handlers run (each reads as undefined, null or false). An integration is such
     // an owner (a runner of its own, another in its EtcFiles); the first made after a full
-    // collection is the one taken, here and in the suite where this was found. One of them
-    // mid-run, its caller keeping no handle: ended, nothing called after.
+    // collection is the one taken, here and in the suite where this was found (the runner
+    // counts it: RunnerTeardowns; a handle its caller keeps holds a runner's wrapper, so a
+    // runner taken so has none out). One of them mid-run, its caller keeping no handle, its
+    // script with a child of its own: both ended, nothing called after.
     property Component _integration: Component {
         ArchIntegration {}
     }
@@ -628,18 +631,23 @@ TestCase {
         const record = { answers: 0, lines: [] };
         _runs.collected = record;
         _busyOwner = _integration.createObject(null);
-        _busyOwner.files._runner.start(["sh", "-c", _ticking], {
+        _busyOwner.files._runner.start(["sh", "-c", _tickingParent], {
             killAfterMs: 200,
             onLine: line => record.lines.push(line),
             done: () => record.answers++
         });
         _then("the busy owner's script runs", () => record.lines.length >= 2, () => {
             record.pid = record.lines[0];
+            record.clearedBefore = Io.RunnerTeardowns.cleared;
             gc();
             _busyOwner.destroy();
             _busyOwner = null;
             record.linesAtEnd = record.lines.length;
             for (let round = 0; round < 30; round++) {
+                // Each first after a full collection: the one taken, wherever the collector
+                // stood when the step began
+                if (round % 3 === 0)
+                    gc();
                 _integration.createObject(null).destroy();
                 // Garbage enough for the collector to run while the owners wait to be deleted
                 const garbage = [];
@@ -650,8 +658,11 @@ TestCase {
         });
         _then("the busy owner's script is gone", () => _answered("collectedPid"), () => {
             assertEqual(_runs.collectedPid.result.stdout.trim() + " " + _runs.collectedPid.result.timedOut, "gone false",
-                        "an owner without a parent destroyed while the collector runs: its runner's script is ended");
+                        "an owner without a parent destroyed while the collector runs: its runner's script is ended, with what it started");
             assertEqual(record.answers + " " + record.lines.length, "0 " + record.linesAtEnd, "… no answer and no line handed over after");
+            assert(Io.RunnerTeardowns.cleared > record.clearedBefore,
+                   "… and a runner was destroyed with its properties already dropped (the case this covers): "
+                   + (Io.RunnerTeardowns.cleared - record.clearedBefore));
             _actionAndQuery();
         });
     }

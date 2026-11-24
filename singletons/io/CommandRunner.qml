@@ -121,12 +121,14 @@ QtObject {
             lineCount: { stdout: 0, stderr: 0 },
             refusal: problem !== "" ? problem : given.problem
         };
+        // Read through `root?.`: once the runner is gone (or its properties were dropped,
+        // onDestruction) a handle says it is not running and its cancel() does nothing
         const handle = {
             get running() {
-                return job.state.phase !== "done";
+                return job.state.phase !== "done" && root?._live === true;
             },
             cancel: function () {
-                if ((job.state.phase !== "done" || job.queued) && root._live)
+                if ((job.state.phase !== "done" || job.queued) && root?._live === true)
                     root._cancel(job);
             }
         };
@@ -389,15 +391,17 @@ QtObject {
     // the shell itself ends or reloads nothing here runs: then the command dying with
     // `timeout` is all there is.
     //
-    // An object waiting for a deferred delete (destroy(), an item a Loader let go) whose
-    // JavaScript wrapper the collector took first — an owner made without a parent, say —
-    // has lost its properties by now: each reads as undefined, null or false, and a write
+    // An object waiting for a deferred delete whose JavaScript wrapper the collector took
+    // first — a runner under an owner made without a parent and destroyed with destroy(),
+    // the case seen — has lost its properties by now: each reads as undefined, null or false, and a write
     // finds nothing to write to. Then there is nothing to mark here (`_live` reads false
     // already) and the runs end from their own Processes all the same.
     Component.onDestruction: {
         const jobs = _jobs;
-        if (!Array.isArray(jobs))
+        if (!Array.isArray(jobs)) {
+            RunnerTeardowns.cleared++;
             return;
+        }
         _live = false;
         for (const job of jobs) {
             job.muted = true;
