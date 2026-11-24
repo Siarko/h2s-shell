@@ -502,9 +502,9 @@ Singleton {
             connected: null,         // the monitor ids at the last step (null: no step yet)
             connectors: ({}),        // their connectors, monitor id → connector
             connectedPower: null,    // the config's canPowerOff at the last step
-            // monitor id → { at, stage, shellOff, connector }: monitors that vanished while
-            // dark in this period — one back in time is not a plug-in (replugWindow,
-            // shellOffWindow)
+            // monitor id → { at, stage, shellOff, connector, offAsks, saverSince }: monitors
+            // that vanished while dark in this period — one back in time is not a plug-in
+            // (replugWindow, shellOffWindow)
             gone: ({}),
             // monitor id → the offs asked of it in this period: a monitor that comes back
             // powered after each cut (a reconnect) is asked again after a growing pause, and
@@ -559,12 +559,11 @@ Singleton {
         const off = times.screenOffAfter * 1000;
         if (!_saverBeforeOff(times))
             return off;
-        return Math.max(off, times.saverAfter * 1000 + (config.saverFade ?? 0) + saverFadeMargin);
+        return Math.max(off, times.saverAfter * 1000 + config.saverFade + saverFadeMargin);
     }
 
-    // When a monitor's screen-off comes (monotonic ms), its stage on and not forced, or -1
-    // while its screensaver has yet to appear (or appear anew: a monitor back after dropping
-    // off): offAt from the last input, and never before
+    // When a monitor's screen-off comes (monotonic ms), its stage on and not forced, or null
+    // while its screensaver has yet to appear: offAt from the last input, and never before
     // the screensaver has faded in since it appeared on that monitor (`saverSince`) — a
     // screensaver that came late (an old `since`, a step held past its time, a profile
     // switched while away) still gets its fade before the power goes
@@ -574,8 +573,8 @@ Singleton {
             return fromInput;
         const since = state.saverSince?.[id];
         if (typeof since !== "number")
-            return -1;
-        return Math.max(fromInput, since + (config.saverFade ?? 0) + saverFadeMargin);
+            return null;
+        return Math.max(fromInput, since + config.saverFade + saverFadeMargin);
     }
 
     // A monitor goes dark at some point: a stage of its own on (or the screensaver forced)
@@ -605,8 +604,8 @@ Singleton {
             const idleFor = now - state.idleSince;
             if (times.saverAfter > 0 && idleFor >= times.saverAfter * 1000)
                 timeline = 1;
-            const offTime = times.screenOffAfter > 0 ? _offTime(state, config, id, times) : -1;
-            if (offTime >= 0 && now >= offTime)
+            const offTime = times.screenOffAfter > 0 ? _offTime(state, config, id, times) : null;
+            if (offTime !== null && now >= offTime)
                 timeline = 2;
         }
         return Math.max(reached, timeline);
@@ -618,7 +617,7 @@ Singleton {
     // screensaver has faded in (ms)
     function _forcedOffAfter(config, times) {
         const gap = times.saverAfter < times.screenOffAfter ? times.screenOffAfter - times.saverAfter : times.screenOffAfter;
-        return Math.max(gap * 1000, (config.saverFade ?? 0) + saverFadeMargin);
+        return Math.max(gap * 1000, config.saverFade + saverFadeMargin);
     }
 
     // → { monitorId: 0 | 1 | 2 } for every connected monitor: the stage each has reached now
@@ -874,8 +873,8 @@ Singleton {
                 }
                 if (times.saverAfter > 0 && reached < 1)
                     due.push(state.idleSince + times.saverAfter * 1000);
-                const offTime = times.screenOffAfter > 0 && reached < 2 ? _offTime(state, config, id, times) : -1;
-                if (offTime >= 0)
+                const offTime = times.screenOffAfter > 0 && reached < 2 ? _offTime(state, config, id, times) : null;
+                if (offTime !== null)
                     due.push(offTime);
             }
         }
@@ -1266,7 +1265,7 @@ Singleton {
             const shown = next.shown[id] ?? "on";
             if (shown !== "on" && !sourceChanged)
                 next.gone[id] = { at: now, stage: next.stage[id], shellOff: shown === "off", connector: beforeConnectors[id] ?? "",
-                                  offAsks: next.offAsks[id] ?? 0 };
+                                  offAsks: next.offAsks[id] ?? 0, saverSince: next.saverSince[id] };
         }
         let plugged = false;
         for (const id of config.monitors) {
@@ -1276,8 +1275,7 @@ Singleton {
                 const was = _sameMonitor(departed, id, config);
                 if (was !== "") {
                     next.stage[id] = departed[was].stage;
-                    if (departed[was].saverSince !== undefined)
-                        next.saverSince[id] = departed[was].saverSince;
+                    next.saverSince[id] = departed[was].saverSince;
                     // Shown as it was: the picture in place moves to the new id, no action
                     if (next.shown[was] !== undefined)
                         next.shown[id] = next.shown[was];
@@ -1288,6 +1286,9 @@ Singleton {
             const back = key !== "" ? next.gone[key] : null;
             if (back !== null && now - back.at <= (back.shellOff ? shellOffWindow : replugWindow)) {
                 next.stage[id] = back.stage;
+                // Its screensaver's moment too: a monitor that keeps dropping off never puts
+                // its screen-off off
+                next.saverSince[id] = back.saverSince;
                 next.offAsks[id] = Math.max(next.offAsks[id] ?? 0, back.offAsks);
                 delete next.gone[key];
             } else if (!next.sleeping) {
@@ -1334,8 +1335,7 @@ Singleton {
         // Only connected monitors keep a stage: one plugged in again starts from the clock
         next.stage = stage(next, config, now);
         // When each monitor first reached a stage in this period: kept while it holds one, so
-        // its screen-off can wait for the fade in from then (a monitor back after dropping
-        // off shows its screensaver anew: from now)
+        // its screen-off can wait for the fade in from then
         const saverSince = {};
         for (const id of config.monitors) {
             if (next.stage[id] >= 1)

@@ -951,6 +951,28 @@ TestCase {
         found.reconfigure(61000, values, [backend], true);
         assertEqual(found.actions, "", "power control found during the fade in: still the screensaver");
         assertEqual(found.next(), 60000 + fade, "… off once it has faded in since it appeared");
+
+        // A monitor that drops off and comes back within the window keeps its screensaver's
+        // moment: dropping off again and again never puts its screen-off off
+        const flapping = _machine(_with(values, { screenOffTimeout: 61 }), ["lcd", "tv"], true);
+        flapping.idle(5000, 0).deadline();
+        flapping.reconfigure(61000, _with(values, { screenOffTimeout: 61 }), ["lcd"]);
+        flapping.reconfigure(62000, _with(values, { screenOffTimeout: 61 }), ["lcd", "tv"]);
+        assertEqual(flapping.next(), 60000 + fade, "a monitor back within the window: …");
+        flapping.deadline();
+        assertEqual(flapping.shown(), "lcd=off tv=off", "… off as long after its screensaver appeared as the one that stayed");
+
+        // Nothing to wait for: the screen-off before the screensaver, or no screensaver on
+        // that monitor
+        const offFirst = _machine(_with(values, { screensaverTimeout: 120 }), ["oled"], true);
+        offFirst.idle(100000, 0);
+        assertEqual(offFirst.shown(), "oled=off", "an old since, the screen-off before the screensaver: off at once");
+        const mixed = _machine(_own({ fadeInDuration: 2000 }, { lcd: _entry(60, 60), oled: _entry(0, 60) }), ["lcd", "oled"], true);
+        mixed.idle(5000, 0);
+        mixed.at(70000, { type: "logindIdleBlock", held: false });
+        assertEqual(mixed.actions, "showSaver:lcd+oled,powerOff:oled,active:true",
+                    "a late step, the OLED without a screensaver: off at once; the LCD its screensaver first");
+        assertEqual(mixed.next(), 70000 + fade, "… the LCD off after its fade in");
     }
 
     function _lock() {
