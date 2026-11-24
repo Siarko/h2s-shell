@@ -2105,10 +2105,13 @@ one-directory `PATH`, the private home and no new privileges. It checks
 the packages asked for and how, where the shell is cloned, where its built-in modules are
 copied (and that `--update` copies them again, alone: no packages, no `sudo`), that nothing
 else runs as root, that a second run changes nothing, another Quickshell config (a fork
-among them: only this repository's address, in its https or ssh spellings, is taken for an
-install), a target folder without `shell.qml` that is not empty, and a link where the
-built-in modules go left alone, the script's own message without a terminal or without
-`sudo` (a run without a controlling terminal through `setsid`), no font warning when
+among them: only this repository's address, in any spelling of GitHub's, is taken for an
+install, its password never shown; an SSH host alias is refused with how to go on), a target
+folder without `shell.qml` that is not empty or cannot be read, a broken `shell.qml` link,
+and a link where the built-in modules go left alone, all before any package, the script's
+own message without a terminal or without `sudo` (a run without a controlling terminal
+through `setsid`) or when the packages fail, `pacman` without `sudo` as root (root of a user
+namespace, `unshare -r`), no font warning when
 `fc-list` lists a Nerd Font early in a long list or fails, and what happens when `pacman`,
 the clone or reading the config's origin fails, and that the helper is built as the user after the
 clone and at `--update` (by a stand-in `scripts/build-helper.sh` in the stand-in clone), a

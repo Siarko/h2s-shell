@@ -67,24 +67,101 @@ packages=(
 # Where the checkout in $target comes from (empty when git cannot say)
 origin() { git -C "$target" remote get-url origin 2> /dev/null || true; }
 
-# ours <origin>: this repository, in any spelling git gives it (https or ssh, with or without
-# .git, any case: GitHub's names ignore it); nothing else, so a fork, or another repository
-# whose address merely contains this one's name, is somebody else's config, left alone
-ours() {
-    local url=${1,,}
-    url=${url%/}
-    url=${url%.git}
+# address_of <url>: "<host>/<path>", lowercased (GitHub's names ignore case), from an address
+# as git keeps it — with a scheme (http, https, ssh, git) or in scp's form (user@host:path) —
+# without the user, password, port, a leading www., a trailing / or .git; nothing (status 1)
+# for a local path
+address_of() {
+    local url=${1,,} rest host path
     case $url in
-        https://github.com/siarko/h2s-shell | git@github.com:siarko/h2s-shell | ssh://git@github.com/siarko/h2s-shell) return 0 ;;
+        http://* | https://* | ssh://* | git://*)
+            rest=${url#*://}
+            host=${rest%%/*}
+            path=${rest#"$host"}
+            host=${host##*@}
+            host=${host%%:*}
+            ;;
+        *:*)
+            host=${url%%:*}
+            path=${url#*:}
+            case $host in */*) return 1 ;; esac
+            host=${host##*@}
+            ;;
         *) return 1 ;;
+    esac
+    path=${path#/}
+    path=${path%/}
+    path=${path%.git}
+    printf '%s/%s\n' "${host#www.}" "$path"
+}
+
+# ours <origin>: this repository, however git spells its address; nothing else, so a fork, or
+# another repository whose address merely contains this one's name, is somebody else's config,
+# left alone. A host alias of the user's SSH config is not followed: it could name any server.
+ours() {
+    [ "$(address_of "$1")" = github.com/siarko/h2s-shell ]
+}
+
+# shown <url>: the address without a user and password, which may hold a token
+shown() {
+    local url=$1 rest authority
+    case $url in
+        *://*)
+            rest=${url#*://}
+            authority=${rest%%/*}
+            printf '%s://%s%s\n' "${url%%://*}" "${authority##*@}" "${rest#"$authority"}"
+            ;;
+        *) printf '%s\n' "${url#*@}" ;;
     esac
 }
 
 # Somebody else's config in $target: said, and the script ends
 leave_other() {
+    local address
     echo "$target already holds another Quickshell config; leaving it alone." >&2
-    [ -z "$1" ] || echo "It comes from $1, not from $repository." >&2
+    if [ -n "$1" ]; then
+        echo "It comes from $(shown "$1"), not from $repository." >&2
+        address=$(address_of "$1") || address=""
+        if [ "${address#*/}" = siarko/h2s-shell ]; then
+            echo "If it is this repository under another name for GitHub (a host of your SSH config), give it GitHub's own address and run this again:" >&2
+            echo "  git -C \"$target\" remote set-url origin git@github.com:Siarko/h2s-shell.git" >&2
+            exit 1
+        fi
+    fi
     echo "Move it away and run this again." >&2
+    exit 1
+}
+
+# What is in $target, checked before anything is installed: somebody else's config, a file, a
+# folder that cannot be read or that holds something else is left alone (git clones only into
+# an empty folder or none)
+check_target() {
+    local from has_entries
+    if [ -L "$target/shell.qml" ] && [ ! -e "$target/shell.qml" ]; then
+        echo "$target/shell.qml is a link that leads nowhere; leaving $target alone. Move it away and run this again." >&2
+        exit 1
+    elif [ -e "$target/shell.qml" ]; then
+        from=$(origin)
+        ours "$from" || leave_other "$from"
+    elif { [ -e "$target" ] || [ -L "$target" ]; } && [ ! -d "$target" ]; then
+        echo "$target is not a folder; leaving it alone. Move it away and run this again." >&2
+        exit 1
+    elif [ -d "$target" ] && { [ ! -r "$target" ] || [ ! -x "$target" ]; }; then
+        echo "$target cannot be read; leaving it alone. Move it away and run this again." >&2
+        exit 1
+    elif [ -d "$target" ]; then
+        has_entries=$(shopt -s nullglob dotglob; for entry in "$target"/*; do echo yes; break; done)
+        if [ -n "$has_entries" ]; then
+            echo "$target holds no Quickshell config (no shell.qml), but it is not empty; leaving it alone." >&2
+            echo "Move it away, or empty it, and run this again." >&2
+            exit 1
+        fi
+    fi
+}
+
+# pacman or sudo failed, or the answer was no
+packages_failed() {
+    echo "The packages were not installed (above); nothing else was done." >&2
     exit 1
 }
 
@@ -154,8 +231,11 @@ if ! command -v pacman > /dev/null || [ ! -e "$pacman_conf" ]; then
     exit 1
 fi
 
-# What the packages step needs, checked first so that the script, not bash, says what is missing
-if ! command -v sudo > /dev/null; then
+check_target
+
+# What the packages step needs, checked first so that the script, not bash, says what is
+# missing (as root pacman runs as it is, without sudo)
+if [ "$EUID" != 0 ] && ! command -v sudo > /dev/null; then
     echo "Installing the packages needs sudo (the package sudo), to run pacman as root, and there is none." >&2
     echo "Install it as root, or install the packages listed in this script by hand, then run this again." >&2
     exit 1
@@ -169,7 +249,11 @@ fi
 echo "==> Packages"
 # From the terminal, not stdin: run as `curl ... | bash`, stdin is this script, and
 # pacman's question would read its next lines as the answer
-sudo pacman -S --needed "${packages[@]}" < /dev/tty
+if [ "$EUID" = 0 ]; then
+    pacman -S --needed "${packages[@]}" < /dev/tty || packages_failed
+else
+    sudo pacman -S --needed "${packages[@]}" < /dev/tty || packages_failed
+fi
 
 # The icons are Nerd Font glyphs: say so now rather than leave empty boxes to puzzle over
 # (the list read whole, not piped into grep -q: grep ends at the first match, and under
@@ -181,24 +265,8 @@ if command -v fc-list > /dev/null && fonts=$(fc-list : family 2> /dev/null) && [
 fi
 
 echo "==> The shell, in $target"
-# whether the target folder holds anything (git clones only into an empty one)
-shopt -s nullglob dotglob
-target_empty=yes
-for entry in "$target"/*; do
-    target_empty=no
-    break
-done
 if [ -e "$target/shell.qml" ]; then
-    from=$(origin)
-    ours "$from" || leave_other "$from"
     echo "Already installed; update it with: git -C \"$target\" pull && \"$target/install.sh\" --update"
-elif { [ -e "$target" ] || [ -L "$target" ]; } && [ ! -d "$target" ]; then
-    echo "$target is not a folder; leaving it alone. Move it away and run this again." >&2
-    exit 1
-elif [ "$target_empty" = no ]; then
-    echo "$target holds no Quickshell config (no shell.qml), but it is not empty; leaving it alone." >&2
-    echo "Move it away, or empty it, and run this again." >&2
-    exit 1
 else
     mkdir -p "$(dirname "$target")"
     git clone "$repository" "$target"

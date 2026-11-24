@@ -168,10 +168,14 @@ The interface modules are written against (`qs.api`), versioned on its own
 ### Fixed
 - The Arch installer: a checkout of a fork, or of another repository whose address contains
   this one's name, is no longer taken for an install ("Already installed"), but left alone
-  with where it comes from; a target folder without `shell.qml` that is not empty, or a file
-  there, is left alone with the installer's own message instead of `git clone`'s error;
-  without a terminal or without `sudo` it stops with its own message naming what is
-  missing; an `fc-list` that fails no longer ends the install silently.
+  with where it comes from (never its user or password); this repository is recognised in
+  any spelling of GitHub's address, but not under an SSH host alias, for which it says how
+  to go on. What is in the target is checked before anything is installed: a folder without
+  `shell.qml` that is not empty, one that cannot be read, a file or a `shell.qml` link to
+  nothing is left alone with the installer's own message instead of `git clone`'s error.
+  Without a terminal or without `sudo` it stops with its own message naming what is
+  missing; run as root it runs `pacman` without `sudo`; packages that were not installed
+  are said plainly; an `fc-list` that fails no longer ends the install silently.
 - A run as administrator that ignored the end of its time limit and had to be killed is
   told as "It did not end within <limit> s", not with its last output line; one that wrote
   more than 1 MB of errors before failing is told with its last line, not an early one.

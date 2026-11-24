@@ -42,6 +42,7 @@ need script "gives each run of install.sh a terminal of its own, as it hands pac
 need setpriv "runs install.sh with no new privileges, so that nothing in it could become root"
 need timeout "ends a run that hangs"
 need setsid "runs install.sh without a terminal, for the case of none"
+need unshare "runs install.sh as root of a user namespace (no real privilege), for the case of a run as root"
 need awk "reads install.sh for ways around the stand-ins before it is run"
 need sed "makes the stand-in curl's other installer"
 for tool in bash mkdir dirname grep cat cp mv rm mktemp readlink; do need "$tool" "install.sh uses it; linked into the private PATH"; done
@@ -53,6 +54,7 @@ SCRIPT=$(type -P script)
 SETPRIV=$(type -P setpriv)
 TIMEOUT=$(type -P timeout)
 SETSID=$(type -P setsid)
+UNSHARE=$(type -P unshare)
 BASH_PATH=$(type -P bash)
 SED_PATH=$(type -P sed)
 
@@ -88,7 +90,7 @@ MARK="# a stand-in written by tests/install-test.sh"
 # there: sudo-status, git-clone-fails, git-remote-fails, git-clone-no-builtin (a clone
 # without builtin-modules/), git-clone-no-helper (a clone without scripts/build-helper.sh),
 # build-fails (the clone's stand-in build-helper.sh fails), fonts (what fc-list prints),
-# fc-list-fails (fc-list ends with an error),
+# fc-list-fails (fc-list ends with an error), pacman-ok (pacman run directly succeeds),
 # curl-fails (the fetch of the Arch installer fails), curl-other-dispatch (the installer
 # fetched expects another hand-over version than the top-level script's).
 make_bin() {
@@ -108,6 +110,7 @@ exit 0
 STANDIN
     standin pacman << 'STANDIN'
 echo "pacman: $*" >> "$control/log"
+[ -e "$control/pacman-ok" ] && exit 0
 exit 97
 STANDIN
     standin git << 'STANDIN'
@@ -295,6 +298,7 @@ start_case() {
     : > "$OS_ROOT/etc/pacman.conf"
     RUN_SCRIPT=$INSTALL
     NO_TERMINAL=""
+    AS_ROOT=""
 }
 # os_release <fixture | none>: the made-up system's os-release, from tests/fixtures/distribution/
 os_release() {
@@ -312,7 +316,10 @@ run_install() {
     {
         echo "#!$BASH_PATH"
         { [ "${1:-}" = piped-in ] || [ "${1:-}" = file-in ]; } && printf 'cd %q || exit 99\n' "$2"
-        printf 'exec env -i PATH=%q HOME=%q TMPDIR=%q' "$BIN" "$HOME_DIR" "$CASE/tmp"
+        printf 'exec '
+        # root of a user namespace of its own: uid 0 there, no privilege outside it
+        [ -n "$AS_ROOT" ] && printf '%q -r ' "$UNSHARE"
+        printf 'env -i PATH=%q HOME=%q TMPDIR=%q' "$BIN" "$HOME_DIR" "$CASE/tmp"
         [ ${#EXTRA_ENV[@]} -gt 0 ] && printf ' %q' "${EXTRA_ENV[@]}"
         if [ "${1:-}" = piped ]; then
             printf ' %q --no-new-privs %q < %q\n' "$SETPRIV" "$BIN/bash" "$INSTALL"
@@ -500,7 +507,8 @@ check "git cannot say where the config comes from: no clone" none_logged '^git: 
 # Only this repository is ours: a fork, or another repository whose address merely contains
 # its name, is somebody else's config
 for origin in "https://github.com/someone/h2s-shell" "https://github.com/Siarko/h2s-shell-tailscale" \
-              "https://example.org/mirror/Siarko/h2s-shell"; do
+              "https://example.org/mirror/Siarko/h2s-shell" "https://github.com.example.org/Siarko/h2s-shell" \
+              "/home/someone/h2s-shell"; do
     start_case "fork-$(echo "$origin" | tr -c 'a-zA-Z0-9\n' '-')"
     mkdir -p "$HOME_DIR/.config/quickshell/default"
     : > "$HOME_DIR/.config/quickshell/default/shell.qml"
@@ -508,6 +516,9 @@ for origin in "https://github.com/someone/h2s-shell" "https://github.com/Siarko/
     run_install
     check "a checkout of $origin: exit 1, not 'already installed'" status_is 1
     check "… says it leaves it alone, naming where it comes from" says "It comes from $origin, not from $repository."
+    # another host with this repository's path may be a host alias: that gets the hint
+    [ "${origin%/Siarko/h2s-shell}" != "$origin" ] || check "… no hint about a host alias" silent_on "remote set-url"
+    check "… nothing installed first" none_logged "^sudo "
     check "… no clone" none_logged '^git: clone'
     run_install --update
     check "--update on a checkout of $origin: exit 1" status_is 1
@@ -516,7 +527,10 @@ for origin in "https://github.com/someone/h2s-shell" "https://github.com/Siarko/
 done
 # The same repository in its other spellings is ours
 for origin in "$repository.git" "$repository/" "git@github.com:Siarko/h2s-shell.git" \
-              "ssh://git@github.com/Siarko/h2s-shell" "https://github.com/siarko/H2S-shell"; do
+              "ssh://git@github.com/Siarko/h2s-shell" "https://github.com/siarko/H2S-shell" \
+              "http://github.com/Siarko/h2s-shell" "git://github.com/Siarko/h2s-shell.git" \
+              "https://www.github.com/Siarko/h2s-shell" "https://someone:a-token@github.com/Siarko/h2s-shell.git" \
+              "ssh://git@github.com:22/Siarko/h2s-shell.git" "https://github.com:443/Siarko/h2s-shell"; do
     start_case "ours-$(echo "$origin" | tr -c 'a-zA-Z0-9\n' '-')"
     mkdir -p "$HOME_DIR/.config/quickshell/default"
     : > "$HOME_DIR/.config/quickshell/default/shell.qml"
@@ -526,6 +540,26 @@ for origin in "$repository.git" "$repository/" "git@github.com:Siarko/h2s-shell.
     check "… exit 0" status_is 0
 done
 
+# Somebody else's address with a user and password: the password is never shown
+start_case fork-token
+mkdir -p "$HOME_DIR/.config/quickshell/default"
+: > "$HOME_DIR/.config/quickshell/default/shell.qml"
+echo "https://someone:s3cr3t-token@github.com:443/someone/h2s-shell.git" > "$HOME_DIR/.config/quickshell/default/.standin-origin"
+run_install
+check "a fork's address with a user and token: left alone, shown without them" says "It comes from https://github.com:443/someone/h2s-shell.git, not from $repository."
+check "… the token is never shown" silent_on "s3cr3t-token"
+check "… nor the user" silent_on "someone:"
+check "… exit 1" status_is 1
+# A host alias of the user's SSH config is not followed, but said how to go on
+start_case host-alias
+mkdir -p "$HOME_DIR/.config/quickshell/default"
+: > "$HOME_DIR/.config/quickshell/default/shell.qml"
+echo "github-personal:Siarko/h2s-shell.git" > "$HOME_DIR/.config/quickshell/default/.standin-origin"
+run_install
+check "an SSH host alias for this repository: exit 1, not 'already installed'" status_is 1
+check "… says where it comes from" says "It comes from github-personal:Siarko/h2s-shell.git, not from $repository."
+check "… and how to run anyway" says "git -C \"$HOME_DIR/.config/quickshell/default\" remote set-url origin git@github.com:Siarko/h2s-shell.git"
+
 # ---- The target is there, without shell.qml ------------------------------------------------
 start_case target-no-shell
 mkdir -p "$HOME_DIR/.config/quickshell/default"
@@ -534,6 +568,7 @@ run_install
 check "a target folder with files but no shell.qml: exit 1" status_is 1
 check "… install.sh's own message" says "holds no Quickshell config (no shell.qml), but it is not empty; leaving it alone."
 check "… no clone tried" none_logged '^git: clone'
+check "… checked before the packages: nothing installed" none_logged "^sudo "
 check "… not git's error" silent_on "fatal:"
 check "… the folder is as it was" test "$(cat "$HOME_DIR/.config/quickshell/default/notes.txt")" = notes
 check "… it does not say it is done" silent_on "==> Done"
@@ -548,8 +583,28 @@ start_case target-dangling
 mkdir -p "$HOME_DIR/.config/quickshell"
 ln -s "$HOME_DIR/nowhere" "$HOME_DIR/.config/quickshell/default"
 run_install
-check "a link to nothing where the target goes: exit 1, install.sh's own message" says "is not a folder; leaving it alone."
+check "a link to nothing where the target goes: install.sh's own message" says "is not a folder; leaving it alone."
+check "… exit 1" status_is 1
 check "… no clone tried" none_logged '^git: clone'
+start_case target-hidden
+mkdir -p "$HOME_DIR/.config/quickshell/default"
+: > "$HOME_DIR/.config/quickshell/default/.hidden"
+run_install
+check "a target folder with only a hidden file: not empty, left alone" says "holds no Quickshell config (no shell.qml), but it is not empty; leaving it alone."
+check "… exit 1, no clone" test "$STATUS" = 1 -a "$(log_count '^git: clone')" = 0
+start_case target-unreadable
+mkdir -p "$HOME_DIR/.config/quickshell/default"
+chmod 000 "$HOME_DIR/.config/quickshell/default"
+run_install
+chmod 755 "$HOME_DIR/.config/quickshell/default"
+check "a target folder that cannot be read: install.sh's own message" says "cannot be read; leaving it alone."
+check "… exit 1, no clone, nothing installed" test "$STATUS" = 1 -a "$(log_count '^git: clone\|^sudo ')" = 0
+start_case shell-qml-dangling
+mkdir -p "$HOME_DIR/.config/quickshell/default"
+ln -s "$HOME_DIR/nowhere" "$HOME_DIR/.config/quickshell/default/shell.qml"
+run_install
+check "shell.qml a link that leads nowhere: install.sh's own message" says "shell.qml is a link that leads nowhere; leaving $HOME_DIR/.config/quickshell/default alone."
+check "… exit 1, no clone" test "$STATUS" = 1 -a "$(log_count '^git: clone')" = 0
 start_case target-empty
 mkdir -p "$HOME_DIR/.config/quickshell/default"
 run_install
@@ -690,6 +745,23 @@ check "the packages are not installed (pacman or sudo fails, or the answer is no
 check "the packages are not installed: no clone" none_logged '^git:'
 check "the packages are not installed: nothing is put in the home directory" test "$(home_tree)" = .
 check "the packages are not installed: it does not say it is done" silent_on "==> Done"
+check "the packages are not installed: its own message" says "The packages were not installed (above); nothing else was done."
+check "… exit 1" status_is 1
+
+start_case as-root
+AS_ROOT=1
+rm "$BIN/sudo"
+: > "$CONTROL/pacman-ok"
+run_install
+check "as root without sudo: pacman run directly" logged "pacman: -S --needed ${packages[*]}"
+check "… and the install goes on" status_is 0
+check "… not bash's error" no_bash_error
+start_case as-root-pacman-fails
+AS_ROOT=1
+run_install
+check "as root, pacman fails: its own message" says "The packages were not installed (above); nothing else was done."
+check "… exit 1, no clone" test "$STATUS" = 1 -a "$(log_count '^git: clone')" = 0
+check "… sudo not used" none_logged "^sudo "
 
 start_case clone-fails
 : > "$CONTROL/git-clone-fails"
