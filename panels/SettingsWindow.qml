@@ -28,8 +28,8 @@ FloatingWindow {
     // or repeat across tabs. The window has two tabs: Behaviour, whose pages edit a
     // profile, and Appearance, whose pages edit a theme. `draftGroups`:
     // the theme groups a page edits through a draft, for its ✎; `separatorBefore`: a line
-    // above it in the sidebar.
-    readonly property var corePages: [
+    // above it in the sidebar. Every core page, on any system: `corePages` are those here.
+    readonly property var allCorePages: [
         // Profiles manages the profiles; the pages below the line edit the picked one
         { id: "profiles", label: "Profiles", tab: "behaviour", component: profilesComp },
         { id: "general", label: "General", tab: "behaviour", component: generalComp, separatorBefore: true },
@@ -69,8 +69,10 @@ FloatingWindow {
         { id: "network_ethernet", label: "Ethernet", tab: "system", parent: "network", component: networkEthernetComp,
           shown: () => NetworkManager.ethernetDevice !== "" },
         { id: "network_vpn", label: "VPN", tab: "system", parent: "network", component: networkVpnComp },
-        // Only on NixOS: the system's configuration the shell's settings can go into
-        { id: "nixos", label: "NixOS", tab: "system", component: nixosComp, shown: () => NixosViewRules.pageShown(Distribution.detection.id) },
+        // `exists`: left out of the window altogether while it says false — not listed, not
+        // opened by id (Shell.openSettings, IPC openPage), never built. Only on NixOS: the
+        // system's configuration the shell's settings can go into
+        { id: "nixos", label: "NixOS", tab: "system", component: nixosComp, exists: () => NixosViewRules.pageShown(Distribution.detection.id) },
         // Every module, then the modules' own pages under the group
         { id: "modules", label: "Modules", tab: "system", group: true },
         { id: "modules_installed", label: "Installed", tab: "system", parent: "modules", component: modulesComp }
@@ -79,6 +81,8 @@ FloatingWindow {
     // Every page: the core's, with the loaded modules' put in (ModuleMergeRules.mergeSettingsPages:
     // under a core group, under Modules, or at the end of their tab). A module's page has a
     // `url` instead of a `component`, and is shown in the core's frame (_modulePageComp).
+    // The core's pages on this system: those whose `exists` (if any) says true
+    readonly property var corePages: allCorePages.filter(page => !page.exists || page.exists())
     readonly property var _mergedPages: ModuleMergeRules.mergeSettingsPages(corePages, Modules.settingsPages)
     readonly property var pages: _mergedPages.pages
     on_MergedPagesChanged: {
@@ -90,7 +94,9 @@ FloatingWindow {
     // off while its page was open left selectedPage on the vanished id)
     onPagesChanged: {
         // The open page went with its module: back to General
-        if (_pageIndex(selectedPage) < 0)
+        if (_absentCorePage(selectedPage))
+            selectedPage = _fallbackOf(selectedPage);
+        else if (_pageIndex(selectedPage) < 0)
             selectedPage = "general";
         if (_pageIndex(_lastBehaviourPage) < 0)
             _lastBehaviourPage = "general";
@@ -147,7 +153,17 @@ FloatingWindow {
     // The open page, by id
     property string selectedPage: "general"
     // Not `_page`: that is the id of the Loader showing it, which a bare name would reach
-    readonly property var _currentPage: _pageOf(selectedPage)
+    readonly property var _currentPage: _pageOf(_absentCorePage(selectedPage) ? _fallbackOf(selectedPage) : selectedPage)
+
+    // A core page left out now (its `exists` says false): asked for by id, its tab's first
+    // page opens instead
+    function _absentCorePage(id) {
+        return allCorePages.some(page => page.id === id) && _pageIndex(id) < 0;
+    }
+    function _fallbackOf(id) {
+        const tab = allCorePages.find(page => page.id === id)?.tab;
+        return tab === "system" ? "authentication" : tab === "appearance" ? "themes" : "general";
+    }
     on_CurrentPageChanged: _showPage()
 
     // Shows the open page in the page loader, and gives a core page's root the base of its
@@ -179,6 +195,10 @@ FloatingWindow {
     onSelectedPageChanged: {
         if (!_openingAt)
             pageSection = "";
+        if (_absentCorePage(selectedPage)) {
+            selectedPage = _fallbackOf(selectedPage);
+            return;
+        }
         // A group is a heading: its first page opens instead
         if (_pageOf(selectedPage).group) {
             const first = pages.find(page => page.parent === selectedPage);

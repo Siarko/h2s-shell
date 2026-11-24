@@ -8,7 +8,8 @@
 # Writes {"version":1} as <folder>/h2s-shell.json only when nothing is there under that name
 # (a file, a folder or a link, even one that leads nowhere): the new file is written beside
 # it under a temporary name, then hard-linked into place — the link fails when the name is
-# taken, so nothing is ever overwritten. Its last line says what it did:
+# taken, so nothing is ever overwritten, nor written into a folder of that name. Its last
+# line says what it did:
 #
 #   created    exit 0
 #   exists     exit 3   something is there already: nothing written
@@ -35,7 +36,8 @@ if ! printf '{"version":1}\n' > "$temporary" || ! chmod 644 "$temporary"; then
     echo failed
     exit 1
 fi
-if ln -- "$temporary" "$target" 2> /dev/null; then
+# -T: a folder (or a link to one) that took the name since the check is never written into
+if ln -T -- "$temporary" "$target" 2> /dev/null; then
     rm -f -- "$temporary"
     echo created
     exit 0

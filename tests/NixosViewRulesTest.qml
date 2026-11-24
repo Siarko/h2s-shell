@@ -26,7 +26,12 @@ TestCase {
         // Listed only on NixOS
         assertEqual(["nixos", "arch", "generic", ""].map(id => rules.pageShown(id)).join(" "), "true false false false",
                     "pageShown: NixOS only, never while the distribution is not known");
-        assertEqual(rules.settingsLine, "programs.h2s-shell.settingsFile = ./h2s-shell.json;", "settingsLine: the exact one-time line");
+        assertEqual(JSON.stringify(rules.settingsLine(reading())), JSON.stringify({ line: "{ programs.h2s-shell.settingsFile = ./h2s-shell.json; }",
+                    caption: "In flake.nix, in your system's modules list. This page notices when it is in force." }),
+                    "settingsLine: a flake: a module for its modules list, flake.nix beside the file");
+        assertEqual(JSON.stringify(rules.settingsLine(reading({ configuration: { found: true, folder, entry: "machine.nix", type: "classic" } }))),
+                    JSON.stringify({ line: "programs.h2s-shell.settingsFile = ./h2s-shell.json;", caption: "In machine.nix, among its options. This page notices when it is in force." }),
+                    "… classic: an option in its entry file, beside the file");
         assertEqual(rules.texts.intro, "The shell can keep its settings in your NixOS configuration and apply them by rebuilding NixOS. Turn that on here.",
                     "the intro");
 
@@ -41,8 +46,8 @@ TestCase {
                     "not connected: the status and the lines-to-copy caption");
         assertEqual([off.facts.length, off.change, off.chooseFolder, off.lookAgain.shown, off.home, off.setup.shown, off.generationsShown].join(" "),
                     "0 false true true false false false", "… no facts, Choose folder… and Look again, no setup");
-        assertEqual(show(off.setup), show({ shown: false, create: { shown: false, way: "", privileged: false, available: false, tooltip: "" }, step: "", stepDone: false, git: false }),
-                    "… the setup all off");
+        assertEqual(show(off.setup), show({ shown: false, create: { shown: false, way: "", privileged: false, available: false, tooltip: "" }, step: "", stepDone: false, git: false,
+                    line: "", lineCaption: "" }), "… the setup all off");
         assert(!rules.view(reading({ state: "notConnected", homeWarning: true }), false).home, "… no home-folder warning without a configuration");
 
         // Found: the root's Create
@@ -54,7 +59,9 @@ TestCase {
         assertEqual([found.change, found.chooseFolder, found.lookAgain.shown, found.generationsShown].join(" "), "true false true false",
                     "… Change… and Look again");
         assertEqual(show(found.setup), show({ shown: true, create: { shown: true, way: "root", privileged: true, available: true, tooltip: "Asks for an administrator's password" },
-                                             step: "Create the shell's file, h2s-shell.json.", stepDone: false, git: false }),
+                                             step: "Create the shell's file, h2s-shell.json.", stepDone: false, git: false,
+                                             line: "{ programs.h2s-shell.settingsFile = ./h2s-shell.json; }",
+                                             lineCaption: "In flake.nix, in your system's modules list. This page notices when it is in force." }),
                     "… the setup: Create through the root step, marked, git knows the file");
         assert(!rules.view(reading(), true).setup.create.available, "… Create waits while a read or a Create runs");
         assertEqual(rules.createWay(reading()), "root", "createWay: a root-owned configuration: the root step");

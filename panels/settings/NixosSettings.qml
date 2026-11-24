@@ -79,7 +79,7 @@ Flickable {
     }
 
     function copyLine() {
-        copyText(NixosViewRules.settingsLine);
+        copyText(view.setup.line);
         copied = true;
     }
 
@@ -328,7 +328,7 @@ Flickable {
                         font.family: Theme.fontFamily
                         font.pixelSize: Theme.fontSizeSmall
                         color: Theme.textPrimary
-                        text: NixosViewRules.settingsLine
+                        text: root.view.setup.line
                     }
                     SmallButton {
                         objectName: "nixos:copy"
@@ -340,7 +340,8 @@ Flickable {
             }
             Hint {
                 Layout.leftMargin: 26
-                text: NixosViewRules.texts.lineCaption
+                objectName: "nixos:lineCaption"
+                text: root.view.setup.lineCaption
             }
         }
     }

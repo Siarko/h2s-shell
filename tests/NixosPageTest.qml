@@ -271,7 +271,8 @@ TestCase {
                     "true true false false", "… Change… and Look again");
         assertEqual(_text("nixos:createStep") + " | " + _shown("nixos:create") + " " + _shown("nixos:createMark"),
                     "Create the shell's file, h2s-shell.json. | true true", "… step 1: Create, marked as asking the password");
-        assertEqual(_text("nixos:line"), "programs.h2s-shell.settingsFile = ./h2s-shell.json;", "… step 2: the line");
+        assertEqual(_text("nixos:line"), "{ programs.h2s-shell.settingsFile = ./h2s-shell.json; }", "… step 2: the line, a module for the flake's list");
+        assertEqual(_text("nixos:lineCaption"), "In flake.nix, in your system's modules list. This page notices when it is in force.", "… where it goes");
         assert(!_shown("nixos:git"), "… git knows the file: no git line");
         assertEqual(_writer.runs.length, 0, "nothing asked the password: shown, read, read again");
 
@@ -291,7 +292,13 @@ TestCase {
 
         // Copy: the exact line
         assert(_click("nixos:copy") && _until(() => _copied !== ""), "Copy");
-        assertEqual(_copied, "programs.h2s-shell.settingsFile = ./h2s-shell.json;", "… gives the exact one-time line");
+        assertEqual(_copied, "{ programs.h2s-shell.settingsFile = ./h2s-shell.json; }", "… gives the exact one-time line");
+        assert(_show(_reading({ folder: "/etc/nixos", configuration: { found: true, folder: "/etc/nixos", entry: "configuration.nix", type: "classic" } })),
+               "a classic configuration: shown");
+        assertEqual(_text("nixos:line") + " | " + _text("nixos:lineCaption"),
+                    "programs.h2s-shell.settingsFile = ./h2s-shell.json; | In configuration.nix, among its options. This page notices when it is in force.",
+                    "… the line as an option of configuration.nix, beside the file");
+        assert(_click("nixos:copy") && _until(() => _copied === "programs.h2s-shell.settingsFile = ./h2s-shell.json;"), "… Copy gives that line");
         assertEqual(_item("nixos:copy").label, "Copied", "… and says so");
 
         // --- the home folder's warning ---
@@ -323,6 +330,21 @@ TestCase {
         assert(_until(() => edited), "the file changed by hand");
         assert(_click("nixos:create") && _until(() => _text("nixos:createNote") === "h2s-shell.json is already there."), "Create again: there already");
         assertEqual(_fileText(home + "/h2s-shell.json"), "{\"version\":1,\"own\":true}", "… not overwritten");
+        // The name taken by a folder, a link to a folder, a link that leads nowhere: nothing
+        // written, nothing written into them
+        let taken = false;
+        _exec(["sh", "-c", "set -e; cd \"$1\"; mkdir -p dir/h2s-shell.json tofolder elsewhere dangling; ln -s ../elsewhere tofolder/h2s-shell.json; ln -s ../nowhere dangling/h2s-shell.json", "sh", _scratch],
+              () => taken = true);
+        assert(_until(() => taken), "names taken");
+        for (const name of ["dir", "tofolder", "dangling"]) {
+            assert(_show(_reading({ folder: _scratch + "/" + name, owner: "yours", rootWrites: false })), name + ": shown");
+            assert(_click("nixos:create") && _until(() => _text("nixos:createNote") === "h2s-shell.json is already there."), "… Create: there already (" + name + ")");
+        }
+        let left = null;
+        _exec(["sh", "-c", "cd \"$1\"; echo $(ls -A dir/h2s-shell.json | wc -l) $(ls -A elsewhere | wc -l) $(ls -A dir tofolder dangling | grep -c '^[.]h2s') $([ -e nowhere ] && echo made || echo none)", "sh", _scratch],
+              (code, stdout) => left = stdout.trim());
+        assert(_until(() => left !== null), "… looked at");
+        assertEqual(left, "0 0 0 none", "… the folders stay empty, nothing made where the link leads, no temporary file left");
         // A folder the user cannot write
         let locked = false;
         _exec(["chmod", "555", _scratch + "/locked"], () => locked = true);
@@ -360,8 +382,8 @@ TestCase {
         assert(window !== null, "the settings window can be made (" + component.errorString() + ")");
         if (!window)
             return null;
-        const ids = window.corePages.map(page => page.id);
-        const entry = window.corePages.find(page => page.id === "nixos");
+        const ids = window.allCorePages.map(page => page.id);
+        const entry = window.allCorePages.find(page => page.id === "nixos") ?? null;
         assertEqual(entry ? entry.label + " " + entry.tab : "(none)", "NixOS system", "the page: NixOS, under System");
         assertEqual(ids.indexOf("nixos") > ids.indexOf("network_vpn") && ids.indexOf("nixos") < ids.indexOf("modules"), true,
                     "… after Network, before Modules");
@@ -381,14 +403,31 @@ TestCase {
             };
             return walk(window.contentItem);
         };
-        for (const id of ["arch", "generic", "nixos"]) {
+        const answer = id => {
             Distribution._reader.override = id;
-            assert(_until(() => Distribution.detection.ready && Distribution.detection.id === id), "the distribution answers " + id);
-            const listed = rowOf("nixos");
-            assert(listed !== null && rowOf("authentication")?.visible === true, "… the page's row is there, beside a listed one (" + id + ")");
-            assertEqual(listed?.visible + " " + entry.shown(), String(id === "nixos") + " " + String(id === "nixos"),
-                        "… the page " + (id === "nixos" ? "listed on NixOS" : "not listed on " + id));
+            return _until(() => Distribution.detection.ready && Distribution.detection.id === id);
+        };
+        for (const id of ["arch", "generic"]) {
+            assert(answer(id), "the distribution answers " + id);
+            assert(rowOf("authentication")?.visible === true, "… the System list shows (" + id + ")");
+            assertEqual([rowOf("nixos") === null, window.pages.some(page => page.id === "nixos"), Shell.settingsPageIds.includes("nixos")].join(" "),
+                        "true false false", "… the page not listed on " + id + ", not among the pages IPC openPage and Shell.openSettings may name");
+            // Asked for by id anyway (what Shell.openSettings and IPC openPage set)
+            window.selectedPage = "nixos";
+            assertEqual(window.selectedPage + " " + window._currentPage.id, "authentication authentication", "… asked for by id: System's first page instead");
+            window.openAt("nixos", "");
+            assertEqual(window.selectedPage, "authentication", "… also through openAt");
         }
+        assertEqual(Nixos.configuration.revision + " " + Nixos.configuration.busy, "0 false", "off NixOS nothing read the configuration");
+        assert(answer("nixos"), "the distribution answers nixos");
+        assertEqual([rowOf("nixos")?.visible, window.pages.some(page => page.id === "nixos"), Shell.settingsPageIds.includes("nixos")].join(" "),
+                    "true true true", "… the page listed on NixOS");
+        window.selectedPage = "nixos";
+        assertEqual(window.selectedPage + " " + window._currentPage.id, "nixos nixos", "… and opened by id");
+        // The window is hidden: the page is built but not shown, so it reads nothing
+        assert(answer("arch"), "the distribution answers arch while the page is open");
+        assertEqual(window.selectedPage + " " + window._currentPage.id, "authentication authentication", "… the page leaves: System's first page");
+        assertEqual(Nixos.configuration.revision + " " + Nixos.configuration.busy, "0 false", "… nothing read the configuration");
         return window;
     }
 

@@ -38,12 +38,22 @@ Singleton {
         createTooltip: "Asks for an administrator's password",
         git: "In git: run git add h2s-shell.json once. The shell never commits.",
         lineStep: "Add this line once to your configuration, then run nixos-rebuild switch.",
-        lineCaption: "In configuration.nix, or in your flake's module list. This page notices when it is in force.",
+        noticed: "This page notices when it is in force.",
         chooserTitle: "The NixOS configuration's folder"
     })
 
-    // The line the configuration takes once, beside the shell's file
-    readonly property string settingsLine: "programs.h2s-shell.settingsFile = ./" + NixosConfigRules.fileName + ";"
+    // The line the configuration takes once, and where it goes → { line, caption }. Where it
+    // goes is the configuration's entry file, which is beside the shell's file, so `./` names
+    // that file there: a flake's flake.nix takes it as a module in its modules list, a
+    // classic configuration's file as one more option among its own. (An absolute path would
+    // not do: a flake is evaluated without access to paths outside it.)
+    function settingsLine(reading) {
+        const option = "programs.h2s-shell.settingsFile = ./" + NixosConfigRules.fileName + ";";
+        const entry = String(reading?.configuration?.entry ?? "");
+        if (reading?.configuration?.type === "flake")
+            return { line: "{ " + option + " }", caption: "In flake.nix, in your system's modules list. " + texts.noticed };
+        return { line: option, caption: "In " + (entry !== "" ? entry : "configuration.nix") + ", among its options. " + texts.noticed };
+    }
 
     // How Create writes the shell's file of this reading: "root" (a root-owned configuration:
     // the root step's create, asking the password at the click), "user" (any other: written as
@@ -91,7 +101,8 @@ Singleton {
     // generationsShown, change (Change… beside the title), chooseFolder (Choose folder… in the
     // status line), lookAgain { shown, available }, home (the home-folder warning), setup {
     // shown, create { shown, way, privileged, available, tooltip }, step (step 1's text),
-    // stepDone (step 1 done or not possible: muted), git (the git line shown) } }
+    // stepDone (step 1 done or not possible: muted), git (the git line shown), line and
+    // lineCaption (settingsLine's) } }
     function view(reading, busy) {
         const working = busy === true;
         const state = reading === null || typeof reading !== "object" ? "" : String(reading.state ?? "");
@@ -110,7 +121,8 @@ Singleton {
             chooseFolder: state === "notConnected",
             lookAgain: { shown: !connected, available: !working },
             home: known && reading.homeWarning === true,
-            setup: { shown: false, create: { shown: false, way: "", privileged: false, available: false, tooltip: "" }, step: "", stepDone: false, git: false }
+            setup: { shown: false, create: { shown: false, way: "", privileged: false, available: false, tooltip: "" }, step: "", stepDone: false, git: false,
+                     line: "", lineCaption: "" }
         };
         if (found && reading.homeWarning !== true) {
             const way = createWay(reading);
@@ -121,7 +133,9 @@ Singleton {
                           tooltip: way === "root" ? texts.createTooltip : "" },
                 step: fileState === "present" ? texts.created : fileState === "absent" ? texts.createStep : texts.unread,
                 stepDone: fileState !== "absent",
-                git: reading.git === "present" && reading.gitKnowsFile !== "tracked"
+                git: reading.git === "present" && reading.gitKnowsFile !== "tracked",
+                line: settingsLine(reading).line,
+                lineCaption: settingsLine(reading).caption
             };
         }
         return result;
