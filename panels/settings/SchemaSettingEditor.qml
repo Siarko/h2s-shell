@@ -439,10 +439,17 @@ Item {
                 problem: editing && !acceptableInput
                 input.inputMethodHints: Qt.ImhDigitsOnly
                 input.validator: IntValidator { bottom: root.entry?.min ?? 0; top: root.entry?.max ?? 2147483647 }
+                // Typed into, or confirmed with Return: only then is the field's value written.
+                // Focus passing through a corrected field must not write the value in use over
+                // what the config file holds (nor make an inherited value this profile's own)
+                property bool typed: false
+                onTextEdited: typed = true
+                onAccepted: typed = true
                 onEditingFinished: {
                     // Against the stored value: typing the value in use over a corrected one writes it
-                    if (acceptableInput && parseInt(text) !== root._storedValue)
+                    if (typed && acceptableInput && parseInt(text) !== root._storedValue)
                         root.edited(parseInt(text));
+                    typed = false;
                 }
                 onEditingChanged: if (!editing) text = Qt.binding(() => root._asText)
             }

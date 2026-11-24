@@ -161,7 +161,8 @@ Singleton {
 
     // A stored value of a number setting as the shell uses it. The config file can be edited
     // by hand, so it may hold a number outside the schema's range, or no number at all: the
-    // shell then uses the nearest bound, or the default, and says so (`note`) — the file
+    // shell then uses the nearest bound (a `number` field's value rounded to a whole number),
+    // or the default, and says so (`note`) — the file
     // itself is left as the user wrote it. Undefined (not set) and the values of other
     // types pass unchanged.
     // Returns { value, corrected, note }.
@@ -178,6 +179,16 @@ Singleton {
         if (typeof entry.max === "number" && stored > entry.max)
             return { value: entry.max, corrected: true,
                      note: "Set to " + shown + " in the config file, above the maximum " + entry.max + ": " + entry.max + " is used" };
+        // A number field takes whole numbers only (a slider or an interval may be fractional)
+        if (entry.type === "number" && !Number.isInteger(stored)) {
+            let rounded = Math.round(stored);
+            if (typeof entry.min === "number" && rounded < entry.min)
+                rounded = entry.min;
+            if (typeof entry.max === "number" && rounded > entry.max)
+                rounded = entry.max;
+            return { value: rounded, corrected: true,
+                     note: "Set to " + shown + " in the config file, not a whole number: " + rounded + " is used" };
+        }
         return { value: stored, corrected: false, note: "" };
     }
 
@@ -197,6 +208,48 @@ Singleton {
             checked[entry.key] = result.value;
         }
         return { values: checked, corrections: corrections };
+    }
+
+    // Which corrections are new: `reported` is key → the stored value (as JSON) already told,
+    // so a correction is told once per stored value, again only after its key was fine or
+    // held another value. Returns { toLog: [corrections], reported } (the next `reported`).
+    function rangeReport(reported, corrections) {
+        const next = {};
+        const toLog = [];
+        for (const correction of corrections ?? []) {
+            const stored = _storedKey(correction.stored);
+            if ((reported ?? {})[correction.key] !== stored)
+                toLog.push(correction);
+            next[correction.key] = stored;
+        }
+        return { toLog: toLog, reported: next };
+    }
+
+    // The banner about corrected settings (StartupWarnings): shown while any is corrected;
+    // `key` names the set, so a dismissed banner comes back when another setting or another
+    // stored value is corrected. Keys are the schema's (only those are corrected).
+    // Returns { shown, key, title, body }.
+    function rangeNotice(corrections) {
+        const list = Array.from(corrections ?? []);
+        if (list.length === 0)
+            return { shown: false, key: "", title: "", body: "" };
+        const keys = list.map(correction => correction.key);
+        const named = keys.length > 5 ? keys.slice(0, 5).join(", ") + " and " + (keys.length - 5) + " more" : keys.join(", ");
+        return {
+            shown: true,
+            key: list.map(correction => correction.key + "=" + _storedKey(correction.stored)).join("\n"),
+            title: "Settings outside their range in the config file",
+            body: named + ": the nearest allowed value is used instead, or the default where it is not a number. "
+                + "The config file is left as it is; Settings shows each with a note."
+        };
+    }
+
+    function _storedKey(stored) {
+        try {
+            return JSON.stringify(stored) ?? String(stored);
+        } catch (error) {
+            return String(stored);
+        }
     }
 
     // A stored value as a note shows it: hand-written, so on one line and capped

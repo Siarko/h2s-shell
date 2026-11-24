@@ -180,9 +180,11 @@ The interface modules are written against (`qs.api`), versioned on its own
   Without a terminal or without `sudo` it stops with its own message naming what is
   missing; run as root it runs `pacman` without `sudo`; packages that were not installed
   are said plainly; an `fc-list` that fails no longer ends the install silently.
-- A number setting edited by hand outside its range, or to something that is not a number,
-  is used at the nearest bound or the default instead; the config file keeps what was
-  written, the log says so once, and Settings shows the value in use with a note.
+- A number setting edited by hand outside its range is used at the nearest bound, a
+  fraction in a whole-number setting rounded; one that is not a number — a number written as
+  text ("30") included — falls back to the default. The config file keeps what was written;
+  a banner under the bar names the settings, the log says so once, and Settings shows the
+  value in use with a note.
 - A run as administrator that ignored the end of its time limit and had to be killed is
   told as "It did not end within <limit> s", not with its last output line; one that wrote
   more than 1 MB of errors before failing is told with its last line, not an early one.

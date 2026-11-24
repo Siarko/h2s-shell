@@ -374,6 +374,19 @@ TestCase {
             assertEqual(noteOf(critical).visible ? noteOf(critical).text : "",
                         "Set to 9 in the config file, above the maximum 3: 3 is used", "… with a note saying what the file holds");
             assertEqual(JSON.parse(Config.globals)["notifications.criticalToastLimit"], 9, "… the stored value left as it was");
+            // Focus passing through the field writes nothing; typing, or Return, writes
+            const field = _find(critical, item => item.typed !== undefined && item.input !== undefined, true);
+            assert(field !== null, "the number's field");
+            field.editingFinished();
+            assertEqual(JSON.parse(Config.globals)["notifications.criticalToastLimit"], 9, "focus out without typing: the config left as it was");
+            field.accepted();
+            field.editingFinished();
+            assertEqual(JSON.parse(Config.globals)["notifications.criticalToastLimit"], 3, "Return on the value in use: written");
+            _globalsPin.use({ "notifications.criticalToastLimit": 9 });
+            field.text = "2";
+            field.textEdited();
+            field.editingFinished();
+            assertEqual(JSON.parse(Config.globals)["notifications.criticalToastLimit"], 2, "a number typed: written");
         } finally {
             _globalsPin.restore();
             page.destroy();
@@ -410,6 +423,12 @@ TestCase {
             assertEqual(titles.join(" | "), "Screensaver | Lock screen | Sleep | Hibernate | Keeping the screen on | Commands",
                         "When away: the sections in the order things happen, then the rest");
             const timeline = named("awayTimeline");
+            // Times outside their range shown as the shell uses them
+            _away({ "lockscreen.screensaverEnabled": true, "lockscreen.screensaverTimeout": 1 });
+            assertEqual(page._config.saverAfter, 5, "a screensaver time stored below its minimum: the timeline has the minimum");
+            _away({ "lockscreen.screensaverEnabled": true, "lockscreen.screensaverTimeout": "soon" });
+            assertEqual(page._config.saverAfter, SettingsSchema.entry("lockscreen.screensaverTimeout").default, "… not a number: the default");
+            _away({});
             const perMonitor = editorIn(page, "lockscreen.perMonitor");
             const saverSection = named("screensaverSection");
             assert(timeline !== null && perMonitor !== null, "the top: \"Set per monitor\" and the timeline");

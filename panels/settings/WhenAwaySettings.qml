@@ -20,11 +20,11 @@ Flickable {
     property string section: ""
 
     // A setting's value in the edited profile, for the timeline and for dimming what
-    // depends on it
+    // depends on it: a time as the shell uses it, within its schema's range
     function _edited(key) {
-        if (key in Profiles.effectiveGlobals)
-            return Profiles.effectiveGlobals[key];
-        return Profiles.profiles[editIndex]?.set?.[key] ?? Profiles.inheritedValue(editIndex, key);
+        const stored = key in Profiles.effectiveGlobals ? Profiles.effectiveGlobals[key]
+            : Profiles.profiles[editIndex]?.set?.[key] ?? Profiles.inheritedValue(editIndex, key);
+        return ProfileRules.checkedNumber(SettingsSchema.entry(key), stored).value;
     }
     readonly property bool _saverOn: _edited("lockscreen.screensaverEnabled") === true
     readonly property bool _offOn: _edited("lockscreen.screenOffEnabled") === true

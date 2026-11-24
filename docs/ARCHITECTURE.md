@@ -344,9 +344,11 @@ Settings live in **shell profiles**.
   configs once. Facts can be simulated with `qs ipc call profiles simulate '{…}'`.
   A number setting (`number`, `slider`, `interval`, a module's too) reaches `value()`
   within its schema's `min`/`max`: a stored value outside them is used at the nearest
-  bound, one that is not a number at the default (`ProfileRules.checkedNumber`). The
-  config file keeps what was written; the shell logs a warning naming the setting and the
-  stored value once, and its editor shows the value in use with a note.
+  bound (a `number`'s fraction rounded), one that is not a number at the default
+  (`ProfileRules.checkedNumber`). The config file keeps what was written; the shell logs a
+  warning naming the setting and the stored value once, a banner under the bar
+  (`hud/StartupWarnings.qml`) names the settings, and their editor shows the value in use
+  with a note.
 - Settings pages edit the profile picked in the settings sidebar through
   `panels/settings/SchemaSettingEditor.qml`, which shows where a value comes from
   (set here, inherited from a profile above, default, global) with a pin and a reset.

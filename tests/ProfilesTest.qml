@@ -329,10 +329,6 @@ TestCase {
         _oldConfigReadFresh();
     }
 
-    // The migrations read the config file fresh each time (Profiles.oldConfig): a section
-    // written to the file after the first read is seen. The file is put back as it was; one
-    // that was not there is removed again (until then it is empty, which every reader takes
-    // as no file).
     property GlobalsPin _globalsPin: GlobalsPin {}
 
     // A number setting is used within its schema's range whatever the config file holds; the
@@ -359,6 +355,10 @@ TestCase {
         assertEqual(ProfileRules.checkedNumber({ type: "interval", min: 0, max: 600000, default: 2000 }, -1).value, 0, "an interval: within its range");
         assertEqual(ProfileRules.checkedNumber({ type: "number", default: 3 }, 1e9).value, 1e9, "no min or max: any number");
         assertEqual(ProfileRules.checkedNumber({ type: "number", min: 2, default: 3 }, 1).value, 2, "only a min: kept to it");
+        assertEqual(JSON.stringify(check(2.4)), JSON.stringify({ value: 2, corrected: true, note: "Set to 2.4 in the config file, not a whole number: 2 is used" }),
+                    "a number field holding a fraction: rounded, said");
+        assertEqual(check(0.4).value, 1, "… a fraction below the minimum: the minimum");
+        assertEqual(ProfileRules.checkedNumber({ type: "slider", min: 0, max: 5, default: 2 }, 2.5).value, 2.5, "a slider: a fraction as stored");
         assertEqual(ProfileRules.checkedNumber({ type: "enum", default: 60 }, "x").value, "x", "another type: not touched");
         assertEqual(ProfileRules.checkedNumber(null, 120).value, 120, "a key without an entry: not touched");
 
@@ -369,6 +369,28 @@ TestCase {
         assertEqual(JSON.stringify(result.corrections.map(each => [each.key, each.stored, each.used])), JSON.stringify([["system.rememberAdminMinutes", 120, 60]]),
                     "… each correction listed with what was stored and what is used");
         assertEqual(values["system.rememberAdminMinutes"], 120, "… the input left as it was");
+
+        // Told once per stored value (ProfileRules.rangeReport)
+        const told = (reported, list) => ProfileRules.rangeReport(reported, list);
+        const at120 = { key: "k", stored: 120, used: 60, note: "n" };
+        let report = told({}, [at120]);
+        assertEqual(report.toLog.length, 1, "a new correction: told");
+        report = told(report.reported, [at120]);
+        assertEqual(report.toLog.length, 0, "the same stored value again (another profile change): not told again");
+        report = told(report.reported, [{ key: "k", stored: 0, used: 1, note: "n" }]);
+        assertEqual(report.toLog.length, 1, "another stored value: told");
+        report = told(told(report.reported, []).reported, [{ key: "k", stored: 0, used: 1, note: "n" }]);
+        assertEqual(report.toLog.length, 1, "fine in between, then the same value again: told again");
+
+        // The startup banner (ProfileRules.rangeNotice)
+        assert(!ProfileRules.rangeNotice([]).shown, "the banner: nothing corrected, none");
+        const notice = ProfileRules.rangeNotice([at120, { key: "b", stored: "x", used: 1, note: "n" }]);
+        assert(notice.shown && notice.title === "Settings outside their range in the config file", "… one shown, with its title");
+        assertEqual(notice.body, "k, b: the nearest allowed value is used instead, or the default where it is not a number. "
+                    + "The config file is left as it is; Settings shows each with a note.", "… naming the settings");
+        assert(ProfileRules.rangeNotice([{ key: "k", stored: 0 }]).key !== ProfileRules.rangeNotice([at120]).key, "… another stored value: another banner");
+        assert(ProfileRules.rangeNotice(Array.from({ length: 7 }, (each, i) => ({ key: "k" + i, stored: 0 }))).body.startsWith("k0, k1, k2, k3, k4 and 2 more:"),
+               "… many: five named, the rest counted");
 
         // Every number setting of the schema, the modules' included: its default within its range
         for (const each of SettingsSchema.entries) {
@@ -382,8 +404,12 @@ TestCase {
         try {
             _globalsPin.use({ "system.rememberAdminMinutes": 0 });
             assertEqual(Profiles.value("system.rememberAdminMinutes"), 1, "Profiles.value: stored below the minimum, the minimum");
+            const logged = Profiles.rangeWarningsLogged;
             _globalsPin.use({ "system.rememberAdminMinutes": 120 });
             assertEqual(Profiles.value("system.rememberAdminMinutes"), 60, "… above the maximum, the maximum");
+            assertEqual(Profiles.rangeWarningsLogged, logged + 1, "… one warning logged");
+            _globalsPin.use({ "graphs.heartbeat": !Profiles.value("graphs.heartbeat") });
+            assertEqual(Profiles.rangeWarningsLogged, logged + 1, "… another setting changed: not logged again");
             _globalsPin.use({ "system.rememberAdminMinutes": "ten" });
             assertEqual(Profiles.value("system.rememberAdminMinutes"), 5, "… not a number, the default");
             assertEqual(JSON.stringify(Profiles.rangeCorrections.map(each => each.key)), JSON.stringify(["system.rememberAdminMinutes"]), "… listed as corrected");
@@ -394,6 +420,10 @@ TestCase {
         assertEqual(Profiles.value("system.rememberAdminMinutes"), before, "put back: as before");
     }
 
+    // The migrations read the config file fresh each time (Profiles.oldConfig): a section
+    // written to the file after the first read is seen. The file is put back as it was; one
+    // that was not there is removed again (until then it is empty, which every reader takes
+    // as no file).
     property FileView _configOnDisk: FileView {
         blockAllReads: true
         blockWrites: true

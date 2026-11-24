@@ -213,8 +213,10 @@ Singleton {
         return SettingsSchema.entry(key)?.global === true
     }
 
-    // Pinning keeps what applies now, so nothing visibly changes. The profiles' own values
-    // for the key are kept, just ignored, and come back when it is unpinned.
+    // Pinning keeps what applies now, so nothing visibly changes — a number outside its range
+    // is pinned at the value in use (value()), not at what the config file held. The
+    // profiles' own values for the key are kept, just ignored, and come back when it is
+    // unpinned.
     function pinGlobal(key) {
         const pinned = Object.assign({}, globals)
         pinned[key] = value(key)
@@ -421,18 +423,19 @@ Singleton {
     // The values corrected, [{ key, stored, used, note }]
     readonly property var rangeCorrections: _checked.corrections
 
-    // Logged once per stored value, not at every change of the profiles: key → that value
+    // Logged once per stored value, not at every change of the profiles
+    // (ProfileRules.rangeReport); how many lines so far, for the suites
     property var _rangeReported: ({})
+    property int rangeWarningsLogged: 0
+    // The startup banner about them closed, for this run: ProfileRules.rangeNotice's key then
+    property string rangeNoticeDismissed: ""
     onRangeCorrectionsChanged: _reportRangeCorrections()
     function _reportRangeCorrections() {
-        const reported = {};
-        for (const correction of rangeCorrections) {
-            const stored = JSON.stringify(correction.stored) ?? String(correction.stored);
-            if (_rangeReported[correction.key] !== stored)
-                console.warn("[Profiles] " + correction.key + ": " + correction.note);
-            reported[correction.key] = stored;
-        }
-        _rangeReported = reported;
+        const report = ProfileRules.rangeReport(_rangeReported, rangeCorrections);
+        for (const correction of report.toLog)
+            console.warn("[Profiles] " + correction.key + ": " + correction.note);
+        rangeWarningsLogged += report.toLog.length;
+        _rangeReported = report.reported;
     }
     // Names of the profiles in effect, in order
     readonly property var activeProfiles: _resolved.active

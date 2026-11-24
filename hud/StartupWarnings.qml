@@ -4,7 +4,7 @@ import qs.singletons
 
 // The banners under the bar, stacked, about how the shell was started or set up
 // (StartupWarning; Hud.qml places them): the safe-mode banner (SafeModeBanner), started
-// without scripts/launch.sh, no Nerd Font. Only those that apply show; with none the column
+// without scripts/launch.sh, no Nerd Font, settings outside their range. Only those that apply show; with none the column
 // is empty (height 0).
 Column {
     id: root
@@ -25,6 +25,10 @@ Column {
     readonly property Item maskItem: height > 0 ? root : null
     readonly property alias safeModeBanner: safeModeBanner
     readonly property alias fontWarning: fontWarning
+    readonly property alias rangeWarning: rangeWarning
+    // Number settings the shell uses other than stored (Profiles; a suite gives stand-ins)
+    property var rangeCorrections: Profiles.rangeCorrections
+    readonly property var _rangeNotice: ProfileRules.rangeNotice(rangeCorrections)
 
     spacing: Theme.osdToast.screenGap
 
@@ -64,5 +68,16 @@ Column {
             + "JetBrainsMono Nerd Font (any Nerd Font works), then restart the shell.\n"
             + DistributionRules.packageHint(root.distributionFacts, "nerdFont").text
         onDismissed: Theme.nerdFontWarningDismissed = true
+    }
+
+    // Number settings in the config file outside their range, or not numbers: the shell uses
+    // others, and says so here as well as in the log and on their Settings rows
+    StartupWarning {
+        id: rangeWarning
+        width: parent.width
+        visible: root._rangeNotice.shown && Profiles.rangeNoticeDismissed !== root._rangeNotice.key
+        title: root._rangeNotice.title
+        body: root._rangeNotice.body
+        onDismissed: Profiles.rangeNoticeDismissed = root._rangeNotice.key
     }
 }

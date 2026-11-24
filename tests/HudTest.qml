@@ -225,6 +225,24 @@ TestCase {
         assert(_until(() => other() !== null && hud.warnings.maskItem !== null), "another warning shown: in the mask");
         assertEqual(_rect(hud.warnings.maskItem), _rect(other()), "… the mask is that warning's rectangle, not the banner's");
 
+        // Settings outside their range: a banner naming them; × closes it, another stored value
+        // brings it back
+        const range = hud.warnings.rangeWarning;
+        const savedDismissed = Profiles.rangeNoticeDismissed;
+        try {
+            assert(!range.visible, "nothing corrected: no range banner");
+            hud.warnings.rangeCorrections = [{ key: "system.rememberAdminMinutes", stored: 120, used: 60, note: "" }];
+            assert(_until(() => range.visible && range.height > 0), "a setting corrected: the range banner");
+            assert(range.body.startsWith("system.rememberAdminMinutes: the nearest allowed value is used"), "… naming it");
+            range.dismissed();
+            assert(_until(() => !range.visible), "× closes it");
+            hud.warnings.rangeCorrections = [{ key: "system.rememberAdminMinutes", stored: 0, used: 1, note: "" }];
+            assert(_until(() => range.visible), "… another stored value: shown again");
+        } finally {
+            hud.warnings.rangeCorrections = Qt.binding(() => Profiles.rangeCorrections);
+            Profiles.rangeNoticeDismissed = savedDismissed;
+        }
+
         // The font warning names the package as this system gets it, never as a command
         const font = hud.warnings.fontWarning;
         const saidFacts = hud.warnings.distributionFacts;
