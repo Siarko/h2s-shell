@@ -479,7 +479,7 @@ Singleton {
             sleepAsked: false,       // the sleep asked in this period: not asked again
             sleepAskedThen: false,   // … as SuspendThenHibernate (read only while sleepAsked)
             sleepPlain: false,       // SuspendThenHibernate refused in this period: a plain Suspend instead
-            sleepLeftUnlocked: false, // … and the settings leave it unlocked (no notice then)
+            sleepLeftUnlocked: false, // the sleep asked leaves it unlocked: no notice then (read only while sleepAsked)
             sleepSince: null,        // a profile switch made the sleep due: it counts from then (ms)
             sleepAfterSeen: null,    // the whole computer's stage at the last step (machineAfter)
             stage: ({}),             // monitor id → 0 none, 1 screensaver, 2 screens off: reached in this period
@@ -811,7 +811,7 @@ Singleton {
         if (state.logindSleepBlock === true)
             return state.sleepReadAt + logindRecheck;
         if (state.logindSleepBlock !== false)
-            return state.sleepReadAt + sleepReadRetryDelay(state.sleepReadFails ?? 0);
+            return state.sleepReadAt + sleepReadRetryDelay(state.sleepReadFails);
         return null;
     }
 
@@ -940,7 +940,6 @@ Singleton {
         next.lockSince = null;
         next.sleepAsked = false;
         next.sleepPlain = false;
-        next.sleepLeftUnlocked = false;
         next.sleepSince = null;
         // Read again before the next sleep: a block seen now says nothing of then
         next.logindSleepBlock = "unknown";
@@ -998,7 +997,7 @@ Singleton {
     function _sleepRead(next, held, now) {
         next.logindSleepBlock = held === true ? true : held === false ? false : "unknown";
         next.sleepReadAt = now;
-        next.sleepReadFails = next.logindSleepBlock === "unknown" ? (next.sleepReadFails ?? 0) + 1 : 0;
+        next.sleepReadFails = next.logindSleepBlock === "unknown" ? next.sleepReadFails + 1 : 0;
     }
 
     // An inhibitor released while unlocked: the counting starts at the release
@@ -1141,8 +1140,7 @@ Singleton {
                 .filter(id => config.monitors.includes(id) && next.shown[id] !== "off");
             for (const id of ids)
                 next.pendingPower[id] = { on: true, at: now, tries: 1, read: null, gaveUp: false };
-            if (ids.length > 0)
-                restored = ids;
+            restored = ids;
             break;
         }
         case "commandsRestored": {
@@ -1442,7 +1440,7 @@ Singleton {
         if (sleepDue(next, config, now)) {
             next.sleepAsked = true;
             next.sleepLeftUnlocked = sleepLeftUnlocked(next, config);
-            if ((config.sleepAfter ?? 0) > 0) {
+            if (config.sleepAfter > 0) {
                 next.sleepAskedThen = config.sleepThenHibernate === true && next.sleepPlain !== true;
                 actions.push({ type: "sleep", leftUnlocked: next.sleepLeftUnlocked, thenHibernate: next.sleepAskedThen });
             } else

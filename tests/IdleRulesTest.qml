@@ -1167,6 +1167,11 @@ TestCase {
         wayland.at(605000, { type: "awayIdle", idle: true, since: 600000 });
         assertEqual(wayland.next(), 900000, "released at 600 s (away-idle comes the base time later): counted from there");
         assert(!IdleRules.waylandHeld(wayland.state), "… no longer held");
+        wayland.at(607000, { type: "awayIdle", idle: true, since: 606000 });
+        assertEqual(wayland.next(), 900000, "away-idle said again: no release, the counting stays");
+        const stillHeld = _machine(values, ["lcd"], true).at(5000, { type: "inputIdle", idle: true, since: 0 })
+            .at(300000, { type: "awayIdle", idle: false });
+        assertEqual(stillHeld.state.idleSince, 0, "not away-idle said again while held: no release either");
         wayland.at(610000, { type: "awayIdle", idle: false });
         wayland.at(610000, { type: "locked" });
         assert(!IdleRules.waylandHeld(wayland.state), "never a hold while locked");
@@ -1814,6 +1819,7 @@ TestCase {
         assertEqual(rules.machineAfter({ sleepAfter: 0, hibernateAfter: 8400 }), 8400, "the whole computer's stage: the hibernation with sleep off");
         assertEqual(rules.machineAfter({ sleepAfter: 1800, hibernateAfter: 8400 }), 1800, "… the sleep when it is on");
         assertEqual(rules.machineAfter({ hibernateAfter: 8400 }), 8400, "… a config without a sleep: the hibernation");
+        assertEqual(rules.machineAfter({ sleepAfter: 0 }), 0, "… a config with neither: none");
         assertEqual(JSON.stringify(rules.hibernateBase(0, 0, 1)), JSON.stringify({ from: "lock", at: 1 }), "a lock after one second is a stage");
         const noMonitors = rules.config(_with(hours, { screensaverEnabled: true, screensaverTimeout: 600 }), [], true, "yes", "yes", "yes");
         assertEqual(noMonitors.hibernate.from + " " + noMonitors.hibernate.at, "saver 600", "no monitor connected: the default's screensaver");

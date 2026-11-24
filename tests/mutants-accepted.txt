@@ -125,3 +125,18 @@ singletons/PamRuleRules.qml	|| -> &&	#1	const asks = role => role.fails && !role
 # reason: at i === fixedIndex the row is the fixed row, never a password row, so fixedIndex >= i
 # adds no row
 singletons/PamRuleRules.qml	> -> >=	#1	if (role.method === "password" && !role.raw && list[i].control === "sufficient" && fixedIndex > i)
+
+# reason: the field is read only while sleepAsked (Idle.sleepLeftUnlocked), and every step that
+# sets sleepAsked sets it too, so the value it starts with is never read
+singletons/IdleRules.qml	false -> true	#1	sleepLeftUnlocked: false, // the sleep asked leaves it unlocked: no notice then (read only while sleepAsked)
+
+# reason: a fresh read that found no sleep block is followed in the same step by the sleep's ask
+# (sleepDue then holds), and sleepAsked ends _sleepReadAt's work before this line; so the line
+# is reached only with the block unknown, where !== false and !== true agree
+singletons/IdleRules.qml	false -> true	#1	if (state.logindSleepBlock !== false)
+
+# reason: a monitor shown off by the shell had its off asked in this period (_reconcile sets
+# offAsks to 1 or more with it, and a wake clears both; a picture moved to a monitor's other
+# id when power control is lost is turned on in that step, and none is off before it is found),
+# so offAsks[id] is never missing here
+singletons/IdleRules.qml	0 -> 1	#1	const asked = next.offAsks[id] ?? 0;
