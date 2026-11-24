@@ -1,0 +1,6 @@
+#!/bin/sh
+# Stand-in for systemctl (NixosApplyScriptTest): records its words, answers ctl/active.code
+# (0: the unit active, 3: not)
+base=${0%/run/current-system/sw/bin/systemctl}
+printf 'systemctl %s\n' "$*" >> "$base/log/calls"
+exit "$(cat "$base/ctl/active.code")"

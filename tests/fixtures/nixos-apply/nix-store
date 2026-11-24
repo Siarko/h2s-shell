@@ -1,0 +1,5 @@
+#!/bin/sh
+# Stand-in for nix-store (NixosApplyScriptTest): records its words, answers ctl/valid.code
+base=${0%/run/current-system/sw/bin/nix-store}
+printf 'nix-store %s\n' "$*" >> "$base/log/calls"
+exit "$(cat "$base/ctl/valid.code")"

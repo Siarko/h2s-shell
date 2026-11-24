@@ -1,10 +1,13 @@
 #!/bin/sh
-# Stand-in for systemd-run (NixosApplyScriptTest): records its options, then runs the command
-# after "--" and answers with its exit.
+# Stand-in for systemd-run (NixosApplyScriptTest): records its options; when ctl/systemd-run.code
+# is not 0, fails with it as if the unit could not be started, else runs the command after
+# "--" and answers with its exit.
 base=${0%/run/current-system/sw/bin/systemd-run}
 words=
 while [ $# -gt 0 ] && [ "$1" != -- ]; do words="$words $1"; shift; done
 printf 'systemd-run%s\n' "$words" >> "$base/log/calls"
+code=$(cat "$base/ctl/systemd-run.code")
+[ "$code" = 0 ] || exit "$code"
 [ $# -gt 0 ] || exit 2
 shift
 exec "$@"

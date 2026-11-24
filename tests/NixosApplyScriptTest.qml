@@ -63,7 +63,7 @@ TestCase {
             return;
         }
         // Every case starts from the stand-ins' answers for success and an empty record
-        const reset = "set -e; cd \"$1\"; : > log/calls; : > ctl/eval.err; echo 0 > ctl/eval.code; echo 0 > ctl/switch.code; echo 0 > ctl/nix-env.code; "
+        const reset = "set -e; cd \"$1\"; : > log/calls; : > ctl/eval.err; echo 0 > ctl/eval.code; echo 0 > ctl/switch.code; echo 0 > ctl/nix-env.code; : > ctl/nix-env.touch; echo 0 > ctl/valid.code; echo 3 > ctl/active.code; echo 0 > ctl/systemd-run.code; "
             + "printf '%s %s\\n' \"$2\" \"$3\" > ctl/eval.out; put() { printf '%s' \"$1\" > etc/nixos/h2s-shell.json; }; ";
         _exec(["sh", "-c", reset + (next.setup ?? ""), "sh", _scratch, _drv, _out], code => {
             suite.assertEqual(code, 0, next.name + ": set up");
@@ -87,7 +87,7 @@ TestCase {
     // The tree after a run: the folder's file (null for none), its listing, the backups, the
     // stand-ins' record, the profile's link
     function _look(folder, done) {
-        const script = "cd \"$1\"; f=$2/h2s-shell.json; printf '== file\\n'; if [ -e \"$f\" ]; then cat \"$f\"; printf '\\n.\\n'; else printf '(none)\\n'; fi; "
+        const script = "cd \"$1\"; f=$2/h2s-shell.json; printf '== file\\n'; if [ -f \"$f\" ] && [ ! -L \"$f\" ]; then cat \"$f\"; printf '\\n.\\n'; else printf '(none)\\n'; fi; "
             + "printf '== listing\\n'; ls -A \"$2\"; printf '== backups\\n'; ls var/lib/h2s-shell/nixos-backup 2> /dev/null; "
             + "printf '== calls\\n'; cat log/calls; printf '== profile\\n'; readlink nix/var/nix/profiles/system; "
             + "printf '== backupMode\\n'; stat -c %a var/lib/h2s-shell/nixos-backup 2> /dev/null; true";
@@ -134,18 +134,20 @@ TestCase {
             assertEqual(JSON.stringify(state.listing), JSON.stringify(["flake.nix", "h2s-shell.json"]), "apply: no temporary file left");
             assertEqual(JSON.stringify(state.backups), JSON.stringify([suite._applyBackup]), "apply: one backup");
             assertEqual(state.profile, "system-2-link", "apply: the profile at the new generation");
-            assertEqual(_names(state.calls), "nix,nix-vars,nix-home,nix-candidate,nix-env,systemd-run,switch",
-                        "apply: evaluated, then the profile set, then switched, in that order");
+            assertEqual(_names(state.calls), "nix,nix-vars,nix-home,nix-candidate,nix-store,systemctl,nix-env,systemd-run,switch",
+                        "apply: evaluated, checked, then the profile set, then switched, in that order");
             assertEqual(state.calls[0], "nix eval --raw --impure --extra-experimental-features nix-command flakes --expr EXPR",
                         "apply: the evaluation's words (a flake: no -I)");
             assertEqual(state.calls[1], "nix-vars flake=path:" + _folder + " host=laptop nixpath=unset override=yes",
                         "apply: path: for a folder without git, the host, no NIX_PATH, the shell's file overridden");
             assertEqual(state.calls[2], "nix-home [safe]  directory = " + _folder + " ", "apply: the folder a safe directory for nix's git");
             assertEqual(state.calls[3], "nix-candidate h2s-shell.json " + _sha(_second), "apply: the candidate evaluated, under the file's name");
-            assertEqual(state.calls[4], "nix-env -p " + S + "/nix/var/nix/profiles/system --set " + _out, "apply: the system profile set to the built system");
-            assertEqual(state.calls[5], "systemd-run --collect --no-ask-password --pipe --quiet --service-type=exec --unit=nixos-rebuild-switch-to-configuration --wait",
+            assertEqual(state.calls[4], "nix-store --check-validity -- " + _out, "apply: the built system valid in the store");
+            assertEqual(state.calls[5], "systemctl is-active --quiet -- nixos-rebuild-switch-to-configuration.service", "apply: no other activation running");
+            assertEqual(state.calls[6], "nix-env -p " + S + "/nix/var/nix/profiles/system --set " + _out, "apply: the system profile set to the built system");
+            assertEqual(state.calls[7], "systemd-run --collect --no-ask-password --pipe --quiet --service-type=exec --unit=nixos-rebuild-switch-to-configuration --wait",
                         "apply: the switch under systemd-run, as nixos-rebuild runs it");
-            assertEqual(state.calls[6], "switch switch", "apply: the built system's switch-to-configuration switch");
+            assertEqual(state.calls[8], "switch switch", "apply: the built system's switch-to-configuration switch");
             assert(run.stderr.includes("activating the configuration..."), "apply: the activation's output passed on");
         });
         _case("the configuration changed since the build",
@@ -177,7 +179,7 @@ TestCase {
             assertEqual(run.code, 1, "the profile not set: exit 1");
             assertEqual(state.file, _second, "the profile not set: the old file back");
             assertEqual(state.backups.length, 3, "the profile not set: the old file's backup and the candidate's");
-            assertEqual(_names(state.calls), "nix,nix-vars,nix-home,nix-candidate,nix-env", "the profile not set: nothing switched");
+            assertEqual(_names(state.calls), "nix,nix-vars,nix-home,nix-candidate,nix-store,systemctl,nix-env", "the profile not set: nothing switched");
             assertEqual(state.profile, "system-2-link", "the profile not set: still the generation before");
             assertEqual(JSON.stringify(state.listing), JSON.stringify(["flake.nix", "h2s-shell.json"]), "the profile not set: no temporary file left");
         });
@@ -191,7 +193,32 @@ TestCase {
             assertEqual(run.code, 1, "a failed switch: exit 1");
             assertEqual(state.file, _second, "a failed switch: the file kept (restore puts it back)");
         });
-        _case("compare-and-swap", "", _apply(_sha(_third), _first), (run, state) => {
+        _case("not valid in the store", "echo 1 > ctl/valid.code", _apply(_sha(_second), _third), (run, state) => {
+            _refused("notbuilt", "a system the store does not hold as valid")(run, state);
+            assertEqual(state.file, _second, "not valid: nothing written");
+        });
+        _case("another activation running", "echo 0 > ctl/active.code", _apply(_sha(_second), _third), (run, state) => {
+            _refused("busy", "another switch-to-configuration unit active")(run, state);
+            assertEqual(state.file, _second, "another activation: nothing written");
+        });
+        _case("the activation not started", "echo 1 > ctl/systemd-run.code", _apply(_sha(_second), _third), (run, state) => {
+            const match = new RegExp("^not-activated 4 " + _sha(_second) + " h2s-shell\\.json\\." + _stampPattern + "$").exec(run.last);
+            assert(match !== null, "systemd-run failed: not activated, the generation before and the old file back: " + run.last);
+            assertEqual(run.code, 5, "not activated: exit 5");
+            assertEqual(state.profile, "system-4-link", "not activated: the profile back at the generation before");
+            assertEqual(state.file, _second, "not activated: the old file back");
+            assertEqual(state.calls.filter(line => line.startsWith("nix-env ")).pop(), "nix-env -p " + S + "/nix/var/nix/profiles/system --switch-generation 4",
+                        "not activated: the generation before switched back to");
+            assertEqual(state.calls.filter(line => line.startsWith("switch ")).length, 0, "not activated: switch-to-configuration never ran");
+        });
+        _case("the old file not put back", "echo 1 > ctl/nix-env.code; echo etc/nixos/h2s-shell.json > ctl/nix-env.touch", _apply(_sha(_second), _third), (run, state) => {
+            assert(new RegExp("^not-restored " + _sha(_third) + " h2s-shell\\.json\\." + _stampPattern + "$").test(run.last),
+                   "the file changed before the restore: not restored, the candidate still written: " + run.last);
+            assertEqual(run.code, 6, "not restored: exit 6, not a refusal's 3");
+            assertEqual(state.file, _third + "x", "not restored: the file as it was left");
+            assertEqual(JSON.stringify(state.listing), JSON.stringify(["flake.nix", "h2s-shell.json"]), "not restored: no temporary file left");
+        });
+        _case("compare-and-swap", "put '" + _second + "'", _apply(_sha(_third), _first), (run, state) => {
             _refused("changed", "the file not as the shell read it")(run, state);
             assertEqual(state.calls.length, 0, "the file not as read: not even evaluated");
         });
@@ -207,7 +234,7 @@ TestCase {
         // A git flake and a classic configuration
         _case("a git flake", "mkdir -p etc/git/.git; : > etc/git/flake.nix",
               _apply("absent", _second, { folder: S + "/etc/git", host: "work_2-b" }), (run, state) => {
-            assert(run.last.startsWith("applied 5 h2s-shell.json."), "a git flake: applied: " + run.last);
+            assert(run.last.startsWith("applied 6 h2s-shell.json."), "a git flake: applied: " + run.last);
             assertEqual(state.calls[1], "nix-vars flake=git+file://" + S + "/etc/git host=work_2-b nixpath=unset override=yes", "a git flake: git+file://");
             assertEqual(state.file, _second, "a git flake: the file written");
             assert(state.backups.some(name => name.endsWith(".absent")), "a git flake: a backup of no file");
@@ -215,14 +242,14 @@ TestCase {
         _case("classic", "mkdir -p etc/classic; : > etc/classic/configuration.nix; "
               + "printf 'export PATH=\"/nowhere\"\\nexport NIX_PATH=\"other=/x:nixpkgs=/nix/store/abc-source:/nix/var/channels\"\\n' > etc/set-environment",
               _apply("absent", _second, { folder: S + "/etc/classic", entry: "configuration.nix", host: "-" }), (run, state) => {
-            assert(run.last.startsWith("applied 6 "), "classic: applied: " + run.last);
+            assert(run.last.startsWith("applied 7 "), "classic: applied: " + run.last);
             assertEqual(state.calls[0], "nix eval --raw --impure --extra-experimental-features nix-command flakes -I nixpkgs=/nix/store/abc-source -I nixos-config="
                         + S + "/etc/classic/configuration.nix --expr EXPR", "classic: the system's nixpkgs and the configuration, each by -I");
             assertEqual(state.calls[1], "nix-vars flake= host= nixpath=unset override=yes", "classic: no flake");
         }, { folder: S + "/etc/classic" });
         _case("classic, another entry", "printf 'x' > etc/classic/machine.nix",
               _apply(_sha(_second), _third, { folder: S + "/etc/classic", entry: "machine.nix", host: "-" }), (run, state) => {
-            assert(run.last.startsWith("applied 7 "), "classic, another entry: applied: " + run.last);
+            assert(run.last.startsWith("applied 8 "), "classic, another entry: applied: " + run.last);
             assert(state.calls[0]?.includes(" -I nixos-config=" + S + "/etc/classic/machine.nix "), "classic: the configuration's own file: " + state.calls[0]);
         }, { folder: S + "/etc/classic" });
         _case("classic with a host", "", _apply(_sha(_third), _second, { folder: S + "/etc/classic", entry: "configuration.nix" }),
@@ -238,10 +265,15 @@ TestCase {
         // A folder others may write in: switch only
         _case("switch", "mkdir -p home/cfg; chmod 775 home/cfg; : > home/cfg/flake.nix; printf '%s' '" + _second + "' > home/cfg/h2s-shell.json",
               ["switch", S + "/home/cfg", "flake.nix", "laptop", _sha(_second), _drv, _out, _second], (run, state) => {
-            assertEqual(run.last + " " + run.code, "applied 8 - 0", "switch: applied, no backup");
+            assertEqual(run.last + " " + run.code, "applied 9 - 0", "switch: applied, no backup");
             assertEqual(state.file, _second, "switch: the file as the user wrote it");
             assertEqual(JSON.stringify(state.listing), JSON.stringify(["flake.nix", "h2s-shell.json"]), "switch: nothing written in the folder");
-            assertEqual(_names(state.calls), "nix,nix-vars,nix-home,nix-candidate,nix-env,systemd-run,switch", "switch: evaluated, set, switched");
+            assertEqual(_names(state.calls), "nix,nix-vars,nix-home,nix-candidate,nix-store,systemctl,nix-env,systemd-run,switch", "switch: evaluated, set, switched");
+        }, { folder: S + "/home/cfg" });
+        _case("switch, the activation not started", "echo 1 > ctl/systemd-run.code",
+              ["switch", S + "/home/cfg", "flake.nix", "laptop", _sha(_second), _drv, _out, _second], (run, state) => {
+            assertEqual(run.code + " " + run.last, "5 not-activated 9 - -", "switch: not activated, the generation before back, nothing written");
+            assertEqual(state.profile, "system-9-link", "switch: not activated: the profile back");
         }, { folder: S + "/home/cfg" });
         _case("switch, the file not the candidate", "",
               ["switch", S + "/home/cfg", "flake.nix", "laptop", _sha(_third), _drv, _out, _third],
@@ -250,12 +282,27 @@ TestCase {
               ["switch", S + "/home/cfg", "flake.nix", "laptop", _sha(_second), _drv, _out, _second],
               (run, state) => {
             assertEqual(run.code + " " + run.last, "3 refused profile", "switch: the profile not set: refused profile");
-            assertEqual(_names(state.calls), "nix,nix-vars,nix-home,nix-candidate,nix-env", "switch: the profile not set: nothing switched");
-            assertEqual(state.profile, "system-8-link", "switch: the profile not set: the generation before");
+            assertEqual(_names(state.calls), "nix,nix-vars,nix-home,nix-candidate,nix-store,systemctl,nix-env", "switch: the profile not set: nothing switched");
+            assertEqual(state.profile, "system-9-link", "switch: the profile not set: the generation before");
         }, { folder: S + "/home/cfg" });
         _case("switch, changed since the build", "printf '%s %s-x\\n' \"$2\" \"$3\" > ctl/eval.out",
               ["switch", S + "/home/cfg", "flake.nix", "laptop", _sha(_second), _drv, _out, _second],
               _refused("changed", "switch: changed since the build"), { folder: S + "/home/cfg" });
+        _case("switch, a failed evaluation", "echo 1 > ctl/eval.code; printf 'error: root:secret-from-shadow\\n' > ctl/eval.err",
+              ["switch", S + "/home/cfg", "flake.nix", "laptop", _sha(_second), _drv, _out, _second], (run, state) => {
+            _refused("evaluation", "switch: a failed evaluation")(run, state);
+            assert(!run.stderr.includes("secret-from-shadow") && !run.stdout.includes("secret-from-shadow"),
+                   "switch: the evaluation's messages of a configuration of the user's not passed on: " + run.stderr);
+        }, { folder: S + "/home/cfg" });
+        _case("switch, a FIFO for the file", "rm home/cfg/h2s-shell.json; mkfifo home/cfg/h2s-shell.json",
+              ["switch", S + "/home/cfg", "flake.nix", "laptop", _sha(_second), _drv, _out, _second], (run, state) => {
+            assert(run.code === 3 && (run.last === "refused changed" || run.last === "refused unreadable"),
+                   "switch: a FIFO in place of the user's file read without waiting, refused: " + run.code + " " + run.last);
+            assertEqual(state.calls.length, 0, "switch: a FIFO: not evaluated");
+        }, { folder: S + "/home/cfg" });
+        _case("switch, a link for the file", "rm home/cfg/h2s-shell.json; ln -s /dev/zero home/cfg/h2s-shell.json",
+              ["switch", S + "/home/cfg", "flake.nix", "laptop", _sha(_second), _drv, _out, _second],
+              _refused("link", "switch: a link in place of the user's file"), { folder: S + "/home/cfg" });
         _case("apply where others may write", "", _apply(_sha(_second), _third, { folder: S + "/home/cfg" }), (run, state) => {
             _refused("owner", "apply in a folder others may write in")(run, state);
             assertEqual(state.calls.length, 0, "… not even evaluated");
@@ -283,7 +330,7 @@ TestCase {
         });
         _case("the caller's PATH and NIX_PATH", "touch release; while [ ! -e gone ]; do sleep 0.05; done; rm -f held release gone; mkdir -p evil; for t in flock sha256sum mktemp stat; do printf '#!/bin/sh\\ntouch \"%s/evil-ran\"\\nexit 1\\n' \"$1\" > evil/$t; chmod 755 evil/$t; done",
               _apply(_sha(_second), _third), (run, state) => {
-            assert(run.last.startsWith("applied 9 "), "the caller's PATH and NIX_PATH: applied all the same: " + run.last);
+            assert(run.last.startsWith("applied 11 "), "the caller's PATH and NIX_PATH: applied all the same: " + run.last);
             assertEqual(state.calls[1].split(" ")[3], "nixpath=unset", "… no NIX_PATH reaches nix");
             suite._exec(["test", "-e", S + "/evil-ran"], code => suite.assertEqual(code, 1, "… no program from the caller's PATH ran"));
         }, { env: ["NIX_PATH=nixpkgs=/evil", "PATH=" + S + "/evil:" + (Quickshell.env("PATH") ?? "")] });
@@ -328,7 +375,7 @@ TestCase {
             assertEqual(state.calls.length, 0, "… nothing run");
         });
         _case("the tools back", "mv run/current-system/sw/bin/nix-env.away run/current-system/sw/bin/nix-env", _apply(_sha(_third), _second), (run, state) => {
-            assert(run.last.startsWith("applied 10 "), "the tools back: applied: " + run.last);
+            assert(run.last.startsWith("applied 12 "), "the tools back: applied: " + run.last);
             assertEqual(state.backupMode, "700", "the backups' folder: 700");
         });
         _case("restore", "", () => ["restore", _folder, suite._applyBackup, _sha(_second)], (run, state) => {
@@ -369,7 +416,7 @@ TestCase {
         _exec(["cat", "--", Quickshell.shellDir + "/scripts/root/replace-lib.sh", Quickshell.shellDir + "/scripts/root/replace-file.sh",
                Quickshell.shellDir + "/scripts/root/nixos-apply.sh"], (code, stdout) => suite._script = code === 0 ? stdout : "");
         const tree = "set -e; umask 022; S=$1; F=$2; mkdir -p \"$S/etc/nixos\" \"$S/run/current-system/sw/bin\" \"$S/nix/var/nix/profiles\" \"$S/ctl\" \"$S/log\" \"$3/bin\"; "
-            + "for t in nix nix-env systemd-run; do cp \"$F/$t\" \"$S/run/current-system/sw/bin/\"; done; cp \"$F/switch-to-configuration\" \"$3/bin/\"; "
+            + "for t in nix nix-env nix-store systemctl systemd-run; do cp \"$F/$t\" \"$S/run/current-system/sw/bin/\"; done; cp \"$F/switch-to-configuration\" \"$3/bin/\"; "
             + ": > \"$S/etc/nixos/flake.nix\"; ln -s /nowhere \"$S/nix/var/nix/profiles/system-1-link\"; ln -s system-1-link \"$S/nix/var/nix/profiles/system\"";
         _exec(["sh", "-c", tree, "sh", _scratch, _fixtures, _out], code => {
             suite.assertEqual(code, 0, "the scratch tree made");

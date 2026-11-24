@@ -3,7 +3,7 @@
 # written, and the system the user built switched to. Joined after replace-lib.sh and
 # replace-file.sh and run as `sh -c <text> sh <base> <arguments>…`; never run by path. Its
 # places are fixed here, under <base> ("" for the system: take_base):
-#   the tools        /run/current-system/sw/bin/{nix,nix-env,systemd-run}
+#   the tools        /run/current-system/sw/bin/{nix,nix-env,nix-store,systemctl,systemd-run}
 #   the profile      /nix/var/nix/profiles/system (its links system-<n>-link)
 #   the store        /nix/store
 #   nixpkgs          the nixpkgs= entry of NIX_PATH in /etc/set-environment (classic only)
@@ -20,26 +20,45 @@
 # configuration's file in the folder (<host> -). create, apply and restore write, and only
 # where every folder of the real path is root's and nobody else may write in it; switch
 # writes nothing (a folder of the user's: the user wrote the file, it must hold the
-# candidate).
+# candidate; root reads it without following a link, without waiting and at most 64 KiB).
 #
 # apply and switch never rebuild: root evaluates the user's configuration with the candidate
 # in place of the shell's file, exactly as the user's build did (nixos_toplevel), and goes on
 # only when its drvPath and out path are the ones the user built — the configuration is
 # unchanged since the build —; then apply writes the file (compare-and-swap, backup), and
 # both set the system profile to that out path and run its switch-to-configuration (under
-# systemd-run, as nixos-rebuild does, so that the activation outlives this run). A failure
-# before the activation puts the old file back.
+# systemd-run, as nixos-rebuild does, so that the activation outlives this run). The built
+# system must be valid in the store (nix-store --check-validity), and no other
+# switch-to-configuration unit may be active. A failure before the activation began puts
+# back what was there: the profile at its generation before and the old file.
+#
+# The evaluation runs the configuration's Nix code as root (impure, so it may read any file
+# root may read). For apply the configuration is root's own; for switch it is the user's, so
+# the password authorizes running code any of the user's programs could have changed — as
+# activating it does. For switch the evaluation's messages are not passed on (they could
+# carry what such code read as root); for apply its last lines precede `refused evaluation`.
 #
 # The last line, on stdout and stderr:
 #   created <sha256> <backup>                       exit 0
 #   applied <generation> <backup | ->               exit 0
 #   applied-with-errors <generation> <backup | ->   exit 4 (switch-to-configuration's 4:
 #                                                   some units did not start)
-#   failed <generation> <backup | ->                exit 1 (the activation failed; the
-#                                                   profile and the file kept)
+#   failed <generation> <backup | ->                exit 1 (the activation failed, or never
+#                                                   started and the generation before could
+#                                                   not be put back; the profile and the
+#                                                   file kept)
 #   restored <sha256 | absent> <backup made>        exit 1 after apply (the profile could not
 #                                                   be set: the old file back), exit 0 for
 #                                                   restore
+#   not-activated <generation> <sha256 | absent | -> <backup made | ->
+#                                                   exit 5: switch-to-configuration never
+#                                                   started (systemd-run failed); the profile
+#                                                   back at <generation>, the file back (-
+#                                                   for switch: nothing was written)
+#   not-restored <sha256> <backup>                  exit 6: the profile not set or not
+#                                                   activated, but the old file could not be
+#                                                   put back: the candidate (<sha256>) is
+#                                                   still written, the old one in <backup>
 #   refused <code>                                  exit 3, on stderr; nothing switched, and
 #                                                   nothing written (the codes: arguments,
 #                                                   paths, folder, owner, json, hash, link,
@@ -47,11 +66,11 @@
 #                                                   nixpath, evaluation, notbuilt, profile
 #                                                   (switch: the profile not set), backup,
 #                                                   nobackup, busy, lock, write)
-# The evaluation's last lines precede `refused evaluation`.
 
 # The generic tools from the system's fixed places, never the caller's PATH
 PATH=/run/current-system/sw/bin:/usr/bin:/bin; export PATH
 unset NIX_PATH
+unit=nixos-rebuild-switch-to-configuration
 [ $# -ge 1 ] || refuse arguments
 take_base "$1"; shift
 bin=$base/run/current-system/sw/bin; profile=$base/nix/var/nix/profiles/system
@@ -118,6 +137,17 @@ folder_safe() {
   done
 }
 
+# check_user_file <file> <sha256>: a file in a folder of the user's holds the candidate.
+# Read without following a link, without blocking (a FIFO swapped in gives nothing) and at
+# most one byte over the cap, under a time limit: the user may change the folder meanwhile.
+check_user_file() {
+  if [ -L "$1" ]; then refuse link; fi
+  [ -e "$1" ] || refuse changed
+  timeout 10 dd if="$1" of="$work/user-file" bs=$((max_bytes + 1)) count=1 iflag=nonblock,nofollow,fullblock 2> /dev/null || refuse unreadable
+  got=$(hash_of "$work/user-file") || refuse unreadable
+  [ "$got" = "$2" ] || refuse changed
+}
+
 # check_text <json> <sha256>: the candidate as the shell sends it (an argument holds no NUL)
 check_text() {
   [ ${#1} -le "$max_bytes" ] || refuse json
@@ -146,8 +176,6 @@ system_nixpkgs() {
 # root; refused unless it is the system the user built ($want_drv, $want_out), and built
 evaluate() {
   eval_entry=$1; eval_host=$2; eval_text=$3; eval_sha=$4
-  work=$(mktemp -d) || refuse write
-  mkdir -- "$work/candidate" "$work/home" || refuse write
   printf '%s' "$eval_text" > "$work/candidate/$prefix" || refuse write
   got=$(hash_of "$work/candidate/$prefix") || refuse write
   [ "$got" = "$eval_sha" ] || refuse hash
@@ -168,30 +196,71 @@ evaluate() {
       H2S_FLAKE="$flake" H2S_HOST="$eval_host" H2S_CANDIDATE="$work/candidate/$prefix" \
       "$bin/nix" eval --raw --impure --extra-experimental-features 'nix-command flakes' "$@" \
       --expr "$nixos_toplevel" > "$work/result" 2> "$work/log" < /dev/null; then
-    tail -n 40 -- "$work/log" >&2 || :
+    if [ "$op" = apply ]; then tail -n 40 -- "$work/log" >&2 || :; fi
     refuse evaluation
   fi
   read -r built_drv built_out < "$work/result" || refuse evaluation
   [ "$built_drv" = "$want_drv" ] && [ "$built_out" = "$want_out" ] || refuse changed
   if [ -L "$want_out" ] || [ ! -d "$want_out" ] || [ ! -f "$want_out/bin/switch-to-configuration" ] \
       || [ ! -x "$want_out/bin/switch-to-configuration" ]; then refuse notbuilt; fi
+  env -i PATH="$PATH" HOME="$work/home" LC_ALL=C "$bin/nix-store" --check-validity -- "$want_out" < /dev/null > /dev/null 2>&1 || refuse notbuilt
+  # Another activation running (nixos-rebuild's own uses the same unit)
+  if env -i PATH="$PATH" LC_ALL=C "$bin/systemctl" is-active --quiet -- "$unit.service" < /dev/null > /dev/null 2>&1; then refuse busy; fi
+}
+
+# start_work: root's private scratch folder ($work), removed at the end
+start_work() {
+  work=$(mktemp -d) || refuse write
+  mkdir -- "$work/candidate" "$work/home" || refuse write
+}
+
+# put_back <backup | ->: the old file back after the candidate was written and nothing was
+# activated; its line's words in $put_back ("<sha256 | absent> <backup made>", or "- -" when
+# nothing was written). Run apart, so that a refusal there does not end this run as if
+# nothing had been written: then `not-restored`, exit 6.
+put_back() {
+  put_back="- -"
+  [ "$1" != - ] || return 0
+  if ( trap clean_up EXIT; restore "$1" "$candidate_sha"; printf '%s %s\n' "$restored" "$backup_name" > "$work/put-back" ); then
+    read -r put_back < "$work/put-back" || put_back="unknown unknown"
+  else
+    say "not-restored $candidate_sha $1"
+    exit 6
+  fi
 }
 
 # activate <backup | ->: the profile set to the built system, then its switch; the last line
-activate() {
-  if ! env -i PATH="$PATH" HOME="$work/home" LC_ALL=C "$bin/nix-env" -p "$profile" --set "$want_out" < /dev/null >&2; then
-    [ "$1" != - ] || refuse profile
-    restore "$1" "$candidate_sha"
-    say "restored $restored $backup_name"
-    exit 1
-  fi
+# generation_of_profile: the generation the profile's link names, or "unknown"
+generation_of_profile() {
   link=$(readlink -- "$profile") || link=
   generation=${link#system-}; generation=${generation%-link}
   case "$generation" in ''|*[!0-9]*) generation=unknown;; esac
+}
+
+activate() {
+  generation_of_profile; before=$generation
+  if ! env -i PATH="$PATH" HOME="$work/home" LC_ALL=C "$bin/nix-env" -p "$profile" --set "$want_out" < /dev/null >&2; then
+    [ "$1" != - ] || refuse profile
+    put_back "$1"
+    say "restored $put_back"
+    exit 1
+  fi
+  generation_of_profile
+  # switch-to-configuration writes a mark when it starts: a failure without it is
+  # systemd-run's own (the unit not started), and nothing was activated
   code=0
   env -i PATH="$PATH" LC_ALL=C "$bin/systemd-run" --collect --no-ask-password --pipe --quiet \
-    --service-type=exec --unit=nixos-rebuild-switch-to-configuration --wait \
-    -- "$want_out/bin/switch-to-configuration" switch < /dev/null >&2 || code=$?
+    --service-type=exec --unit="$unit" --wait \
+    -- /bin/sh -c ': > "$1"; exec "$2" switch' sh "$work/started" "$want_out/bin/switch-to-configuration" < /dev/null >&2 || code=$?
+  if [ "$code" != 0 ] && [ ! -e "$work/started" ] && [ "$before" != unknown ]; then
+    # Nothing activated and the boot loader untouched: the generation before comes back, so
+    # the profile names the system in force, as before this run
+    if env -i PATH="$PATH" HOME="$work/home" LC_ALL=C "$bin/nix-env" -p "$profile" --switch-generation "$before" < /dev/null >&2; then
+      put_back "$1"
+      say "not-activated $before $put_back"
+      exit 5
+    fi
+  fi
   case "$code" in
   0) say "applied $generation $1";;
   4) say "applied-with-errors $generation $1"; exit 4;;
@@ -221,9 +290,10 @@ apply)
   is_store_path "$want_drv" drv && is_store_path "$want_out" out || refuse arguments
   check_entry "$2" "$3"
   take_folder "$1"; folder_safe
-  tool nix; tool nix-env; tool systemd-run
+  tool nix; tool nix-env; tool nix-store; tool systemctl; tool systemd-run
   prepare_backups; take_lock
   check_current "$target" "$current"
+  start_work
   evaluate "$2" "$3" "$json" "$candidate_sha"
   check_current "$target" "$current"
   new_file
@@ -239,9 +309,10 @@ switch)
   is_store_path "$want_drv" drv && is_store_path "$want_out" out || refuse arguments
   check_entry "$2" "$3"
   take_folder "$1"
-  tool nix; tool nix-env; tool systemd-run
+  tool nix; tool nix-env; tool nix-store; tool systemctl; tool systemd-run
   prepare_backups; take_lock
-  check_current "$target" "$candidate_sha"
+  start_work
+  check_user_file "$target" "$candidate_sha"
   evaluate "$2" "$3" "$json" "$candidate_sha"
   activate -;;
 restore)

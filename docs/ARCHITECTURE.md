@@ -204,6 +204,21 @@ rules' two files as `PamEditRules.build` makes them), the option's text for `cop
 sign-in rules' module options, `PamEditRules.optionsSnippet`).
 `tests/DistributionContractTest.qml` holds every integration to the same answers.
 
+On NixOS a setting the shell keeps in the system's configuration goes through the shell's
+settings file (`<configuration folder>/h2s-shell.json`) and a system the user built, and one
+root step applies it: `scripts/root/nixos-apply.sh`. Root never rebuilds. It evaluates the
+configuration with the candidate in place of the shell's file, as the user's build did, and
+goes on only when the drvPath and out path are the ones the user built (the configuration is
+unchanged since the build) and the out path is valid in the store. Then, where the
+configuration folder is root's all the way down, it writes the file (compare-and-swap, the
+old one kept under `/var/lib/h2s-shell/nixos-backup/`), sets the system profile to that out
+path and runs its `switch-to-configuration switch` under `systemd-run`, as `nixos-rebuild`
+does. In a folder of the user's it writes nothing (the user wrote the file) and only checks
+and switches. That evaluation runs the configuration's Nix code as root, impure: for a
+configuration of the user's the password authorizes running code any of the user's programs
+could have changed, as activating it does; its messages are not passed back to the shell
+there.
+
 #### NixOS
 
 `/etc/NIXOS` makes it `nixos`, whatever os-release says. `/etc` is generated: the integration

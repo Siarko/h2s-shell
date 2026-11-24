@@ -1,12 +1,25 @@
 #!/bin/sh
-# Stand-in for nix-env (NixosApplyScriptTest): records its words; unless ctl/nix-env.code
-# says otherwise, sets the profile (-p <profile> --set <path>) to a new generation's link.
+# Stand-in for nix-env (NixosApplyScriptTest): records its words. -p <profile> --set <path>:
+# unless ctl/nix-env.code says otherwise, the profile at a new generation's link (before
+# failing, it appends "x" to the file ctl/nix-env.touch names, when it names one: a file
+# changed meanwhile). -p <profile> --switch-generation <n>: the profile at system-<n>-link.
 base=${0%/run/current-system/sw/bin/nix-env}
 printf 'nix-env %s\n' "$*" >> "$base/log/calls"
-code=$(cat "$base/ctl/nix-env.code")
-[ "$code" = 0 ] || exit "$code"
-[ $# -eq 4 ] && [ "$1" = -p ] && [ "$3" = --set ] || exit 2
-count=$(ls -- "${2%/*}" | grep -c '^system-[0-9]*-link$')
-generation=$((count + 1))
-ln -s -- "$4" "$2-$generation-link"
-ln -sfn -- "system-$generation-link" "$2"
+[ $# -eq 4 ] && [ "$1" = -p ] || exit 2
+case "$3" in
+--switch-generation)
+  [ -L "$2-$4-link" ] || exit 1
+  ln -sfn -- "system-$4-link" "$2";;
+--set)
+  code=$(cat "$base/ctl/nix-env.code")
+  if [ "$code" != 0 ]; then
+    touched=$(cat "$base/ctl/nix-env.touch")
+    [ -z "$touched" ] || printf x >> "$base/$touched"
+    exit "$code"
+  fi
+  count=$(ls -- "${2%/*}" | grep -c '^system-[0-9]*-link$')
+  generation=$((count + 1))
+  ln -s -- "$4" "$2-$generation-link"
+  ln -sfn -- "system-$generation-link" "$2";;
+*) exit 2;;
+esac
