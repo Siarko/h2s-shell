@@ -26,7 +26,8 @@
 #     answers no name (with -n the commands printed, without it `qs kill --pid` run); with
 #     --main and --also, by list's own rule, in those trees: a plan an old tool started in a
 #     working tree (IPC name planning/<name>) marked open by list and closed by close, with
-#     and without the element named, by this tool;
+#     and without the element named, by this tool; one run from a working tree holding the
+#     main copy unchanged marked open too; a running mockup no tree lists closed by its name;
 #   - open, -n: through Hyprland's exec when Hyprland is there, else setsid; every address
 #     form (<element>, <kind>/<name>, <element>/<state>, <kind>/<name>/<state>, a part, with
 #     and without the word open) built into the right __exec; a state or scene about.txt does
@@ -534,6 +535,21 @@ check "$([ "$(grep '^qs kill' "$work/rule-close-all.out" | sed 's/ *$//' | sort 
     && has rule-close-all 'Would close plans/legacy' && has rule-close-all 'Would close components/alpha'; echo $?)" "close: every mockup list marks open in the trees given, none of a tree not given ($(out rule-close-all | paste -s -d ' '))"
 tool rule-close-none -- -n close panel "${over[@]}"
 check "$(has rule-close-none 'views/panel is not running' && ! has rule-close-none 'qs kill'; echo $?)" "close <element> not running in any tree: said, nothing killed"
+# A mockup run from a working tree that holds the main tree's copy unchanged (pin): listed
+# under the main tree's entry, open there too
+printf 'Instance hhhh:\n  Process ID: 4194308\n  Config path: %s\n' "$trees/pin/mockup.qml" >> "$work/list.txt"
+echo views/panel > "$work/name-4194308"
+tool rule-pin COLUMNS=60 -- list "${over[@]}"
+check "$(grep -q -E '^  panel     \* A panel view' "$work/rule-pin.out"; echo $?)" "list: a mockup run from a tree holding the main copy unchanged is open ($(grep -E '^  panel' "$work/rule-pin.out"))"
+tool rule-pin-close -- -n close panel "${over[@]}"
+check "$([ "$(grep '^qs kill' "$work/rule-pin-close.out" | sed 's/ *$//')" = "qs kill --pid 4194308" ]; echo $?)" "close <element>: the same instance ($(out rule-pin-close | paste -s -d ' '))"
+# A running mockup whose element no tree lists any more: close finds it by its name
+echo views/removed > "$work/name-4194308"
+tool rule-gone -- -n close removed "${over[@]}"
+check "$([ "$(grep '^qs kill' "$work/rule-gone.out" | sed 's/ *$//')" = "qs kill --pid 4194308" ] && has rule-gone 'Would close views/removed'; echo $?)" "close <element> of an element no tree lists, still running: found by its name ($(out rule-gone | paste -s -d ' '))"
+tool rule-gone-none -- -n close nothing-like-this "${over[@]}"
+check "$([ "${status[rule-gone-none]}" = 2 ] && ! has rule-gone-none 'qs kill'; echo $?)" "close <element> neither listed nor running: refused, nothing killed (status ${status[rule-gone-none]})"
+rm -f "$work/name-4194308"
 mv "$work/list.saved" "$work/list.txt"
 rm -f "$work/name-4194307"
 

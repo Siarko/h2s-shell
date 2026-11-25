@@ -394,26 +394,31 @@ add_tree() {
     done
 }
 
-# mark_open: el_open[i]=1 for each element open in one of its trees (mockups_running, asked
-# once of all of them)
+# given_trees: the trees list and close look in: --main's (else this one) and each --also's,
+# resolved, one per line
+given_trees() {
+    local entry
+    (cd "${main_tree:-$REPO}" && pwd -P)
+    for entry in "${also_trees[@]}"; do (cd "${entry%=*}" && pwd -P); done
+}
+
+# mark_open: el_open[i]=1 for each element open in any of the given trees (mockups_running,
+# asked once of all of them): the entry whose trees hold that tree, else, for a tree listed
+# under no copy of it (one holding the main copy unchanged), the element's first entry
 declare -A el_open=()
 mark_open() {
-    local -A known=() open=()
-    local i tree pid name t
-    for i in "${!el_key[@]}"; do
-        IFS='|' read -r -a trees_of <<< "${el_trees[i]}"
-        for tree in "${trees_of[@]}"; do known[$tree]=1; done
-    done
-    [ ${#known[@]} -gt 0 ] || return 0
+    local -a trees=()
+    local i pid tree name found
+    mapfile -t trees < <(given_trees)
     while IFS=$'\t' read -r pid tree name; do
-        open[$tree|$name]=1
-    done < <(mockups_running "${!known[@]}")
-    for i in "${!el_key[@]}"; do
-        IFS='|' read -r -a trees_of <<< "${el_trees[i]}"
-        for t in "${trees_of[@]}"; do
-            [ -n "${open[$t|${el_key[i]}]:-}" ] && el_open[$i]=1
+        found=""
+        for i in "${!el_key[@]}"; do
+            [ "${el_key[i]}" = "$name" ] || continue
+            [[ "|${el_trees[i]}|" == *"|$tree|"* ]] && { found=$i; break; }
         done
-    done
+        [ -n "$found" ] || found=${el_index[$name]:-}
+        [ -z "$found" ] || el_open[$found]=1
+    done < <(mockups_running "${trees[@]}")
     return 0
 }
 
@@ -839,21 +844,27 @@ across_trees() {
 # cmd_close [<element>]: by the rule list marks open by (mockups_running): in this tree, or
 # with --main or --also in each of those trees, whichever tree's tool started it
 cmd_close() {
-    local name verb entry i across=0
-    local -a lines=() pids=() trees=("$REPO")
+    local name verb i across=0
+    local -a lines=() pids=() trees=("$REPO") named=()
     verb=$([ "$dry" = 1 ] && echo "Would close" || echo Closed)
     if [ -n "$main_tree" ] || [ ${#also_trees[@]} -gt 0 ]; then
         across=1
-        trees=("$(cd "${main_tree:-$REPO}" && pwd -P)")
-        for entry in "${also_trees[@]}"; do trees+=("$(cd "${entry%=*}" && pwd -P)"); done
+        mapfile -t trees < <(given_trees)
     fi
     if [ $# -gt 0 ]; then
         element_only close "$1"
         if [ "$across" = 1 ] && [ "$address_element" != gallery ]; then
             [[ "$address_element" != planning/* ]] || { resolve "$address_element"; exit 2; }
             collect quiet
-            i=$(find_element "$address_element") || exit 2
-            name=${el_key[i]}
+            if i=$(find_element "$address_element" 2> /dev/null); then
+                name=${el_key[i]}
+            else
+                # No tree lists it any more, but it may still run: its whole name, or the
+                # name without its kind, among the running ones
+                mapfile -t named < <(running "${trees[@]}" | awk -v w="$address_element" '{ n = $2; sub(/^[^\/]*\//, "", n) } $2 == w || n == w { print $2 }' | sort -u)
+                [ ${#named[@]} -eq 1 ] || { find_element "$address_element" > /dev/null; exit 2; }
+                name=${named[0]}
+            fi
         else
             name=$(resolve_or_gallery "$address_element") || exit 2
         fi
