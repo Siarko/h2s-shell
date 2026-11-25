@@ -18,8 +18,9 @@
 #     pointer, tests/lock/input/ltinput.py) scrolls a component's, a plan's and the gallery's
 #     window by 48 px a notch, a plan's sideways by a horizontal wheel and by Shift, and a
 #     touchpad's stroke (its virtual two-finger swipe) by its pixels; and the shell's own:
-#     the event form's colour row (a fixture plan), sideways only by Shift or a sideways
-#     stroke, no plain WheelHandler in the tree but components/WheelScroll.qml;
+#     the event form's colour row (a fixture plan), sideways by a vertical or horizontal
+#     wheel or stroke and by Shift, no plain WheelHandler in the tree but
+#     components/WheelScroll.qml;
 #   - with state cells (the kit's StateGrid): shot in their grid, each cropped to its cell; on
 #     screen with no state named, every state's cell shown, none overlapping, labelled with its
 #     name and about.txt's description in order, a pointer state saying how to see it, no
@@ -639,19 +640,23 @@ while [ $SECONDS -lt $deadline ] && kill -0 "${pids[wheel-row]}" 2> /dev/null; d
 done
 if [ -n "$id" ]; then
     send_input "abs 1 1 2 2"
-    # A plain vertical wheel passes it by; Shift with it and a touchpad's sideways stroke move it
-    send_input "scroll vertical 3"
-    send_input "scroll vertical 3 shift"
-    send_input "swipe horizontal -40"
-    # The row scrolled, a condition polled; five seconds for a wheel that does nothing
-    row_deadline=$((SECONDS + 5))
-    while [ $SECONDS -lt $row_deadline ] && ! grep -q -E 'WHEEL-ROW 140$' "${logs[wheel-row]}"; do sleep 0.05; done
-    row_answer=$(grep -o -E 'WHEEL-ROW [0-9]+' "${logs[wheel-row]}" | paste -s -d ' ')
+    # Each in turn, its value waited for: a plain vertical wheel down 2, Shift with it up 1, a
+    # horizontal wheel right 1, a vertical stroke down 40 px, a sideways stroke back 40 px
+    for step in "scroll vertical 2|120" "scroll vertical -1 shift|60" "scroll horizontal 1|120" \
+        "swipe vertical 40|160" "swipe horizontal -40|120"; do
+        send_input "${step%|*}"
+        # The row's value reached, a condition polled; five seconds for a wheel that does nothing
+        row_deadline=$((SECONDS + 5))
+        while [ $SECONDS -lt $row_deadline ] \
+            && [ "$(grep -o -E 'WHEEL-ROW [0-9]+' "${logs[wheel-row]}" | tail -n 1)" != "WHEEL-ROW ${step#*|}" ]; do
+            sleep 0.05
+        done
+        row_answer+="${row_answer:+ }$(grep -o -E 'WHEEL-ROW [0-9]+' "${logs[wheel-row]}" | tail -n 1 | cut -d ' ' -f 2)"
+    done
 fi
 kill -TERM "${pids[wheel-row]}" 2> /dev/null
 finish_entry wheel-row
-# (the stroke's steps may come one by one or together: its last value is the check)
-check "$([ "${row_answer%% WHEEL-ROW *}" = "WHEEL-ROW 180" ] && [ "${row_answer##* }" = 140 ]; echo $?)" "three plain notches leave the swatches, three with Shift move them 180 px (60 a notch), a 40 px stroke back by 40 (was '$row_answer')"
+check "$([ "$row_answer" = "120 60 120 160 120" ]; echo $?)" "two plain notches down move the swatches 120 px (60 a notch), Shift and one up back 60, a horizontal notch on 60, a 40 px vertical stroke on 40, a sideways one back 40 (was '$row_answer')"
 check "$(! grep -q -E 'MOCKUP-ERROR|TypeError|ReferenceError' "${logs[wheel-row]}"; echo $?)" "no error"
 
 # point_at <id> <x,y>: the pointer moved to that place in the window, from where the probe

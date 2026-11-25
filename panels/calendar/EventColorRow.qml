@@ -36,8 +36,8 @@ Item {
         clip: true
         flickableDirection: Flickable.HorizontalFlick
 
-        // Sideways by a horizontal wheel or stroke, or by Shift with a vertical one; a plain
-        // vertical wheel or stroke goes on to what holds the form
+        // Sideways by any wheel or stroke over it: a vertical one (plain or with Shift) as
+        // well as a horizontal one, so the form does not scroll while the pointer is on the row
         function _scrollBy(dx) {
             contentX = Math.max(0, Math.min(contentWidth - width, contentX - dx));
         }
@@ -49,7 +49,6 @@ Item {
         }
         WheelScroll {
             target: null
-            acceptedModifiers: Qt.ShiftModifier
             notchPixels: 60
             onWheel: event => _colorFlickable._scrollBy(step(event))
         }
