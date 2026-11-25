@@ -26,8 +26,9 @@
 #     name and about.txt's description in order (a pointer state's too, with nothing added), no
 #     state current and no buttons, and at rest using next to no processor time (the
 #     fixture, and each component and view mockup); a pointer state's cell drawn in its
-#     look (pill's hover differs from idle) and kept so while the real pointer passes over
-#     it and over another cell;
+#     look (small-button's hover differs from rest), and a keyboard state's cell kept so
+#     while the real pointer, live over another cell, passes over its button and clicks it;
+#     settings-modal's focus-button cell ringed among all the states;
 #     H2S_MOCKUP_STATE one cell alone, labelled, current; a plan has no cells, its scene
 #     buttons each with its scene's description as tooltip;
 #   - a plan on a scene that holds a list open (plans/open-list), switched to another scene:
@@ -425,7 +426,9 @@ grab_state=enable-module grab_file=$work/modal-all-enable.png
 on_screen_cells modal-all-enable mockups views/settings-modal
 grab_state="" grab_file=""
 ringed=$("$LOCKTEST_MAGICK" compare -metric AE "$work/modal-all-focus.png" "$work/modal-all-enable.png" null: 2>&1 | cut -d ' ' -f 1)
-check "$([ -s "$work/modal-all-focus.png" ] && [ -n "$ringed" ] && [ "$ringed" != 0 ]; echo $?)" "settings-modal's focus-button cell: the same question as enable-module's, with the ring ($ringed pixels apart)"
+# The ring is a line round a button (some 50 pixels); the two cells otherwise differ by a
+# trace of anti-aliasing (well under one pixel's worth)
+check "$([ -s "$work/modal-all-focus.png" ] && awk -v n="${ringed:-0}" 'BEGIN { exit !(n > 10) }'; echo $?)" "settings-modal's focus-button cell: the same question as enable-module's, with the ring ($ringed pixels apart)"
 
 echo "on screen: the mockups in all their states"
 for entry in components/pill:4 components/small-button:8 components/status-pill:5 components/toggle-switch:5 views/nixos-page:16 views/settings-modal:10; do
@@ -775,48 +778,48 @@ pixels_apart() {
     "$LOCKTEST_MAGICK" compare -metric AE "$1" "$2" null: 2>&1 | cut -d ' ' -f 1
 }
 
-echo "on screen: a pointer state's cell drawn in its look among all the states, kept while the real pointer passes over the cells"
-start_entry frozen "$REPO/mockup.qml" H2S_MOCKUP=components/pill
+echo "on screen: pointer and keyboard states' cells drawn in their look among all the states, kept while the real pointer passes over and clicks"
+start_entry frozen "$REPO/mockup.qml" H2S_MOCKUP=components/small-button
 id="" deadline=$((SECONDS + 30))
-frozen_hover_idle="" frozen_live="" frozen_kept="" frozen_pressed=""
+frozen_hover_rest="" frozen_live="" frozen_hovered="" frozen_clicked=""
 while [ $SECONDS -lt $deadline ] && kill -0 "${pids[frozen]}" 2> /dev/null; do
     id=$(instance_of frozen)
-    [ -n "$id" ] && [ "$(ipc "$id" call mockup window)" = floating ] && [ -n "$(ipc "$id" call mockup centre hover)" ] && break
+    [ -n "$id" ] && [ "$(ipc "$id" call mockup window)" = floating ] && [ -n "$(ipc "$id" call mockup centre focus)" ] && break
     id=""
     # A condition polled (the window made, the cells placed), not a fixed wait
     sleep 0.05
 done
-if [ -n "$id" ] && grab_cell "$id" idle "$work/frozen-idle.png" && grab_cell "$id" hover "$work/frozen-hover.png"; then
-    frozen_hover_idle=$(pixels_apart "$work/frozen-idle.png" "$work/frozen-hover.png")
+if [ -n "$id" ] && grab_cell "$id" rest "$work/frozen-rest.png" && grab_cell "$id" hover "$work/frozen-hover.png" \
+    && grab_cell "$id" focus "$work/frozen-focus.png"; then
+    frozen_hover_rest=$(pixels_apart "$work/frozen-rest.png" "$work/frozen-hover.png")
     send_input "abs 1 1 2 2"
     send_input "move 1 1"
     pointer_deadline=$((SECONDS + 5))
     # The pointer seen in the window, a condition polled
     while [ $SECONDS -lt $pointer_deadline ] && [ -z "$(ipc "$id" call mockup pointer)" ]; do sleep 0.05; done
-    # Over the small pill of a cell: 26 px in from the cell's left edge (the row starts at
-    # 16), at its middle; the cells are 320 px wide
-    idle_at=$(ipc "$id" call mockup centre idle) hover_at=$(ipc "$id" call mockup centre hover)
-    small_of() { echo "$((${1%,*} - 160 + 26)),${1#*,}"; }
-    # The real pointer over idle's small pill lights it there (the pointer is live), and
-    # leaves the hover cell as it was
-    if point_at "$id" "$(small_of "$idle_at")" mockup && grab_cell "$id" idle "$work/frozen-idle-pointed.png" \
-        && grab_cell "$id" hover "$work/frozen-hover-1.png"; then
-        frozen_live=$(pixels_apart "$work/frozen-idle.png" "$work/frozen-idle-pointed.png")
-        frozen_kept=$(pixels_apart "$work/frozen-hover.png" "$work/frozen-hover-1.png")
+    # Over a cell's first button (normal): the column starts 12 px in, its first button 24 px
+    # tall; the cells are 140 x 272
+    first_of() { echo "$((${1%,*} - 70 + 30)),$((${1#*,} - 136 + 24))"; }
+    rest_at=$(ipc "$id" call mockup centre rest) focus_at=$(ipc "$id" call mockup centre focus)
+    # The real pointer over rest's first button lights it there: the pointer is live
+    if point_at "$id" "$(first_of "$rest_at")" mockup && grab_cell "$id" rest "$work/frozen-rest-pointed.png"; then
+        frozen_live=$(pixels_apart "$work/frozen-rest.png" "$work/frozen-rest-pointed.png")
     fi
-    # Over the hover cell's own small pill, pressed and released, then away again: nothing
-    # reaches its pills
-    if point_at "$id" "$(small_of "$hover_at")" mockup && send_input "click left" \
-        && point_at "$id" "$(small_of "$idle_at")" mockup && grab_cell "$id" hover "$work/frozen-hover-2.png"; then
-        frozen_pressed=$(pixels_apart "$work/frozen-hover.png" "$work/frozen-hover-2.png")
+    # Over the focus cell's first button, which the pointer would light, then a click on it:
+    # the cell takes neither
+    if point_at "$id" "$(first_of "$focus_at")" mockup && grab_cell "$id" focus "$work/frozen-focus-1.png"; then
+        frozen_hovered=$(pixels_apart "$work/frozen-focus.png" "$work/frozen-focus-1.png")
+        if send_input "click left" && grab_cell "$id" focus "$work/frozen-focus-2.png"; then
+            frozen_clicked=$(pixels_apart "$work/frozen-focus.png" "$work/frozen-focus-2.png")
+        fi
     fi
 fi
 kill -TERM "${pids[frozen]}" 2> /dev/null
 finish_entry frozen
-check "$([ -n "$frozen_hover_idle" ] && [ "$frozen_hover_idle" != 0 ]; echo $?)" "pill's hover cell drawn lit with no pointer there: $frozen_hover_idle pixels apart from idle's"
-check "$([ -n "$frozen_live" ] && [ "$frozen_live" != 0 ]; echo $?)" "the real pointer over idle's pill lights it: $frozen_live pixels changed there"
-check "$([ "$frozen_kept" = 0 ]; echo $?)" "the hover cell meanwhile the same ('$frozen_kept' pixels changed)"
-check "$([ "$frozen_pressed" = 0 ]; echo $?)" "the real pointer over the hover cell, a click there and the pointer gone: the cell the same ('$frozen_pressed' pixels changed)"
+check "$([ -n "$frozen_hover_rest" ] && [ "$frozen_hover_rest" != 0 ]; echo $?)" "small-button's hover cell drawn lit with no pointer there: $frozen_hover_rest pixels apart from rest's"
+check "$([ -n "$frozen_live" ] && [ "$frozen_live" != 0 ]; echo $?)" "the real pointer over rest's first button lights it: $frozen_live pixels changed there"
+check "$([ "$frozen_hovered" = 0 ]; echo $?)" "the real pointer over the focus cell's first button: the cell the same ('$frozen_hovered' pixels changed)"
+check "$([ "$frozen_clicked" = 0 ]; echo $?)" "and a click there: the cell the same ('$frozen_clicked' pixels changed)"
 check "$(! grep -q -E 'MOCKUP-ERROR|TypeError|ReferenceError|Binding loop' "${logs[frozen]}"; echo $?)" "no error"
 
 # Every wheel handler in the tree is the shell's WheelScroll, which takes a mouse wheel as

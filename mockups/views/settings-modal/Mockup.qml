@@ -85,20 +85,28 @@ MockupWindow {
             keys.keyClick(Qt.Key_Tab);
     }
 
-    // The first button shown inside `item` (in the order Tab takes them) drawn with the
-    // keyboard's ring (SmallButton.shownFocused)
-    function _ringFirst(item) {
-        for (const child of item.children) {
-            if (!child.visible)
-                continue;
-            if (child.shownFocused !== undefined && child.activeFocusOnTab) {
-                child.shownFocused = true;
-                return true;
+    // The control Tab gives the keyboard to from the modal's panel (where the keyboard is
+    // when it opens), as FocusTrap.cycle finds it: drawn with the keyboard's ring
+    // (SmallButton.shownFocused)
+    function _ringFirst(modal) {
+        const panel = Array.prototype.find.call(modal.children, child => child.toString().startsWith("QQuickFocusScope"));
+        const inside = item => {
+            for (let up = item; up; up = up.parent)
+                if (up === panel)
+                    return true;
+            return false;
+        };
+        let item = panel;
+        for (let step = 0; panel && step < 1000; step++) {
+            item = item.nextItemInFocusChain(true);
+            if (!item || item === panel)
+                return;
+            if (inside(item) && item.visible && item.enabled) {
+                if (item.shownFocused !== undefined)
+                    item.shownFocused = true;
+                return;
             }
-            if (_ringFirst(child))
-                return true;
         }
-        return false;
     }
 
     TestCase {
