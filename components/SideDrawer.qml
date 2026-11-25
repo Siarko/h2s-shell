@@ -59,13 +59,14 @@ Item {
         active: root.open && root.visible
     }
 
-    // A dropdown's list open over the panel (components/FloatingList.qml, which lives in the
-    // window's top item while open), anchored inside it
+    // A dropdown's list open and shown over the panel (components/FloatingList.qml, which
+    // lives in the window's top item), anchored inside it; one held open under a hidden
+    // anchor is not shown, and Escape is the panel's then
     function _openLists() {
         const top = Window.window?.contentItem ?? null;
         if (!top)
             return [];
-        return Array.from(top.children).filter(child => child.floatingList === true && child.open === true
+        return Array.from(top.children).filter(child => child.floatingList === true && child.open === true && child.visible
             && child.anchorItem && _isInside(child.anchorItem));
     }
 

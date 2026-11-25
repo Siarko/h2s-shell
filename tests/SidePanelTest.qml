@@ -102,6 +102,18 @@ TestCase {
                     spacing: 4
                     Component.onCompleted: suite.built++
                     Component.onDestruction: suite.destroyed++
+                    // A list held open under a hidden anchor: not shown, so Escape is
+                    // not taken by it
+                    Item {
+                        id: _heldAnchor
+                        visible: false
+                        implicitHeight: 0
+                        FloatingList {
+                            anchorItem: _heldAnchor
+                            open: true
+                            Text { text: "Held" }
+                        }
+                    }
                     Public.Dropdown {
                         objectName: "choice"
                         options: [{ value: "a", label: "A" }, { value: "b", label: "B" }]
@@ -300,7 +312,7 @@ TestCase {
         // --- Escape, a dropdown's list first ---
         assert(_openFirst(), "opened again");
         driver.keyClick(Qt.Key_Escape);
-        assertEqual(_lastReason(), "first:escape", "Escape: closed(\"escape\")");
+        assertEqual(_lastReason(), "first:escape", "Escape: closed(\"escape\"), a list held open under a hidden anchor passed by");
         assert(_until(_settled), "… slid out");
         assert(_openFirst(), "opened again");
         const choice = _find(drawer.contentItem, "choice");

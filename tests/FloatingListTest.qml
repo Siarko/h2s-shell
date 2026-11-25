@@ -6,9 +6,10 @@ import qs.singletons
 
 // components/FloatingList.qml and the Dropdown built on it, in a window: an open list and
 // its press catcher live in the window's top item, so they follow whether the anchor is
-// shown — a page hidden while its list is open (bound open, as a plan's scene holds a menu
-// open) leaves neither over the window, a press there reaches what is under it, and the
-// list is back when the page is shown again.
+// shown — a page hidden while its list is open leaves neither over the window, a press
+// there reaches what is under it; the hidden anchor tells the owner the list closed, so a
+// dropdown comes back closed, and a list held open by a binding (as a plan's scene holds a
+// menu open) is back when the page is shown again.
 TestCase {
     id: suite
     suiteName: "FloatingList"
@@ -99,21 +100,21 @@ TestCase {
 
         page.visible = false;
         assert(_until(() => below.visible), "the page hidden");
-        assert(!list.visible && !dropdownList().visible, "hidden: neither list is shown, both still open");
-        assertEqual(_catchers().filter(catcher => catcher.visible).length, 0, "… nor their press catchers");
+        assert(!list.visible && !dropdownList().visible, "hidden: neither list is shown");
+        assert(!dropdown.open, "… the dropdown's list closed (its anchor hid)");
+        assert(list.open, "… the list held open by its binding still open");
+        assertEqual(closes, 1, "… and told it closed");
+        assertEqual(_catchers().filter(catcher => catcher.visible).length, 0, "… no press catcher shown");
         driver.mouseClick(below, below.width / 2, below.height / 2);
         assertEqual(clicks, 1, "a press where the catchers were reaches the item under them");
-        assertEqual(closes, 0, "… and closes nothing");
+        assertEqual(closes, 1, "… and closes nothing");
 
         page.visible = true;
-        assert(_until(() => list.visible && dropdownList().visible), "the page shown again: its open lists are back");
-        assertEqual(_catchers().filter(catcher => catcher.visible).length, 2, "… with their press catchers");
-        // The dropdown's catcher lies over the held list's (made later): it takes the first
-        // press, the held list's the next
+        assert(_until(() => list.visible), "the page shown again: the held list is back");
+        assert(!dropdown.open && !dropdownList().visible, "… the dropdown's list is not");
+        assertEqual(_catchers().filter(catcher => catcher.visible).length, 1, "… one press catcher, the held list's");
         driver.mouseClick(anchor, 5, 5);
-        assert(!dropdown.open, "a press beside the lists still closes the top one, the dropdown's");
-        driver.mouseClick(anchor, 5, 5);
-        assertEqual(closes, 1, "… and the next one the held list");
+        assertEqual(closes, 2, "a press beside the held list closes it");
         finish();
     }
 }

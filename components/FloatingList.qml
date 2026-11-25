@@ -12,8 +12,9 @@ import qs.singletons
 // there is no room below (on neither side room for all of it: on the larger side, as tall
 // as fits). The anchor scrolled out of view (out of a clipping ancestor, or of the host)
 // closes it. Moved out from under the anchor, it no longer hides with it: it shows only
-// while the anchor is shown, so a page hidden with its list open (or a plan's scene that
-// holds one open) leaves neither the list nor its press catcher over the window. Taller
+// while the anchor and its window are shown, so a page hidden with its list open (or a
+// plan's scene that holds one open) leaves neither the list nor its press catcher over the
+// window — and the anchor hidden while open emits `closed`. Taller
 // than `maximumHeight`, it scrolls by itself; a wheel over it never reaches the page.
 //
 //   FloatingList { anchorItem: button; open: menuOpen; onClosed: menuOpen = false; … }
@@ -43,6 +44,8 @@ Rectangle {
     // anchor moved to another window from covering this one
     readonly property bool _anchorShown: anchorItem !== null && anchorItem.visible && _host !== null
         && anchorItem.Window.window === _host.Window.window
+    // Whether the anchor has been shown: the hidden one at the start (no window yet) closes nothing
+    property bool _anchorWasShown: false
     // The anchor inside the view of every clipping ancestor and of the host (_place)
     property bool _anchorInView: true
     // The room on the side it opens to, past which it scrolls (_place)
@@ -144,6 +147,15 @@ Rectangle {
     readonly property real _wanted: Math.min(_items.implicitHeight + 6, maximumHeight)
     on_WantedChanged: if (open) _place()
     Component.onCompleted: if (open) _rewatch()
+    // The anchor hidden while open (its page, its window): closed, so the owner's state says
+    // so and the list does not come back open with the page. A list held open by a binding
+    // stays open, and shows again with its anchor.
+    on_AnchorShownChanged: {
+        if (_anchorShown)
+            _anchorWasShown = true;
+        else if (open && _anchorWasShown)
+            closed();
+    }
     Component.onDestruction: _unwatch()
 
     Flickable {

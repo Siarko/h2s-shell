@@ -241,7 +241,8 @@ The interface modules are written against (`qs.api`), versioned on its own
   on the side with more room, when there is no room below. The wheel over a long list
   scrolls the list, never the page under it.
 - A dropdown or picker list left open on a page that was then hidden no longer stays over
-  the window taking every click; it is back when the page shows again.
+  the window taking every click, and is closed when the page shows again; Escape in a side
+  panel no longer counts such a hidden list before closing the panel.
 - "Lock before the computer sleeps": a sleep that began while the shell was starting or
   reloading, before it had read its settings, now locks the screen too.
 - A fast wheel turn of two notches or more over the Music widget skips a track per notch,

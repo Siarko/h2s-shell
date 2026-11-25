@@ -243,6 +243,15 @@ TestCase {
         plain.visible = true;
         driver.wait(50);
         assert(!plain.open && !_listOf(plain).visible, "shown again: still closed");
+        // The window hidden (the settings window hides rather than closing)
+        plain.open = true;
+        assert(_until(() => _listOf(plain)?.visible === true), "open again");
+        _window.visible = false;
+        assert(_until(() => !plain.open), "the window hidden: the list closed");
+        _window.visible = true;
+        const frames = driver.framesDrawn;
+        assert(_until(() => driver.framesDrawn > frames), "the window shown again");
+        assert(!plain.open && !_listOf(plain).visible, "… the list still closed");
     }
 
     // Groups and disabled entries
@@ -281,6 +290,7 @@ TestCase {
         assert(input.pointAt(page, 5, 5), "the virtual pointer answers");
         _attachment();
         _ownWheel();
+        _closeOnHide();
         finish();
     }
 }
