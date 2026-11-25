@@ -3,6 +3,8 @@
 # list them, open and close them on this machine's display, review a comparison's images and
 # approve them. The headless runs are tests/run-mockups.sh's.
 #
+#   tests/mockup.sh help                  the usage, commands and options (also -h, --help
+#                                         after any command)
 #   tests/mockup.sh [list] [<element>] [--main <tree>] [--also <tree>=<label>]...
 #                                         every element by kind (Components, Views, Plans):
 #                                         its description and its states or scenes, read from
@@ -13,27 +15,36 @@
 #                                         the elements, states and scenes whose names or
 #                                         descriptions contain every word, in any case (no
 #                                         match: status 1)
-#   tests/mockup.sh [-n] [open] <name> [--state <s> | --scene <s>] [--restart]
-#                                         start the mockup on the display (a component or view
-#                                         on a state, a plan on a scene); if it already runs,
-#                                         say so, or with --restart close it and start it again
-#   tests/mockup.sh [-n] close [<name>]   close that mockup (with no name: every running
+#   tests/mockup.sh [-n] [open] <element>[/<state or scene>] [--restart] [--theme <name>]
+#                                         start the mockup on the display: a component or view
+#                                         in all its states or on one, a plan on its first
+#                                         scene or on one; if it already runs, say so, or with
+#                                         --restart close it and start it again; --theme shows
+#                                         it in one of the user's theme files (or "default")
+#   tests/mockup.sh [-n] close [<element>] close that mockup (with none: every running
 #                                         mockup of this tree)
-#   tests/mockup.sh [-n] review <name>    compare it with its baseline (tests/run-mockups.sh
+#   tests/mockup.sh [-n] review <element> compare it with its baseline (tests/run-mockups.sh
 #                                         --compare), then show each differing state's old, new
 #                                         and diff images (not a plan: it has no baseline)
-#   tests/mockup.sh [-n] approve <name>   the reviewed run becomes the baseline
+#   tests/mockup.sh [-n] approve <element> the reviewed run becomes the baseline
 #                                         (tests/run-mockups.sh --approve; not a plan)
-#     <name>        <kind>/<name> (components, views, plans), or a unique part of one
-#                   (e.g. "pill"); planning/, the plans' old folder, is refused
+#     <element>     a name, <kind>/<name> (components, views, plans), or a unique part of a
+#                   name (e.g. "pill"); planning/, the plans' old folder, is refused;
+#                   <element>/<state> (also <kind>/<name>/<state>) names one state or scene
 #     -n            print the commands instead of running them (review still shows the images
 #                   of the last run there is)
-#     --main <tree> list, search: the elements of that shell tree instead of this one's
+#     --main <tree> list, search, open, close <element>, review, approve: that shell tree's
+#                   elements instead of this one's
 #     --also <tree>=<label>
 #                   list, search: also the elements found only in that tree (in neither the
 #                   main tree nor an earlier --also), marked [not merged: <label>]; a tree in
-#                   the old layout (mockups/planning/, no about.txt) is read as well
+#                   the old layout (mockups/planning/, no about.txt) is read as well;
+#                   open, close <element>, review, approve: the tree whose copy is taken — the
+#                   main tree's, unless exactly one --also tree holds a different copy (said
+#                   on a line), or the one --also tree holding an element the main tree lacks;
+#                   several: refused with their labels. Another tree's own tool then runs.
 #
+# Wrong commands and options print the usage line to standard error, status 2.
 # list and search wrap to the terminal's width (COLUMNS, else the terminal's, else 80), with
 # bold headings only on a terminal (and never with NO_COLOR); the commands they suggest name
 # H2S_MOCKUP_COMMAND (tests/mockup.sh by default; the metadata forwarder sets its own).
@@ -42,7 +53,8 @@
 # session's environment), else detached with setsid. Either way the command it starts is this
 # script again (__exec), which drops every H2S_* variable it inherited (the shell's own, such
 # as H2S_SHELL_MODULES, and a stray H2S_MOCKUP_SHOT), then runs
-#   H2S_MOCKUP=<kind>/<name> [H2S_MOCKUP_STATE=<s> | H2S_MOCKUP_SCENE=<s>] qs -p <tree>/mockup.qml
+#   H2S_MOCKUP=<kind>/<name> [H2S_MOCKUP_STATE=<s> | H2S_MOCKUP_SCENE=<s>] [H2S_MOCKUP_THEME=<t>]
+#       qs -p <tree>/mockup.qml
 #
 # A running mockup is an instance in `qs list --all` whose config path is this tree's
 # mockup.qml, and its name what `qs ipc --pid <pid> call mockup name` answers: close never
@@ -70,15 +82,16 @@ case "$base" in
 esac
 
 # ---- __exec: the command open starts (not for typing) ---------------------------------
-# __exec <base> <kind>/<name> [<state or scene>]: drop the inherited H2S_* variables, run the
-# entry
+# __exec <base> <kind>/<name> [<state or scene> [<theme>]]: drop the inherited H2S_*
+# variables, run the entry (an empty state or scene: none)
 if [ "${1:-}" = __exec ] || { [ "${1:-}" = -n ] && [ "${2:-}" = __exec ]; }; then
     dry=0
     [ "$1" = -n ] && { dry=1; shift; }
     shift
-    [ $# -ge 2 ] || { echo "mockup.sh: __exec <base> <kind>/<name> [<state or scene>]" >&2; exit 2; }
-    exec_base=$1 name=$2 first=${3:-}
+    [ $# -ge 2 ] && [ $# -le 4 ] || { echo "mockup.sh: __exec <base> <kind>/<name> [<state or scene> [<theme>]]" >&2; exit 2; }
+    exec_base=$1 name=$2 first=${3:-} theme=${4:-}
     [ -z "$first" ] || [[ "$first" =~ ^[A-Za-z0-9_-]+$ ]] || { echo "mockup.sh: __exec: state or scene '$first'" >&2; exit 2; }
+    [ -z "$theme" ] || [[ "$theme" =~ ^[[:alnum:]_.\ -]+$ ]] || { echo "mockup.sh: __exec: theme '$theme'" >&2; exit 2; }
     [[ "$exec_base" =~ ^(mockups|tests/fixtures/mockups)$ ]] || { echo "mockup.sh: __exec: base '$exec_base'" >&2; exit 2; }
     [[ "$name" =~ ^(components|views|plans)/[a-z0-9-]+$ ]] || { echo "mockup.sh: __exec: name '$name'" >&2; exit 2; }
     unset_args=()
@@ -90,51 +103,103 @@ if [ "${1:-}" = __exec ] || { [ "${1:-}" = -n ] && [ "${2:-}" = __exec ]; }; the
     if [ -n "$first" ]; then
         if [[ "$name" == plans/* ]]; then set_args+=(H2S_MOCKUP_SCENE="$first"); else set_args+=(H2S_MOCKUP_STATE="$first"); fi
     fi
+    [ -z "$theme" ] || set_args+=(H2S_MOCKUP_THEME="$theme")
     [ "$exec_base" = mockups ] || set_args+=(H2S_MOCKUP_BASE="$exec_base")
     command=(env "${unset_args[@]}" "${set_args[@]}" qs -p "$ENTRY")
     if [ "$dry" = 1 ]; then printf '%q ' "${command[@]}"; echo; exit 0; fi
     exec "${command[@]}"
 fi
 
+cmdname=${H2S_MOCKUP_COMMAND:-tests/mockup.sh}
+
+# help_text: the help, the same after every command (the forwarder adds its own lines)
+help_text() {
+    cat << EOF
+Usage: $cmdname <command> [<element>] [options]
+
+Opens the shell's mockups on this screen: components and views in all their
+states, plans with their scenes, and the gallery of every component and view.
+
+Commands:
+  list [<element>]        Every element by kind; with an element, each of its
+                          states or scenes with its description
+  search <text>...        The elements, states and scenes whose names or
+                          descriptions contain every word
+  open <element>          A component or view in all its states, a plan on its
+                          first scene
+  open <element>/<state>  One state of a component or view, or one scene of a
+                          plan (<plan>/<scene>)
+  open gallery            Every component and view in one scrollable window
+  close [<element>]       Close it; with none named, every open mockup
+  review <element>        Compare with the approved pictures, show what changed
+  approve <element>       Make the reviewed pictures the approved ones
+  help                    This help
+
+Elements:
+  pill, components/pill   a name, with its kind if two kinds share it, or a
+                          unique part of a name
+  pill/hover-s            one state of a component or view
+  distribution-nixos/building
+                          a plan, opened on that scene
+
+Options:
+  --restart               open: close it first if it is open
+  --theme <name>          open: show it in that theme (one of your theme files)
+  -n                      print the commands instead of running them
+  -h, --help              this help
+
+Examples:
+  $cmdname list
+  $cmdname search progress
+  $cmdname open pill
+  $cmdname open distribution-nixos/building
+  $cmdname close
+EOF
+}
+
+# usage [<message>]: the message, the usage line and where the help is, on standard error;
+# status 2
 usage() {
-    awk '/^#   tests\/mockup.sh/ { on = 1 } on && /^#$/ { exit } on' "$SELF" >&2
+    [ -z "${1:-}" ] || echo "mockup.sh: $1" >&2
+    echo "Usage: $cmdname <command> [<element>] [options]" >&2
+    echo "$cmdname -h for help" >&2
     exit 2
 }
 
 dry=0
 restart=0
-first=""
-first_option=""
+theme=""
 main_tree=""
 also_trees=()
 args=()
+# The arguments without --main and --also: what another tree's tool is handed
+pass_args=()
 while [ $# -gt 0 ]; do
     case "$1" in
-        -n | --dry-run) dry=1; shift ;;
-        --restart) restart=1; shift ;;
-        --state | --scene)
-            [ -z "$first_option" ] || { echo "mockup.sh: one of --state and --scene" >&2; exit 2; }
-            first_option=${1#--}
-            first=${2:-}
-            # The name goes into the command line Hyprland runs through a shell: letters,
-            # digits, "_" and "-" only, never a character a shell reads
-            [[ "$first" =~ ^[A-Za-z0-9_-]+$ ]] || { echo "mockup.sh: $1 needs a $first_option name of letters, digits, '_' and '-'" >&2; exit 2; }
+        -n | --dry-run) dry=1; pass_args+=("$1"); shift ;;
+        --restart) restart=1; pass_args+=("$1"); shift ;;
+        --theme)
+            theme=${2:-}
+            # The name goes into the command line Hyprland runs through a shell: never a
+            # character a shell reads
+            [[ "$theme" =~ ^[[:alnum:]_.\ -]+$ ]] || usage "--theme needs a theme's name (letters, digits, spaces, '.', '_' and '-')"
+            pass_args+=("$1" "$2")
             shift 2
             ;;
         --main)
             main_tree=${2:-}
-            [ -d "$main_tree" ] || { echo "mockup.sh: --main needs a shell tree's folder" >&2; exit 2; }
+            [ -d "$main_tree" ] || usage "--main needs a shell tree's folder"
             shift 2
             ;;
         --also)
             [[ "${2:-}" =~ ^(.+)=([A-Za-z0-9._-]+)$ ]] && [ -d "${BASH_REMATCH[1]}" ] \
-                || { echo "mockup.sh: --also needs <tree folder>=<label> (a label of letters, digits, '.', '_' and '-')" >&2; exit 2; }
+                || usage "--also needs <tree folder>=<label> (a label of letters, digits, '.', '_' and '-')"
             also_trees+=("$2")
             shift 2
             ;;
-        -h | --help) awk 'NR > 1 && /^set -uo/ { exit } NR > 1' "$SELF"; exit 0 ;;
-        -*) echo "mockup.sh: unknown option $1" >&2; usage ;;
-        *) args+=("$1"); shift ;;
+        -h | --help) help_text; exit 0 ;;
+        -*) usage "unknown option $1" ;;
+        *) args+=("$1"); pass_args+=("$1"); shift ;;
     esac
 done
 
@@ -207,7 +272,6 @@ pids_of() { running | awk -v n="$1" '$2 == n { print $1 }'; }
 # el_state_names[<i>,<j>] and el_state_descs[<i>,<j>] (el_state_names[<i>,count] of them)
 declare -a el_key=() el_desc=() el_note=() el_trees=() el_labels=()
 declare -A el_index=() el_state_names=() el_state_descs=()
-cmdname=${H2S_MOCKUP_COMMAND:-tests/mockup.sh}
 
 # old_description <folder>: an old-layout element's description, from MOCKUP.md's first
 # heading or the first sentence of Mockup.qml's first comment
@@ -313,7 +377,8 @@ mark_open() {
     return 0
 }
 
-# collect: every element, main tree and --also trees, sorted (el_order) by kind and name
+# collect [quiet]: every element, main tree and --also trees, sorted (el_order) by kind and
+# name; which are open asked unless quiet
 collect() {
     local entry
     list_main=$(cd "${main_tree:-$REPO}" && pwd -P)
@@ -326,7 +391,7 @@ collect() {
         case ${k%%/*} in components) r=1 ;; views) r=2 ;; *) r=3 ;; esac
         echo "$r ${k#*/} $i"
     done | sort -k1,1n -k2,2 | awk '{ print $3 }')
-    mark_open
+    [ "${1:-}" = quiet ] || mark_open
 }
 
 # Output: the width to wrap at, and bold and dim only on a terminal
@@ -472,7 +537,7 @@ find_element() {
 }
 
 cmd_list() {
-    local i j count w line pad word option
+    local i j count w line pad word address
     setup_output
     collect
     if [ $# -eq 0 ]; then
@@ -499,10 +564,15 @@ cmd_list() {
         printf -v line '  %-*s  ' "$w" "${el_state_names[$i,$j]}"
         wrap "$line" "$pad" "${el_state_descs[$i,$j]}"
     done
-    word=state option=--state
-    [[ "${el_key[i]}" == plans/* ]] && word=scene option=--scene
-    line="Open: $cmdname open ${el_key[i]}"
-    [ "$count" -gt 0 ] && line="$line   one $word: $cmdname open ${el_key[i]} $option ${el_state_names[$i,0]}"
+    word=state
+    [[ "${el_key[i]}" == plans/* ]] && word=scene
+    # Its address: the name alone, unless another kind has an element of that name
+    address=${el_key[i]#*/}
+    for j in "${el_order[@]}"; do
+        [ "$j" != "$i" ] && [ "${el_key[j]#*/}" = "$address" ] && address=${el_key[i]}
+    done
+    line="Open: $cmdname open $address"
+    [ "$count" -gt 0 ] && line="$line   one $word: $cmdname open $address/${el_state_names[$i,0]}"
     echo "$line"
 }
 
@@ -558,11 +628,100 @@ kill_pids() {
     done
 }
 
+# parse_address <address>: its element (address_element) and its state or scene
+# (address_first, or empty): <element>, <kind>/<name>, <element>/<state>, <kind>/<name>/<state>
+parse_address() {
+    local -a parts
+    address_element="" address_first=""
+    IFS=/ read -r -a parts <<< "$1"
+    [[ "$1" != */ ]] || usage "\"$1\": a state or scene name after the \"/\""
+    case ${#parts[@]} in
+        1) address_element=${parts[0]} ;;
+        2) if [[ "${parts[0]}" =~ ^(components|views|plans|planning)$ ]]; then address_element=$1
+           else address_element=${parts[0]} address_first=${parts[1]}
+           fi ;;
+        3) [[ "${parts[0]}" =~ ^(components|views|plans|planning)$ ]] \
+               || usage "\"$1\": <kind>/<name>/<state>, the kind components, views or plans"
+           address_element=${parts[0]}/${parts[1]} address_first=${parts[2]} ;;
+        *) usage "\"$1\": <element>, <element>/<state> or <kind>/<name>/<state>" ;;
+    esac
+    [ -n "$address_element" ] || usage "\"$1\": no element named"
+    # The name goes into the command line Hyprland runs through a shell: letters, digits, "_"
+    # and "-" only, never a character a shell reads
+    [ -z "$address_first" ] || [[ "$address_first" =~ ^[A-Za-z0-9_-]+$ ]] \
+        || usage "\"$address_first\": a state or scene name is letters, digits, '_' and '-'"
+}
+
+# element_only <command> <address>: the element it names (address_element); a state is refused
+element_only() {
+    parse_address "$2"
+    [ -z "$address_first" ] || usage "$1 takes an element, not one of its states or scenes ($2)"
+}
+
+# ---- the tree whose copy is taken (--main, --also) -----------------------------------
+# folder_in <tree> <kind>/<name>: the element's folder in that tree (a plan also under the
+# old planning/), or nothing
+folder_in() {
+    local folder=$1/$base/$2
+    [ -f "$folder/Mockup.qml" ] && { echo "$folder"; return 0; }
+    folder=$1/$base/planning/${2#plans/}
+    [[ "$2" == plans/* ]] && [ -f "$folder/Mockup.qml" ] && echo "$folder"
+    return 0
+}
+
+# choose_tree <kind>/<name>: the tree whose copy is taken: the main tree's, unless exactly one
+# --also tree holds a different copy; an element the main tree lacks, the one --also tree
+# holding it. Prints "<tree>\t<label>" (no label: the main tree); several trees: refused
+choose_tree() {
+    local key=$1 main_folder folder entry tree label
+    local -a found=()
+    main_folder=$(folder_in "$list_main" "$key")
+    for entry in "${also_trees[@]}"; do
+        tree=$(cd "${entry%=*}" && pwd -P)
+        [ "$tree" = "$list_main" ] && continue
+        folder=$(folder_in "$tree" "$key")
+        [ -n "$folder" ] || continue
+        [ -n "$main_folder" ] && diff -r -q "$main_folder" "$folder" > /dev/null 2>&1 && continue
+        found+=("$tree"$'\t'"${entry##*=}")
+    done
+    if [ ${#found[@]} -eq 0 ]; then
+        printf '%s\t\n' "$list_main"
+    elif [ ${#found[@]} -eq 1 ]; then
+        echo "${found[0]}"
+    else
+        if [ -n "$main_folder" ]; then
+            echo "mockup.sh: $key differs from the main tree's in several working trees; choose one with --tree:" >&2
+        else
+            echo "mockup.sh: $key is in several working trees; choose one with --tree:" >&2
+        fi
+        for entry in "${found[@]}"; do echo "  ${entry#*$'\t'}" >&2; done
+        exit 2
+    fi
+}
+
+# across_trees <command> <element>: with --main or --also, the tree whose copy of the element is taken;
+# another tree's own tool then runs on the same arguments (without --main and --also)
+across_trees() {
+    local i chosen tree label verb=Using
+    [ -n "$main_tree" ] || [ ${#also_trees[@]} -gt 0 ] || return 0
+    [ "$1" = open ] && verb=Opening
+    collect quiet
+    i=$(find_element "$2") || exit 2
+    chosen=$(choose_tree "${el_key[i]}") || exit 2
+    tree=${chosen%%$'\t'*}
+    label=${chosen#*$'\t'}
+    [ -z "$label" ] || echo "$verb the working copy from $label (not merged)"
+    [ "$tree" = "$REPO" ] && return 0
+    [ -x "$tree/tests/mockup.sh" ] || { echo "mockup.sh: no tests/mockup.sh in $tree" >&2; exit 2; }
+    exec "$tree/tests/mockup.sh" "${pass_args[@]}"
+}
+
 cmd_close() {
     local name verb lines pids
     verb=$([ "$dry" = 1 ] && echo "Would close" || echo Closed)
     if [ $# -gt 0 ]; then
-        name=$(resolve "$1") || exit 2
+        element_only close "$1"
+        name=$(resolve "$address_element") || exit 2
         mapfile -t pids < <(pids_of "$name")
         [ ${#pids[@]} -gt 0 ] || { echo "$name is not running"; return; }
         kill_pids "${pids[@]}"
@@ -576,15 +735,41 @@ cmd_close() {
     fi
 }
 
+# theme_check <name>: "default" or one of the user's theme files, else the list of them
+theme_check() {
+    local folder=${XDG_CONFIG_HOME:-${HOME:?}/.config}/h2s_shell/themes file
+    local -a names=(default)
+    [ "$1" = default ] || [ -f "$folder/$1.json" ] && return 0
+    for file in "$folder"/*.json; do
+        [ -f "$file" ] || continue
+        file=${file##*/}
+        [ "$file" = default.json ] || names+=("${file%.json}")
+    done
+    echo "mockup.sh: no theme \"$1\" in $folder; the themes: $(IFS=,; echo "${names[*]}" | sed 's/,/, /g')" >&2
+    exit 2
+}
+
 cmd_open() {
-    local name pids i command
-    name=$(resolve "$1") || exit 2
-    # A plan has scenes, a component or a view states: the other option is a mistake
-    if [[ "$name" == plans/* ]] && [ "$first_option" = state ]; then
-        echo "mockup.sh: $name is a plan: it has scenes (--scene), not states" >&2; exit 2
-    elif [[ "$name" != plans/* ]] && [ "$first_option" = scene ]; then
-        echo "mockup.sh: $name is a ${name%%s/*}: it has states (--state), not scenes" >&2; exit 2
+    local name pids i command first word
+    parse_address "$1"
+    if [ "$address_element" = gallery ] && [ -z "$address_first" ] && [ ! -f "$REPO/mockups/kit/Gallery.qml" ]; then
+        echo "mockup.sh: this tree has no gallery yet (mockups/kit/Gallery.qml)" >&2
+        exit 2
     fi
+    name=$(resolve "$address_element") || exit 2
+    first=$address_first
+    # The state or scene must be one about.txt declares (a broken about.txt: the entry says)
+    word=state
+    [[ "$name" == plans/* ]] && word=scene
+    if [ -n "$first" ] && about_read "$REPO/$base/$name" "$word"; then
+        local known=0 n
+        for n in "${about_names[@]}"; do [ "$n" = "$first" ] && known=1; done
+        if [ "$known" = 0 ]; then
+            echo "mockup.sh: $name has no $word \"$first\"; its ${word}s: $(IFS=,; echo "${about_names[*]}" | sed 's/,/, /g')" >&2
+            exit 2
+        fi
+    fi
+    [ -z "$theme" ] || theme_check "$theme"
     [[ "$SELF" != *[\"\'\\]* ]] || { echo "mockup.sh: cannot start from a path with quotes or '\\': $SELF" >&2; exit 2; }
     mapfile -t pids < <(pids_of "$name")
     if [ ${#pids[@]} -gt 0 ]; then
@@ -594,14 +779,20 @@ cmd_open() {
         fi
         kill_pids "${pids[@]}"
     fi
+    local -a extra=()
+    if [ -n "$theme" ]; then extra=("$first" "$theme")
+    elif [ -n "$first" ]; then extra=("$first")
+    fi
     if [ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ] && command -v hyprctl > /dev/null; then
         command="'$SELF' '__exec' '$base' '$name'"
-        [ -z "$first" ] || command="$command '$first'"
+        for i in "${extra[@]}"; do command="$command '$i'"; done
         run hyprctl dispatch "hl.dsp.exec_cmd(\"$command\")"
     elif [ "$dry" = 1 ]; then
-        printf 'setsid -f %q __exec %q %q%s >/dev/null 2>&1 </dev/null\n' "$SELF" "$base" "$name" "${first:+ $first}"
+        printf 'setsid -f %q __exec %q %q' "$SELF" "$base" "$name"
+        for i in "${extra[@]}"; do printf ' %q' "$i"; done
+        printf ' >/dev/null 2>&1 </dev/null\n'
     else
-        setsid -f "$SELF" __exec "$base" "$name" ${first:+"$first"} > /dev/null 2>&1 < /dev/null
+        setsid -f "$SELF" __exec "$base" "$name" "${extra[@]}" > /dev/null 2>&1 < /dev/null
     fi
     [ "$dry" = 1 ] && return
     for i in $(seq 50); do
@@ -704,24 +895,44 @@ cmd_review() {
     done
 }
 
-if [ -n "$main_tree" ] || [ ${#also_trees[@]} -gt 0 ]; then
-    case "${args[0]:-list}" in
-        list | search) ;;
-        *) echo "mockup.sh: --main and --also are for list and search" >&2; exit 2 ;;
-    esac
+command=${args[0]:-list}
+shorthand=0
+case "$command" in
+    list | search | help | open | close | review | approve) ;;
+    # A first word that is no command: the shorthand for open, if it names an element
+    *) command=open; args=(open "${args[@]}"); shorthand=1 ;;
+esac
+[ -z "$theme" ] || [ "$command" = open ] || usage "--theme is for open"
+# The tree whose copy is taken: for a named element, in each tree's own tool
+if [[ "$command" =~ ^(open|close|review|approve)$ ]] && [ ${#args[@]} -ge 2 ]; then
+    if [ "$command" = open ]; then parse_address "${args[1]}"; else element_only "$command" "${args[1]}"; fi
+    # A first word that is neither a command nor part of any element's name
+    if [ "$shorthand" = 1 ] && [ "$address_element" != gallery ]; then
+        if [ -n "$main_tree" ] || [ ${#also_trees[@]} -gt 0 ]; then
+            collect quiet
+            keys=$(printf '%s\n' "${el_key[@]}")
+        else
+            keys=$(all_names)
+        fi
+        [[ "$keys" == *"${address_element#planning/}"* ]] || usage "\"${args[1]}\" is neither a command nor an element"
+    fi
+    [ "$address_element" = gallery ] || across_trees "$command" "$address_element"
+    main_tree="" also_trees=()
 fi
 
-case "${args[0]:-list}" in
-    list) [ ${#args[@]} -le 2 ] || usage; cmd_list "${args[@]:1}" ;;
+case "$command" in
+    help) [ ${#args[@]} -eq 1 ] || usage "help takes nothing more"; help_text ;;
+    list) [ ${#args[@]} -le 2 ] || usage "list takes one element at most"; cmd_list "${args[@]:1}" ;;
     search) cmd_search "${args[@]:1}" ;;
-    close) [ ${#args[@]} -le 2 ] || usage; cmd_close "${args[@]:1}" ;;
-    open) [ ${#args[@]} -eq 2 ] || { echo "mockup.sh: open needs one name" >&2; exit 2; }
+    close) [ ${#args[@]} -le 2 ] || usage "close takes one element at most"
+        [ -z "$main_tree" ] || [ ${#args[@]} -eq 2 ] || usage "--main and --also are for list, search and a named element"
+        cmd_close "${args[@]:1}" ;;
+    open) [ ${#args[@]} -eq 2 ] || usage "open takes one element"
         cmd_open "${args[1]}" ;;
-    review) [ ${#args[@]} -eq 2 ] || { echo "mockup.sh: review needs one name" >&2; exit 2; }
-        cmd_review "${args[1]}" ;;
-    approve) [ ${#args[@]} -eq 2 ] || { echo "mockup.sh: approve needs one name" >&2; exit 2; }
-        name=$(resolve "${args[1]}") || exit 2
+    review) [ ${#args[@]} -eq 2 ] || usage "review takes one element"
+        cmd_review "$address_element" ;;
+    approve) [ ${#args[@]} -eq 2 ] || usage "approve takes one element"
+        name=$(resolve "$address_element") || exit 2
         no_baseline_for_plan "$name" approve
         run "$REPO/tests/run-mockups.sh" --approve "$name" ;;
-    *) [ ${#args[@]} -eq 1 ] || usage; cmd_open "${args[0]}" ;;
 esac

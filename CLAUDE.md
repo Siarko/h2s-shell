@@ -227,7 +227,8 @@ baselines. A baseline changes only in the commit of the code change that causes 
 maintainer approved the review images. On a screen, `tests/mockup.sh` lists (by kind, each
 element with its states or scenes, from `about.txt`), searches, opens, closes,
 reviews (the images inline in a kitty terminal, else their paths) and approves them (`-n`
-prints the commands).
+prints the commands, `help` the commands and options); `open <element>/<state>` opens one
+state or scene, `--theme <name>` in one of the user's theme files.
 
 Mockup code:
 

@@ -20,10 +20,22 @@
 #   - close picks only instances whose config is this tree's mockup.qml, by the name each
 #     answers over IPC: never another tree's mockup, never the shell, never an instance that
 #     answers no name (with -n the commands printed, without it `qs kill --pid` run);
-#   - open, -n: through Hyprland's exec when Hyprland is there, else setsid; a state name
-#     a shell would read (; & | $( ) `) refused before any command is built; an instance
-#     already running is said, --restart closes it first; --scene on a component and
-#     --state on a plan refused; a name under planning/ (the plans' old folder) refused;
+#   - open, -n: through Hyprland's exec when Hyprland is there, else setsid; every address
+#     form (<element>, <kind>/<name>, <element>/<state>, <kind>/<name>/<state>, a part, with
+#     and without the word open) built into the right __exec; a state or scene about.txt does
+#     not declare, a malformed address and a state name a shell would read (; & | $( ) `)
+#     refused before any command is built; an instance already running is said, --restart
+#     closes it first; a name under planning/ (the plans' old folder) refused;
+#   - --theme: passed to the entry as H2S_MOCKUP_THEME (with or without a state, a name with
+#     a space), "default" with no file, an unknown theme refused with the list of the theme
+#     files, a quote refused, refused for other commands;
+#   - help: the exact text at COLUMNS=80, no line over 80 columns, the same for -h and --help
+#     after every command, the command named by H2S_MOCKUP_COMMAND; wrong commands, options and
+#     argument counts: the message and the usage line on standard error only, status 2;
+#   - the tree whose copy is taken (--main, --also, on fixture trees with stand-in tools): the
+#     main tree's, one working tree's different copy (said), an element only in one working
+#     tree (said, an old-layout one too), several: refused with their labels; that tree's tool
+#     runs with the same arguments less --main and --also;
 #   - open, run: the entry starts with every inherited H2S_* variable dropped (the shell's
 #     H2S_SHELL_MODULES, a stray H2S_MOCKUP_SHOT), H2S_MOCKUP and H2S_MOCKUP_STATE (a plan:
 #     H2S_MOCKUP_SCENE) set, the rest of the environment kept;
@@ -51,7 +63,7 @@ check() {
 # PATH: the stand-ins, then links to the system tools the screen tool uses (no qs, hyprctl,
 # kitten or kitty among them)
 mkdir -p "$work/fake" "$work/tools"
-for tool in bash env sed grep awk readlink dirname cut tr sort seq sleep sha256sum setsid stty cat; do
+for tool in bash env sed grep awk readlink dirname cut tr sort seq sleep sha256sum setsid stty cat diff; do
     found=$(command -v "$tool") || { echo "mockup-selftest.sh: needs $tool" >&2; exit 2; }
     ln -s "$found" "$work/tools/$tool"
 done
@@ -206,11 +218,11 @@ cat > "$work/one.expected" << EXPECTED
 Component alpha (open) — The first component
   rest   The alpha at rest
   hover  The pointer over alpha
-Open: tools/mockup.sh open components/alpha   one state: tools/mockup.sh open components/alpha --state rest
+Open: tools/mockup.sh open alpha   one state: tools/mockup.sh open alpha/rest
 EXPECTED
 check "$(diff "$work/one.expected" "$work/one.out" > "$work/one.diff"; echo $?)" "list <element>: each state with its description, the command named by H2S_MOCKUP_COMMAND $(cat "$work/one.diff")"
 tool one-fresh COLUMNS=60 -- list fresh "${over[@]}"
-check "$(has one-fresh 'Plan fresh — A plan only in a working tree' && has one-fresh '[not merged: side]' && has one-fresh '  start  The start' && has one-fresh '--scene start'; echo $?)" "list <plan> not merged: its note and scenes, --scene"
+check "$(has one-fresh 'Plan fresh — A plan only in a working tree' && has one-fresh '[not merged: side]' && has one-fresh '  start  The start' && has one-fresh 'open fresh/start'; echo $?)" "list <plan> not merged: its note and scenes, --scene"
 tool one-several -- list a "${over[@]}"
 check "$([ "${status[one-several]}" = 2 ] && has one-several 'matches several elements'; echo $?)" "list <part> matching several: refused (status ${status[one-several]})"
 tool search COLUMNS=60 -- search HOVER "${over[@]}"
@@ -232,8 +244,6 @@ tool search-mixed COLUMNS=60 -- search panel only "${over[@]}"
 check "$(has search-mixed '  panel ' && has search-mixed '  only  The panel' && ! has search-mixed 'states:'; echo $?)" "search: a word in the name, another in a state: that state shown"
 tool search-none -- search nothing-like-this "${over[@]}"
 check "$([ "${status[search-none]}" = 1 ] && [ "$(out search-none)" = 'Nothing matches "nothing-like-this" (tests/mockup.sh list shows everything)' ]; echo $?)" "search with no match: said, status 1 (status ${status[search-none]})"
-tool also-open -- -n open alpha --also "$trees/side=side"
-check "$([ "${status[also-open]}" = 2 ] && has also-open '--main and --also are for list and search'; echo $?)" "--also with open: refused"
 tool also-bad -- list --also "$trees/side"
 check "$([ "${status[also-bad]}" = 2 ] && has also-bad 'needs <tree folder>=<label>'; echo $?)" "--also without a label: refused"
 
@@ -302,40 +312,187 @@ tool close-none -- close components/clock
 check "$(has close-none 'components/clock is not running' && ! log_of close-none qs | grep -q '^qs kill'; echo $?)" "close of a mockup not running kills nothing"
 
 echo "open"
-tool open-hypr HYPRLAND_INSTANCE_SIGNATURE=test -- -n open clock --state ticking
-dispatch=$(printf '%q' "hl.dsp.exec_cmd(\"'$TOOL' '__exec' 'tests/fixtures/mockups' 'components/clock' 'ticking'\")")
+tool open-hypr HYPRLAND_INSTANCE_SIGNATURE=test -- -n open clock/first
+dispatch=$(printf '%q' "hl.dsp.exec_cmd(\"'$TOOL' '__exec' 'tests/fixtures/mockups' 'components/clock' 'first'\")")
 check "$(has open-hypr "hyprctl dispatch $dispatch" && [ ! -s "$work/state-open-hypr/hyprctl.log" ]; echo $?)" "-n under Hyprland: the exec dispatch printed, of this tool's __exec with the state, nothing run"
 tool open-setsid -- -n open components/clock
-check "$(has open-setsid "setsid -f $TOOL __exec tests/fixtures/mockups components/clock"; echo $?)" "-n without Hyprland: setsid printed"
+check "$(has open-setsid "setsid -f $TOOL __exec tests/fixtures/mockups components/clock >" ; echo $?)" "-n without Hyprland: setsid printed"
+# Every address form: <address>|the __exec arguments expected after the base
+for entry in \
+    "clock|components/clock" \
+    "components/clock|components/clock" \
+    "clock/first|components/clock first" \
+    "components/clock/first|components/clock first" \
+    "cloc/first|components/clock first" \
+    "tall|plans/tall" \
+    "plans/tall|plans/tall" \
+    "tall/second|plans/tall second" \
+    "plans/tall/second|plans/tall second"; do
+    IFS='|' read -r address expected <<< "$entry"
+    tool open-address -- -n open "$address"
+    check "$([ "${status[open-address]}" = 0 ] && has open-address "setsid -f $TOOL __exec tests/fixtures/mockups $expected >"; echo $?)" "open $address: __exec $expected"
+    tool open-address-short -- -n "$address"
+    check "$(has open-address-short "setsid -f $TOOL __exec tests/fixtures/mockups $expected >"; echo $?)" "$address with no command: the same as open"
+done
+tool open-unknown-state -- -n open clock/nope
+check "$([ "${status[open-unknown-state]}" = 2 ] && has open-unknown-state 'components/clock has no state "nope"; its states: first' && ! has open-unknown-state setsid; echo $?)" "a state about.txt does not declare: refused with the states (status ${status[open-unknown-state]})"
+tool open-unknown-scene -- -n open tall/fourth
+check "$([ "${status[open-unknown-scene]}" = 2 ] && has open-unknown-scene 'plans/tall has no scene "fourth"; its scenes: first, second, third'; echo $?)" "a scene about.txt does not declare: refused with the scenes"
+for bad in 'clock/' 'a/b/c' 'components/clock/first/more' '/first'; do
+    tool open-bad-address -- -n open "$bad"
+    check "$([ "${status[open-bad-address]}" = 2 ] && has open-bad-address "Usage: tests/mockup.sh" && ! has open-bad-address setsid; echo $?)" "address $bad: refused with the usage (status ${status[open-bad-address]})"
+done
 tool open-running HYPRLAND_INSTANCE_SIGNATURE=test -- -n open good
 check "$(has open-running 'components/good is already running (pid 4194301)' && ! has open-running hyprctl; echo $?)" "a running mockup: said, not started again"
 tool open-restart HYPRLAND_INSTANCE_SIGNATURE=test -- -n open good --restart
 check "$(has open-restart 'qs kill --pid 4194301' && has open-restart 'hyprctl dispatch'; echo $?)" "--restart: closed, then started"
-tool open-badstate -- -n open clock --state 'a b'
+tool open-badstate -- -n open 'clock/a b'
 check "$([ "${status[open-badstate]}" = 2 ]; echo $?)" "a state with whitespace is refused (status ${status[open-badstate]})"
-tool open-scene-of-component HYPRLAND_INSTANCE_SIGNATURE=test -- -n open clock --scene ticking
-check "$([ "${status[open-scene-of-component]}" = 2 ] && has open-scene-of-component 'it has states (--state), not scenes' && ! has open-scene-of-component hyprctl; echo $?)" "--scene on a component is refused (status ${status[open-scene-of-component]})"
-tool open-state-of-plan HYPRLAND_INSTANCE_SIGNATURE=test -- -n open plans/tall --state second
-check "$([ "${status[open-state-of-plan]}" = 2 ] && has open-state-of-plan 'is a plan: it has scenes (--scene)' && ! has open-state-of-plan hyprctl; echo $?)" "--state on a plan is refused (status ${status[open-state-of-plan]})"
-tool open-both -- -n open clock --state ticking --scene ticking
-check "$([ "${status[open-both]}" = 2 ] && has open-both 'one of --state and --scene'; echo $?)" "--state and --scene together are refused (status ${status[open-both]})"
+tool open-state-option -- -n open clock --state first
+check "$([ "${status[open-state-option]}" = 2 ] && has open-state-option 'unknown option --state'; echo $?)" "--state is no option (the address names the state)"
 tool open-planning -- -n open planning/idea
 check "$([ "${status[open-planning]}" = 2 ] && has open-planning 'mockups/planning/ is now mockups/plans/' && has open-planning 'plans/idea'; echo $?)" "a name under planning/ is refused with the move to make (status ${status[open-planning]})"
 for hostile in 'x;id' 'x&&id' 'x|id' '$(id)' 'x`id`'; do
-    tool open-hostile HYPRLAND_INSTANCE_SIGNATURE=test -- -n open clock --state "$hostile"
+    tool open-hostile HYPRLAND_INSTANCE_SIGNATURE=test -- -n open "clock/$hostile"
     check "$([ "${status[open-hostile]}" = 2 ] && ! has open-hostile hyprctl && ! has open-hostile setsid; echo $?)" "a state a shell would read ($hostile) is refused before any command is built (status ${status[open-hostile]})"
 done
-tool open-run H2S_SHELL_MODULES=/modules H2S_SHELL_HELPER=/helper H2S_MOCKUP_SHOT=1 KEPT=yes -- open components/clock --state ticking
+tool open-gallery -- -n open gallery
+check "$([ "${status[open-gallery]}" = 2 ] && has open-gallery 'no gallery yet' || has open-gallery 'gallery'; echo $?)" "open gallery: opened, or the tree's lack of one said"
+tool open-run H2S_SHELL_MODULES=/modules H2S_SHELL_HELPER=/helper H2S_MOCKUP_SHOT=1 KEPT=yes -- open components/clock/first
 envs=$work/state-open-run/env.txt
-check "$([ -f "$envs" ] && grep -q -x 'H2S_MOCKUP=components/clock' "$envs" && grep -q -x 'H2S_MOCKUP_STATE=ticking' "$envs" \
+check "$([ -f "$envs" ] && grep -q -x 'H2S_MOCKUP=components/clock' "$envs" && grep -q -x 'H2S_MOCKUP_STATE=first' "$envs" \
     && ! grep -q '^H2S_MOCKUP_SCENE=' "$envs" \
     && grep -q -x 'H2S_MOCKUP_BASE=tests/fixtures/mockups' "$envs" && grep -q -x 'KEPT=yes' "$envs"; echo $?)" "open: the entry gets H2S_MOCKUP, the state (H2S_MOCKUP_STATE) and the base, the rest of the environment kept"
-tool open-plan -- open plans/tall --scene second
+tool open-plan -- open tall/second
 envs=$work/state-open-plan/env.txt
 check "$([ -f "$envs" ] && grep -q -x 'H2S_MOCKUP=plans/tall' "$envs" && grep -q -x 'H2S_MOCKUP_SCENE=second' "$envs" \
     && ! grep -q '^H2S_MOCKUP_STATE=' "$envs"; echo $?)" "open of a plan: the scene goes as H2S_MOCKUP_SCENE"
 check "$([ -f "$envs" ] && ! grep -q -E '^(H2S_SHELL_MODULES|H2S_SHELL_HELPER|H2S_MOCKUP_SHOT|H2S_MOCKUP_SHOTS)=' "$envs"; echo $?)" "open: the inherited H2S_* variables are dropped (H2S_SHELL_MODULES, H2S_SHELL_HELPER, H2S_MOCKUP_SHOT)"
 check "$(log_of open-run qs | grep -q -x -F "qs -p $ENTRY" && has open-run 'Opened components/clock (pid 4194398)'; echo $?)" "open: qs -p <tree>/mockup.qml, then found running"
+
+echo "--theme"
+mkdir -p "$work/config/h2s_shell/themes"
+: > "$work/config/h2s_shell/themes/ocean.json"
+: > "$work/config/h2s_shell/themes/Power save.json"
+tool theme-run XDG_CONFIG_HOME="$work/config" -- open clock --theme ocean
+envs=$work/state-theme-run/env.txt
+check "$([ -f "$envs" ] && grep -q -x 'H2S_MOCKUP_THEME=ocean' "$envs" && grep -q -x 'H2S_MOCKUP=components/clock' "$envs" && ! grep -q '^H2S_MOCKUP_STATE=' "$envs"; echo $?)" "--theme: the entry gets H2S_MOCKUP_THEME, no state"
+tool theme-hypr XDG_CONFIG_HOME="$work/config" HYPRLAND_INSTANCE_SIGNATURE=test -- -n open tall/second --theme 'Power save'
+dispatch=$(printf '%q' "hl.dsp.exec_cmd(\"'$TOOL' '__exec' 'tests/fixtures/mockups' 'plans/tall' 'second' 'Power save'\")")
+check "$(has theme-hypr "hyprctl dispatch $dispatch"; echo $?)" "--theme with a scene, a name with a space: both in the exec dispatch"
+tool theme-default -- -n open clock --theme default
+check "$([ "${status[theme-default]}" = 0 ] && has theme-default "__exec tests/fixtures/mockups components/clock '' default"; echo $?)" "--theme default, no theme file needed: passed with an empty state"
+tool theme-unknown XDG_CONFIG_HOME="$work/config" -- -n open clock --theme sea
+check "$([ "${status[theme-unknown]}" = 2 ] && has theme-unknown 'no theme "sea"' && has theme-unknown 'the themes: default, Power save, ocean' && ! has theme-unknown setsid; echo $?)" "an unknown theme: refused with the list (status ${status[theme-unknown]})"
+tool theme-hostile -- -n open clock --theme "a'b"
+check "$([ "${status[theme-hostile]}" = 2 ] && ! has theme-hostile setsid; echo $?)" "a theme name with a quote: refused"
+tool theme-list -- list --theme ocean
+check "$([ "${status[theme-list]}" = 2 ] && has theme-list '--theme is for open'; echo $?)" "--theme with list: refused"
+tool theme-exec -- -n __exec mockups components/good '' ocean
+check "$(has theme-exec 'H2S_MOCKUP=components/good H2S_MOCKUP_THEME=ocean qs -p' && ! has theme-exec H2S_MOCKUP_STATE; echo $?)" "__exec with a theme and no state: H2S_MOCKUP_THEME only"
+
+echo "help and usage errors"
+cat > "$work/help.expected" << 'EXPECTED'
+Usage: tests/mockup.sh <command> [<element>] [options]
+
+Opens the shell's mockups on this screen: components and views in all their
+states, plans with their scenes, and the gallery of every component and view.
+
+Commands:
+  list [<element>]        Every element by kind; with an element, each of its
+                          states or scenes with its description
+  search <text>...        The elements, states and scenes whose names or
+                          descriptions contain every word
+  open <element>          A component or view in all its states, a plan on its
+                          first scene
+  open <element>/<state>  One state of a component or view, or one scene of a
+                          plan (<plan>/<scene>)
+  open gallery            Every component and view in one scrollable window
+  close [<element>]       Close it; with none named, every open mockup
+  review <element>        Compare with the approved pictures, show what changed
+  approve <element>       Make the reviewed pictures the approved ones
+  help                    This help
+
+Elements:
+  pill, components/pill   a name, with its kind if two kinds share it, or a
+                          unique part of a name
+  pill/hover-s            one state of a component or view
+  distribution-nixos/building
+                          a plan, opened on that scene
+
+Options:
+  --restart               open: close it first if it is open
+  --theme <name>          open: show it in that theme (one of your theme files)
+  -n                      print the commands instead of running them
+  -h, --help              this help
+
+Examples:
+  tests/mockup.sh list
+  tests/mockup.sh search progress
+  tests/mockup.sh open pill
+  tests/mockup.sh open distribution-nixos/building
+  tests/mockup.sh close
+EXPECTED
+tool help COLUMNS=80 -- help
+check "$([ "${status[help]}" = 0 ] && diff "$work/help.expected" "$work/help.out" > "$work/help.diff"; echo $?)" "help: the text exactly, status 0 $(cat "$work/help.diff")"
+check "$(! awk 'length > 80 { found = 1 } END { exit !found }' "$work/help.out"; echo $?)" "help: no line over 80 columns"
+for words in "-h" "--help" "list -h" "search x --help" "open clock -h" "close -h" "review good -h" "approve -h" "-n open -h" "nothing-like-this -h"; do
+    # shellcheck disable=SC2086  # the words
+    tool help-option COLUMNS=80 -- $words
+    check "$([ "${status[help-option]}" = 0 ] && diff -q "$work/help.expected" "$work/help-option.out" > /dev/null; echo $?)" "$words: the help, status 0"
+done
+tool help-named COLUMNS=80 H2S_MOCKUP_COMMAND=tools/mockup.sh -- -h
+check "$(head -1 "$work/help-named.out" | grep -q -x -F 'Usage: tools/mockup.sh <command> [<element>] [options]' && has help-named '  tools/mockup.sh open pill'; echo $?)" "the help names H2S_MOCKUP_COMMAND"
+usage_lines=$'Usage: tests/mockup.sh <command> [<element>] [options]\ntests/mockup.sh -h for help'
+# usage_case <case> <arguments…>: the message and the usage on standard error only, status 2
+usage_case() {
+    local case=$1
+    shift
+    env -i HOME="$work/home" PATH="$work/fake:$work/tools" FAKE="$work/state-list" TERM=dumb \
+        H2S_MOCKUP_BASE=tests/fixtures/mockups bash "$TOOL" "$@" > "$work/$case.stdout" 2> "$work/$case.stderr" < /dev/null
+    status[$case]=$?
+}
+for entry in "frobnicate|\"frobnicate\" is neither a command nor an element" "--frob|unknown option --frob" "help more|help takes nothing more" \
+    "list a b|list takes one element at most" "open|open takes one element" "open a b|open takes one element" \
+    "review|review takes one element" "review good/normal|review takes an element, not one of its states or scenes (good/normal)" "close a b|close takes one element at most"; do
+    IFS='|' read -r words message <<< "$entry"
+    # shellcheck disable=SC2086  # the words
+    usage_case usage $words
+    check "$([ "${status[usage]}" = 2 ] && [ ! -s "$work/usage.stdout" ] \
+        && [ "$(cat "$work/usage.stderr")" = "mockup.sh: $message"$'\n'"$usage_lines" ]; echo $?)" "$words: '$message' and the usage line on standard error, status 2 (status ${status[usage]}: $(cat "$work/usage.stderr"))"
+done
+
+echo "the tree whose copy is taken (--main, --also)"
+# Each fixture tree's tool a stand-in that says which tree ran and with what
+for t in main side old pin; do
+    mkdir -p "$trees/$t/tests"
+    printf '#!/usr/bin/env bash\necho "TOOL %s $*"\n' "$t" > "$trees/$t/tests/mockup.sh"
+    chmod +x "$trees/$t/tests/mockup.sh"
+done
+element main components/delta "description: Delta" "state: rest At rest"
+element pin components/delta "description: Delta" "state: rest At rest"
+element side components/delta "description: Delta, changed" "state: rest At rest"
+for entry in \
+    "panel/only|0|TOOL main -n open panel/only|" \
+    "delta|0|TOOL side -n open delta|Opening the working copy from side (not merged)" \
+    "fresh/start|0|TOOL side -n open fresh/start|Opening the working copy from side (not merged)" \
+    "legacy|0|TOOL old -n open legacy|Opening the working copy from old (not merged)" \
+    "alpha|2||differs from the main tree's in several working trees" \
+    "both|2||plans/both is in several working trees"; do
+    IFS='|' read -r address want_status want_line want_note <<< "$entry"
+    tool across -- -n open "$address" --theme default "${over[@]}"
+    check "$([ "${status[across]}" = "$want_status" ] && { [ -z "$want_line" ] || has across "$want_line --theme default"; } \
+        && { [ -z "$want_note" ] || has across "$want_note"; } && { [ -n "$want_note" ] || ! has across 'working copy'; } \
+        && ! has across '--also'; echo $?)" "open $address across trees: ${want_line:-refused}${want_note:+ ($want_note)} (status ${status[across]}: $(out across | head -3 | paste -s -d ' '))"
+done
+tool across-list -- -n open alpha "${over[@]}"
+check "$(has across-list '  side' && has across-list '  old' && ! has across-list '  pin'; echo $?)" "several different copies: their trees listed, not a tree with the same copy"
+tool across-review -- -n review delta "${over[@]}"
+check "$(has across-review 'Using the working copy from side (not merged)' && has across-review 'TOOL side -n review delta'; echo $?)" "review across trees: the working copy's tool"
+tool across-here -- -n open clock --main "$REPO" --also "$trees/side=side"
+check "$([ "${status[across-here]}" = 0 ] && has across-here "setsid -f $TOOL __exec tests/fixtures/mockups components/clock" && ! has across-here 'working copy'; echo $?)" "the main tree is this one: opened here"
+tool across-none -- -n open nothing-like-this "${over[@]}"
+check "$([ "${status[across-none]}" = 2 ] && has across-none 'no element matches'; echo $?)" "no element in any tree: refused"
 
 echo "review"
 key=$(printf '%s' "$REPO" | sha256sum | cut -c 1-16)

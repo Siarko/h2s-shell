@@ -2810,14 +2810,19 @@ failing an element whose file is missing or broken before starting it, and
 
 On a screen, `tests/mockup.sh` lists the tree's mockups with their descriptions (`*` on a
 running one), opens one
-(`open <name> [--state <s> | --scene <s>] [--restart]`, a state of a component or view, a
-scene of a plan: through Hyprland's exec when Hyprland is there,
+(`open <element>[/<state or scene>] [--restart] [--theme <name>]`: a component or view in
+all its states or on one, a plan on its first scene or on one, in the built-in theme or one
+of the user's theme files; through Hyprland's exec when Hyprland is there,
 else detached; the entry starts with every inherited `H2S_*` variable dropped), closes them
 (only instances whose config is this tree's `mockup.qml`, picked by the name each answers
 over IPC), and `review <name>` runs the comparison and shows each differing state's old, new
 and diff images: inline through `kitten icat` in a terminal that draws the kitty graphics
 protocol, else their paths. `approve <name>` hands the run to `tests/run-mockups.sh
---approve`; `-n` prints the commands. `tests/mockup-selftest.sh`, a part of `--quick`, checks
+--approve`; `-n` prints the commands, `help` (or `-h`) the commands and options, and a wrong
+command or option the usage line on standard error with status 2. Given other trees
+(`--main`, `--also`), it takes an element from the main tree, or from the one other tree
+holding a different copy or holding it alone, and runs that tree's own tool.
+`tests/mockup-selftest.sh`, a part of `--quick`, checks
 it on a stand-in `qs`, `hyprctl` and `kitten`.
 
 #### NixOS
