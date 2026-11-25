@@ -14,7 +14,12 @@ import qs.singletons
 // its preview found failing held under this version, the shell restarted, the backup
 // protected from the pruning that follows — and the next start running its pending
 // migrations; a newer backup applied with its unknown records and keys kept, no migration run
-// backwards; a module switch's config backup (ConfigRestore.backUp).
+// backwards; a module switch's config backup (ConfigRestore.backUp); Make a backup now (a
+// manual backup of the config as it is, listed first, kept by pruning past ten automatic ones;
+// refused under the test runner, while a run goes on, while a restore is under way); Delete
+// (that backup and its side files only; not a name outside the folder or another file, not a
+// folder, not the backup being applied or the one Restore previous settings needs, not under
+// the test runner, one at a time).
 TestCase {
     id: suite
     suiteName: "ConfigBackups"
@@ -198,6 +203,8 @@ TestCase {
         _newer();
         _moduleBackup();
         _guards();
+        _manual();
+        _delete();
         _clock.start();
     }
 
@@ -417,6 +424,140 @@ TestCase {
             assert(!notice.backUp("module", { id: "kappa", from: "1.0.0", to: "1.1.0" }, () => {}), "no module backup once a restore wrote the config");
             const module = list.rows.find(row => row.reason === "module");
             assertEqual(module?.reasonText, "Before going back: Kappa Weather 1.1.0 → 1.0.0", "a module's display name; to an older version a way back");
+        });
+    }
+
+    // ---- Make a backup now: a manual backup, kept by pruning ----
+    function _manual() {
+        const dir = _scratch + "/manual";
+        let notice = null;
+        let list = null;
+        let made = null;
+        let module = null;
+        let listing = null;
+        let mode = null;
+        _then("the manual case's folder", () => true, () => {
+            _write(dir + "/config.json", _currentText);
+            for (let day = 1; day <= 10; day++)
+                _write(dir + "/" + _stamp(7, day) + "-migration", _configText([], "2.1.0"));
+            notice = _newNotice(dir);
+            list = _newList(dir, notice);
+            const runner = _newList(dir, _newNotice(dir, { testRunner: true }));
+            assertEqual(runner.makeBackup(() => {}), "Not under the test runner", "backup now: refused under the test runner");
+            notice.busy = true;
+            assertEqual(list.makeBackup(() => {}), "The settings update is still running", "backup now: refused while a run goes on");
+            notice.busy = false;
+            assertEqual(_newList(dir, null).makeBackup(() => {}), "Could not start", "backup now: no notice, nothing");
+            assertEqual(list.makeBackup(answer => made = answer), "", "backup now: started");
+            assertEqual(list.makeBackup(() => {}), "A backup is being written", "backup now: one at a time");
+        });
+        _then("the manual backup made", () => made !== null && list.known && !list.listing, () => {
+            assert(made.ok, "backup now: done");
+            assert(/^config\.json\.bak-[0-9T-]+Z-manual$/.test(made.name), "backup now: named manual");
+            assertEqual(_read(dir + "/" + made.name), _currentText, "backup now: the config as it is");
+            assertEqual(_read(dir + "/config.json"), _currentText, "backup now: config.json untouched");
+            assertEqual(list.rows[0]?.name, made.name, "backup now: listed first");
+            assert(list.rows[0]?.kept && list.rows[0]?.reasonText === "Made by you", "backup now: listed as made by you, kept");
+            assertEqual(list.rows.length, 11, "backup now: ten automatic ones before it, none pruned");
+            mode = _run(["stat", "-c", "%a", "--", dir + "/" + made.name]);
+            assert(notice.backUp("module", { id: "kappa", from: "1.0.0", to: "1.1.0" }, answer => module = answer), "an automatic backup after it");
+        });
+        _then("an automatic backup after it", () => module !== null && mode.names !== null, () => {
+            assertEqual(mode.names.join(""), "600", "backup now: readable by the user only");
+            assert(module.ok, "the automatic one taken");
+            listing = _run(["ls", "-1A", "--", dir]);
+        });
+        _then("the folder after its pruning", () => listing.names !== null, () => {
+            assert(listing.names.includes(made.name), "backup now: kept by pruning past ten automatic ones, the oldest but one though it is");
+            const automatic = listing.names.filter(name => ConfigBackupRules.parseName(name).ok && ConfigBackupRules.parseName(name).reason !== "manual");
+            assertEqual(automatic.length, 10, "pruning: the automatic ones to ten");
+            assert(!listing.names.includes(_stamp(7, 1) + "-migration"), "pruning: the oldest automatic one went");
+            _write(dir + "/x", "");
+            const missing = _newList(_scratch + "/manual-none", notice);
+            notice.configPath = _scratch + "/manual-none/config.json";
+            made = null;
+            assertEqual(missing.makeBackup(answer => made = answer), "", "no config.json: started");
+        });
+        _then("no config.json", () => made !== null, () => {
+            assertEqual(made.ok + "|" + made.problem + "|" + made.name, "false|No settings file to back up yet|", "no config.json: nothing to back up, said");
+        });
+    }
+
+    // ---- Delete: that one backup only, never what a restore needs ----
+    function _delete() {
+        const dir = _scratch + "/delete";
+        const victim = _stamp(8, 2) + "-migration";
+        const other = _stamp(8, 3) + "-manual";
+        const applied = _stamp(8, 4) + "-migration";
+        const folderNamed = _stamp(8, 5) + "-migration";
+        let notice = null;
+        let list = null;
+        let made = null;
+        let before = null;
+        let after = null;
+        let deleted = null;
+        let folder = null;
+        _then("the delete case's folder", () => true, () => {
+            _write(dir + "/config.json", _currentText);
+            for (const name of [victim, other, applied])
+                _write(dir + "/" + name, _configText([], "2.1.0"));
+            _write(dir + "/backup-side-files/" + victim + "/side.json", "{}");
+            _write(dir + "/backup-side-files/" + other + "/side.json", "{}");
+            _write(dir + "/notes.txt", "notes");
+            _write(dir + "/" + folderNamed + "/inside", "x");
+            made = _run(["true"]);
+        });
+        _then("the delete case written", () => made.code !== -1, () => {
+            notice = _newNotice(dir);
+            list = _newList(dir, notice);
+            const runner = _newList(dir, _newNotice(dir, { testRunner: true }));
+            assertEqual(runner.deleteBackup(victim, () => {}), "Not under the test runner", "delete: refused under the test runner");
+            assertEqual(_newList(dir, null).deleteBackup(victim, () => {}), "Could not start", "delete: no notice, nothing");
+            assertEqual(list.deleteBackup("../delete/" + victim, () => {}), "Not a backup: ../delete/" + victim, "delete: nothing outside the folder");
+            assertEqual(list.deleteBackup("config.json", () => {}), "Not a backup: config.json", "delete: not the settings file");
+            assertEqual(list.deleteBackup("notes.txt", () => {}), "Not a backup: notes.txt", "delete: not another file");
+            before = _run(["find", dir, "-mindepth", "1"]);
+        });
+        _then("the folder before", () => before.names !== null, () => {
+            assertEqual(list.deleteBackup(victim, answer => deleted = answer), "", "delete: started");
+            assertEqual(list.deleteBackup(other, () => {}), "Already deleting", "delete: one at a time");
+        });
+        _then("deleted", () => deleted !== null && list.known && !list.listing, () => {
+            assert(deleted.ok, "delete: done");
+            assert(!list.rows.some(row => row.name === victim), "delete: gone from the list, read again");
+            after = _run(["find", dir, "-mindepth", "1"]);
+        });
+        _then("the folder after", () => after.names !== null, () => {
+            const gone = before.names.filter(path => !after.names.includes(path)).sort();
+            assertEqual(gone.join(","), [dir + "/" + victim, dir + "/backup-side-files/" + victim, dir + "/backup-side-files/" + victim + "/side.json"].sort().join(","),
+                        "delete: that backup and its side files, nothing else");
+            assertEqual(after.names.filter(path => !before.names.includes(path)).length, 0, "delete: nothing written");
+            deleted = null;
+            assertEqual(list.deleteBackup(folderNamed, answer => deleted = answer), "", "a folder of a backup's name: tried");
+        });
+        _then("a folder not deleted", () => deleted !== null, () => {
+            assert(!deleted.ok && deleted.problem.startsWith("Could not delete"), "a folder of a backup's name: refused, said");
+            folder = _run(["find", dir + "/" + folderNamed]);
+        });
+        _then("the folder kept", () => folder.names !== null, () => {
+            assertEqual(folder.names.length, 2, "a folder of a backup's name: kept with what it holds");
+            assertEqual(list.apply(applied, []), "", "a restore started");
+            assertEqual(list.deleteBackup(applied, () => {}), "Being applied", "delete: not the backup being applied");
+            assertEqual(list.deleteRefusal(applied), "Being applied", "delete: Delete unavailable on it");
+            assertEqual(list.makeBackup(() => {}), "A restore is under way", "backup now: refused while a restore is under way");
+            assertEqual(list.deleteRefusal(other), "", "delete: another one still allowed");
+        });
+        _then("the restore done", () => notice.restarts > 0, () => {
+            assertEqual(list.deleteRefusal(applied), "", "delete: allowed once the restore read it");
+            const failing = _newNotice(dir);
+            failing.reports = { load: { phase: "load", reset: [{ id: "2026-11-25-x-music-popup", error: "x" }], skipped: [], held: [], applied: [],
+                                        backup: dir + "/" + other },
+                                afterSeed: { phase: "afterSeed", reset: [], skipped: [], held: [], applied: [] } };
+            list = _newList(dir, failing);
+        });
+        _then("the failure known", () => list.notice.current.backup !== "", () => {
+            assertEqual(list.deleteBackup(other, () => {}), "Needed by Restore previous settings", "delete: not the failure notice's backup");
+            assertEqual(_read(dir + "/" + other), _configText([], "2.1.0"), "delete refused: the file kept");
         });
     }
 }

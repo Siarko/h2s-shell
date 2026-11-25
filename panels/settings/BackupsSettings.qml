@@ -6,9 +6,11 @@ import qs.singletons
 
 // System → Backups: the config backups (ConfigBackupList, read each time the page shows),
 // newest first — the date, why it was made (a manual one marked Kept: never pruned), the
-// version that wrote it (a newer writer marked). A row clicked opens: the file's name, a newer
-// writer's one line, what Apply would do (its preview, run in memory) and Apply…, whose
-// question in the Settings modal is a steps list keyed to the backup and what it holds.
+// version that wrote it (a newer writer marked). Make a backup now writes a manual one, which
+// comes in at the top, opened. A row clicked opens: the file's name, a newer writer's one
+// line, what Apply would do (its preview, run in memory), Apply…, whose question in the
+// Settings modal is a steps list keyed to the backup and what it holds, and Delete…, which
+// asks naming the backup (not the one being applied or the failure notice's restore needs).
 Item {
     id: root
 
@@ -21,16 +23,65 @@ Item {
     // The opened row's name ("" none), and its preview
     property string selected: ""
     property var preview: null
-    // Why the last Apply did not start ("" none)
+    // Why the last Apply or Delete did not start or finish ("" none)
     property string problem: ""
+    // The backup Make a backup now made last ("" none), and why the last one was not made
+    property string made: ""
+    property string backupProblem: ""
+    // A backup made, opened once the list holds it; and faded in as it comes
+    property string _openWhenListed: ""
+    property string _fadeIn: ""
 
     readonly property var _rows: backups?.rows ?? []
     readonly property var _selectedRow: _rows.find(row => row.name === selected) ?? null
 
-    // A row that went (deleted, pruned) closes
+    // A row that went (deleted, pruned) closes; a backup just made opens once it is listed
     on_RowsChanged: {
-        if (selected !== "" && !_rows.some(row => row.name === selected))
+        if (_openWhenListed !== "" && _rows.some(row => row.name === _openWhenListed)) {
+            const name = _openWhenListed;
+            _openWhenListed = "";
+            select(name);
+        } else if (selected !== "" && !_rows.some(row => row.name === selected)) {
             select("");
+        }
+    }
+
+    // Make a backup now: a manual backup of the settings as saved
+    function makeBackup() {
+        backupProblem = "";
+        if (!backups)
+            return false;
+        const refusal = backups.makeBackup(result => {
+            if (!result.ok) {
+                root.backupProblem = result.problem;
+                return;
+            }
+            root.made = result.name;
+            root._fadeIn = result.name;
+            root._openWhenListed = result.name;
+        });
+        backupProblem = refusal;
+        return refusal === "";
+    }
+
+    // Why the row's backup cannot be deleted now ("" it can)
+    function deleteRefusal(name) {
+        return backups ? backups.deleteRefusal(name) : "Could not start";
+    }
+
+    // Delete's question for the opened row; its answer deletes the backup asked about
+    function askDelete() {
+        const row = _selectedRow;
+        if (!row || !modalHost || deleteRefusal(row.name) !== "")
+            return false;
+        return modalHost.ask(ConfigBackupRules.deleteQuestion(row), answer => {
+            if (answer.cancelled || answer.button !== "delete")
+                return;
+            root.problem = root.backups.deleteBackup(answer.subject.name, result => {
+                if (!result.ok)
+                    root.problem = result.problem;
+            });
+        }) === "";
     }
 
     function select(name) {
@@ -81,6 +132,33 @@ Item {
             Layout.fillWidth: true
             title: "Settings backups"
             spacing: 6
+            buttons: SmallButton {
+                objectName: "backupNow"
+                label: "Make a backup now"
+                onClicked: root.makeBackup()
+            }
+
+            Text {
+                objectName: "backupMade"
+                visible: root.made !== "" && root._rows.some(row => row.name === root.made)
+                Layout.fillWidth: true
+                text: ConfigBackupRules.madeLine(root.made)
+                textFormat: Text.PlainText
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.fontSizeSmall
+                color: Theme.success
+            }
+            Text {
+                objectName: "backupNowProblem"
+                visible: root.backupProblem !== ""
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                text: root.backupProblem
+                textFormat: Text.PlainText
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.fontSizeSmall
+                color: Theme.error
+            }
 
             Text {
                 objectName: "backupsEmpty"
@@ -128,6 +206,22 @@ Item {
         border.color: Theme.accent
         clip: true
         Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
+
+        // A backup just made fades in
+        NumberAnimation on opacity {
+            id: _fadeIn
+            running: false
+            from: 0
+            to: 1
+            duration: Theme.duration("enter")
+            easing: Theme.curve("enter")
+        }
+        Component.onCompleted: {
+            if (row !== null && row.name === root._fadeIn) {
+                root._fadeIn = "";
+                _fadeIn.start();
+            }
+        }
 
         PointerArea {
             id: _rowArea
@@ -241,6 +335,16 @@ Item {
                     label: "Apply…"
                     tooltip: "Load this backup and restart the shell"
                     onClicked: root.askApply()
+                }
+                SmallButton {
+                    id: _delete
+                    objectName: "backupDelete"
+                    readonly property string refusal: _row.opened ? root.deleteRefusal(_row.row.name) : ""
+                    label: "Delete…"
+                    kind: "delete"
+                    available: refusal === ""
+                    tooltip: refusal !== "" ? refusal : "Delete this backup"
+                    onClicked: root.askDelete()
                 }
             }
             Text {

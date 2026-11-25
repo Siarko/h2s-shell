@@ -8,7 +8,10 @@ import qs.singletons
 // each row's date, reason and version, a manual one's Kept, a newer writer's ⚠; a row opened
 // shows the file, the newer line, what Apply would do and Apply… (none for an unreadable
 // one); Apply asks the steps question keyed to the backup and what its preview holds, and
-// only its answer applies; a refusal is said on the row; a row that went closes.
+// only its answer applies; a refusal is said on the row; a row that went closes. Make a backup
+// now: the backup made comes in at the top, opened, fading in, with its line; a refusal said.
+// Delete… on every opened row asks naming the backup, and only its answer deletes the backup
+// asked about; unavailable, with the reason, where it is refused; a failure said on the row.
 TestCase {
     id: suite
     suiteName: "BackupsSettings"
@@ -36,7 +39,25 @@ TestCase {
         property int refreshes: 0
         property var applied: []
         property string answer: ""
+        property var makeDone: null
+        property string makeAnswer: ""
+        property var deleted: []
+        property var deleteDone: null
+        property string deleteAnswer: ""
+        property var refused: ({})
         function refresh() { refreshes++; }
+        function makeBackup(done) {
+            makeDone = done;
+            return makeAnswer;
+        }
+        function deleteRefusal(name) {
+            return refused[name] ?? "";
+        }
+        function deleteBackup(name, done) {
+            deleted = deleted.concat([name]);
+            deleteDone = done;
+            return deleteAnswer;
+        }
         function preview(name) {
             const entry = suite._entries.find(each => each.name === name);
             return ConfigBackupRules.preview(suite._registry, entry?.text ?? "", "2.2.0");
@@ -177,5 +198,73 @@ TestCase {
 
         backups.rows = ConfigBackupRules.rows(_entries.slice(0, 3), "2.2.0", _registry);
         assertEqual(page.selected, "", "a row that went: closed");
+
+        _makeBackup(page);
+        _delete(page);
+    }
+
+    function _makeBackup(page) {
+        const button = _named(page, "backupNow")[0];
+        assertEqual(button?.label, "Make a backup now", "backup now: the section's button");
+        assert(!_named(page, "backupMade")[0].visible && !_named(page, "backupNowProblem")[0].visible, "backup now: no line before");
+        backups.makeAnswer = "Not under the test runner";
+        button.clicked();
+        assertEqual(_named(page, "backupNowProblem")[0].text, "Not under the test runner", "backup now: a refusal said");
+        assert(_named(page, "backupNowProblem")[0].visible, "backup now: … shown");
+        backups.makeAnswer = "";
+        backups.makeDone = null;
+        button.clicked();
+        assert(!_named(page, "backupNowProblem")[0].visible, "backup now: the refusal gone once started");
+        const made = "config.json.bak-2026-01-15T10-30-00-000Z-manual";
+        backups.makeDone({ ok: false, problem: "could not write the backup", name: "" });
+        assertEqual(_named(page, "backupNowProblem")[0].text, "could not write the backup", "backup now: a failure said");
+        button.clicked();
+        backups.makeDone({ ok: true, problem: "", name: made });
+        assert(!_named(page, "backupMade")[0].visible, "backup now: no line before the list holds it");
+        const entries = [{ name: made, text: _text("2.2.0", ["2026-11-25-x-music-popup"]) }].concat(_entries.slice(0, 3));
+        backups.rows = ConfigBackupRules.rows(entries, "2.2.0", _registry);
+        const row = _rowOf(page, made);
+        assert(row !== null && page._rows[0]?.name === made, "backup now: listed at the top");
+        assertEqual(page.selected, made, "backup now: its row opened");
+        assert(row.opacity < 1, "backup now: its row fades in");
+        assert(_named(page, "backupMade")[0].visible, "backup now: the line shown");
+        assertEqual(_named(page, "backupMade")[0].text, "✓ Backup made: " + ConfigBackupRules.date(made), "backup now: the line names its date");
+        assert(!_named(page, "backupNowProblem")[0].visible, "backup now: no problem line");
+        assertEqual(_rowOf(page, _entries[0].name).opacity, 1, "backup now: other rows do not fade");
+    }
+
+    function _delete(page) {
+        const name = _entries[0].name;
+        page.select(name);
+        const row = _rowOf(page, name);
+        const button = _named(row, "backupDelete")[0];
+        assert(button.visible && button.available, "delete: on the opened row");
+        assertEqual(button.label + "|" + button.kind + "|" + button.tooltip, "Delete…|delete|Delete this backup", "delete: its label, kind, tooltip");
+        modalHost.spec = null;
+        button.clicked();
+        assertEqual(backups.deleted.length, 0, "delete: nothing before the answer");
+        assertEqual(modalHost.spec?.title, "Delete the backup of " + ConfigBackupRules.date(name) + " (before a settings update, 2.1.0)?", "delete: asks naming the backup");
+        assertEqual(modalHost.spec.kind, "danger", "delete: a danger question");
+        const asked = modalHost.onAnswer;
+        const subject = modalHost.spec.subject;
+        page.select(_entries[1].name);
+        asked({ button: "cancel", cancelled: true, subject: subject });
+        assertEqual(backups.deleted.length, 0, "delete: cancelled, nothing deleted");
+        asked({ button: "delete", cancelled: false, subject: subject });
+        assertEqual(backups.deleted.join(","), name, "delete: the answer deletes the backup asked about");
+        backups.deleteDone({ ok: false, problem: "Could not delete: Permission denied" });
+        assertEqual(_named(_rowOf(page, _entries[1].name), "backupProblem")[0].text, "Could not delete: Permission denied", "delete: a failure said on the row");
+        backups.deleteAnswer = "Being applied";
+        asked({ button: "delete", cancelled: false, subject: subject });
+        assertEqual(page.problem, "Being applied", "delete: a refusal at the answer said");
+
+        backups.refused = { [_entries[2].name]: "Needed by Restore previous settings" };
+        page.select(_entries[2].name);
+        const refused = _named(_rowOf(page, _entries[2].name), "backupDelete")[0];
+        assert(refused.visible && !refused.available, "delete: unavailable where refused");
+        assertEqual(refused.tooltip, "Needed by Restore previous settings", "delete: the reason on it");
+        modalHost.spec = null;
+        assert(!page.askDelete(), "delete refused: no question");
+        assertEqual(modalHost.spec, null, "delete refused: nothing asked");
     }
 }

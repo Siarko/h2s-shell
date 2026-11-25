@@ -9,7 +9,8 @@ import QtQuick
 // version that wrote it, a newer writer marked, an unreadable file shown as such), Apply's
 // in-memory preview of the migrations the backup still needs (how many, which fail under this
 // version and are held, a whole-config failure), the opened row's line and Apply's question
-// as a steps list. Pure: names, texts, the registry and the running version in. Checked by
+// as a steps list; Make a backup now's and Delete's refusals and Delete's question. Pure:
+// names, texts, the registry and the running version in. Checked by
 // tests/ConfigBackupRulesTest.qml.
 Singleton {
     id: root
@@ -228,6 +229,70 @@ Singleton {
             cancelLabel: "Cancel",
             subject: { name: String(row?.name ?? ""), held: _list(preview?.held).slice() }
         };
+    }
+
+    // The reason as Delete's question names it, short
+    function reasonShort(reason) {
+        switch (reason) {
+        case "migration": return "before a settings update";
+        case "restore": return "before a restore";
+        case "module": return "before a module update";
+        case "manual": return "manual";
+        default: return "reason not recorded";
+        }
+    }
+
+    // Why Make a backup now cannot start ("" it can). `state`: { testRunner, busy (a migration
+    // run goes on), restoring (a restore or a start with defaults is under way or waits for
+    // its restart), running (a backup is being written) }
+    function backupRefusal(state) {
+        if (state?.testRunner === true)
+            return "Not under the test runner";
+        if (state?.busy === true)
+            return "The settings update is still running";
+        if (state?.restoring === true)
+            return "A restore is under way";
+        if (state?.running === true)
+            return "A backup is being written";
+        return "";
+    }
+
+    // Why the backup `name` cannot be deleted ("" it can). `state`: { testRunner, deleting (a
+    // delete runs), reading (the backup a restore reads: a name or path, "" none), needed
+    // (backups Restore previous settings needs: names or paths) }. Only a bare name of the
+    // pattern is a backup: nothing outside the folder, nothing else in it
+    function deleteRefusal(name, state) {
+        if (typeof name !== "string" || name.includes("/") || !parseName(name).ok)
+            return "Not a backup: " + String(name ?? "").slice(0, 80);
+        if (state?.testRunner === true)
+            return "Not under the test runner";
+        if (state?.deleting === true)
+            return "Already deleting";
+        const base = path => String(path ?? "").replace(/^.*\//, "");
+        if (base(state?.reading) === name)
+            return "Being applied";
+        if (_list(state?.needed).some(path => base(path) === name))
+            return "Needed by Restore previous settings";
+        return "";
+    }
+
+    // Delete's question for `row` (rows'): its date, reason and version. `subject`: the
+    // backup, what the answer acts on
+    function deleteQuestion(row) {
+        return {
+            kind: "danger",
+            title: "Delete the backup of " + String(row?.date ?? "") + " (" + reasonShort(row?.reason) + ", " + String(row?.versionText ?? "") + ")?",
+            body: ["Only this backup is removed. This cannot be undone."],
+            buttons: [{ id: "delete", label: "Delete", kind: "delete" }],
+            cancelLabel: "Cancel",
+            subject: { name: String(row?.name ?? "") }
+        };
+    }
+
+    // The line under the section's title after Make a backup now
+    function madeLine(name) {
+        const when = date(name);
+        return when !== "" ? "✓ Backup made: " + when : "";
     }
 
     // The list as IPC tells it: whether it was read, and the rows, as JSON

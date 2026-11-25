@@ -7,7 +7,10 @@ import qs.singletons
 // by version and by records, an unreadable file shown as such), Apply's preview of an older,
 // a current and a newer backup (pending, held, failing with the skipped held, a whole-config
 // failure), the opened row's line, Apply's question as steps and its subject, the IPC text;
-// and the pruning of module-switch backups as automatic (MigrationRules.backupsToKeep).
+// the pruning of module-switch backups as automatic (MigrationRules.backupsToKeep); Make a
+// backup now's refusals and its line, manual backups kept by pruning past ten automatic ones;
+// Delete's refusals (only a backup's bare name, not under the test runner, not one at a time,
+// not the backup being applied or the one Restore previous settings needs) and its question.
 TestCase {
     id: suite
     suiteName: "ConfigBackupRules"
@@ -40,6 +43,7 @@ TestCase {
         _preview();
         _texts();
         _pruning();
+        _manualAndDelete();
     }
 
     function _names() {
@@ -241,5 +245,69 @@ TestCase {
         assert(!plan.keep.some(name => name.includes("/")), "pruning: only names in the folder");
         assertEqual(MigrationRules.backupName("2026-01-12T09:14:40.123Z", "module", { id: "kappa", from: "1", to: "2" }),
                     "config.json.bak-2026-01-12T09-14-40-123Z-module~kappa~1~2", "pruning: the runner names backups the same way");
+    }
+
+    function _manualAndDelete() {
+        assertEqual(rules.backupRefusal({}), "", "backup now: allowed");
+        assertEqual(rules.backupRefusal(null), "", "backup now: no state, allowed");
+        assertEqual(rules.backupRefusal({ testRunner: true }), "Not under the test runner", "backup now: not under the test runner");
+        assertEqual(rules.backupRefusal({ busy: true }), "The settings update is still running", "backup now: not while a run goes on");
+        assertEqual(rules.backupRefusal({ restoring: true }), "A restore is under way", "backup now: not while a restore is under way");
+        assertEqual(rules.backupRefusal({ running: true }), "A backup is being written", "backup now: one at a time");
+        assertEqual(rules.backupRefusal({ testRunner: "yes", busy: 1, restoring: "x", running: {} }), "", "backup now: only true refuses");
+
+        const made = rules.name("2026-01-15T10:30:00.000Z", "manual");
+        assertEqual(made, "config.json.bak-2026-01-15T10-30-00-000Z-manual", "backup now: named manual");
+        assertEqual(rules.madeLine(made), "✓ Backup made: " + rules.date(made), "backup now: the line names its date");
+        assertEqual(rules.madeLine("notes.txt"), "", "backup now: no line for a name that is no backup");
+        assertEqual(rules.madeLine(""), "", "backup now: no line for none");
+
+        const manuals = ["config.json.bak-2025-01-01T10-00-00-000Z-manual", "config.json.bak-2025-01-02T10-00-00-000Z-manual"];
+        const automatic = [];
+        for (let day = 1; day <= 12; day++)
+            automatic.push("config.json.bak-2026-02-" + String(day).padStart(2, "0") + "T10-00-00-000Z-migration");
+        const plan = MigrationRules.backupsToKeep(manuals.concat(automatic), { written: automatic[11] });
+        assert(manuals.every(name => plan.keep.includes(name)), "pruning: manual ones kept past ten automatic ones, the oldest though they are");
+        assertEqual(plan.delete.slice().sort().join(","), automatic.slice(0, 2).join(","), "pruning: only the automatic ones pruned to ten");
+        const justMade = "config.json.bak-2026-03-01T10-00-00-000Z-manual";
+        const afterManual = MigrationRules.backupsToKeep(automatic.slice(0, 10).concat([justMade]), { written: justMade });
+        assertEqual(afterManual.delete.length, 0, "pruning: a manual one just written takes no place among the ten automatic ones");
+
+        const name = "config.json.bak-2026-01-05T21-30-00-000Z-manual";
+        assertEqual(rules.deleteRefusal(name, {}), "", "delete: a backup's name");
+        assertEqual(rules.deleteRefusal(name, null), "", "delete: no state, allowed");
+        assertEqual(rules.deleteRefusal("config.json", {}), "Not a backup: config.json", "delete: not the settings file");
+        assertEqual(rules.deleteRefusal("notes.txt", {}), "Not a backup: notes.txt", "delete: not another file");
+        assertEqual(rules.deleteRefusal("../" + name, {}), "Not a backup: ../" + name, "delete: nothing outside the folder");
+        assertEqual(rules.deleteRefusal("/tmp/" + name, {}), "Not a backup: /tmp/" + name, "delete: not a path");
+        assertEqual(rules.deleteRefusal(name + "/x", {}), "Not a backup: " + name + "/x", "delete: nothing under a backup's name");
+        assertEqual(rules.deleteRefusal(null, {}), "Not a backup: ", "delete: no name");
+        assertEqual(rules.deleteRefusal("x".repeat(200), {}).length, "Not a backup: ".length + 80, "delete: a long name cut");
+        assertEqual(rules.deleteRefusal(name, { testRunner: true }), "Not under the test runner", "delete: not under the test runner");
+        assertEqual(rules.deleteRefusal(name, { deleting: true }), "Already deleting", "delete: one at a time");
+        assertEqual(rules.deleteRefusal(name, { reading: "/home/u/.config/h2s_shell/" + name }), "Being applied", "delete: not the backup a restore reads (a path)");
+        assertEqual(rules.deleteRefusal(name, { reading: name }), "Being applied", "delete: … or its name");
+        assertEqual(rules.deleteRefusal(name, { reading: "/x/config.json.bak-2026-01-05T21-30-00-000Z-migration" }), "",
+                    "delete: another backup being applied does not refuse");
+        assertEqual(rules.deleteRefusal(name, { needed: ["/x/other", "/home/u/" + name] }), "Needed by Restore previous settings",
+                    "delete: not the failure notice's backup");
+        assertEqual(rules.deleteRefusal(name, { needed: ["/x/config.json.bak-2026-01-05T21-30-00-000Z"] }), "",
+                    "delete: another one needed does not refuse");
+        assertEqual(rules.deleteRefusal(name, { reading: "", needed: [""] }), "", "delete: none read, none needed");
+        assertEqual(rules.deleteRefusal(name, { testRunner: "yes", deleting: 1 }), "", "delete: only true refuses");
+
+        const row = rules.rows([{ name: name, text: JSON.stringify({ writtenBy: "2.1.0" }) }], "2.2.0", [])[0];
+        const question = rules.deleteQuestion(row);
+        assertEqual(question.title, "Delete the backup of " + rules.date(name) + " (manual, 2.1.0)?", "delete: asks naming date, reason and version");
+        assertEqual(question.body.join("|"), "Only this backup is removed. This cannot be undone.", "delete: says what it removes");
+        assertEqual(question.kind + "|" + question.buttons.map(button => button.id + ":" + button.label + ":" + button.kind).join(",") + "|" + question.cancelLabel,
+                    "danger|delete:Delete:delete|Cancel", "delete: a danger question, Delete and Cancel");
+        assertEqual(question.subject.name, name, "delete: keyed to the backup");
+        const reasons = ["migration", "restore", "module", "manual", ""].map(reason => rules.reasonShort(reason));
+        assertEqual(reasons.join("|"), "before a settings update|before a restore|before a module update|manual|reason not recorded",
+                    "delete: each reason, short");
+        const old = rules.rows([{ name: "config.json.bak-2025-12-01T11-47-09-000Z", text: "", readable: false }], "2.2.0", [])[0];
+        assertEqual(rules.deleteQuestion(old).title, "Delete the backup of " + rules.date(old.name) + " (reason not recorded, can't be read)?",
+                    "delete: an unreadable one asked about too");
     }
 }

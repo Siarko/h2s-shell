@@ -9,7 +9,9 @@ import qs.singletons
 // preview(name) runs a backup's pending migrations in memory (ConfigBackupRules.preview);
 // apply(name, held) restores it through the failure notice's restore
 // (MigrationFailureNotice.restoreBackup: the current config backed up, saving held, the
-// shell restarted — refused while a run goes on or the shell cannot restart).
+// shell restarted — refused while a run goes on or the shell cannot restart);
+// makeBackup() writes a manual backup (never pruned); deleteBackup(name) removes one backup,
+// never the one a restore reads or the failure notice's restore needs.
 QtObject {
     id: root
 
@@ -129,6 +131,82 @@ QtObject {
         if (!notice)
             return "Could not start";
         return notice.restoreBackup(path, held);
+    }
+
+    // Make a backup now: config.json as it is now, as a manual backup
+    // (MigrationFailureNotice.backUpNow), the list read again once it is written.
+    // `done({ ok, problem, name })` — `name` the backup made ("" none). → "" started, else why not
+    function makeBackup(done) {
+        if (!notice)
+            return "Could not start";
+        return notice.backUpNow(result => {
+            const name = String(result?.backup ?? "").replace(/^.*\//, "");
+            const problem = !result?.ok ? String(result?.problem ?? "") : name === "" ? "No settings file to back up yet" : "";
+            root.refresh();
+            if (typeof done === "function")
+                done({ ok: problem === "", problem: problem, name: name });
+        });
+    }
+
+    // Why backup `name` cannot be deleted now ("" it can): not while a restore reads it or the
+    // failure notice's restore needs it (ConfigBackupRules.deleteRefusal)
+    function deleteRefusal(name) {
+        if (!notice)
+            return "Could not start";
+        return ConfigBackupRules.deleteRefusal(name, {
+            testRunner: notice.testRunner, deleting: deleting, reading: notice.restoring,
+            needed: notice.current?.backup ? [notice.current.backup] : []
+        });
+    }
+
+    // Deletes backup `name`: that file, and the side files a migration run kept with it
+    // (backup-side-files/<name>), nothing else; the list read again. `done({ ok, problem })`.
+    // → "" started, else why not
+    function deleteBackup(name, done) {
+        const refusal = deleteRefusal(name);
+        if (refusal !== "")
+            return refusal;
+        _deleteRunning = true;
+        _deleting = name;
+        _deleteDone = done ?? null;
+        // A plain rm on the file: a folder of that name is refused, not emptied
+        _deleter.command = ["rm", "-f", "--", dir + "/" + name];
+        _deleter.running = true;
+        return "";
+    }
+
+    // A delete runs (set at once: a Process says it runs only once it started)
+    readonly property bool deleting: _deleteRunning
+    property bool _deleteRunning: false
+    property string _deleting: ""
+    property var _deleteDone: null
+
+    property Process _deleter: Process {
+        stderr: StdioCollector { id: _deleteErrors }
+        onExited: code => {
+            if (code !== 0) {
+                const why = _deleteErrors.text.trim().split("\n")[0] ?? "";
+                root._deleted(false, "Could not delete" + (why !== "" ? ": " + why.slice(0, 200) : ""));
+                return;
+            }
+            console.info("[Migrations] backup deleted: " + root.dir + "/" + root._deleting);
+            root._sideDeleter.command = ["rm", "-rf", "--", root.dir + "/backup-side-files/" + root._deleting];
+            root._sideDeleter.running = true;
+        }
+    }
+
+    property Process _sideDeleter: Process {
+        onExited: code => root._deleted(true, "")
+    }
+
+    function _deleted(ok, problem) {
+        const done = _deleteDone;
+        _deleteDone = null;
+        _deleting = "";
+        _deleteRunning = false;
+        refresh();
+        if (typeof done === "function")
+            done({ ok: ok, problem: problem });
     }
 
     // Apply backup `name` with what its preview holds now (IPC). → "" started, else why not

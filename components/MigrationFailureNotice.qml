@@ -195,6 +195,24 @@ QtObject {
         return _restorer.backUp(reason, module, done);
     }
 
+    // Make a backup now (the backups list's button, or IPC): config.json as it is now, as a
+    // manual backup (never pruned), through the one restorer. `done({ ok, problem, backup })`.
+    // → "" started, else why not (ConfigBackupRules.backupRefusal)
+    function backUpNow(done) {
+        const refusal = ConfigBackupRules.backupRefusal({
+            testRunner: testRunner, busy: busy, restoring: _acting || _restartPending, running: _restorer.running
+        });
+        if (refusal !== "")
+            return refusal;
+        const started = _restorer.backUp("manual", null, result => {
+            if (result.ok && result.backup !== "")
+                root._log("a backup made: " + result.backup);
+            if (typeof done === "function")
+                done(result);
+        });
+        return started ? "" : "Could not start";
+    }
+
     // Start with default settings (a session that saves nothing): the current config backed
     // up, a new one with the defaults written, the shell restarted. → "" started, else why not
     function startWithDefaults(key) {

@@ -1040,7 +1040,7 @@ Singleton {
     // ConfigBackupRules.parseName) count; every
     // other name is left alone. A manual backup ("-manual") is never pruned: kept, not
     // counted. `options`: { written (the backup just written: always kept, whatever its stamp
-    // says — the clock may have gone back —, and counted), protect: [names] (one being
+    // says — the clock may have gone back —, and counted unless manual), protect: [names] (one being
     // restored from: kept, not counted), neverPrune: [names] (kept, not counted) }.
     // The rest by their stamps, newest first, fill up to `backupsKept`; equal stamps by name.
     // → { keep, delete } (newest first)
@@ -1050,7 +1050,8 @@ Singleton {
         const listed = value => Array.isArray(value) ? value : [];
         const written = typeof options?.written === "string" ? options.written : "";
         const kept = listed(options?.protect).concat(listed(options?.neverPrune));
-        let room = backupsKept - (backups.includes(written) ? 1 : 0);
+        // The backup just written takes a place among the automatic ones only when it is one
+        let room = backupsKept - (backups.includes(written) && ConfigBackupRules.parseName(written).reason !== "manual" ? 1 : 0);
         const keep = [];
         const deleted = [];
         for (const name of backups) {

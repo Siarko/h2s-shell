@@ -942,8 +942,12 @@ its file and what Apply would do ("Apply: 1 settings update brings it up to 2.2.
 whose update would fail). Apply… asks with the steps: create a new backup, load the selected
 backup, the settings update (only for a backup from an older version), restart the shell. A
 backup written by a newer shell is marked "Written by shell 2.3.0 (newer than current) — may be
-incompatible, expect odd behaviour" and loaded as it is. `qs ipc call settings backups` lists
-them; `settings restoreBackup <name>` applies one.
+incompatible, expect odd behaviour" and loaded as it is. Make a backup now saves the current
+settings as a backup made by you, which comes in at the top of the list. Delete… on a row asks
+("Delete the backup of 5 Jan 2026, 21:30 (manual, 2.1.0)?") and removes only that backup; the
+backup being applied and the one Restore previous settings needs cannot be deleted.
+`qs ipc call settings backups` lists them; `settings restoreBackup <name>` applies one,
+`settings backup` makes one, `settings deleteBackup <name>` deletes one.
 
 ### A page for the distribution
 

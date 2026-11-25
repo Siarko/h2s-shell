@@ -590,7 +590,7 @@ backups (`-migration`, `-restore`, `-module`, and those with no reason) beyond t
 (`MigrationRules.backupsKept`, by the stamp in the name) are deleted with their side files
 (`MigrationRules.backupsToKeep`). Only names of that exact pattern count; nothing else in the
 folder is touched. The backup just written is always kept; a manual backup (`-manual`) is
-never pruned. A module's own backups (its store and data, `ModuleBackups`) keep their own
+never pruned and takes no place among the ten, the one just written neither. A module's own backups (its store and data, `ModuleBackups`) keep their own
 limit. The pruning is `components/ConfigBackupPruner.qml`, run after every config backup:
 the run's, a restore's and a module switch's.
 
@@ -626,6 +626,21 @@ and notice. No migration runs backwards; a newer backup is never refused. Refuse
 goes on, while a module job runs (`Modules.jobRunning`: the restart would cut it in half),
 while the shell cannot restart, and under the test runner. IPC: `settings backups`
 (the list as last read, JSON; reads it again), `settings restoreBackup <name>`.
+
+**Make a backup now** (`ConfigBackupList.makeBackup`, through
+`MigrationFailureNotice.backUpNow` and its one `ConfigRestore`) copies config.json as saved
+to `-manual` (readable by the user only), which the pruning that follows never takes; the
+list is read again and the page opens the new row. Refused under the test runner, while a
+run goes on, while a restore is under way, and while a backup is being written
+(`ConfigBackupRules.backupRefusal`). **Delete…** (`ConfigBackupList.deleteBackup`) asks in
+the Settings modal naming the date, reason and version (`ConfigBackupRules.deleteQuestion`,
+keyed to the backup) and removes that file (a plain `rm -f`: a folder of a backup's name is
+refused) and its `backup-side-files/<name>/`, nothing else. Only a bare name of the backup
+pattern is taken; refused under the test runner, one at a time, for the backup a restore
+reads (`MigrationFailureNotice.restoring`) and for the failure notice's backup, which
+Restore previous settings needs (`ConfigBackupRules.deleteRefusal`; the button is
+unavailable with the reason). IPC: `settings backup`, `settings deleteBackup <name>` ("" when
+started, else why not).
 
 #### Downgrade
 

@@ -114,6 +114,9 @@ The interface modules are written against (`qs.api`), versioned on its own
   update) and restarts the shell; a backup from a newer shell is marked and loaded as it is.
   A module update or version switch now backs up the settings first. IPC `settings backups`
   and `settings restoreBackup <name>`.
+- Backups: Make a backup now saves a backup of the current settings, kept until you delete
+  it; Delete… on any backup removes it after asking (not the one being applied or the one
+  Restore previous settings needs). IPC `settings backup` and `settings deleteBackup <name>`.
 - Settings → System → NixOS, listed only on NixOS: the system's NixOS configuration as the
   shell finds it (a flake or a classic configuration.nix, in any folder; Change… picks
   another), its facts one per line, and whether it is connected — the shell's file
