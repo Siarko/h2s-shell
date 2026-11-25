@@ -29,6 +29,9 @@
 #     buttons each with its scene's description as tooltip;
 #   - a plan on a scene that holds a list open (plans/open-list), switched to another scene:
 #     a click on that scene's button lands (the hidden scene's list leaves no press catcher);
+#     and with a real pointer (plans/held-list), in a scene holding a list open, a press on
+#     another scene's button switches scenes (the kit's buttons lie above every overlay), the
+#     scene's own button brings the list back, a press outside closes it;
 #   - `ipc call mockup theme <name>` on screen shows it in that theme and answers the name;
 #   - the gallery (H2S_MOCKUP=gallery, on mockups/), in the built-in theme and opened in a
 #     fixture theme (tests/fixtures/mockup-themes/, H2S_MOCKUP_THEME): a section per
@@ -645,6 +648,61 @@ finish_entry wheel-row
 # (the stroke's steps may come one by one or together: its last value is the check)
 check "$([ "${row_answer%% WHEEL-ROW *}" = "WHEEL-ROW 180" ] && [ "${row_answer##* }" = 140 ]; echo $?)" "three plain notches leave the swatches, three with Shift move them 180 px (60 a notch), a 40 px stroke back by 40 (was '$row_answer')"
 check "$(! grep -q -E 'MOCKUP-ERROR|TypeError|ReferenceError' "${logs[wheel-row]}"; echo $?)" "no error"
+
+# point_at <id> <x,y>: the pointer moved to that place in the window, from where the probe
+# sees it now (relative moves: the window's place on the output is the compositor's); a few
+# corrections at most; 0 once it is there
+point_at() {
+    local id=$1 target=$2 here attempt
+    for attempt in 1 2 3 4; do
+        here=$(ipc "$id" call probe pointer)
+        [ -z "$here" ] && return 1
+        [ "$here" = "$target" ] && return 0
+        send_input "move $((${target%,*} - ${here%,*})) $((${target#*,} - ${here#*,}))"
+        local deadline=$((SECONDS + 5))
+        # Seen moved, a condition polled
+        while [ $SECONDS -lt $deadline ] && [ "$(ipc "$id" call probe pointer)" = "$here" ]; do sleep 0.05; done
+    done
+    [ "$(ipc "$id" call probe pointer)" = "$target" ]
+}
+
+# await <id> <expected> <ipc call…>: polls the call until it answers <expected>, five seconds
+# at most; prints the last answer
+await() {
+    local id=$1 expected=$2 answer deadline=$((SECONDS + 5))
+    shift 2
+    # A condition polled
+    while answer=$(ipc "$id" call "$@") && [ "$answer" != "$expected" ] && [ $SECONDS -lt $deadline ]; do sleep 0.05; done
+    printf '%s' "$answer"
+}
+
+echo "on screen: a real pointer in a scene holding a list open: a scene button takes the press, a press outside closes the list"
+start_entry held-list "$REPO/mockup.qml" H2S_MOCKUP_BASE=tests/fixtures/mockups H2S_MOCKUP=plans/held-list H2S_MOCKUP_SCENE=open
+held_steps="" deadline=$((SECONDS + 30)) id=""
+while [ $SECONDS -lt $deadline ] && kill -0 "${pids[held-list]}" 2> /dev/null; do
+    id=$(instance_of held-list)
+    [ -n "$id" ] && [ "$(ipc "$id" call mockup window)" = floating ] && [ "$(ipc "$id" call probe list)" = shown ] && break
+    id=""
+    # A condition polled (the window made, the list shown), not a fixed wait
+    sleep 0.05
+done
+if [ -n "$id" ]; then
+    send_input "abs 1 1 2 2"
+    send_input "move 1 1"
+    pointer_deadline=$((SECONDS + 5))
+    # The pointer seen in the window, a condition polled
+    while [ $SECONDS -lt $pointer_deadline ] && [ -z "$(ipc "$id" call probe pointer)" ]; do sleep 0.05; done
+    point_at "$id" "$(ipc "$id" call mockup place other)" && send_input "click left"
+    held_steps="$(await "$id" other mockup current) $(await "$id" hidden probe list)"
+    point_at "$id" "$(ipc "$id" call mockup place open)" && send_input "click left"
+    held_steps+=" $(await "$id" open mockup current) $(await "$id" shown probe list)"
+    point_at "$id" "$(ipc "$id" call probe outside)" && send_input "click left"
+    held_steps+=" $(await "$id" hidden probe list) $(ipc "$id" call mockup current)"
+fi
+kill -TERM "${pids[held-list]}" 2> /dev/null
+finish_entry held-list
+check "$([ "$held_steps" = "other hidden open shown hidden open" ]; echo $?)" "the other scene's button switches scenes, the open one's brings the list back, a press outside closes it (was '$held_steps')"
+check "$(! grep -q -E 'MOCKUP-ERROR|TypeError|ReferenceError' "${logs[held-list]}"; echo $?)" "no error"
 
 # Every wheel handler in the tree is the shell's WheelScroll, which takes a mouse wheel as
 # Qt on Wayland hands it over (from its touchpad device); a plain WheelHandler turns it away

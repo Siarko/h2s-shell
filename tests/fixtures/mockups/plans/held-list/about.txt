@@ -1,0 +1,3 @@
+description: A fixture plan whose first scene holds a list open, closed by a press outside it
+scene: open     A dropdown's list held open by the scene
+scene: other    Another scene, reached by its button

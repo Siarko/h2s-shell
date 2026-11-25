@@ -91,6 +91,9 @@ import qs.components
 //   qs -p <tree>/mockup.qml ipc call mockup buttons
 //                         the buttons inside the window: "<shown> of <names> shown,
 //                         checked <name>" (none while shooting)
+//   qs -p <tree>/mockup.qml ipc call mockup place <name>
+//                         the centre of that state's or scene's button in window
+//                         coordinates, "<x>,<y>" ("" while it is not shown)
 //   qs -p <tree>/mockup.qml ipc call mockup tooltips
 //                         each button's "<name>: <tooltip>", a line each
 //   qs -p <tree>/mockup.qml ipc call mockup cells
@@ -391,9 +394,8 @@ QtObject {
         }
     }
 
-    // The content and the buttons, put into the window start() makes: while shooting
-    // the content at the window's corner; on screen the buttons, and under them the content
-    // moved into the scroller
+    // The content, put into the window start() makes: while shooting at the window's corner;
+    // on screen moved into the scroller, under the buttons (in the controls' layer)
     readonly property Item _body: Item {
         width: parent ? parent.width : root._windowWidth
         height: parent ? parent.height : root._windowHeight
@@ -444,7 +446,12 @@ QtObject {
                 onWheel: event => _scroller._scrollBy(step(event), 0)
             }
 
+            // In the controls' layer, over the scroller's edges
             ScrollBar.vertical: ScrollBar {
+                parent: root._controls
+                x: _scroller.x + _scroller.width - width
+                y: _scroller.y
+                height: _scroller.height
                 policy: _scroller.contentHeight > _scroller.height ? ScrollBar.AlwaysOn : ScrollBar.AlwaysOff
                 contentItem: Rectangle {
                     implicitWidth: 6
@@ -453,6 +460,10 @@ QtObject {
                 }
             }
             ScrollBar.horizontal: ScrollBar {
+                parent: root._controls
+                x: _scroller.x
+                y: _scroller.y + _scroller.height - height
+                width: _scroller.width
                 policy: _scroller.contentWidth > _scroller.width ? ScrollBar.AlwaysOn : ScrollBar.AlwaysOff
                 contentItem: Rectangle {
                     implicitHeight: 6
@@ -461,6 +472,18 @@ QtObject {
                 }
             }
         }
+    }
+
+    // The window's own controls, the buttons and the scroll bars: a layer of their own in the
+    // window's top item, above every overlay the mockup's items put there (a FloatingList
+    // and its press catcher, z 1000, cover the whole top item), so that they always take a
+    // press — also in a scene that holds a list open. The top item is the Qt window's own
+    // (where those overlays go), which holds the Quickshell window's contentItem
+    readonly property Item _controls: Item {
+        parent: _body.Window.window ? _body.Window.window.contentItem : null
+        z: 2000
+        width: parent ? parent.width : root._windowWidth
+        height: parent ? parent.height : root._windowHeight
 
         Flow {
             id: _switcher
@@ -562,6 +585,19 @@ QtObject {
 
         function buttons(): string {
             return root._window ? root._buttonsShown() : "";
+        }
+
+        // The centre of a state's or scene's button, in window coordinates: "<x>,<y>", or ""
+        // while it is not shown
+        function place(name: string): string {
+            for (let i = 0; i < _buttons.count; i++) {
+                const button = _buttons.itemAt(i);
+                if (!button || button.modelData !== name || !button.visible)
+                    continue;
+                const centre = button.mapToItem(null, button.width / 2, button.height / 2);
+                return Math.round(centre.x) + "," + Math.round(centre.y);
+            }
+            return "";
         }
 
         function scroller(): string {
