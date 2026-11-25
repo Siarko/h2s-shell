@@ -16,8 +16,6 @@ import qs.mockups.kit
 MockupWindow {
     id: root
 
-    names: ["list", "backup-made", "selected", "apply-confirm", "apply-confirm-failing", "newer-version",
-        "newer-confirm", "delete-confirm", "failure-notification", "failure-dashboard", "failure-restore-confirm"]
     contentWidth: 1000
     contentHeight: 690
 

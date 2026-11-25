@@ -1,0 +1,12 @@
+description: Config backups in Settings (list, apply, delete) and the failed settings update notice
+scene: list                     System → Backups: newest first, date, reason, version; Kept chips
+scene: backup-made              After Make a backup now: the confirmation and the new row, selected
+scene: selected                 A row opened: its file name, what Apply would do, Apply… and Delete…
+scene: apply-confirm            Apply's question: reason and version, then the steps
+scene: apply-confirm-failing    The same when an update fails under this version
+scene: newer-version            The 2.3.0 backup selected: the full warning; Apply available
+scene: newer-confirm            Its question, led by the warning in bold; no updates run
+scene: delete-confirm           Delete's question (danger modal), naming date, reason, version
+scene: failure-notification     The critical notification after a failed update at start
+scene: failure-dashboard        The same notice as a Dashboard entry with the same three choices
+scene: failure-restore-confirm  Restore previous settings… asks first
