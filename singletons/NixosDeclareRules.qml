@@ -12,8 +12,8 @@ import QtQuick
 // The configuration may set the same thing itself, past the shell's option (the system's
 // own systemd option): its line wins (the NixOS module defines the shell's value below it)
 // and the shell shows it, never offering to apply over it. The published file says which
-// won: `settings` holds the file's value as taken in, `system` what the system's option
-// merged to; when they differ, or the file gives none, the setting is the configuration's own.
+// won: `system` holds what the system's option merged to, `own` whether the configuration
+// defines it itself (then it is the configuration's, even at the file's value).
 Singleton {
     id: root
 
@@ -61,18 +61,19 @@ Singleton {
             return unknown;
         const published = reading.publishedSettings;
         const merged = _at(published?.system, path);
-        if (merged === undefined)
+        const own = _at(published?.own, path);
+        if (merged === undefined || typeof own !== "boolean")
             return unknown;
-        if (merged === null)
-            return Object.assign(unknown, { state: "default" });
-        const value = seconds(merged);
-        if (value === null)
+        const value = merged === null ? null : seconds(merged);
+        if (merged !== null && value === null)
             return unknown;
-        const fileValue = seconds(_at(published?.settings, path));
-        if (fileValue === value)
-            return Object.assign(unknown, { state: "set", value, from: String(reading.file?.path ?? "") });
-        const folder = String(reading.configuration?.folder ?? "");
-        return Object.assign(unknown, { state: "set", value, from: folder, elsewhere: folder, afterOwn: folder !== "" });
+        const state = value === null ? "default" : "set";
+        // The configuration's own definition, whatever its value (the file's too)
+        if (own) {
+            const folder = String(reading.configuration?.folder ?? "");
+            return folder === "" ? unknown : Object.assign(unknown, { state, value, from: folder, elsewhere: folder, afterOwn: true });
+        }
+        return Object.assign(unknown, { state, value, from: value === null ? "" : String(reading.file?.path ?? "") });
     }
 
     // The shell's file with `kind` set to `value` → { request (NixosRebuild.announce's: key,

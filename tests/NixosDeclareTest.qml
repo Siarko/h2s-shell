@@ -33,14 +33,17 @@ TestCase {
             real: folder, owner: "root", rootWrites: true, git: "absent", gitKnowsFile: "", host: "nixos",
             file: { path: folder + "/h2s-shell.json", state: "present", sha256: PamEditRules.sha256(text), text },
             fileStatus: "inForce", module: "present", published: "present",
-            publishedSettings: published ?? { version: 1, settings: {}, inForce: {}, system: { idle: { hibernateDelay: null } } },
+            publishedSettings: published ?? { version: 1, settings: {}, inForce: {}, system: { idle: { hibernateDelay: null } }, own: { idle: { hibernateDelay: false } } },
             generations: { count: 3, current: 3 }, state: "connected", homeWarning: false, facts: []
         }, more ?? {});
     }
 
-    function published(fileValue, merged) {
+    // `own` defaults to what the module tells by priority: a merged value other than the file's
+    function published(fileValue, merged, own) {
         const settings = fileValue === undefined ? {} : { idle: { hibernateDelay: fileValue } };
-        return { version: 1, settings, inForce: { idle: { hibernateDelay: fileValue ?? null } }, system: { idle: { hibernateDelay: merged } } };
+        const theirs = own ?? (merged !== null && NixosDeclareRules.seconds(merged) !== NixosDeclareRules.seconds(fileValue));
+        return { version: 1, settings, inForce: { idle: { hibernateDelay: fileValue ?? null } }, system: { idle: { hibernateDelay: merged } },
+                 own: { idle: { hibernateDelay: theirs } } };
     }
 
     // ── The stand-ins ──
@@ -130,7 +133,7 @@ TestCase {
 
     function _pure() {
         const rules = NixosDeclareRules;
-        const inForce = (fileValue, merged, more) => rules.inForce(reading(more, null, published(fileValue, merged)), kind);
+        const inForce = (fileValue, merged, more, own) => rules.inForce(reading(more, null, published(fileValue, merged, own)), kind);
         const own = inForce(10800, 10800);
         assert(IntegrationRules.validInForce(own), "inForce: a valid answer " + JSON.stringify(own));
         assertEqual([own.state, own.value, own.from, own.elsewhere, own.afterOwn].join("|"), "set|10800|" + folder + "/h2s-shell.json||false",
@@ -141,8 +144,17 @@ TestCase {
         assertEqual([theirs.state, theirs.value, theirs.from, theirs.elsewhere, theirs.afterOwn].join("|"), "set|600|" + folder + "|" + folder + "|true",
                     "inForce: the configuration's own systemd line differs from the file's: set in the configuration, the shell cannot win over it");
         assertEqual(inForce(undefined, "10min").elsewhere, folder, "… the file gives none: the configuration's own");
+        const equalOwn = inForce(10800, "3h", {}, true);
+        assertEqual([equalOwn.state, equalOwn.value, equalOwn.elsewhere, equalOwn.afterOwn].join("|"), "set|10800|" + folder + "|true",
+                    "inForce: the configuration's own definition at the file's value: still its own, nothing offered over it");
+        const ownDefault = inForce(10800, null, {}, true);
+        assert(IntegrationRules.validInForce(ownDefault), "… valid " + JSON.stringify(ownDefault));
+        assertEqual(ownDefault.state + "|" + ownDefault.elsewhere, "default|" + folder, "… its own null: systemd's default, the configuration's");
+        assertEqual(inForce(10800, 10800, {}, "yes").state, "unknown", "own not a boolean: unknown");
         assertEqual(inForce(undefined, null).state + "|" + inForce(undefined, null).value, "default|null", "nothing set anywhere: systemd's default");
         assertEqual(inForce(10800, "soon").state, "unknown", "a merged value not understood: unknown");
+        assertEqual(rules.inForce(reading({}, null, { version: 1, settings: {}, inForce: {}, system: { idle: { hibernateDelay: 600 } } }), kind).state, "unknown",
+                    "a module that does not tell whether the configuration defines it: unknown");
         assertEqual(rules.inForce(reading({}, null, { version: 1, settings: {}, inForce: {} }), kind).state, "unknown",
                     "a module that publishes no merged value: unknown, never the shell's");
         assertEqual(rules.inForce(reading({ state: "found" }, null, published(10800, 10800)), kind).state, "unknown", "not connected: unknown");

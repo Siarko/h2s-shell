@@ -168,7 +168,19 @@ let
   collidedPublished = builtins.fromJSON (etcText collided "h2s-shell/settings.json");
   # … and beside the shell's own option written by hand: the configuration's systemd line wins too
   collidedOption = configOf { programs.h2s-shell.idle.hibernateDelay = "3h"; systemd.sleep.settings.Sleep.HibernateDelaySec = "10min"; };
+  ownOf = config: (builtins.fromJSON (etcText config "h2s-shell/settings.json")).own.idle.hibernateDelay or null;
+  # The configuration's own value equal to the file's: still its own
+  equalOwn = configOf { programs.h2s-shell.settingsFile = fixturePath; systemd.sleep.settings.Sleep.HibernateDelaySec = "3h"; };
+  equalOption = configOf { programs.h2s-shell.settingsFile = fixturePath; programs.h2s-shell.idle.hibernateDelay = "3h"; };
+  # The shell's option written by hand beside a profile's mkDefault HibernateDelaySec: the option wins, no clash
+  optionOverProfile = configOf { programs.h2s-shell.idle.hibernateDelay = "3h"; systemd.sleep.settings.Sleep.HibernateDelaySec = lib.mkDefault "10min"; };
   collisions = [
+    (result (ownOf collided == true && ownOf equalOwn == true && ownOf equalOption == true)
+      "own: the configuration's HibernateDelaySec or its own idle.hibernateDelay, also of the file's value" (builtins.toJSON [ (ownOf collided) (ownOf equalOwn) (ownOf equalOption) ]))
+    (result (ownOf fromFile == false && ownOf (configOf (withFile { version = 1; })) == false)
+      "… not own: the file's value alone, or nothing set" (builtins.toJSON [ (ownOf fromFile) (ownOf (configOf (withFile { version = 1; }))) ]))
+    (result (lib.hasInfix "HibernateDelaySec=3h" (etcText optionOverProfile "systemd/sleep.conf") && failedOf optionOverProfile == [ ])
+      "a hand-written idle.hibernateDelay beside a profile's mkDefault HibernateDelaySec: the option wins, no clash" (builtins.toJSON (etcText optionOverProfile "systemd/sleep.conf")))
     (result (lib.hasInfix "HibernateDelaySec=10min" (etcText collided "systemd/sleep.conf") && !(lib.hasInfix "HibernateDelaySec=3h" (etcText collided "systemd/sleep.conf")))
       "the configuration's own HibernateDelaySec beside the file's: it wins, no conflicting definitions" (builtins.toJSON (etcText collided "systemd/sleep.conf")))
     (result (failedOf collided == [ ]) "… and evaluation succeeds" (builtins.toJSON (failedOf collided)))

@@ -11,8 +11,8 @@
 # (a newer shell's) is a warning and is ignored. What was taken in, and what is in force
 # for the same options, is published as /etc/h2s-shell/settings.json for the shell to read
 # unprivileged, with what the system's own options merged for the same settings (`system`:
-# HibernateDelaySec, which the configuration may set itself); the file's presence says the
-# line is in place.
+# HibernateDelaySec, which the configuration may set itself) and whether the configuration
+# defines them itself (`own`); the file's presence says the line is in place.
 { config, options, lib, ... }:
 
 let
@@ -168,6 +168,13 @@ let
     system.idle.hibernateDelay =
       if options.systemd.sleep ? settings then config.systemd.sleep.settings.Sleep.HibernateDelaySec or null
       else cfg.idle.hibernateDelay;
+    # Whether the configuration defines it itself, past the file: the shell's option at a
+    # priority of its own, or a HibernateDelaySec beside the one module.nix defines. The
+    # shell offers nothing over such a definition, even when its value equals the file's
+    own.idle.hibernateDelay = opts.idle.hibernateDelay.highestPrio < filePriority
+      || (options.systemd.sleep ? settings
+          && lib.length (lib.filter (value: builtins.isAttrs value && value ? HibernateDelaySec) options.systemd.sleep.settings.Sleep.definitions)
+             > (if cfg.idle.hibernateDelay != null then 1 else 0));
   };
 in
 {

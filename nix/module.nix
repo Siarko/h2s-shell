@@ -26,12 +26,13 @@ let
     in if orders == [ ] then 10000 else lib.foldl' lib.min (lib.head orders) orders;
 
   # The system's delay before a sleep the shell starts turns into hibernation: sleep.conf's
-  # HibernateDelaySec, through whichever option this NixOS has for it. Never above mkDefault:
-  # the configuration's own HibernateDelaySec wins over the shell's option instead of
-  # clashing with it; a value from the shell's settings file (priority 1001, below mkDefault)
-  # stays below a profile's mkDefault of it too.
+  # HibernateDelaySec, through whichever option this NixOS has for it. Below a plain
+  # definition: the configuration's own HibernateDelaySec wins over the shell's option
+  # instead of clashing with it. The option written in the configuration (999) still wins
+  # over a profile's mkDefault of HibernateDelaySec; a value from the shell's settings file
+  # (1001, below mkDefault) does not.
   hibernateDelay = toString cfg.idle.hibernateDelay;
-  sleepPriority = lib.max 1000 options.programs.h2s-shell.idle.hibernateDelay.highestPrio;
+  sleepPriority = if options.programs.h2s-shell.idle.hibernateDelay.highestPrio >= 1001 then 1001 else 999;
   sleepConfig =
     if options.systemd.sleep ? settings
     then { systemd.sleep.settings.Sleep.HibernateDelaySec = lib.mkOverride sleepPriority hibernateDelay; }

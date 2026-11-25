@@ -72,7 +72,7 @@ TestCase {
         function current() {
             return { state: "connected", configuration: { found: true, folder: "/srv/nixos-config" },
                      file: { path: "/srv/nixos-config/h2s-shell.json", state: "present", sha256: "", text: "{\"version\":1}\n" },
-                     publishedSettings: { version: 1, settings: {}, inForce: { idle: { hibernateDelay: null } }, system: { idle: { hibernateDelay: "10min" } } } };
+                     publishedSettings: { version: 1, settings: {}, inForce: { idle: { hibernateDelay: null } }, system: { idle: { hibernateDelay: "10min" } }, own: { idle: { hibernateDelay: true } } } };
         }
         function read() {
             Qt.callLater(() => revision++);
