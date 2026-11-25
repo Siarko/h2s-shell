@@ -180,7 +180,14 @@ TestCase {
         backups.answer = "The shell cannot restart now";
         asked({ button: "apply", cancelled: false, subject: subject });
         assertEqual(backups.applied.join(","), _entries[0].name + ":2026-11-25-x-music-popup", "Apply: the answer applies the backup asked about, with its holds");
-        assertEqual(_named(manual, "backupProblem")[0].text, "The shell cannot restart now", "Apply refused: said");
+        assertEqual(_named(page, "backupProblem")[0].text, "The shell cannot restart now", "Apply refused: said");
+        assert(_named(page, "backupProblem")[0].visible, "Apply refused: shown");
+        page.select("");
+        backups.answer = "A module update is running";
+        asked({ button: "apply", cancelled: false, subject: subject });
+        assert(_named(page, "backupProblem")[0].visible && _named(page, "backupProblem")[0].text === "A module update is running",
+               "Apply refused at the answer: shown with no row open");
+        page.select(_entries[1].name);
         assertEqual(_named(manual, "backupPreview")[0].text, "Apply: No settings updates are needed.", "a current one: nothing to update");
 
         page.select(_entries[2].name);
@@ -253,7 +260,10 @@ TestCase {
         asked({ button: "delete", cancelled: false, subject: subject });
         assertEqual(backups.deleted.join(","), name, "delete: the answer deletes the backup asked about");
         backups.deleteDone({ ok: false, problem: "Could not delete: Permission denied" });
-        assertEqual(_named(_rowOf(page, _entries[1].name), "backupProblem")[0].text, "Could not delete: Permission denied", "delete: a failure said on the row");
+        assertEqual(_named(page, "backupProblem")[0].text, "Could not delete: Permission denied", "delete: a failure said");
+        page.select("");
+        backups.deleteDone({ ok: false, problem: "Could not delete: backup-side-files is a link: nothing deleted" });
+        assert(_named(page, "backupProblem")[0].visible, "delete: a failure shown with no row open");
         backups.deleteAnswer = "Being applied";
         asked({ button: "delete", cancelled: false, subject: subject });
         assertEqual(page.problem, "Being applied", "delete: a refusal at the answer said");
@@ -266,5 +276,33 @@ TestCase {
         modalHost.spec = null;
         assert(!page.askDelete(), "delete refused: no question");
         assertEqual(modalHost.spec, null, "delete refused: nothing asked");
+        assertEqual(page.problem, "Needed by Restore previous settings", "delete refused: the reason said (the keyboard has no tooltip)");
+        backups.refused = {};
+        _keys(page);
+    }
+
+    function _keys(page) {
+        assert(page.activeFocusOnTab, "keys: the list takes the keyboard");
+        const names = page._rows.map(row => row.name);
+        page.select("");
+        assert(page.handleKey(Qt.Key_Down), "keys: ↓ taken");
+        assertEqual(page.selected, names[0], "keys: ↓ with none open opens the first");
+        page.handleKey(Qt.Key_Down);
+        assertEqual(page.selected, names[1], "keys: ↓ the next");
+        page.handleKey(Qt.Key_Up);
+        assertEqual(page.selected, names[0], "keys: ↑ the one above");
+        page.handleKey(Qt.Key_Up);
+        assertEqual(page.selected, names[0], "keys: ↑ stays at the top");
+        page.select("");
+        page.handleKey(Qt.Key_Up);
+        assertEqual(page.selected, names[names.length - 1], "keys: ↑ with none open opens the last");
+        page.select(names[0]);
+        modalHost.spec = null;
+        assert(page.handleKey(Qt.Key_Return), "keys: Enter taken");
+        assert(modalHost.spec?.title.startsWith("Apply the backup of"), "keys: Enter asks to apply");
+        modalHost.spec = null;
+        assert(page.handleKey(Qt.Key_Delete), "keys: Delete taken");
+        assert(modalHost.spec?.title.startsWith("Delete the backup of"), "keys: Delete asks to delete");
+        assert(!page.handleKey(Qt.Key_A), "keys: others left");
     }
 }

@@ -19,7 +19,9 @@ import qs.singletons
 // refused under the test runner, while a run goes on, while a restore is under way); Delete
 // (that backup and its side files only; not a name outside the folder or another file, not a
 // folder, not the backup being applied or the one Restore previous settings needs, not under
-// the test runner, one at a time).
+// the test runner, one at a time; no folder, nothing; nothing through a linked
+// backup-side-files; a side folder that cannot be removed said); the pruning (only regular
+// files are backups; nothing through a linked backup-side-files).
 TestCase {
     id: suite
     suiteName: "ConfigBackups"
@@ -205,6 +207,8 @@ TestCase {
         _guards();
         _manual();
         _delete();
+        _deleteGuards();
+        _pruneGuards();
         _clock.start();
     }
 
@@ -558,6 +562,102 @@ TestCase {
         _then("the failure known", () => list.notice.current.backup !== "", () => {
             assertEqual(list.deleteBackup(other, () => {}), "Needed by Restore previous settings", "delete: not the failure notice's backup");
             assertEqual(_read(dir + "/" + other), _configText([], "2.1.0"), "delete refused: the file kept");
+        });
+    }
+
+    // ---- Delete: no folder, a linked side-files folder, side files that stay ----
+    function _deleteGuards() {
+        const dir = _scratch + "/delete-guards";
+        const outside = _scratch + "/delete-guards-outside";
+        const linked = _stamp(9, 1) + "-migration";
+        const stuck = _stamp(9, 2) + "-migration";
+        let notice = null;
+        let list = null;
+        let made = null;
+        let deleted = null;
+        let listing = null;
+        _then("the delete guards' folder", () => true, () => {
+            _write(dir + "/config.json", _currentText);
+            _write(dir + "/" + linked, _configText([], "2.1.0"));
+            _write(outside + "/" + linked + "/keep.json", "{}");
+            made = _run(["ln", "-s", "--", outside, dir + "/backup-side-files"]);
+        });
+        _then("the link made", () => made.code !== -1, () => {
+            assertEqual(made.code, 0, "a linked backup-side-files made");
+            notice = _newNotice(dir);
+            const nowhere = _list.createObject(suite, { configPath: "config.json", notice: notice });
+            assertEqual(nowhere.dir, "", "no folder: none");
+            assertEqual(nowhere.deleteBackup(linked, () => {}), "Not a backup: " + linked, "no folder: nothing deleted");
+            assert(!nowhere.deleting, "no folder: no delete running");
+            list = _newList(dir, notice);
+            assertEqual(list.deleteBackup(linked, answer => deleted = answer), "", "linked side files: tried");
+        });
+        _then("linked: refused", () => deleted !== null, () => {
+            assertEqual(deleted.ok + "|" + deleted.problem, "false|Could not delete: backup-side-files is a link: nothing deleted",
+                        "linked side files: refused, said");
+            assertEqual(_read(outside + "/" + linked + "/keep.json"), "{}", "linked side files: nothing deleted where it points");
+            assertEqual(_read(dir + "/" + linked), _configText([], "2.1.0"), "linked side files: the backup kept");
+            made = _run(["sh", "-c", "rm -- \"$1/backup-side-files\" && mkdir -p -- \"$1/backup-side-files/$2/sub\" && : > \"$1/backup-side-files/$2/sub/x\" && chmod 500 -- \"$1/backup-side-files/$2/sub\"",
+                         "sh", dir, stuck]);
+            _write(dir + "/" + stuck, _configText([], "2.1.0"));
+        });
+        _then("side files that cannot go", () => made.code !== -1, () => {
+            assertEqual(made.code, 0, "side files that cannot be removed made");
+            deleted = null;
+            assertEqual(list.deleteBackup(stuck, answer => deleted = answer), "", "stuck side files: started");
+        });
+        _then("stuck: said", () => deleted !== null, () => {
+            assert(!deleted.ok && deleted.problem.startsWith("Could not delete: "), "stuck side files: the failure said");
+            listing = _run(["chmod", "-R", "u+rwX", "--", dir]);
+        });
+        _then("stuck: put back", () => listing.code !== -1, () => {});
+    }
+
+    // ---- The pruning: only regular files; nothing through a linked backup-side-files ----
+    function _pruneGuards() {
+        const dir = _scratch + "/prune-guards";
+        const outside = _scratch + "/prune-guards-outside";
+        const folderNamed = _stamp(10, 1) + "-migration";
+        const oldest = _stamp(10, 2) + "-migration";
+        let notice = null;
+        let made = null;
+        let result = null;
+        let listing = null;
+        _then("the prune guards' folder", () => true, () => {
+            _write(dir + "/config.json", _currentText);
+            _write(dir + "/" + folderNamed + "/inside", "x");
+            for (let day = 2; day <= 11; day++)
+                _write(dir + "/" + _stamp(10, day) + "-migration", _configText([], "2.1.0"));
+            _write(outside + "/" + oldest + "/keep.json", "{}");
+            made = _run(["ln", "-s", "--", outside, dir + "/backup-side-files"]);
+        });
+        _then("the prune link made", () => made.code !== -1, () => {
+            assertEqual(made.code, 0, "a linked backup-side-files made");
+            notice = _newNotice(dir);
+            assert(notice.backUp("module", { id: "kappa", from: "1.0.0", to: "1.1.0" }, answer => result = answer), "a backup that prunes");
+        });
+        _then("pruned through a link: nothing", () => result !== null, () => {
+            assert(result.ok, "taken");
+            assertEqual(_read(outside + "/" + oldest + "/keep.json"), "{}", "pruning: nothing deleted where a linked backup-side-files points");
+            listing = _run(["ls", "-1A", "--", dir]);
+        });
+        _then("the prune folder", () => listing.names !== null, () => {
+            assert(listing.names.includes(folderNamed), "pruning: a folder of a backup's name is no backup");
+            assert(listing.names.includes(oldest), "pruning: refused through the link, the backup kept with its side files");
+            made = _run(["rm", "--", dir + "/backup-side-files"]);
+        });
+        _then("the link gone", () => made.code !== -1, () => {
+            result = null;
+            assert(notice.backUp("module", { id: "kappa", from: "1.1.0", to: "1.2.0" }, answer => result = answer), "a backup that prunes again");
+        });
+        _then("pruned", () => result !== null, () => {
+            listing = _run(["ls", "-1A", "--", dir]);
+        });
+        _then("the prune folder after", () => listing.names !== null, () => {
+            assert(listing.names.includes(folderNamed), "pruning: the folder still no backup, kept");
+            assert(!listing.names.includes(oldest), "pruning: the oldest regular one pruned");
+            const automatic = listing.names.filter(name => name !== folderNamed && ConfigBackupRules.parseName(name).ok);
+            assertEqual(automatic.length, 10, "pruning: ten automatic files");
         });
     }
 }

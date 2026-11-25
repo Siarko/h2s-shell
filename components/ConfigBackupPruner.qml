@@ -2,9 +2,11 @@ import QtQuick
 import Quickshell.Io
 import qs.singletons
 
-// Prunes the config backups in config.json's folder after one was written: the folder listed,
+// Prunes the config backups in config.json's folder after one was written: the folder's
+// regular files listed (a folder or a link of a backup's name is never a backup),
 // MigrationRules.backupsToKeep decides (the newest automatic ones; manual ones and the
-// protected never), each deleted backup removed with the folder of side files it holds. One
+// protected never), each deleted backup removed with the folder of side files it holds
+// (ConfigBackupRemover: nothing removed through a linked backup-side-files). One
 // at a time: a prune asked for while one runs runs again once it is done, with the last
 // names it was given.
 QtObject {
@@ -12,7 +14,7 @@ QtObject {
 
     // config.json's folder
     property string dir: ""
-    readonly property bool busy: _lister.running || _remover.running
+    readonly property bool busy: _lister.running || _remover.running || _listing
 
     // A prune ended (also when nothing was removed or the folder could not be listed)
     signal pruned
@@ -36,13 +38,21 @@ QtObject {
             return;
         }
         _again = false;
-        _lister.command = ["ls", "-1A", "--", dir];
+        if (dir === "") {
+            Qt.callLater(_done);
+            return;
+        }
+        _listing = true;
+        _lister.command = ["find", "-H", dir, "-mindepth", "1", "-maxdepth", "1", "-type", "f", "-printf", "%f\\n"];
         _lister.running = true;
     }
+
+    property bool _listing: false
 
     property Process _lister: Process {
         stdout: StdioCollector { id: _names }
         onExited: code => {
+            root._listing = false;
             if (code !== 0) {
                 console.warn("[Migrations] could not list " + root.dir + ": no backups pruned");
                 root._done();
@@ -54,17 +64,17 @@ QtObject {
                 return;
             }
             console.log("[Migrations] Older backups removed:", plan.delete.join(", "));
-            const paths = [];
-            for (const name of plan.delete)
-                paths.push(root.dir + "/" + name, root.sideFolder(name));
-            root._remover.command = ["rm", "-rf", "--"].concat(paths);
-            root._remover.running = true;
+            const started = root._remover.remove(root.dir, plan.delete, result => {
+                if (!result.ok)
+                    console.warn("[Migrations] pruning backups: " + result.problem);
+                root._done();
+            });
+            if (!started)
+                root._done();
         }
     }
 
-    property Process _remover: Process {
-        onExited: root._done()
-    }
+    property ConfigBackupRemover _remover: ConfigBackupRemover {}
 
     function _done() {
         if (_again) {

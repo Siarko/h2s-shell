@@ -62,7 +62,7 @@ QtObject {
         }
         _again = false;
         // Each file with its size: one too large is not read
-        _lister.command = ["find", dir, "-mindepth", "1", "-maxdepth", "1", "-type", "f", "-printf", "%s\\t%f\\n"];
+        _lister.command = ["find", "-H", dir, "-mindepth", "1", "-maxdepth", "1", "-type", "f", "-printf", "%s\\t%f\\n"];
         _lister.running = true;
     }
 
@@ -160,49 +160,35 @@ QtObject {
     }
 
     // Deletes backup `name`: that file, and the side files a migration run kept with it
-    // (backup-side-files/<name>), nothing else; the list read again. `done({ ok, problem })`.
+    // (backup-side-files/<name>), nothing else (ConfigBackupRemover: a folder of the name is
+    // refused, nothing is removed through a link); the list read again. `done({ ok, problem })`.
     // → "" started, else why not
     function deleteBackup(name, done) {
         const refusal = deleteRefusal(name);
         if (refusal !== "")
             return refusal;
+        if (_path(name) === "")
+            return "Not a backup: " + String(name ?? "").slice(0, 80);
         _deleteRunning = true;
-        _deleting = name;
-        _deleteDone = done ?? null;
-        // A plain rm on the file: a folder of that name is refused, not emptied
-        _deleter.command = ["rm", "-f", "--", dir + "/" + name];
-        _deleter.running = true;
+        const started = _remover.remove(dir, [name], result => {
+            if (result.ok)
+                console.info("[Migrations] backup deleted: " + root.dir + "/" + name);
+            root._deleted(result.ok, result.ok ? "" : "Could not delete: " + result.problem, done);
+        });
+        if (!started) {
+            _deleteRunning = false;
+            return "Could not start";
+        }
         return "";
     }
 
     // A delete runs (set at once: a Process says it runs only once it started)
     readonly property bool deleting: _deleteRunning
     property bool _deleteRunning: false
-    property string _deleting: ""
-    property var _deleteDone: null
 
-    property Process _deleter: Process {
-        stderr: StdioCollector { id: _deleteErrors }
-        onExited: code => {
-            if (code !== 0) {
-                const why = _deleteErrors.text.trim().split("\n")[0] ?? "";
-                root._deleted(false, "Could not delete" + (why !== "" ? ": " + why.slice(0, 200) : ""));
-                return;
-            }
-            console.info("[Migrations] backup deleted: " + root.dir + "/" + root._deleting);
-            root._sideDeleter.command = ["rm", "-rf", "--", root.dir + "/backup-side-files/" + root._deleting];
-            root._sideDeleter.running = true;
-        }
-    }
+    property ConfigBackupRemover _remover: ConfigBackupRemover {}
 
-    property Process _sideDeleter: Process {
-        onExited: code => root._deleted(true, "")
-    }
-
-    function _deleted(ok, problem) {
-        const done = _deleteDone;
-        _deleteDone = null;
-        _deleting = "";
+    function _deleted(ok, problem, done) {
         _deleteRunning = false;
         refresh();
         if (typeof done === "function")

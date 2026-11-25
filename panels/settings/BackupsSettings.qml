@@ -46,6 +46,36 @@ Item {
         }
     }
 
+    // The list's keys: ↑ ↓ open the row above or below, Enter asks to apply, Delete asks to
+    // delete
+    activeFocusOnTab: true
+    Keys.onPressed: event => {
+        if (root.handleKey(event.key))
+            event.accepted = true;
+    }
+
+    // → whether the key was taken
+    function handleKey(key) {
+        if (key === Qt.Key_Up || key === Qt.Key_Down) {
+            const names = _rows.map(row => row.name);
+            if (names.length === 0)
+                return true;
+            const at = names.indexOf(selected);
+            const step = key === Qt.Key_Down ? 1 : -1;
+            select(names[at < 0 ? (step > 0 ? 0 : names.length - 1) : Math.max(0, Math.min(names.length - 1, at + step))]);
+            return true;
+        }
+        if (key === Qt.Key_Return || key === Qt.Key_Enter) {
+            askApply();
+            return true;
+        }
+        if (key === Qt.Key_Delete) {
+            askDelete();
+            return true;
+        }
+        return false;
+    }
+
     // Make a backup now: a manual backup of the settings as saved
     function makeBackup() {
         backupProblem = "";
@@ -72,8 +102,14 @@ Item {
     // Delete's question for the opened row; its answer deletes the backup asked about
     function askDelete() {
         const row = _selectedRow;
-        if (!row || !modalHost || deleteRefusal(row.name) !== "")
+        if (!row || !modalHost)
             return false;
+        // Said where it is seen: Delete from the keyboard has no tooltip
+        const refusal = deleteRefusal(row.name);
+        if (refusal !== "") {
+            problem = refusal;
+            return false;
+        }
         return modalHost.ask(ConfigBackupRules.deleteQuestion(row), answer => {
             if (answer.cancelled || answer.button !== "delete")
                 return;
@@ -147,6 +183,19 @@ Item {
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeSmall
                 color: Theme.success
+            }
+            // Why the last Apply or Delete did not start or finish: under the title, seen
+            // whichever row is open
+            Text {
+                objectName: "backupProblem"
+                visible: root.problem !== ""
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                text: root.problem
+                textFormat: Text.PlainText
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.fontSizeSmall
+                color: Theme.error
             }
             Text {
                 objectName: "backupNowProblem"
@@ -227,7 +276,10 @@ Item {
             id: _rowArea
             centred: false
             anchors.fill: parent
-            onClicked: root.select(_row.opened ? "" : _row.row.name)
+            onClicked: {
+                root.forceActiveFocus();
+                root.select(_row.opened ? "" : _row.row.name);
+            }
         }
 
         ColumnLayout {
@@ -346,17 +398,6 @@ Item {
                     tooltip: refusal !== "" ? refusal : "Delete this backup"
                     onClicked: root.askDelete()
                 }
-            }
-            Text {
-                objectName: "backupProblem"
-                visible: _row.opened && root.problem !== ""
-                Layout.fillWidth: true
-                wrapMode: Text.WordWrap
-                text: root.problem
-                textFormat: Text.PlainText
-                font.family: Theme.fontFamily
-                font.pixelSize: Theme.fontSizeSmall
-                color: Theme.error
             }
         }
     }

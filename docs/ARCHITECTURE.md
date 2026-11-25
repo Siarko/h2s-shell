@@ -634,12 +634,15 @@ list is read again and the page opens the new row. Refused under the test runner
 run goes on, while a restore is under way, and while a backup is being written
 (`ConfigBackupRules.backupRefusal`). **Delete…** (`ConfigBackupList.deleteBackup`) asks in
 the Settings modal naming the date, reason and version (`ConfigBackupRules.deleteQuestion`,
-keyed to the backup) and removes that file (a plain `rm -f`: a folder of a backup's name is
-refused) and its `backup-side-files/<name>/`, nothing else. Only a bare name of the backup
+keyed to the backup) and removes that file and its `backup-side-files/<name>/`, nothing else
+(`components/ConfigBackupRemover.qml`, also the pruning's: a folder of a backup's name is
+refused, a link is removed itself, and when `backup-side-files` is a link nothing is removed;
+the pruning lists only regular files). Only a bare name of the backup
 pattern is taken; refused under the test runner, one at a time, for the backup a restore
 reads (`MigrationFailureNotice.restoring`) and for the failure notice's backup, which
 Restore previous settings needs (`ConfigBackupRules.deleteRefusal`; the button is
-unavailable with the reason). IPC: `settings backup`, `settings deleteBackup <name>` ("" when
+unavailable with the reason; a refusal or failure is said under the section's title). Keys
+on the list: ↑ ↓ open a row, Enter asks to apply, Delete asks to delete. IPC: `settings backup`, `settings deleteBackup <name>` ("" when
 started, else why not).
 
 #### Downgrade
