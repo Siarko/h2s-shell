@@ -323,7 +323,9 @@ Item {
                 selectedDay: root.selectedDay
                 showDate: root.viewMode !== "day"
                 onEditingChanged: editing ? root._editStarted(this) : root._editEnded(this)
-                Component.onDestruction: root._editEnded(this)
+                // Read on the panel only: the panel going with it reads no card editing
+                // (Qt may have dropped its properties, and the card's, by then)
+                Component.onDestruction: if (root._editingCard === this) root._editEnded(this)
             }
 
             Text {

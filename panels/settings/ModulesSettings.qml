@@ -51,10 +51,16 @@ Item {
     property int _installJob: 0
     readonly property bool _windowShown: Window.window?.visible ?? false
     on_WindowShownChanged: if (!_windowShown) _dropPreview()
-    Component.onDestruction: _dropPreview()
     function _dropPreview() {
         if (_installJob !== 0)
             installer?.cancelPreview(_installJob);
+    }
+    // The preview's job and its installer, in a JavaScript object the destruction's closure
+    // holds: Qt may drop the page's properties before its destruction runs
+    readonly property var _preview: ({ job: 0, installer: null })
+    on_InstallJobChanged: {
+        _preview.job = _installJob;
+        _preview.installer = installer;
     }
 
     // The side panel: the changelogs of an install's chain ({ title, sections })
@@ -76,7 +82,14 @@ Item {
                 root._installed = read;
         });
     }
-    Component.onCompleted: _followOpenRequest()
+    Component.onCompleted: {
+        const preview = _preview;
+        Component.destruction.connect(() => {
+            if (preview.job !== 0)
+                preview.installer?.cancelPreview(preview.job);
+        });
+        _followOpenRequest();
+    }
     // The modules installed, read each time the page shows (one added or removed meanwhile)
     PageShown {
         onBecameShown: root._readInstalled()

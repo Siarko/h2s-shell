@@ -247,6 +247,7 @@ TestCase {
             assertEqual(_written, [0, 1, 2, 3, 4, 5].map(index => "{\"kept\":" + index + "}").join(" "),
                         "ModuleStore: destroyed within a second of a change, what waited is written");
             Quickshell.execDetached(["rm", "-rf", "--", _scratch]);
+            _sidePanels();
         });
     }
 
@@ -260,5 +261,167 @@ TestCase {
         _reading = true;
         _reader.command = ["sh", "-c", "for i in 0 1 2 3 4 5; do cat \"$1/teardown$i.json\" 2>/dev/null || printf 'missing'; echo; done", "sh", _scratch];
         _reader.running = true;
+    }
+
+    // ---- SidePanelHost: the open panel told it closed ----
+    property var _closedFor: []
+    property Component _sideOwner: Component {
+        TeardownOwner {
+            id: owner
+            property alias host: _host
+            TeardownProbe { tally: suite._tally }
+            SidePanelHost {
+                id: _host
+            }
+        }
+    }
+    property var _sideOwners: []
+
+    function _sidePanels() {
+        _closedFor = [];
+        _sideOwners = _make(_sideOwner, _owners);
+        _sideOwners.forEach(owner => owner.host.show(_panelStandIn, reason => suite._closedFor.push(reason)));
+        assert(_sideOwners.every(owner => owner.host.current === _panelStandIn), "SidePanelHost: each host shows the panel");
+        _drop(_sideOwners);
+        _then("the side panel hosts' owners are destroyed", _allGone, () => {
+            _reachedDropped("SidePanelHost");
+            assertEqual(JSON.stringify(_closedFor), JSON.stringify(Array(_owners).fill(ApiElementRules.sidePanelEvent(true, "pageGone", false).reason)),
+                        "SidePanelHost: destroyed with a panel open, the panel is told it closed (the page went)");
+            _modals();
+        });
+    }
+    property Item _panelStandIn: Item {}
+
+    // ---- SettingsModalHost: the asker answered, cancelled ----
+    property var _answers: []
+    property Component _modalOwner: Component {
+        TeardownOwner {
+            id: owner
+            property alias host: _host
+            TeardownProbe { tally: suite._tally }
+            SettingsModalHost {
+                id: _host
+            }
+        }
+    }
+    property var _modalOwners: []
+
+    function _modals() {
+        _answers = [];
+        _modalOwners = _make(_modalOwner, _owners);
+        _modalOwners.forEach((owner, index) => owner.host.ask({ title: "Teardown", subject: { index: index } }, answer => suite._answers.push(answer)));
+        assert(_modalOwners.every(owner => owner.host.open), "SettingsModalHost: each host's modal is open");
+        _drop(_modalOwners);
+        _then("the modal hosts' owners are destroyed", _allGone, () => {
+            _reachedDropped("SettingsModalHost");
+            assertEqual(JSON.stringify(_answers.map(answer => [answer.button, answer.cancelled, answer.reason, answer.subject.index]).sort()),
+                        JSON.stringify([0, 1, 2, 3, 4, 5].map(index => ["cancel", true, "window", index])),
+                        "SettingsModalHost: destroyed while open, the asker is answered: cancelled for \"window\", with its subject");
+            _hoverTips();
+        });
+    }
+
+    // ---- HoverTip: its handler on the target ----
+    property Item _tipTarget: Item {}
+    property Component _tipOwner: Component {
+        TeardownOwner {
+            id: owner
+            TeardownProbe { tally: suite._tally }
+            Api.HoverTip {
+                target: suite._tipTarget
+                text: "Teardown"
+            }
+        }
+    }
+    property var _tipOwners: []
+    function _handlersOnTarget() {
+        return Array.from(_tipTarget.data).filter(child => child instanceof HoverHandler).length;
+    }
+
+    function _hoverTips() {
+        const before = _handlersOnTarget();
+        _tipOwners = _make(_tipOwner, _owners);
+        // (a handler replaced while the tooltip is built goes with the event loop)
+        _then("the tooltips' handlers are made", () => _handlersOnTarget() - before === _owners, () => _drop(_tipOwners));
+        _then("the tooltips' owners are destroyed", _allGone, () => {
+            _reachedDropped("HoverTip");
+            _then("the handlers are deleted", () => _handlersOnTarget() === before, () => {
+                assertEqual(_handlersOnTarget(), before, "HoverTip: destroyed, its handler leaves the target");
+                _pamLists();
+            });
+        });
+    }
+
+    // ---- PamRuleList: the page's Flickable a drag holds ----
+    // A page Flickable for each list
+    property Component _flickable: Component {
+        Flickable {
+            width: 100
+            height: 100
+            contentHeight: 400
+        }
+    }
+    property var _flicks: []
+    property Component _pamOwner: Component {
+        TeardownOwner {
+            id: owner
+            property alias list: _list
+            TeardownProbe { tally: suite._tally }
+            PamRuleList {
+                id: _list
+            }
+        }
+    }
+    property var _pamOwners: []
+
+    function _pamLists() {
+        _pamOwners = _make(_pamOwner, _owners);
+        _flicks = _pamOwners.map(() => _flickable.createObject(null));
+        // In a Flickable: only its parent item, the owner still has no parent object
+        _pamOwners.forEach((owner, index) => owner.parent = _flicks[index].contentItem);
+        _pamOwners.forEach(owner => owner.list._beginDrag("row"));
+        assert(_flicks.every(flick => !flick.interactive), "PamRuleList: a drag holds the page's Flickable still");
+        // Out of the Flickable again: an item in a shown tree keeps what is declared inside it
+        _pamOwners.forEach(owner => owner.parent = null);
+        _drop(_pamOwners);
+        _then("the rule lists' owners are destroyed", _allGone, () => {
+            _reachedDropped("PamRuleList");
+            assert(_flicks.every(flick => flick.interactive), "PamRuleList: destroyed mid-drag, the page scrolls again");
+            _flicks.forEach(flick => flick.destroy());
+            _flicks = [];
+            _modulePages();
+        });
+    }
+
+    // ---- ModulesSettings: an install's preview cancelled ----
+    property var _cancelled: []
+    property QtObject _installer: QtObject {
+        function cancelPreview(job) {
+            suite._cancelled.push(job);
+        }
+    }
+    property Component _modulesOwner: Component {
+        TeardownOwner {
+            id: owner
+            property alias page: _page
+            TeardownProbe { tally: suite._tally }
+            ModulesSettings {
+                id: _page
+                installer: suite._installer
+            }
+        }
+    }
+    property var _modulesOwners: []
+
+    function _modulePages() {
+        _cancelled = [];
+        _modulesOwners = _make(_modulesOwner, _owners);
+        _modulesOwners.forEach((owner, index) => owner.page._installJob = 10 + index);
+        _drop(_modulesOwners);
+        _then("the modules pages' owners are destroyed", _allGone, () => {
+            _reachedDropped("ModulesSettings");
+            assertEqual(JSON.stringify(_cancelled.slice().sort()), JSON.stringify([10, 11, 12, 13, 14, 15]),
+                        "ModulesSettings: destroyed with an install's preview waiting, the preview is cancelled");
+        });
     }
 }

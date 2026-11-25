@@ -116,20 +116,21 @@ Item {
     property string _dragId: ""
     readonly property int _dragIndex: _dragId === "" ? -1 : _rows.findIndex(row => String(row?.id) === _dragId)
     property int _dropSlot: -1
-    // The page's Flickable while a drag holds it, and what it was before
-    property var _flickable: null
-    property bool _flickableWasInteractive: true
+    // The page's Flickable while a drag holds it, and what it was before: in a JavaScript
+    // object the destruction's closure holds, as Qt may drop the list's properties before its
+    // destruction runs and the page must still scroll again then
+    readonly property var _held: ({ flickable: null, wasInteractive: true })
 
     function _beginDrag(id) {
         if (_dragId !== "")
             _endDrag(false);
         _dragId = String(id);
         _dropSlot = _dragIndex;
-        if (_flickable === null) {
+        if (_held.flickable === null) {
             for (let item = root.parent; item; item = item.parent) {
                 if (item.contentY !== undefined && item.flick !== undefined) {
-                    _flickable = item;
-                    _flickableWasInteractive = item.interactive;
+                    _held.flickable = item;
+                    _held.wasInteractive = item.interactive;
                     item.interactive = false;
                     break;
                 }
@@ -154,15 +155,22 @@ Item {
         _autoScroll.end();
         _dragId = "";
         _dropSlot = -1;
-        if (_flickable)
-            _flickable.interactive = _flickableWasInteractive;
-        _flickable = null;
+        if (_held.flickable)
+            _held.flickable.interactive = _held.wasInteractive;
+        _held.flickable = null;
         const next = dropping && !readOnly && from >= 0 ? PamRuleViewRules.dropped(_rows, from, slot) : null;
         if (next)
             edited(next);
     }
 
-    Component.onDestruction: if (_flickable) _flickable.interactive = _flickableWasInteractive
+    Component.onCompleted: {
+        const held = _held;
+        Component.destruction.connect(() => {
+            if (held.flickable)
+                held.flickable.interactive = held.wasInteractive;
+            held.flickable = null;
+        });
+    }
 
     DragAutoScroll {
         id: _autoScroll
@@ -283,8 +291,16 @@ Item {
         opacity: root._dragIndex === index ? 0.35 : 1
 
         // A row removed while its handle is held: its area goes without a release or a
-        // cancel, so the drag ends here, or the page would stay unscrollable
-        Component.onDestruction: if (root._dragId === modelData) root._endDrag(false)
+        // cancel, so the drag ends here, or the page would stay unscrollable. Its id kept by
+        // the closure: Qt may drop the row's properties before its destruction runs (the
+        // list going with it reads no drag: it lets the page go itself)
+        Component.onCompleted: {
+            const id = modelData;
+            Component.destruction.connect(() => {
+                if (root._dragId === id)
+                    root._endDrag(false);
+            });
+        }
 
         // Where the dragged row would drop: above this row, or below it as the last
         Rectangle {

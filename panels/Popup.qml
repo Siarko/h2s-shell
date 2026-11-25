@@ -76,19 +76,26 @@ LazyLoader {
     // The panel on screen, reported to Profiles for its "panel.open" fact. Closed from the
     // moment the close animation starts.
     readonly property string _shownPanel: active && !closing ? contentType : ""
-    property string _reportedPanel: ""
+    // The panel reported, in a JavaScript object the destruction's closure holds: Qt may drop
+    // the popup's properties before its destruction runs, and the panel must still be
+    // reported closed then
+    readonly property var _reported: ({ panel: "" })
 
     on_ShownPanelChanged: {
-        if (_reportedPanel !== "")
-            Profiles.panelClosed(_reportedPanel);
-        _reportedPanel = _shownPanel;
+        if (_reported.panel !== "")
+            Profiles.panelClosed(_reported.panel);
+        _reported.panel = _shownPanel;
         if (_shownPanel !== "")
             Profiles.panelOpened(_shownPanel);
     }
 
-    Component.onDestruction: {
-        if (_reportedPanel !== "")
-            Profiles.panelClosed(_reportedPanel);
+    Component.onCompleted: {
+        const reported = _reported;
+        Component.destruction.connect(() => {
+            if (reported.panel !== "")
+                Profiles.panelClosed(reported.panel);
+            reported.panel = "";
+        });
     }
 
     // A hover popup closes a moment after the pointer leaves it, and opening it again in
@@ -492,6 +499,13 @@ LazyLoader {
             property real position: 0
             Component.onCompleted: {
                 position = Math.round(_exact);
+                // Gone: its area taken back, from the screen it was told for (kept where a
+                // destruction after Qt dropped the popup's properties still reads it)
+                const told = _told;
+                Component.destruction.connect(() => {
+                    if (told.screen !== null)
+                        Toasts.setCentreArea(told.screen, null);
+                });
                 _reportCentreArea();
             }
             on_ExactChanged: {
@@ -560,6 +574,7 @@ LazyLoader {
                 if (_centreArea === null) {
                     _centreSettle.stop();
                     Toasts.setCentreArea(popupLoader.barScreen?.name ?? "", null);
+                    _told.screen = null;
                 } else {
                     _centreSettle.restart();
                 }
@@ -567,9 +582,13 @@ LazyLoader {
             Timer {
                 id: _centreSettle
                 interval: 80
-                onTriggered: Toasts.setCentreArea(popupLoader.barScreen?.name ?? "", clipWrapper._centreArea)
+                onTriggered: {
+                    clipWrapper._told.screen = popupLoader.barScreen?.name ?? "";
+                    Toasts.setCentreArea(clipWrapper._told.screen, clipWrapper._centreArea);
+                }
             }
-            Component.onDestruction: Toasts.setCentreArea(popupLoader.barScreen?.name ?? "", null)
+            // The screen its area was last told for, null when none is
+            readonly property var _told: ({ screen: null })
 
             Behavior on _start {
                 enabled: popup.showPopup

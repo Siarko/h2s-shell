@@ -51,7 +51,15 @@ ColumnLayout {
     readonly property string note: _pageNote !== "" ? _pageNote : (actions?.note ?? "")
     property bool copied: false
 
-    Component.onCompleted: _syncCountdown()
+    Component.onCompleted: {
+        const shownOn = _shownOn;
+        Component.destruction.connect(() => {
+            const admin = shownOn.admin;
+            shownOn.admin = null;
+            admin?.hideCountdown();
+        });
+        _syncCountdown();
+    }
     // What is installed and remembered, read each time the page shows: the window keeps the
     // page while it is hidden
     PageShown {
@@ -115,10 +123,15 @@ ColumnLayout {
     // The countdown: once a second while the kept row counts down and the section shows
     readonly property bool _counting: _kept.kept && root.visible && (root.Window.window?.visible ?? false)
     property bool _countdownShown: false
+    // Whom the countdown was shown on, in a JavaScript object the destruction's closure holds:
+    // Qt may drop the section's properties before its destruction runs, and the countdown
+    // must still be hidden then
+    readonly property var _shownOn: ({ admin: null })
     function _syncCountdown() {
         if (_counting === _countdownShown)
             return;
         _countdownShown = _counting;
+        _shownOn.admin = _counting ? admin : null;
         if (_counting)
             admin?.showCountdown();
         else
@@ -129,10 +142,6 @@ ColumnLayout {
         _syncCountdown();
     }
     on_RememberedChanged: _now = Date.now()
-    Component.onDestruction: {
-        if (_countdownShown)
-            admin?.hideCountdown();
-    }
     Timer {
         interval: 1000
         repeat: true

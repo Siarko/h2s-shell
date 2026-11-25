@@ -112,14 +112,22 @@ FloatingWindow {
     // (a VPN provider's card: VpnManager.settingsPageOf). One window in the shell; a test's
     // window going away takes its ids with it.
     readonly property var _pageIds: pages.map(page => page.id)
-    on_PageIdsChanged: Shell.settingsPageIds = _pageIds
+    // The ids told, in a JavaScript object the destruction's closure holds: Qt may drop the
+    // window's properties before its destruction runs
+    readonly property var _told: ({ ids: [] })
+    on_PageIdsChanged: {
+        _told.ids = _pageIds;
+        Shell.settingsPageIds = _pageIds;
+    }
     Component.onCompleted: {
+        const told = _told;
+        told.ids = _pageIds;
+        Component.destruction.connect(() => {
+            if (JSON.stringify(Shell.settingsPageIds) === JSON.stringify(told.ids))
+                Shell.settingsPageIds = [];
+        });
         Shell.settingsPageIds = _pageIds;
         _showPage();
-    }
-    Component.onDestruction: {
-        if (JSON.stringify(Shell.settingsPageIds) === JSON.stringify(_pageIds))
-            Shell.settingsPageIds = [];
     }
 
     function _pageIndex(id) {
