@@ -1,4 +1,5 @@
 import QtQuick
+import qs.singletons
 
 // Keeps Tab inside `scope` while `active`: Tab and Shift+Tab go to the next or previous
 // control in it that takes the keyboard, wrapping round, never to one outside it. Its
@@ -64,11 +65,12 @@ Item {
     readonly property Item _focused: Window.activeFocusItem
     readonly property bool _working: active && scope !== null && scope.visible && (holdsFocus || isInside(_focused))
 
+    // (Not while the mockups show several traps at once: Isolation.keyboardHeld)
     on_FocusedChanged: {
-        if (active && holdsFocus && _focused && !isInside(_focused))
+        if (active && holdsFocus && Isolation.keyboardHeld && _focused && !isInside(_focused))
             Qt.callLater(() => {
                 const focused = Window.activeFocusItem;
-                if (root.active && root.holdsFocus && focused && !root.isInside(focused))
+                if (root.active && root.holdsFocus && Isolation.keyboardHeld && focused && !root.isInside(focused))
                     root.scope.forceActiveFocus();
             });
     }

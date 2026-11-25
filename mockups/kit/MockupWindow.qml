@@ -93,6 +93,9 @@ import qs.components
 //                         "overlapping <a>/<b> …", a cell's label named <name>:label), then
 //                         each shown cell's label a line, in order; "no cells: …" for a
 //                         plan or a mockup without a StateGrid
+//   qs -p <tree>/mockup.qml ipc call mockup grab <state> <path>
+//                         saves that state's cell as drawn into a PNG at <path>, which
+//                         appears once done: "" or why not
 // With several mockups running on one display, `qs ipc --id <instance id>` (or --pid) picks
 // one: the target is the same in all of them.
 QtObject {
@@ -259,6 +262,10 @@ QtObject {
         // A plan keeps its scene buttons; a component or view with state cells shows them
         _grid = _word === "state" ? _findGrid(content) : null;
         layout = shooting ? "shot" : !_grid ? "buttons" : first === "" ? "all" : "one";
+        // Every state at once: open modals side by side must not take the keyboard from each
+        // other without end
+        if (layout === "all")
+            Isolation.keyboardHeld = false;
         if (_grid) {
             _grid.mockup = root;
             _grid.availableWidth = Qt.binding(() => _scroller.width);
@@ -488,6 +495,15 @@ QtObject {
 
         function current(): string {
             return root.current;
+        }
+
+        // Saves the cell of a state as drawn (grabToImage) into a PNG at `path`: "" once
+        // started, or why not; the file appears when it is done
+        function grab(name: string, path: string): string {
+            const cell = root._grid ? root._grid.cells.find(c => c.name === name) : null;
+            if (!cell || !cell.visible)
+                return "no cell '" + name + "' shown";
+            return cell.grabToImage(result => result.saveToFile(path)) ? "" : "the cell cannot be grabbed";
         }
 
         function cells(): string {

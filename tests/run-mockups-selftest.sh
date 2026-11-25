@@ -262,16 +262,18 @@ check "$([ "$buttons_answer" = "3 of 3 shown, checked second" ]; echo $?)" "the 
 check "$([ "$scroller_answer" = "wheel, vertical bar shown" ]; echo $?)" "content taller than the window: scrolled by the wheel and a shown scroll bar, never by a drag (was '$scroller_answer')"
 check "$(! grep -q -E 'MOCKUP-ERROR|TypeError|ReferenceError' "${logs[tall]}"; echo $?)" "no error"
 
-# The Quickshell process under a case's background job (the job is the memory cap's wrapper
-# and timeout): its descendant running the runners' Quickshell
+# The Quickshell process under a case's background job (the memory cap's wrapper, then
+# timeout, each with the entry on its command line): the deepest process of the job's tree
+# whose command line names mockup.qml (Quickshell's executable is a wrapper on NixOS, so its
+# path tells nothing)
 quickshell_pid() {
-    local pid=$1 child found qs
-    qs=$(readlink -f "$(command -v "$LOCKTEST_QS")")
+    local pid=$1 child found=""
     for child in $(pgrep -P "$pid"); do
-        if [ "$(readlink -f "/proc/$child/exe" 2> /dev/null)" = "$qs" ]; then echo "$child"; return; fi
         found=$(quickshell_pid "$child")
-        [ -n "$found" ] && { echo "$found"; return; }
+        [ -n "$found" ] && break
+        if tr '\0' ' ' < "/proc/$child/cmdline" 2> /dev/null | grep -q -F 'mockup.qml'; then found=$child; break; fi
     done
+    echo "$found"
 }
 
 # cpu_ticks <pid>: the processor time it has used, in clock ticks (user and system)
@@ -282,7 +284,9 @@ cpu_ticks() {
 # on_screen_cells <case> <base> <mockup> [<state or scene>]: started on screen (all its
 # states when none is named); once its window is made, cells_answer, current_answer,
 # buttons_answer and tooltips_answer what it answers over IPC, and idle_ticks the processor
-# time it used over the next two seconds, at rest
+# time it used over the next two seconds, at rest; with grab_state and grab_file set, that
+# state's cell saved into the file as drawn
+grab_state="" grab_file=""
 on_screen_cells() {
     local case=$1 base=$2 mockup=$3 first=${4:-} id deadline=$((SECONDS + 30)) made="" variable=H2S_MOCKUP_STATE
     [[ "$mockup" == plans/* ]] && variable=H2S_MOCKUP_SCENE
@@ -307,6 +311,10 @@ on_screen_cells() {
                 before=$(cpu_ticks "$qs_pid")
                 sleep 2
                 idle_ticks=$(( $(cpu_ticks "$qs_pid") - before ))
+            fi
+            if [ -n "$grab_state" ] && [ -z "$(ipc "$id" call mockup grab "$grab_state" "$grab_file")" ]; then
+                # The file written once the grab is done, a condition polled
+                while [ $SECONDS -lt $deadline ] && [ ! -s "$grab_file" ]; do sleep 0.05; done
             fi
             break
         fi
@@ -344,6 +352,15 @@ on_screen_cells plan-tips tests/fixtures/mockups plans/tall
 check "$([ "$cells_answer" = "no cells: a plan, its scene buttons" ]; echo $?)" "no cells (was '$cells_answer')"
 check "$([ "$buttons_answer" = "3 of 3 shown, checked first" ]; echo $?)" "its three buttons, the first scene checked (was '$buttons_answer')"
 check "$([ "$tooltips_answer" = "$(printf '%s\n' "first: The first scene" "second: The second scene" "third: The third scene")" ]; echo $?)" "each button's tooltip its scene's description (was '$tooltips_answer')"
+
+echo "on screen: a cell among all the states drawn as when its state opens alone"
+grab_state=on grab_file=$work/toggle-all-on.png
+on_screen_cells toggle-all mockups components/toggle-switch
+grab_file=$work/toggle-one-on.png
+on_screen_cells toggle-one mockups components/toggle-switch on
+grab_state="" grab_file=""
+differing=$("$LOCKTEST_MAGICK" compare -metric AE "$work/toggle-all-on.png" "$work/toggle-one-on.png" null: 2>&1 | cut -d ' ' -f 1)
+check "$([ -s "$work/toggle-all-on.png" ] && [ -s "$work/toggle-one-on.png" ] && [ "$differing" = 0 ]; echo $?)" "toggle-switch's 'on' cell: the same pixels in both, never a disabled look ($differing differing)"
 
 echo "on screen: the mockups in all their states"
 for entry in components/pill:6 components/small-button:24 components/status-pill:5 components/toggle-switch:4 views/nixos-page:16 views/settings-modal:10; do

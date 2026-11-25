@@ -246,6 +246,17 @@ TestCase {
         driver.mouseClick(field, 5, 5);
         assertEqual(behindClicks, 0, "a click on a control behind: nothing");
         assert(_focusInside(), "… the keyboard stays in the modal");
+        // The mockups' all-states window: an open modal does not take the keyboard back
+        Isolation.keyboardHeld = false;
+        field.forceActiveFocus();
+        // A trap takes the keyboard back in a later call (Qt.callLater): events processed
+        driver.wait(10);
+        driver.wait(10);
+        const keptOut = field.activeFocus;
+        Isolation.keyboardHeld = true;
+        assert(keptOut, "with Isolation.keyboardHeld false, the keyboard moved out stays out");
+        behindBox.forceActiveFocus();
+        assert(_until(_focusInside), "… and with it true, it is taken back into the modal");
 
         assert(_click("modalCheck:data"), "the checkbox clicked");
         assert(_until(() => host.modal.values.data === true), "… checked");

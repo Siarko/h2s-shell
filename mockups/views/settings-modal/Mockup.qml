@@ -170,8 +170,7 @@ MockupWindow {
                 name: root.names[index]
                 height: name === "short-window" ? 200 : 440
 
-                // Every state's question at once, the ticked box drawn ticked; opened once
-                // the grid has disabled the cells, so that no modal takes the keyboard
+                // Every state's question at once, the ticked box drawn ticked
                 Loader {
                     anchors.fill: parent
                     active: root.layout === "all"

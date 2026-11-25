@@ -9,10 +9,10 @@ import qs.singletons
 //         cell
 //   all   on screen, every cell under its label (the state's name and description), in rows
 //         that fit the window (stacked: one under another); a pointer state's label says how
-//         to see it, as one pointer cannot light every cell at once. Only the cell under the
-//         pointer takes input: the others are disabled, since what holds the keyboard while
-//         shown (an open modal's FocusTrap) would take it back from its like in another
-//         cell without end, and a disabled item cannot take the keyboard
+//         to see it, as one pointer cannot light every cell at once. What holds the keyboard
+//         while shown (an open modal's FocusTrap) does not take it back there
+//         (Isolation.keyboardHeld, set by the kit): two such cells would take it from each
+//         other without end
 //   one   on screen, the current cell alone under its label, at its size
 // The mockup gives each state a StateCell (a Repeater over `names` as a rule), its items
 // inside; a cell is cellWidth x cellHeight unless the mockup sizes it otherwise (the
@@ -142,21 +142,6 @@ Item {
         return _places.cells[name] ?? Qt.point(0, 0);
     }
 
-    // The cell under the pointer in the all-states layout, the one that takes input
-    readonly property string _pointed: {
-        if (layout !== "all" || !_hover.hovered)
-            return "";
-        const at = _hover.point.position;
-        for (const cell of cells)
-            if (at.x >= cell.x && at.x < cell.x + cell.width && at.y >= cell.y && at.y < cell.y + cell.height)
-                return cell.name;
-        return "";
-    }
-
-    function cellEnabled(name) {
-        return layout !== "all" || name === _pointed;
-    }
-
     function cellShown(name) {
         if (layout === "shot")
             return !stacked || name === mockup.current;
@@ -169,10 +154,6 @@ Item {
 
     width: laidWidth
     height: laidHeight
-
-    HoverHandler {
-        id: _hover
-    }
 
     // Where the pointer rests off every cell
     Item {
