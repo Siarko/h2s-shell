@@ -503,6 +503,18 @@ new kind.
   minor or major release, never a patch. — Ad-hoc migrations each had their own trigger,
   marker and backup, ran after readers had seen the old shape, and wrote outside what they
   meant to change.
+- **Nothing at an item's destruction reads the item.** Qt may drop a QML object's properties
+  and functions before its `Component.onDestruction` runs (inside an owner of a derived type
+  made without a parent and destroyed while the collector runs: each reads undefined, 0, ""
+  or false, an own function "is not a function"), and a plain `connect()` to another object is
+  not ended when the item goes. So: signals of outside objects are followed through a
+  `Connections` or an object the item owns, which end with it — never a plain `connect()`
+  undone in `Component.onDestruction`; a destruction handler calls no function of its own and
+  reads no property of its own: what it needs is in a JavaScript object a closure holds
+  (`Component.destruction.connect` from `Component.onCompleted`, as `components/AnchorBlock.qml`),
+  or it passes only its id to a singleton that forgets it. A new one gets a step in
+  `tests/TeardownTest.qml`, which reaches that case. — Holds, a module's store write and
+  answers owed were lost at destruction; handlers ran on items already gone.
 - **One slice = one change with its test.** While iterating run only the suites the change
   touches, `--quick` before the commit; the full set before merging to `master`. — Small reviewed
   steps, fast feedback; the full set on both machines took longer than the work it checked.
