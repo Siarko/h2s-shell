@@ -196,6 +196,7 @@ TestCase {
         assertEqual(drafted.bar.barHeight, 30, "what the draft does not touch follows the file");
         assertEqual(file.colors.surface, "#222222", "the inputs are not modified");
         assert(!("colors" in ThemeRules.applyDraft({ colors: { a: "#1" } }, { colors: { a: null } })), "a group left empty goes");
+        assertEqual(JSON.stringify(ThemeRules.applyDraft({}, { colors: { a: "#1" } })), JSON.stringify({ colors: { a: "#1" } }), "a group of one token stays");
         const resetInFile = ThemeRules.draftWith({}, file, "colors", "surface", null);
         assertEqual(resetInFile.colors.surface, null, "resetting a value the file sets drafts its removal");
         const resetDraftOnly = ThemeRules.draftWith(draft, file, "colors", "error", null);
@@ -340,6 +341,83 @@ TestCase {
         assert(longThemes.every(name => ("themes/" + name + ".json") in longMove.document.files), "… the file the profile picks");
         assertEqual(longMove.document.profiles[0].name, longName, "… the profile keeps its name");
         assert(longThemes[0].startsWith("\u{1F600}".repeat(40)), "… the theme named after its start");
+
+        // --- keys a theme file shares with every object's prototype ---
+        // Theme files can come from others: "__proto__", "constructor" or "toString" as a key
+        // is a token like any other, never a property every object has
+        {
+            const hostile = '{ "__proto__": { "injected": "#bad000" }, "constructor": "#bad001", "toString": "#bad002", "hasOwnProperty": "#bad003", "accent": "#abcdef" }';
+            const plainProto = Object.getPrototypeOf({});
+            const unknownIgnored = (colors, where) => {
+                assert(Object.getPrototypeOf(colors) === plainProto, where + ": the colours keep their prototype");
+                assertEqual(colors.injected, undefined, where + ": nothing comes in through \"__proto__\"");
+                for (const key of ["__proto__", "constructor", "toString", "hasOwnProperty"])
+                    assert(!Object.prototype.hasOwnProperty.call(colors, key), where + ": \"" + key + "\" is not a known token, ignored");
+                assertEqual(typeof colors.toString, "function", where + ": toString is still the object's");
+            };
+            const hostileTheme = [{ name: "x", theme: { colors: JSON.parse(hostile), fonts: JSON.parse(hostile) } }];
+            const layered = ThemeRules.resolve(Theme.builtin, hostileTheme, {});
+            unknownIgnored(layered.colors, "a theme's colours");
+            unknownIgnored(layered.fonts, "a theme's fonts");
+            assertEqual(layered.colors.accent, "#abcdef", "the known token beside them applies");
+            assertEqual(layered.colors.visualizer, "#abcdef", "and a follower still follows it");
+            const fromPalette = ThemeRules.resolve(Theme.builtin, [{ name: "x", theme: {} }], { x: JSON.parse(hostile) });
+            unknownIgnored(fromPalette.colors, "a palette file");
+            assertEqual(fromPalette.colors.accent, "#abcdef", "a palette's known token applies");
+            assertEqual(ThemeRules.resolve(Theme.builtin, [{ name: "constructor", theme: {} }], {}).colors.accent, Theme.builtin.colors.accent,
+                "a theme named \"constructor\" without a palette takes none");
+            // A follower's leader set through "__proto__" is not seen as set
+            const followerProto = ThemeRules.resolve(Theme.builtin, [{ name: "x", theme: { colors: JSON.parse('{ "__proto__": { "visualizer": "#bad004" } }') } }], {});
+            assertEqual(followerProto.colors.visualizer, Theme.builtin.colors.accent, "a follower set only through \"__proto__\" still follows");
+
+            const hostileOrigins = ThemeRules.origins(hostileTheme, { x: JSON.parse(hostile) });
+            assert(Object.getPrototypeOf(hostileOrigins.colors) === plainProto, "origins: the colours keep their prototype");
+            assertEqual(hostileOrigins.colors.injected, undefined, "origins: nothing comes in through \"__proto__\"");
+            assertEqual(hostileOrigins.colors.accent?.theme, "x", "origins: the known token is the theme's");
+            assertEqual(hostileOrigins.colors.visualizer?.follows, "accent", "origins: a follower nothing sets follows");
+            // Theme marks a draft's tokens on what origins returns, so its entries stay writable
+            hostileOrigins.colors.accent = { theme: "y", palette: false, draft: true };
+            assertEqual(hostileOrigins.colors.accent.theme, "y", "origins: an entry can be overwritten");
+            const protoOrigins = ThemeRules.origins([{ name: "x", theme: { colors: JSON.parse('{ "__proto__": { "visualizer": 1 } }') } }], {});
+            assertEqual(protoOrigins.colors.visualizer?.follows, "accent", "origins: a follower set only through \"__proto__\" still follows");
+
+            const hostileDraft = JSON.parse('{ "__proto__": { "colors": { "injected": "#bad005" } }, "colors": ' + hostile + ' }');
+            const draftedHostile = ThemeRules.applyDraft(JSON.parse('{ "__proto__": { "x": 1 }, "colors": { "surface": "#111111" } }'), hostileDraft);
+            assert(Object.getPrototypeOf(draftedHostile) === plainProto, "applyDraft: the theme keeps its prototype");
+            assert(Object.getPrototypeOf(draftedHostile.colors) === plainProto, "applyDraft: its colours keep their prototype");
+            assertEqual(draftedHostile.colors.injected, undefined, "applyDraft: nothing comes in through \"__proto__\"");
+            assertEqual(draftedHostile.colors.accent, "#abcdef", "applyDraft: the draft's tokens apply");
+            assertEqual(draftedHostile.colors.surface, "#111111", "applyDraft: the file's stay");
+            assertEqual(JSON.stringify(ThemeRules.draftWith({}, {}, "colors", "constructor", null)), "{}",
+                "draftWith: resetting \"constructor\" the file does not set drops it");
+            assertEqual(JSON.stringify(ThemeRules.draftWith({}, {}, "colors", "toString", null)), "{}",
+                "draftWith: resetting \"toString\" the file does not set drops it");
+            const withProto = ThemeRules.draftWith({}, {}, "__proto__", "x", "#1");
+            assert(Object.getPrototypeOf(withProto) === plainProto, "draftWith: the draft keeps its prototype");
+            assertEqual(JSON.stringify(ThemeRules.draftWithout(JSON.parse('{ "colors": { "a": "#1" } }'), "__proto__", "a")), JSON.stringify({ colors: { a: "#1" } }),
+                "draftWithout: a group named \"__proto__\" is not found");
+            const splitHostile = ThemeRules.splitDraft(hostileDraft);
+            assert(Object.getPrototypeOf(splitHostile.taken) === plainProto, "splitDraft: the part taken keeps its prototype");
+            assertEqual(splitHostile.taken.colors?.accent, "#abcdef", "splitDraft: and holds the draft's groups");
+            const themesHostile = { child: JSON.parse('{ "__proto__": { "x": 1 }, "extends": "base" }') };
+            const renamedHostile = ThemeRules.renameExtends(themesHostile, "base", "core");
+            assert(Object.getPrototypeOf(renamedHostile.child) === plainProto, "renameExtends: the theme keeps its prototype");
+            assertEqual(renamedHostile.child.extends, "core", "renameExtends: re-pointed");
+            assertEqual(renamedHostile.child.x, undefined, "renameExtends: nothing comes in through \"__proto__\"");
+            const curvesHostile = { a: JSON.parse('{ "__proto__": { "x": 1 }, "curves": { "hover": "snappy" } }') };
+            const renamedCurve = ThemeRules.renameCurveIn(curvesHostile, "snappy", "quick");
+            assert(Object.getPrototypeOf(renamedCurve.a) === plainProto, "renameCurveIn: the theme keeps its prototype");
+            assertEqual(renamedCurve.a.curves.hover, "quick", "renameCurveIn: re-pointed");
+            const retargetedHostile = ThemeRules.retargetTheme([], JSON.parse('{ "__proto__": { "x": 1 }, "appearance.theme": "a" }'), "a", "b");
+            assert(Object.getPrototypeOf(retargetedHostile.globals) === plainProto, "retargetTheme: the globals keep their prototype");
+            assertEqual(retargetedHostile.globals["appearance.theme"], "b", "retargetTheme: re-pointed");
+            assertEqual(ThemeRules.withoutExtends({ b: { extends: "toString" } }, "toString").b.extends, "default",
+                "withoutExtends: a removed theme named \"toString\" that is not there hands over the default");
+            const constructorLook = ThemeRules.buttonLook("constructor", {});
+            assertEqual(JSON.stringify([constructorLook.group, constructorLook.fill, constructorLook.border]), JSON.stringify(["button", "surface", ""]),
+                "buttonLook: a kind named \"constructor\" is plain");
+            assertEqual(ThemeRules.buttonLook("toString", { asking: true }).label, "textPrimary", "buttonLook: \"toString\" asking is plain");
+        }
 
         assertEqual(ThemeRules.freeName("Power/save", name => false), "Power-save", "freeName: the name, a \"/\" made \"-\"");
         assertEqual(ThemeRules.freeName("Ease", name => name === "Ease"), "Ease 2", "freeName: taken, the next number");
