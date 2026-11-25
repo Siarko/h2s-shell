@@ -18,6 +18,11 @@ section to the new version and date.
 ### Module API
 The interface modules are written against (`qs.api`), versioned on its own
 (`Api.version`; its reference is `api/Api.qml`).
+- 1.42: a module's VPN provider must have its module id as `providerId`: another id (one
+  of another module, or the shell's reserved `fake`) is refused, the reason among the
+  module's errors — a module that loaded first could otherwise take another module's id and
+  have its VPNs shown in that module's places. Its `pageUrl` must name a file in its own
+  folder; another is not opened, the reason among its errors.
 - 1.42: `Api.networks`, `Api.vpnsUp`, `Api.localNetworks`, `Api.slots` and `Api.anchors`
   are deprecated: a module whose code reads one has it listed among its `deprecations`, with
   its `list…()` function to use instead; they go with the shell's next tightening.

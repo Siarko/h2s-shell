@@ -371,7 +371,11 @@ through the own-provider places `popup.network.connections.vpn.row` and
 and `network.vpn.card` are read as them); its page is its `settingsPage`, else the slot
 `network.vpn.page` (`VpnManager.pageOf`). A provider that is no module's (the stand-in) hands
 over its own `rowExtras` and `cardExtras` (`VpnManager.ownExtrasOf`, built by
-`components/VpnExtras.qml` beside the hosts) and `pageUrl`.
+`components/VpnExtras.qml` beside the hosts) and `pageUrl`. A module's provider — traced
+by the file that declared it and the module code on the registering call's stack — has its
+module id as `providerId`, never another module's or the stand-in's reserved `fake`, and
+its `pageUrl` is a file of its own folder (`VpnProviderRules.providerRegistration`,
+`providerPageUrl`); a refusal goes among the module's errors.
 The contract is in `components/VpnProvider.qml`; the stand-in provider
 for tests is `tests/FakeVpnProvider.qml` (by hand: a test tree started with
 `H2S_FAKE_VPN_PROVIDER=1`, "The test tree" under "Testing"; IPC target `fakevpn`).

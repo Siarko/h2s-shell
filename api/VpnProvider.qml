@@ -2,8 +2,8 @@ import qs.components as Components
 
 // The base type of a VPN provider (module API 1.7; the contract is API 1.1's): VPNs that
 // are not NetworkManager's, listed, shown and switched by the shell beside its own. A
-// module declares one inside its main, with its module id as `providerId`; it registers
-// itself when made and leaves when destroyed.
+// module declares one inside its main, with its module id as `providerId` (another id is
+// refused); it registers itself when made and leaves when destroyed.
 //
 //   VpnProvider {
 //       providerId: "example"; typeName: "Example"; glyph: "󰖂"; ready: true

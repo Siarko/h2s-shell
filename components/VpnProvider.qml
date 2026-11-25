@@ -26,6 +26,9 @@ import qs.singletons.network
 //   providerId  string, constant — a lower-case letter, then up to 31 of a–z 0–9 - _ (no
 //               colon). The core addresses an entry as "<providerId>:<entry id>", which no
 //               NetworkManager UUID can be. A second provider with a taken id is refused.
+//               A module's provider (declared in a module's file, or made by its code) has
+//               its module id; any other, and the reserved "fake", is refused, the reason
+//               among the module's errors (VpnProviderRules.providerRegistration).
 //   kind        string — what sort of thing it is ("mesh", "vpn"); informative only
 //   typeName    string — the VPN's type as the cards and the editor's picker show it
 //   glyph       string — a Nerd Font glyph for its rows and, when only it is up, the bar
@@ -98,7 +101,8 @@ import qs.singletons.network
 //               title (type · entry name) and scrolling are the core's — the page is a plain
 //               Item (a ColumnLayout) laid out at the page's width, scrolled by its
 //               implicitHeight; it must not scroll itself. Unused while settingsPage is
-//               there. Neither: no "Settings…".
+//               there. Neither: no "Settings…". A module's provider: only a file:// URL of
+//               a file in its own folder (VpnProviderRules.providerPageUrl), else no page.
 //   A contribution's root item may declare `property var context`; the core sets it to
 //   { vpnId, entryId, vpn, provider, otherVpnsUp, otherVpns } — `provider` this object, to
 //   call its functions and read its state; `otherVpnsUp` the other VPNs up by name,

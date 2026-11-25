@@ -1,0 +1,8 @@
+{
+    "id": "fake",
+    "name": "VPN reserved id fixture",
+    "version": "1.0.0",
+    "api": "1.2",
+    "description": "A module whose id is the shell's reserved VPN provider id: its provider is refused (tests/fixtures/modules)",
+    "main": "Main.qml"
+}

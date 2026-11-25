@@ -1,0 +1,8 @@
+{
+    "id": "vpn-impostor",
+    "name": "VPN impostor fixture",
+    "version": "1.0.0",
+    "api": "1.2",
+    "description": "A module whose VPN providers claim another module's id and name another module's file as their page: refused (tests/fixtures/modules)",
+    "main": "Main.qml"
+}

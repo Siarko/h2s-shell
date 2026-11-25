@@ -699,6 +699,32 @@ TestCase {
             _frame = null;
             Modules.host.unload();
         });
+        // A module's provider has its module id, never another module's or a reserved one,
+        // and its page is a file of its own folder (VpnProviderRules.providerRegistration,
+        // providerPageUrl)
+        _then("vpn-slots and vpn-page unloaded", () => Modules.host.statuses.length === 0, () => {
+            Modules.host.load([fixtures + "/vpn-impostor", fixtures + "/vpn-reserved", fixtures + "/vpn-page"], {});
+        });
+        _then("vpn-impostor, fake and vpn-page settle", () => _settled() && VpnProviders.providerOf("vpn-page:one") !== null
+                                                       && VpnProviders.providerOf("vpn-impostor:one") !== null
+                                                       && (Modules.status("vpn-impostor")?.errors ?? []).length >= 2
+                                                       && (Modules.status("fake")?.errors ?? []).length >= 1, () => {
+            assertEqual(VpnProviders.providerOf("vpn-page:one")?.object, Modules.host.mainObject("vpn-page")?.provider,
+                        "vpn-page's provider is vpn-page's own, not the impostor's that claimed its id first");
+            assert((Modules.status("vpn-impostor")?.errors ?? []).some(error => error.includes("must be its module id \"vpn-impostor\"")),
+                   "… the impostor's refused, the reason among its module's errors: " + JSON.stringify(Modules.status("vpn-impostor")?.errors));
+            assertEqual(VpnProviders.providerOf("fake:one"), null, "a module whose id is the reserved \"fake\": its provider refused");
+            assert((Modules.status("fake")?.errors ?? []).some(error => error.includes("\"fake\" is reserved")),
+                   "… the reason among its errors: " + JSON.stringify(Modules.status("fake")?.errors));
+            const own = VpnManager.vpns.find(each => each.uuid === "vpn-impostor:one") ?? null;
+            assertEqual(VpnProviders.pageOf(own), "", "a pageUrl naming another module's file: no page");
+            assert((Modules.status("vpn-impostor")?.errors ?? []).some(error => error.includes("not a file in the module's own folder")),
+                   "… the reason among its module's errors");
+            VpnProviders.providerOf(own).object.pageUrl = "file://" + fixtures + "/vpn-impostor/Main.qml";
+            assertEqual(VpnProviders.pageOf(own), "file://" + fixtures + "/vpn-impostor/Main.qml", "a file of its own folder: its page");
+            Modules.host.unload();
+        });
+        _then("the impostors unloaded", () => Modules.host.statuses.length === 0, () => {});
         _clock.start();
     }
 

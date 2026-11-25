@@ -25,6 +25,58 @@ Singleton {
         "__defineGetter__", "__defineSetter__", "__lookupGetter__", "__lookupSetter__", "isPrototypeOf", "propertyIsEnumerable",
         "toLocaleString"]
 
+    // Provider ids the core keeps for providers of its own (the tests' stand-in): no module
+    // may register one, whatever its module id
+    readonly property var reservedProviderIds: ["fake"]
+
+    // Whose provider a registration is, and whether it may have `id` (a valid provider id).
+    // `owners`: [{ directory, moduleId }], each module directory the provider was traced to
+    // (the file that declared it, a module's code on the call's stack), `moduleId` "" for a
+    // directory whose module has no handle (a shadowed copy). → { moduleId, directory,
+    // problem }: none traced, the core's — any id; else exactly one module, whose provider
+    // id is its module id and not reserved — the views, the own-provider places and the page
+    // slot take a provider's id as its module's, so another id would put its VPNs and
+    // pages in that module's places. `problem` "" when it may register.
+    function providerRegistration(id, owners) {
+        const list = Array.isArray(owners) ? owners : [];
+        if (list.length === 0)
+            return { moduleId: "", directory: "", problem: "" };
+        const owner = list[0];
+        const moduleId = typeof owner?.moduleId === "string" ? owner.moduleId : "";
+        const refused = problem => ({ moduleId: moduleId, directory: typeof owner?.directory === "string" ? owner.directory : "", problem: problem });
+        if (list.length > 1)
+            return refused("a VPN provider traced to more than one module is refused");
+        if (moduleId === "")
+            return refused("a VPN provider of a module that is not loaded is refused");
+        if (reservedProviderIds.includes(id))
+            return refused("the VPN provider id \"" + id + "\" is reserved for the shell");
+        if (id !== moduleId)
+            return refused("a VPN provider \"" + id + "\" refused: a module's provider id must be its module id \"" + moduleId + "\"");
+        return refused("");
+    }
+
+    // A provider's pageUrl as the core may load it: a module's provider (`ownDirectory`, a
+    // canonical module directory) only a file:// URL of a file in its own folder — in
+    // `directories` (the module directories) the deepest holding it is its own, not one
+    // nested inside it —, else "" with the reason; the core's (`ownDirectory` "") as given.
+    // → { url, problem }
+    function providerPageUrl(pageUrl, ownDirectory, directories) {
+        const url = typeof pageUrl === "string" ? pageUrl : "";
+        if (url === "" || typeof ownDirectory !== "string" || ownDirectory === "")
+            return { url: url, problem: "" };
+        const list = Array.isArray(directories) ? directories : [];
+        let path = "";
+        try {
+            path = url.startsWith("file:///") ? ModuleFileRules.canonicalPath(decodeURIComponent(url.slice(7).replace(/[?#].*$/, ""))) : "";
+        } catch (error) {
+            path = "";
+        }
+        // The deepest module directory holding it is its own (list[-1] is undefined)
+        if (path.startsWith(ownDirectory + "/") && list[ModuleFileRules.directoryIndexOf(list, "file://" + encodeURI(path))] === ownDirectory)
+            return { url: url, problem: "" };
+        return { url: "", problem: "pageUrl " + JSON.stringify(url.slice(0, 200)) + " refused: not a file in the module's own folder" };
+    }
+
     function vpnId(providerId, entryId) {
         return providerId + ":" + entryId;
     }

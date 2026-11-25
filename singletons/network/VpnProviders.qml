@@ -39,7 +39,9 @@ Singleton {
     readonly property var slots: ({ page: "network.vpn.page" })
 
     // Takes `provider` (a VpnProvider, or an object of its shape); false when refused: no
-    // valid providerId, or the id taken by another provider still there
+    // valid providerId, a module's provider whose id is not its module id or is reserved
+    // (VpnProviderRules.providerRegistration; the reason in the module's status), or the id
+    // taken by another provider still there
     function registerProvider(provider): bool {
         let id;
         try {
@@ -55,6 +57,14 @@ Singleton {
         const live = _providers.filter(entry => _alive(entry));
         if (live.some(entry => entry.object === provider))
             return true;
+        const registration = VpnProviderRules.providerRegistration(id, _ownersOf(provider, new Error().stack));
+        if (registration.problem !== "") {
+            if (registration.moduleId !== "")
+                Modules.reportError(registration.moduleId, registration.problem);
+            else
+                console.warn("VpnProviders: " + registration.problem);
+            return false;
+        }
         if (live.some(entry => entry.id === id)) {
             console.warn("VpnProviders: a second VPN provider \"" + id + "\" refused: the id is taken");
             return false;
@@ -68,8 +78,30 @@ Singleton {
         } catch (error) {
             console.warn("VpnProviders: VPN provider \"" + id + "\": its failed signal cannot be connected:", error);
         }
-        _providers = live.concat([{ id: id, object: provider, handler: handler }]);
+        _providers = live.concat([{ id: id, object: provider, handler: handler, moduleId: registration.moduleId, directory: registration.directory }]);
         return true;
+    }
+
+    // The module directories a provider is traced to ([{ directory, moduleId }]): the folder
+    // of the file that declared it (its QML context) and each module whose code is on the
+    // registering call's `stack` — a provider a module's code makes from its own file is
+    // traced to that module once. None: the core's
+    function _ownersOf(provider, stack) {
+        const directories = Modules.host.directories;
+        const found = [];
+        let declared = "";
+        try {
+            declared = String(Qt.resolvedUrl(".", provider));
+        } catch (error) {
+            declared = "";
+        }
+        const index = ModuleFileRules.directoryIndexOf(directories, declared);
+        if (index >= 0)
+            found.push(directories[index]);
+        for (const directory of ModuleRules.stackDirectories(stack, directories))
+            if (!found.includes(directory))
+                found.push(directory);
+        return found.map(directory => ({ directory: directory, moduleId: Modules.handleAt("file://" + encodeURI(directory) + "/")?.moduleId ?? "" }));
     }
 
     // Lets the provider `id` go; with `provider` given, only if it is that object (a
@@ -101,7 +133,9 @@ Singleton {
     }
 
     // Each provider as read now: { providerId, alive, typeName, glyph, busy, canChange,
-    // ready, lockdownNote, rowExtras, cardExtras, settingsPage, pageUrl, entries, problems, object }
+    // ready, lockdownNote, rowExtras, cardExtras, settingsPage, pageUrl, pageProblem, moduleId,
+    // entries, problems, object } — a module's provider's pageUrl only a file of its own
+    // folder (VpnProviderRules.providerPageUrl; else "" and pageProblem, in its module's status)
     readonly property var reads: _providers.map(entry => _readProvider(entry))
     // A provider's `ready`: its entries were read successfully at least once. The core no
     // longer judges anything by it (nothing is pruned); kept in the read for the views.
@@ -109,7 +143,8 @@ Singleton {
     function _readProvider(entry) {
         const gone = problem => ({
             providerId: entry.id, alive: false, typeName: "", glyph: "", busy: false, canChange: true, ready: false,
-            lockdownNote: "", rowExtras: null, cardExtras: null, settingsPage: "", pageUrl: "", entries: [], problems: [problem], object: null
+            lockdownNote: "", rowExtras: null, cardExtras: null, settingsPage: "", pageUrl: "", pageProblem: "", moduleId: entry.moduleId ?? "",
+            entries: [], problems: [problem], object: null
         });
         try {
             const provider = entry.object;
@@ -118,17 +153,27 @@ Singleton {
             const checked = VpnProviderRules.vpnProviderEntries(entry.id, provider.entries);
             const text = (value, most) => typeof value === "string" ? value.slice(0, most) : "";
             const component = value => value !== null && value !== undefined && typeof value.createObject === "function" ? value : null;
+            const page = VpnProviderRules.providerPageUrl(text(provider.pageUrl, 1000), entry.directory ?? "", Modules.host.directories);
             return {
                 providerId: entry.id, alive: true, typeName: text(provider.typeName, 60) || "VPN", glyph: text(provider.glyph, 8),
                 busy: provider.busy === true, canChange: provider.canChange !== false, ready: provider.ready === true,
                 lockdownNote: text(provider.lockdownNote, 300), rowExtras: component(provider.rowExtras),
                 cardExtras: component(provider.cardExtras), settingsPage: text(provider.settingsPage, 200),
-                pageUrl: text(provider.pageUrl, 1000),
+                pageUrl: page.url, pageProblem: page.problem, moduleId: entry.moduleId ?? "",
                 entries: checked.entries, problems: checked.problems, object: provider
             };
         } catch (error) {
             return gone(entry.id + ": reading it threw: " + error);
         }
+    }
+
+    // A module's provider's refused pageUrl goes into its module's status, once per text
+    readonly property string _pageProblemsText: JSON.stringify(reads.filter(read => read.pageProblem !== "" && read.moduleId !== "")
+        .map(read => [read.moduleId, read.pageProblem]))
+    on_PageProblemsTextChanged: {
+        for (const read of reads)
+            if (read.pageProblem !== "" && read.moduleId !== "")
+                Modules.reportError(read.moduleId, "VPN provider \"" + read.providerId + "\": " + read.pageProblem);
     }
 
     // The providers' entries as VPNs (VpnProviderRules.vpnProviderVpns), providers in the order
