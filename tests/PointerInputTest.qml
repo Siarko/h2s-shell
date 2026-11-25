@@ -253,11 +253,11 @@ TestCase {
         driver.mouseClick(cell, x, y, Qt.LeftButton, Qt.ControlModifier);
         driver.mouseClick(cell, x, y, Qt.LeftButton, Qt.AltModifier);
         driver.mouseClick(cell, x, y, Qt.LeftButton, Qt.ShiftModifier | Qt.ControlModifier);
-        assertEqual(_seen(), "shiftClick, ctrlClick, altClick", "clicks with Shift, Ctrl, Alt; two modifiers are no interaction");
+        assertEqual(_seen(), "shiftClick, ctrlClick, altClick, leftClick", "clicks with Shift, Ctrl, Alt; two modifiers: a left click, as before");
         assertEqual(cell.clicks, 4, "each still the old clicked, as before");
         driver.mouseClick(cell, x, y, Qt.MiddleButton, Qt.ShiftModifier);
         driver.mouseClick(cell, x, y, Qt.RightButton, Qt.ControlModifier);
-        assertEqual(_seen(), "shiftClick, ctrlClick, altClick, middleClick, rightClick", "a middle or right click ignores modifiers");
+        assertEqual(_seen(), "shiftClick, ctrlClick, altClick, leftClick, middleClick, rightClick", "a middle or right click ignores modifiers");
         _resetInput();
         driver.mouseDoubleClickSequence(cell, x, y);
         assertEqual(_seen(), "leftClick, leftClick", "no double click bound: a double click is two clicks, at once");

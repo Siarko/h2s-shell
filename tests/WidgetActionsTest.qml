@@ -195,7 +195,7 @@ TestCase {
     }
 
     // The steps a cell is driven through: hover first, the mouse then stays over it
-    readonly property var _steps: ["hover", "leftClick", "shiftClick", "middleClick", "rightClick", "scrollUp", "scrollDown", "tap"]
+    readonly property var _steps: ["hover", "leftClick", "shiftClick", "ctrlShiftClick", "middleClick", "rightClick", "scrollUp", "scrollDown", "tap"]
 
     function _drive(item, step) {
         const x = item.width / 2;
@@ -211,6 +211,9 @@ TestCase {
             break;
         case "shiftClick":
             driver.mouseClick(item, x, y, Qt.LeftButton, Qt.ShiftModifier);
+            break;
+        case "ctrlShiftClick":
+            driver.mouseClick(item, x, y, Qt.LeftButton, Qt.ControlModifier | Qt.ShiftModifier);
             break;
         case "middleClick":
             driver.mouseClick(item, x, y, Qt.MiddleButton);

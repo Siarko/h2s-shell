@@ -107,6 +107,9 @@
       ],
       "tap": [
         "popup open persistent=true byTouch=true"
+      ],
+      "ctrlShiftClick": [
+        "popup open persistent=true byTouch=false"
       ]
     },
     "left/1 settings": {
@@ -117,6 +120,9 @@
         "settings.toggleSettings"
       ],
       "tap": [
+        "settings.toggleSettings"
+      ],
+      "ctrlShiftClick": [
         "settings.toggleSettings"
       ]
     },
@@ -147,6 +153,9 @@
       ],
       "scrollDown": [
         "music.previous"
+      ],
+      "ctrlShiftClick": [
+        "popup open persistent=true byTouch=false"
       ]
     },
     "center/1 sound": {
@@ -167,6 +176,9 @@
       ],
       "scrollDown": [
         "sound.volume=0.49"
+      ],
+      "ctrlShiftClick": [
+        "popup open persistent=true byTouch=false"
       ]
     },
     "center/2 bluetooth": {
@@ -178,6 +190,9 @@
       ],
       "tap": [
         "popup open persistent=true byTouch=true"
+      ],
+      "ctrlShiftClick": [
+        "popup open persistent=true byTouch=false"
       ]
     },
     "center/3 tray": "own targets",
@@ -190,6 +205,9 @@
       ],
       "tap": [
         "popup open persistent=true byTouch=true"
+      ],
+      "ctrlShiftClick": [
+        "popup open persistent=true byTouch=false"
       ]
     },
     "right/1 notifications": {
@@ -201,6 +219,9 @@
       ],
       "tap": [
         "popup open persistent=true byTouch=true"
+      ],
+      "ctrlShiftClick": [
+        "popup open persistent=true byTouch=false"
       ]
     },
     "right/2 hardware": {},
@@ -213,6 +234,9 @@
       ],
       "tap": [
         "popup open persistent=true byTouch=true"
+      ],
+      "ctrlShiftClick": [
+        "popup open persistent=true byTouch=false"
       ]
     },
     "right/4 stt": {
@@ -223,6 +247,9 @@
         "stt.toggle"
       ],
       "tap": [
+        "stt.toggle"
+      ],
+      "ctrlShiftClick": [
         "stt.toggle"
       ]
     },

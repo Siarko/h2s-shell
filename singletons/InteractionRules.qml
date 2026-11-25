@@ -88,8 +88,8 @@ Singleton {
     // A press that ended. `event`: { button (Qt.LeftButton, …), modifiers, byTouch, held (the
     // press-and-hold fired: its release is no click), second (the second click of a double
     // click, only counted where one waits, waitsForDouble), swiped (a finger swipe took it) }.
-    // "" when it is no interaction: a release after a swipe, a modifier combination
-    // with no name (Super is the compositor's), a button the cell does not take.
+    // "" when it is no interaction: a release after a swipe, a button the cell does not take.
+    // A modifier combination with no name of its own is a plain click.
     function pressInteraction(event): string {
         if (!event || event.swiped)
             return "";
@@ -109,15 +109,15 @@ Singleton {
         if (event.held)
             return "longPress";
         const modifiers = event.modifiers & (Qt.ShiftModifier | Qt.ControlModifier | Qt.AltModifier | Qt.MetaModifier);
-        if (modifiers === 0)
-            return event.second ? "doubleClick" : "leftClick";
         if (modifiers === Qt.ShiftModifier)
             return "shiftClick";
         if (modifiers === Qt.ControlModifier)
             return "ctrlClick";
         if (modifiers === Qt.AltModifier)
             return "altClick";
-        return "";
+        // None, or a combination with no name of its own (two modifiers, Super): a plain
+        // click, as a click with any modifiers always was
+        return event.second ? "doubleClick" : "leftClick";
     }
 
     // The hold fired: what it starts now (its release ends a pair). A middle or right button

@@ -58,8 +58,9 @@ TestCase {
         assertEqual(press({ modifiers: Qt.AltModifier }), "altClick", "alt click");
         assertEqual(press({ modifiers: Qt.ShiftModifier, second: true }), "shiftClick", "a modified second click is a modified click");
         assertEqual(press({ modifiers: Qt.KeypadModifier }), "leftClick", "the keypad flag is no modifier");
-        assertEqual(press({ modifiers: Qt.ShiftModifier | Qt.ControlModifier }), "", "two modifiers have no name");
-        assertEqual(press({ modifiers: Qt.MetaModifier }), "", "super is the compositor's");
+        assertEqual(press({ modifiers: Qt.ShiftModifier | Qt.ControlModifier }), "leftClick", "two modifiers have no name: a left click, as before");
+        assertEqual(press({ modifiers: Qt.MetaModifier }), "leftClick", "… nor Super (usually the compositor's): a left click");
+        assertEqual(press({ modifiers: Qt.MetaModifier | Qt.AltModifier, second: true }), "doubleClick", "… the second of a double click, a double click");
         assertEqual(press({ byTouch: true }), "tap", "a finger's press is a tap");
         assertEqual(press({ byTouch: true, second: true }), "doubleTap", "the second tap of a double");
         assertEqual(press({ byTouch: true, held: true }), "touchHold", "a finger held");
@@ -406,13 +407,20 @@ TestCase {
         const none = go("rightClick", plain, {});
         assertEqual(text(none.ref) + "|" + none.memoryKey + "|" + text(none.target), "undefined||" + text({ kind: "", id: "" }), "unassigned: nothing runs, nothing kept");
         assertEqual(go("leftClick", plain, { leftClick: null }).ref, undefined, "bound to nothing: nothing");
-        assertEqual(text(R.dispatch("leftClick", plain, null, noState, noMemory, kindOf)), text(none),
+        const nothingRuns = { target: { kind: "", id: "" }, amount: 0, direction: "", memoryKey: "", memory: null };
+        assertEqual(text(none), text(nothingRuns), "… the whole answer");
+        assertEqual(text(R.dispatch("leftClick", plain, null, noState, noMemory, kindOf)), text(nothingRuns),
                     "no lookup (a cell taking no interactions): nothing runs, nothing kept");
+        const endless = go("leftClick", { phase: "end" }, { leftClick: single(own("x")) });
+        assertEqual(text(endless), text({ target: { kind: "", id: "" }, amount: 0, direction: "", memoryKey: "leftClick", memory: null }),
+                    "bound, but nothing runs at this phase: the whole answer, its memory kept under it");
 
         // Movement and amounts
         const scrolled = go("scroll", { phase: "", byTouch: false, amount: 0.5, direction: "up" }, { scroll: single(own("volume")) });
         assertEqual(text([scrolled.ref, scrolled.amount, scrolled.direction]), text([own("volume"), 0.5, "up"]), "an adjust action on a scroll: the movement as measured");
-        assertEqual(go("scroll", { phase: "", amount: 0.5 }, { scroll: single(own("mute")) }).ref, undefined, "a run action on a continuous scroll: does not run");
+        assertEqual(text(go("scroll", { phase: "", amount: 0.5 }, { scroll: single(own("mute")) })),
+                    text({ target: { kind: "", id: "" }, amount: 0, direction: "", memoryKey: "scroll", memory: null }),
+                    "a run action on a continuous scroll: does not run");
         assertEqual(go("scroll", { phase: "", amount: 0 }, { scroll: single(own("volume")) }).ref, undefined, "… nor an adjust one with no movement");
         assertEqual(go("scroll", { phase: "" }, { scroll: single(own("volume")) }).ref, undefined, "… nor when the details carry no amount");
         const stepped = go("scrollDown", { phase: "", amount: -1 }, { scrollDown: single(own("mute")) });
