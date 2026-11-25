@@ -30,10 +30,8 @@ import qs.mockups.kit
 // cell, and the modal opens anew (open false, then true), as the host does for each question:
 // the keyboard goes to the panel and the checkboxes start unchecked. (A modal made anew for
 // each state draws its text a pixel apart from one reused: the glyph cache fills in another
-// order.) With every state on screen at once, each cell has an area and a modal of its own,
-// and the cells take no input: each open modal holds the keyboard, and one taking it from
-// another would take it back from the next, without end (a disabled item cannot take the
-// keyboard, so none takes it).
+// order.) With every state on screen at once, each cell has an area and a modal of its own
+// (the grid lets only the cell under the pointer take input).
 MockupWindow {
     id: root
 
@@ -171,10 +169,9 @@ MockupWindow {
                 required property int index
                 name: root.names[index]
                 height: name === "short-window" ? 200 : 440
-                enabled: root.layout !== "all"
 
                 // Every state's question at once, the ticked box drawn ticked; opened once
-                // the cells are disabled, so that no modal takes the keyboard
+                // the grid has disabled the cells, so that no modal takes the keyboard
                 Loader {
                     anchors.fill: parent
                     active: root.layout === "all"

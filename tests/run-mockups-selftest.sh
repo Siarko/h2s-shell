@@ -18,7 +18,8 @@
 #   - with state cells (the kit's StateGrid): shot in their grid, each cropped to its cell; on
 #     screen with no state named, every state's cell shown, none overlapping, labelled with its
 #     name and about.txt's description in order, a pointer state saying how to see it, no
-#     state current and no buttons (the fixture, and each component and view mockup);
+#     state current and no buttons, and at rest using next to no processor time (the
+#     fixture, and each component and view mockup);
 #     H2S_MOCKUP_STATE one cell alone, labelled, current; a plan has no cells, its scene
 #     buttons each with its scene's description as tooltip;
 #   - a view that reaches the module host, the notification server, Notifier and the helper,
@@ -261,16 +262,35 @@ check "$([ "$buttons_answer" = "3 of 3 shown, checked second" ]; echo $?)" "the 
 check "$([ "$scroller_answer" = "wheel, vertical bar shown" ]; echo $?)" "content taller than the window: scrolled by the wheel and a shown scroll bar, never by a drag (was '$scroller_answer')"
 check "$(! grep -q -E 'MOCKUP-ERROR|TypeError|ReferenceError' "${logs[tall]}"; echo $?)" "no error"
 
+# The Quickshell process under a case's background job (the job is the memory cap's wrapper
+# and timeout): its descendant running the runners' Quickshell
+quickshell_pid() {
+    local pid=$1 child found qs
+    qs=$(readlink -f "$(command -v "$LOCKTEST_QS")")
+    for child in $(pgrep -P "$pid"); do
+        if [ "$(readlink -f "/proc/$child/exe" 2> /dev/null)" = "$qs" ]; then echo "$child"; return; fi
+        found=$(quickshell_pid "$child")
+        [ -n "$found" ] && { echo "$found"; return; }
+    done
+}
+
+# cpu_ticks <pid>: the processor time it has used, in clock ticks (user and system)
+cpu_ticks() {
+    awk '{ sub(/^.*\) /, ""); print $12 + $13 }' "/proc/$1/stat" 2> /dev/null
+}
+
 # on_screen_cells <case> <base> <mockup> [<state or scene>]: started on screen (all its
 # states when none is named); once its window is made, cells_answer, current_answer,
-# buttons_answer and tooltips_answer what it answers over IPC
+# buttons_answer and tooltips_answer what it answers over IPC, and idle_ticks the processor
+# time it used over the next two seconds, at rest
 on_screen_cells() {
     local case=$1 base=$2 mockup=$3 first=${4:-} id deadline=$((SECONDS + 30)) made="" variable=H2S_MOCKUP_STATE
     [[ "$mockup" == plans/* ]] && variable=H2S_MOCKUP_SCENE
     local extra=()
     [ -n "$first" ] && extra=("$variable=$first")
     start_entry "$case" "$REPO/mockup.qml" H2S_MOCKUP_BASE="$base" H2S_MOCKUP="$mockup" "${extra[@]}"
-    cells_answer="" current_answer="" buttons_answer="" tooltips_answer=""
+    cells_answer="" current_answer="" buttons_answer="" tooltips_answer="" idle_ticks=""
+    local qs_pid before
     while [ $SECONDS -lt $deadline ] && kill -0 "${pids[$case]}" 2> /dev/null; do
         id=$(instance_of "$case")
         [ -n "$id" ] && made=$(ipc "$id" call mockup window)
@@ -279,6 +299,15 @@ on_screen_cells() {
             current_answer=$(ipc "$id" call mockup current)
             buttons_answer=$(ipc "$id" call mockup buttons)
             tooltips_answer=$(ipc "$id" call mockup tooltips)
+            # A window at rest uses next to no processor time; items fighting over the
+            # keyboard keep a core busy. Measured over an interval, which is what this
+            # check is about: a fixed wait, not a wait for a condition
+            qs_pid=$(quickshell_pid "${pids[$case]}")
+            if [ -n "$qs_pid" ]; then
+                before=$(cpu_ticks "$qs_pid")
+                sleep 2
+                idle_ticks=$(( $(cpu_ticks "$qs_pid") - before ))
+            fi
             break
         fi
         # A condition polled (the window made), not a fixed wait
@@ -302,6 +331,7 @@ check "$([ "$cells_answer" = "$expected_cells" ]; echo $?)" "every state shown, 
 check "$([ -z "$current_answer" ]; echo $?)" "no state current: the simulated pointer lights none (was '$current_answer')"
 check "$([ "$buttons_answer" = "0 of 3 shown, checked " ]; echo $?)" "no state buttons (was '$buttons_answer')"
 check "$(! grep -q -E 'MOCKUP-SHOT|MOCKUP-ERROR|TypeError|ReferenceError' "${logs[cells-all]}"; echo $?)" "no shot, no error"
+check "$([ -n "$idle_ticks" ] && [ "$idle_ticks" -lt 50 ]; echo $?)" "at rest: under 50 ticks of processor time in 2 s (was '$idle_ticks')"
 
 echo "on screen: H2S_MOCKUP_STATE opens one state of a component with state cells, labelled"
 on_screen_cells cells-one tests/fixtures/mockups components/cells hover
@@ -316,13 +346,14 @@ check "$([ "$buttons_answer" = "3 of 3 shown, checked first" ]; echo $?)" "its t
 check "$([ "$tooltips_answer" = "$(printf '%s\n' "first: The first scene" "second: The second scene" "third: The third scene")" ]; echo $?)" "each button's tooltip its scene's description (was '$tooltips_answer')"
 
 echo "on screen: the mockups in all their states"
-for entry in components/pill:6 components/small-button:24 views/nixos-page:16 views/settings-modal:10; do
+for entry in components/pill:6 components/small-button:24 components/status-pill:5 components/toggle-switch:4 views/nixos-page:16 views/settings-modal:10; do
     mockup=${entry%%:*} count=${entry#*:}
     on_screen_cells "all-${mockup#*/}" mockups "$mockup"
     labels=$(tail -n +2 <<< "$cells_answer" | sed 's/ — .*//')
     declared=$(source "$REPO/tests/mockup-about.sh" && about_read "$REPO/mockups/$mockup" state > /dev/null && printf '%s\n' "${about_names[@]}")
     check "$([ "$(head -n 1 <<< "$cells_answer")" = "$count of $count shown, none overlapping" ] && [ "$labels" = "$declared" ]; echo $?)" "$mockup: every state labelled, in about.txt's order, none overlapping (was '$(head -n 1 <<< "$cells_answer")')"
     check "$(! grep -q -E 'MOCKUP-ERROR|TypeError|ReferenceError|Binding loop' "${logs[all-${mockup#*/}]}"; echo $?)" "$mockup: no error"
+    check "$([ -n "$idle_ticks" ] && [ "$idle_ticks" -lt 50 ]; echo $?)" "$mockup: at rest, nothing fighting over the keyboard: under 50 ticks of processor time in 2 s (was '$idle_ticks')"
 done
 
 echo "isolation: a view that reaches modules, notifications and the helper"
