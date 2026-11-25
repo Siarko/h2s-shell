@@ -10,8 +10,12 @@
 #     (--main, --also) the exact output at COLUMNS=60: each element once, the main tree's
 #     version, a working tree's own elements [not merged: <label>] (an old-layout one too), a
 #     tree that only duplicates the main one adding nothing, no colour off a terminal;
+#     on trees in git, an element the main tree removed not offered by a tree that only lags
+#     behind, a copy whose tree lags behind another working tree's left out; two working
+#     trees' different copies each listed, in list <element> too;
 #     list <element> with each state's description; search in names and descriptions of
-#     elements, states and scenes, any case, every word, no match status 1;
+#     elements, states and scenes, any case (Polish letters in the C locale), every word, no
+#     match status 1;
 #   - tests/mockup-about.sh: the fixtures' about.txt read, each broken form (missing, no
 #     description, the wrong keyword, a bad, a repeated, an empty or an undescribed name, too long, a
 #     second description, an unknown keyword, over 30 states) refused, naming the line; every
@@ -198,8 +202,12 @@ Views
               states: only
 Plans
   both        A plan in two working trees
-              [not merged: side, old]
+              [not merged: side]
               scenes: one
+  both        (no description)
+              [not merged: old]
+              old layout: no about.txt, its scenes not
+              declared
   fresh       A plan only in a working tree
               [not merged: side]
               scenes: start
@@ -513,23 +521,57 @@ g "$gitwork/main" add -A && g "$gitwork/main" commit -q -m A
 g "$gitwork/main" worktree add -q --detach "$gitwork/stale"
 g "$gitwork/main" worktree add -q -b work "$gitwork/work"
 echo "state: one More" >> "$gitwork/work/$fix/components/kept/about.txt"
-g "$gitwork/work" commit -q -a -m W1
+mkdir -p "$gitwork/work/$fix/plans/new"
+printf 'description: New, at first\nscene: zero The first\n' > "$gitwork/work/$fix/plans/new/about.txt"
+: > "$gitwork/work/$fix/plans/new/Mockup.qml"
+g "$gitwork/work" add -A && g "$gitwork/work" commit -q -m W1
 g "$gitwork/main" worktree add -q --detach "$gitwork/lag" work
 echo "state: two More" >> "$gitwork/work/$fix/components/kept/about.txt"
-mkdir -p "$gitwork/work/$fix/plans/new"
 printf 'description: New\nscene: one The one\n' > "$gitwork/work/$fix/plans/new/about.txt"
-: > "$gitwork/work/$fix/plans/new/Mockup.qml"
 g "$gitwork/work" add -A && g "$gitwork/work" commit -q -m W2
 g "$gitwork/main" worktree add -q --detach "$gitwork/ahead" work
 g "$gitwork/main" rm -q -r "$fix/components/gone" && g "$gitwork/main" commit -q -m B
 git_over=(--main "$gitwork/main" --also "$gitwork/stale=stale" --also "$gitwork/lag=lag" --also "$gitwork/work=work" --also "$gitwork/ahead=ahead")
-check "$([ -f "$gitwork/ahead/$fix/plans/new/about.txt" ] && [ ! -e "$gitwork/main/$fix/components/gone" ] && grep -q 'state: one' "$gitwork/lag/$fix/components/kept/about.txt"; echo $?)" "the git fixture trees are made"
+check "$([ -f "$gitwork/ahead/$fix/plans/new/about.txt" ] && [ ! -e "$gitwork/main/$fix/components/gone" ] && grep -q 'state: one' "$gitwork/lag/$fix/components/kept/about.txt" \
+    && grep -q 'scene: zero' "$gitwork/lag/$fix/plans/new/about.txt"; echo $?)" "the git fixture trees are made"
 tool git-kept -- -n open kept/two "${git_over[@]}"
 check "$(has git-kept 'Opening the working copy from work (not merged; the same in ahead)' && has git-kept 'TOOL work -n open kept/two'; echo $?)" "a working tree's change: taken from it, the tree on the same branch said, a tree lagging behind it and a stale one not counted $(out git-kept | paste -s -d ' ')"
 tool git-new -- -n open new "${git_over[@]}"
 check "$(has git-new 'Opening the working copy from work (not merged; the same in ahead)' && has git-new 'TOOL work -n open new'; echo $?)" "an element only working trees added: taken from them"
 tool git-gone -- -n open gone "${git_over[@]}"
-check "$(has git-gone 'TOOL main -n open gone' && ! has git-gone 'working copy'; echo $?)" "an element the main tree removed: no working tree that only lags behind offers it"
+check "$([ "${status[git-gone]}" = 2 ] && has git-gone 'no element matches "gone"' && ! has git-gone 'working copy'; echo $?)" "an element the main tree removed: no working tree that only lags behind offers it"
+tool git-list COLUMNS=80 -- list "${git_over[@]}"
+cat > "$work/git-list.expected" << EXPECTED
+Components
+  kept   kept
+         states: rest
+Plans
+  new    New
+         [not merged: work, ahead]
+         scenes: one
+EXPECTED
+check "$(diff "$work/git-list.expected" "$work/git-list.out" > "$work/git-list.diff"; echo $?)" "list over git trees: an element the main tree removed not offered by the trees lagging behind, two trees on one branch one copy, a tree lagging behind another left out $(cat "$work/git-list.diff")"
+# Two working trees each with a copy of its own: both listed, each with its states
+element side plans/twice "description: Twice, the side copy" "scene: left The side scene"
+element old plans/twice "description: Twice, the old copy" "scene: right The old scene"
+tool twice COLUMNS=80 -- list twice "${over[@]}"
+cat > "$work/twice.expected" << EXPECTED
+Plan twice — Twice, the side copy
+  [not merged: side]
+  left  The side scene
+Open: tests/mockup.sh open twice   one scene: tests/mockup.sh open twice/left
+Plan twice — Twice, the old copy
+  [not merged: old]
+  right  The old scene
+Open: tests/mockup.sh open twice   one scene: tests/mockup.sh open twice/right
+EXPECTED
+check "$(diff "$work/twice.expected" "$work/twice.out" > "$work/twice.diff"; echo $?)" "list <element> held differently by two working trees: each copy with its scenes $(cat "$work/twice.diff")"
+tool twice-search COLUMNS=80 -- search right "${over[@]}"
+check "$(has twice-search 'right  The old scene' && ! has twice-search 'left'; echo $?)" "search: the copy whose scene matches"
+# Lower case by Unicode's rules whatever the locale (env -i: the C locale)
+element side plans/meadow "description: Łąka i źródło" "scene: one The one"
+tool polish -- search ŁĄKA "${over[@]}"
+check "$(has polish 'meadow'; echo $?)" "search in Polish letters, any case, in the C locale"
 
 # A whole name before a part of a longer one: the tool itself, copied into a fixture tree
 real=$trees/real

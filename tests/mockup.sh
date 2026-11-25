@@ -36,9 +36,12 @@
 #     --main <tree> list, search, open, close <element>, review, approve: that shell tree's
 #                   elements instead of this one's
 #     --also <tree>=<label>
-#                   list, search: also the elements found only in that tree (in neither the
-#                   main tree nor an earlier --also), marked [not merged: <label>]; a tree in
-#                   the old layout (mockups/planning/, no about.txt) is read as well;
+#                   list, search: also the elements the main tree lacks and that tree changed
+#                   since it left the main tree's history (git; without git, every one),
+#                   marked [not merged: <label>]: one entry for the trees holding the same
+#                   copy, one more for a different copy, none for a copy whose tree only lags
+#                   behind another's; a tree in the old layout (mockups/planning/, no
+#                   about.txt) is read as well;
 #                   open, close <element>, review, approve: the tree whose copy is taken — the
 #                   main tree's, unless the --also trees that changed it since they left the
 #                   main tree's history hold one copy (said on a line), or the one copy the
@@ -269,12 +272,13 @@ running() {
 pids_of() { running | awk -v n="$1" '$2 == n { print $1 }'; }
 
 # ---- list and search ------------------------------------------------------------------
-# The elements of the main tree (this one, or --main), then those found only in an --also
-# tree, one entry each by <kind>/<name>: el_key, el_desc (or what is wrong with about.txt),
+# The elements of the main tree (this one, or --main), then those an --also tree changed or
+# added and the main tree lacks, one entry each by <kind>/<name> (a second one for another
+# working tree's different copy): el_key, el_folder, el_desc (or what is wrong with about.txt),
 # el_note (more errors, or the old layout), el_trees (the trees holding it, "|"-joined),
 # el_labels (the --also labels; none for the main tree), and its states or scenes in
 # el_state_names[<i>,<j>] and el_state_descs[<i>,<j>] (el_state_names[<i>,count] of them)
-declare -a el_key=() el_desc=() el_note=() el_trees=() el_labels=()
+declare -a el_key=() el_desc=() el_note=() el_trees=() el_labels=() el_folder=()
 declare -A el_index=() el_state_names=() el_state_descs=()
 
 # old_description <folder>: an old-layout element's description, from MOCKUP.md's first
@@ -308,17 +312,28 @@ add_tree() {
         kind=${kind##*/}
         [ "$kind" = planning ] && kind=plans
         key=$kind/${folder##*/}
-        if [ -n "${el_index[$key]:-}" ]; then
-            i=${el_index[$key]}
-            # Only in working trees so far: one more tree holding it
-            if [ -n "${el_labels[i]}" ] && [ -n "$label" ]; then
-                el_labels[i]="${el_labels[i]}, $label"
-                el_trees[i]="${el_trees[i]}|$tree"
+        if [ -n "$label" ]; then
+            # In the main tree: its copy is the one listed
+            [ -n "${el_index[$key]:-}" ] && [ -z "${el_labels[${el_index[$key]}]}" ] && continue
+            # Not the tree's own: an element it only kept while the main tree removed or
+            # renamed it (a pinned tree, a branch not rebased)
+            changed_in "$tree" "$folder" || continue
+            # In working trees so far: the same copy is one more tree holding it, another
+            # copy is listed apart (drop_lagging leaves out one that only lags behind)
+            local same=-1 k
+            for k in "${!el_key[@]}"; do
+                [ "${el_key[k]}" = "$key" ] || continue
+                if diff -r -q "${el_folder[k]}" "$folder" > /dev/null 2>&1; then same=$k; break; fi
+            done
+            if [ "$same" -ge 0 ]; then
+                el_labels[same]="${el_labels[same]}, $label"
+                el_trees[same]="${el_trees[same]}|$tree"
+                continue
             fi
-            continue
         fi
         i=${#el_key[@]}
-        el_index[$key]=$i
+        [ -n "${el_index[$key]:-}" ] || el_index[$key]=$i
+        el_folder[i]=$folder
         el_key[i]=$key
         el_trees[i]=$tree
         el_labels[i]=$label
@@ -381,6 +396,26 @@ mark_open() {
     return 0
 }
 
+# drop_lagging: of two copies of an element in working trees, the one whose tree only lags
+# behind the other's is left out
+drop_lagging() {
+    local i k
+    local -a gone=()
+    for i in "${!el_key[@]}"; do
+        [ -n "${el_labels[i]}" ] || continue
+        for k in "${!el_key[@]}"; do
+            [ "$i" != "$k" ] && [ "${el_key[i]}" = "${el_key[k]}" ] && [ -n "${el_labels[k]}" ] || continue
+            changed_in "${el_trees[i]%%|*}" "${el_folder[i]}" "${el_trees[k]%%|*}" || { gone+=("$i"); break; }
+        done
+    done
+    for i in "${gone[@]}"; do unset "el_key[$i]"; done
+    # The first copy left of each element is its index
+    el_index=()
+    for i in "${!el_key[@]}"; do
+        [ -n "${el_index[${el_key[i]}]:-}" ] || el_index[${el_key[i]}]=$i
+    done
+}
+
 # collect [quiet]: every element, main tree and --also trees, sorted (el_order) by kind and
 # name; which are open asked unless quiet
 collect() {
@@ -390,6 +425,7 @@ collect() {
     for entry in "${also_trees[@]}"; do
         add_tree "$(cd "${entry%=*}" && pwd -P)" "${entry##*=}"
     done
+    drop_lagging
     mapfile -t el_order < <(for i in "${!el_key[@]}"; do
         k=${el_key[i]}
         case ${k%%/*} in components) r=1 ;; views) r=2 ;; *) r=3 ;; esac
@@ -527,6 +563,8 @@ find_element() {
     local -a exact=() parts=()
     [ -n "${el_index[$want]:-}" ] && { echo "${el_index[$want]}"; return 0; }
     for i in "${el_order[@]}"; do
+        # One index per element: a second copy of it (another working tree's) is not another
+        [ "${el_index[${el_key[i]}]}" = "$i" ] || continue
         [ "${el_key[i]#*/}" = "$want" ] && exact+=("$i")
         [[ "${el_key[i]}" == *"$want"* ]] && parts+=("$i")
     done
@@ -541,7 +579,7 @@ find_element() {
 }
 
 cmd_list() {
-    local i j count w line pad word address
+    local i j count w line pad word address first
     setup_output
     collect
     if [ $# -eq 0 ]; then
@@ -550,38 +588,44 @@ cmd_list() {
         legend
         return 0
     fi
-    i=$(find_element "$1") || exit 2
-    line="$(kind_word "${el_key[i]}") ${el_key[i]#*/}"
-    [ -n "${el_open[$i]:-}" ] && line="$line (open)"
-    wrap "$line — " "  " "${el_desc[i]}"
-    [ -z "${el_labels[i]}" ] || wrap "  " "  " "[not merged: ${el_labels[i]}]" "$dim"
-    while IFS= read -r line; do
-        [ -n "$line" ] && wrap "  " "    " "$line" "$dim"
-    done <<< "${el_note[i]}"
-    count=${el_state_names[$i,count]:-0}
-    w=0
-    for ((j = 0; j < count; j++)); do
-        [ ${#el_state_names[$i,$j]} -gt "$w" ] && w=${#el_state_names[$i,$j]}
+    first=$(find_element "$1") || exit 2
+    # Each copy, when working trees hold different ones
+    for i in "${el_order[@]}"; do
+        [ "${el_key[i]}" = "${el_key[first]}" ] || continue
+        line="$(kind_word "${el_key[i]}") ${el_key[i]#*/}"
+        [ -n "${el_open[$i]:-}" ] && line="$line (open)"
+        wrap "$line — " "  " "${el_desc[i]}"
+        [ -z "${el_labels[i]}" ] || wrap "  " "  " "[not merged: ${el_labels[i]}]" "$dim"
+        while IFS= read -r line; do
+            [ -n "$line" ] && wrap "  " "    " "$line" "$dim"
+        done <<< "${el_note[i]}"
+        count=${el_state_names[$i,count]:-0}
+        w=0
+        for ((j = 0; j < count; j++)); do
+            [ ${#el_state_names[$i,$j]} -gt "$w" ] && w=${#el_state_names[$i,$j]}
+        done
+        printf -v pad '%*s' $((w + 4)) ""
+        for ((j = 0; j < count; j++)); do
+            printf -v line '  %-*s  ' "$w" "${el_state_names[$i,$j]}"
+            wrap "$line" "$pad" "${el_state_descs[$i,$j]}"
+        done
+        word=state
+        [[ "${el_key[i]}" == plans/* ]] && word=scene
+        # Its address: the name alone, unless another kind has an element of that name
+        address=${el_key[i]#*/}
+        for j in "${el_order[@]}"; do
+            [ "${el_key[j]}" != "${el_key[i]}" ] && [ "${el_key[j]#*/}" = "$address" ] && address=${el_key[i]}
+        done
+        line="Open: $cmdname open $address"
+        [ "$count" -gt 0 ] && line="$line   one $word: $cmdname open $address/${el_state_names[$i,0]}"
+        echo "$line"
     done
-    printf -v pad '%*s' $((w + 4)) ""
-    for ((j = 0; j < count; j++)); do
-        printf -v line '  %-*s  ' "$w" "${el_state_names[$i,$j]}"
-        wrap "$line" "$pad" "${el_state_descs[$i,$j]}"
-    done
-    word=state
-    [[ "${el_key[i]}" == plans/* ]] && word=scene
-    # Its address: the name alone, unless another kind has an element of that name
-    address=${el_key[i]#*/}
-    for j in "${el_order[@]}"; do
-        [ "$j" != "$i" ] && [ "${el_key[j]#*/}" = "$address" ] && address=${el_key[i]}
-    done
-    line="Open: $cmdname open $address"
-    [ "$count" -gt 0 ] && line="$line   one $word: $cmdname open $address/${el_state_names[$i,0]}"
-    echo "$line"
 }
 
 # matches <text> <word>...: whether the text holds every word, in any case
 matches() {
+    # Lower case by Unicode's rules (Polish letters too), whatever the caller's locale
+    local LC_ALL=C.UTF-8
     local text=${1,,} word
     shift
     for word in "$@"; do [[ "$text" == *"${word,,}"* ]] || return 1; done
