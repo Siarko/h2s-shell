@@ -203,8 +203,10 @@ TestCase {
         });
         _then("checked writable by its group", () => _check !== null && _ready, () => {
             assertEqual(_check.installedFound + " " + _check.unsafe, "false true", "the check: a script others may write — unsafe");
+            // Cleared now, not when the set-up ends: the next step waits for Remove's outcome,
+            // and Install's still here would pass for it
+            _outcome = null;
             _shell("chmod 755 \"$1/usr/local/libexec/h2s-vpn-lockdown\"", () => {
-                suite._outcome = null;
                 suite.assert(suite._install.apply(suite._request("remove")).started, "Remove: started");
             });
         });
@@ -223,8 +225,9 @@ TestCase {
         _then("read after Undo", () => _current !== null, () => {
             assertEqual(_current.script + "|" + _current.rule, _shellScript + "|" + _rule, "the same bytes back");
             const before = _request("remove");
+            // Cleared now: the Undo's outcome would pass for the refusal the next step waits for
+            _outcome = null;
             _shell("printf '// mine\\n' >> \"$1/usr/share/polkit-1/rules.d/49-h2s-vpn-lockdown.rules\"", () => {
-                suite._outcome = null;
                 suite.assert(suite._install.apply(before).started, "Remove from a reading taken before a hand edit: started");
             });
         });
@@ -253,6 +256,7 @@ TestCase {
         });
         _then("replaced", () => _outcome !== null, () => {
             assertEqual([_outcome.ok, _outcome.script, _outcome.rule].join(" "), "true " + sha(_shellScript) + " " + sha(_rule), "the shell's script and rule in place");
+            _direct = null;
             _exec(["cat", "--", _paths.backups + "/49-h2s-vpn-lockdown.rules." + _outcome.stamp], (code, stdout) => suite._direct = { stdout: stdout });
         });
         _then("the user's rule kept", () => _direct !== null, () => {
