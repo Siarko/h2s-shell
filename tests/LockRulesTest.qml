@@ -1495,6 +1495,9 @@ TestCase {
         assert(!has(lockedWhileDown.effects, "lockCompositor"), "7: … not again when it is locked already");
         const onAwake = started({ lockOnSleep: false, passwordFallback: fallback }).send({ type: "settings", values: { lockOnSleep: true } });
         assert(!has(onAwake.effects, "lockCompositor"), "7: switched on while awake: no lock, only the inhibitor");
+        const otherWhileDown = started({ lockOnSleep: false, passwordFallback: fallback }).sendAll([
+            { type: "prepareForSleep" }, { type: "settings", values: { passwordFallback: null } }]);
+        assert(!has(otherWhileDown.effects, "lockCompositor"), "7: another setting changed while going down (lock before sleep off): no lock");
         notWhileDown.send({ type: "resumed" });
         assert(has(notWhileDown.effects, "holdInhibitor"), "7: … which it is");
     }

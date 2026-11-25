@@ -141,15 +141,20 @@ for offset in 0 0.4; do
         last_release=$(awk -v a="$last_release" -v b="${released:-9999999999}" 'BEGIN { printf "%.6f", (b + 0 > a + 0) ? b : a }')
     done
     [ -n "$held_at_signal" ] || fail "[$offset] no inhibitor was held when the signal came (logind sleeps at once)"
-    # Taken while the sleep was under way: none (refused), as with logind
-    holds_during=$(awk -v since="$signal_at" '$1 == "hold" && $3 + 0 > since + 0 { n++ } END { print n + 0 }' "$WORK/logind/log")
+    # Asked for once the shell knew of the sleep: none. The stand-in refuses every request
+    # while the sleep is under way and a hold recorded is one granted before the signal, so
+    # its record cannot tell; the shell's own log can, in its order: no holdInhibitor effect
+    # after the shell took the PrepareForSleep (a request made earlier, as the new generation
+    # starts, is refused by logind and harmless)
+    holds_during=$(tail -n +"$((signal_line + 1))" "$WORK/shell.log" | sed 's/\x1b\[[0-9;]*m//g' \
+        | awk '/\[Lockscreen\] event \{"type":"prepareForSleep"/ { known = 1 } known && /\[Lockscreen\] effect \{"type":"holdInhibitor"/ { n++ } END { print n + 0 }')
     refusals=$(awk -v since="$signal_at" '$1 == "refuse" && $3 + 0 > since + 0 { n++ } END { print n + 0 }' "$WORK/logind/log")
     sleeps_at=$(awk -v r="$last_release" -v s="$signal_at" -v max="$delay_max" 'BEGIN { c = s + max; printf "%.6f", (r + 0 < c) ? r : c }')
     # The timings. The old generation's inhibitor is the newest held at the signal: its input
     # closed at the old generation's teardown, and it ended `grace` seconds after that.
     log "[$offset] timings (s): $(awk -v s="$signal_at" -v t="${released:-9999999999}" -v g="$grace" -v l="${locked_at:-9999999999}" -v z="$sleeps_at" -v r="$last_release" -v max="$delay_max" \
-        'BEGIN { td = t - g; printf "signal->teardown %.3f, teardown->locked %.3f, signal->locked %.3f, logind sleeps at signal+%.3f (%s), margin %.3f", td - s, l - td, l - s, z - s, (r + 0 < s + max) ? "last release" : "InhibitDelayMaxSec", z - l }'); holds taken while sleeping: $holds_during, refused: $refusals"
-    check "[$offset] no inhibitor was taken while the sleep was under way (logind refuses them)" test "$holds_during" = 0
+        'BEGIN { td = t - g; printf "signal->teardown %.3f, teardown->locked %.3f, signal->locked %.3f, logind sleeps at signal+%.3f (%s), margin %.3f", td - s, l - td, l - s, z - s, (r + 0 < s + max) ? "last release" : "InhibitDelayMaxSec", z - l }'); holdInhibitor after the shell took the sleep: $holds_during, refused: $refusals"
+    check "[$offset] no inhibitor was asked for once the shell took the sleep (logind refuses them)" test "$holds_during" = 0
     check "[$offset] logind would sleep only after the lock: the last inhibitor held at the signal is let go after it, within InhibitDelayMaxSec of the signal" \
         awk -v z="$sleeps_at" -v l="${locked_at:-9999999999}" 'BEGIN { exit !(l + 0 <= z + 0) }'
     log "[$offset] how the shell heard of it: $(sed 's/\x1b\[[0-9;]*m//g' "$WORK/shell.log" | grep -a -E 'PreparingForSleep|"type":"prepareForSleep"' | tail -n 2 | sed 's/^.*\[Lockscreen\] //' | tr '\n' '|')"
