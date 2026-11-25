@@ -19,7 +19,8 @@ import qs.mockups.kit
 //                              stepped by `ipc call mockup next`; then MOCKUP-DONE, exit 0
 //   H2S_MOCKUP_SHOT_LIMIT_MS   how long the shots may take in all (60000 by default), a
 //                              guard against a hang: then MOCKUP-ERROR
-//   H2S_MOCKUP_STATE=<state>   on screen: opens a component or view on that state
+//   H2S_MOCKUP_STATE=<state>   on screen: opens a component or view on that state alone
+//                              (without it, one with state cells shows every state)
 //   H2S_MOCKUP_SCENE=<scene>   on screen: opens a plan on that scene (each variable is
 //                              refused for the other kind)
 //   H2S_MOCKUP_CHECK=1         checks the element and exits, without making a window:

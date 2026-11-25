@@ -24,8 +24,8 @@ import qs.mockups.kit
 // (modal.answered), flow.cancel, flow.applyNow (Apply now), flow.undo. The run's clock is the
 // cell's: a fixed time, moved on between the steps, so every elapsed time is a fixed value.
 // The cells are a settings window's page area each, too large for all of them to fit the
-// shooter's output side by side: they lie on one another and only the state's cell is
-// shown. No pointer is ever simulated over a cell: it rests on a strip below them from the
+// shooter's output side by side: the kit's StateGrid stacks them (on one another while
+// shooting, only the state's cell shown; one under another on screen). No pointer is ever simulated over a cell: it rests on a strip below them from the
 // first state on, so nothing shown or hidden is ever under it.
 //
 //   not-connected        no configuration found: Choose folder…, Look again
@@ -49,14 +49,7 @@ import qs.mockups.kit
 MockupWindow {
     id: root
 
-    // A settings window's page area: the page, the side panel over its right part, the modal
-    readonly property int cellWidth: 890
-    readonly property int cellHeight: 960
-    contentWidth: cellWidth
-    contentHeight: cellHeight + parking.height
-    subject: _cells.itemAt(Array.prototype.indexOf.call(names, current)) ?? _area
-
-    onCurrentChanged: pointer.mouseMove(parking, parking.width / 2, parking.height / 2)
+    onCurrentChanged: pointer.mouseMove(_area.parking, _area.parking.width / 2, _area.parking.height / 2)
 
     TestCase {
         id: pointer
@@ -220,28 +213,23 @@ MockupWindow {
 
     // ---- The cells ----
 
-    Item {
+    // A settings window's page area each: the page, the side panel over its right part, the
+    // modal
+    StateGrid {
         id: _area
-        anchors.fill: parent
-
-        // Where the pointer rests, off every cell
-        Item {
-            id: parking
-            y: root.cellHeight
-            width: parent.width
-            height: 8
-        }
+        cellWidth: 890
+        cellHeight: 960
+        stacked: true
+        parkingHeight: 8
 
         Repeater {
             id: _cells
             model: root.names.length
-            Item {
+            StateCell {
                 id: cell
                 required property int index
-                readonly property string stateName: root.names[index]
-                width: root.cellWidth
-                height: root.cellHeight
-                visible: root.names[index] === root.current
+                name: root.names[index]
+                readonly property string stateName: name
                 clip: true
 
                 // The stand-ins the cell's run and page read

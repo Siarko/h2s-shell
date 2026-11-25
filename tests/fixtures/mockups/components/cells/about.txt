@@ -1,0 +1,4 @@
+description: The runners' fixture mockup with state cells
+state: rest      The button at rest
+state: checked   The button checked
+state: hover     The pointer over the button

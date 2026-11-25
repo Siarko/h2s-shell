@@ -15,6 +15,12 @@
 #     taller than the screen, whose own item reaches above its content; on screen the
 #     content never scrolls by a drag (a drag is the mockup's), only by the wheel and a
 #     vertical scroll bar shown while it does not fit;
+#   - with state cells (the kit's StateGrid): shot in their grid, each cropped to its cell; on
+#     screen with no state named, every state's cell shown, none overlapping, labelled with its
+#     name and about.txt's description in order, a pointer state saying how to see it, no
+#     state current and no buttons (the fixture, and each component and view mockup);
+#     H2S_MOCKUP_STATE one cell alone, labelled, current; a plan has no cells, its scene
+#     buttons each with its scene's description as tooltip;
 #   - a view that reaches the module host, the notification server, Notifier and the helper,
 #     started with H2S_SHELL_MODULES and H2S_SHELL_HELPER set, loads no module, registers no
 #     server, sends nothing and has no helper;
@@ -254,6 +260,70 @@ check "$([ "$window_answer" = floating ]; echo $?)" "a floating window (ipc wind
 check "$([ "$buttons_answer" = "3 of 3 shown, checked second" ]; echo $?)" "the three scene buttons inside the window, 'second' checked (was '$buttons_answer')"
 check "$([ "$scroller_answer" = "wheel, vertical bar shown" ]; echo $?)" "content taller than the window: scrolled by the wheel and a shown scroll bar, never by a drag (was '$scroller_answer')"
 check "$(! grep -q -E 'MOCKUP-ERROR|TypeError|ReferenceError' "${logs[tall]}"; echo $?)" "no error"
+
+# on_screen_cells <case> <base> <mockup> [<state or scene>]: started on screen (all its
+# states when none is named); once its window is made, cells_answer, current_answer,
+# buttons_answer and tooltips_answer what it answers over IPC
+on_screen_cells() {
+    local case=$1 base=$2 mockup=$3 first=${4:-} id deadline=$((SECONDS + 30)) made="" variable=H2S_MOCKUP_STATE
+    [[ "$mockup" == plans/* ]] && variable=H2S_MOCKUP_SCENE
+    local extra=()
+    [ -n "$first" ] && extra=("$variable=$first")
+    start_entry "$case" "$REPO/mockup.qml" H2S_MOCKUP_BASE="$base" H2S_MOCKUP="$mockup" "${extra[@]}"
+    cells_answer="" current_answer="" buttons_answer="" tooltips_answer=""
+    while [ $SECONDS -lt $deadline ] && kill -0 "${pids[$case]}" 2> /dev/null; do
+        id=$(instance_of "$case")
+        [ -n "$id" ] && made=$(ipc "$id" call mockup window)
+        if [ -n "$made" ]; then
+            cells_answer=$(ipc "$id" call mockup cells)
+            current_answer=$(ipc "$id" call mockup current)
+            buttons_answer=$(ipc "$id" call mockup buttons)
+            tooltips_answer=$(ipc "$id" call mockup tooltips)
+            break
+        fi
+        # A condition polled (the window made), not a fixed wait
+        sleep 0.05
+    done
+    kill -TERM "${pids[$case]}" 2> /dev/null
+    finish_entry "$case"
+}
+
+echo "state cells: shot in a grid of two a row, each shot cropped to its cell"
+start_entry cells-shot "$REPO/mockup.qml" "${fixtures[@]}" H2S_MOCKUP=components/cells
+drive yes cells-shot
+check "$([ "$(grep -o 'MOCKUP-SHOT .*' "${logs[cells-shot]}")" = "$(printf 'MOCKUP-SHOT 0 rest 0,0 120x60\nMOCKUP-SHOT 1 checked 120,0 120x60\nMOCKUP-SHOT 2 hover 0,60 120x60')" ]; echo $?)" "rest, checked, hover at their cells, in about.txt's order"
+check "$(! grep -q -E 'MOCKUP-ERROR|TypeError|ReferenceError' "${logs[cells-shot]}"; echo $?)" "no error"
+
+echo "on screen: a component with state cells opens in all its states, each labelled from about.txt"
+on_screen_cells cells-all tests/fixtures/mockups components/cells
+expected_cells=$(printf '%s\n' "3 of 3 shown, none overlapping" "rest — The button at rest" "checked — The button checked" \
+    "hover — The pointer over the button (point at it, or open cells/hover)")
+check "$([ "$cells_answer" = "$expected_cells" ]; echo $?)" "every state shown, in order, labelled with its name and description, the pointer state saying how to see it (was '$cells_answer')"
+check "$([ -z "$current_answer" ]; echo $?)" "no state current: the simulated pointer lights none (was '$current_answer')"
+check "$([ "$buttons_answer" = "0 of 3 shown, checked " ]; echo $?)" "no state buttons (was '$buttons_answer')"
+check "$(! grep -q -E 'MOCKUP-SHOT|MOCKUP-ERROR|TypeError|ReferenceError' "${logs[cells-all]}"; echo $?)" "no shot, no error"
+
+echo "on screen: H2S_MOCKUP_STATE opens one state of a component with state cells, labelled"
+on_screen_cells cells-one tests/fixtures/mockups components/cells hover
+check "$([ "$cells_answer" = "$(printf '%s\n' "1 of 3 shown, none overlapping" "hover — The pointer over the button")" ]; echo $?)" "only hover's cell, labelled, without the all-states note (was '$cells_answer')"
+check "$([ "$current_answer" = hover ]; echo $?)" "hover current: its simulated pointer placed (was '$current_answer')"
+check "$(! grep -q -E 'MOCKUP-ERROR|TypeError|ReferenceError' "${logs[cells-one]}"; echo $?)" "no error"
+
+echo "on screen: a plan keeps its scene buttons, each with its scene's description as tooltip"
+on_screen_cells plan-tips tests/fixtures/mockups plans/tall
+check "$([ "$cells_answer" = "no cells: a plan, its scene buttons" ]; echo $?)" "no cells (was '$cells_answer')"
+check "$([ "$buttons_answer" = "3 of 3 shown, checked first" ]; echo $?)" "its three buttons, the first scene checked (was '$buttons_answer')"
+check "$([ "$tooltips_answer" = "$(printf '%s\n' "first: The first scene" "second: The second scene" "third: The third scene")" ]; echo $?)" "each button's tooltip its scene's description (was '$tooltips_answer')"
+
+echo "on screen: the mockups in all their states"
+for entry in components/pill:6 components/small-button:24 views/nixos-page:16 views/settings-modal:10; do
+    mockup=${entry%%:*} count=${entry#*:}
+    on_screen_cells "all-${mockup#*/}" mockups "$mockup"
+    labels=$(tail -n +2 <<< "$cells_answer" | sed 's/ — .*//')
+    declared=$(source "$REPO/tests/mockup-about.sh" && about_read "$REPO/mockups/$mockup" state > /dev/null && printf '%s\n' "${about_names[@]}")
+    check "$([ "$(head -n 1 <<< "$cells_answer")" = "$count of $count shown, none overlapping" ] && [ "$labels" = "$declared" ]; echo $?)" "$mockup: every state labelled, in about.txt's order, none overlapping (was '$(head -n 1 <<< "$cells_answer")')"
+    check "$(! grep -q -E 'MOCKUP-ERROR|TypeError|ReferenceError|Binding loop' "${logs[all-${mockup#*/}]}"; echo $?)" "$mockup: no error"
+done
 
 echo "isolation: a view that reaches modules, notifications and the helper"
 start_entry isolation "$REPO/mockup.qml" "${fixtures[@]}" H2S_MOCKUP=views/isolation \

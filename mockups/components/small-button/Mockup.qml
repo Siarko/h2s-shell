@@ -20,11 +20,11 @@ import qs.mockups.kit
 //                           with the button held: pressed, not under the pointer
 // The pointer is simulated with QtTest's events: each state puts it where the state needs
 // it before its frames are waited for, so the look depends on the state, never on time.
-// Every state has a cell of its own, all of them shown side by side while shooting, the shot
-// cropped to the state's cell, and the pointer, when no button is to be under it, parked on
-// a strip below the cells: no button is shown or hidden as the states go by, so none
+// Every state has a cell of its own (the kit's StateGrid lays them out), the shot cropped to
+// the state's cell, and the pointer, when no button is to be under it, parked on the grid's
+// strip below the cells: no button is shown or hidden as the states go by, so none
 // is ever under a pointer left where an earlier state put it (Qt Quick sends hover again at
-// the pointer's place as items change under it). On screen only the state's cell is shown.
+// the pointer's place as items change under it).
 // A pressed button is never released: a release would make the look linger for a moment
 // (PointerArea.linger), so the pressed states come last, each with its own column.
 // "asking" is DeleteButton's state (the first click of a button that asks), not
@@ -44,15 +44,9 @@ MockupWindow {
         return { state: parts[0], pointer: pointerStates.includes(parts[0]) ? parts[0] : "", kind: parts[1] ?? "" };
     }
 
-    // A cell: the widest button (saveChange) and the column of eight, each 24 px tall, 8 px
-    // apart, with 12 px round them; while shooting, the cells in rows of six
-    readonly property int cellWidth: 140
-    readonly property int cellHeight: 8 * 24 + 7 * 8 + 2 * 12
-    readonly property int cellsPerRow: 6
-    contentWidth: shooting ? cellsPerRow * cellWidth : cellWidth
-    readonly property int gridHeight: Math.ceil(names.length / cellsPerRow) * cellHeight
-    contentHeight: shooting ? gridHeight + away.height : cellHeight
-    subject: _cells.itemAt(Array.prototype.indexOf.call(names, current)) ?? content_
+    // The states one pointer or one keyboard focus shows: not all at once on screen
+    pointerStates: Array.prototype.filter.call(names, name => _parse(name).pointer !== "")
+    keyboardStates: Array.prototype.filter.call(names, name => _parse(name).state === "focus")
 
     function _button(name, kind) {
         const cell = _cells.itemAt(Array.prototype.indexOf.call(names, name));
@@ -85,31 +79,27 @@ MockupWindow {
         when: false
     }
 
-    Item {
-        id: content_
-        anchors.fill: parent
+    // Where the pointer rests off every cell (and the keyboard focus off every button)
+    readonly property Item away: grid.parking
 
-        // Where the pointer rests off every cell (and the keyboard focus off every button)
-        Item {
-            id: away
-            y: root.gridHeight
-            width: parent.width
-            height: 8
-        }
+    // A cell: the widest button (saveChange) and the column of eight, each 24 px tall, 8 px
+    // apart, with 12 px round them; while shooting, the cells in rows of six
+    StateGrid {
+        id: grid
+        cellWidth: 140
+        cellHeight: 8 * 24 + 7 * 8 + 2 * 12
+        cellsPerRow: 6
+        parkingHeight: 8
 
         Repeater {
             id: _cells
             model: root.names.length
-            Item {
+            StateCell {
                 id: cell
                 required property int index
+                name: root.names[index]
                 readonly property string cellState: root._parse(root.names[index]).state
                 property alias column: _column
-                x: root.shooting ? (index % root.cellsPerRow) * root.cellWidth : 0
-                y: root.shooting ? Math.floor(index / root.cellsPerRow) * root.cellHeight : 0
-                width: root.cellWidth
-                height: root.cellHeight
-                visible: root.shooting || root.names[index] === root.current
 
                 Column {
                     id: _column

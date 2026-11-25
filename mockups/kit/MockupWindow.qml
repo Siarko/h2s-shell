@@ -14,10 +14,10 @@ import qs.components
 //              (layer-shell namespace h2s-mockup), so that an item's window coordinates are
 //              output coordinates and a shooter can crop to them
 //   on screen  a normal window titled with the mockup's name, which the compositor
-//              moves and resizes like any other: the buttons (one per state or scene)
-//              along its top, the content under them, scrolled by the wheel and scroll
-//              bars (never by a drag, which is the mockup's) when the window is smaller
-//              than it (the window opens at the content's size, at most the screen's)
+//              moves and resizes like any other: the content scrolled by the wheel and
+//              scroll bars (never by a drag, which is the mockup's) when the window is
+//              smaller than it (the window opens at the content's size, at most the
+//              screen's); a plan's buttons (one per scene) along its top
 //
 // A component or a view has states, a plan has scenes; the kit treats both alike (not
 // `states`/`state`, which every Qt Quick Item has: a binding to `state` inside a mockup's item
@@ -32,6 +32,12 @@ import qs.components
 //   subject       the item a shot is cropped to; the content by default
 //   subjectRect   overrides the crop, in window coordinates, for a subject spread over
 //                 several items (a side panel and a modal); ignored while it has no size
+//   pointerStates the states a simulated pointer shows (hover, press), and keyboardStates
+//   keyboardStates the ones the keyboard's focus shows: one pointer and one focus cannot
+//                 show them all at once, so their labels in the all-states layout say how
+//                 to see them
+//   layout        how the window shows the mockup (set by start()): "shot", "all", "one" or
+//                 "buttons"
 //   now           the time every mockup shows (2026-01-15 10:30 UTC), handed to what shows
 //                 a time or a date: a state must not depend on when it is drawn
 //
@@ -41,6 +47,13 @@ import qs.components
 // looping one is off through the component's own property. A text field shows no cursor
 // while shooting: the panel never takes the keyboard focus.
 // `visible` shows and hides the window (the entry shows it once the mockup has started).
+// A component's or a view's states are cells: a StateGrid among its items, a StateCell per
+// state in it (StateGrid.qml). The grid then sets the content's size and the subject (the
+// current cell), and lays the cells out by `layout`: while shooting all side by side (or on
+// one another), on screen with no state named all of them labelled ("all", `current`
+// empty), with one named that one labelled ("one"). A mockup without one, and a plan, shows
+// its current state or scene under a row of buttons ("buttons"), each button's tooltip its
+// description.
 // A simulated pointer (hover, press) acts only inside the state's own cell: one cell per
 // state, all shown while shooting, `subject` the state's cell, the pointer otherwise parked
 // off every cell; nothing is shown or hidden under the pointer between states (Qt Quick
@@ -53,9 +66,10 @@ import qs.components
 // gives the subject's bounds; then the shooter calls `ipc call mockup next`. After the last
 // one `finished` comes; an error (a bad list of names, a subject without a size, the shots
 // taking longer than shotLimitMs in all) `failed`.
-// On screen: the state or scene the entry names (H2S_MOCKUP_STATE, H2S_MOCKUP_SCENE), else
-// the first, and a row of
-// buttons above the content that switches between them, the current one checked.
+// On screen: the state or scene the entry names (H2S_MOCKUP_STATE, H2S_MOCKUP_SCENE); with
+// none, every state of a component or view with cells, else the first, and for a plan (or a
+// mockup without cells) a row of buttons above the content that switches between them, the
+// current one checked.
 //
 // Over IPC (the config path is the entry's, the same for every mockup, so `name` tells
 // running ones apart):
@@ -72,6 +86,13 @@ import qs.components
 //   qs -p <tree>/mockup.qml ipc call mockup buttons
 //                         the buttons inside the window: "<shown> of <names> shown,
 //                         checked <name>" (none while shooting)
+//   qs -p <tree>/mockup.qml ipc call mockup tooltips
+//                         each button's "<name>: <tooltip>", a line each
+//   qs -p <tree>/mockup.qml ipc call mockup cells
+//                         the cells shown: "<shown> of <names> shown, none overlapping" (or
+//                         "overlapping <a>/<b> …", a cell's label named <name>:label), then
+//                         each shown cell's label a line, in order; "no cells: …" for a
+//                         plan or a mockup without a StateGrid
 // With several mockups running on one display, `qs ipc --id <instance id>` (or --pid) picks
 // one: the target is the same in all of them.
 QtObject {
@@ -91,6 +112,18 @@ QtObject {
 
     property int contentWidth: 480
     property int contentHeight: 320
+
+    // The states a simulated pointer or the keyboard shows, which the all-states layout
+    // cannot show at once (one pointer, one keyboard focus): their labels say how to see them
+    property var pointerStates: []
+    property var keyboardStates: []
+    // How the window shows the mockup, set by start(): "shot" while shooting; on screen
+    // "all" (every state's cell, labelled), "one" (one state's cell, labelled) or
+    // "buttons" (a plan, or a mockup without a StateGrid: the current state or scene under a
+    // row of buttons); "" before start()
+    property string layout: ""
+    // The mockup's StateGrid, found by start(); null when it has none
+    property Item _grid: null
     // The mockup's own items go into the content area
     default property alias data: content.data
 
@@ -110,8 +143,68 @@ QtObject {
     // The window start() made: the panel while shooting, a floating window on screen
     property var _window: null
 
-    readonly property int _windowWidth: Math.max(contentWidth, shooting ? 0 : _switcher.implicitWidth)
-    readonly property int _windowHeight: contentHeight + (shooting ? 0 : _switcher.implicitHeight)
+    readonly property bool _withButtons: layout === "buttons"
+    readonly property int _switcherHeight: _withButtons ? _switcher.implicitHeight : 0
+    readonly property int _windowWidth: Math.max(contentWidth, _withButtons ? _switcher.implicitWidth : 0)
+    readonly property int _windowHeight: contentHeight + _switcherHeight
+    // The content's size as laid out: with a StateGrid on screen it follows the window's width
+    readonly property int _laidWidth: _grid ? _grid.laidWidth : contentWidth
+    readonly property int _laidHeight: _grid ? _grid.laidHeight : contentHeight
+
+    // What a pointer or keyboard state's label adds in the all-states layout
+    function hintFor(name) {
+        const element = mockupName.replace(/^[^\/]*\//, "");
+        if (Array.prototype.includes.call(pointerStates, name))
+            return " (point at it, or open " + element + "/" + name + ")";
+        if (Array.prototype.includes.call(keyboardStates, name))
+            return " (one item has the keyboard at a time: open " + element + "/" + name + ")";
+        return "";
+    }
+
+    // The StateGrid among the content's items, depth first
+    function _findGrid(item) {
+        for (const child of item.children) {
+            if (child.isStateGrid)
+                return child;
+            const inner = _findGrid(child);
+            if (inner)
+                return inner;
+        }
+        return null;
+    }
+
+    // The cells shown and their labels: "<shown> of <names> shown, <none|overlapping …>",
+    // then each shown cell's label on a line of its own, in order (on screen; while shooting
+    // the cells without labels)
+    function _cellsShown() {
+        if (!_grid)
+            return "no cells: " + (_word === "scene" ? "a plan, its scene buttons" : "no StateGrid, the state buttons");
+        const boxes = [];
+        const lines = [];
+        for (const cell of _grid.cells) {
+            if (!cell.visible || !(cell.width > 0 && cell.height > 0))
+                continue;
+            const origin = cell.mapToItem(content, 0, 0);
+            boxes.push({ name: cell.name, x: origin.x, y: origin.y, w: cell.width, h: cell.height });
+            const label = _grid.labelItem(cell.name);
+            if (label && label.visible) {
+                const at = label.mapToItem(content, 0, 0);
+                boxes.push({ name: cell.name + ":label", x: at.x, y: at.y, w: label.width, h: label.height });
+                lines.push(label.text);
+            } else {
+                lines.push(cell.name);
+            }
+        }
+        const overlapping = [];
+        for (let i = 0; i < boxes.length; i++)
+            for (let j = i + 1; j < boxes.length; j++) {
+                const a = boxes[i], b = boxes[j];
+                if (a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h)
+                    overlapping.push(a.name + "/" + b.name);
+            }
+        return [lines.length + " of " + names.length + " shown, " + (overlapping.length ? "overlapping " + overlapping.join(" ") : "none overlapping")]
+            .concat(lines).join("\n");
+    }
 
     // The buttons wholly inside the window, and the checked one's name
     function _buttonsShown() {
@@ -163,6 +256,16 @@ QtObject {
         const index = shooting || first === "" ? 0 : Array.prototype.indexOf.call(names, first);
         if (index < 0)
             return "no " + _word + " '" + first + "' (the " + _word + "s: " + Array.prototype.join.call(names, " ") + ")";
+        // A plan keeps its scene buttons; a component or view with state cells shows them
+        _grid = _word === "state" ? _findGrid(content) : null;
+        layout = shooting ? "shot" : !_grid ? "buttons" : first === "" ? "all" : "one";
+        if (_grid) {
+            _grid.mockup = root;
+            _grid.availableWidth = Qt.binding(() => _scroller.width);
+            contentWidth = Qt.binding(() => _grid.preferredWidth);
+            contentHeight = Qt.binding(() => _grid.preferredHeight);
+            subject = Qt.binding(() => _grid.currentCell ?? content);
+        }
         const window = (shooting ? _panelWindow : _floatingWindow).createObject(root);
         if (!window)
             return "the window cannot be made";
@@ -175,7 +278,8 @@ QtObject {
             return "";
         }
         _index = index;
-        current = names[index];
+        // All states at once: none is current, the simulated pointer stays off every cell
+        current = layout === "all" ? "" : names[index];
         return "";
     }
 
@@ -268,18 +372,18 @@ QtObject {
             id: content
             x: 0
             y: 0
-            width: root.contentWidth
-            height: root.contentHeight
+            width: root._laidWidth
+            height: root._laidHeight
         }
 
         Flickable {
             id: _scroller
             visible: !root.shooting
-            y: _switcher.height
+            y: root._switcherHeight
             width: parent.width
             height: Math.max(0, parent.height - y)
-            contentWidth: root.contentWidth
-            contentHeight: root.contentHeight
+            contentWidth: root._laidWidth
+            contentHeight: root._laidHeight
             boundsBehavior: Flickable.StopAtBounds
             // Nothing of the mockup's own reaches over the buttons
             clip: true
@@ -325,18 +429,20 @@ QtObject {
 
         Flow {
             id: _switcher
-            visible: !root.shooting
+            visible: root._withButtons
             width: parent.width
             padding: Theme.popup.contentPadding
             spacing: Theme.popup.contentPadding
             Repeater {
                 id: _buttons
                 model: ScriptModel {
-                    values: root.shooting ? [] : Array.prototype.slice.call(root.names)
+                    values: root._withButtons ? Array.prototype.slice.call(root.names) : []
                 }
                 SmallButton {
                     required property string modelData
+                    required property int index
                     label: modelData
+                    tooltip: root.descriptions[index] ?? ""
                     checked: modelData === root.current
                     onClicked: root.current = modelData
                 }
@@ -382,6 +488,22 @@ QtObject {
 
         function current(): string {
             return root.current;
+        }
+
+        function cells(): string {
+            return root._window ? root._cellsShown() : "";
+        }
+
+        function tooltips(): string {
+            if (!root._window)
+                return "";
+            const lines = [];
+            for (let i = 0; i < _buttons.count; i++) {
+                const button = _buttons.itemAt(i);
+                if (button)
+                    lines.push(button.modelData + ": " + button.tooltip);
+            }
+            return lines.join("\n");
         }
 
         function window(): string {

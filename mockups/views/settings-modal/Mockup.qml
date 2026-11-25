@@ -24,8 +24,16 @@ import qs.mockups.kit
 //   focus-button     enable-module after Tab: the keyboard on the first button (its ring)
 //   short-window     remove-password in a window too short for it (200 px): the middle is
 //                    cut and scrolls, the header and the buttons stay
-// Each state opens the modal anew (open false, then true), as the host does for each
-// question: the keyboard goes to the panel and the checkboxes start unchecked.
+// Each state has a cell (the kit's StateGrid stacks them: on one another while shooting, one
+// under another on screen), a stand-in of the window's area. While shooting and for one
+// state, one area and its modal take each state's question in turn, placed on the state's
+// cell, and the modal opens anew (open false, then true), as the host does for each question:
+// the keyboard goes to the panel and the checkboxes start unchecked. (A modal made anew for
+// each state draws its text a pixel apart from one reused: the glyph cache fills in another
+// order.) With every state on screen at once, each cell has an area and a modal of its own,
+// and the cells take no input: each open modal holds the keyboard, and one taking it from
+// another would take it back from the next, without end (a disabled item cannot take the
+// keyboard, so none takes it).
 MockupWindow {
     id: root
 
@@ -57,26 +65,23 @@ MockupWindow {
         "short-window": PamRuleViewRules.removeFixedQuestion("sudo", [], {})
     })
     readonly property var spec: specs[current] ?? {}
+    keyboardStates: ["focus-button"]
 
     readonly property var changeLines: ["Plays from the files' folder too", "Shows the cover in the popup",
                                         "Remembers the volume per player", "Fixes a stall after a suspend"]
 
-    contentWidth: 600
-    contentHeight: 440
-    subject: area
-
     // The question opened anew for the state, then the keyboard and the checkboxes it needs,
     // once the modal has opened (its focus taken) with the state's spec
     onCurrentChanged: {
-        modal.open = false;
-        modal.open = true;
+        area.modal.open = false;
+        area.modal.open = true;
         Qt.callLater(_settle, current);
     }
     function _settle(name) {
         if (name !== current)
             return;
         if (name === "remove-checked")
-            modal.values = { data: true };
+            area.modal.values = { data: true };
         if (name === "focus-button")
             keys.keyClick(Qt.Key_Tab);
     }
@@ -106,12 +111,10 @@ MockupWindow {
 
     // A stand-in of the Settings window's area behind the modal: a page title and rows, so
     // that the dim over it shows
-    Item {
-        id: area
-        x: 0
-        y: 0
-        width: parent.width
-        height: root.current === "short-window" ? 200 : parent.height
+    component Area: Item {
+        id: areaItem
+        property alias modal: _modal
+        property var spec: ({})
 
         Column {
             x: Theme.modal.padding
@@ -137,19 +140,65 @@ MockupWindow {
         }
 
         SettingsModal {
-            id: modal
+            id: _modal
             x: 0
             y: 0
             width: parent.width
             height: parent.height
-            kind: root.spec.kind ?? "info"
-            title: root.spec.title ?? ""
-            body: root.spec.body ?? []
-            checks: root.spec.checks ?? []
-            content: root.spec.content ?? null
-            buttons: root.spec.buttons ?? []
-            cancelLabel: root.spec.cancelLabel ?? ""
-            size: root.spec.size ?? "m"
+            kind: areaItem.spec.kind ?? "info"
+            title: areaItem.spec.title ?? ""
+            body: areaItem.spec.body ?? []
+            checks: areaItem.spec.checks ?? []
+            content: areaItem.spec.content ?? null
+            buttons: areaItem.spec.buttons ?? []
+            cancelLabel: areaItem.spec.cancelLabel ?? ""
+            size: areaItem.spec.size ?? "m"
+        }
+    }
+
+    StateGrid {
+        id: grid
+        cellWidth: 600
+        cellHeight: 440
+        stacked: true
+
+        Repeater {
+            id: _cells
+            model: root.names.length
+
+            StateCell {
+                id: cell
+                required property int index
+                name: root.names[index]
+                height: name === "short-window" ? 200 : 440
+                enabled: root.layout !== "all"
+
+                // Every state's question at once, the ticked box drawn ticked; opened once
+                // the cells are disabled, so that no modal takes the keyboard
+                Loader {
+                    anchors.fill: parent
+                    active: root.layout === "all"
+                    sourceComponent: Area {
+                        spec: root.specs[cell.name] ?? {}
+                        Component.onCompleted: Qt.callLater(() => {
+                            modal.open = true;
+                            if (cell.name === "remove-checked")
+                                modal.values = { data: true };
+                        })
+                    }
+                }
+            }
+        }
+
+        // The one area while shooting and for one state, on the state's cell
+        Area {
+            id: area
+            x: grid.currentCell ? grid.currentCell.x : 0
+            y: grid.currentCell ? grid.currentCell.y : 0
+            width: grid.cellWidth
+            height: grid.currentCell ? grid.currentCell.height : grid.cellHeight
+            visible: root.layout === "shot" || root.layout === "one"
+            spec: root.spec
         }
     }
 }

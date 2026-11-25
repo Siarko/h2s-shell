@@ -166,8 +166,10 @@ ticks, cells respond to clicks, and popups toggle.
 
 `mockups/`, with the root entry `mockup.qml`: development only, never installed. A mockup is
 `mockups/<kind>/<name>/Mockup.qml`, run against this tree (no copy of it), with
-`H2S_MOCKUP=<kind>/<name>` (`H2S_MOCKUP_STATE=<state>` opens a component or view on a
-state, `H2S_MOCKUP_SCENE=<scene>` a plan on a scene, each refused for the other kind;
+`H2S_MOCKUP=<kind>/<name>` (on a screen a component or view shows all its states, each
+labelled with its name and description; `H2S_MOCKUP_STATE=<state>` opens it on one state
+alone, `H2S_MOCKUP_SCENE=<scene>` a plan on a scene, each refused for the other kind; a plan
+keeps a button per scene, its description as tooltip;
 `H2S_MOCKUP_SHOT=1` steps through them headless, `H2S_MOCKUP_CHECK=1` checks one without a
 window). **Every element has an `about.txt`** beside its `Mockup.qml`, the one place its
 list is declared:
@@ -236,10 +238,17 @@ Mockup code:
   animations take Theme's durations, which the entry makes instant.
   A picture is loaded before the state that shows it (its asynchronous `Image` made from the
   start, hidden): the shot is taken three frames after the state is set.
+- Each state is a cell: the kit's `StateGrid` (`cellWidth`, `cellHeight`, `cellsPerRow`,
+  `parkingHeight`, `stacked` for cells too large to lie side by side) with a `StateCell`
+  (`name`) per state, the state's items inside it. The grid lays them out — all side by side
+  while shooting (stacked: on one another, the current one shown), the shot cropped to the
+  current cell; on a screen in labelled rows, or one alone — and sets the content's size and
+  the subject.
 - A pointer state (hover, press) is simulated with QtTest's events (a `TestCase` with
-  `when: false`), only inside the state's own cell: each state has a cell of its own, all
-  shown side by side while shooting and the shot cropped to it (`subject`), and the pointer,
-  when nothing is to be under it, rests on a strip off every cell. Nothing is shown or
+  `when: false`), only inside the state's own cell, and the pointer, when nothing is to be
+  under it, rests on the grid's `parking` strip off every cell. The mockup lists such states
+  in the kit's `pointerStates` (`keyboardStates` for a keyboard focus): with all states on a
+  screen none is current, and their labels say how to see them. Nothing is shown or
   hidden under the pointer as the states go by: Qt Quick sends hover again at the pointer's
   place when items change under it, so an item shown where an earlier state left the
   pointer is lit in some runs and not in others.

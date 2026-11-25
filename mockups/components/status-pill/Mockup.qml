@@ -14,10 +14,10 @@ import qs.mockups.kit
 //   not-expandable   with parts but `expandable: false`, under the pointer: no hover look
 // The pointer is simulated with QtTest's events: each state puts it where the state needs
 // it before its frames are waited for, so the look depends on the state, never on time.
-// Every state has a cell of its own, all shown side by side while shooting, the shot cropped
-// to the state's cell; the pointer, when no pill is to be under it, is parked on a strip
-// below the cells. Nothing is shown or hidden as the states go by, so no pill is ever under
-// a pointer left where an earlier state put it. On screen only the state's cell is shown.
+// Every state has a cell of its own (the kit's StateGrid lays them out), the shot cropped
+// to the state's cell; the pointer, when no pill is to be under it, is parked on the grid's
+// strip below the cells. Nothing is shown or hidden as the states go by, so no pill is ever
+// under a pointer left where an earlier state put it.
 MockupWindow {
     id: root
 
@@ -30,14 +30,7 @@ MockupWindow {
     ]
     // The states the pointer is over the pill in
     readonly property var pointed: ["hover", "not-expandable"]
-
-    readonly property int cellWidth: 240
-    readonly property int cellHeight: 5 * 28 + 4 * 8 + 2 * 16
-    readonly property int cellsPerRow: 5
-    readonly property int gridHeight: Math.ceil(names.length / cellsPerRow) * cellHeight
-    contentWidth: shooting ? cellsPerRow * cellWidth : cellWidth
-    contentHeight: shooting ? gridHeight + parking.height : cellHeight
-    subject: _cells.itemAt(Array.prototype.indexOf.call(names, current)) ?? content_
+    pointerStates: pointed
 
     // The pointer for the state, before its frames are waited for
     onCurrentChanged: {
@@ -46,7 +39,7 @@ MockupWindow {
         if (pill)
             pointer.mouseMove(pill, Theme.row.horizontalPadding + 4, pill.collapsedHeight / 2);
         else
-            pointer.mouseMove(parking, parking.width / 2, parking.height / 2);
+            pointer.mouseMove(grid.parking, grid.parking.width / 2, grid.parking.height / 2);
     }
 
     TestCase {
@@ -54,31 +47,22 @@ MockupWindow {
         when: false
     }
 
-    Item {
-        id: content_
-        anchors.fill: parent
-
-        // Where the pointer rests off every cell
-        Item {
-            id: parking
-            y: root.gridHeight
-            width: parent.width
-            height: 8
-        }
+    StateGrid {
+        id: grid
+        cellWidth: 240
+        cellHeight: 5 * 28 + 4 * 8 + 2 * 16
+        cellsPerRow: 5
+        parkingHeight: 8
 
         Repeater {
             id: _cells
             model: root.names.length
-            Item {
+            StateCell {
                 id: cell
                 required property int index
-                readonly property string stateName: root.names[index]
+                name: root.names[index]
+                readonly property string stateName: name
                 property alias pill: _pill
-                x: root.shooting ? (index % root.cellsPerRow) * root.cellWidth : 0
-                y: root.shooting ? Math.floor(index / root.cellsPerRow) * root.cellHeight : 0
-                width: root.cellWidth
-                height: root.cellHeight
-                visible: root.shooting || stateName === root.current
 
                 Column {
                     x: 16
