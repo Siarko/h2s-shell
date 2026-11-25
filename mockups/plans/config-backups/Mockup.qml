@@ -13,6 +13,9 @@ import qs.mockups.kit
 // here as proposals; the real pieces used are the theme, SettingsPage, SettingsSection,
 // SmallButton, SettingsModal and NotificationCard. Stand-in data: this shell is 2.2.0, now is
 // the kit's 15 Jan 2026, 10:30. Scenes and wording: MOCKUP.md.
+// The last scene, config-backups-live, is the same window working on its own stand-in data:
+// backups made, applied and deleted, the failed update's notice raised from the note under the
+// window, with the theme's animations (off in the other scenes and while shooting).
 MockupWindow {
     id: root
 
@@ -28,7 +31,16 @@ MockupWindow {
         return wanted.indexOf(root.current) >= 0;
     }
 
-    readonly property bool onDashboard: sceneIs("failure-dashboard", "failure-restore-confirm")
+    readonly property bool live: current === "config-backups-live"
+    readonly property bool onDashboard: live ? livePage === "dashboard" : sceneIs("failure-dashboard", "failure-restore-confirm")
+
+    // The live scene animates as the shell would; every other scene, and every shot, is drawn
+    // without motion (the entry makes animations instant)
+    onCurrentChanged: {
+        Theme.instantAnimations = !(live && !shooting);
+        if (live)
+            Qt.callLater(() => listKeys.forceActiveFocus());
+    }
 
     // ---- Stand-in data ---------------------------------------------------------------------
 
@@ -53,9 +65,115 @@ MockupWindow {
         { key: "o2", date: "1 Dec 2025, 11:47", reason: "", version: "",
           file: "config.json.bak-2025-12-01T11-47-09", updates: 4 }
     ]
-    readonly property var shownBackups: sceneIs("backup-made") ? [madeNow].concat(backups) : backups
+    readonly property var shownBackups: live ? liveBackups : sceneIs("backup-made") ? [madeNow].concat(backups) : backups
+
+    // ---- The live scene's state ------------------------------------------------------------
+
+    property var liveBackups: backups.slice()
+    property string liveSelected: ""
+    // "apply" | "delete" | "restore" | ""
+    property string liveModal: ""
+    // "backups" | "dashboard"
+    property string livePage: "backups"
+    // The date of the backup Make a backup now made last; "" hides the line
+    property string liveMade: ""
+    property bool liveToast: false
+    property bool liveFailure: false
+    property bool liveDetails: false
+    // The stand-in clock: each backup made takes the next minute after 10:30
+    property int liveMinute: 30
+    property int liveSerial: 0
+    // What the stand-in shell did last (a restart), said in the note under the window
+    property string liveEvent: ""
+
+    function liveReset() {
+        liveBackups = backups.slice();
+        liveSelected = "";
+        liveModal = "";
+        livePage = "backups";
+        liveMade = "";
+        liveToast = false;
+        liveFailure = false;
+        liveDetails = false;
+        liveMinute = 30;
+        liveEvent = "";
+        listKeys.forceActiveFocus();
+    }
+
+    // A new backup at the top, at the stand-in clock's next minute; automatic ones pruned to
+    // the newest 10
+    function liveAdd(reason) {
+        const minute = liveMinute++;
+        const hh = 10 + Math.floor(minute / 60), mm = minute % 60;
+        const pad = n => (n < 10 ? "0" : "") + n;
+        const backup = { key: "live" + (++liveSerial), date: "15 Jan 2026, " + hh + ":" + pad(mm), reason: reason, version: thisVersion,
+                         file: "config.json.bak-2026-01-15T" + pad(hh) + "-" + pad(mm) + "-00-" + reason, updates: 0, fresh: true };
+        let automatic = 0;
+        liveBackups = [backup].concat(liveBackups).filter(item => item.reason === "manual" || ++automatic <= 10);
+        return backup;
+    }
+
+    function liveMakeBackup() {
+        const backup = liveAdd("manual");
+        liveMade = backup.date;
+        liveSelected = backup.key;
+    }
+
+    function liveMove(step) {
+        const keys = liveBackups.map(backup => backup.key);
+        if (keys.length === 0)
+            return;
+        const at = keys.indexOf(liveSelected);
+        liveSelected = keys[at < 0 ? (step > 0 ? 0 : keys.length - 1) : Math.max(0, Math.min(keys.length - 1, at + step))];
+    }
+
+    function liveAsk(which) {
+        if ((which === "apply" || which === "delete") && !selectedBackup)
+            return;
+        liveModal = which;
+    }
+
+    function liveAnswer(confirmed) {
+        const which = liveModal;
+        liveModal = "";
+        if (!confirmed)
+            return;
+        if (which === "delete") {
+            liveBackups = liveBackups.filter(backup => backup.key !== liveSelected);
+            liveSelected = "";
+            liveMade = "";
+        } else if (which === "apply") {
+            const applied = selectedBackup;
+            liveAdd("restore");
+            liveSelected = "";
+            liveMade = "";
+            liveEvent = "The shell restarted with the backup of " + applied.date + ".";
+        } else if (which === "restore") {
+            liveAdd("restore");
+            liveFailure = false;
+            liveToast = false;
+            liveDetails = false;
+            livePage = "backups";
+            liveEvent = "The shell restarted with the settings from before the update.";
+        }
+    }
+
+    function liveFail() {
+        liveFailure = true;
+        liveToast = true;
+        liveDetails = false;
+        liveEvent = "The shell started after an update to 2.2.0; one settings update failed.";
+    }
+
+    function liveKeepDefaults() {
+        liveFailure = false;
+        liveToast = false;
+        liveDetails = false;
+    }
 
     readonly property string selectedKey: {
+        if (live)
+            return liveSelected;
         if (sceneIs("selected", "apply-confirm"))
             return "g1";
         if (sceneIs("apply-confirm-failing"))
@@ -104,9 +222,13 @@ MockupWindow {
     readonly property string newerWarning: "Written by h2s-shell 2.3.0, newer than this version: what this version does not know is kept, unused; nothing is converted back."
 
     // The modal each scene shows, as SettingsModal takes it
+    readonly property string modalWhich: live ? liveModal
+        : sceneIs("apply-confirm", "apply-confirm-failing", "newer-confirm") ? "apply"
+        : sceneIs("delete-confirm") ? "delete"
+        : sceneIs("failure-restore-confirm") ? "restore" : ""
     readonly property var modalSpec: {
         const backup = selectedBackup;
-        if (sceneIs("apply-confirm", "apply-confirm-failing", "newer-confirm") && backup) {
+        if (modalWhich === "apply" && backup) {
             const body = [];
             if (backup.newer)
                 body.push({ text: newerWarning, strong: true });
@@ -119,11 +241,11 @@ MockupWindow {
             return { kind: "warning", title: "Apply the backup of " + backup.date + "?", body: body,
                      buttons: [{ label: "Apply and restart", kind: "warning" }], cancelLabel: "Cancel" };
         }
-        if (sceneIs("delete-confirm") && backup)
+        if (modalWhich === "delete" && backup)
             return { kind: "danger", title: "Delete the backup of " + backup.date + " (" + reasonShort(backup) + ", " + versionText(backup) + ")?",
                      body: ["Only this backup is removed. This cannot be undone."],
                      buttons: [{ label: "Delete", kind: "delete" }], cancelLabel: "Cancel" };
-        if (sceneIs("failure-restore-confirm"))
+        if (modalWhich === "restore")
             return { kind: "warning", title: "Restore your settings from before the update?",
                      body: ["Your current settings are saved first, as a new backup (Before a restore): nothing set since is lost.",
                             "Your settings from before the update come back. The part that failed (music widget presets) stays unused until the next update of the shell, which tries again.",
@@ -139,9 +261,12 @@ MockupWindow {
     readonly property var failureNotification: ({
         id: 9101, appName: "h2s-shell", summary: failureSummary, body: failureBody, appIcon: "", hints: ({}),
         urgency: NotificationUrgency.Critical,
-        actions: [{ identifier: "keep", text: "Keep defaults" }, { identifier: "restore", text: "Restore previous settings" },
-                  { identifier: "details", text: "Details" }]
+        // The live scene's answers, after the card's own click handler is done: they remove the card
+        actions: [{ identifier: "keep", text: "Keep defaults", invoke: () => Qt.callLater(root.liveKeepDefaults) },
+                  { identifier: "restore", text: "Restore previous settings", invoke: () => Qt.callLater(() => { root.livePage = "dashboard"; root.liveModal = "restore"; }) },
+                  { identifier: "details", text: "Details", invoke: () => Qt.callLater(() => { root.livePage = "dashboard"; root.liveDetails = true; }) }]
     })
+    readonly property string failureFile: "config.json.bak-2026-01-15T10-29-00-migration"
 
     readonly property var notes: ({
         "list": "System → Backups (proposed place). Newest first: the date, why it was made, the version that wrote it. Manual backups carry \"Kept\": only the automatic ones are pruned to the newest 10. The older backups made before reasons were recorded say so. Make a backup now is on the section's title line.",
@@ -154,7 +279,8 @@ MockupWindow {
         "delete-confirm": "Delete asks in the Settings modal (danger), naming the date, reason and version, as the owner's draft: only that one file goes.",
         "failure-notification": "A settings update failed at start: one critical notification (red border, no timeout, kept in the history) with Keep defaults / Restore previous settings / Details. A successful update is never announced.",
         "failure-dashboard": "The same notice as an entry on the Settings Dashboard (HS-176, still a sketch: only this entry is proposed), kept until Keep defaults. The same three choices.",
-        "failure-restore-confirm": "Restore previous settings asks first (from the notification or the Dashboard): the current settings backed up, the pre-update ones back, the failed part unused until the next shell update; restart."
+        "failure-restore-confirm": "Restore previous settings asks first (from the notification or the Dashboard): the current settings backed up, the pre-update ones back, the failed part unused until the next shell update; restart.",
+        "config-backups-live": "Live, on stand-in data. Keys: ↑ ↓ select, Enter apply, Delete delete, Esc deselect; Tab in the questions."
     })
 
     // ---- Stand-in pieces ------------------------------------------------------------------
@@ -193,9 +319,32 @@ MockupWindow {
         readonly property bool selected: backup.key === root.selectedKey
         implicitHeight: _rowColumn.implicitHeight + 16
         radius: Theme.settings.cardRadius
-        color: selected ? Theme.accentTint : Theme.surface
+        color: selected ? Theme.accentTint : _rowArea.containsMouse && root.live ? Theme.surfaceHover : Theme.surface
         border.width: selected ? Theme.border.selectedWidth : 0
         border.color: Theme.accent
+        clip: true
+        Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
+        Behavior on implicitHeight { NumberAnimation { duration: Theme.duration("expand"); easing: Theme.curve("expand") } }
+
+        // A backup just made fades in (live scene)
+        NumberAnimation on opacity {
+            running: _row.backup.fresh === true
+            from: 0; to: 1
+            duration: Theme.duration("enter")
+            easing: Theme.curve("enter")
+        }
+
+        // The live scene: a click selects the row, a second one closes it
+        MouseArea {
+            id: _rowArea
+            anchors.fill: parent
+            enabled: root.live
+            hoverEnabled: true
+            onClicked: {
+                root.liveSelected = _row.selected ? "" : _row.backup.key;
+                listKeys.forceActiveFocus();
+            }
+        }
 
         ColumnLayout {
             id: _rowColumn
@@ -256,16 +405,19 @@ MockupWindow {
                     color: _row.backup.failing ? Theme.warning : Theme.textSecondary
                     font.pixelSize: Theme.fontSizeSmall
                 }
-                SmallButton { label: "Apply…"; tooltip: "Load this backup and restart the shell" }
-                SmallButton { label: "Delete…"; kind: "delete" }
+                SmallButton { label: "Apply…"; tooltip: "Load this backup and restart the shell"; onClicked: root.liveAsk("apply") }
+                SmallButton { label: "Delete…"; kind: "delete"; onClicked: root.liveAsk("delete") }
             }
         }
     }
 
     component SidebarItem: Rectangle {
+        id: _item
         property string label
         property bool picked: false
         property bool line: false
+        // The live scene's page it opens; "" for the stand-ins
+        property string page: ""
         width: root.sidebarWidth - 16
         height: 30
         radius: Theme.settings.sidebarItemRadius
@@ -276,6 +428,11 @@ MockupWindow {
             anchors.verticalCenter: parent.verticalCenter
             text: parent.label
             color: parent.picked ? Theme.textPrimary : Theme.textSecondary
+        }
+        MouseArea {
+            anchors.fill: parent
+            enabled: root.live && _item.page !== ""
+            onClicked: root.livePage = _item.page
         }
     }
 
@@ -329,11 +486,11 @@ MockupWindow {
         Column {
             x: 8; y: tabBar.height + 10
             spacing: 6
-            SidebarItem { label: "󰕮  Dashboard"; picked: root.onDashboard }
+            SidebarItem { label: "󰕮  Dashboard" + (root.live && root.liveFailure ? "  ⚠" : ""); picked: root.onDashboard; page: "dashboard" }
             SidebarItem { label: "Authentication"; line: true }
             SidebarItem { label: "Network" }
             SidebarItem { label: "Modules" }
-            SidebarItem { label: "Backups"; picked: !root.onDashboard }
+            SidebarItem { label: "Backups"; picked: !root.onDashboard; page: "backups" }
         }
 
         Rectangle {
@@ -349,6 +506,29 @@ MockupWindow {
             width: parent.width - x
             height: parent.height - y
             property string anchorBase: "settings.backups"
+
+            // The live scene's keyboard on the list: ↑ ↓ select, Enter asks to apply, Delete to
+            // delete, Escape closes the row
+            Item {
+                id: listKeys
+                Keys.onPressed: event => {
+                    if (!root.live || root.onDashboard)
+                        return;
+                    if (event.key === Qt.Key_Down)
+                        root.liveMove(1);
+                    else if (event.key === Qt.Key_Up)
+                        root.liveMove(-1);
+                    else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter)
+                        root.liveAsk("apply");
+                    else if (event.key === Qt.Key_Delete)
+                        root.liveAsk("delete");
+                    else if (event.key === Qt.Key_Escape)
+                        root.liveSelected = "";
+                    else
+                        return;
+                    event.accepted = true;
+                }
+            }
 
             SettingsPage {
                 visible: !root.onDashboard
@@ -369,12 +549,16 @@ MockupWindow {
                     Layout.fillWidth: true
                     title: "Settings backups"
                     spacing: 6
-                    buttons: SmallButton { label: "Make a backup now"; checked: root.sceneIs("backup-made") }
+                    buttons: SmallButton {
+                        label: "Make a backup now"
+                        checked: root.sceneIs("backup-made")
+                        onClicked: if (root.live) root.liveMakeBackup()
+                    }
 
                     Text {
-                        visible: root.sceneIs("backup-made")
+                        visible: root.live ? root.liveMade !== "" : root.sceneIs("backup-made")
                         Layout.fillWidth: true
-                        text: "✓ Backup made: 15 Jan 2026, 10:30"
+                        text: "✓ Backup made: " + (root.live ? root.liveMade : "15 Jan 2026, 10:30")
                         font.family: Theme.fontFamily
                         font.pixelSize: Theme.fontSizeSmall
                         color: Theme.success
@@ -407,6 +591,7 @@ MockupWindow {
                 spacing: 10
 
                 Rectangle {
+                    visible: !root.live || root.liveFailure
                     Layout.fillWidth: true
                     implicitHeight: _entry.implicitHeight + 24
                     radius: Theme.settings.cardRadius
@@ -431,13 +616,26 @@ MockupWindow {
                             text: root.failureBody
                             color: Theme.textSecondary
                         }
+                        Label {
+                            visible: root.live && root.liveDetails
+                            Layout.fillWidth: true
+                            text: root.failureFile
+                            color: Theme.textMuted
+                            font.pixelSize: Theme.fontSizeSmall
+                            elide: Text.ElideRight
+                        }
                         RowLayout {
                             Layout.fillWidth: true
                             spacing: 8
                             Item { Layout.fillWidth: true }
-                            SmallButton { label: "Keep defaults"; tooltip: "Close this notice; the old values stay in the backup" }
-                            SmallButton { label: "Restore previous settings…"; kind: "warning"; checked: root.sceneIs("failure-restore-confirm") }
-                            SmallButton { label: "Details" }
+                            SmallButton { label: "Keep defaults"; tooltip: "Close this notice; the old values stay in the backup"; onClicked: root.liveKeepDefaults() }
+                            SmallButton {
+                                label: "Restore previous settings…"
+                                kind: "warning"
+                                checked: root.modalWhich === "restore"
+                                onClicked: if (root.live) root.liveAsk("restore")
+                            }
+                            SmallButton { label: "Details"; checked: root.live && root.liveDetails; onClicked: root.liveDetails = !root.liveDetails }
                         }
                     }
                 }
@@ -467,6 +665,33 @@ MockupWindow {
             body: root.modalSpec?.body ?? []
             buttons: root.modalSpec?.buttons ?? []
             cancelLabel: root.modalSpec?.cancelLabel ?? ""
+            onAnswered: index => root.liveAnswer(!buttonList[index].cancel)
+            onRequested: event => root.liveAnswer(false)
+        }
+    }
+
+    // ---- The live scene's notification, over the window's top right corner ------------------
+
+    Loader {
+        x: root.windowWidth - 412
+        y: 52
+        width: 400
+        active: root.live && root.liveToast
+        sourceComponent: Item {
+            id: _toastBox
+            width: 400
+            height: _liveToast.height
+            opacity: 0
+            Component.onCompleted: opacity = 1
+            Behavior on opacity { NumberAnimation { duration: Theme.duration("enter"); easing: Theme.curve("enter") } }
+            NotificationCard {
+                id: _liveToast
+                width: parent.width
+                notification: root.failureNotification
+                compactDismiss: true
+                timestamp: "now"
+                onDismissRequested: Qt.callLater(() => root.liveToast = false)
+            }
         }
     }
 
@@ -521,11 +746,22 @@ MockupWindow {
         width: root.contentWidth
         height: root.contentHeight - root.windowHeight
         color: Theme.surfaceSunken
+        Row {
+            id: _liveControls
+            visible: root.live
+            anchors.right: parent.right
+            anchors.rightMargin: 14
+            y: 8
+            spacing: 8
+            SmallButton { label: "Failed update"; kind: "warning"; tooltip: "Start as after an update whose settings update failed"; onClicked: root.liveFail() }
+            SmallButton { label: "Reset"; tooltip: "Back to the stand-in data"; onClicked: root.liveReset() }
+        }
         Text {
             x: 14; y: 8
-            width: parent.width - 28
+            width: parent.width - 28 - (root.live ? _liveControls.width + 14 : 0)
             wrapMode: Text.WordWrap
             text: "<b>" + root.current + "</b> — " + (root.notes[root.current] ?? "")
+                  + (root.live && root.liveEvent !== "" ? "<br>" + root.liveEvent : "")
             textFormat: Text.StyledText
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSizeSmall

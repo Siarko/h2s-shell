@@ -8,7 +8,7 @@ Settings window (1000 x 620) per scene with a note under it. Stand-in data: this
 2.2.0; now is the kit's 15 Jan 2026, 10:30.
 
 Open on a screen: `tests/mockup.sh open plans/config-backups` (`--scene <name>` for one
-scene). Headless: `tests/run-mockups.sh --shoot plans/config-backups`.
+scene). The last scene, `config-backups-live`, is interactive. Headless: `tests/run-mockups.sh --shoot plans/config-backups`.
 
 Real pieces: the theme, `SettingsPage`, `SettingsSection`, `SmallButton`, `SettingsModal`,
 `NotificationCard` (critical urgency). Drawn here as proposals: the backup rows, the "Kept"
@@ -35,6 +35,21 @@ Dashboard's other lines (the Dashboard itself is HS-176, a sketch).
 9. `failure-notification`: the critical notification after a failed update at start.
 10. `failure-dashboard`: the same notice as a Dashboard entry with the same three choices.
 11. `failure-restore-confirm`: Restore previous settings… asks first.
+12. `config-backups-live`: the same window working, on its own copy of the stand-in data,
+    with the theme's animations (every other scene and every shot is drawn without motion).
+    Make a backup now adds a manual row at the top (the stand-in clock gives each the next
+    minute after 10:30) with its "✓ Backup made" line; a click selects a row (again: closes
+    it); Apply… and Delete… ask in the Settings modal, and their answers act: Apply adds a
+    "Before a restore" backup (automatic ones pruned to the newest 10) and the note says the
+    stand-in shell restarted; Delete removes the row. Keys: ↑ ↓ select, Enter asks to apply,
+    Delete asks to delete, Escape closes the row; in a question Tab moves between the
+    buttons, Space or Enter presses, Escape cancels. The sidebar's Dashboard and Backups
+    switch pages. Under the window: "Failed update" raises the critical notification over
+    the window's top right and the Dashboard entry (⚠ on the sidebar); its Keep defaults
+    clears both, Restore previous settings asks on the Dashboard and restores, Details opens
+    the entry with the backup's file name; "Reset" puts the stand-in data back.
+
+Open the live scene: `tests/mockup.sh open plans/config-backups/config-backups-live`.
 
 ## Proposed wording
 

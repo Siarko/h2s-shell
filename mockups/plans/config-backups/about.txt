@@ -10,3 +10,4 @@ scene: delete-confirm           Delete's question (danger modal), naming date, r
 scene: failure-notification     The critical notification after a failed update at start
 scene: failure-dashboard        The same notice as a Dashboard entry with the same three choices
 scene: failure-restore-confirm  Restore previous settings… asks first
+scene: config-backups-live      Live, stand-in data: make, select, apply, delete; Failed update raises the notice
