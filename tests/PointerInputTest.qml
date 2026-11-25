@@ -163,6 +163,15 @@ TestCase {
         driver.wait(120);
     }
 
+    // Hover is passed on by a timer (BarWidget's _hoverSettle): on a busy machine it fires
+    // later than any fixed wait, so a step that expects it waits for it (a hang guard, counted
+    // in waits)
+    function _until(condition, limitMs = 5000) {
+        for (let waited = 0; waited < limitMs && !condition(); waited += 10)
+            driver.wait(10);
+        return condition();
+    }
+
     function _reset() {
         driver.mouseMove(away, 5, 5);
         driver.wait(120);
@@ -184,10 +193,10 @@ TestCase {
         // --- the mouse: hover and click, as before ---
         _reset();
         driver.mouseMove(cell, 10, 10);
-        driver.wait(120);
+        _until(() => cell.hovers.length > 0);
         assertEqual(cell.hovers.join(","), "true", "the mouse coming over the cell is hover");
         driver.mouseMove(away, 5, 5);
-        driver.wait(50);
+        _until(() => cell.hovers.length > 1);
         assertEqual(cell.hovers.join(","), "true,false", "and leaving it, hover ends");
         driver.mouseClick(cell);
         driver.wait(50);
@@ -205,12 +214,12 @@ TestCase {
         _reset();
         popupCell.popupMode = "hover";
         driver.mouseMove(popupCell, 10, 10);
-        driver.wait(120);
+        _until(() => fakePopup.calls.length > 0);
         assertEqual(fakePopup.calls.join("; "), "open persistent=false byTouch=false",
                     "hover mode: the mouse over the cell opens it, to close when the mouse leaves");
         _reset();
         driver.mouseMove(popupCell, 10, 10);
-        driver.wait(120);
+        assert(_until(() => fakePopup.calls.length > 0), "hover mode: the mouse over the cell again opens it");
         fakePopup.calls = [];
         driver.mouseClick(popupCell);
         driver.wait(50);

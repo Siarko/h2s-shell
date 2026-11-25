@@ -229,8 +229,10 @@ TestCase {
         return _until(() => _harness.drawer.contentItem === null);
     }
 
+    // Open, shown, and holding the keyboard (the modal takes it when it opens), so a key sent
+    // next is the modal's
     function _modalOpen() {
-        return _until(() => _harness.host.open && _shown("modalTitle"));
+        return _until(() => _harness.host.open && _shown("modalTitle") && _harness.host.modal._isInside(area.Window.activeFocusItem));
     }
 
     function _applies() {
@@ -260,7 +262,9 @@ TestCase {
     function _run() {
         _configuration.value = _reading("before");
         _window.visible = true;
-        assert(_until(() => _window.visible && driver.waitShown()), "the window shows");
+        // Shown is not yet focused: the compositor gives the window the keyboard a moment later,
+        // and a key sent before that reaches no item
+        assert(_until(() => _window.visible && driver.waitShown() && area.Window.active), "the window shows and has the keyboard");
         _harness = _harnessComponent.createObject(area);
         assert(_harness !== null, "the harness built");
         assert(_until(() => _harness.page.reading !== null), "the page read");
