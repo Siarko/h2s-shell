@@ -93,9 +93,14 @@ import qs.components
 //                         "overlapping <a>/<b> …", a cell's label named <name>:label), then
 //                         each shown cell's label a line, in order; "no cells: …" for a
 //                         plan or a mockup without a StateGrid
+//   qs -p <tree>/mockup.qml ipc call mockup theme <name>
+//                         on screen, shows it in that theme (MockupTheme; "" only asks):
+//                         the name in force, or why not
 //   qs -p <tree>/mockup.qml ipc call mockup grab <state> <path>
 //                         saves that state's cell as drawn into a PNG at <path>, which
 //                         appears once done: "" or why not
+// Hosted (`host` set as it is created, by the gallery): start() makes no window, lays the
+// content out in `host` in all its states, and the IpcHandler is off.
 // With several mockups running on one display, `qs ipc --id <instance id>` (or --pid) picks
 // one: the target is the same in all of them.
 QtObject {
@@ -134,6 +139,10 @@ QtObject {
 
     // Set by the entry before start()
     property string mockupName: ""
+    // Hosted (the gallery): no window and no IpcHandler of its own, the content laid out in
+    // `host` (its width the one the cells flow in); one process, many mockups, one IPC target
+    property Item host: null
+    readonly property bool hosted: host !== null
     property bool shooting: false
     property int shotLimitMs: 60000
 
@@ -268,10 +277,16 @@ QtObject {
             Isolation.keyboardHeld = false;
         if (_grid) {
             _grid.mockup = root;
-            _grid.availableWidth = Qt.binding(() => _scroller.width);
+            _grid.availableWidth = Qt.binding(() => hosted ? host.width : _scroller.width);
             contentWidth = Qt.binding(() => _grid.preferredWidth);
             contentHeight = Qt.binding(() => _grid.preferredHeight);
             subject = Qt.binding(() => _grid.currentCell ?? content);
+        }
+        if (hosted) {
+            content.parent = host;
+            _index = index;
+            current = layout === "all" ? "" : names[index];
+            return "";
         }
         const window = (shooting ? _panelWindow : _floatingWindow).createObject(root);
         if (!window)
@@ -484,6 +499,7 @@ QtObject {
 
     readonly property IpcHandler _ipc: IpcHandler {
         target: "mockup"
+        enabled: !root.hosted
 
         function next(): string {
             return root._next();
@@ -495,6 +511,11 @@ QtObject {
 
         function current(): string {
             return root.current;
+        }
+
+        // Shows the mockup in that theme ("" only asks): the name in force, or why not
+        function theme(name: string): string {
+            return MockupTheme.apply(name);
         }
 
         // Saves the cell of a state as drawn (grabToImage) into a PNG at `path`: "" once

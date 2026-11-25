@@ -22,6 +22,13 @@
 #     fixture, and each component and view mockup);
 #     H2S_MOCKUP_STATE one cell alone, labelled, current; a plan has no cells, its scene
 #     buttons each with its scene's description as tooltip;
+#   - `ipc call mockup theme <name>` on screen shows it in that theme and answers the name;
+#   - the gallery (H2S_MOCKUP=gallery, on mockups/), in the built-in theme and opened in a
+#     fixture theme (tests/fixtures/mockup-themes/, H2S_MOCKUP_THEME): a section per
+#     component and view on disk, in order, each built once jumped to, in all its states
+#     labelled from about.txt, no error or warning, at rest using next to no processor time;
+#     the filter keeps only matching sections; the theme switched over IPC to default and
+#     back, an unknown one refused with the list;
 #   - a view that reaches the module host, the notification server, Notifier and the helper,
 #     started with H2S_SHELL_MODULES and H2S_SHELL_HELPER set, loads no module, registers no
 #     server, sends nothing and has no helper;
@@ -30,8 +37,9 @@
 #     kind's keyword, a bad, a repeated, an empty or an undescribed name, too long), a Mockup.qml still
 #     setting names, an unknown first state, the old
 #     planning/ folder, H2S_MOCKUP_SCENE for a component and H2S_MOCKUP_STATE for a plan, a
-#     mockup still setting the kit's old `scenes`, and shots that take longer than their
-#     limit each end with MOCKUP-ERROR and exit 2.
+#     mockup still setting the kit's old `scenes`, a theme while shooting (the baselines are
+#     the built-in theme's), the gallery while shooting or with a state, and shots that take
+#     longer than their limit each end with MOCKUP-ERROR and exit 2.
 #
 # The runner:
 #   - --load-only passes good mockups and writes no shot; --shoot writes one PNG per state,
@@ -229,7 +237,7 @@ on_screen() {
     local case=$1 id deadline=$((SECONDS + 30)) variable=H2S_MOCKUP_STATE
     [[ "$2" == plans/* ]] && variable=H2S_MOCKUP_SCENE
     start_entry "$case" "$REPO/mockup.qml" H2S_MOCKUP_BASE=tests/fixtures/mockups H2S_MOCKUP="$2" "$variable=$3"
-    current_answer="" window_answer="" buttons_answer="" scroller_answer=""
+    current_answer="" window_answer="" buttons_answer="" scroller_answer="" theme_answer=""
     while [ $SECONDS -lt $deadline ] && kill -0 "${pids[$case]}" 2> /dev/null; do
         id=$(instance_of "$case")
         [ -n "$id" ] && current_answer=$(ipc "$id" call mockup current)
@@ -237,6 +245,7 @@ on_screen() {
             window_answer=$(ipc "$id" call mockup window)
             buttons_answer=$(ipc "$id" call mockup buttons)
             scroller_answer=$(ipc "$id" call mockup scroller)
+            theme_answer=$(ipc "$id" call mockup theme default)
             break
         fi
         # A condition polled (the instance answering), not a fixed wait
@@ -252,6 +261,7 @@ check "$([ "$current_answer" = checked ]; echo $?)" "ipc current answers checked
 check "$([ "$window_answer" = floating ]; echo $?)" "a floating window, not the panel (ipc window was '$window_answer')"
 check "$([ "$buttons_answer" = "2 of 2 shown, checked checked" ]; echo $?)" "both state buttons inside the window, 'checked' checked (was '$buttons_answer')"
 check "$([ "$scroller_answer" = "wheel, vertical bar hidden" ]; echo $?)" "content that fits: no drag-scrolling, no scroll bar (was '$scroller_answer')"
+check "$([ "$theme_answer" = default ]; echo $?)" "ipc theme default: shown in it, the name answered (was '$theme_answer')"
 check "$(! grep -q -E 'MOCKUP-SHOT|MOCKUP-ERROR|TypeError|ReferenceError' "${logs[state]}"; echo $?)" "no shot, no error"
 
 echo "on screen: H2S_MOCKUP_SCENE opens a plan taller than the screen on that scene, its buttons in the window"
@@ -373,6 +383,79 @@ for entry in components/pill:6 components/small-button:24 components/status-pill
     check "$([ -n "$idle_ticks" ] && [ "$idle_ticks" -lt 50 ]; echo $?)" "$mockup: at rest, nothing fighting over the keyboard: under 50 ticks of processor time in 2 s (was '$idle_ticks')"
 done
 
+# gallery_run <case> [VAR=value…]: the gallery started on screen on mockups/; once its
+# sections are listed each is jumped to in turn and waited for (built or failed):
+# sections_answer then, cells_of[<section>] each one's cells, idle_ticks the processor time
+# it used over the next two seconds at rest, and theme_answers what `ipc call mockup theme`
+# answered to "", contrast, "", default, "", nope (a line each)
+declare -A cells_of=()
+gallery_run() {
+    local case=$1 id="" deadline=$((SECONDS + 60)) sections="" section qs_pid before
+    shift
+    start_entry "$case" "$REPO/mockup.qml" H2S_MOCKUP=gallery "$@"
+    sections_answer="" idle_ticks="" theme_answers="" filter_answer=""
+    cells_of=()
+    while [ $SECONDS -lt $deadline ] && kill -0 "${pids[$case]}" 2> /dev/null; do
+        id=$(instance_of "$case")
+        [ -n "$id" ] && [ "$(ipc "$id" call mockup window)" = floating ] && sections=$(ipc "$id" call mockup sections)
+        [ -n "$sections" ] && break
+        # A condition polled (the folders listed), not a fixed wait
+        sleep 0.05
+    done
+    if [ -n "$sections" ]; then
+        for section in $(awk '{ print $1 }' <<< "$sections"); do
+            ipc "$id" call mockup jump "$section" > /dev/null
+            # Built (or failed) once jumped to, a condition polled
+            while [ $SECONDS -lt $deadline ] && ipc "$id" call mockup sections | grep -q -x -F "$section waiting"; do sleep 0.05; done
+            cells_of[$section]=$(ipc "$id" call mockup cells "$section")
+        done
+        sections_answer=$(ipc "$id" call mockup sections)
+        # Measured over an interval, which is what this check is about: a fixed wait
+        qs_pid=$(quickshell_pid "${pids[$case]}")
+        if [ -n "$qs_pid" ]; then
+            before=$(cpu_ticks "$qs_pid")
+            sleep 2
+            idle_ticks=$(( $(cpu_ticks "$qs_pid") - before ))
+        fi
+        filter_answer=$(ipc "$id" call mockup filter "pointer over the large")
+        ipc "$id" call mockup filter "" > /dev/null
+        theme_answers=$(for name in "" contrast "" default "" nope; do ipc "$id" call mockup theme "$name"; done)
+    fi
+    kill -TERM "${pids[$case]}" 2> /dev/null
+    finish_entry "$case"
+}
+
+# The elements on disk, as the gallery lists them, and each one's states from about.txt
+elements_on_disk=$(cd "$REPO/mockups" && for folder in components/*/ views/*/; do echo "${folder%/}"; done)
+theme_config=$work/theme-config
+mkdir -p "$theme_config/h2s_shell/themes"
+echo '{}' > "$theme_config/h2s_shell/config.json"
+cp "$REPO/tests/fixtures/mockup-themes/contrast.json" "$theme_config/h2s_shell/themes/"
+
+for run in built-in contrast; do
+    if [ "$run" = built-in ]; then
+        echo "the gallery: every component and view in all its states, in the built-in theme"
+        gallery_run gallery-$run XDG_CONFIG_HOME="$theme_config"
+    else
+        echo "the gallery opened in a theme file (H2S_MOCKUP_THEME), switched over IPC"
+        gallery_run gallery-$run XDG_CONFIG_HOME="$theme_config" H2S_MOCKUP_THEME=contrast
+    fi
+    check "$([ "$(awk '{ print $1 }' <<< "$sections_answer")" = "$elements_on_disk" ]; echo $?)" "$run: a section per component and view on disk, components first, each alphabetical (was '$(awk '{ print $1 }' <<< "$sections_answer" | paste -s -d ' ')')"
+    check "$([ -n "$sections_answer" ] && ! grep -q -v ' built$' <<< "$sections_answer"; echo $?)" "$run: every section built once jumped to ($(grep -v ' built$' <<< "$sections_answer" | paste -s -d ';'))"
+    for element in $elements_on_disk; do
+        declared=$(source "$REPO/tests/mockup-about.sh" && about_read "$REPO/mockups/$element" state > /dev/null && printf '%s\n' "${about_names[@]}")
+        count=$(grep -c . <<< "$declared")
+        labels=$(tail -n +2 <<< "${cells_of[$element]:-}" | sed 's/ — .*//')
+        check "$([ "$(head -n 1 <<< "${cells_of[$element]:-}")" = "$count of $count shown, none overlapping" ] && [ "$labels" = "$declared" ]; echo $?)" "$run: $element in all its states, labelled from about.txt in its order (was '$(head -n 1 <<< "${cells_of[$element]:-}")')"
+    done
+    check "$(! grep -q -E 'MOCKUP-ERROR|TypeError|ReferenceError|Binding loop|qml.*(Unable|Cannot)|\[Theme\]|file://' "${logs[gallery-$run]}"; echo $?)" "$run: no error or warning"
+    grep -E 'MOCKUP-ERROR|TypeError|ReferenceError|Binding loop|\[Theme\]|file://' "${logs[gallery-$run]}" | head -n 5 | sed 's/^/    | /'
+    check "$([ -n "$idle_ticks" ] && [ "$idle_ticks" -lt 50 ]; echo $?)" "$run: every section built, at rest: under 50 ticks of processor time in 2 s (was '$idle_ticks')"
+done
+check "$([ "$filter_answer" = components/pill ]; echo $?)" "the filter: only the section whose state holds every word (was '$filter_answer')"
+expected_themes=$(printf '%s\n' contrast contrast contrast default default "no theme 'nope'; the themes: default, contrast")
+check "$([ "$theme_answers" = "$expected_themes" ]; echo $?)" "opened in contrast; theme switches to default and back, asks, refuses an unknown one with the list (was '$(paste -s -d '|' <<< "$theme_answers")')"
+
 echo "isolation: a view that reaches modules, notifications and the helper"
 start_entry isolation "$REPO/mockup.qml" "${fixtures[@]}" H2S_MOCKUP=views/isolation \
     H2S_SHELL_MODULES="$REPO/tests/fixtures/modules/good" H2S_SHELL_HELPER=/nonexistent/h2s-helper
@@ -424,6 +507,9 @@ errors=(
     "a state for a plan|H2S_MOCKUP_STATE is set for the plan plans/tall|H2S_MOCKUP_BASE=tests/fixtures/mockups H2S_MOCKUP=plans/tall H2S_MOCKUP_STATE=second"
     "the kit's old scenes|the kit's scenes and scene are now names and current, and the states are declared in about.txt|${fixtures[*]} H2S_MOCKUP=components/old-scenes"
     "bad shot limit|H2S_MOCKUP_SHOT_LIMIT_MS is 'soon'|${fixtures[*]} H2S_MOCKUP=components/good H2S_MOCKUP_SHOT_LIMIT_MS=soon"
+    "a theme while shooting|H2S_MOCKUP_THEME is 'contrast' while shooting: shots and baselines are always drawn in the built-in theme|${fixtures[*]} H2S_MOCKUP=components/good H2S_MOCKUP_THEME=contrast"
+    "the gallery while shooting|H2S_MOCKUP_SHOT is set for the gallery|H2S_MOCKUP_SHOT=1 H2S_MOCKUP=gallery"
+    "the gallery with a state|H2S_MOCKUP_STATE is set for the gallery|H2S_MOCKUP=gallery H2S_MOCKUP_STATE=idle"
 )
 for entry in "${errors[@]}"; do
     IFS='|' read -r name expected variables <<< "$entry"

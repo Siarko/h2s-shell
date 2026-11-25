@@ -13,6 +13,8 @@ import qs.mockups.kit
 //
 //   H2S_MOCKUP=<kind>/<name>   mockups/<kind>/<name>/Mockup.qml; the kind is components,
 //                              views or plans, the name lowercase letters, digits and "-"
+//   H2S_MOCKUP=gallery         on screen: every component and view in one window
+//                              (mockups/kit/Gallery.qml)
 //   H2S_MOCKUP_BASE            "tests/fixtures/mockups" loads the runners' fixture mockups
 //                              instead of mockups/; nothing else is taken
 //   H2S_MOCKUP_SHOT=1          headless: every state or scene in turn, a MOCKUP-SHOT line each,
@@ -23,6 +25,9 @@ import qs.mockups.kit
 //                              (without it, one with state cells shows every state)
 //   H2S_MOCKUP_SCENE=<scene>   on screen: opens a plan on that scene (each variable is
 //                              refused for the other kind)
+//   H2S_MOCKUP_THEME=<theme>   on screen: shown in that theme ("default" or a theme file's
+//                              name; Theme.preview, saved nowhere); refused while shooting,
+//                              whose pictures are always drawn in the built-in theme
 //   H2S_MOCKUP_CHECK=1         checks the element and exits, without making a window:
 //                              about.txt read, Mockup.qml loaded, the kit's list accepted;
 //                              then MOCKUP-CHECKED <count> <states|scenes>, exit 0
@@ -147,16 +152,63 @@ ShellRoot {
         Qt.callLater(() => Qt.exit(code));
     }
 
+    // The gallery: on screen only, without a state or scene of its own
+    function _startGallery(base, shooting) {
+        const refused = shooting ? "H2S_MOCKUP_SHOT" : Quickshell.env("H2S_MOCKUP_CHECK") === "1" ? "H2S_MOCKUP_CHECK"
+            : (Quickshell.env("H2S_MOCKUP_STATE") ?? "") !== "" ? "H2S_MOCKUP_STATE"
+            : (Quickshell.env("H2S_MOCKUP_SCENE") ?? "") !== "" ? "H2S_MOCKUP_SCENE" : "";
+        if (refused !== "") {
+            _fail(refused + " is set for the gallery: it is only opened on a screen, every element in all its states");
+            return;
+        }
+        if (!_bases.includes(base)) {
+            _fail("H2S_MOCKUP_BASE is '" + base + "': " + _bases.join(" or "));
+            return;
+        }
+        const component = Qt.createComponent(Qt.resolvedUrl("mockups/kit/Gallery.qml"), Component.PreferSynchronous);
+        const gallery = component.status === Component.Ready
+            ? component.createObject(root, { visible: false, baseUrl: Qt.resolvedUrl(base), readAbout: _readAbout }) : null;
+        if (!gallery) {
+            _fail("gallery: " + component.errorString().replace(/\s+/g, " ").trim());
+            return;
+        }
+        _window = gallery;
+        const error = gallery.start();
+        if (error !== "") {
+            _fail("gallery: " + error);
+            return;
+        }
+        gallery.visible = true;
+    }
+
     Component.onCompleted: {
         const name = Quickshell.env("H2S_MOCKUP") ?? "";
         const base = Quickshell.env("H2S_MOCKUP_BASE") || "mockups";
         const shooting = Quickshell.env("H2S_MOCKUP_SHOT") === "1";
+        const themeWanted = Quickshell.env("H2S_MOCKUP_THEME") ?? "";
+        if (themeWanted !== "" && themeWanted !== "default" && shooting) {
+            _fail("H2S_MOCKUP_THEME is '" + themeWanted + "' while shooting: shots and baselines are always drawn in the built-in theme (a theme is for a mockup open on a screen)");
+            return;
+        }
+        if (themeWanted !== "" && !/^[A-Za-z0-9_. -]+$/.test(themeWanted)) {
+            _fail("H2S_MOCKUP_THEME is '" + themeWanted + "': a theme's name (letters, digits, spaces, '.', '_' and '-')");
+            return;
+        }
+        MockupTheme.shooting = shooting;
+        // Set before the mockup is made, so that it is drawn in it from the first frame; the
+        // name is checked against the theme files by the screen tool (they are listed later)
+        if (themeWanted !== "" && !shooting)
+            Theme.preview = themeWanted;
+        if (name === "gallery") {
+            _startGallery(base, shooting);
+            return;
+        }
         if (/^planning\//.test(name)) {
             _fail("H2S_MOCKUP is '" + name + "': mockups/planning/ is now mockups/plans/ (git mv mockups/planning/<name> mockups/plans/<name>), the name plans/<name>");
             return;
         }
         if (!/^(components|views|plans)\/[a-z0-9-]+$/.test(name)) {
-            _fail("H2S_MOCKUP is '" + name + "': <kind>/<name>, the kind components, views or plans, the name lowercase letters, digits and '-'");
+            _fail("H2S_MOCKUP is '" + name + "': <kind>/<name>, the kind components, views or plans, the name lowercase letters, digits and '-', or gallery");
             return;
         }
         // A plan has scenes, a component or a view states: the variable of the other kind is

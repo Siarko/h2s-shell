@@ -228,7 +228,15 @@ maintainer approved the review images. On a screen, `tests/mockup.sh` lists (by 
 element with its states or scenes, from `about.txt`), searches, opens, closes,
 reviews (the images inline in a kitty terminal, else their paths) and approves them (`-n`
 prints the commands, `help` the commands and options); `open <element>/<state>` opens one
-state or scene, `--theme <name>` in one of the user's theme files.
+state or scene, `--theme <name>` in one of the user's theme files (`H2S_MOCKUP_THEME`, set as
+`Theme.preview`, saved nowhere; `ipc call mockup theme <name>` switches it; refused while
+shooting: baselines are always the built-in theme's). `open gallery` opens
+`mockups/kit/Gallery.qml` (`H2S_MOCKUP=gallery`): every component and view in one scrollable
+window, a section each, in all its states, labelled from `about.txt`; a bar with the theme,
+a filter and a button per section. Each section's `Mockup.qml` is created hosted (the kit's
+`host`: no window, no `IpcHandler`) when it scrolls near the view; the gallery has no
+baseline of its own (its parts have theirs) and answers the IPC target `mockup` itself
+(`sections`, `cells <section>`, `jump`, `filter`, `theme`).
 
 Mockup code:
 

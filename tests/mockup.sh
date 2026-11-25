@@ -21,6 +21,10 @@
 #                                         scene or on one; if it already runs, say so, or with
 #                                         --restart close it and start it again; --theme shows
 #                                         it in one of the user's theme files (or "default")
+#   tests/mockup.sh [-n] open gallery [--restart] [--theme <name>]
+#                                         every component and view in all their states in one
+#                                         window (mockups/kit/Gallery.qml; no state of its own,
+#                                         no baseline: review and approve refuse it)
 #   tests/mockup.sh [-n] close [<element>] close that mockup (with none: every running
 #                                         mockup of this tree)
 #   tests/mockup.sh [-n] review <element> compare it with its baseline (tests/run-mockups.sh
@@ -97,7 +101,8 @@ if [ "${1:-}" = __exec ] || { [ "${1:-}" = -n ] && [ "${2:-}" = __exec ]; }; the
     [ -z "$first" ] || [[ "$first" =~ ^[A-Za-z0-9_-]+$ ]] || { echo "mockup.sh: __exec: state or scene '$first'" >&2; exit 2; }
     [ -z "$theme" ] || [[ "$theme" =~ ^[[:alnum:]_.\ -]+$ ]] || { echo "mockup.sh: __exec: theme '$theme'" >&2; exit 2; }
     [[ "$exec_base" =~ ^(mockups|tests/fixtures/mockups)$ ]] || { echo "mockup.sh: __exec: base '$exec_base'" >&2; exit 2; }
-    [[ "$name" =~ ^(components|views|plans)/[a-z0-9-]+$ ]] || { echo "mockup.sh: __exec: name '$name'" >&2; exit 2; }
+    [[ "$name" =~ ^((components|views|plans)/[a-z0-9-]+|gallery)$ ]] || { echo "mockup.sh: __exec: name '$name'" >&2; exit 2; }
+    [ "$name" != gallery ] || [ -z "$first" ] || { echo "mockup.sh: __exec: the gallery has no state" >&2; exit 2; }
     unset_args=()
     while IFS= read -r variable; do
         unset_args+=(-u "$variable")
@@ -245,6 +250,17 @@ resolve() {
     esac
 }
 
+# resolve_or_gallery <name or part>: "gallery" for the gallery (when this tree has one),
+# else resolve's answer
+resolve_or_gallery() {
+    if [ "$1" = gallery ]; then
+        [ -f "$REPO/mockups/kit/Gallery.qml" ] && { echo gallery; return 0; }
+        echo "mockup.sh: this tree has no gallery yet (mockups/kit/Gallery.qml)" >&2
+        return 1
+    fi
+    resolve "$1"
+}
+
 # instances: this tree's running entries, "<pid> <config path>" from `qs list --all`
 instances() {
     local entry_real
@@ -265,7 +281,7 @@ running() {
     local pid name
     while IFS= read -r pid; do
         name=$(qs ipc --pid "$pid" call mockup name 2> /dev/null | tr -d '[:space:]')
-        [[ "$name" =~ ^(components|views|plans)/[a-z0-9-]+$ ]] && echo "$pid $name"
+        [[ "$name" =~ ^((components|views|plans)/[a-z0-9-]+|gallery)$ ]] && echo "$pid $name"
     done < <(instances)
 }
 
@@ -820,7 +836,7 @@ cmd_close() {
     verb=$([ "$dry" = 1 ] && echo "Would close" || echo Closed)
     if [ $# -gt 0 ]; then
         element_only close "$1"
-        name=$(resolve "$address_element") || exit 2
+        name=$(resolve_or_gallery "$address_element") || exit 2
         mapfile -t pids < <(pids_of "$name")
         [ ${#pids[@]} -gt 0 ] || { echo "$name is not running"; return; }
         kill_pids "${pids[@]}"
@@ -851,16 +867,16 @@ theme_check() {
 cmd_open() {
     local name pids i command first word
     parse_address "$1"
-    if [ "$address_element" = gallery ] && [ -z "$address_first" ] && [ ! -f "$REPO/mockups/kit/Gallery.qml" ]; then
-        echo "mockup.sh: this tree has no gallery yet (mockups/kit/Gallery.qml)" >&2
+    name=$(resolve_or_gallery "$address_element") || exit 2
+    if [ "$name" = gallery ] && [ -n "$address_first" ]; then
+        echo "mockup.sh: the gallery has no states: it shows every component and view in all theirs ($cmdname open gallery)" >&2
         exit 2
     fi
-    name=$(resolve "$address_element") || exit 2
     first=$address_first
     # The state or scene must be one about.txt declares (a broken about.txt: the entry says)
     word=state
     [[ "$name" == plans/* ]] && word=scene
-    if [ -n "$first" ] && about_read "$REPO/$base/$name" "$word"; then
+    if [ -n "$first" ] && [ "$name" != gallery ] && about_read "$REPO/$base/$name" "$word"; then
         local known=0 n
         for n in "${about_names[@]}"; do [ "$n" = "$first" ] && known=1; done
         if [ "$known" = 0 ]; then
@@ -928,8 +944,13 @@ icat_command() {
     fi
 }
 
-# no_baseline_for_plan <kind>/<name> <command>: a plan is refused (it has no baseline)
+# no_baseline_for_plan <kind>/<name> <command>: a plan is refused (it has no baseline), and
+# the gallery (made of baselined parts)
 no_baseline_for_plan() {
+    if [ "$1" = gallery ]; then
+        echo "mockup.sh: the gallery has no baseline of its own: it is made of the components and views, each with its own; nothing to $2" >&2
+        exit 2
+    fi
     [[ "$1" == plans/* ]] || return 0
     echo "mockup.sh: $1 is a plan: plans have no baseline (they are not tested), nothing to $2" >&2
     exit 2
@@ -938,7 +959,7 @@ no_baseline_for_plan() {
 cmd_review() {
     local name shots_root tree_key run_id run inline=0 icat="" folder one label kind file
     local -a images=()
-    name=$(resolve "$1") || exit 2
+    name=$(resolve_or_gallery "$1") || exit 2
     no_baseline_for_plan "$name" review
     run "$REPO/tests/run-mockups.sh" --compare "$name"
     shots_root=${H2S_MOCKUP_SHOTS:-${XDG_CACHE_HOME:-${HOME:?}/.cache}/h2s-shell-mockups}
@@ -1031,7 +1052,7 @@ case "$command" in
     review) [ ${#args[@]} -eq 2 ] || usage "review takes one element"
         cmd_review "$address_element" ;;
     approve) [ ${#args[@]} -eq 2 ] || usage "approve takes one element"
-        name=$(resolve "$address_element") || exit 2
+        name=$(resolve_or_gallery "$address_element") || exit 2
         no_baseline_for_plan "$name" approve
         run "$REPO/tests/run-mockups.sh" --approve "$name" ;;
 esac

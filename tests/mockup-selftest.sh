@@ -30,6 +30,9 @@
 #     not declare, a malformed address and a state name a shell would read (; & | $( ) `)
 #     refused before any command is built; an instance already running is said, --restart
 #     closes it first; a name under planning/ (the plans' old folder) refused;
+#   - open gallery (and the bare word): __exec gallery, the entry started with
+#     H2S_MOCKUP=gallery and found running by that name; gallery/<state>, review gallery and
+#     approve gallery refused (no states, no baseline of its own);
 #   - --theme: passed to the entry as H2S_MOCKUP_THEME (with or without a state, a name with
 #     a space), "default" with no file, an unknown theme refused with the list of the theme
 #     files, a quote refused, refused for other commands;
@@ -367,7 +370,20 @@ for hostile in 'x;id' 'x&&id' 'x|id' '$(id)' 'x`id`'; do
     check "$([ "${status[open-hostile]}" = 2 ] && ! has open-hostile hyprctl && ! has open-hostile setsid; echo $?)" "a state a shell would read ($hostile) is refused before any command is built (status ${status[open-hostile]})"
 done
 tool open-gallery -- -n open gallery
-check "$([ "${status[open-gallery]}" = 2 ] && has open-gallery 'no gallery yet' || has open-gallery 'gallery'; echo $?)" "open gallery: opened, or the tree's lack of one said"
+check "$([ "${status[open-gallery]}" = 0 ] && has open-gallery "setsid -f $TOOL __exec tests/fixtures/mockups gallery >"; echo $?)" "open gallery: __exec gallery (status ${status[open-gallery]})"
+tool open-gallery-short -- -n gallery
+check "$(has open-gallery-short "setsid -f $TOOL __exec tests/fixtures/mockups gallery >"; echo $?)" "gallery with no command: the same as open"
+tool open-gallery-run -- open gallery
+envs=$work/state-open-gallery-run/env.txt
+check "$([ -f "$envs" ] && grep -q -x 'H2S_MOCKUP=gallery' "$envs" && ! grep -q -E '^H2S_MOCKUP_(STATE|SCENE)=' "$envs" && has open-gallery-run 'Opened gallery'; echo $?)" "open gallery: the entry gets H2S_MOCKUP=gallery, no state; found running by its name"
+tool open-gallery-state -- -n open gallery/idle
+check "$([ "${status[open-gallery-state]}" = 2 ] && has open-gallery-state 'the gallery has no states' && ! has open-gallery-state setsid; echo $?)" "gallery/<state>: refused, the gallery has no states (status ${status[open-gallery-state]})"
+for command in review approve; do
+    tool gallery-$command -- -n $command gallery
+    check "$([ "${status[gallery-$command]}" = 2 ] && has gallery-$command 'the gallery has no baseline of its own' && ! has gallery-$command run-mockups; echo $?)" "$command gallery: refused, no baseline of its own (status ${status[gallery-$command]})"
+done
+tool gallery-exec-state -- -n __exec mockups gallery idle
+check "$([ "${status[gallery-exec-state]}" = 2 ]; echo $?)" "__exec gallery with a state: refused"
 tool open-run H2S_SHELL_MODULES=/modules H2S_SHELL_HELPER=/helper H2S_MOCKUP_SHOT=1 KEPT=yes -- open components/clock/first
 envs=$work/state-open-run/env.txt
 check "$([ -f "$envs" ] && grep -q -x 'H2S_MOCKUP=components/clock' "$envs" && grep -q -x 'H2S_MOCKUP_STATE=first' "$envs" \
