@@ -233,8 +233,8 @@ prints the commands, `help` the commands and options); `open <element>/<state>` 
 state or scene, `--theme <name>` in one of the user's theme files (`H2S_MOCKUP_THEME`, set as
 `Theme.preview`, saved nowhere; `ipc call mockup theme <name>` switches it; refused while
 shooting: baselines are always the built-in theme's). `open gallery` opens
-`mockups/kit/Gallery.qml` (`H2S_MOCKUP=gallery`): every component and view in one scrollable
-window, a section each, in all its states, labelled from `about.txt`; a bar with the theme,
+`mockups/kit/Gallery.qml` (`H2S_MOCKUP=gallery`): every component in one scrollable
+window (views are opened on their own), a section each, in all its states, labelled from `about.txt`; a bar with the theme,
 a filter and a button per section. Each section's `Mockup.qml` is created hosted (the kit's
 `host`: no window, no `IpcHandler`) when it scrolls near the view; the gallery has no
 baseline of its own (its parts have theirs) and answers the IPC target `mockup` itself
@@ -256,14 +256,18 @@ Mockup code:
   while shooting (stacked: on one another, the current one shown), the shot cropped to the
   current cell; on a screen in labelled rows, or one alone — and sets the content's size and
   the subject.
-- A pointer state (hover, press) is simulated with QtTest's events (a `TestCase` with
-  `when: false`), only inside the state's own cell, and the pointer, when nothing is to be
-  under it, rests on the grid's `parking` strip off every cell. The mockup lists such states
-  in the kit's `pointerStates` (`keyboardStates` for a keyboard focus): with all states on a
-  screen none is current, and their labels say how to see them. Nothing is shown or
-  hidden under the pointer as the states go by: Qt Quick sends hover again at the pointer's
-  place when items change under it, so an item shown where an earlier state left the
-  pointer is lit in some runs and not in others.
+- A pointer state (hover, press) or a keyboard state is one cell with every size or kind in
+  it, all drawn in that look through the component's own preview properties (`shownLit`,
+  from PointerArea; SmallButton's `shownFocused`), never by moving a pointer or the
+  keyboard: one pointer cannot light every item of a cell, nor every cell on a screen at
+  once. The mockup lists such states in the kit's `pointerStates` (`keyboardStates`); on a
+  screen their cells take no real pointer (StateCell), so the look stays. Where a state
+  needs a real one, the pointer is simulated with QtTest's events (a `TestCase` with
+  `when: false`), only inside the state's own cell, resting on the grid's `parking` strip
+  off every cell when nothing is to be under it; nothing is shown or hidden under the
+  pointer as the states go by: Qt Quick sends hover again at the pointer's place when items
+  change under it, so an item shown where an earlier state left the pointer is lit in some
+  runs and not in others.
 - It never changes a shell file for its own sake. If a view cannot take stand-in data, that
   missing seam is reported and added to the shell as a change of its own, with its test.
 - It contains no `*Rules.qml`, no literal colours (theme tokens, as everywhere), and no

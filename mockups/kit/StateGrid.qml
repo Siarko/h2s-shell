@@ -8,8 +8,8 @@ import qs.singletons
 //         current one shown), the parking strip under them: the shooter crops to the current
 //         cell
 //   all   on screen, every cell under its label (the state's name and description), in rows
-//         that fit the window (stacked: one under another); a pointer state's label says how
-//         to see it, as one pointer cannot light every cell at once. What holds the keyboard
+//         that fit the window (stacked: one under another); a pointer or keyboard state's
+//         cell is drawn in its look by the mockup and takes no pointer. What holds the keyboard
 //         while shown (an open modal's FocusTrap) does not take it back there
 //         (Isolation.keyboardHeld, set by the kit): two such cells would take it from each
 //         other without end
@@ -71,12 +71,17 @@ Item {
         return null;
     }
 
-    // A label's text: the state's name and description, and for a pointer state in the
-    // all-states layout how to see it
+    // A label's text: the state's name and description
     function labelText(name) {
         const index = _names.indexOf(name);
         const description = index >= 0 && mockup ? mockup.descriptions[index] ?? "" : "";
-        return name + " — " + description + (layout === "all" && mockup ? mockup.hintFor(name) : "");
+        return name + " — " + description;
+    }
+
+    // Whether the state's cell takes no pointer: a pointer or keyboard state on screen, drawn
+    // in its look by the mockup, which the real pointer must not change
+    function cellFrozen(name) {
+        return (layout === "all" || layout === "one") && mockup !== null && mockup.isFrozen(name);
     }
 
     function _labelHeight(name) {

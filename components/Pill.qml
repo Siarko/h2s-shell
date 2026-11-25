@@ -16,6 +16,8 @@ Rectangle {
     property int minimumHeight: ThemeRules.pillHeight(Theme.pill, size)
     // What the choice means, shown on hover ("" none)
     property string tooltip: ""
+    // Drawn as under the pointer without one: a preview of the look (PointerArea.shownLit)
+    property bool shownLit: false
     signal clicked
 
     implicitWidth: _label.implicitWidth + 2 * Theme.pill.horizontalPadding
@@ -43,6 +45,7 @@ Rectangle {
 
     PointerArea {
         id: _area
+        shownLit: root.shownLit
         cursorShape: Qt.PointingHandCursor
         onClicked: root.clicked()
     }

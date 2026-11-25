@@ -2,5 +2,6 @@
 description: The on/off switch, small and large
 state: off            Off
 state: on             On
+state: hover          Off, under the pointer
 state: disabled-off   Not enabled, off: dimmed
 state: disabled-on    Not enabled, on: dimmed

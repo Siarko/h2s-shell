@@ -10,7 +10,7 @@ import qs.singletons
 // card's wave. The wave: a band moving through the fill within two periods with `wave`, its
 // period the theme's, none without, hidden, full, of unknown length or with reduced motion.
 // The pill: its parts in order in their kinds' colours, a tooltip each, a click expands and
-// a second folds, none without parts, unknown words logged once, its views on ScriptModels.
+// a second folds, the hover look's preview (`shownLit`), none without parts, unknown words logged once, its views on ScriptModels.
 // The card: its bar waves while the job runs and its value grows, and stops when it stands.
 //
 // Opens a small window in a corner for a moment (a layer surface that takes no keyboard), in
@@ -241,6 +241,11 @@ TestCase {
         }
         pill.kind = "normal";
         assert(Qt.colorEqual(inner.color, Theme.fill) && Qt.colorEqual(inner.border.color, Theme.outline), "the pill filled and outlined as the theme says");
+        inner.shownLit = true;
+        // The colour eases over the theme's hover duration (this suite runs its animations)
+        assert(_until(() => Qt.colorEqual(inner.color, Theme.surfaceHover)), "shownLit, no pointer over it: lit as under the pointer");
+        inner.shownLit = false;
+        assert(_until(() => Qt.colorEqual(inner.color, Theme.fill)), "… and back at rest without it");
         const repeaters = _find(inner, child => child.toString().startsWith("QQuickRepeater"));
         assert(repeaters.length === 2 && repeaters.every(repeater => repeater.model !== null && typeof repeater.model === "object" && "objectProp" in repeater.model),
                "its two views on ScriptModels, never a live array");

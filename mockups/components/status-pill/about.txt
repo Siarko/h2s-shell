@@ -1,6 +1,6 @@
 description: A bar pill with an icon, a label and parts that can unfold
 state: kinds            One pill of each status kind, no parts
 state: parts            An icon, a label and three parts of different kinds, folded
-state: hover            The same under the pointer, over its label
+state: hover            The same under the pointer
 state: expanded         The same unfolded: one part per line under a rule
 state: not-expandable   With parts but not expandable, under the pointer: no hover look

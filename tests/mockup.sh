@@ -22,7 +22,7 @@
 #                                         --restart close it and start it again; --theme shows
 #                                         it in one of the user's theme files (or "default")
 #   tests/mockup.sh [-n] open gallery [--restart] [--theme <name>]
-#                                         every component and view in all their states in one
+#                                         every component in all its states in one
 #                                         window (mockups/kit/Gallery.qml; no state of its own,
 #                                         no baseline: review and approve refuse it)
 #   tests/mockup.sh [-n] close [<element>] [--main <tree>] [--also <tree>=<label>]...
@@ -134,7 +134,7 @@ help_text() {
 Usage: $cmdname <command> [<element>] [options]
 
 Opens the shell's mockups on this screen: components and views in all their
-states, plans with their scenes, and the gallery of every component and view.
+states, plans with their scenes, and the gallery of every component.
 
 Commands:
   list [<element>]        Every element by kind; with an element, each of its
@@ -145,7 +145,7 @@ Commands:
                           first scene
   open <element>/<state>  One state of a component or view, or one scene of a
                           plan (<plan>/<scene>)
-  open gallery            Every component and view in one scrollable window
+  open gallery            Every component in one scrollable window
   close [<element>]       Close it; with none named, every open mockup
   review <element>        Compare with the approved pictures, show what changed
   approve <element>       Make the reviewed pictures the approved ones
@@ -154,7 +154,7 @@ Commands:
 Elements:
   pill, components/pill   a name, with its kind if two kinds share it, or a
                           unique part of a name
-  pill/hover-s            one state of a component or view
+  pill/hover              one state of a component or view
   distribution-nixos/building
                           a plan, opened on that scene
 
@@ -903,7 +903,7 @@ cmd_open() {
     parse_address "$1"
     name=$(resolve_or_gallery "$address_element") || exit 2
     if [ "$name" = gallery ] && [ -n "$address_first" ]; then
-        echo "mockup.sh: the gallery has no states: it shows every component and view in all theirs ($cmdname open gallery)" >&2
+        echo "mockup.sh: the gallery has no states: it shows every component in all theirs ($cmdname open gallery)" >&2
         exit 2
     fi
     first=$address_first
@@ -982,7 +982,7 @@ icat_command() {
 # the gallery (made of baselined parts)
 no_baseline_for_plan() {
     if [ "$1" = gallery ]; then
-        echo "mockup.sh: the gallery has no baseline of its own: it is made of the components and views, each with its own; nothing to $2" >&2
+        echo "mockup.sh: the gallery has no baseline of its own: it is made of the components, each with its own; nothing to $2" >&2
         exit 2
     fi
     [[ "$1" == plans/* ]] || return 0

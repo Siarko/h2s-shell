@@ -1,5 +1,5 @@
-# One of three tall views: the gallery's sections grow far from their placeholders
-description: A tall fixture view, a
+# One of three tall components: the gallery's sections grow far from their placeholders
+description: A tall fixture component, a
 state: one     The first tall cell
 state: two     The second tall cell
 state: three   The third tall cell

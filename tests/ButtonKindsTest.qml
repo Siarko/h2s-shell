@@ -6,7 +6,8 @@ import qs.singletons
 
 // The shell's buttons as they are drawn (SmallButton, DeleteButton): each kind's fill,
 // label and border at rest, under the pointer, asking and not available; the question's
-// two parts under one border; a label shown as written; a narrow button's label elided.
+// two parts under one border; a label shown as written; a narrow button's label elided; the
+// preview of a look without the pointer or the keyboard (`shownLit`, `shownFocused`).
 // The rule alone (which colour for which kind and state): ThemeTest, ThemeRules.buttonLook.
 // What is expected here is written out, not asked of that rule.
 //
@@ -114,6 +115,28 @@ TestCase {
                 id: markedAsking
                 label: "<i>y</i>"
                 confirmLabel: "<b>z</b>?"
+            }
+        }
+
+        // Each kind drawn as under the pointer, and one with the keyboard's ring, with neither
+        Row {
+            id: previewButtons
+            x: 10; y: 150
+            spacing: 30
+
+            Repeater {
+                model: root.kinds.length
+                SmallButton {
+                    required property int index
+                    kind: root.kinds[index].kind
+                    label: "Lit " + kind
+                    shownLit: true
+                }
+            }
+            SmallButton {
+                id: ringed
+                label: "Ringed"
+                shownFocused: true
             }
         }
 
@@ -281,6 +304,19 @@ TestCase {
         assert(markedAsking.asking && markedParts.label.text === "<b>z</b>?" && _asWritten(markedParts.label), "and its question too");
         markedAsking.asking = false;
         _leave(() => markedParts.area.lit);
+
+        // --- the look's preview: lit and ringed with no pointer and no keyboard there ---
+        for (let i = 0; i < kinds.length; i++) {
+            const expected = kinds[i];
+            const button = _buttons(previewButtons)[i];
+            assert(!button.hovered && _is(button.color, expected.hotFill) && _is(_child(button, "QQuickText").color, expected.hotLabel),
+                   "\"" + expected.kind + "\" with shownLit, no pointer over it: drawn as under the pointer (" + expected.hotFill + ")");
+        }
+        const ring = _child(ringed, "QQuickRectangle");
+        assert(!ringed.activeFocus && ring.visible && _is(ring.border.color, "textSecondary") && _is(ringed.color, "surface"),
+               "shownFocused, without the keyboard: the keyboard's ring, the fill at rest");
+        ringed.shownFocused = false;
+        assert(!ring.visible, "shownFocused off: no ring");
 
         _window.visible = false;
         finish();

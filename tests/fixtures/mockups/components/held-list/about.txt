@@ -1,3 +1,3 @@
 # In the gallery its list is held open: the gallery's bar must still take a press
-description: A fixture view whose list is held open in the gallery until a press outside it
+description: A fixture component whose list is held open in the gallery until a press outside it
 state: open    A dropdown's list held open

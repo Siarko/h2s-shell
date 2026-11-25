@@ -26,10 +26,15 @@ Rectangle {
     // Shown on hover when not empty
     property string tooltip: ""
     readonly property bool hovered: _area.containsMouse
+    // A preview of the look without the pointer or the keyboard (the mockups' states, every
+    // button of a state at once): drawn as under the pointer (PointerArea.shownLit), and with
+    // the keyboard's ring. Only the look: Tab, keys and clicks are as before
+    property bool shownLit: false
+    property bool shownFocused: false
     signal clicked
 
     readonly property bool _hot: _area.lit && available
-    readonly property var _look: ThemeRules.buttonLook(kind, { hot: _hot, checked: checked, focused: activeFocus })
+    readonly property var _look: ThemeRules.buttonLook(kind, { hot: _hot, checked: checked, focused: activeFocus || shownFocused })
     // The theme's group for this kind of button: its own radius; padding and height are
     // the general button's
     readonly property var _shape: Theme[_look.group]
@@ -85,6 +90,7 @@ Rectangle {
 
     PointerArea {
         id: _area
+        shownLit: root.shownLit
         cursorShape: root.available ? Qt.PointingHandCursor : Qt.ArrowCursor
         onClicked: if (root.available) root.clicked()
     }

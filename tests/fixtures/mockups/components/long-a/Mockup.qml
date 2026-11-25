@@ -2,7 +2,7 @@ import QtQuick
 import qs.singletons
 import qs.mockups.kit
 
-// The runners' tall fixture view: four cells of 500 px one under another on screen, so
+// The runners' tall fixture component: four cells of 500 px one under another on screen, so
 // that the gallery's section grows far beyond its placeholder when it is built
 MockupWindow {
     id: root

@@ -6,14 +6,15 @@ import Quickshell.Io
 import qs.singletons
 import qs.components
 
-// The gallery (H2S_MOCKUP=gallery, made by the entry, mockup.qml): every component and view
-// in one scrollable window, components first, then views, each alphabetical. A section per
-// element: its kind and name, about.txt's description, and the element's own Mockup.qml in
-// all its states, every cell labelled as in the all-states window. Plans are not in it.
+// The gallery (H2S_MOCKUP=gallery, made by the entry, mockup.qml): every component in one
+// scrollable window, alphabetical. A section per component: its name, about.txt's
+// description, and the component's own Mockup.qml in all its states, every cell labelled as
+// in the all-states window. Views and plans are not in it: a view is opened on its own.
 //
 // Each section's mockup is created hosted (MockupWindow's `host`): no window and no
 // IpcHandler of its own, its content laid out in the section. A section is created only when
-// it scrolls near the view, so that the large views cost nothing until reached, and then kept.
+// it scrolls near the view, so that the sections far below cost nothing until reached, and
+// then kept.
 // Every state is on screen at once, so what holds the keyboard while shown does not take it
 // back (Isolation.keyboardHeld, as in the all-states window).
 //
@@ -43,7 +44,7 @@ import qs.components
 QtObject {
     id: root
 
-    // Set by the entry: the folder holding components/ and views/, and its about.txt reader
+    // Set by the entry: the folder holding components/, and its about.txt reader
     // (folder URL, word): { description, names, descriptions, error }
     property url baseUrl
     property var readAbout: null
@@ -55,8 +56,6 @@ QtObject {
     property bool _listed: false
     property string filterText: ""
     property var _window: null
-
-    readonly property var _kinds: ["components", "views"]
 
     // The window closed by the user or the compositor
     signal closed
@@ -134,24 +133,21 @@ QtObject {
 
     onFilterTextChanged: Qt.callLater(_buildNear)
 
-    // Reads both folders once they are listed: the sections and their about.txt
+    // Reads the components' folder once it is listed: the sections and their about.txt
     function _list() {
-        if (_listed || _componentsFolder.status !== FolderListModel.Ready || _viewsFolder.status !== FolderListModel.Ready)
+        if (_listed || _componentsFolder.status !== FolderListModel.Ready)
             return;
         _listed = true;
         const keys = [];
         const about = {};
-        for (const folder of [_componentsFolder, _viewsFolder]) {
-            const kind = folder === _componentsFolder ? "components" : "views";
-            const names = [];
-            for (let i = 0; i < folder.count; i++)
-                names.push(folder.get(i, "fileName"));
-            names.sort();
-            for (const name of names) {
-                const key = kind + "/" + name;
-                keys.push(key);
-                about[key] = readAbout(Qt.resolvedUrl(baseUrl + "/" + key), "state");
-            }
+        const names = [];
+        for (let i = 0; i < _componentsFolder.count; i++)
+            names.push(_componentsFolder.get(i, "fileName"));
+        names.sort();
+        for (const name of names) {
+            const key = "components/" + name;
+            keys.push(key);
+            about[key] = readAbout(Qt.resolvedUrl(baseUrl + "/" + key), "state");
         }
         _about = about;
         sectionKeys = keys;
@@ -172,13 +168,6 @@ QtObject {
 
     readonly property FolderListModel _componentsFolder: FolderListModel {
         folder: root.baseUrl + "/components"
-        showFiles: false
-        showDirs: true
-        showDotAndDotDot: false
-        onStatusChanged: root._list()
-    }
-    readonly property FolderListModel _viewsFolder: FolderListModel {
-        folder: root.baseUrl + "/views"
         showFiles: false
         showDirs: true
         showDotAndDotDot: false
@@ -261,9 +250,8 @@ QtObject {
                         required property string modelData
                         required property int index
                         readonly property string key: modelData
-                        readonly property string kind: key.replace(/\/.*$/, "")
                         readonly property var about: root._about[key] ?? { description: "", names: [], descriptions: [], error: "" }
-                        readonly property bool firstOfKind: index === 0 || (root.sectionKeys[index - 1] ?? "").replace(/\/.*$/, "") !== kind
+                        readonly property bool first: index === 0
                         property var mockup: null
                         property string error: about.error ?? ""
                         property bool _tried: false
@@ -314,13 +302,13 @@ QtObject {
                         Column {
                             id: _heading
                             width: parent.width
-                            topPadding: section.firstOfKind ? 24 : 16
+                            topPadding: section.first ? 24 : 16
                             leftPadding: 16
                             spacing: 4
 
                             Text {
-                                visible: section.firstOfKind
-                                text: section.kind === "components" ? "Components" : "Views"
+                                visible: section.first
+                                text: "Components"
                                 textFormat: Text.PlainText
                                 font.family: Theme.fontFamily
                                 font.pixelSize: Theme.fontSizeHeading

@@ -23,9 +23,11 @@
 #     components/WheelScroll.qml;
 #   - with state cells (the kit's StateGrid): shot in their grid, each cropped to its cell; on
 #     screen with no state named, every state's cell shown, none overlapping, labelled with its
-#     name and about.txt's description in order, a pointer state saying how to see it, no
+#     name and about.txt's description in order (a pointer state's too, with nothing added), no
 #     state current and no buttons, and at rest using next to no processor time (the
-#     fixture, and each component and view mockup);
+#     fixture, and each component and view mockup); a pointer state's cell drawn in its
+#     look (pill's hover differs from idle) and kept so while the real pointer passes over
+#     it and over another cell;
 #     H2S_MOCKUP_STATE one cell alone, labelled, current; a plan has no cells, its scene
 #     buttons each with its scene's description as tooltip;
 #   - a plan on a scene that holds a list open (plans/open-list), switched to another scene:
@@ -35,14 +37,13 @@
 #     scene's own button brings the list back, a press outside closes it, the current
 #     scene's button again opens it again, and the list and a button's tooltip are drawn
 #     over the buttons;
-#     and the gallery with a section's list held open (views/held-list): a section button in
+#     and the gallery with a section's list held open (components/held-list): a section button in
 #     its bar takes the press, a press outside closes the list, and the list and the
 #     button's tooltip are drawn over the bar;
 #   - `ipc call mockup theme <name>` on screen shows it in that theme and answers the name;
 #   - the gallery (H2S_MOCKUP=gallery, on mockups/), in the built-in theme and opened in a
 #     fixture theme (tests/fixtures/mockup-themes/, H2S_MOCKUP_THEME): a section per
-#     component and view on disk, in order, the last one not built before it is reached, each
-#     built once jumped to and at the top of the view then, in all its states
+#     component on disk, in order, no view, each built once jumped to and at the top of the view then, in all its states
 #     labelled from about.txt, no error or warning, at rest using next to no processor time;
 #     the filter keeps only matching sections; the theme switched over IPC to default and
 #     back, an unknown one refused with the list;
@@ -367,17 +368,17 @@ check "$(! grep -q -E 'MOCKUP-ERROR|TypeError|ReferenceError' "${logs[cells-shot
 echo "on screen: a component with state cells opens in all its states, each labelled from about.txt"
 on_screen_cells cells-all tests/fixtures/mockups components/cells
 expected_cells=$(printf '%s\n' "3 of 3 shown, none overlapping" "rest — The button at rest" "checked — The button checked" \
-    "hover — The pointer over the button (point at it, or open cells/hover)")
-check "$([ "$cells_answer" = "$expected_cells" ]; echo $?)" "every state shown, in order, labelled with its name and description, the pointer state saying how to see it (was '$cells_answer')"
-check "$([ -z "$current_answer" ]; echo $?)" "no state current: the simulated pointer lights none (was '$current_answer')"
+    "hover — The pointer over the button")
+check "$([ "$cells_answer" = "$expected_cells" ]; echo $?)" "every state shown, in order, labelled with its name and description alone, the pointer state too (was '$cells_answer')"
+check "$([ -z "$current_answer" ]; echo $?)" "no state current (was '$current_answer')"
 check "$([ "$buttons_answer" = "0 of 3 shown, checked " ]; echo $?)" "no state buttons (was '$buttons_answer')"
 check "$(! grep -q -E 'MOCKUP-SHOT|MOCKUP-ERROR|TypeError|ReferenceError' "${logs[cells-all]}"; echo $?)" "no shot, no error"
 check "$([ -n "$idle_ticks" ] && [ "$idle_ticks" -lt 50 ]; echo $?)" "at rest: under 50 ticks of processor time in 2 s (was '$idle_ticks')"
 
 echo "on screen: H2S_MOCKUP_STATE opens one state of a component with state cells, labelled"
 on_screen_cells cells-one tests/fixtures/mockups components/cells hover
-check "$([ "$cells_answer" = "$(printf '%s\n' "1 of 3 shown, none overlapping" "hover — The pointer over the button")" ]; echo $?)" "only hover's cell, labelled, without the all-states note (was '$cells_answer')"
-check "$([ "$current_answer" = hover ]; echo $?)" "hover current: its simulated pointer placed (was '$current_answer')"
+check "$([ "$cells_answer" = "$(printf '%s\n' "1 of 3 shown, none overlapping" "hover — The pointer over the button")" ]; echo $?)" "only hover's cell, labelled (was '$cells_answer')"
+check "$([ "$current_answer" = hover ]; echo $?)" "hover current (was '$current_answer')"
 check "$(! grep -q -E 'MOCKUP-ERROR|TypeError|ReferenceError' "${logs[cells-one]}"; echo $?)" "no error"
 
 echo "on screen: a plan keeps its scene buttons, each with its scene's description as tooltip"
@@ -417,8 +418,17 @@ grab_state="" grab_file=""
 differing=$("$LOCKTEST_MAGICK" compare -metric AE "$work/toggle-all-on.png" "$work/toggle-one-on.png" null: 2>&1 | cut -d ' ' -f 1)
 check "$([ -s "$work/toggle-all-on.png" ] && [ -s "$work/toggle-one-on.png" ] && [ "$differing" = 0 ]; echo $?)" "toggle-switch's 'on' cell: the same pixels in both, never a disabled look ($differing differing)"
 
+echo "on screen: a keyboard state's cell among all the states drawn with the keyboard's ring, the keyboard elsewhere"
+grab_state=focus-button grab_file=$work/modal-all-focus.png
+on_screen_cells modal-all mockups views/settings-modal
+grab_state=enable-module grab_file=$work/modal-all-enable.png
+on_screen_cells modal-all-enable mockups views/settings-modal
+grab_state="" grab_file=""
+ringed=$("$LOCKTEST_MAGICK" compare -metric AE "$work/modal-all-focus.png" "$work/modal-all-enable.png" null: 2>&1 | cut -d ' ' -f 1)
+check "$([ -s "$work/modal-all-focus.png" ] && [ -n "$ringed" ] && [ "$ringed" != 0 ]; echo $?)" "settings-modal's focus-button cell: the same question as enable-module's, with the ring ($ringed pixels apart)"
+
 echo "on screen: the mockups in all their states"
-for entry in components/pill:6 components/small-button:24 components/status-pill:5 components/toggle-switch:4 views/nixos-page:16 views/settings-modal:10; do
+for entry in components/pill:4 components/small-button:8 components/status-pill:5 components/toggle-switch:5 views/nixos-page:16 views/settings-modal:10; do
     mockup=${entry%%:*} count=${entry#*:}
     on_screen_cells "all-${mockup#*/}" mockups "$mockup"
     labels=$(tail -n +2 <<< "$cells_answer" | sed 's/ — .*//')
@@ -438,7 +448,7 @@ gallery_run() {
     local case=$1 id="" deadline=$((SECONDS + 60)) sections="" section qs_pid before
     shift
     start_entry "$case" "$REPO/mockup.qml" H2S_MOCKUP=gallery "$@"
-    sections_answer="" idle_ticks="" theme_answers="" filter_answer="" far_before=""
+    sections_answer="" idle_ticks="" theme_answers="" filter_answer=""
     cells_of=() top_of=()
     while [ $SECONDS -lt $deadline ] && kill -0 "${pids[$case]}" 2> /dev/null; do
         id=$(instance_of "$case")
@@ -448,12 +458,11 @@ gallery_run() {
         sleep 0.05
     done
     if [ -n "$sections" ]; then
-        # The first section built where it stands, a condition polled; the last one, far below,
-        # not built before it is reached
+        # The first section built where it stands, a condition polled (how far below a section
+        # waits unbuilt: the fixtures' tall sections, below)
         local first last
         first=$(head -n 1 <<< "$sections" | awk '{ print $1 }') last=$(tail -n 1 <<< "$sections" | awk '{ print $1 }')
         while [ $SECONDS -lt $deadline ] && ! ipc "$id" call mockup sections | grep -q -x -F "$first built"; do sleep 0.05; done
-        far_before=$(ipc "$id" call mockup sections | grep -F "$last ")
         # The last first: the placeholders above it grow as they are built under the view
         for section in "$last" $(awk '{ print $1 }' <<< "$sections" | grep -v -x -F "$last"); do
             ipc "$id" call mockup jump "$section" > /dev/null
@@ -472,7 +481,7 @@ gallery_run() {
             sleep 2
             idle_ticks=$(( $(cpu_ticks "$qs_pid") - before ))
         fi
-        filter_answer=$(ipc "$id" call mockup filter "pointer over the large")
+        filter_answer=$(ipc "$id" call mockup filter "background lit")
         ipc "$id" call mockup filter "" > /dev/null
         theme_answers=$(for name in "" contrast "" default "" nope; do ipc "$id" call mockup theme "$name"; done)
     fi
@@ -481,7 +490,7 @@ gallery_run() {
 }
 
 # The elements on disk, as the gallery lists them, and each one's states from about.txt
-elements_on_disk=$(cd "$REPO/mockups" && for folder in components/*/ views/*/; do echo "${folder%/}"; done)
+elements_on_disk=$(cd "$REPO/mockups" && for folder in components/*/; do echo "${folder%/}"; done)
 theme_config=$work/theme-config
 mkdir -p "$theme_config/h2s_shell/themes"
 echo '{}' > "$theme_config/h2s_shell/config.json"
@@ -489,14 +498,13 @@ cp "$REPO/tests/fixtures/mockup-themes/contrast.json" "$theme_config/h2s_shell/t
 
 for run in built-in contrast; do
     if [ "$run" = built-in ]; then
-        echo "the gallery: every component and view in all its states, in the built-in theme"
+        echo "the gallery: every component in all its states, in the built-in theme"
         gallery_run gallery-$run XDG_CONFIG_HOME="$theme_config"
     else
         echo "the gallery opened in a theme file (H2S_MOCKUP_THEME), switched over IPC"
         gallery_run gallery-$run XDG_CONFIG_HOME="$theme_config" H2S_MOCKUP_THEME=contrast
     fi
-    check "$([ "$(awk '{ print $1 }' <<< "$sections_answer")" = "$elements_on_disk" ]; echo $?)" "$run: a section per component and view on disk, components first, each alphabetical (was '$(awk '{ print $1 }' <<< "$sections_answer" | paste -s -d ' ')')"
-    check "$([ "$far_before" = "views/settings-modal waiting" ]; echo $?)" "$run: before any jump the last section, far below the view, is not built (was '$far_before')"
+    check "$([ "$(awk '{ print $1 }' <<< "$sections_answer")" = "$elements_on_disk" ]; echo $?)" "$run: a section per component on disk, alphabetical, no view (was '$(awk '{ print $1 }' <<< "$sections_answer" | paste -s -d ' ')')"
     check "$([ -n "$sections_answer" ] && ! grep -q -v ' built$' <<< "$sections_answer"; echo $?)" "$run: every section built once jumped to ($(grep -v ' built$' <<< "$sections_answer" | paste -s -d ';'))"
     tops=$(for element in $elements_on_disk; do [ "${top_of[$element]:-}" = "$element" ] || echo "$element:${top_of[$element]:-}"; done)
     check "$([ -z "$tops" ]; echo $?)" "$run: each section jumped to at the top of the view, the sections above it grown ($tops)"
@@ -522,20 +530,20 @@ while [ $SECONDS -lt $deadline ] && kill -0 "${pids[gallery-lazy]}" 2> /dev/null
 done
 if [ -n "$lazy_sections" ]; then
     lazy_before=$(ipc "$lazy_id" call mockup sections)
-    ipc "$lazy_id" call mockup jump views/long-c > /dev/null
+    ipc "$lazy_id" call mockup jump components/long-c > /dev/null
     # The section above it built (it grows by some 2000 px), a condition polled
-    while [ $SECONDS -lt $deadline ] && ipc "$lazy_id" call mockup sections | grep -q -x -E 'views/long-[bc] waiting'; do sleep 0.05; done
+    while [ $SECONDS -lt $deadline ] && ipc "$lazy_id" call mockup sections | grep -q -x -E 'components/long-[bc] waiting'; do sleep 0.05; done
     lazy_after=$(ipc "$lazy_id" call mockup sections)
     # Placed again once the column is laid out: polled, five seconds guarding a hang
     top_deadline=$((SECONDS + 5))
-    while [ $SECONDS -lt $top_deadline ] && [ "$(ipc "$lazy_id" call mockup top)" != views/long-c ]; do sleep 0.05; done
+    while [ $SECONDS -lt $top_deadline ] && [ "$(ipc "$lazy_id" call mockup top)" != components/long-c ]; do sleep 0.05; done
     lazy_top=$(ipc "$lazy_id" call mockup top)
 fi
 kill -TERM "${pids[gallery-lazy]}" 2> /dev/null
 finish_entry gallery-lazy
-check "$(grep -q -x 'views/long-b waiting' <<< "$lazy_before" && grep -q -x 'views/long-c waiting' <<< "$lazy_before"; echo $?)" "before any jump the tall sections far below are not built ($(grep long- <<< "$lazy_before" | paste -s -d ';'))"
-check "$(grep -q -x 'views/long-b built' <<< "$lazy_after" && grep -q -x 'views/long-c built' <<< "$lazy_after"; echo $?)" "jumped to views/long-c: it and the section above it built ($(grep long- <<< "$lazy_after" | paste -s -d ';'))"
-check "$([ "$lazy_top" = views/long-c ]; echo $?)" "views/long-c stays at the top of the view while views/long-b above it grows (top was '$lazy_top')"
+check "$(grep -q -x 'components/long-b waiting' <<< "$lazy_before" && grep -q -x 'components/long-c waiting' <<< "$lazy_before"; echo $?)" "before any jump the tall sections far below are not built ($(grep long- <<< "$lazy_before" | paste -s -d ';'))"
+check "$(grep -q -x 'components/long-b built' <<< "$lazy_after" && grep -q -x 'components/long-c built' <<< "$lazy_after"; echo $?)" "jumped to components/long-c: it and the section above it built ($(grep long- <<< "$lazy_after" | paste -s -d ';'))"
+check "$([ "$lazy_top" = components/long-c ]; echo $?)" "components/long-c stays at the top of the view while components/long-b above it grows (top was '$lazy_top')"
 check "$(grep -q '^components/load-error failed: .*NoSuchFixtureType' <<< "$lazy_before" && grep -q '^components/no-about failed: about.txt is missing' <<< "$lazy_before"; echo $?)" "a mockup that does not load and a missing about.txt: their sections say why"
 check "$(! grep -q -E 'MOCKUP-ERROR|TypeError|ReferenceError|Binding loop' "${logs[gallery-lazy]}"; echo $?)" "no error"
 check "$([ "$filter_answer" = components/pill ]; echo $?)" "the filter: only the section whose state holds every word (was '$filter_answer')"
@@ -614,8 +622,8 @@ wheel_run() {
 }
 
 echo "on screen: a real mouse wheel scrolls a component's window (the pointer over its cells)"
-wheel_run wheel-component "scroll vertical 3" H2S_MOCKUP=components/small-button
-check "$([ "$wheel_scroller" = "wheel, vertical bar shown" ]; echo $?)" "small-button's states taller than the window (scroller was '$wheel_scroller')"
+wheel_run wheel-component "scroll vertical 3" H2S_MOCKUP_BASE=tests/fixtures/mockups H2S_MOCKUP=components/long-a
+check "$([ "$wheel_scroller" = "wheel, vertical bar shown" ]; echo $?)" "long-a's states taller than the window (scroller was '$wheel_scroller')"
 check "$([ "$wheel_positions" = "$(printf '%s\n' 0,0 0,144)" ]; echo $?)" "three notches down: 48 px each (positions were '$(paste -s -d ' ' <<< "$wheel_positions")')"
 check "$(! grep -q -E 'MOCKUP-ERROR|TypeError|ReferenceError' "${logs[wheel-component]}"; echo $?)" "no error"
 
@@ -659,21 +667,21 @@ finish_entry wheel-row
 check "$([ "$row_answer" = "120 60 120 160 120" ]; echo $?)" "two plain notches down move the swatches 120 px (60 a notch), Shift and one up back 60, a horizontal notch on 60, a 40 px vertical stroke on 40, a sideways one back 40 (was '$row_answer')"
 check "$(! grep -q -E 'MOCKUP-ERROR|TypeError|ReferenceError' "${logs[wheel-row]}"; echo $?)" "no error"
 
-# point_at <id> <x,y>: the pointer moved to that place in the window, from where the probe
-# sees it now (relative moves: the window's place on the output is the compositor's); a few
-# corrections at most; 0 once it is there
+# point_at <id> <x,y> [<target>]: the pointer moved to that place in the window, from where
+# the probe (or the kit, target "mockup") sees it now (relative moves: the window's place on
+# the output is the compositor's); a few corrections at most; 0 once it is there
 point_at() {
-    local id=$1 target=$2 here attempt
+    local id=$1 target=$2 seer=${3:-probe} here attempt
     for attempt in 1 2 3 4; do
-        here=$(ipc "$id" call probe pointer)
+        here=$(ipc "$id" call "$seer" pointer)
         [ -z "$here" ] && return 1
         [ "$here" = "$target" ] && return 0
         send_input "move $((${target%,*} - ${here%,*})) $((${target#*,} - ${here#*,}))"
         local deadline=$((SECONDS + 5))
         # Seen moved, a condition polled
-        while [ $SECONDS -lt $deadline ] && [ "$(ipc "$id" call probe pointer)" = "$here" ]; do sleep 0.05; done
+        while [ $SECONDS -lt $deadline ] && [ "$(ipc "$id" call "$seer" pointer)" = "$here" ]; do sleep 0.05; done
     done
-    [ "$(ipc "$id" call probe pointer)" = "$target" ]
+    [ "$(ipc "$id" call "$seer" pointer)" = "$target" ]
 }
 
 # await <id> <expected> <ipc call…>: polls the call until it answers <expected>, five seconds
@@ -726,8 +734,8 @@ start_entry gallery-held "$REPO/mockup.qml" H2S_MOCKUP=gallery H2S_MOCKUP_BASE=t
 gallery_steps="" deadline=$((SECONDS + 60)) id=""
 while [ $SECONDS -lt $deadline ] && kill -0 "${pids[gallery-held]}" 2> /dev/null; do
     id=$(instance_of gallery-held)
-    if [ -n "$id" ] && [ "$(ipc "$id" call mockup window)" = floating ] && ipc "$id" call mockup sections | grep -q -x 'views/held-list .*'; then
-        ipc "$id" call mockup jump views/held-list > /dev/null
+    if [ -n "$id" ] && [ "$(ipc "$id" call mockup window)" = floating ] && ipc "$id" call mockup sections | grep -q -x 'components/held-list .*'; then
+        ipc "$id" call mockup jump components/held-list > /dev/null
         [ "$(ipc "$id" call probe list)" = shown ] && break
     fi
     id=""
@@ -752,6 +760,64 @@ finish_entry gallery-held
 check "$([ "$gallery_steps" = "components/good shown hidden components/good" ]; echo $?)" "the bar's section button scrolls to its section past the open list, a press outside then closes it (was '$gallery_steps')"
 check "$([ "$gallery_stacking" = "list top, tip top" ]; echo $?)" "the section's held list and the section button's tooltip are drawn over the bar's layer (was '$gallery_stacking')"
 check "$(! grep -q -E 'MOCKUP-ERROR|TypeError|ReferenceError|Binding loop' "${logs[gallery-held]}"; echo $?)" "no error"
+
+# grab_cell <id> <state> <file>: that state's cell saved as drawn; 0 once the file is there
+grab_cell() {
+    local deadline=$((SECONDS + 5))
+    rm -f -- "$3"
+    [ -z "$(ipc "$1" call mockup grab "$2" "$3")" ] || return 1
+    # The file written once the grab is done, a condition polled
+    while [ $SECONDS -lt $deadline ] && [ ! -s "$3" ]; do sleep 0.05; done
+    [ -s "$3" ]
+}
+# pixels_apart <png> <png>: how many pixels differ ("" when either cannot be read)
+pixels_apart() {
+    "$LOCKTEST_MAGICK" compare -metric AE "$1" "$2" null: 2>&1 | cut -d ' ' -f 1
+}
+
+echo "on screen: a pointer state's cell drawn in its look among all the states, kept while the real pointer passes over the cells"
+start_entry frozen "$REPO/mockup.qml" H2S_MOCKUP=components/pill
+id="" deadline=$((SECONDS + 30))
+frozen_hover_idle="" frozen_live="" frozen_kept="" frozen_pressed=""
+while [ $SECONDS -lt $deadline ] && kill -0 "${pids[frozen]}" 2> /dev/null; do
+    id=$(instance_of frozen)
+    [ -n "$id" ] && [ "$(ipc "$id" call mockup window)" = floating ] && [ -n "$(ipc "$id" call mockup centre hover)" ] && break
+    id=""
+    # A condition polled (the window made, the cells placed), not a fixed wait
+    sleep 0.05
+done
+if [ -n "$id" ] && grab_cell "$id" idle "$work/frozen-idle.png" && grab_cell "$id" hover "$work/frozen-hover.png"; then
+    frozen_hover_idle=$(pixels_apart "$work/frozen-idle.png" "$work/frozen-hover.png")
+    send_input "abs 1 1 2 2"
+    send_input "move 1 1"
+    pointer_deadline=$((SECONDS + 5))
+    # The pointer seen in the window, a condition polled
+    while [ $SECONDS -lt $pointer_deadline ] && [ -z "$(ipc "$id" call mockup pointer)" ]; do sleep 0.05; done
+    # Over the small pill of a cell: 26 px in from the cell's left edge (the row starts at
+    # 16), at its middle; the cells are 320 px wide
+    idle_at=$(ipc "$id" call mockup centre idle) hover_at=$(ipc "$id" call mockup centre hover)
+    small_of() { echo "$((${1%,*} - 160 + 26)),${1#*,}"; }
+    # The real pointer over idle's small pill lights it there (the pointer is live), and
+    # leaves the hover cell as it was
+    if point_at "$id" "$(small_of "$idle_at")" mockup && grab_cell "$id" idle "$work/frozen-idle-pointed.png" \
+        && grab_cell "$id" hover "$work/frozen-hover-1.png"; then
+        frozen_live=$(pixels_apart "$work/frozen-idle.png" "$work/frozen-idle-pointed.png")
+        frozen_kept=$(pixels_apart "$work/frozen-hover.png" "$work/frozen-hover-1.png")
+    fi
+    # Over the hover cell's own small pill, pressed and released, then away again: nothing
+    # reaches its pills
+    if point_at "$id" "$(small_of "$hover_at")" mockup && send_input "click left" \
+        && point_at "$id" "$(small_of "$idle_at")" mockup && grab_cell "$id" hover "$work/frozen-hover-2.png"; then
+        frozen_pressed=$(pixels_apart "$work/frozen-hover.png" "$work/frozen-hover-2.png")
+    fi
+fi
+kill -TERM "${pids[frozen]}" 2> /dev/null
+finish_entry frozen
+check "$([ -n "$frozen_hover_idle" ] && [ "$frozen_hover_idle" != 0 ]; echo $?)" "pill's hover cell drawn lit with no pointer there: $frozen_hover_idle pixels apart from idle's"
+check "$([ -n "$frozen_live" ] && [ "$frozen_live" != 0 ]; echo $?)" "the real pointer over idle's pill lights it: $frozen_live pixels changed there"
+check "$([ "$frozen_kept" = 0 ]; echo $?)" "the hover cell meanwhile the same ('$frozen_kept' pixels changed)"
+check "$([ "$frozen_pressed" = 0 ]; echo $?)" "the real pointer over the hover cell, a click there and the pointer gone: the cell the same ('$frozen_pressed' pixels changed)"
+check "$(! grep -q -E 'MOCKUP-ERROR|TypeError|ReferenceError|Binding loop' "${logs[frozen]}"; echo $?)" "no error"
 
 # Every wheel handler in the tree is the shell's WheelScroll, which takes a mouse wheel as
 # Qt on Wayland hands it over (from its touchpad device); a plain WheelHandler turns it away

@@ -6,18 +6,29 @@ import qs.mockups.kit
 // ToggleSwitch in its states, each state the settings' small switch and the popups' larger
 // one (width 44, height 24, off in Theme.textDisabled) side by side:
 //   off, on                     `checked` false, true
+//   hover                       off, drawn as under the pointer: its pointer area's
+//                               `shownLit` (the switch has no property of its own for it)
 //   disabled-off, disabled-on   not `enabled`: dimmed
-// The switch has no look of its own under the pointer or with the keyboard: it takes no
-// keyboard focus, and its pointer area only gives the cursor and the click.
+// The switch takes no keyboard focus. Under the pointer it draws no look of its own yet: the
+// hover cell shows what it draws there, the same as off until it has one.
 // Every state has a cell of its own (the kit's StateGrid lays them out), the shot cropped
-// to the state's cell, as in the mockups that move a pointer.
+// to the state's cell.
 MockupWindow {
     id: root
+
+    pointerStates: ["hover"]
+
+    // Lights the switch's pointer area, as the pointer over it would (PointerArea.shownLit)
+    function _light(toggle) {
+        for (const child of toggle.children)
+            if (child.shownLit !== undefined)
+                child.shownLit = true;
+    }
 
     StateGrid {
         cellWidth: 124
         cellHeight: 48
-        cellsPerRow: 4
+        cellsPerRow: 5
 
         Repeater {
             id: _cells
@@ -35,17 +46,21 @@ MockupWindow {
                     spacing: 20
 
                     ToggleSwitch {
+                        id: _small
                         anchors.verticalCenter: parent.verticalCenter
                         checked: cell.on
                         enabled: !cell.disabled
+                        Component.onCompleted: if (cell.stateName === "hover") root._light(_small)
                     }
                     ToggleSwitch {
+                        id: _large
                         anchors.verticalCenter: parent.verticalCenter
                         width: 44
                         height: 24
                         offColor: Theme.textDisabled
                         checked: cell.on
                         enabled: !cell.disabled
+                        Component.onCompleted: if (cell.stateName === "hover") root._light(_large)
                     }
                 }
             }

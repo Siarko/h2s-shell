@@ -426,7 +426,7 @@ cat > "$work/help.expected" << 'EXPECTED'
 Usage: tests/mockup.sh <command> [<element>] [options]
 
 Opens the shell's mockups on this screen: components and views in all their
-states, plans with their scenes, and the gallery of every component and view.
+states, plans with their scenes, and the gallery of every component.
 
 Commands:
   list [<element>]        Every element by kind; with an element, each of its
@@ -437,7 +437,7 @@ Commands:
                           first scene
   open <element>/<state>  One state of a component or view, or one scene of a
                           plan (<plan>/<scene>)
-  open gallery            Every component and view in one scrollable window
+  open gallery            Every component in one scrollable window
   close [<element>]       Close it; with none named, every open mockup
   review <element>        Compare with the approved pictures, show what changed
   approve <element>       Make the reviewed pictures the approved ones
@@ -446,7 +446,7 @@ Commands:
 Elements:
   pill, components/pill   a name, with its kind if two kinds share it, or a
                           unique part of a name
-  pill/hover-s            one state of a component or view
+  pill/hover              one state of a component or view
   distribution-nixos/building
                           a plan, opened on that scene
 

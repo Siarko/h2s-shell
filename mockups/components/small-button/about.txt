@@ -1,27 +1,11 @@
-# Each state's cell is a column of every kind ThemeRules.buttonLook names; a state is
-# named <look>[-<pointer>]-<kind>, the kind naming the one button it is about.
+# Each state's cell is a column of every kind ThemeRules.buttonLook names, all of them in
+# the state's look; the save kind reads "Create", saveChange "Update".
 description: The small text button in every kind and look
-state: rest                    No pointer, no keyboard
-state: disabled                Not available: dimmed
-state: checked                 Checked (a toggle that is on): the plain kinds take the accent
-state: hover-normal            The pointer over the normal button
-state: hover-save              The pointer over the save button
-state: hover-saveChange        The pointer over the saveChange button
-state: hover-action            The pointer over the action button
-state: hover-cancel            The pointer over the cancel button
-state: hover-delete            The pointer over the delete button
-state: hover-warning           The pointer over the warning button
-state: hover-success           The pointer over the success button
-state: checked-hover-normal    Checked, the pointer over the normal button
-state: disabled-hover-normal   Not available, the pointer over the normal button: no light
-state: focus-normal            The keyboard on the normal button (its ring)
-state: focus-save              The keyboard on the save button (its ring)
-state: focus-saveChange        The keyboard on the saveChange button (its ring)
-state: focus-action            The keyboard on the action button (its ring)
-state: focus-cancel            The keyboard on the cancel button (its ring)
-state: focus-delete            The keyboard on the delete button (its ring)
-state: focus-warning           The keyboard on the warning button (its ring)
-state: focus-success           The keyboard on the success button (its ring)
-state: pressed-normal          Pressed on the normal button, the pointer moved off it held
-state: pressed-save            Pressed on the save button, the pointer moved off it held
-state: pressed-delete          Pressed on the delete button, the pointer moved off it held
+state: rest             No pointer, no keyboard
+state: disabled         Not available: dimmed
+state: checked          Checked (a toggle that is on): the plain kinds take the accent
+state: hover            Under the pointer
+state: focus            With the keyboard (its ring)
+state: pressed          Pressed: drawn as under the pointer
+state: checked-hover    Checked, under the pointer
+state: disabled-hover   Not available, under the pointer: no light

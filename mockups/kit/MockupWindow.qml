@@ -32,10 +32,13 @@ import qs.components
 //   subject       the item a shot is cropped to; the content by default
 //   subjectRect   overrides the crop, in window coordinates, for a subject spread over
 //                 several items (a side panel and a modal); ignored while it has no size
-//   pointerStates the states a simulated pointer shows (hover, press), and keyboardStates
-//   keyboardStates the ones the keyboard's focus shows: one pointer and one focus cannot
-//                 show them all at once, so their labels in the all-states layout say how
-//                 to see them
+//   pointerStates the states drawn as under the pointer (hover, press), and keyboardStates
+//   keyboardStates the ones drawn with the keyboard: one pointer and one focus cannot show
+//                 them all at once, so the mockup draws each such cell's look itself, every
+//                 item of it at once, through the components' own preview properties
+//                 (`shownLit`, `shownFocused`), never by moving a pointer or the keyboard
+//                 there; on screen those cells take no pointer (StateCell), so the real
+//                 pointer passing over them changes nothing
 //   layout        how the window shows the mockup (set by start()): "shot", "all", "one" or
 //                 "buttons"
 //   now           the time every mockup shows (2026-01-15 10:30 UTC), handed to what shows
@@ -56,10 +59,10 @@ import qs.components
 // empty), with one named that one labelled ("one"). A mockup without one, and a plan, shows
 // its current state or scene under a row of buttons ("buttons"), each button's tooltip its
 // description.
-// A simulated pointer (hover, press) acts only inside the state's own cell: one cell per
-// state, all shown while shooting, `subject` the state's cell, the pointer otherwise parked
-// off every cell; nothing is shown or hidden under the pointer between states (Qt Quick
-// sends hover again where the pointer was left).
+// A simulated pointer (QtTest's events, where a state needs a real one) acts only inside the
+// state's own cell: one cell per state, all shown while shooting, `subject` the state's cell,
+// the pointer otherwise parked off every cell; nothing is shown or hidden under the pointer
+// between states (Qt Quick sends hover again where the pointer was left).
 //
 // Shooting (shooting, set by the entry): each state or scene in turn is set, three frames are
 // waited for once the window is mapped (the first frame after a change can still show the
@@ -104,6 +107,12 @@ import qs.components
 //   qs -p <tree>/mockup.qml ipc call mockup theme <name>
 //                         on screen, shows it in that theme (MockupTheme; "" only asks):
 //                         the name in force, or why not
+//   qs -p <tree>/mockup.qml ipc call mockup centre <state>
+//                         on screen, the centre of that state's cell in window coordinates,
+//                         "<x>,<y>" ("" while it is not shown)
+//   qs -p <tree>/mockup.qml ipc call mockup pointer
+//                         on screen, where the real pointer is in the window, "<x>,<y>" (""
+//                         while it is outside)
 //   qs -p <tree>/mockup.qml ipc call mockup grab <state> <path>
 //                         saves that state's cell as drawn into a PNG at <path>, which
 //                         appears once done: "" or why not
@@ -129,8 +138,8 @@ QtObject {
     property int contentWidth: 480
     property int contentHeight: 320
 
-    // The states a simulated pointer or the keyboard shows, which the all-states layout
-    // cannot show at once (one pointer, one keyboard focus): their labels say how to see them
+    // The states drawn as under the pointer or with the keyboard: on screen their cells take
+    // no pointer (StateCell)
     property var pointerStates: []
     property var keyboardStates: []
     // How the window shows the mockup, set by start(): "shot" while shooting; on screen
@@ -176,14 +185,9 @@ QtObject {
     readonly property int _laidWidth: _grid ? _grid.laidWidth : contentWidth
     readonly property int _laidHeight: _grid ? _grid.laidHeight : contentHeight
 
-    // What a pointer or keyboard state's label adds in the all-states layout
-    function hintFor(name) {
-        const element = mockupName.replace(/^[^\/]*\//, "");
-        if (Array.prototype.includes.call(pointerStates, name))
-            return " (point at it, or open " + element + "/" + name + ")";
-        if (Array.prototype.includes.call(keyboardStates, name))
-            return " (one item has the keyboard at a time: open " + element + "/" + name + ")";
-        return "";
+    // Whether the state's cell is drawn as under the pointer or with the keyboard
+    function isFrozen(name) {
+        return Array.prototype.includes.call(pointerStates, name) || Array.prototype.includes.call(keyboardStates, name);
     }
 
     // The StateGrid among the content's items, depth first
@@ -403,6 +407,12 @@ QtObject {
         width: parent ? parent.width : root._windowWidth
         height: parent ? parent.height : root._windowHeight
 
+        // Where the real pointer is: an ancestor of every item of the mockup sees the hover
+        // its items see, and takes nothing from them
+        HoverHandler {
+            id: _pointer
+        }
+
         Item {
             id: content
             x: 0
@@ -572,6 +582,20 @@ QtObject {
 
         function cells(): string {
             return root._window ? root._cellsShown() : "";
+        }
+
+        function centre(name: string): string {
+            const cell = root._grid ? root._grid.cells.find(c => c.name === name) : null;
+            if (!root._window || root.shooting || !cell || !cell.visible)
+                return "";
+            const at = cell.mapToItem(null, cell.width / 2, cell.height / 2);
+            return Math.round(at.x) + "," + Math.round(at.y);
+        }
+
+        function pointer(): string {
+            if (!root._window || root.shooting || !_pointer.hovered)
+                return "";
+            return Math.round(_pointer.point.position.x) + "," + Math.round(_pointer.point.position.y);
         }
 
         function tooltips(): string {

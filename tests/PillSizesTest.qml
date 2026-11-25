@@ -7,7 +7,8 @@ import qs.singletons
 // The pills' three sizes as they are drawn (Pill: "s", "m", "l", the theme's three
 // heights), and the tree's own pills: none sets its height itself, and each names the
 // size written here (tests/pill-sizes.sh reads the sources). The rule alone:
-// ThemeTest, ThemeRules.pillHeight.
+// ThemeTest, ThemeRules.pillHeight. And the hover look's preview (`shownLit`): the
+// background lit with no pointer there, the same at every size.
 TestCase {
     id: suite
     suiteName: "PillSizes"
@@ -18,6 +19,8 @@ TestCase {
     property var _large: Pill { size: "l"; label: "x" }
     property var _unsized: Pill { label: "x" }
     property var _unknown: Pill { size: "huge"; label: "x" }
+    property var _litSmall: Pill { size: "s"; label: "x"; shownLit: true }
+    property var _litLarge: Pill { size: "l"; label: "x"; shownLit: true }
 
     // The sizes the shell's pills name, per file, sorted ("-": none, the default).
     // 22 px: "s" and "-"; 26 px: "m"; 30 px: "l".
@@ -69,6 +72,10 @@ TestCase {
         assertEqual(_large.height, Theme.pill.largeHeight, "a large pill the large one");
         assertEqual(_unsized.height, _small.height, "a pill that names no size is small");
         assertEqual(_unknown.height, _small.height, "and so is one with a size that does not exist");
+        assert(Qt.colorEqual(_small.color, Theme.surfaceHoverClear), "a pill at rest: the clear background");
+        assert(Qt.colorEqual(_litSmall.color, Theme.surfaceHover) && Qt.colorEqual(_litLarge.color, Theme.surfaceHover),
+               "shownLit, no pointer: lit as under the pointer, small and large alike");
+        assertEqual(_litLarge.height, _large.height, "… its size as it was");
         _medium.size = "l";
         assertEqual(_medium.height, _large.height, "a pill follows its size when that changes");
 

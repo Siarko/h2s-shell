@@ -4,7 +4,7 @@ import qs.singletons
 import qs.components
 import qs.mockups.kit
 
-// A fixture view for tests/run-mockups-selftest.sh's real pointer in the gallery: hosted
+// A fixture component for tests/run-mockups-selftest.sh's real pointer in the gallery: hosted
 // there, it holds a list open as a state shows an open menu, until a press outside it. The
 // list's press catcher covers the whole window: the gallery's bar must still take a press,
 // while the list and a section button's tooltip are drawn over it.

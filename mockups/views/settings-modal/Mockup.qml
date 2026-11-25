@@ -21,7 +21,8 @@ import qs.mockups.kit
 //                    lines of explanation
 //   content-list     info, a list under the body (the modal's `content`)
 //   long-text        a long title and long lines wrapping at the small panel's width
-//   focus-button     enable-module after Tab: the keyboard on the first button (its ring)
+//   focus-button     enable-module after Tab: the keyboard on the first button (its ring;
+//                    with every state on screen the ring is drawn without the keyboard)
 //   short-window     remove-password in a window too short for it (200 px): the middle is
 //                    cut and scrolls, the header and the buttons stay
 // Each state has a cell (the kit's StateGrid stacks them: on one another while shooting, one
@@ -82,6 +83,22 @@ MockupWindow {
             area.modal.values = { data: true };
         if (name === "focus-button")
             keys.keyClick(Qt.Key_Tab);
+    }
+
+    // The first button shown inside `item` (in the order Tab takes them) drawn with the
+    // keyboard's ring (SmallButton.shownFocused)
+    function _ringFirst(item) {
+        for (const child of item.children) {
+            if (!child.visible)
+                continue;
+            if (child.shownFocused !== undefined && child.activeFocusOnTab) {
+                child.shownFocused = true;
+                return true;
+            }
+            if (_ringFirst(child))
+                return true;
+        }
+        return false;
     }
 
     TestCase {
@@ -180,6 +197,10 @@ MockupWindow {
                             modal.open = true;
                             if (cell.name === "remove-checked")
                                 modal.values = { data: true };
+                            // The ring Tab gives the first button, drawn without the keyboard:
+                            // one item has it at a time, and every cell is shown
+                            if (cell.name === "focus-button")
+                                Qt.callLater(() => root._ringFirst(modal));
                         })
                     }
                 }

@@ -25,6 +25,8 @@ Rectangle {
     property bool expanded: false
     // Whether a click expands it; false: hover only
     property bool expandable: true
+    // Drawn as under the pointer without one: a preview of the look (PointerArea.shownLit)
+    property bool shownLit: false
 
     signal toggled(bool expanded)
 
@@ -62,6 +64,7 @@ Rectangle {
     // not expandable, stops here
     PointerArea {
         id: _area
+        shownLit: root.shownLit
         enabled: root.hasParts || !root.expandable
         cursorShape: root._clickable ? Qt.PointingHandCursor : Qt.ArrowCursor
         onClicked: {

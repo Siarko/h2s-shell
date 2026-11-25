@@ -19,7 +19,10 @@ import qs.singletons
 MouseArea {
     id: root
 
-    readonly property bool lit: containsMouse || pressed || _lingering
+    readonly property bool lit: containsMouse || pressed || _lingering || shownLit
+    // Lit without a pointer: a preview of the control's look under the pointer (the mockups'
+    // pointer states, every control of a state lit at once). Only the look: no click, no tip
+    property bool shownLit: false
     // How long the look stays after a press ends, in ms
     property int linger: 200
     property bool centred: true

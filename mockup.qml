@@ -13,7 +13,7 @@ import qs.mockups.kit
 //
 //   H2S_MOCKUP=<kind>/<name>   mockups/<kind>/<name>/Mockup.qml; the kind is components,
 //                              views or plans, the name lowercase letters, digits and "-"
-//   H2S_MOCKUP=gallery         on screen: every component and view in one window
+//   H2S_MOCKUP=gallery         on screen: every component in one window
 //                              (mockups/kit/Gallery.qml)
 //   H2S_MOCKUP_BASE            "tests/fixtures/mockups" loads the runners' fixture mockups
 //                              instead of mockups/; nothing else is taken
