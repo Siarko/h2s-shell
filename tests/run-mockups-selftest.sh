@@ -31,9 +31,12 @@
 #     a click on that scene's button lands (the hidden scene's list leaves no press catcher);
 #     and with a real pointer (plans/held-list), in a scene holding a list open, a press on
 #     another scene's button switches scenes (the kit's buttons lie above every overlay), the
-#     scene's own button brings the list back, a press outside closes it;
+#     scene's own button brings the list back, a press outside closes it, the current
+#     scene's button again opens it again, and the list and a button's tooltip are drawn
+#     over the buttons;
 #     and the gallery with a section's list held open (views/held-list): a section button in
-#     its bar takes the press, a press outside closes the list;
+#     its bar takes the press, a press outside closes the list, and the list and the
+#     button's tooltip are drawn over the bar;
 #   - `ipc call mockup theme <name>` on screen shows it in that theme and answers the name;
 #   - the gallery (H2S_MOCKUP=gallery, on mockups/), in the built-in theme and opened in a
 #     fixture theme (tests/fixtures/mockup-themes/, H2S_MOCKUP_THEME): a section per
@@ -694,16 +697,23 @@ if [ -n "$id" ]; then
     pointer_deadline=$((SECONDS + 5))
     # The pointer seen in the window, a condition polled
     while [ $SECONDS -lt $pointer_deadline ] && [ -z "$(ipc "$id" call probe pointer)" ]; do sleep 0.05; done
+    held_stacking=$(ipc "$id" call probe stacking)
     point_at "$id" "$(ipc "$id" call mockup place other)" && send_input "click left"
     held_steps="$(await "$id" other mockup current) $(await "$id" hidden probe list)"
+    # The pointer rests on the button: its tooltip comes after its delay, a condition polled
+    held_stacking+="; $(await "$id" "list hidden, tip top" probe stacking)"
     point_at "$id" "$(ipc "$id" call mockup place open)" && send_input "click left"
     held_steps+=" $(await "$id" open mockup current) $(await "$id" shown probe list)"
     point_at "$id" "$(ipc "$id" call probe outside)" && send_input "click left"
     held_steps+=" $(await "$id" hidden probe list) $(ipc "$id" call mockup current)"
+    # The current scene's own button again: its list opens again
+    point_at "$id" "$(ipc "$id" call mockup place open)" && send_input "click left"
+    held_steps+=" $(await "$id" shown probe list)"
 fi
 kill -TERM "${pids[held-list]}" 2> /dev/null
 finish_entry held-list
-check "$([ "$held_steps" = "other hidden open shown hidden open" ]; echo $?)" "the other scene's button switches scenes, the open one's brings the list back, a press outside closes it (was '$held_steps')"
+check "$([ "$held_steps" = "other hidden open shown hidden open shown" ]; echo $?)" "the other scene's button switches scenes, the open one's brings the list back, a press outside closes it, the current scene's button opens it again (was '$held_steps')"
+check "$([ "$held_stacking" = "list top, tip none; list hidden, tip top" ]; echo $?)" "the held list and a scene button's tooltip are drawn over the buttons' layer (was '$held_stacking')"
 check "$(! grep -q -E 'MOCKUP-ERROR|TypeError|ReferenceError' "${logs[held-list]}"; echo $?)" "no error"
 
 echo "on screen: a real pointer in the gallery with a section's list held open: a section button in the bar takes the press, a press outside closes the list"
@@ -727,12 +737,15 @@ if [ -n "$id" ]; then
     while [ $SECONDS -lt $pointer_deadline ] && [ -z "$(ipc "$id" call probe pointer)" ]; do sleep 0.05; done
     point_at "$id" "$(ipc "$id" call mockup place components/good)" && send_input "click left"
     gallery_steps="$(await "$id" components/good mockup top) $(ipc "$id" call probe list)"
+    # The pointer rests on the section button: its tooltip comes after its delay, a condition polled
+    gallery_stacking=$(await "$id" "list top, tip top" probe stacking)
     point_at "$id" "$(ipc "$id" call probe outside)" && send_input "click left"
     gallery_steps+=" $(await "$id" hidden probe list) $(ipc "$id" call mockup top)"
 fi
 kill -TERM "${pids[gallery-held]}" 2> /dev/null
 finish_entry gallery-held
 check "$([ "$gallery_steps" = "components/good shown hidden components/good" ]; echo $?)" "the bar's section button scrolls to its section past the open list, a press outside then closes it (was '$gallery_steps')"
+check "$([ "$gallery_stacking" = "list top, tip top" ]; echo $?)" "the section's held list and the section button's tooltip are drawn over the bar's layer (was '$gallery_stacking')"
 check "$(! grep -q -E 'MOCKUP-ERROR|TypeError|ReferenceError|Binding loop' "${logs[gallery-held]}"; echo $?)" "no error"
 
 # Every wheel handler in the tree is the shell's WheelScroll, which takes a mouse wheel as

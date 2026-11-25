@@ -158,6 +158,9 @@ QtObject {
     signal failed(string text)
     // The floating window closed by the user or the compositor (never while shooting)
     signal closed
+    // A state's or scene's button pressed on screen, the current one's too: a scene that
+    // holds a list open opens it again
+    signal chosen(string name)
 
     property int _index: -1
     property bool _waitingForNext: false
@@ -475,13 +478,14 @@ QtObject {
     }
 
     // The window's own controls, the buttons and the scroll bars: a layer of their own in the
-    // window's top item, above every overlay the mockup's items put there (a FloatingList
-    // and its press catcher, z 1000, cover the whole top item), so that they always take a
-    // press — also in a scene that holds a list open. The top item is the Qt window's own
-    // (where those overlays go), which holds the Quickshell window's contentItem
+    // window's top item, between a FloatingList's press catcher (z 999, over the whole top
+    // item) and the overlays themselves (a FloatingList, a HoverTip: z 1000), so that they
+    // always take a press — also in a scene that holds a list open — while lists and tooltips
+    // still float over them. The top item is the Qt window's own (where those overlays go),
+    // which holds the Quickshell window's contentItem
     readonly property Item _controls: Item {
         parent: _body.Window.window ? _body.Window.window.contentItem : null
-        z: 2000
+        z: 999.5
         width: parent ? parent.width : root._windowWidth
         height: parent ? parent.height : root._windowHeight
 
@@ -502,7 +506,10 @@ QtObject {
                     label: modelData
                     tooltip: root.descriptions[index] ?? ""
                     checked: modelData === root.current
-                    onClicked: root.current = modelData
+                    onClicked: {
+                        root.current = modelData;
+                        root.chosen(modelData);
+                    }
                 }
             }
         }

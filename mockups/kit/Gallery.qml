@@ -373,14 +373,15 @@ QtObject {
     }
 
     // The bar and the scroll bar: a layer of their own in the Qt window's top item (which
-    // holds the Quickshell window's contentItem), above every overlay a section's items put
-    // there (a FloatingList held open and its press catcher, z 1000, over the whole window),
-    // so that they always take a press. The bar's own lists (the theme's dropdown) float in
+    // holds the Quickshell window's contentItem), between a FloatingList's press catcher
+    // (z 999, over the whole window) and the overlays a section's items put there (a
+    // FloatingList, a HoverTip: z 1000), so that they always take a press while lists and
+    // tooltips still float over them. The bar's own lists (the theme's dropdown) float in
     // this layer, its overlay host, above the bar
     readonly property Item _controls: Item {
         objectName: "overlayHost"
         parent: _body.Window.window ? _body.Window.window.contentItem : null
-        z: 2000
+        z: 999.5
         width: parent ? parent.width : 0
         height: parent ? parent.height : 0
 
