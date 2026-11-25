@@ -812,6 +812,17 @@ entry uses. `singletons/WidgetPresets.qml` is the one place that parses and
 writes the library and holds each type's defaults; it also lists where a preset is used,
 and renames or deletes it while repointing the bar entries of every profile.
 
+A preset also holds what the entry's interactions run, one key per interaction:
+`on.<interaction>` (`on.middleClick`, `on.hover`, …), a binding in `InteractionRules`'
+shape. Every widget type whose cell takes interactions has presets (all but the tray,
+whose registry entry says `cellInteractions: []`); a key the preset does not set, or one
+that fails its shape check (logged once when it appears), falls back to the type's
+default. Those defaults join `WidgetPresets.defaults` as the same keys: the registry
+entry's `bindings`, and for a popup widget what `widgets.<type>.popupMode` of the active
+profile implies (click: `leftClick` toggles the popup; hover: `hover` opens it; none:
+neither), a declared `leftClick` winning over the popup's. The Bar hands each cell its
+entry's lookup (`WidgetPresets.bindingLookup(type, preset)`) as `bindingLookup`.
+
 ### Popup
 
 There is exactly one popup window per Bar. `panels/Popup.qml` is a `LazyLoader` around

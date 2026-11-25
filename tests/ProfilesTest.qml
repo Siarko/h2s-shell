@@ -214,7 +214,8 @@ TestCase {
         assertEqual(WidgetPresets.value("clock", "", "format"), "hh:mm:ss", "no preset: the type's default");
         assertEqual(WidgetPresets.value("clock", "no such preset", "format"), "hh:mm:ss", "a missing preset: the default");
         assertEqual(WidgetPresets.value("stt", "", "previewWidth"), undefined, "stt has no defaults — it inherits the profile setting");
-        assert(WidgetRegistry.hasPresets("clock") && !WidgetRegistry.hasPresets("music"), "only widgets with a settings page have presets");
+        assert(WidgetRegistry.hasPresets("clock") && WidgetRegistry.hasPresets("music") && !WidgetRegistry.hasPresets("tray"),
+               "widgets with a settings page or cell interactions have presets, the tray not");
         assert(WidgetRegistry.allowsMultiple("clock") && !WidgetRegistry.allowsMultiple("tray"), "clocks may repeat in a section, the tray not");
 
         // --- saving ---

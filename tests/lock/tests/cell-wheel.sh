@@ -2,7 +2,9 @@
 # compositor, so the signs are Wayland's and Qt's as they come, not the ones a test made up.
 # Wayland's horizontal axis is positive to the right, Qt's angleDelta.x positive to the
 # left; the cell must report a wheel tilted right as scrollRight. The same for the vertical
-# axis (positive down in Wayland): scrollDown. Not about the lock screen.
+# axis (positive down in Wayland): scrollDown. The bar hands the cell its entry's bindings:
+# the clock's left click toggles its popup (the popup mode's default). Not about the lock
+# screen.
 
 stack_start
 
@@ -14,6 +16,10 @@ log "the clock's cell: $rect"
 cell_x=$(python3 -I -c 'import json,sys; r=json.loads(sys.argv[1]); print(r["x"] + r["width"] // 2)' "$rect")
 cell_y=$(python3 -I -c 'import json,sys; r=json.loads(sys.argv[1]); print(r["y"] + r["height"] // 2)' "$rect")
 move_pointer "$cell_x" "$cell_y"
+binding_is() { [ "$(shell_ipc shelltest cellBinding clock "$1")" = "$2" ]; }
+check "the bar hands the cell its bindings: the left click toggles the popup" \
+    binding_is leftClick '{"mode":"single","action":{"action":"shell:popup.toggle"}}'
+check "… the middle click is unassigned" binding_is middleClick unassigned
 check "the cell's interactions are watched" test -z "$(shell_ipc shelltest watchInteractions clock)"
 
 # scrolls_are <names…>: the cell's interactions since it was watched, hover left out (the

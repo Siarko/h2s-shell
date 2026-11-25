@@ -80,7 +80,7 @@ ReorderList {
         // Only for widgets with something to set: a popup mode or presets (not the settings
         // button or the tray)
         Rectangle {
-            visible: WidgetRegistry.hasPopupMode(_content.value) || WidgetRegistry.hasPresets(_content.value)
+            visible: WidgetRegistry.hasPopupMode(_content.value) || WidgetRegistry.hasSettingsPage(_content.value)
             width: 24
             height: 24
             radius: Theme.iconButton.radius

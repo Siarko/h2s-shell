@@ -315,6 +315,10 @@ QtObject {
             delete merged[keyName];
         else
             merged[keyName] = newValue;
+        // The shell's binding keys ("on.<interaction>") beside its own are not the module's to check
+        for (const stored of Object.keys(merged))
+            if (InteractionRules.interactionOfKey(stored) !== "")
+                delete merged[stored];
         const problem = ModuleManifestRules.presetDefaultsProblem(merged);
         if (problem !== "")
             return problem;

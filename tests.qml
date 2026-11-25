@@ -46,6 +46,7 @@ QtObject {
     property var _calendarDates: CalendarDatesTest {}
     property var _calendarEvents: CalendarEventsTest {}
     property var _widgetRegistry: WidgetRegistryTest {}
+    property var _widgetPresets: WidgetPresetsTest {}
     property var _hardware: HardwareTest {}
     property var _profiles: ProfilesTest {}
     property var _polling: PollingTest {}

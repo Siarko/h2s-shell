@@ -367,6 +367,62 @@ Singleton {
         return interaction => resolve(interaction, _own(values, interaction), declared, hasPopup, popupMode, ownIds).binding;
     }
 
+    // ---- Bindings stored in widget presets -------------------------------------------------
+
+    // A preset holds one key per interaction, "on.<interaction>", beside the widget's own
+    // settings, so a preset that sets only some inherits the rest from the type's defaults
+    function bindingKey(interaction): string {
+        return "on." + interaction;
+    }
+
+    // The interaction a preset key binds, "" for a key that is no binding key
+    function interactionOfKey(key): string {
+        return typeof key === "string" && key.startsWith("on.") ? key.slice(3) : "";
+    }
+
+    // The binding keys a type's preset defaults gain: for each interaction, what its declared
+    // bindings or its popup imply ({ "on.<interaction>": binding }; an interaction left
+    // unassigned has no key)
+    function bindingDefaults(declared, hasPopup, popupMode, ownIds): var {
+        const result = {};
+        for (const interaction of interactions()) {
+            const found = resolve(interaction, undefined, declared, hasPopup, popupMode, ownIds).binding;
+            if (found !== undefined)
+                result[bindingKey(interaction)] = found;
+        }
+        return result;
+    }
+
+    // The binding keys of a preset (or of a type's defaults) by interaction: { leftClick: … }
+    function bindingsOf(preset): var {
+        const result = {};
+        if (!_plainObject(preset))
+            return result;
+        for (const key of Object.keys(preset)) {
+            const interaction = interactionOfKey(key);
+            if (isInteraction(interaction))
+                result[interaction] = preset[key];
+        }
+        return result;
+    }
+
+    // The binding keys of a preset that fail their shape check (an unknown interaction
+    // included), sorted: each counts as not set, so the type's default applies
+    function bindingProblems(preset, ownIds): var {
+        if (!_plainObject(preset))
+            return [];
+        return Object.keys(preset).filter(key => {
+            const interaction = interactionOfKey(key);
+            return interaction !== "" && !validBinding(preset[key], interaction, ownIds);
+        }).sort();
+    }
+
+    // A bar entry's lookup from its preset's own keys and its type's preset defaults (the
+    // binding keys bindingDefaults gave, already resolved against the popup)
+    function presetLookup(preset, typeDefaults, ownIds): var {
+        return lookupFor(bindingsOf(preset), bindingsOf(typeDefaults), false, "", ownIds);
+    }
+
     // An interaction's fallback while it is unassigned: a finger's does what its pointer one
     // does, and a long press or a modifier click is a left click — as a slow click or a
     // Shift+click is today

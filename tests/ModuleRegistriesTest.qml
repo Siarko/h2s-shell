@@ -170,6 +170,19 @@ TestCase {
         return (list ?? []).some(entry => String(entry).includes(fragment));
     }
 
+    // Preset defaults without their binding keys ("on.<interaction>"), a type left with none dropped
+    function _withoutBindings(defaults) {
+        const result = {};
+        for (const type of Object.keys(defaults)) {
+            const kept = {};
+            for (const key of Object.keys(defaults[type]).filter(key => !key.startsWith("on.")))
+                kept[key] = defaults[type][key];
+            if (Object.keys(kept).length > 0)
+                result[type] = kept;
+        }
+        return result;
+    }
+
     // With no module loaded: every registry is the core's own list, unchanged
     function _identity(when) {
         assert(WidgetRegistry.entries === WidgetRegistry.coreEntries, when + ": WidgetRegistry.entries is the core's list");
@@ -178,7 +191,7 @@ TestCase {
         assert(SettingsSchema.entries === SettingsSchema.coreEntries, when + ": SettingsSchema.entries is the core's list");
         assertEqual(JSON.stringify(SettingsSchema.defaults), JSON.stringify(SettingsSchema.coreDefaults), when + ": … the defaults the core's");
         assert(ProfileRules.factTypes === ProfileRules.coreFactTypes, when + ": ProfileRules.factTypes is the core's list");
-        assertEqual(JSON.stringify(WidgetPresets.defaults), JSON.stringify(WidgetPresets.coreDefaults), when + ": WidgetPresets.defaults the core's");
+        assertEqual(JSON.stringify(_withoutBindings(WidgetPresets.defaults)), JSON.stringify(WidgetPresets.coreDefaults), when + ": WidgetPresets.defaults the core's, beside the binding keys");
         assert(!Object.keys(Profiles.facts).some(fact => fact.startsWith("good.")), when + ": no module fact in Profiles.facts");
         assert(_window.pages === _window.corePages, when + ": the settings window's pages are the core's list");
         assertEqual(Modules.host.slotContributions("network.vpn.page").filter(entry => entry.module === "good").length, 0, when + ": no slot contribution of good's");
@@ -238,6 +251,15 @@ TestCase {
                 assert(goodHandle.setPresetValue("good", "Mine", "k50", 50) !== "", "… a 51st: refused (the preset as a whole, after the write)");
                 assert(goodHandle.setPresetValue("good", "Mine", "k0", "x".repeat(17 * 1024)) !== "", "… larger than 16 KiB after the write: refused");
                 assertEqual(goodHandle.setPresetValue("good", "Mine", "k0", undefined), "", "… removing a key always fits");
+                // The shell's binding keys in the same preset are not counted or checked as the module's
+                WidgetPresets.set("good", "Mine", "on.middleClick", { mode: "single", action: null });
+                assertEqual(goodHandle.setPresetValue("good", "Mine", "k0", 0), "", "… a binding key beside 50 of its own: still fine");
+                assert(goodHandle.setPresetValue("good", "Mine", "on.leftClick", null) !== "", "… a binding key is not the module's to write");
+                assertEqual(JSON.stringify(goodHandle.presetValue("good", "Mine", "on.middleClick")), JSON.stringify({ mode: "single", action: null }),
+                            "… and stays as the shell wrote it");
+                // Its popup implies the left click's default, as for the core's popup widgets
+                assertEqual(JSON.stringify(WidgetPresets.value("good", "", "on.leftClick")), JSON.stringify({ mode: "single", action: { action: "shell:popup.toggle" } }),
+                            "WidgetPresets: a module popup widget's left click toggles its popup by default");
                 // __proto__ and inherited names are never presets (own properties only)
                 assert(!WidgetPresets.exists("good", "__proto__") && !WidgetPresets.exists("good", "constructor")
                        && !WidgetPresets.exists("clock", "toString"), "WidgetPresets.exists: never an inherited property");

@@ -153,6 +153,8 @@ tests/fixtures/migrations-testonly/* unit:MigrationsTest
 tests/fixtures/migrations-golden/* unit:MigrationsGoldenTest
 # Each registered migration's fixture, read by path
 tests/fixtures/migrations/* unit:MigrationsTest
+# A config from before preset bindings and what its bar entries run, read by path
+tests/fixtures/widget-bindings/* unit:WidgetPresetsTest
 flake.nix self:tests/run-system.sh
 flake.lock self:tests/run-system.sh unit:QuickshellPinTest
 nix/* self:tests/run-system.sh
@@ -206,6 +208,7 @@ singletons/io/NotificationHandle.qml lock:notifier-progress lock:modules-notify
 components/NotificationCard.qml lock:notification* lock:toast-*
 Hud.qml lock:toast-* lock:hud-bar-bottom
 +components/BarWidget.qml lock:cell-wheel
++singletons/WidgetPresets.qml lock:cell-wheel
 +hud/* lock:toast-* lock:hud-bar-bottom
 +singletons/Toast* lock:toast-* lock:hud-bar-bottom
 singletons/BarGeometry.qml lock:hud-bar-bottom lock:toast-*

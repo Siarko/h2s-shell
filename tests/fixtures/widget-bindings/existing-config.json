@@ -1,0 +1,38 @@
+{
+  "about": "A config written before preset bindings: every core widget type on the bar, popup modes click, hover and none, presets with the widgets' own keys only. expected: what each bar entry's interactions run (only the bound ones; tap: what a tap runs, its fallback followed), which is what its clicks and hover did before bindings.",
+  "profiles": [
+    { "name": "Full", "set": {
+        "widgets.clock.popupMode": "hover",
+        "widgets.hardware.popupMode": "none",
+        "widgets.battery.popupMode": "click",
+        "bar.left": [{ "type": "power", "preset": "" }, { "type": "settings", "preset": "" },
+                     { "type": "workspaces", "preset": "Workspaces 1" }, { "type": "clock", "preset": "Clock 1" }],
+        "bar.center": [{ "type": "music", "preset": "" }, { "type": "sound", "preset": "" },
+                       { "type": "bluetooth", "preset": "" }, { "type": "tray", "preset": "" }],
+        "bar.right": [{ "type": "network", "preset": "" }, { "type": "notifications", "preset": "Notifications 1" },
+                      { "type": "hardware", "preset": "Hardware 1" }, { "type": "battery", "preset": "" },
+                      { "type": "stt", "preset": "" }, { "type": "clock", "preset": "" }] } }
+  ],
+  "widgetPresets": {
+    "clock": { "Clock 1": { "format": "hh:mm" } },
+    "workspaces": { "Workspaces 1": { "showSpecial": false } },
+    "notifications": { "Notifications 1": { "badge": false } },
+    "hardware": { "Hardware 1": { "capsule": ["cpu", "ram"] } }
+  },
+  "expected": {
+    "left/0 power": { "leftClick": "toggle", "tap": "toggle" },
+    "left/1 settings": {},
+    "left/2 workspaces": {},
+    "left/3 clock": { "hover": "open", "tap": "toggle" },
+    "center/0 music": { "leftClick": "toggle", "tap": "toggle" },
+    "center/1 sound": { "leftClick": "toggle", "tap": "toggle" },
+    "center/2 bluetooth": { "leftClick": "toggle", "tap": "toggle" },
+    "center/3 tray": "no cell interactions",
+    "right/0 network": { "leftClick": "toggle", "tap": "toggle" },
+    "right/1 notifications": { "leftClick": "toggle", "tap": "toggle" },
+    "right/2 hardware": {},
+    "right/3 battery": { "leftClick": "toggle", "tap": "toggle" },
+    "right/4 stt": {},
+    "right/5 clock": { "hover": "open", "tap": "toggle" }
+  }
+}

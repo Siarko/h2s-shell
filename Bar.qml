@@ -61,6 +61,9 @@ PanelWindow {
             item.popup = popupLoader
         if (typeof item.preset !== "undefined")
             item.preset = Qt.binding(() => delegate.entry.preset)
+        // What the entry's interactions run: its preset's bindings, else the type's defaults
+        if (typeof item.bindingLookup !== "undefined")
+            item.bindingLookup = Qt.binding(() => WidgetPresets.bindingLookup(delegate.entry.type ?? "", delegate.entry.preset ?? ""))
         if (delegate.entry.type === "notifications")
             bar.notifWidget = item
     }
@@ -387,6 +390,7 @@ PanelWindow {
     //   qs ipc call shelltest toastDismiss 7
     //   qs ipc call shelltest watchInteractions clock
     //   qs ipc call shelltest interactionsSeen
+    //   qs ipc call shelltest cellBinding clock leftClick
     IpcHandler {
         target: "shelltest"
         enabled: bar.modelData === Quickshell.screens[0]
@@ -481,6 +485,16 @@ PanelWindow {
                 });
             }
             return "";
+        }
+
+        // What a cell's interaction runs, as its entry's preset resolves it (JSON; "unassigned"
+        // when nothing is, "no lookup" for a cell without one)
+        function cellBinding(widgetType: string, interaction: string): string {
+            const cell = bar._testFind(bar.contentItem, item => item.widgetType === widgetType && item.visible);
+            if (!cell || typeof cell.bindingLookup !== "function")
+                return "no lookup";
+            const binding = cell.bindingLookup(interaction);
+            return binding === undefined ? "unassigned" : JSON.stringify(binding);
         }
 
         // Their names, oldest first

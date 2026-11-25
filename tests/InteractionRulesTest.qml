@@ -363,5 +363,52 @@ TestCase {
         assert(has(R.warnings("leftClick", null, info, true), "reactsByItself"), "a legacy widget");
         assertEqual(R.warnings("middleClick", single({ action: "own:wifiOn" }), info, false).length, 0, "a plain binding has no warning");
         assertEqual(R.warnings("hover", undefined, info, false).length, 0, "unassigned has none");
+
+        _presetBindings();
+    }
+
+    // Bindings stored in widget presets as "on.<interaction>" keys, and the defaults they fall
+    // back to
+    function _presetBindings() {
+        const R = InteractionRules;
+        const text = value => JSON.stringify(value);
+        assertEqual(R.bindingKey("middleClick"), "on.middleClick", "a binding's preset key");
+        assertEqual(R.interactionOfKey("on.hover") + "|" + R.interactionOfKey("format") + "|" + R.interactionOfKey(undefined) + "|" + R.interactionOfKey("xon.hover"),
+                    "hover|||", "the interaction of a key; none for a widget's own key");
+
+        // The defaults a type's presets fall back to: its declared bindings, else its popup
+        assertEqual(text(R.bindingDefaults(undefined, true, "click", [])), text({ "on.leftClick": toggle }), "a popup on click: the left click toggles it");
+        assertEqual(text(R.bindingDefaults({}, true, "hover", [])), text({ "on.hover": open }), "on hover: hovering opens it, the left click unassigned");
+        assertEqual(text(R.bindingDefaults({}, true, "none", [])), "{}", "none: nothing assigned");
+        assertEqual(text(R.bindingDefaults({}, false, "click", [])), "{}", "no popup: nothing, whatever the mode");
+        assertEqual(text(R.bindingDefaults({ middleClick: mute }, true, "click", ["mute"])), text({ "on.leftClick": toggle, "on.middleClick": mute }),
+                    "declared bindings join the popup's");
+        assertEqual(text(R.bindingDefaults({ leftClick: mute }, true, "click", ["mute"])), text({ "on.leftClick": mute }), "a declared left click overrides the popup's");
+        assertEqual(text(R.bindingDefaults({ leftClick: nothing, rightClick: null }, true, "click", [])), text({ "on.leftClick": null, "on.rightClick": null }),
+                    "a declared nothing is kept as nothing");
+        assertEqual(text(R.bindingDefaults({ middleClick: mute, bogus: mute }, false, "", [])), "{}", "a declared own action the type does not have, or no interaction: dropped");
+
+        // A preset's own binding keys
+        const preset = { format: "hh:mm", "on.middleClick": mute, "on.hover": nothing, "on.bogus": mute, "on.leftClick": { mode: "single" } };
+        assertEqual(text(R.bindingsOf(preset)), text({ middleClick: mute, hover: nothing, leftClick: { mode: "single" } }),
+                    "bindingsOf: the binding keys of known interactions, by interaction");
+        assertEqual(text(R.bindingsOf(null)) + text(R.bindingsOf([mute])), "{}{}", "… nothing from what is no preset");
+        assertEqual(text(R.bindingProblems(preset, ["mute"])), text(["on.bogus", "on.leftClick"]), "bindingProblems: a bad shape and an unknown interaction, sorted");
+        assertEqual(text(R.bindingProblems(preset, [])), text(["on.bogus", "on.leftClick", "on.middleClick"]), "… and an own action the type does not have");
+        assertEqual(text(R.bindingProblems({ "on.leftClick": { mode: "pair", on: null, off: null } }, [])), text(["on.leftClick"]), "… a pair where the interaction has no end");
+        assertEqual(text(R.bindingProblems({ format: 3, "on.hover": { mode: "pair", on: open.action, off: null } }, [])), "[]", "… none: the widget's own keys are not checked");
+        assertEqual(text(R.bindingProblems(null, [])), "[]", "… none in what is no preset");
+
+        // An entry's lookup: its preset's keys, each falling back to the type's default
+        const defaults = R.bindingDefaults({ middleClick: mute }, true, "click", ["mute"]);
+        const look = R.presetLookup({ "on.middleClick": nothing, "on.rightClick": open }, defaults, ["mute"]);
+        assertEqual(text(look("leftClick")), text(toggle), "a key the preset does not set: the default");
+        assertEqual(look("middleClick"), null, "a key set to nothing: nothing, not the default");
+        assertEqual(text(look("rightClick")), text(open), "a key set where the default has none: the preset's");
+        assertEqual(look("hover"), undefined, "neither: unassigned");
+        const broken = R.presetLookup({ "on.middleClick": { mode: "single", action: "own:mute" }, "on.leftClick": { mode: "cycle", actions: [open] } }, defaults, ["mute"]);
+        assertEqual(text(broken("middleClick")) + text(broken("leftClick")), text(mute) + text(toggle), "a key failing its shape check counts as not set: the default");
+        assertEqual(text(R.presetLookup({}, defaults, ["mute"])("middleClick")), text(mute), "an empty preset: the defaults");
+        assertEqual(R.presetLookup({ "on.middleClick": mute }, {}, [])("middleClick"), undefined, "an own action the type does not declare: unassigned");
     }
 }

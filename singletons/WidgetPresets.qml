@@ -33,8 +33,69 @@ Singleton {
         "battery": { percent: "right", thresholds: [], chargingColor: "" }
     })
 
-    // The core's, plus each loaded module widget's presetDefaults (its manifest)
-    readonly property var defaults: ModuleMergeRules.mergePresetDefaults(coreDefaults, WidgetRegistry.entries.filter(entry => entry.module))
+    // The core's, plus each loaded module widget's presetDefaults (its manifest), plus each
+    // type's binding keys ("on.<interaction>", InteractionRules.bindingDefaults): its
+    // declared bindings and what its popup implies. The popup's follows the active profile's
+    // widgets.<type>.popupMode, until bindings take its place.
+    readonly property var defaults: {
+        const merged = ModuleMergeRules.mergePresetDefaults(coreDefaults, WidgetRegistry.entries.filter(entry => entry.module));
+        const result = {};
+        for (const type of Object.keys(merged))
+            result[type] = merged[type];
+        for (const entry of WidgetRegistry.entries) {
+            if (!WidgetRegistry.hasCellInteractions(entry.type))
+                continue;
+            const popupMode = entry.popup ? (Profiles.value("widgets." + entry.type + ".popupMode") ?? WidgetRegistry.defaultPopupMode) : "";
+            const bindings = InteractionRules.bindingDefaults(WidgetRegistry.declaredBindings(entry.type), !!entry.popup, popupMode, WidgetRegistry.actionIds(entry.type));
+            if (Object.keys(bindings).length > 0)
+                result[entry.type] = Object.assign({}, _own(result, entry.type) ?? {}, bindings);
+        }
+        return result;
+    }
+
+    // What a bar entry's interactions run: interaction => resolved binding
+    // (InteractionRules), from its preset's binding keys, each falling back to the type's
+    // default; a key failing its shape check counts as not set. null for a type whose cell
+    // takes no interactions. Call in a binding: it follows edits.
+    function bindingLookup(type, name) {
+        if (!WidgetRegistry.hasCellInteractions(type))
+            return null;
+        return InteractionRules.presetLookup(stored(type, name), _own(defaults, type) ?? {}, WidgetRegistry.actionIds(type));
+    }
+
+    // Every preset binding key that fails its shape check, [{ type, name, key }], for the
+    // widget types the registry knows
+    readonly property var bindingProblems: {
+        const found = [];
+        for (const type of Object.keys(all)) {
+            if (WidgetRegistry.entry(type) === null || !WidgetRegistry.hasCellInteractions(type))
+                continue;
+            const presets = _own(all, type);
+            for (const name of Object.keys(presets ?? {}))
+                for (const key of InteractionRules.bindingProblems(_own(presets, name), WidgetRegistry.actionIds(type)))
+                    found.push({ type: type, name: name, key: key });
+        }
+        return found;
+    }
+    // The problems already logged, as text: one line when one appears, again only after it
+    // went
+    property var _loggedProblems: []
+    // How many such lines were logged (read by the tests)
+    property int problemLinesLogged: 0
+    onBindingProblemsChanged: _logProblems()
+    Component.onCompleted: _logProblems()
+
+    function _logProblems() {
+        const now = bindingProblems.map(problem => JSON.stringify([problem.type, problem.name, problem.key]));
+        bindingProblems.forEach((problem, index) => {
+            if (_loggedProblems.includes(now[index]))
+                return;
+            problemLinesLogged++;
+            console.warn("[WidgetPresets] " + WidgetRegistry.displayName(problem.type) + " preset " + JSON.stringify(problem.name)
+                         + ": " + problem.key + " is not a valid binding, its default is used");
+        });
+        _loggedProblems = now;
+    }
 
     function names(type) {
         return Object.keys(all[type] ?? {});

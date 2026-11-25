@@ -18,7 +18,9 @@ Item {
 
     implicitHeight: _col.implicitHeight + 12
 
-    readonly property bool _hasPresets: WidgetRegistry.hasPresets(widgetType)
+    // The preset row shows for a widget with settings of its own; its bindings are not
+    // edited here yet
+    readonly property bool _hasPresets: WidgetRegistry.hasSettingsPage(widgetType)
     // Preset names in the shared library for this widget type
     readonly property var _knownPresets: WidgetPresets.names(widgetType)
     // Where the current preset is used, across every shell profile

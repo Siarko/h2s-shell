@@ -18,10 +18,16 @@ import QtQuick
 //                 out.
 //   popupPanel  — the panel the popup shows for that key. A panel that needs wiring to
 //                 the popup is built from Popup.qml's _componentMap instead, which wins.
-//   settings    — its preset settings page, if the widget has presets
+//   settings    — its preset settings page, if the widget has settings of its own
 //   multiple    — true if a section may hold more than one, each with its own preset
 //   module      — (a module's entry only) its module's id; its files are file:// URLs
 //   presetDefaults — (a module's entry only) its presets' defaults (WidgetPresets)
+//   bindings    — what its interactions run when the preset does not say,
+//                 { <interaction>: binding } (InteractionRules); the popup's left click
+//                 is implied by `popup`, a declared left click overrides it
+//   actions     — its own actions, [{ id, … }]; a binding names one as "own:<id>"
+//   cellInteractions — the interactions its cell takes, absent: all; [] for a widget
+//                 whose cell takes none (the tray: each icon has its own clicks)
 Singleton {
     id: root
 
@@ -44,7 +50,7 @@ Singleton {
           popup: "sound", popupPanel: "panels/SoundPanel.qml" },
         { type: "bluetooth", name: "Bluetooth", widget: "widgets/BluetoothWidget.qml",
           popup: "bluetooth", popupPanel: "panels/BluetoothPanel.qml" },
-        { type: "tray", name: "System Tray", widget: "widgets/TrayWidget.qml" },
+        { type: "tray", name: "System Tray", widget: "widgets/TrayWidget.qml", cellInteractions: [] },
         { type: "network", name: "Network", widget: "widgets/NetworkWidget.qml",
           popup: "network", popupPanel: "panels/NetworkPanel.qml" },
         { type: "notifications", name: "Notifications", widget: "widgets/NotificationsWidget.qml",
@@ -75,7 +81,8 @@ Singleton {
     }
 
     function entry(type) {
-        return _byType[type] ?? null;
+        // Own properties only: "constructor" or "__proto__" is no widget type
+        return typeof type === "string" && Object.prototype.hasOwnProperty.call(_byType, type) ? _byType[type] : null;
     }
 
     function displayName(type) {
@@ -108,9 +115,33 @@ Singleton {
         return _url(entry(type)?.settings);
     }
 
-    // Whether the widget has presets — the ones with a settings page
+    // Whether the widget has presets: a settings page, or a cell that takes interactions,
+    // whose bindings a preset holds
     function hasPresets(type) {
+        return !!entry(type)?.settings || hasCellInteractions(type);
+    }
+
+    // Whether it has a settings page of its own (the section editor's preset row, until
+    // bindings can be edited there)
+    function hasSettingsPage(type) {
         return !!entry(type)?.settings;
+    }
+
+    function hasCellInteractions(type) {
+        const found = entry(type);
+        return !!found && (!Array.isArray(found.cellInteractions) || found.cellInteractions.length > 0);
+    }
+
+    // Its declared default bindings, { <interaction>: binding } (a copy; {} when none)
+    function declaredBindings(type) {
+        const bindings = entry(type)?.bindings;
+        return bindings !== null && typeof bindings === "object" && !Array.isArray(bindings) ? JSON.parse(JSON.stringify(bindings)) : {};
+    }
+
+    // The ids of its own actions (a new list; [] when it declares none)
+    function actionIds(type) {
+        const actions = entry(type)?.actions;
+        return Array.isArray(actions) ? actions.filter(action => typeof action?.id === "string").map(action => action.id) : [];
     }
 
     function allowsMultiple(type) {
