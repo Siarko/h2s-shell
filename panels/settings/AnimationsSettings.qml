@@ -22,7 +22,7 @@ Flickable {
     readonly property var _values: (Theme.revision, Theme.valuesOf(themeName))
     readonly property var _origins: (Theme.revision, Theme.originsOf(themeName))
     // A theme file that does not parse is not changed
-    readonly property bool _editable: !Theme.themeNames.includes(themeName) || themeName in Theme.themeFiles
+    readonly property bool _editable: !Theme.themeNames.includes(themeName) || ThemeRules.hasOwn(Theme.themeFiles, themeName)
     // The curve tokens whose list of curves is open
     property string pickingCurve: ""
     onThemeNameChanged: pickingCurve = ""

@@ -21,9 +21,9 @@ Flickable {
     clip: true
 
     readonly property bool _hasFile: Theme.themeNames.includes(themeName)
-    readonly property bool _broken: _hasFile && !(themeName in Theme.themeFiles)
+    readonly property bool _broken: _hasFile && !ThemeRules.hasOwn(Theme.themeFiles, themeName)
     readonly property bool _isDefault: themeName === "default"
-    readonly property var _file: Theme.themeFiles[themeName] ?? null
+    readonly property var _file: ThemeRules.ownValue(Theme.themeFiles, themeName) ?? null
     readonly property string _extends: typeof _file?.extends === "string" ? _file.extends : "default"
     readonly property var _users: (Profiles.profiles, Theme.usersOf(themeName))
     readonly property var _setters: (Profiles.profiles, Profiles.globals, ThemeFiles.setters(themeName))
@@ -32,7 +32,7 @@ Flickable {
     readonly property var _parents: {
         Theme.revision;
         const names = (Theme.themeNames.includes("default") ? [] : ["default"]).concat(Theme.themeNames);
-        return names.filter(name => !ThemeRules.extendsCycle(themeName, name, other => Theme.themeFiles[other] ?? null));
+        return names.filter(name => !ThemeRules.extendsCycle(themeName, name, other => ThemeRules.ownValue(Theme.themeFiles, other) ?? null));
     }
 
     // Why a name typed for a new or renamed theme cannot be used, or ""

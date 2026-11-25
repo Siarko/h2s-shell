@@ -22,7 +22,7 @@ Flickable {
     readonly property var _colors: (Theme.revision, Theme.valuesOf(themeName).colors)
     readonly property var _origins: (Theme.revision, Theme.originsOf(themeName).colors ?? {})
     // A theme file that does not parse is not changed
-    readonly property bool _editable: !Theme.themeNames.includes(themeName) || themeName in Theme.themeFiles
+    readonly property bool _editable: !Theme.themeNames.includes(themeName) || ThemeRules.hasOwn(Theme.themeFiles, themeName)
     // The colour whose picker is open
     property string expanded: ""
     onThemeNameChanged: expanded = ""

@@ -23,7 +23,7 @@ Flickable {
     readonly property var _bar: (Theme.revision, Theme.valuesOf(themeName).bar)
     readonly property var _origins: (Theme.revision, Theme.originsOf(themeName).fonts ?? {})
     // A theme file that does not parse is not changed
-    readonly property bool _editable: !Theme.themeNames.includes(themeName) || themeName in Theme.themeFiles
+    readonly property bool _editable: !Theme.themeNames.includes(themeName) || ThemeRules.hasOwn(Theme.themeFiles, themeName)
 
     // Slider moves go out at most every 80 ms, like a colour picker's
     property string _pendingToken: ""

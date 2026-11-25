@@ -21,7 +21,7 @@ Flickable {
     contentHeight: _column.implicitHeight + 2 * Theme.settings.pageMargin
     clip: true
 
-    readonly property bool _editable: !Theme.themeNames.includes(themeName) || themeName in Theme.themeFiles
+    readonly property bool _editable: !Theme.themeNames.includes(themeName) || ThemeRules.hasOwn(Theme.themeFiles, themeName)
 
     ColumnLayout {
         id: _column

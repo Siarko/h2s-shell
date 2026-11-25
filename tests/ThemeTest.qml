@@ -413,6 +413,23 @@ TestCase {
             assertEqual(retargetedHostile.globals["appearance.theme"], "b", "retargetTheme: re-pointed");
             assertEqual(ThemeRules.withoutExtends({ b: { extends: "toString" } }, "toString").b.extends, "default",
                 "withoutExtends: a removed theme named \"toString\" that is not there hands over the default");
+            assertEqual(JSON.stringify(ThemeRules.draftWith(JSON.parse('{ "colors": null }'), {}, "colors", "accent", "#1")), JSON.stringify({ colors: { accent: "#1" } }),
+                "draftWith: a hand-edited draft's group that is null is taken as empty");
+            assertEqual(JSON.stringify(ThemeRules.draftWith(JSON.parse('{ "colors": 5 }'), {}, "colors", "accent", "#1")), JSON.stringify({ colors: { accent: "#1" } }),
+                "draftWith: … and one that is a number");
+            // The curves library: names are the user's, and may be any of these
+            const library = JSON.parse('{ "__proto__": [0, 0, 1, 1], "snappy": [0.2, 0, 0, 1], "toString": [0.5, 0, 0.5, 1] }');
+            const renamedLibrary = ThemeRules.libraryWithRename(library, "__proto__", "linearish");
+            assertEqual(JSON.stringify(Object.keys(renamedLibrary ?? {})), JSON.stringify(["linearish", "snappy", "toString"]),
+                "libraryWithRename: a curve named \"__proto__\" renamed in its place");
+            assert(renamedLibrary !== null && Object.getPrototypeOf(renamedLibrary) === plainProto, "libraryWithRename: the library keeps its prototype");
+            const toProto = ThemeRules.libraryWithRename(JSON.parse('{ "snappy": [0.2, 0, 0, 1] }'), "snappy", "__proto__");
+            assertEqual(JSON.stringify(ThemeRules.ownValue(toProto, "__proto__")), "[0.2,0,0,1]", "libraryWithRename: renamed to \"__proto__\": kept as that name");
+            assert(toProto !== null && Object.getPrototypeOf(toProto) === plainProto, "… the library keeps its prototype");
+            assertEqual(ThemeRules.libraryWithRename({ snappy: [0.2, 0, 0, 1] }, "constructor", "x"), null, "libraryWithRename: \"constructor\" is not in the library");
+            assertEqual(JSON.stringify(ThemeRules.libraryWithRename({ snappy: [0.2, 0, 0, 1] }, "snappy", "toString")), JSON.stringify({ toString: [0.2, 0, 0, 1] }),
+                "libraryWithRename: \"toString\" is a free name");
+            assertEqual(ThemeRules.libraryWithRename(library, "snappy", "toString"), null, "libraryWithRename: a name the library has is taken");
             const constructorLook = ThemeRules.buttonLook("constructor", {});
             assertEqual(JSON.stringify([constructorLook.group, constructorLook.fill, constructorLook.border]), JSON.stringify(["button", "surface", ""]),
                 "buttonLook: a kind named \"constructor\" is plain");

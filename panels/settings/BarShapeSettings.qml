@@ -20,7 +20,7 @@ Flickable {
     readonly property var _bar: (Theme.revision, Theme.valuesOf(themeName).bar)
     readonly property var _origins: (Theme.revision, Theme.originsOf(themeName).bar ?? {})
     // A theme file that does not parse is not changed
-    readonly property bool _editable: !Theme.themeNames.includes(themeName) || themeName in Theme.themeFiles
+    readonly property bool _editable: !Theme.themeNames.includes(themeName) || ThemeRules.hasOwn(Theme.themeFiles, themeName)
 
     // The values being dragged, ahead of the draft, so related values are kept in step
     // with them; sent at most every 80 ms

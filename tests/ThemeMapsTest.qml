@@ -52,5 +52,41 @@ TestCase {
         assertEqual(resolved.values.colors.accent, "#222222", "and applies");
 
         Theme.drafts = savedDrafts;
+
+        _pages();
+    }
+
+    // The settings pages: a theme file named "constructor" or "toString" that does not parse
+    // is listed but has no parsed file — broken, not editable, no file to show
+    property Item _stage: Item { width: 720; height: 1500 }
+    function _pages() {
+        const savedNames = Theme.themeNames;
+        Theme.themeNames = savedNames.concat(["constructor", "toString"]);
+        try {
+            for (const page of ["ColorsSettings", "FontsSettings", "AnimationsSettings", "ShapeSettings", "BarShapeSettings",
+                                "ShapeSections", "ThemesSettings"]) {
+                const component = Qt.createComponent(Qt.resolvedUrl("../panels/settings/" + page + ".qml"));
+                for (const name of ["constructor", "toString"]) {
+                    const item = component.createObject(_stage, { themeName: name });
+                    if (item === null) {
+                        fail(page + " builds: " + component.errorString().trim());
+                        break;
+                    }
+                    try {
+                        if (page === "ThemesSettings") {
+                            assert(item._broken, page + ": \"" + name + "\" without a parsed file is broken");
+                            assertEqual(item._file, null, page + ": … and has no file");
+                            assertEqual(item._extends, "default", page + ": … extends the default");
+                        } else {
+                            assert(!item._editable, page + ": \"" + name + "\" without a parsed file is not editable");
+                        }
+                    } finally {
+                        item.destroy();
+                    }
+                }
+            }
+        } finally {
+            Theme.themeNames = savedNames;
+        }
     }
 }

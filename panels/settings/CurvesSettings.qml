@@ -32,7 +32,7 @@ Flickable {
     readonly property int _segments: CurvePoints.segmentCount(draftPoints)
     readonly property var _names: Object.keys(Theme.curveLibrary).sort()
     readonly property bool _dirty: draftName !== selected
-        || JSON.stringify(draftPoints) !== JSON.stringify(ThemeRules.curvePoints(Theme.curveLibrary[selected]))
+        || JSON.stringify(draftPoints) !== JSON.stringify(ThemeRules.curvePoints(ThemeRules.ownValue(Theme.curveLibrary, selected)))
     readonly property string _nameProblem: {
         if (!ThemeRules.validCurveName(draftName))
             return draftName.trim() === "" ? "Give the curve a name" : "Not a name a curve can have: it is one of Qt's curves, or has spaces at its ends";
@@ -57,7 +57,7 @@ Flickable {
     function edit(name) {
         selected = name;
         draftName = name;
-        _open(Theme.curveLibrary[name]);
+        _open(ThemeRules.ownValue(Theme.curveLibrary, name));
     }
 
     function newCurve(points, baseName) {

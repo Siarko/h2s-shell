@@ -246,11 +246,9 @@ Singleton {
         if (Config.readOnly || !ThemeRules.validCurveName(newName))
             return false;
         const library = _libraryForEdit();
-        if (library === null || !ThemeRules.hasOwn(library, oldName) || ThemeRules.hasOwn(library, newName))
+        const renamed = library === null ? null : ThemeRules.libraryWithRename(library, oldName, newName);
+        if (renamed === null)
             return false;
-        const renamed = {};
-        for (const name of Object.keys(library))
-            ThemeRules.putOwn(renamed, name === oldName ? newName : name, library[name]);
         _writeLibrary(renamed);
         const changed = ThemeRules.renameCurveIn(Theme.themeFiles, oldName, newName);
         for (const name of Object.keys(changed))

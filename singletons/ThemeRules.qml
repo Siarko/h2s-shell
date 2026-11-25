@@ -486,7 +486,9 @@ Singleton {
     // the theme if `theme` sets it, else dropped from the draft. Empty groups go.
     function draftWith(draft, theme, group, token, value) {
         const result = JSON.parse(JSON.stringify(draft ?? {}));
-        if (!hasOwn(result, group))
+        // A group a hand-edited draft holds as null or a number is taken as empty
+        const present = ownValue(result, group);
+        if (present === null || typeof present !== "object")
             putOwn(result, group, {});
         if (value === null && !hasOwn(ownValue(theme, group), token))
             delete result[group][token];
@@ -669,6 +671,17 @@ Singleton {
             putOwn(changed, theme, copy);
         }
         return changed;
+    }
+
+    // The curves library with the curve `oldName` named `newName`, in its place; null when
+    // the library has no `oldName` or already has `newName`. The input is not modified.
+    function libraryWithRename(library, oldName, newName) {
+        if (!hasOwn(library, oldName) || hasOwn(library, newName))
+            return null;
+        const renamed = {};
+        for (const name of _keys(library))
+            putOwn(renamed, name === oldName ? newName : name, library[name]);
+        return renamed;
     }
 
     // Whether `name` may name a library curve: not empty, not a Qt curve's name

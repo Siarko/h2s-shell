@@ -18,7 +18,7 @@ ColumnLayout {
     readonly property var _values: (Theme.revision, Theme.valuesOf(themeName))
     readonly property var _origins: (Theme.revision, Theme.originsOf(themeName))
     // A theme file that does not parse is not changed
-    readonly property bool _editable: !Theme.themeNames.includes(themeName) || themeName in Theme.themeFiles
+    readonly property bool _editable: !Theme.themeNames.includes(themeName) || ThemeRules.hasOwn(Theme.themeFiles, themeName)
 
     // What a popup of `base` px at the built-in fonts comes to in this theme, as dragged
     function _popupWidth(base, token) {
