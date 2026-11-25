@@ -16,7 +16,7 @@ import qs.mockups.kit
 MockupWindow {
     id: root
 
-    scenes: ["list", "backup-made", "selected", "apply-confirm", "apply-confirm-failing", "newer-version",
+    names: ["list", "backup-made", "selected", "apply-confirm", "apply-confirm-failing", "newer-version",
         "newer-confirm", "delete-confirm", "failure-notification", "failure-dashboard", "failure-restore-confirm"]
     contentWidth: 1000
     contentHeight: 690
@@ -26,8 +26,8 @@ MockupWindow {
     readonly property int sidebarWidth: Theme.scaled(160)
     readonly property string thisVersion: "2.2.0"
 
-    function sceneIs(...names) {
-        return names.indexOf(root.scene) >= 0;
+    function sceneIs(...wanted) {
+        return wanted.indexOf(root.current) >= 0;
     }
 
     readonly property bool onDashboard: sceneIs("failure-dashboard", "failure-restore-confirm")
@@ -527,7 +527,7 @@ MockupWindow {
             x: 14; y: 8
             width: parent.width - 28
             wrapMode: Text.WordWrap
-            text: "<b>" + root.scene + "</b> — " + (root.notes[root.scene] ?? "")
+            text: "<b>" + root.current + "</b> — " + (root.notes[root.current] ?? "")
             textFormat: Text.StyledText
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSizeSmall

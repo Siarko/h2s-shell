@@ -7,8 +7,8 @@ Delete) and for the notice of a failed settings update, before any code. One sta
 Settings window (1000 x 620) per scene with a note under it. Stand-in data: this shell is
 2.2.0; now is the kit's 15 Jan 2026, 10:30.
 
-Open on a screen: `tests/mockup.sh open planning/config-backups` (`--scene <name>` for one
-scene). Headless: `tests/run-mockups.sh --shoot planning/config-backups`.
+Open on a screen: `tests/mockup.sh open plans/config-backups` (`--scene <name>` for one
+scene). Headless: `tests/run-mockups.sh --shoot plans/config-backups`.
 
 Real pieces: the theme, `SettingsPage`, `SettingsSection`, `SmallButton`, `SettingsModal`,
 `NotificationCard` (critical urgency). Drawn here as proposals: the backup rows, the "Kept"
