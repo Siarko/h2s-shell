@@ -13,7 +13,7 @@ import qs.mockups.kit
 // password step after it. The shell's real theme and components on stand-in data: nothing
 // reads the system, nothing runs nix or pkexec; every button changes the stand-in state only.
 //
-// A planning mockup: it runs only when named (tests/run-mockups.sh planning/distribution-nixos).
+// A plan: it runs only when named (tests/run-mockups.sh plans/distribution-nixos).
 // On screen the kit's scene buttons set up a moment; from there Apply, Build, Cancel, the
 // password card, Undo and Copy work on the stand-ins, and a stand-in build runs on a timer
 // (never while shooting: each scene is set up whole by showScene).
@@ -188,9 +188,9 @@ MockupWindow {
                                         "Building", "Password after the build", "Switching", "Applied, Undo offered", "Build failed",
                                         "Applied, with errors", "Locked during the build", "Cancelled", "Set in your configuration",
                                         "Undo: the announcement", "Undo: building"]
-    scenes: sceneTitles.map(title => title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""))
-    readonly property int sceneIndex: Math.max(0, Array.prototype.indexOf.call(scenes, scene))
-    onSceneChanged: showScene(Math.max(0, Array.prototype.indexOf.call(scenes, scene)))
+    names: sceneTitles.map(title => title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""))
+    readonly property int sceneIndex: Math.max(0, Array.prototype.indexOf.call(names, current))
+    onCurrentChanged: showScene(Math.max(0, Array.prototype.indexOf.call(names, current)))
     readonly property var sceneNotes: [
         "Not connected: no configuration found (none in the usual places and none chosen, or the shell's NixOS module is not in it, or it lives on another machine). Every setting keeps today's line to copy — the hibernation delay below shows its option. This fallback stays for good.",
         "The configuration was found (here a classic configuration.nix at /etc/nixos, not in git, host nixos), but the shell's file is not in force yet. Two one-time steps: the shell creates h2s-shell.json (root-owned folder: asks the password), and you add one line, then nixos-rebuild switch. Until then settings still show lines to copy.",

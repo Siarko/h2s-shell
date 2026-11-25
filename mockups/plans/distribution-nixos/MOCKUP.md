@@ -1,12 +1,12 @@
 # Mockup: NixOS configuration page and the rebuild side panel (planned)
 
-A planning mockup on the shell's tree (`Mockup.qml` on the mockup kit's `MockupWindow`): the
+A plan on the shell's tree (`Mockup.qml` on the mockup kit's `MockupWindow`): the
 shell's real theme, SideDrawer, SettingsModal, SmallButton, Pill, ProgressBar, PrivilegedMark
 on stand-in data. Nothing reads the system, nothing runs nix or pkexec.
 
-- Headless check: `tests/run-mockups.sh --load-only planning/distribution-nixos`, or
+- Headless check: `tests/run-mockups.sh --load-only plans/distribution-nixos`, or
   `--shoot` for one image per scene.
-- On a screen: `tests/mockup.sh open planning/distribution-nixos` — the kit's scene
+- On a screen: `tests/mockup.sh open plans/distribution-nixos` — the kit's scene
   buttons under the window; Apply, Build, Cancel build, the password card, Undo and Copy
   work on the stand-ins (a stand-in build runs on a timer).
 

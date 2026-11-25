@@ -10,14 +10,15 @@
 #   - close picks only instances whose config is this tree's mockup.qml, by the name each
 #     answers over IPC: never another tree's mockup, never the shell, never an instance that
 #     answers no name (with -n the commands printed, without it `qs kill --pid` run);
-#   - open, -n: through Hyprland's exec when Hyprland is there, else setsid; a scene name
+#   - open, -n: through Hyprland's exec when Hyprland is there, else setsid; a state name
 #     a shell would read (; & | $( ) `) refused before any command is built; an instance
-#     already running is said, --restart closes it first;
+#     already running is said, --restart closes it first; --scene on a component and
+#     --state on a plan refused; a name under planning/ (the plans' old folder) refused;
 #   - open, run: the entry starts with every inherited H2S_* variable dropped (the shell's
-#     H2S_SHELL_MODULES, a stray H2S_MOCKUP_SHOT), H2S_MOCKUP and the scene set, the rest of
-#     the environment kept;
+#     H2S_SHELL_MODULES, a stray H2S_MOCKUP_SHOT), H2S_MOCKUP and H2S_MOCKUP_STATE (a plan:
+#     H2S_MOCKUP_SCENE) set, the rest of the environment kept;
 #   - review: under a kitty terminal (KITTY_WINDOW_ID, TERM=xterm-kitty) each differing
-#     scene's old, new and diff go to `kitten icat`, labelled; elsewhere, and in kitty without
+#     state's old, new and diff go to `kitten icat`, labelled; elsewhere, and in kitty without
 #     kitten, their paths are printed; a mockup with no baseline shows its new shots; no run
 #     is said.
 #
@@ -115,7 +116,8 @@ tool list -- list
 check "$(out list | grep -q -E '^\* components/good +component +The runners. fixture mockup that loads'; echo $?)" "components/good: running, its kind and title"
 check "$(out list | grep -q -E '^\* views/isolation +view '; echo $?)" "views/isolation: running (another instance of the entry)"
 check "$(out list | grep -q -E '^  components/clock +component '; echo $?)" "components/clock: not running"
-check "$(out list | grep -q -E '^  planning/idea +planning'; echo $?)" "planning/idea: listed with its kind"
+check "$(out list | grep -q -E '^  plans/idea +plan '; echo $?)" "plans/idea: listed with its kind"
+check "$(! has list planning; echo $?)" "no old planning folder in the fixtures: nothing said of it"
 check "$(log_of list qs | grep -q -E 'ipc --pid (4194303|4194304) '; [ $? = 1 ]; echo $?)" "another tree's instance and the shell are never asked their name"
 
 echo "names"
@@ -135,25 +137,38 @@ tool close-none -- close components/clock
 check "$(has close-none 'components/clock is not running' && ! log_of close-none qs | grep -q '^qs kill'; echo $?)" "close of a mockup not running kills nothing"
 
 echo "open"
-tool open-hypr HYPRLAND_INSTANCE_SIGNATURE=test -- -n open clock --scene ticking
+tool open-hypr HYPRLAND_INSTANCE_SIGNATURE=test -- -n open clock --state ticking
 dispatch=$(printf '%q' "hl.dsp.exec_cmd(\"'$TOOL' '__exec' 'tests/fixtures/mockups' 'components/clock' 'ticking'\")")
-check "$(has open-hypr "hyprctl dispatch $dispatch" && [ ! -s "$work/state-open-hypr/hyprctl.log" ]; echo $?)" "-n under Hyprland: the exec dispatch printed, of this tool's __exec with the scene, nothing run"
+check "$(has open-hypr "hyprctl dispatch $dispatch" && [ ! -s "$work/state-open-hypr/hyprctl.log" ]; echo $?)" "-n under Hyprland: the exec dispatch printed, of this tool's __exec with the state, nothing run"
 tool open-setsid -- -n open components/clock
 check "$(has open-setsid "setsid -f $TOOL __exec tests/fixtures/mockups components/clock"; echo $?)" "-n without Hyprland: setsid printed"
 tool open-running HYPRLAND_INSTANCE_SIGNATURE=test -- -n open good
 check "$(has open-running 'components/good is already running (pid 4194301)' && ! has open-running hyprctl; echo $?)" "a running mockup: said, not started again"
 tool open-restart HYPRLAND_INSTANCE_SIGNATURE=test -- -n open good --restart
 check "$(has open-restart 'qs kill --pid 4194301' && has open-restart 'hyprctl dispatch'; echo $?)" "--restart: closed, then started"
-tool open-badscene -- -n open clock --scene 'a b'
-check "$([ "${status[open-badscene]}" = 2 ]; echo $?)" "a scene with whitespace is refused (status ${status[open-badscene]})"
+tool open-badstate -- -n open clock --state 'a b'
+check "$([ "${status[open-badstate]}" = 2 ]; echo $?)" "a state with whitespace is refused (status ${status[open-badstate]})"
+tool open-scene-of-component HYPRLAND_INSTANCE_SIGNATURE=test -- -n open clock --scene ticking
+check "$([ "${status[open-scene-of-component]}" = 2 ] && has open-scene-of-component 'it has states (--state), not scenes' && ! has open-scene-of-component hyprctl; echo $?)" "--scene on a component is refused (status ${status[open-scene-of-component]})"
+tool open-state-of-plan HYPRLAND_INSTANCE_SIGNATURE=test -- -n open plans/tall --state second
+check "$([ "${status[open-state-of-plan]}" = 2 ] && has open-state-of-plan 'is a plan: it has scenes (--scene)' && ! has open-state-of-plan hyprctl; echo $?)" "--state on a plan is refused (status ${status[open-state-of-plan]})"
+tool open-both -- -n open clock --state ticking --scene ticking
+check "$([ "${status[open-both]}" = 2 ] && has open-both 'one of --state and --scene'; echo $?)" "--state and --scene together are refused (status ${status[open-both]})"
+tool open-planning -- -n open planning/idea
+check "$([ "${status[open-planning]}" = 2 ] && has open-planning 'mockups/planning/ is now mockups/plans/' && has open-planning 'plans/idea'; echo $?)" "a name under planning/ is refused with the move to make (status ${status[open-planning]})"
 for hostile in 'x;id' 'x&&id' 'x|id' '$(id)' 'x`id`'; do
-    tool open-hostile HYPRLAND_INSTANCE_SIGNATURE=test -- -n open clock --scene "$hostile"
-    check "$([ "${status[open-hostile]}" = 2 ] && ! has open-hostile hyprctl && ! has open-hostile setsid; echo $?)" "a scene a shell would read ($hostile) is refused before any command is built (status ${status[open-hostile]})"
+    tool open-hostile HYPRLAND_INSTANCE_SIGNATURE=test -- -n open clock --state "$hostile"
+    check "$([ "${status[open-hostile]}" = 2 ] && ! has open-hostile hyprctl && ! has open-hostile setsid; echo $?)" "a state a shell would read ($hostile) is refused before any command is built (status ${status[open-hostile]})"
 done
-tool open-run H2S_SHELL_MODULES=/modules H2S_SHELL_HELPER=/helper H2S_MOCKUP_SHOT=1 KEPT=yes -- open components/clock --scene ticking
+tool open-run H2S_SHELL_MODULES=/modules H2S_SHELL_HELPER=/helper H2S_MOCKUP_SHOT=1 KEPT=yes -- open components/clock --state ticking
 envs=$work/state-open-run/env.txt
-check "$([ -f "$envs" ] && grep -q -x 'H2S_MOCKUP=components/clock' "$envs" && grep -q -x 'H2S_MOCKUP_SCENE=ticking' "$envs" \
-    && grep -q -x 'H2S_MOCKUP_BASE=tests/fixtures/mockups' "$envs" && grep -q -x 'KEPT=yes' "$envs"; echo $?)" "open: the entry gets H2S_MOCKUP, the scene and the base, the rest of the environment kept"
+check "$([ -f "$envs" ] && grep -q -x 'H2S_MOCKUP=components/clock' "$envs" && grep -q -x 'H2S_MOCKUP_STATE=ticking' "$envs" \
+    && ! grep -q '^H2S_MOCKUP_SCENE=' "$envs" \
+    && grep -q -x 'H2S_MOCKUP_BASE=tests/fixtures/mockups' "$envs" && grep -q -x 'KEPT=yes' "$envs"; echo $?)" "open: the entry gets H2S_MOCKUP, the state (H2S_MOCKUP_STATE) and the base, the rest of the environment kept"
+tool open-plan -- open plans/tall --scene second
+envs=$work/state-open-plan/env.txt
+check "$([ -f "$envs" ] && grep -q -x 'H2S_MOCKUP=plans/tall' "$envs" && grep -q -x 'H2S_MOCKUP_SCENE=second' "$envs" \
+    && ! grep -q '^H2S_MOCKUP_STATE=' "$envs"; echo $?)" "open of a plan: the scene goes as H2S_MOCKUP_SCENE"
 check "$([ -f "$envs" ] && ! grep -q -E '^(H2S_SHELL_MODULES|H2S_SHELL_HELPER|H2S_MOCKUP_SHOT|H2S_MOCKUP_SHOTS)=' "$envs"; echo $?)" "open: the inherited H2S_* variables are dropped (H2S_SHELL_MODULES, H2S_SHELL_HELPER, H2S_MOCKUP_SHOT)"
 check "$(log_of open-run qs | grep -q -x -F "qs -p $ENTRY" && has open-run 'Opened components/clock (pid 4194398)'; echo $?)" "open: qs -p <tree>/mockup.qml, then found running"
 
@@ -172,16 +187,16 @@ echo 20261124-120000-2 > "$work/shots/fixtures/components/clock/last-run-$key"
 review_env=(H2S_MOCKUP_BASELINES="$work/baselines")
 tool review-kitty "${review_env[@]}" KITTY_WINDOW_ID=3 -- -n review good
 check "$(has review-kitty "$REPO/tests/run-mockups.sh --compare components/good"; echo $?)" "-n: the comparison's command printed"
-check "$(for kind in old new diff; do has review-kitty "components/good, scene checked: $kind" && has review-kitty "kitten icat --align left $run/01-checked/$kind.png" || exit 1; done; echo 0)" "KITTY_WINDOW_ID: old, new and diff each labelled and shown through kitten icat"
-check "$(! has review-kitty 00-normal; echo $?)" "a scene that does not differ is not shown"
+check "$(for kind in old new diff; do has review-kitty "components/good, state checked: $kind" && has review-kitty "kitten icat --align left $run/01-checked/$kind.png" || exit 1; done; echo 0)" "KITTY_WINDOW_ID: old, new and diff each labelled and shown through kitten icat"
+check "$(! has review-kitty 00-normal; echo $?)" "a state that does not differ is not shown"
 tool review-term "${review_env[@]}" TERM=xterm-kitty -- -n review good
 check "$(has review-term "kitten icat --align left $run/01-checked/new.png"; echo $?)" "TERM=xterm-kitty: shown through kitten icat"
 tool review-plain "${review_env[@]}" -- -n review good
-check "$(has review-plain "components/good, scene checked: diff: $run/01-checked/diff.png" && ! has review-plain icat; echo $?)" "another terminal: the paths printed, no icat"
+check "$(has review-plain "components/good, state checked: diff: $run/01-checked/diff.png" && ! has review-plain icat; echo $?)" "another terminal: the paths printed, no icat"
 tool review-nokitten "${review_env[@]}" KITTY_WINDOW_ID=3 PATH="$work/tools" -- -n review good
-check "$(has review-nokitten "components/good, scene checked: old: $run/01-checked/old.png" && ! has review-nokitten 'icat --align'; echo $?)" "kitty without kitten or kitty: the paths printed"
+check "$(has review-nokitten "components/good, state checked: old: $run/01-checked/old.png" && ! has review-nokitten 'icat --align'; echo $?)" "kitty without kitten or kitty: the paths printed"
 tool review-new "${review_env[@]}" -- -n review clock
-check "$(has review-new "components/clock, scene ticking: new (no baseline): $fresh/00-ticking.png"; echo $?)" "no baseline: the new shots shown"
+check "$(has review-new "components/clock, state ticking: new (no baseline): $fresh/00-ticking.png"; echo $?)" "no baseline: the new shots shown"
 tool review-none "${review_env[@]}" -- -n review effects
 check "$([ "${status[review-none]}" = 2 ] && has review-none 'nothing to review'; echo $?)" "no run of the mockup: said, status 2 (status ${status[review-none]})"
 

@@ -1,4 +1,4 @@
-# The approved baseline of views/settings-modal: a PNG per scene (<NN>-<scene>.png), compared pixel
+# The approved baseline of views/settings-modal: a PNG per state (<NN>-<state>.png), compared pixel
 # for pixel by tests/run-mockups.sh --compare, and what it was drawn with (a run drawn
 # otherwise is NOT RUN). Written by tests/run-mockups.sh --approve; never by hand.
 environment renderer OpenGL VENDOR: Mesa RENDERER: llvmpipe (LLVM 23.1.5, 256 bits) VERSION: 4.6 (Compatibility Profile) Mesa 26.3.1-arch1.2
@@ -17,13 +17,13 @@ environment qt-svg (not loaded)
 environment freetype 0b0e16faaaed2145c89e193bc52f308bfb909ccd182fbed0d2f245329c248fca /usr/lib/libfreetype.so.6.20.7
 environment fontconfig ea856e202615c9198c76bbd72a4de6b4bd91ad160a33eb51500ef132d8fc6536 /usr/lib/libfontconfig.so.1.17.0
 environment harfbuzz 70b65f53855877c74f99189eaa3652c8abd67ce3c9d5e3611a6d0e36291c6482 /usr/lib/libharfbuzz.so.0.61510.0
-scene 00 informing 600x440 491539558e79bcf9037f4332fe0f08ba8dc8625386df4b387ab938b20beeed11
-scene 01 enable-module 600x440 4fb3424649bcadfaa3b38b19b43b474ff18568f90a0796e4cd23a38b077ecf57
-scene 02 disable-module 600x440 416e82d2d7e0b26d2bd0187e0212ebf1deffab6886b471d29298a311c25ee74b
-scene 03 remove-module 600x440 93e11bd82d6167b1a8c44c7ed23808c2ad632f03c9d3040c9b927ca7b88fc24c
-scene 04 remove-checked 600x440 dccea5aea2210ef4fbd2c170fb105d5369149892d137bec7638d77d0dff3265d
-scene 05 remove-password 600x440 bf67c63e638ae2dc4a5dc2b1b3c67a4ea16f35a9ce205d79386dbd1556c97908
-scene 06 content-list 600x440 f4918613d124c8d62f714ffc0191bf4c466ca72f66cb43cfcf3ef57c1b0bd519
-scene 07 long-text 600x440 b15f6c854de5bb97779777025dd447c33193af82a9e7fc90cd23689bbf6b74f7
-scene 08 focus-button 600x440 9343df080f3656ead6a47c2b11913d1afd3fb9e0c34a8be18dfa3d210ff3e699
-scene 09 short-window 600x200 b5b6de031653660deb63018218a315fbfd204fd2909507531f7c879d94640aa8
+state 00 informing 600x440 491539558e79bcf9037f4332fe0f08ba8dc8625386df4b387ab938b20beeed11
+state 01 enable-module 600x440 4fb3424649bcadfaa3b38b19b43b474ff18568f90a0796e4cd23a38b077ecf57
+state 02 disable-module 600x440 416e82d2d7e0b26d2bd0187e0212ebf1deffab6886b471d29298a311c25ee74b
+state 03 remove-module 600x440 93e11bd82d6167b1a8c44c7ed23808c2ad632f03c9d3040c9b927ca7b88fc24c
+state 04 remove-checked 600x440 dccea5aea2210ef4fbd2c170fb105d5369149892d137bec7638d77d0dff3265d
+state 05 remove-password 600x440 bf67c63e638ae2dc4a5dc2b1b3c67a4ea16f35a9ce205d79386dbd1556c97908
+state 06 content-list 600x440 f4918613d124c8d62f714ffc0191bf4c466ca72f66cb43cfcf3ef57c1b0bd519
+state 07 long-text 600x440 b15f6c854de5bb97779777025dd447c33193af82a9e7fc90cd23689bbf6b74f7
+state 08 focus-button 600x440 9343df080f3656ead6a47c2b11913d1afd3fb9e0c34a8be18dfa3d210ff3e699
+state 09 short-window 600x200 b5b6de031653660deb63018218a315fbfd204fd2909507531f7c879d94640aa8

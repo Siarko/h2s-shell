@@ -1,4 +1,4 @@
-# The approved baseline of components/pill: a PNG per scene (<NN>-<scene>.png), compared pixel
+# The approved baseline of components/pill: a PNG per state (<NN>-<state>.png), compared pixel
 # for pixel by tests/run-mockups.sh --compare, and what it was drawn with (a run drawn
 # otherwise is NOT RUN). Written by tests/run-mockups.sh --approve; never by hand.
 environment renderer OpenGL VENDOR: Mesa RENDERER: llvmpipe (LLVM 23.1.5, 256 bits) VERSION: 4.6 (Compatibility Profile) Mesa 26.3.1-arch1.2
@@ -17,9 +17,9 @@ environment qt-svg (not loaded)
 environment freetype 0b0e16faaaed2145c89e193bc52f308bfb909ccd182fbed0d2f245329c248fca /usr/lib/libfreetype.so.6.20.7
 environment fontconfig ea856e202615c9198c76bbd72a4de6b4bd91ad160a33eb51500ef132d8fc6536 /usr/lib/libfontconfig.so.1.17.0
 environment harfbuzz 70b65f53855877c74f99189eaa3652c8abd67ce3c9d5e3611a6d0e36291c6482 /usr/lib/libharfbuzz.so.0.61510.0
-scene 00 idle 320x96 0995377685663f1acb2ca66ce1d423802114aad1fdb8507e9db8b8a3f7894dd4
-scene 01 picked 320x96 a6580f64daea539b17e0b14373cdfa613c45e44d3a8eb9d35b6f6f476f2ca4f6
-scene 02 hover-s 320x96 f12524dd398d86d5c3253b47e078110a15caf3feef0fc3efd6a5552917b1485d
-scene 03 hover-m 320x96 ce13e6d8622eb86233ac00d893d7646bc7f3cde6354863361d8280593b685411
-scene 04 hover-l 320x96 f9bb6d17f5f3f68c3c304f623382b941249939e322f29d9a5d66a056d2453448
-scene 05 long-label 320x96 72e9bd5e835e49e25cc427fc921ec78d02e57788b927d42cc05229a129a353ff
+state 00 idle 320x96 0995377685663f1acb2ca66ce1d423802114aad1fdb8507e9db8b8a3f7894dd4
+state 01 picked 320x96 a6580f64daea539b17e0b14373cdfa613c45e44d3a8eb9d35b6f6f476f2ca4f6
+state 02 hover-s 320x96 f12524dd398d86d5c3253b47e078110a15caf3feef0fc3efd6a5552917b1485d
+state 03 hover-m 320x96 ce13e6d8622eb86233ac00d893d7646bc7f3cde6354863361d8280593b685411
+state 04 hover-l 320x96 f9bb6d17f5f3f68c3c304f623382b941249939e322f29d9a5d66a056d2453448
+state 05 long-label 320x96 72e9bd5e835e49e25cc427fc921ec78d02e57788b927d42cc05229a129a353ff

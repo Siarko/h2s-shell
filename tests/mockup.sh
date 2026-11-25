@@ -5,17 +5,19 @@
 #
 #   tests/mockup.sh [-n] [list]           the tree's mockups, their kind and title; "*" marks
 #                                         a running one
-#   tests/mockup.sh [-n] [open] <name> [--scene <s>] [--restart]
-#                                         start the mockup on the display; if it already runs,
+#   tests/mockup.sh [-n] [open] <name> [--state <s> | --scene <s>] [--restart]
+#                                         start the mockup on the display (a component or view
+#                                         on a state, a plan on a scene); if it already runs,
 #                                         say so, or with --restart close it and start it again
 #   tests/mockup.sh [-n] close [<name>]   close that mockup (with no name: every running
 #                                         mockup of this tree)
 #   tests/mockup.sh [-n] review <name>    compare it with its baseline (tests/run-mockups.sh
-#                                         --compare), then show each differing scene's old, new
+#                                         --compare), then show each differing state's old, new
 #                                         and diff images
 #   tests/mockup.sh [-n] approve <name>   the reviewed run becomes the baseline
 #                                         (tests/run-mockups.sh --approve)
-#     <name>        <kind>/<name>, or a unique part of one (e.g. "pill")
+#     <name>        <kind>/<name> (components, views, plans), or a unique part of one
+#                   (e.g. "pill"); planning/, the plans' old folder, is refused
 #     -n            print the commands instead of running them (review still shows the images
 #                   of the last run there is)
 #
@@ -23,7 +25,7 @@
 # session's environment), else detached with setsid. Either way the command it starts is this
 # script again (__exec), which drops every H2S_* variable it inherited (the shell's own, such
 # as H2S_SHELL_MODULES, and a stray H2S_MOCKUP_SHOT), then runs
-#   H2S_MOCKUP=<kind>/<name> [H2S_MOCKUP_SCENE=<s>] qs -p <tree>/mockup.qml
+#   H2S_MOCKUP=<kind>/<name> [H2S_MOCKUP_STATE=<s> | H2S_MOCKUP_SCENE=<s>] qs -p <tree>/mockup.qml
 #
 # A running mockup is an instance in `qs list --all` whose config path is this tree's
 # mockup.qml, and its name what `qs ipc --pid <pid> call mockup name` answers: close never
@@ -31,7 +33,7 @@
 #
 # review shows the images inline when the terminal draws the kitty graphics protocol
 # (KITTY_WINDOW_ID set, TERM=xterm-kitty, or the terminal answers the protocol's query), each
-# labelled with the mockup, the scene and old/new/diff, through `kitten icat`; otherwise, or
+# labelled with the mockup, the state and old/new/diff, through `kitten icat`; otherwise, or
 # without kitten, it prints their paths. A mockup with no baseline shows its new shots.
 #
 # H2S_MOCKUP_BASE, H2S_MOCKUP_SHOTS and H2S_MOCKUP_BASELINES are taken as tests/run-mockups.sh
@@ -49,22 +51,26 @@ case "$base" in
 esac
 
 # ---- __exec: the command open starts (not for typing) ---------------------------------
-# __exec <base> <kind>/<name> [<scene>]: drop the inherited H2S_* variables, run the entry
+# __exec <base> <kind>/<name> [<state or scene>]: drop the inherited H2S_* variables, run the
+# entry
 if [ "${1:-}" = __exec ] || { [ "${1:-}" = -n ] && [ "${2:-}" = __exec ]; }; then
     dry=0
     [ "$1" = -n ] && { dry=1; shift; }
     shift
-    [ $# -ge 2 ] || { echo "mockup.sh: __exec <base> <kind>/<name> [<scene>]" >&2; exit 2; }
-    exec_base=$1 name=$2 scene=${3:-}
-    [ -z "$scene" ] || [[ "$scene" =~ ^[A-Za-z0-9_-]+$ ]] || { echo "mockup.sh: __exec: scene '$scene'" >&2; exit 2; }
+    [ $# -ge 2 ] || { echo "mockup.sh: __exec <base> <kind>/<name> [<state or scene>]" >&2; exit 2; }
+    exec_base=$1 name=$2 first=${3:-}
+    [ -z "$first" ] || [[ "$first" =~ ^[A-Za-z0-9_-]+$ ]] || { echo "mockup.sh: __exec: state or scene '$first'" >&2; exit 2; }
     [[ "$exec_base" =~ ^(mockups|tests/fixtures/mockups)$ ]] || { echo "mockup.sh: __exec: base '$exec_base'" >&2; exit 2; }
-    [[ "$name" =~ ^(components|views|planning)/[a-z0-9-]+$ ]] || { echo "mockup.sh: __exec: name '$name'" >&2; exit 2; }
+    [[ "$name" =~ ^(components|views|plans)/[a-z0-9-]+$ ]] || { echo "mockup.sh: __exec: name '$name'" >&2; exit 2; }
     unset_args=()
     while IFS= read -r variable; do
         unset_args+=(-u "$variable")
     done < <(compgen -e | grep -E '^H2S_' || true)
     set_args=(H2S_MOCKUP="$name")
-    [ -n "$scene" ] && set_args+=(H2S_MOCKUP_SCENE="$scene")
+    # A plan opens on a scene, a component or a view on a state
+    if [ -n "$first" ]; then
+        if [[ "$name" == plans/* ]]; then set_args+=(H2S_MOCKUP_SCENE="$first"); else set_args+=(H2S_MOCKUP_STATE="$first"); fi
+    fi
     [ "$exec_base" = mockups ] || set_args+=(H2S_MOCKUP_BASE="$exec_base")
     command=(env "${unset_args[@]}" "${set_args[@]}" qs -p "$ENTRY")
     if [ "$dry" = 1 ]; then printf '%q ' "${command[@]}"; echo; exit 0; fi
@@ -72,26 +78,29 @@ if [ "${1:-}" = __exec ] || { [ "${1:-}" = -n ] && [ "${2:-}" = __exec ]; }; the
 fi
 
 usage() {
-    sed -n '6,24p' "$SELF" >&2
+    sed -n '6,22p' "$SELF" >&2
     exit 2
 }
 
 dry=0
 restart=0
-scene=""
+first=""
+first_option=""
 args=()
 while [ $# -gt 0 ]; do
     case "$1" in
         -n | --dry-run) dry=1; shift ;;
         --restart) restart=1; shift ;;
-        --scene)
-            scene=${2:-}
-            # The scene goes into the command line Hyprland runs through a shell: letters,
+        --state | --scene)
+            [ -z "$first_option" ] || { echo "mockup.sh: one of --state and --scene" >&2; exit 2; }
+            first_option=${1#--}
+            first=${2:-}
+            # The name goes into the command line Hyprland runs through a shell: letters,
             # digits, "_" and "-" only, never a character a shell reads
-            [[ "$scene" =~ ^[A-Za-z0-9_-]+$ ]] || { echo "mockup.sh: --scene needs a scene name of letters, digits, '_' and '-'" >&2; exit 2; }
+            [[ "$first" =~ ^[A-Za-z0-9_-]+$ ]] || { echo "mockup.sh: $1 needs a $first_option name of letters, digits, '_' and '-'" >&2; exit 2; }
             shift 2
             ;;
-        -h | --help) sed -n '2,36p' "$SELF"; exit 0 ;;
+        -h | --help) sed -n '2,40p' "$SELF"; exit 0 ;;
         -*) echo "mockup.sh: unknown option $1" >&2; usage ;;
         *) args+=("$1"); shift ;;
     esac
@@ -105,7 +114,7 @@ run() {
 # all_names: every mockup of the tree, <kind>/<name>, one per line
 all_names() {
     local file
-    for file in "$REPO/$base"/{components,views,planning}/*/Mockup.qml; do
+    for file in "$REPO/$base"/{components,views,plans}/*/Mockup.qml; do
         [ -f "$file" ] || continue
         file=${file%/Mockup.qml}
         echo "${file#"$REPO/$base/"}"
@@ -117,6 +126,10 @@ resolve() {
     local want=$1 n
     local -a matches=()
     [ -n "$want" ] || { echo "mockup.sh: an empty name" >&2; return 1; }
+    if [[ "$want" == planning/* ]]; then
+        echo "mockup.sh: \"$want\": mockups/planning/ is now mockups/plans/ (git mv mockups/planning/${want#planning/} mockups/plans/${want#planning/}), the name plans/${want#planning/}" >&2
+        return 1
+    fi
     while IFS= read -r n; do
         [ "$n" = "$want" ] && { echo "$n"; return 0; }
         [[ "$n" == *"$want"* ]] && matches+=("$n")
@@ -156,7 +169,7 @@ running() {
     local pid name
     while IFS= read -r pid; do
         name=$(qs ipc --pid "$pid" call mockup name 2> /dev/null | tr -d '[:space:]')
-        [[ "$name" =~ ^(components|views|planning)/[a-z0-9-]+$ ]] && echo "$pid $name"
+        [[ "$name" =~ ^(components|views|plans)/[a-z0-9-]+$ ]] && echo "$pid $name"
     done < <(instances)
 }
 
@@ -175,6 +188,9 @@ cmd_list() {
         printf '%s %-36s %-9s %s\n' "$mark" "$n" "$kind" "$t"
     done < <(all_names)
     [ "$count" -gt 0 ] || echo "No mockup in $REPO/$base"
+    # A tree still in the old layout: its plans would be missing without a word
+    [ ! -d "$REPO/$base/planning" ] \
+        || echo "mockup.sh: $base/planning/ is the plans' old folder, not listed: git mv it to $base/plans/" >&2
 }
 
 kill_pids() {
@@ -209,6 +225,12 @@ cmd_close() {
 cmd_open() {
     local name pids i command
     name=$(resolve "$1") || exit 2
+    # A plan has scenes, a component or a view states: the other option is a mistake
+    if [[ "$name" == plans/* ]] && [ "$first_option" = state ]; then
+        echo "mockup.sh: $name is a plan: it has scenes (--scene), not states" >&2; exit 2
+    elif [[ "$name" != plans/* ]] && [ "$first_option" = scene ]; then
+        echo "mockup.sh: $name is a ${name%%s/*}: it has states (--state), not scenes" >&2; exit 2
+    fi
     [[ "$SELF" != *[\"\'\\]* ]] || { echo "mockup.sh: cannot start from a path with quotes or '\\': $SELF" >&2; exit 2; }
     mapfile -t pids < <(pids_of "$name")
     if [ ${#pids[@]} -gt 0 ]; then
@@ -220,12 +242,12 @@ cmd_open() {
     fi
     if [ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ] && command -v hyprctl > /dev/null; then
         command="'$SELF' '__exec' '$base' '$name'"
-        [ -z "$scene" ] || command="$command '$scene'"
+        [ -z "$first" ] || command="$command '$first'"
         run hyprctl dispatch "hl.dsp.exec_cmd(\"$command\")"
     elif [ "$dry" = 1 ]; then
-        printf 'setsid -f %q __exec %q %q%s >/dev/null 2>&1 </dev/null\n' "$SELF" "$base" "$name" "${scene:+ $scene}"
+        printf 'setsid -f %q __exec %q %q%s >/dev/null 2>&1 </dev/null\n' "$SELF" "$base" "$name" "${first:+ $first}"
     else
-        setsid -f "$SELF" __exec "$base" "$name" ${scene:+"$scene"} > /dev/null 2>&1 < /dev/null
+        setsid -f "$SELF" __exec "$base" "$name" ${first:+"$first"} > /dev/null 2>&1 < /dev/null
     fi
     [ "$dry" = 1 ] && return
     for i in $(seq 50); do
@@ -263,7 +285,7 @@ icat_command() {
 }
 
 cmd_review() {
-    local name shots_root tree_key run_id run inline=0 icat="" folder scene label kind file
+    local name shots_root tree_key run_id run inline=0 icat="" folder one label kind file
     local -a images=()
     name=$(resolve "$1") || exit 2
     run "$REPO/tests/run-mockups.sh" --compare "$name"
@@ -276,26 +298,26 @@ cmd_review() {
         return 2
     fi
     run=$shots_root/$name/$run_id
-    # Each differing scene's old, new and diff; with no baseline, the new shots
+    # Each differing state's old, new and diff; with no baseline, the new shots
     for folder in "$run"/[0-9][0-9]-*/; do
         [ -f "$folder/new.png" ] || continue
-        scene=${folder%/}
-        scene=${scene##*/}
+        one=${folder%/}
+        one=${one##*/}
         for kind in old new diff; do
-            [ -f "$folder/$kind.png" ] && images+=("$name, scene ${scene#[0-9][0-9]-}: $kind|$folder$kind.png")
+            [ -f "$folder/$kind.png" ] && images+=("$name, state ${one#[0-9][0-9]-}: $kind|$folder$kind.png")
         done
     done
     if [ ${#images[@]} -eq 0 ] && [ ! -f "${H2S_MOCKUP_BASELINES:-$REPO/$base}/$name/baseline/manifest.txt" ]; then
         for file in "$run"/[0-9][0-9]-*.png; do
             [ -f "$file" ] || continue
             [[ "$file" == *-review.png ]] && continue
-            scene=${file##*/}
-            scene=${scene%.png}
-            images+=("$name, scene ${scene#[0-9][0-9]-}: new (no baseline)|$file")
+            one=${file##*/}
+            one=${one%.png}
+            images+=("$name, state ${one#[0-9][0-9]-}: new (no baseline)|$file")
         done
     fi
     if [ ${#images[@]} -eq 0 ]; then
-        echo "No scene of $name differs in its last run ($run)"
+        echo "No state of $name differs in its last run ($run)"
         return 0
     fi
     if kitty_graphics; then

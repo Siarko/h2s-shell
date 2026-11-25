@@ -13,20 +13,23 @@ import qs.components
 //              (layer-shell namespace h2s-mockup), so that an item's window coordinates are
 //              output coordinates and a shooter can crop to them
 //   on screen  a normal window titled with the mockup's name, which the compositor
-//              moves and resizes like any other: the scene buttons along its top, the
+//              moves and resizes like any other: the buttons (one per state or scene)
+//              along its top, the
 //              content under them, scrolled when the window is smaller than it (the window
 //              opens at the content's size, at most the screen's)
 //
-// The scene contract:
-//   scenes        the names of the scenes, in their fixed order; each non-empty, without
-//                 whitespace or "/" (a name goes into the shot line and a file name), none
-//                 repeated
-//   scene         the current scene: the mockup binds its stand-in data to it
+// A component or a view has states, a plan has scenes; the kit treats both alike (not
+// `states`/`state`, which every Qt Quick Item has: a binding to `state` inside a mockup's item
+// would read that item's own property). The contract:
+//   names         the names of the states or scenes, in their fixed order; each non-empty,
+//                 without whitespace or "/" (a name goes into the shot line and a file
+//                 name), none repeated
+//   current       the current state or scene: the mockup binds its stand-in data to it
 //   subject       the item a shot is cropped to; the content by default
 //   subjectRect   overrides the crop, in window coordinates, for a subject spread over
 //                 several items (a side panel and a modal); ignored while it has no size
 //   now           the time every mockup shows (2026-01-15 10:30 UTC), handed to what shows
-//                 a time or a date: a scene must not depend on when it is drawn
+//                 a time or a date: a state must not depend on when it is drawn
 //
 // A mockup keeps no time of its own: no Timer, no read of the clock, no animation of a
 // literal duration (tests/run-mockups.sh fails a component or view mockup that has one in
@@ -34,38 +37,42 @@ import qs.components
 // looping one is off through the component's own property. A text field shows no cursor
 // while shooting: the panel never takes the keyboard focus.
 // `visible` shows and hides the window (the entry shows it once the mockup has started).
-// A simulated pointer (hover, press) acts only inside the scene's own cell: one cell per
-// scene, all shown while shooting, `subject` the scene's cell, the pointer otherwise parked
-// off every cell; nothing is shown or hidden under the pointer between scenes (Qt Quick
+// A simulated pointer (hover, press) acts only inside the state's own cell: one cell per
+// state, all shown while shooting, `subject` the state's cell, the pointer otherwise parked
+// off every cell; nothing is shown or hidden under the pointer between states (Qt Quick
 // sends hover again where the pointer was left).
 //
-// Shooting (shooting, set by the entry): each scene in turn is set, three frames are
+// Shooting (shooting, set by the entry): each state or scene in turn is set, three frames are
 // waited for once the window is mapped (the first frame after a change can still show the
-// scene before), and a line
-//   MOCKUP-SHOT <i> <scene> <x>,<y> <w>x<h>
+// one before), and a line
+//   MOCKUP-SHOT <i> <name> <x>,<y> <w>x<h>
 // gives the subject's bounds; then the shooter calls `ipc call mockup next`. After the last
-// scene `finished` comes; an error (a bad scene list, a subject without a size, the shots
+// one `finished` comes; an error (a bad list of names, a subject without a size, the shots
 // taking longer than shotLimitMs in all) `failed`.
-// On screen: the scene the entry names (H2S_MOCKUP_SCENE), else the first, and a row of
+// On screen: the state or scene the entry names (H2S_MOCKUP_STATE, H2S_MOCKUP_SCENE), else
+// the first, and a row of
 // buttons above the content that switches between them, the current one checked.
 //
 // Over IPC (the config path is the entry's, the same for every mockup, so `name` tells
 // running ones apart):
-//   qs -p <tree>/mockup.qml ipc call mockup next   the next scene, after a shot: "" or why not
+//   qs -p <tree>/mockup.qml ipc call mockup next   the next one, after a shot: "" or why not
 //   qs -p <tree>/mockup.qml ipc call mockup name   the mockup's <kind>/<name>
-//   qs -p <tree>/mockup.qml ipc call mockup scene  the current scene
+//   qs -p <tree>/mockup.qml ipc call mockup current
+//                                                  the current state or scene
 //   qs -p <tree>/mockup.qml ipc call mockup window the window made: "panel" while shooting,
 //                                                  "floating" on screen, "" before start()
 //   qs -p <tree>/mockup.qml ipc call mockup buttons
-//                         the scene buttons inside the window: "<shown> of <scenes> shown,
-//                         checked <scene>" (none while shooting)
+//                         the buttons inside the window: "<shown> of <names> shown,
+//                         checked <name>" (none while shooting)
 // With several mockups running on one display, `qs ipc --id <instance id>` (or --pid) picks
 // one: the target is the same in all of them.
 QtObject {
     id: root
 
-    property var scenes: []
-    property string scene: ""
+    property var names: []
+    property string current: ""
+    // "state" for a component or a view, "scene" for a plan: the word in the messages
+    readonly property string _word: mockupName.startsWith("plans/") ? "scene" : "state"
     property Item subject: content
     property rect subjectRect: Qt.rect(0, 0, 0, 0)
     readonly property date now: new Date(Date.UTC(2026, 0, 15, 10, 30, 0))
@@ -94,7 +101,7 @@ QtObject {
     readonly property int _windowWidth: Math.max(contentWidth, shooting ? 0 : _switcher.implicitWidth)
     readonly property int _windowHeight: contentHeight + (shooting ? 0 : _switcher.implicitHeight)
 
-    // The scene buttons wholly inside the window, and the checked one's scene
+    // The buttons wholly inside the window, and the checked one's name
     function _buttonsShown() {
         let shown = 0, checked = "";
         for (let i = 0; i < _buttons.count; i++) {
@@ -108,37 +115,37 @@ QtObject {
             if (button.checked)
                 checked = button.modelData;
         }
-        return shown + " of " + scenes.length + " shown, checked " + checked;
+        return shown + " of " + names.length + " shown, checked " + checked;
     }
 
-    // Why the scene list cannot be used, or ""
-    function _scenesError() {
-        if (!Array.isArray(scenes) && !(scenes && typeof scenes.length === "number"))
-            return "scenes is not a list";
-        if (scenes.length === 0)
-            return "no scenes";
+    // Why the list of names cannot be used, or ""
+    function _namesError() {
+        if (!Array.isArray(names) && !(names && typeof names.length === "number"))
+            return "names is not a list";
+        if (names.length === 0)
+            return "no " + _word + "s";
         const seen = {};
-        for (let i = 0; i < scenes.length; i++) {
-            const name = scenes[i];
+        for (let i = 0; i < names.length; i++) {
+            const name = names[i];
             if (typeof name !== "string" || name === "")
-                return "scene " + i + " has an empty name";
+                return _word + " " + i + " has an empty name";
             if (/[\s\/]/.test(name))
-                return "scene name '" + name + "' has whitespace or '/'";
+                return _word + " name '" + name + "' has whitespace or '/'";
             if (seen[name])
-                return "scene name '" + name + "' is repeated";
+                return _word + " name '" + name + "' is repeated";
             seen[name] = true;
         }
         return "";
     }
 
-    // Starts the mockup on `firstScene` ("" for the first); "" or why it cannot start
-    function start(firstScene) {
-        const error = _scenesError();
+    // Starts the mockup on `first` ("" for the first); "" or why it cannot start
+    function start(first) {
+        const error = _namesError();
         if (error !== "")
             return error;
-        const index = shooting || firstScene === "" ? 0 : Array.prototype.indexOf.call(scenes, firstScene);
+        const index = shooting || first === "" ? 0 : Array.prototype.indexOf.call(names, first);
         if (index < 0)
-            return "no scene '" + firstScene + "' (the scenes: " + Array.prototype.join.call(scenes, " ") + ")";
+            return "no " + _word + " '" + first + "' (the " + _word + "s: " + Array.prototype.join.call(names, " ") + ")";
         const window = (shooting ? _panelWindow : _floatingWindow).createObject(root);
         if (!window)
             return "the window cannot be made";
@@ -151,13 +158,13 @@ QtObject {
             return "";
         }
         _index = index;
-        scene = scenes[index];
+        current = names[index];
         return "";
     }
 
     function _show(index) {
         _index = index;
-        scene = scenes[index];
+        current = names[index];
         _settle.frames = 0;
         _settle.running = true;
     }
@@ -175,15 +182,15 @@ QtObject {
         const x = Math.round(bounds.x), y = Math.round(bounds.y);
         const width = Math.round(bounds.width), height = Math.round(bounds.height);
         if (width <= 0 || height <= 0) {
-            failed("scene '" + scene + "': the subject has no size");
+            failed(_word + " '" + current + "': the subject has no size");
             return;
         }
         if (x < 0 || y < 0 || x + width > _window.width || y + height > _window.height) {
-            failed("scene '" + scene + "': the subject (" + x + "," + y + " " + width + "x" + height
+            failed(_word + " '" + current + "': the subject (" + x + "," + y + " " + width + "x" + height
                    + ") is not inside the window (" + _window.width + "x" + _window.height + ")");
             return;
         }
-        console.info("MOCKUP-SHOT " + _index + " " + scene + " " + x + "," + y + " " + width + "x" + height);
+        console.info("MOCKUP-SHOT " + _index + " " + current + " " + x + "," + y + " " + width + "x" + height);
         _waitingForNext = true;
     }
 
@@ -195,7 +202,7 @@ QtObject {
         if (!_waitingForNext)
             return "no shot is waiting";
         _waitingForNext = false;
-        if (_index + 1 >= scenes.length) {
+        if (_index + 1 >= names.length) {
             _done = true;
             finished();
         }
@@ -233,7 +240,7 @@ QtObject {
         }
     }
 
-    // The content and the scene buttons, put into the window start() makes: while shooting
+    // The content and the buttons, put into the window start() makes: while shooting
     // the content at the window's corner; on screen the buttons, and under them the content
     // moved into the scroller
     readonly property Item _body: Item {
@@ -270,19 +277,19 @@ QtObject {
             Repeater {
                 id: _buttons
                 model: ScriptModel {
-                    values: root.shooting ? [] : Array.prototype.slice.call(root.scenes)
+                    values: root.shooting ? [] : Array.prototype.slice.call(root.names)
                 }
                 SmallButton {
                     required property string modelData
                     label: modelData
-                    checked: modelData === root.scene
-                    onClicked: root.scene = modelData
+                    checked: modelData === root.current
+                    onClicked: root.current = modelData
                 }
             }
         }
     }
 
-    // Three frames after a scene is set, then the shot line
+    // Three frames after a state or scene is set, then the shot line
     readonly property FrameAnimation _settle: FrameAnimation {
         property int frames: 0
         running: false
@@ -294,7 +301,7 @@ QtObject {
         }
     }
 
-    // The guard against a hang while shooting: a scene that never settles, a shooter that
+    // The guard against a hang while shooting: a state that never settles, a shooter that
     // never calls next
     readonly property Timer _limit: Timer {
         interval: root.shotLimitMs
@@ -302,7 +309,7 @@ QtObject {
         onTriggered: {
             root._done = true;
             root._settle.running = false;
-            root.failed("the shots took longer than " + root.shotLimitMs + " ms (at scene " + root._index + " '" + root.scene + "', "
+            root.failed("the shots took longer than " + root.shotLimitMs + " ms (at " + root._word + " " + root._index + " '" + root.current + "', "
                         + (root._waitingForNext ? "waiting for next" : "settling") + ")");
         }
     }
@@ -318,8 +325,8 @@ QtObject {
             return root.mockupName;
         }
 
-        function scene(): string {
-            return root.scene;
+        function current(): string {
+            return root.current;
         }
 
         function window(): string {

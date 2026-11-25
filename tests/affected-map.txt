@@ -17,7 +17,7 @@
 #   mockup:<kind>/<name>  mockup:all
 #                                component and view mockups (tests/run-mockups.sh
 #                                --by-system); each covers its own folder's closure by
-#                                itself, planning mockups are placed with none
+#                                itself, plans (mockups/plans/*) are placed with none
 #   none                         no test needed (a decision, written down)
 # A line whose pattern starts with "+" only adds its targets: it places nothing, so a file
 # it matches still needs a closure or a line of its own (`--check`).

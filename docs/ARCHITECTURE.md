@@ -2656,7 +2656,7 @@ closure. `tests/affected-map.txt` places what a closure cannot see — scripts, 
 lock scenarios' subjects — and lists what needs no test (`none`). A component or view mockup
 covers the closure of its folder (its `Mockup.qml`, its baseline's files), and a change there
 runs it through `tests/run-mockups.sh --by-system`; `mockup.qml` and `mockups/kit/` run every
-mockup, and a planning mockup needs no test. A changed file nothing places selects everything. `tests/affected-selftest.sh` runs `affected.sh --check` (every
+mockup, and a plan (`mockups/plans/`) needs no test. A changed file nothing places selects everything. `tests/affected-selftest.sh` runs `affected.sh --check` (every
 tracked file placed, every map line true) and checks the selection on made-up repositories.
 
 ### Finding checks that cannot fail, and flakes
@@ -2796,15 +2796,16 @@ trees, on either system.
 
 `tests/run-all.sh` (`--quick` too) runs the component and view mockups
 (`mockups/components/`, `mockups/views/`) through `tests/run-mockups.sh --by-system`, which
-takes the system as `tests/run-system.sh` does and says which mode it took. A planning
-mockup is never run by a test. With no component or view mockup in the tree there is
+takes the system as `tests/run-system.sh` does and says which mode it took. A plan
+(`mockups/plans/`) is never run by a test. With no component or view mockup in the tree there is
 nothing to check, and the part passes saying so.
 
 On a screen, `tests/mockup.sh` lists the tree's mockups (`*` on a running one), opens one
-(`open <name> [--scene <s>] [--restart]`: through Hyprland's exec when Hyprland is there,
+(`open <name> [--state <s> | --scene <s>] [--restart]`, a state of a component or view, a
+scene of a plan: through Hyprland's exec when Hyprland is there,
 else detached; the entry starts with every inherited `H2S_*` variable dropped), closes them
 (only instances whose config is this tree's `mockup.qml`, picked by the name each answers
-over IPC), and `review <name>` runs the comparison and shows each differing scene's old, new
+over IPC), and `review <name>` runs the comparison and shows each differing state's old, new
 and diff images: inline through `kitten icat` in a terminal that draws the kitty graphics
 protocol, else their paths. `approve <name>` hands the run to `tests/run-mockups.sh
 --approve`; `-n` prints the commands. `tests/mockup-selftest.sh`, a part of `--quick`, checks
@@ -2812,14 +2813,14 @@ it on a stand-in `qs`, `hyprctl` and `kitten`.
 
 #### NixOS
 
-The mockups run `--load-only`: each reaches every scene with no error, and nothing is
+The mockups run `--load-only`: each reaches every state with no error, and nothing is
 compared. The baselines are drawn on Arch, and another system's libraries and fonts give
 other pixels. Any system other than Arch runs them the same way; one whose distribution
 cannot be told runs nothing (NOT RUN, status 2).
 
 #### Arch
 
-The mockups run `--compare`: each scene's shot is compared, pixel for pixel, with the
+The mockups run `--compare`: each state's shot is compared, pixel for pixel, with the
 mockup's baseline. A mockup without a baseline, or whose baseline was drawn in another
 environment, is NOT RUN, which makes the run NOT RUN (status 2), never a pass.
 

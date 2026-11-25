@@ -37,7 +37,7 @@
 #     the closure of every file in its folder, as a unit suite does (its Mockup.qml, its
 #     baseline's PNGs and manifest); its command is `tests/run-mockups.sh --by-system
 #     <kind>/<name>…` (--compare on Arch, --load-only elsewhere), the map's `mockup:all` runs
-#     every one; a planning mockup (mockups/planning/*) is placed with none: it is not
+#     every one; a plan (mockups/plans/*) is placed with none: it is not
 #     tested, and no closure starts from it.
 # A changed path the tree no longer has is scanned as present, so that the files still
 # naming it select their tests. A changed file none of these places (deleted with nothing
@@ -381,7 +381,7 @@ place() {
     case "$file" in
         tests/lock/tests/*.sh) echo "lock:$(basename "$file" .sh)" ;;
         tests/*-selftest.sh | tests/install-test.sh | tests/lock/selftest.sh) echo "self:$file" ;;
-        mockups/planning/*) echo none ;;
+        mockups/plans/*) echo none ;;
     esac
 }
 

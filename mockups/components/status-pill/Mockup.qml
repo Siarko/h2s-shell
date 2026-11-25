@@ -12,12 +12,12 @@ import qs.mockups.kit
 //                    a window of its own, outside the shot), with a simulated pointer move
 //   expanded         the same unfolded: one part per line under a rule
 //   not-expandable   with parts but `expandable: false`, under the pointer: no hover look
-// The pointer is simulated with QtTest's events: each scene puts it where the scene needs
-// it before its frames are waited for, so the look depends on the scene, never on time.
-// Every scene has a cell of its own, all shown side by side while shooting, the shot cropped
-// to the scene's cell; the pointer, when no pill is to be under it, is parked on a strip
-// below the cells. Nothing is shown or hidden as the scenes go by, so no pill is ever under
-// a pointer left where an earlier scene put it. On screen only the scene's cell is shown.
+// The pointer is simulated with QtTest's events: each state puts it where the state needs
+// it before its frames are waited for, so the look depends on the state, never on time.
+// Every state has a cell of its own, all shown side by side while shooting, the shot cropped
+// to the state's cell; the pointer, when no pill is to be under it, is parked on a strip
+// below the cells. Nothing is shown or hidden as the states go by, so no pill is ever under
+// a pointer left where an earlier state put it. On screen only the state's cell is shown.
 MockupWindow {
     id: root
 
@@ -28,21 +28,21 @@ MockupWindow {
         { icon: "", text: "1", kind: "muted", tip: "1 queued", line: "1 queued" },
         { icon: "", text: "1", kind: "danger", tip: "1 failed", line: "1 failed: no connection" }
     ]
-    scenes: ["kinds", "parts", "hover", "expanded", "not-expandable"]
-    // The scenes the pointer is over the pill in
+    names: ["kinds", "parts", "hover", "expanded", "not-expandable"]
+    // The states the pointer is over the pill in
     readonly property var pointed: ["hover", "not-expandable"]
 
     readonly property int cellWidth: 240
     readonly property int cellHeight: 5 * 28 + 4 * 8 + 2 * 16
     readonly property int cellsPerRow: 5
-    readonly property int gridHeight: Math.ceil(scenes.length / cellsPerRow) * cellHeight
+    readonly property int gridHeight: Math.ceil(names.length / cellsPerRow) * cellHeight
     contentWidth: shooting ? cellsPerRow * cellWidth : cellWidth
     contentHeight: shooting ? gridHeight + parking.height : cellHeight
-    subject: _cells.itemAt(Array.prototype.indexOf.call(scenes, scene)) ?? content_
+    subject: _cells.itemAt(Array.prototype.indexOf.call(names, current)) ?? content_
 
-    // The pointer for the scene, before its frames are waited for
-    onSceneChanged: {
-        const cell = pointed.includes(scene) ? _cells.itemAt(Array.prototype.indexOf.call(scenes, scene)) : null;
+    // The pointer for the state, before its frames are waited for
+    onCurrentChanged: {
+        const cell = pointed.includes(current) ? _cells.itemAt(Array.prototype.indexOf.call(names, current)) : null;
         const pill = cell ? cell.pill : null;
         if (pill)
             pointer.mouseMove(pill, Theme.row.horizontalPadding + 4, pill.collapsedHeight / 2);
@@ -69,23 +69,23 @@ MockupWindow {
 
         Repeater {
             id: _cells
-            model: root.scenes.length
+            model: root.names.length
             Item {
                 id: cell
                 required property int index
-                readonly property string sceneName: root.scenes[index]
+                readonly property string stateName: root.names[index]
                 property alias pill: _pill
                 x: root.shooting ? (index % root.cellsPerRow) * root.cellWidth : 0
                 y: root.shooting ? Math.floor(index / root.cellsPerRow) * root.cellHeight : 0
                 width: root.cellWidth
                 height: root.cellHeight
-                visible: root.shooting || sceneName === root.scene
+                visible: root.shooting || stateName === root.current
 
                 Column {
                     x: 16
                     y: 16
                     spacing: 8
-                    visible: cell.sceneName === "kinds"
+                    visible: cell.stateName === "kinds"
 
                     Repeater {
                         model: ScriptModel { values: root.kinds }
@@ -98,17 +98,17 @@ MockupWindow {
                     }
                 }
 
-                // The pill with parts, in every scene but "kinds"
+                // The pill with parts, in every state but "kinds"
                 StatusPill {
                     id: _pill
                     x: 16
                     y: 16
-                    visible: cell.sceneName !== "kinds"
+                    visible: cell.stateName !== "kinds"
                     icon: ""
                     label: "Sending 4/6"
                     parts: root.parts
-                    expanded: cell.sceneName === "expanded"
-                    expandable: cell.sceneName !== "not-expandable"
+                    expanded: cell.stateName === "expanded"
+                    expandable: cell.stateName !== "not-expandable"
                 }
             }
         }

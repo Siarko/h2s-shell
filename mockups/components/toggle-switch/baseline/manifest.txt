@@ -1,4 +1,4 @@
-# The approved baseline of components/toggle-switch: a PNG per scene (<NN>-<scene>.png), compared pixel
+# The approved baseline of components/toggle-switch: a PNG per state (<NN>-<state>.png), compared pixel
 # for pixel by tests/run-mockups.sh --compare, and what it was drawn with (a run drawn
 # otherwise is NOT RUN). Written by tests/run-mockups.sh --approve; never by hand.
 environment renderer OpenGL VENDOR: Mesa RENDERER: llvmpipe (LLVM 23.1.5, 256 bits) VERSION: 4.6 (Compatibility Profile) Mesa 26.3.1-arch1.2
@@ -17,7 +17,7 @@ environment qt-svg (not loaded)
 environment freetype 0b0e16faaaed2145c89e193bc52f308bfb909ccd182fbed0d2f245329c248fca /usr/lib/libfreetype.so.6.20.7
 environment fontconfig ea856e202615c9198c76bbd72a4de6b4bd91ad160a33eb51500ef132d8fc6536 /usr/lib/libfontconfig.so.1.17.0
 environment harfbuzz 70b65f53855877c74f99189eaa3652c8abd67ce3c9d5e3611a6d0e36291c6482 /usr/lib/libharfbuzz.so.0.61510.0
-scene 00 off 124x48 d374dc07784da744ebded344126f27321e3e4855fee0bc1eda57f516f4669009
-scene 01 on 124x48 376cb9ee917e32833e03c9846dd002c0202c422ca9d1452189643cd6ce5f2b60
-scene 02 disabled-off 124x48 6e80e35307ab00b691b59a5a4eae18140d1c01c6e876e19bdb992d2bcdba683f
-scene 03 disabled-on 124x48 7b59b0ec31950ecb920b85805ef848c1e9349ee60fb6b437e9be0d9d1cccef6c
+state 00 off 124x48 d374dc07784da744ebded344126f27321e3e4855fee0bc1eda57f516f4669009
+state 01 on 124x48 376cb9ee917e32833e03c9846dd002c0202c422ca9d1452189643cd6ce5f2b60
+state 02 disabled-off 124x48 6e80e35307ab00b691b59a5a4eae18140d1c01c6e876e19bdb992d2bcdba683f
+state 03 disabled-on 124x48 7b59b0ec31950ecb920b85805ef848c1e9349ee60fb6b437e9be0d9d1cccef6c

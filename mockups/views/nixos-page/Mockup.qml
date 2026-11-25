@@ -19,14 +19,14 @@ import qs.mockups.kit
 // is in force NixosDeclareRules.inForce of a stand-in published setting, the Apply's request
 // NixosDeclareRules.request. Nothing runs, nothing is read from the system, no notification.
 //
-// Each scene is set up whole in a cell of its own when the cell is made, by the clicks'
+// Each state is set up whole in a cell of its own when the cell is made, by the clicks'
 // own paths: flow.apply (the page's Apply, the announcing modal), the modal's Build
 // (modal.answered), flow.cancel, flow.applyNow (Apply now), flow.undo. The run's clock is the
 // cell's: a fixed time, moved on between the steps, so every elapsed time is a fixed value.
 // The cells are a settings window's page area each, too large for all of them to fit the
-// shooter's output side by side: they lie on one another and only the scene's cell is
+// shooter's output side by side: they lie on one another and only the state's cell is
 // shown. No pointer is ever simulated over a cell: it rests on a strip below them from the
-// first scene on, so nothing shown or hidden is ever under it.
+// first state on, so nothing shown or hidden is ever under it.
 //
 //   not-connected        no configuration found: Choose folder…, Look again
 //   found-not-in-force   a classic configuration.nix at /etc/nixos, not in git, root's: the
@@ -49,7 +49,7 @@ import qs.mockups.kit
 MockupWindow {
     id: root
 
-    scenes: ["not-connected", "found-not-in-force", "home-folder", "ready", "apply-announcement", "building", "built-apply-now",
+    names: ["not-connected", "found-not-in-force", "home-folder", "ready", "apply-announcement", "building", "built-apply-now",
              "waiting-password", "switching", "applied", "build-failed", "applied-with-errors", "cancelled", "set-in-configuration",
              "undo-announcement", "undo-building"]
 
@@ -58,9 +58,9 @@ MockupWindow {
     readonly property int cellHeight: 960
     contentWidth: cellWidth
     contentHeight: cellHeight + parking.height
-    subject: _cells.itemAt(Array.prototype.indexOf.call(scenes, scene)) ?? _area
+    subject: _cells.itemAt(Array.prototype.indexOf.call(names, current)) ?? _area
 
-    onSceneChanged: pointer.mouseMove(parking, parking.width / 2, parking.height / 2)
+    onCurrentChanged: pointer.mouseMove(parking, parking.width / 2, parking.height / 2)
 
     TestCase {
         id: pointer
@@ -129,7 +129,7 @@ MockupWindow {
                                        "Job for bluetooth.service failed because the control process exited with error code.",
                                        "warning: the following units failed: bluetooth.service"]
 
-    // ---- A scene set up in its cell, by the clicks' own paths ----
+    // ---- A state set up in its cell, by the clicks' own paths ----
 
     function setUp(cell, name) {
         const connected = reading({});
@@ -238,14 +238,14 @@ MockupWindow {
 
         Repeater {
             id: _cells
-            model: root.scenes.length
+            model: root.names.length
             Item {
                 id: cell
                 required property int index
-                readonly property string sceneName: root.scenes[index]
+                readonly property string stateName: root.names[index]
                 width: root.cellWidth
                 height: root.cellHeight
-                visible: root.scenes[index] === root.scene
+                visible: root.names[index] === root.current
                 clip: true
 
                 // The stand-ins the cell's run and page read
@@ -262,7 +262,7 @@ MockupWindow {
                 property alias writer: _writer
 
                 Component.onCompleted: {
-                    root.setUp(cell, sceneName);
+                    root.setUp(cell, stateName);
                     root.stillBars(_drawer.contentItem);
                 }
 

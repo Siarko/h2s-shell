@@ -4,7 +4,7 @@
 # repositories with a copy of the script — the closure (a suite covers what it uses,
 # transitively), the map's targets, the lock closure, the default range (the nearest
 # segment-* or master merge-base, working tree and untracked files included), the mockups
-# (a mockup covers its folder's closure, the kit and the entry all, planning none), explicit
+# (a mockup covers its folder's closure, the kit and the entry all, plans none), explicit
 # ranges, the fallback for a file placed nowhere, --check's findings and --run's verdict.
 # Nothing is run but stand-in runners.
 #
@@ -121,17 +121,17 @@ echo 'module' > "$tree/fixtures/mod/main.qml"
 echo 'echo run' > "$tree/scripts/run.sh"
 echo 'page' > "$tree/site/page.md"
 # Mockups: a component one that draws a pill (with its baseline), a view one that does not,
-# a planning one that does, the kit and the entry
-mkdir -p "$tree/components" "$tree/mockups/kit" "$tree/mockups/components/pill/baseline" "$tree/mockups/views/panel" "$tree/mockups/planning/idea"
+# a plan that does, the kit and the entry
+mkdir -p "$tree/components" "$tree/mockups/kit" "$tree/mockups/components/pill/baseline" "$tree/mockups/views/panel" "$tree/mockups/plans/idea"
 echo 'Item {}' > "$tree/components/Pill.qml"
 echo 'Item {}' > "$tree/mockups/kit/MockupWindow.qml"
 echo 'Item {}' > "$tree/mockup.qml"
 printf 'import qs.components\nimport qs.mockups.kit\nMockupWindow { Pill {} }\n' > "$tree/mockups/components/pill/Mockup.qml"
-echo 'scene 00 normal 10x10 0' > "$tree/mockups/components/pill/baseline/manifest.txt"
+echo 'state 00 normal 10x10 0' > "$tree/mockups/components/pill/baseline/manifest.txt"
 echo 'png' > "$tree/mockups/components/pill/baseline/00-normal.png"
 printf 'import qs.mockups.kit\nMockupWindow {}\n' > "$tree/mockups/views/panel/Mockup.qml"
-printf 'import qs.components\nimport qs.mockups.kit\nMockupWindow { Pill {} }\n' > "$tree/mockups/planning/idea/Mockup.qml"
-echo 'notes' > "$tree/mockups/planning/idea/MOCKUP.md"
+printf 'import qs.components\nimport qs.mockups.kit\nMockupWindow { Pill {} }\n' > "$tree/mockups/plans/idea/Mockup.qml"
+echo 'notes' > "$tree/mockups/plans/idea/MOCKUP.md"
 for name in one two three; do echo 'echo PASS' > "$tree/tests/lock/tests/$name.sh"; done
 cat > "$tree/tests/run-all.sh" << 'EOF'
 parts=(
@@ -205,7 +205,7 @@ check "a none file selects nothing" bash -c '[ -z "$1" ] && [ "$2" = 0 ]' _ "$OU
 run "$tree" --files tests/lock/tests/three.sh tests/x-selftest.sh
 check "a scenario and a self-test select themselves" is "$(printf 'tests/x-selftest.sh\ntests/lock/run.sh three')"
 run "$tree" --files components/Pill.qml
-check "a component selects the mockups that draw it, not a planning one" is "tests/run-mockups.sh --by-system components/pill"
+check "a component selects the mockups that draw it, not a plan" is "tests/run-mockups.sh --by-system components/pill"
 run "$tree" --files mockups/components/pill/baseline/00-normal.png mockups/components/pill/baseline/manifest.txt
 check "a mockup's baseline files select their mockup" is "tests/run-mockups.sh --by-system components/pill"
 run "$tree" --files mockups/views/panel/Mockup.qml components/Pill.qml
@@ -214,9 +214,9 @@ run "$tree" --files mockups/kit/MockupWindow.qml
 check "the kit selects every mockup" is "tests/run-mockups.sh --by-system"
 run "$tree" --files mockup.qml
 check "the entry selects every mockup" is "tests/run-mockups.sh --by-system"
-run "$tree" --why --files mockups/planning/idea/Mockup.qml mockups/planning/idea/MOCKUP.md
-check "a planning mockup is placed with none, and selects nothing" \
-    is "$(printf 'mockups/planning/idea/MOCKUP.md\tnone\nmockups/planning/idea/Mockup.qml\tnone')"
+run "$tree" --why --files mockups/plans/idea/Mockup.qml mockups/plans/idea/MOCKUP.md
+check "a plan is placed with none, and selects nothing" \
+    is "$(printf 'mockups/plans/idea/MOCKUP.md\tnone\nmockups/plans/idea/Mockup.qml\tnone')"
 
 # The default range: from the nearest segment-* or master merge-base, plus the working tree
 git -C "$tree" checkout -q -b segment-a

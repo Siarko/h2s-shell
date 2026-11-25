@@ -4,31 +4,34 @@
 # (H2S_MOCKUP_BASE).
 #
 # The entry, driven here as the runner drives it:
-#   - a good mockup loads with its qs.* imports, prints one MOCKUP-SHOT line per scene with
+#   - a good mockup loads with its qs.* imports, prints one MOCKUP-SHOT line per state with
 #     the subject's bounds, steps on `ipc call mockup next`, answers `ipc call mockup name`,
 #     and ends with MOCKUP-DONE and exit 0; also with the tree reached through a symbolic
 #     link, and two at once on one display, each stepped by its instance id; its window is
 #     the layer-shell panel (`ipc call mockup window`);
-#   - on screen (no H2S_MOCKUP_SHOT), H2S_MOCKUP_SCENE opens that scene, in a floating
-#     window (a normal toplevel, never the panel), with every scene's button inside it and
-#     that scene's checked; also for a mockup taller than the screen, whose own item
-#     reaches above its content;
+#   - on screen (no H2S_MOCKUP_SHOT), H2S_MOCKUP_STATE opens a component on that state, in a
+#     floating window (a normal toplevel, never the panel), with every state's button inside
+#     it and that state's checked; H2S_MOCKUP_SCENE a plan on that scene, also for a plan
+#     taller than the screen, whose own item reaches above its content;
 #   - a view that reaches the module host, the notification server, Notifier and the helper,
 #     started with H2S_SHELL_MODULES and H2S_SHELL_HELPER set, loads no module, registers no
 #     server, sends nothing and has no helper;
 #   - a bad name, a base it does not take, a missing file, a load error, a root that is not
-#     a MockupWindow, a repeated and an empty scene name, an unknown first scene, and shots
-#     that take longer than their limit each end with MOCKUP-ERROR and exit 2.
+#     a MockupWindow, a repeated and an empty state name, an unknown first state, the old
+#     planning/ folder, H2S_MOCKUP_SCENE for a component and H2S_MOCKUP_STATE for a plan, a
+#     mockup still setting the kit's old `scenes`, and shots that take longer than their
+#     limit each end with MOCKUP-ERROR and exit 2.
 #
 # The runner:
-#   - --load-only passes good mockups and writes no shot; --shoot writes one PNG per scene,
+#   - --load-only passes good mockups and writes no shot; --shoot writes one PNG per state,
 #     of the subject's size, into H2S_MOCKUP_SHOTS; the effects fixture's effects are drawn
-#     (the renderer draws MultiEffect and layer.effect), and each scene drawn twice in one
+#     (the renderer draws MultiEffect and layer.effect), and each state drawn twice in one
 #     process is the same file;
-#   - a load error, a repeated scene and a QML warning from the mockup's own file FAIL, the
+#   - a load error, a repeated state and a QML warning from the mockup's own file FAIL, the
 #     others in the same run still PASS;
-#   - with no name it runs every component and view fixture, never the planning one, which
-#     runs when named; a name that is not <kind>/<name> or not a mockup runs nothing;
+#   - with no name it runs every component and view fixture, never the plan, which runs
+#     when named; a name that is not <kind>/<name>, under planning/ (with the move to make)
+#     or not a mockup runs nothing;
 #   - --by-system takes --compare on Arch and --load-only on NixOS and any other system,
 #     saying which (made-up systems' os-release), and runs nothing (status 2) on a system
 #     that cannot be told; with no component or view mockup in the
@@ -41,12 +44,13 @@
 #     over the size limit the oldest run goes, never this run's or one still going;
 #   - --compare without a baseline is NOT RUN and keeps its shots; --approve with no run to
 #     take does nothing (status 2); --approve writes the baseline (the PNGs, a manifest with
-#     the environment and a checksummed line per scene); a fresh run then compares the same
+#     the environment and a checksummed state line per state); a fresh run then compares the same
 #     (0 differing pixels: the drawing is deterministic across processes);
-#   - a baseline one pixel off FAILs, naming the scene, "1 pixel differs" and its review
-#     image (old | new | diff; diff.png red at that pixel), the other scene not named;
+#   - a baseline one pixel off FAILs, naming the state, "1 pixel differs" and its review
+#     image (old | new | diff; diff.png red at that pixel), the other state not named;
 #   - a baseline PNG that is not the manifest's file, one over 300 KB, a manifest of more
-#     than 30 scenes and the baselines together over 15 MB FAIL;
+#     than 30 states, a manifest still saying scene and the baselines together over 15 MB
+#     FAIL;
 #   - a changed environment line is NOT RUN, "environment changed since the baseline",
 #     naming the old and new value, and compares nothing;
 #   - --approve refuses a run drawn with the software backend, and leaves the baseline;
@@ -174,10 +178,10 @@ check_good() {
     check "$([ "${statuses[$case]}" = 0 ]; echo $?)" "exits 0 (was ${statuses[$case]})"
     shot_lines=$(grep -o 'MOCKUP-SHOT .*' "$log")
     # The button at 20,20 in a 200x80 window: its size is the theme's, its place the mockup's
-    check "$(grep -q -E '^MOCKUP-SHOT 0 normal 20,20 [1-9][0-9]*x[1-9][0-9]*$' <<< "$shot_lines"; echo $?)" "scene 0 'normal' shot at the subject's bounds"
-    check "$(grep -q -E '^MOCKUP-SHOT 1 checked 20,20 [1-9][0-9]*x[1-9][0-9]*$' <<< "$shot_lines"; echo $?)" "scene 1 'checked' shot after next"
-    check "$([ "$(grep -c . <<< "$shot_lines")" = 2 ]; echo $?)" "two shot lines, one per scene"
-    check "$(grep -q 'MOCKUP-DONE' "$log"; echo $?)" "MOCKUP-DONE after the last scene"
+    check "$(grep -q -E '^MOCKUP-SHOT 0 normal 20,20 [1-9][0-9]*x[1-9][0-9]*$' <<< "$shot_lines"; echo $?)" "state 0 'normal' shot at the subject's bounds"
+    check "$(grep -q -E '^MOCKUP-SHOT 1 checked 20,20 [1-9][0-9]*x[1-9][0-9]*$' <<< "$shot_lines"; echo $?)" "state 1 'checked' shot after next"
+    check "$([ "$(grep -c . <<< "$shot_lines")" = 2 ]; echo $?)" "two shot lines, one per state"
+    check "$(grep -q 'MOCKUP-DONE' "$log"; echo $?)" "MOCKUP-DONE after the last state"
     check "$([ "${names[$case]}" = components/good ]; echo $?)" "ipc name answers components/good (was '${names[$case]}')"
     check "$([ "${windows[$case]}" = panel ]; echo $?)" "shot in the layer-shell panel (ipc window was '${windows[$case]}')"
     check "$(! grep -q -E 'MOCKUP-ERROR|TypeError|ReferenceError|is not a type|module .* is not installed' "$log"; echo $?)" "no error: the qs.* imports resolve"
@@ -202,16 +206,18 @@ drive yes first second
 check_good first
 check_good second
 
-# on_screen <case> <mockup> <scene>: started on screen on that scene; scene_answer,
-# window_answer and buttons_answer what it answers over IPC once it has started
+# on_screen <case> <mockup> <state or scene>: started on screen on it (H2S_MOCKUP_SCENE for a
+# plan, H2S_MOCKUP_STATE otherwise); current_answer, window_answer and buttons_answer what it
+# answers over IPC once it has started
 on_screen() {
-    local case=$1 id deadline=$((SECONDS + 30))
-    start_entry "$case" "$REPO/mockup.qml" H2S_MOCKUP_BASE=tests/fixtures/mockups H2S_MOCKUP="$2" H2S_MOCKUP_SCENE="$3"
-    scene_answer="" window_answer="" buttons_answer=""
+    local case=$1 id deadline=$((SECONDS + 30)) variable=H2S_MOCKUP_STATE
+    [[ "$2" == plans/* ]] && variable=H2S_MOCKUP_SCENE
+    start_entry "$case" "$REPO/mockup.qml" H2S_MOCKUP_BASE=tests/fixtures/mockups H2S_MOCKUP="$2" "$variable=$3"
+    current_answer="" window_answer="" buttons_answer=""
     while [ $SECONDS -lt $deadline ] && kill -0 "${pids[$case]}" 2> /dev/null; do
         id=$(instance_of "$case")
-        [ -n "$id" ] && scene_answer=$(ipc "$id" call mockup scene)
-        if [ -n "$scene_answer" ]; then
+        [ -n "$id" ] && current_answer=$(ipc "$id" call mockup current)
+        if [ -n "$current_answer" ]; then
             window_answer=$(ipc "$id" call mockup window)
             buttons_answer=$(ipc "$id" call mockup buttons)
             break
@@ -223,15 +229,16 @@ on_screen() {
     finish_entry "$case"
 }
 
-echo "on screen: H2S_MOCKUP_SCENE opens that scene, in a floating window"
-on_screen scene components/good checked
-check "$([ "$scene_answer" = checked ]; echo $?)" "ipc scene answers checked (was '$scene_answer')"
+echo "on screen: H2S_MOCKUP_STATE opens a component on that state, in a floating window"
+on_screen state components/good checked
+check "$([ "$current_answer" = checked ]; echo $?)" "ipc current answers checked (was '$current_answer')"
 check "$([ "$window_answer" = floating ]; echo $?)" "a floating window, not the panel (ipc window was '$window_answer')"
-check "$([ "$buttons_answer" = "2 of 2 shown, checked checked" ]; echo $?)" "both scene buttons inside the window, 'checked' checked (was '$buttons_answer')"
-check "$(! grep -q -E 'MOCKUP-SHOT|MOCKUP-ERROR|TypeError|ReferenceError' "${logs[scene]}"; echo $?)" "no shot, no error"
+check "$([ "$buttons_answer" = "2 of 2 shown, checked checked" ]; echo $?)" "both state buttons inside the window, 'checked' checked (was '$buttons_answer')"
+check "$(! grep -q -E 'MOCKUP-SHOT|MOCKUP-ERROR|TypeError|ReferenceError' "${logs[state]}"; echo $?)" "no shot, no error"
 
-echo "on screen: a mockup taller than the screen keeps its scene buttons in the window"
-on_screen tall planning/tall second
+echo "on screen: H2S_MOCKUP_SCENE opens a plan taller than the screen on that scene, its buttons in the window"
+on_screen tall plans/tall second
+check "$([ "$current_answer" = second ]; echo $?)" "ipc current answers second (was '$current_answer')"
 check "$([ "$window_answer" = floating ]; echo $?)" "a floating window (ipc window was '$window_answer')"
 check "$([ "$buttons_answer" = "3 of 3 shown, checked second" ]; echo $?)" "the three scene buttons inside the window, 'second' checked (was '$buttons_answer')"
 check "$(! grep -q -E 'MOCKUP-ERROR|TypeError|ReferenceError' "${logs[tall]}"; echo $?)" "no error"
@@ -255,7 +262,7 @@ echo "shots longer than their limit"
 start_entry limit "$REPO/mockup.qml" "${fixtures[@]}" H2S_MOCKUP=components/good H2S_MOCKUP_SHOT_LIMIT_MS=1500
 drive no limit
 check "$([ "${statuses[limit]}" = 2 ]; echo $?)" "exits 2 (was ${statuses[limit]})"
-check "$(grep 'MOCKUP-ERROR ' "${logs[limit]}" | grep -q -F "longer than 1500 ms (at scene 0 'normal', waiting for next)"; echo $?)" "MOCKUP-ERROR names the limit, the scene and what it waited for"
+check "$(grep 'MOCKUP-ERROR ' "${logs[limit]}" | grep -q -F "longer than 1500 ms (at state 0 'normal', waiting for next)"; echo $?)" "MOCKUP-ERROR names the limit, the state and what it waited for"
 check "$(! grep -q 'MOCKUP-DONE' "${logs[limit]}"; echo $?)" "no MOCKUP-DONE"
 
 # Each: case | expected text in the MOCKUP-ERROR line | the variables
@@ -268,9 +275,14 @@ errors=(
     "missing file|components/no-such-mockup:|H2S_MOCKUP_SHOT=1 H2S_MOCKUP=components/no-such-mockup"
     "load error|NoSuchFixtureType|${fixtures[*]} H2S_MOCKUP=components/load-error"
     "not a MockupWindow|is not a MockupWindow|${fixtures[*]} H2S_MOCKUP=components/not-a-window"
-    "repeated scene|scene name 'first' is repeated|${fixtures[*]} H2S_MOCKUP=components/repeated-scene"
-    "empty scene|scene 1 has an empty name|${fixtures[*]} H2S_MOCKUP=components/empty-scene"
-    "unknown first scene on screen|no scene 'nope'|H2S_MOCKUP_BASE=tests/fixtures/mockups H2S_MOCKUP=components/good H2S_MOCKUP_SCENE=nope"
+    "repeated state|state name 'first' is repeated|${fixtures[*]} H2S_MOCKUP=components/repeated-name"
+    "empty state|state 1 has an empty name|${fixtures[*]} H2S_MOCKUP=components/empty-name"
+    "unknown first state on screen|no state 'nope'|H2S_MOCKUP_BASE=tests/fixtures/mockups H2S_MOCKUP=components/good H2S_MOCKUP_STATE=nope"
+    "unknown first scene of a plan on screen|no scene 'nope'|H2S_MOCKUP_BASE=tests/fixtures/mockups H2S_MOCKUP=plans/tall H2S_MOCKUP_SCENE=nope"
+    "the old planning folder|mockups/planning/ is now mockups/plans/|${fixtures[*]} H2S_MOCKUP=planning/idea"
+    "a scene for a component|H2S_MOCKUP_SCENE is set for components/good|H2S_MOCKUP_BASE=tests/fixtures/mockups H2S_MOCKUP=components/good H2S_MOCKUP_SCENE=checked"
+    "a state for a plan|H2S_MOCKUP_STATE is set for the plan plans/tall|H2S_MOCKUP_BASE=tests/fixtures/mockups H2S_MOCKUP=plans/tall H2S_MOCKUP_STATE=second"
+    "the kit's old scenes|the kit's scenes and scene are now names and current|${fixtures[*]} H2S_MOCKUP=components/old-scenes"
     "bad shot limit|H2S_MOCKUP_SHOT_LIMIT_MS is 'soon'|${fixtures[*]} H2S_MOCKUP=components/good H2S_MOCKUP_SHOT_LIMIT_MS=soon"
 )
 for entry in "${errors[@]}"; do
@@ -390,30 +402,30 @@ show_on_failure "$before" clock
 
 echo "runner: what fails, beside what passes"
 before=$failures
-runner failing -- --load-only components/good components/load-error components/repeated-scene components/warning
+runner failing -- --load-only components/good components/load-error components/repeated-name components/warning
 check "$([ "${runner_status[failing]}" = 1 ]; echo $?)" "exits 1 (was ${runner_status[failing]})"
 check "$([ "$(verdict_of failing components/good)" = PASS ]; echo $?)" "components/good PASS"
-for name in load-error repeated-scene warning; do
+for name in load-error repeated-name warning; do
     check "$([ "$(verdict_of failing components/$name)" = FAIL ]; echo $?)" "components/$name FAIL"
 done
 check "$(grep -q "MOCKUP-ERROR components/load-error: .*NoSuchFixtureType" "${out[failing]}"; echo $?)" "the load error is named"
-check "$(grep -q "MOCKUP-ERROR components/repeated-scene: scene name 'first' is repeated" "${out[failing]}"; echo $?)" "the repeated scene is named"
+check "$(grep -q "MOCKUP-ERROR components/repeated-name: state name 'first' is repeated" "${out[failing]}"; echo $?)" "the repeated state is named"
 check "$(grep -q "a line about the mockup's own files: .*warning/Mockup.qml.*Unable to assign" "${out[failing]}"; echo $?)" "the warning from the mockup's file is named"
 show_on_failure "$before" failing
 
-echo "runner: no name runs every component and view, never a planning mockup"
+echo "runner: no name runs every component and view, never a plan"
 before=$failures
 runner all -- --load-only
 expected=$(cd "$REPO/tests/fixtures/mockups" && find components views -mindepth 2 -maxdepth 2 -name Mockup.qml -printf '%h\n' | LC_ALL=C sort)
 ran=$(awk '/^  (PASS|FAIL) / { print $2 } /^  NOT RUN / { print $3 }' "${out[all]}" | LC_ALL=C sort)
 check "$([ "$ran" = "$expected" ]; echo $?)" "ran each component and view fixture once ($(echo $ran))"
-check "$(! grep -q 'planning/' <<< "$ran"; echo $?)" "no planning mockup"
-runner planning -- --load-only planning/idea
-check "$([ "${runner_status[planning]}" = 0 ] && [ "$(verdict_of planning planning/idea)" = PASS ]; echo $?)" "planning/idea runs when named (status ${runner_status[planning]})"
+check "$(! grep -q 'plans/' <<< "$ran"; echo $?)" "no plan"
+runner plan -- --load-only plans/idea
+check "$([ "${runner_status[plan]}" = 0 ] && [ "$(verdict_of plan plans/idea)" = PASS ] && grep -q -F 'plans/idea (1 scenes,' "${out[plan]}"; echo $?)" "plans/idea runs when named, its verdict counting scenes (status ${runner_status[plan]})"
 show_on_failure "$before" all
 
 echo "runner: names that run nothing"
-for entry in "Bad_Name|is not <kind>/<name>" "planning/../idea|is not <kind>/<name>" "components/no-such-mockup|no mockup components/no-such-mockup"; do
+for entry in "Bad_Name|is not <kind>/<name>" "plans/../idea|is not <kind>/<name>" "planning/idea|mockups/planning/ is now mockups/plans/ (git mv mockups/planning/idea mockups/plans/idea)" "components/no-such-mockup|no mockup components/no-such-mockup"; do
     IFS='|' read -r name expected <<< "$entry"
     runner bad-name -- --load-only components/good "$name"
     check "$([ "${runner_status[bad-name]}" = 2 ] && grep -q -F -- "$expected" "${out[bad-name]}" && ! grep -q -E '^  (PASS|FAIL)' "${out[bad-name]}"; echo $?)" "'$name': exit 2, '$expected', nothing run"
@@ -508,13 +520,13 @@ compare_vars=(H2S_MOCKUP_SHOTS="$work/shots-compare" H2S_MOCKUP_BASELINES="$work
 baseline=$work/baselines/components/good/baseline
 # shots_named <case>: the run folder the verdict names
 shots_named() { sed -n 's|^.*shots: \([^);]*\).*$|\1|p' "${out[$1]}" | head -n 1; }
-# set_baseline_png <file> <scene line's number and name>: the file becomes that scene's
+# set_baseline_png <file> <state line's number and name>: the file becomes that state's
 # baseline PNG, with its checksum in the manifest (a baseline approved so)
 set_baseline_png() {
     local sum
     cp -- "$1" "$baseline/$2.png"
     sum=$(sha256sum < "$baseline/$2.png")
-    sed -i "s/^\(scene ${2%%-*} ${2#*-} [0-9x]* \).*\$/\1${sum%% *}/" "$baseline/manifest.txt"
+    sed -i "s/^\(state ${2%%-*} ${2#*-} [0-9x]* \).*\$/\1${sum%% *}/" "$baseline/manifest.txt"
 }
 
 runner approve-none "${compare_vars[@]}" -- --approve components/good
@@ -560,7 +572,7 @@ mkdir -p "$baseline"
 touch "$baseline/05-gone.png"
 runner approve "${compare_vars[@]}" -- --approve components/good
 manifest=$baseline/manifest.txt
-check "$([ "${runner_status[approve]}" = 0 ] && grep -q -F "APPROVED components/good — 2 scenes from $first_run" "${out[approve]}"; echo $?)" "--approve takes the newest run (status ${runner_status[approve]})"
+check "$([ "${runner_status[approve]}" = 0 ] && grep -q -F "APPROVED components/good — 2 states from $first_run" "${out[approve]}"; echo $?)" "--approve takes the newest run (status ${runner_status[approve]})"
 check "$([ "$(cd "$baseline" 2> /dev/null && ls | paste -s -d ' ')" = "00-normal.png 01-checked.png manifest.txt" ]; echo $?)" "the baseline: two PNGs and manifest.txt"
 check "$(cmp -s "$first_run/01-checked.png" "$baseline/01-checked.png"; echo $?)" "the PNGs are the run's"
 check "$(grep -q -E '^environment renderer OpenGL VENDOR: .*RENDERER: llvmpipe \(LLVM [^,]+, [0-9]+ bits\)' "$manifest" \
@@ -574,13 +586,13 @@ check "$(grep -q -E '^environment renderer OpenGL VENDOR: .*RENDERER: llvmpipe \
     && grep -q -E '^environment font:emoji [0-9a-f]{64} /' "$manifest" \
     && grep -q -E '^environment font-rendering hinting=[^ ]+ hintstyle=[^ ]* antialias=[^ ]+ rgba=[^ ]* lcdfilter=[^ ]*' "$manifest"; echo $?)" "the manifest's environment: renderer line with the vector width, backend, quickshell, Qt Core/Gui/Quick/Svg, freetype, fontconfig, harfbuzz (by checksum), the fonts' checksums, fontconfig's rendering settings"
 normal_sum=$(sha256sum < "$baseline/00-normal.png")
-check "$(grep -q -x -E "scene 00 normal [0-9]+x[0-9]+ ${normal_sum%% *}" "$manifest" && grep -q -E '^scene 01 checked [0-9]+x[0-9]+ [0-9a-f]{64}$' "$manifest"; echo $?)" "a scene line per scene, with its size and checksum"
+check "$(grep -q -x -E "state 00 normal [0-9]+x[0-9]+ ${normal_sum%% *}" "$manifest" && grep -q -E '^state 01 checked [0-9]+x[0-9]+ [0-9a-f]{64}$' "$manifest"; echo $?)" "a state line per state, with its size and checksum"
 show_on_failure "$before" approve
 cp -a "$baseline" "$work/baseline-approved"
 
 before=$failures
 runner compare-same "${compare_vars[@]}" -- --compare components/good
-check "$([ "${runner_status[compare-same]}" = 0 ] && grep -q '^  PASS     components/good (2 scenes, the same as the baseline' "${out[compare-same]}"; echo $?)" "a fresh run compares the same: PASS, 0 differing pixels (status ${runner_status[compare-same]})"
+check "$([ "${runner_status[compare-same]}" = 0 ] && grep -q '^  PASS     components/good (2 states, the same as the baseline' "${out[compare-same]}"; echo $?)" "a fresh run compares the same: PASS, 0 differing pixels (status ${runner_status[compare-same]})"
 show_on_failure "$before" compare-same
 
 before=$failures
@@ -589,10 +601,10 @@ set_baseline_png "$work/checked-one-pixel.png" 01-checked
 runner compare-pixel "${compare_vars[@]}" -- --compare components/good
 pixel_run=$(shots_named compare-pixel)
 check "$([ "${runner_status[compare-pixel]}" = 1 ] && [ "$(verdict_of compare-pixel components/good)" = FAIL ]; echo $?)" "a baseline one pixel off: FAIL (status ${runner_status[compare-pixel]})"
-check "$(grep -q -F "scene 'checked': 1 pixel differs; review: $pixel_run/01-checked-review.png" "${out[compare-pixel]}"; echo $?)" "names the scene, '1 pixel differs' and the review image"
-check "$(! grep -q "scene 'normal'" "${out[compare-pixel]}"; echo $?)" "the unchanged scene is not named"
+check "$(grep -q -F "state 'checked': 1 pixel differs; review: $pixel_run/01-checked-review.png" "${out[compare-pixel]}"; echo $?)" "names the state, '1 pixel differs' and the review image"
+check "$(! grep -q "state 'normal'" "${out[compare-pixel]}"; echo $?)" "the unchanged state is not named"
 check "$([ -s "$pixel_run/01-checked-review.png" ] && cmp -s "$pixel_run/01-checked/old.png" "$baseline/01-checked.png" \
-    && cmp -s "$pixel_run/01-checked/new.png" "$pixel_run/01-checked.png" && [ -s "$pixel_run/01-checked/diff.png" ] && [ ! -e "$pixel_run/00-normal" ]; echo $?)" "old.png, new.png, diff.png and the review image written, for that scene only"
+    && cmp -s "$pixel_run/01-checked/new.png" "$pixel_run/01-checked.png" && [ -s "$pixel_run/01-checked/diff.png" ] && [ ! -e "$pixel_run/00-normal" ]; echo $?)" "old.png, new.png, diff.png and the review image written, for that state only"
 check "$([ "$("$LOCKTEST_MAGICK" "$pixel_run/01-checked/diff.png" -format '%[pixel:p{5,5}]' info: 2> /dev/null)" = "srgb(255,0,0)" ] \
     && [ "$("$LOCKTEST_MAGICK" "$pixel_run/01-checked/diff.png" -format '%[pixel:p{6,5}]' info: 2> /dev/null)" != "srgb(255,0,0)" ]; echo $?)" "diff.png is red at the pixel, and only there"
 shot_width=$("$LOCKTEST_MAGICK" identify -format '%w' "$pixel_run/01-checked.png" 2> /dev/null)
@@ -617,10 +629,10 @@ show_on_failure "$before" compare-oversize
 
 before=$failures
 rm -rf "$baseline" && cp -a "$work/baseline-approved" "$baseline"
-for i in $(seq 2 30); do echo "scene $i extra-$i 1x1 0000000000000000000000000000000000000000000000000000000000000000" >> "$baseline/manifest.txt"; done
-runner compare-scenes "${compare_vars[@]}" -- --compare components/good
-check "$([ "${runner_status[compare-scenes]}" = 1 ] && grep -q -F "the baseline has 31 scenes, over the limit of 30" "${out[compare-scenes]}"; echo $?)" "a baseline of 31 scenes: FAIL (status ${runner_status[compare-scenes]})"
-show_on_failure "$before" compare-scenes
+for i in $(seq 2 30); do echo "state $i extra-$i 1x1 0000000000000000000000000000000000000000000000000000000000000000" >> "$baseline/manifest.txt"; done
+runner compare-states "${compare_vars[@]}" -- --compare components/good
+check "$([ "${runner_status[compare-states]}" = 1 ] && grep -q -F "the baseline has 31 states, over the limit of 30" "${out[compare-states]}"; echo $?)" "a baseline of 31 states: FAIL (status ${runner_status[compare-states]})"
+show_on_failure "$before" compare-states
 
 before=$failures
 rm -rf "$baseline" && cp -a "$work/baseline-approved" "$baseline"
@@ -648,7 +660,7 @@ runner compare-environment-tampered "${compare_vars[@]}" -- --compare components
 check "$([ "${runner_status[compare-environment-tampered]}" = 1 ] && grep -q -F "baseline/00-normal.png is not the approved file" "${out[compare-environment-tampered]}"; echo $?)" "a tampered baseline FAILs even when the environment changed too (status ${runner_status[compare-environment-tampered]})"
 show_on_failure "$before" compare-environment-tampered
 
-# A scene whose size changed, with no pixel of the shot different: the baseline one transparent
+# A state whose size changed, with no pixel of the shot different: the baseline one transparent
 # column wider
 before=$failures
 rm -rf "$baseline" && cp -a "$work/baseline-approved" "$baseline"
@@ -656,31 +668,39 @@ normal_size=$("$LOCKTEST_MAGICK" identify -format '%wx%h' "$baseline/00-normal.p
 wider=$(( ${normal_size%x*} + 1 ))x${normal_size#*x}
 "$LOCKTEST_MAGICK" "$baseline/00-normal.png" -alpha set -background none -gravity West -extent "$wider" "$work/wider.png"
 set_baseline_png "$work/wider.png" 00-normal
-sed -i "s/^scene 00 normal $normal_size /scene 00 normal $wider /" "$baseline/manifest.txt"
+sed -i "s/^state 00 normal $normal_size /state 00 normal $wider /" "$baseline/manifest.txt"
 runner compare-size "${compare_vars[@]}" -- --compare components/good
-check "$([ "${runner_status[compare-size]}" = 1 ] && grep -q -F "scene 'normal': 0 pixels differ (the size was $wider, is $normal_size)" "${out[compare-size]}"; echo $?)" "a scene whose size changed FAILs with no pixel different (status ${runner_status[compare-size]})"
+check "$([ "${runner_status[compare-size]}" = 1 ] && grep -q -F "state 'normal': 0 pixels differ (the size was $wider, is $normal_size)" "${out[compare-size]}"; echo $?)" "a state whose size changed FAILs with no pixel different (status ${runner_status[compare-size]})"
 show_on_failure "$before" compare-size
 
 # Scenes renamed, added and removed
-# scenes_case <case> <expected baseline names>: the scene lists named
-scenes_case() {
+# states_case <case> <expected baseline names>: the state lists named
+states_case() {
     runner "$1" "${compare_vars[@]}" -- --compare components/good
-    check "$([ "${runner_status[$1]}" = 1 ] && grep -q -F "the scenes are not the baseline's: baseline '$2', now 'normal checked'" "${out[$1]}"; echo $?)" "$1: FAIL, the scene lists named (status ${runner_status[$1]})"
+    check "$([ "${runner_status[$1]}" = 1 ] && grep -q -F "the states are not the baseline's: baseline '$2', now 'normal checked'" "${out[$1]}"; echo $?)" "$1: FAIL, the state lists named (status ${runner_status[$1]})"
     show_on_failure "$before" "$1"
 }
 before=$failures
 rm -rf "$baseline" && cp -a "$work/baseline-approved" "$baseline"
 mv "$baseline/01-checked.png" "$baseline/01-pressed.png"
-sed -i 's/^scene 01 checked /scene 01 pressed /' "$baseline/manifest.txt"
-scenes_case scene-renamed "normal pressed"
+sed -i 's/^state 01 checked /state 01 pressed /' "$baseline/manifest.txt"
+states_case state-renamed "normal pressed"
 rm -rf "$baseline" && cp -a "$work/baseline-approved" "$baseline"
 cp "$baseline/01-checked.png" "$baseline/02-extra.png"
-echo "$(grep '^scene 01 ' "$baseline/manifest.txt" | sed 's/^scene 01 checked /scene 02 extra /')" >> "$baseline/manifest.txt"
-scenes_case scene-removed-since "normal checked extra"
+echo "$(grep '^state 01 ' "$baseline/manifest.txt" | sed 's/^state 01 checked /state 02 extra /')" >> "$baseline/manifest.txt"
+states_case state-removed-since "normal checked extra"
 rm -rf "$baseline" && cp -a "$work/baseline-approved" "$baseline"
 rm "$baseline/01-checked.png"
-sed -i '/^scene 01 /d' "$baseline/manifest.txt"
-scenes_case scene-added-since "normal"
+sed -i '/^state 01 /d' "$baseline/manifest.txt"
+states_case state-added-since "normal"
+
+# A manifest still saying scene, the keyword's old name: FAIL, the fix named
+before=$failures
+rm -rf "$baseline" && cp -a "$work/baseline-approved" "$baseline"
+sed -i 's/^state /scene /' "$baseline/manifest.txt"
+runner compare-old-keyword "${compare_vars[@]}" -- --compare components/good
+check "$([ "${runner_status[compare-old-keyword]}" = 1 ] && grep -q -F "baseline/manifest.txt says scene, the keyword's old name: state" "${out[compare-old-keyword]}"; echo $?)" "a manifest still saying scene: FAIL, the keyword named (status ${runner_status[compare-old-keyword]})"
+show_on_failure "$before" compare-old-keyword
 
 before=$failures
 rm -rf "$baseline" && cp -a "$work/baseline-approved" "$baseline"
@@ -724,7 +744,7 @@ runner tree-changed-approve "${compare_vars[@]}" H2S_MOCKUP_SHOTS="$work/shots-t
 check "$([ "${runner_status[tree-changed-approve]}" = 1 ]; echo $?)" "and that run cannot be approved (status ${runner_status[tree-changed-approve]})"
 show_on_failure "$before" tree-changed
 
-# A Quickshell that names no version: what drew the scenes cannot be told
+# A Quickshell that names no version: what drew the states cannot be told
 before=$failures
 mkdir -p "$work/mute-qs"
 printf '#!%s\n[ "${1:-}" = --version ] && exit 0\nexec %q "$@"\n' "$(type -P bash)" "$LOCKTEST_QS" > "$work/mute-qs/qs"

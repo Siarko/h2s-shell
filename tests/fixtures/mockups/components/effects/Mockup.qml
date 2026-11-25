@@ -5,19 +5,19 @@ import qs.components
 import qs.mockups.kit
 
 // The runners' fixture mockup with the shader effects the shell uses: the renderer a mockup
-// runs under must draw them the same each time (tests/run-mockups.sh). Scenes:
+// runs under must draw them the same each time (tests/run-mockups.sh). States:
 //   text           a real component and plain text, no effect
 //   rounded-image  the shell's RoundedImage (a MultiEffect mask over an Image)
 //   shadow-blur    a MultiEffect with a shadow and a blur over a rounded rectangle
 //   layer-effect   an item drawn through layer.effect (a MultiEffect colorization)
-// and each once more, "<scene>-again": the same scene drawn later in the same process
+// and each once more, "<state>-again": the same state drawn later in the same process
 // The image is loaded from the start (an Image that is not visible still loads), so that it
-// is there before its scene, whatever the order of frames
+// is there before its state, whatever the order of frames
 MockupWindow {
     id: root
-    scenes: ["text", "rounded-image", "shadow-blur", "layer-effect",
+    names: ["text", "rounded-image", "shadow-blur", "layer-effect",
         "text-again", "rounded-image-again", "shadow-blur-again", "layer-effect-again"]
-    readonly property string shown: scene.replace(/-again$/, "")
+    readonly property string shown: current.replace(/-again$/, "")
     contentWidth: 240
     contentHeight: 120
 

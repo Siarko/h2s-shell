@@ -166,39 +166,43 @@ ticks, cells respond to clicks, and popups toggle.
 
 `mockups/`, with the root entry `mockup.qml`: development only, never installed. A mockup is
 `mockups/<kind>/<name>/Mockup.qml`, run against this tree (no copy of it), with
-`H2S_MOCKUP=<kind>/<name>` (`H2S_MOCKUP_SCENE=<scene>` opens a scene;
-`H2S_MOCKUP_SHOT=1` steps through the scenes headless). Its root is the kit's
-`MockupWindow` (`import qs.mockups.kit`), which holds the scene contract — `scenes`,
-`scene`, `subject`, `subjectRect` — and the shot protocol (`mockups/kit/MockupWindow.qml`); it
+`H2S_MOCKUP=<kind>/<name>` (`H2S_MOCKUP_STATE=<state>` opens a component or view on a
+state, `H2S_MOCKUP_SCENE=<scene>` a plan on a scene, each refused for the other kind;
+`H2S_MOCKUP_SHOT=1` steps through them headless). Its root is the kit's
+`MockupWindow` (`import qs.mockups.kit`), which holds the contract — `names` (the states or
+scenes; not `states`/`state`, which every Qt Quick Item has), `current`, `subject`,
+`subjectRect` — and the shot protocol (`mockups/kit/MockupWindow.qml`); it
 makes the window itself: a layer-shell panel at the output's corner while shooting, a normal
 window titled with the mockup's name on a screen. The entry isolates the process from
 the session it runs in (`singletons/Isolation.qml`): no module loads, no notification server
 is registered, nothing is sent, whatever environment it inherited.
 `tests/run-mockups.sh --load-only | --shoot | --compare [<kind>/<name>…]` runs them headless, each in a
 compositor of its own, side by side, in a fixed environment (Mesa's llvmpipe, which draws
-shader effects; scale 1, 96 DPI, `QT_HASH_SEED=0`, UTC); `--shoot` writes a PNG per scene,
+shader effects; scale 1, 96 DPI, `QT_HASH_SEED=0`, UTC); `--shoot` writes a PNG per state,
 cropped to the subject, into `$H2S_MOCKUP_SHOTS` (else `~/.cache/h2s-shell-mockups/`).
-With no name it runs every component and view mockup, never a planning one; `--by-system`,
+With no name it runs every component and view mockup, never a plan; `--by-system`,
 the part `tests/run-all.sh` runs and the command `tests/affected.sh` gives (a mockup covers its
 folder's closure), is `--compare` on Arch and `--load-only` elsewhere. Folder names are lowercase with hyphens, so no `import qs.…` reaches them; `kit/` is the only
-importable folder. Three kinds:
+importable folder. Three kinds (a "mockup" is any of them):
 
 - `components/<name>`: one component in all its states (the component's file name in kebab
   case).
-- `views/<name>`: one view on stand-in data.
-- `planning/<feature>`: an idea with notes (`MOCKUP.md`: the purpose, the scenes, the
-  proposed wording, open questions), only for making the plan and the implementation; not
-  tested; deleted a longer while after the feature is merged.
+- `views/<name>`: one view on stand-in data, in its states.
+- `plans/<feature>` (once `planning/`, a name refused now): an idea in **scenes**, with
+  notes (`MOCKUP.md`: the purpose, the scenes, the proposed wording, open questions), only
+  for making the plan and the implementation; not tested; deleted a longer while after the
+  feature is merged.
 
 Components and views have a baseline under `baseline/`, compared exactly (on Arch; NixOS
 runs them load-only): `tests/run-mockups.sh --compare` decodes each shot and the baseline's
 PNG and counts the pixels that differ (no tolerance), writes an old | new | diff
-`<NN>-<scene>-review.png` beside the shots for each scene that does, and is NOT RUN, never
+`<NN>-<state>-review.png` beside the shots for each state that does, and is NOT RUN, never
 FAIL, when the environment in `baseline/manifest.txt` (Quickshell, the renderer line, Qt,
-freetype, fontconfig, harfbuzz, the fonts and fontconfig's rendering settings) is not the
+freetype, fontconfig, harfbuzz, the fonts and fontconfig's rendering settings; a line
+`state <NN> <state> <w>x<h> <sha256>` per state) is not the
 run's, or there is no baseline. `tests/run-mockups.sh --approve <kind>/<name>` makes the
 baseline from the last run this tree made of the mockup, when it passed and the tree is still
-at its commit and uncommitted changes. Limits: 300 KB a PNG, 30 scenes a mockup, 15 MB all
+at its commit and uncommitted changes. Limits: 300 KB a PNG, 30 states a mockup, 15 MB all
 baselines. A baseline changes only in the commit of the code change that causes it, after the
 maintainer approved the review images. On a screen, `tests/mockup.sh` lists, opens, closes,
 reviews (the images inline in a kitty terminal, else their paths) and approves them (`-n`
@@ -208,24 +212,24 @@ Mockup code:
 
 - It uses the real components, views and theme, with stand-in data passed in through
   properties. It never reads the system, the clock or the network; a time shown is a fixed
-  value (the kit's `now`), and a looping animation is off in a scene through the
+  value (the kit's `now`), and a looping animation is off in a state through the
   component's own property. It keeps no time of its own: no `Timer`, no `Date.now()` or
   `new Date()`, no animation of a literal duration (the runner fails one in `Mockup.qml`);
   animations take Theme's durations, which the entry makes instant.
-  A picture is loaded before the scene that shows it (its asynchronous `Image` made from the
-  start, hidden): the shot is taken three frames after the scene is set.
+  A picture is loaded before the state that shows it (its asynchronous `Image` made from the
+  start, hidden): the shot is taken three frames after the state is set.
 - A pointer state (hover, press) is simulated with QtTest's events (a `TestCase` with
-  `when: false`), only inside the scene's own cell: each scene has a cell of its own, all
+  `when: false`), only inside the state's own cell: each state has a cell of its own, all
   shown side by side while shooting and the shot cropped to it (`subject`), and the pointer,
   when nothing is to be under it, rests on a strip off every cell. Nothing is shown or
-  hidden under the pointer as the scenes go by: Qt Quick sends hover again at the pointer's
-  place when items change under it, so an item shown where an earlier scene left the
+  hidden under the pointer as the states go by: Qt Quick sends hover again at the pointer's
+  place when items change under it, so an item shown where an earlier state left the
   pointer is lit in some runs and not in others.
 - It never changes a shell file for its own sake. If a view cannot take stand-in data, that
   missing seam is reported and added to the shell as a change of its own, with its test.
 - It contains no `*Rules.qml`, no literal colours (theme tokens, as everywhere), and no
   `qmldir`.
-- Planning mockups are throwaway code: no review, no test, and kept out of every closure.
+- Plans are throwaway code: no review, no test, and kept out of every closure.
 
 Shell code never imports from `mockups/`.
 

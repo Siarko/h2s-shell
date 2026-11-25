@@ -7,7 +7,7 @@ import qs.components
 import qs.mockups.kit
 
 // The Settings window's modal (SettingsModal) over a stand-in area of the window, one
-// question per scene, its spec passed in through the modal's own properties. The questions
+// question per state, its spec passed in through the modal's own properties. The questions
 // are the shell's own, made by its rules from stand-in names where a rule makes one:
 //   informing        success, no button of its own: the one "OK" informs (size s)
 //   enable-module    ModuleInstallRules.confirmationQuestion: warning, a strong line first,
@@ -24,12 +24,12 @@ import qs.mockups.kit
 //   focus-button     enable-module after Tab: the keyboard on the first button (its ring)
 //   short-window     remove-password in a window too short for it (200 px): the middle is
 //                    cut and scrolls, the header and the buttons stay
-// Each scene opens the modal anew (open false, then true), as the host does for each
+// Each state opens the modal anew (open false, then true), as the host does for each
 // question: the keyboard goes to the panel and the checkboxes start unchecked.
 MockupWindow {
     id: root
 
-    scenes: ["informing", "enable-module", "disable-module", "remove-module", "remove-checked", "remove-password",
+    names: ["informing", "enable-module", "disable-module", "remove-module", "remove-checked", "remove-password",
              "content-list", "long-text", "focus-button", "short-window"]
 
     // The stand-in removal preview (ModuleInstaller.removalPreview's answer)
@@ -59,7 +59,7 @@ MockupWindow {
         "focus-button": ModuleInstallRules.confirmationQuestion("Weather Radar"),
         "short-window": PamRuleViewRules.removeFixedQuestion("sudo", [], {})
     })
-    readonly property var spec: specs[scene] ?? {}
+    readonly property var spec: specs[current] ?? {}
 
     readonly property var changeLines: ["Plays from the files' folder too", "Shows the cover in the popup",
                                         "Remembers the volume per player", "Fixes a stall after a suspend"]
@@ -68,15 +68,15 @@ MockupWindow {
     contentHeight: 440
     subject: area
 
-    // The question opened anew for the scene, then the keyboard and the checkboxes it needs,
-    // once the modal has opened (its focus taken) with the scene's spec
-    onSceneChanged: {
+    // The question opened anew for the state, then the keyboard and the checkboxes it needs,
+    // once the modal has opened (its focus taken) with the state's spec
+    onCurrentChanged: {
         modal.open = false;
         modal.open = true;
-        Qt.callLater(_settle, scene);
+        Qt.callLater(_settle, current);
     }
     function _settle(name) {
-        if (name !== scene)
+        if (name !== current)
             return;
         if (name === "remove-checked")
             modal.values = { data: true };
@@ -114,7 +114,7 @@ MockupWindow {
         x: 0
         y: 0
         width: parent.width
-        height: root.scene === "short-window" ? 200 : parent.height
+        height: root.current === "short-window" ? 200 : parent.height
 
         Column {
             x: Theme.modal.padding

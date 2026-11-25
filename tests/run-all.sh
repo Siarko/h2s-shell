@@ -64,7 +64,7 @@
 #   tests/mockup-selftest.sh                            the mockups' screen tool, on stand-ins
 #   tests/run-mockups.sh --by-system                    the component and view mockups:
 #                                                       compared with their baselines on
-#                                                       Arch, every scene reached elsewhere
+#                                                       Arch, every state reached elsewhere
 #   tests/run-system.sh                                 this system's set (NixOS or Arch)
 #   tests/lock/run.sh                                   the lock screen, end to end
 #
