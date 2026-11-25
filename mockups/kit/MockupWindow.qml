@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Controls
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
@@ -14,9 +15,9 @@ import qs.components
 //              output coordinates and a shooter can crop to them
 //   on screen  a normal window titled with the mockup's name, which the compositor
 //              moves and resizes like any other: the buttons (one per state or scene)
-//              along its top, the
-//              content under them, scrolled when the window is smaller than it (the window
-//              opens at the content's size, at most the screen's)
+//              along its top, the content under them, scrolled by the wheel and scroll
+//              bars (never by a drag, which is the mockup's) when the window is smaller
+//              than it (the window opens at the content's size, at most the screen's)
 //
 // A component or a view has states, a plan has scenes; the kit treats both alike (not
 // `states`/`state`, which every Qt Quick Item has: a binding to `state` inside a mockup's item
@@ -61,6 +62,10 @@ import qs.components
 //                                                  the current state or scene
 //   qs -p <tree>/mockup.qml ipc call mockup window the window made: "panel" while shooting,
 //                                                  "floating" on screen, "" before start()
+//   qs -p <tree>/mockup.qml ipc call mockup scroller
+//                         on screen, how the content scrolls: "wheel, vertical bar shown"
+//                         (or hidden while the content fits; never "drag": a drag belongs
+//                         to the mockup); "" while shooting
 //   qs -p <tree>/mockup.qml ipc call mockup buttons
 //                         the buttons inside the window: "<shown> of <names> shown,
 //                         checked <name>" (none while shooting)
@@ -266,6 +271,44 @@ QtObject {
             boundsBehavior: Flickable.StopAtBounds
             // Nothing of the mockup's own reaches over the buttons
             clip: true
+            // A drag belongs to the mockup (a slider, a text selection), never to the
+            // scroller: it scrolls by the wheel and its scroll bars only
+            interactive: false
+
+            // Scrolls by the wheel where the mockup's own items did not take it; a
+            // horizontal wheel, or Shift with a vertical one, scrolls sideways
+            WheelHandler {
+                target: null
+                onWheel: event => {
+                    const step = (pixel, angle) => pixel !== 0 ? pixel : angle / 120 * 48;
+                    let dx = step(event.pixelDelta.x, event.angleDelta.x);
+                    let dy = step(event.pixelDelta.y, event.angleDelta.y);
+                    if (event.modifiers & Qt.ShiftModifier && dx === 0) {
+                        dx = dy;
+                        dy = 0;
+                    }
+                    const flick = _scroller;
+                    flick.contentX = Math.max(0, Math.min(flick.contentWidth - flick.width, flick.contentX - dx));
+                    flick.contentY = Math.max(0, Math.min(flick.contentHeight - flick.height, flick.contentY - dy));
+                }
+            }
+
+            ScrollBar.vertical: ScrollBar {
+                policy: _scroller.contentHeight > _scroller.height ? ScrollBar.AlwaysOn : ScrollBar.AlwaysOff
+                contentItem: Rectangle {
+                    implicitWidth: 6
+                    radius: width / 2
+                    color: Theme.textSecondary
+                }
+            }
+            ScrollBar.horizontal: ScrollBar {
+                policy: _scroller.contentWidth > _scroller.width ? ScrollBar.AlwaysOn : ScrollBar.AlwaysOff
+                contentItem: Rectangle {
+                    implicitHeight: 6
+                    radius: height / 2
+                    color: Theme.textSecondary
+                }
+            }
         }
 
         Flow {
@@ -335,6 +378,14 @@ QtObject {
 
         function buttons(): string {
             return root._window ? root._buttonsShown() : "";
+        }
+
+        function scroller(): string {
+            if (!root._window || root.shooting)
+                return "";
+            const bar = _scroller.ScrollBar.vertical;
+            return (_scroller.interactive ? "drag" : "wheel") + ", vertical bar "
+                + (bar && bar.visible && bar.policy === ScrollBar.AlwaysOn ? "shown" : "hidden");
         }
     }
 }

@@ -12,7 +12,9 @@
 #   - on screen (no H2S_MOCKUP_SHOT), H2S_MOCKUP_STATE opens a component on that state, in a
 #     floating window (a normal toplevel, never the panel), with every state's button inside
 #     it and that state's checked; H2S_MOCKUP_SCENE a plan on that scene, also for a plan
-#     taller than the screen, whose own item reaches above its content;
+#     taller than the screen, whose own item reaches above its content; on screen the
+#     content never scrolls by a drag (a drag is the mockup's), only by the wheel and a
+#     vertical scroll bar shown while it does not fit;
 #   - a view that reaches the module host, the notification server, Notifier and the helper,
 #     started with H2S_SHELL_MODULES and H2S_SHELL_HELPER set, loads no module, registers no
 #     server, sends nothing and has no helper;
@@ -208,18 +210,19 @@ check_good second
 
 # on_screen <case> <mockup> <state or scene>: started on screen on it (H2S_MOCKUP_SCENE for a
 # plan, H2S_MOCKUP_STATE otherwise); current_answer, window_answer and buttons_answer what it
-# answers over IPC once it has started
+# answers over IPC once it has started, and scroller_answer
 on_screen() {
     local case=$1 id deadline=$((SECONDS + 30)) variable=H2S_MOCKUP_STATE
     [[ "$2" == plans/* ]] && variable=H2S_MOCKUP_SCENE
     start_entry "$case" "$REPO/mockup.qml" H2S_MOCKUP_BASE=tests/fixtures/mockups H2S_MOCKUP="$2" "$variable=$3"
-    current_answer="" window_answer="" buttons_answer=""
+    current_answer="" window_answer="" buttons_answer="" scroller_answer=""
     while [ $SECONDS -lt $deadline ] && kill -0 "${pids[$case]}" 2> /dev/null; do
         id=$(instance_of "$case")
         [ -n "$id" ] && current_answer=$(ipc "$id" call mockup current)
         if [ -n "$current_answer" ]; then
             window_answer=$(ipc "$id" call mockup window)
             buttons_answer=$(ipc "$id" call mockup buttons)
+            scroller_answer=$(ipc "$id" call mockup scroller)
             break
         fi
         # A condition polled (the instance answering), not a fixed wait
@@ -234,6 +237,7 @@ on_screen state components/good checked
 check "$([ "$current_answer" = checked ]; echo $?)" "ipc current answers checked (was '$current_answer')"
 check "$([ "$window_answer" = floating ]; echo $?)" "a floating window, not the panel (ipc window was '$window_answer')"
 check "$([ "$buttons_answer" = "2 of 2 shown, checked checked" ]; echo $?)" "both state buttons inside the window, 'checked' checked (was '$buttons_answer')"
+check "$([ "$scroller_answer" = "wheel, vertical bar hidden" ]; echo $?)" "content that fits: no drag-scrolling, no scroll bar (was '$scroller_answer')"
 check "$(! grep -q -E 'MOCKUP-SHOT|MOCKUP-ERROR|TypeError|ReferenceError' "${logs[state]}"; echo $?)" "no shot, no error"
 
 echo "on screen: H2S_MOCKUP_SCENE opens a plan taller than the screen on that scene, its buttons in the window"
@@ -241,6 +245,7 @@ on_screen tall plans/tall second
 check "$([ "$current_answer" = second ]; echo $?)" "ipc current answers second (was '$current_answer')"
 check "$([ "$window_answer" = floating ]; echo $?)" "a floating window (ipc window was '$window_answer')"
 check "$([ "$buttons_answer" = "3 of 3 shown, checked second" ]; echo $?)" "the three scene buttons inside the window, 'second' checked (was '$buttons_answer')"
+check "$([ "$scroller_answer" = "wheel, vertical bar shown" ]; echo $?)" "content taller than the window: scrolled by the wheel and a shown scroll bar, never by a drag (was '$scroller_answer')"
 check "$(! grep -q -E 'MOCKUP-ERROR|TypeError|ReferenceError' "${logs[tall]}"; echo $?)" "no error"
 
 echo "isolation: a view that reaches modules, notifications and the helper"
