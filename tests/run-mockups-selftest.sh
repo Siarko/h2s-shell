@@ -10,7 +10,9 @@
 #     link, and two at once on one display, each stepped by its instance id; its window is
 #     the layer-shell panel (`ipc call mockup window`);
 #   - on screen (no H2S_MOCKUP_SHOT), H2S_MOCKUP_SCENE opens that scene, in a floating
-#     window (a normal toplevel, never the panel);
+#     window (a normal toplevel, never the panel), with every scene's button inside it and
+#     that scene's checked; also for a mockup taller than the screen, whose own item
+#     reaches above its content;
 #   - a view that reaches the module host, the notification server, Notifier and the helper,
 #     started with H2S_SHELL_MODULES and H2S_SHELL_HELPER set, loads no module, registers no
 #     server, sends nothing and has no helper;
@@ -200,23 +202,39 @@ drive yes first second
 check_good first
 check_good second
 
+# on_screen <case> <mockup> <scene>: started on screen on that scene; scene_answer,
+# window_answer and buttons_answer what it answers over IPC once it has started
+on_screen() {
+    local case=$1 id deadline=$((SECONDS + 30))
+    start_entry "$case" "$REPO/mockup.qml" H2S_MOCKUP_BASE=tests/fixtures/mockups H2S_MOCKUP="$2" H2S_MOCKUP_SCENE="$3"
+    scene_answer="" window_answer="" buttons_answer=""
+    while [ $SECONDS -lt $deadline ] && kill -0 "${pids[$case]}" 2> /dev/null; do
+        id=$(instance_of "$case")
+        [ -n "$id" ] && scene_answer=$(ipc "$id" call mockup scene)
+        if [ -n "$scene_answer" ]; then
+            window_answer=$(ipc "$id" call mockup window)
+            buttons_answer=$(ipc "$id" call mockup buttons)
+            break
+        fi
+        # A condition polled (the instance answering), not a fixed wait
+        sleep 0.05
+    done
+    kill -TERM "${pids[$case]}" 2> /dev/null
+    finish_entry "$case"
+}
+
 echo "on screen: H2S_MOCKUP_SCENE opens that scene, in a floating window"
-start_entry scene "$REPO/mockup.qml" H2S_MOCKUP_BASE=tests/fixtures/mockups H2S_MOCKUP=components/good H2S_MOCKUP_SCENE=checked
-scene_answer=""
-window_answer=""
-deadline=$((SECONDS + 30))
-while [ $SECONDS -lt $deadline ] && kill -0 "${pids[scene]}" 2> /dev/null; do
-    id=$(instance_of scene)
-    [ -n "$id" ] && scene_answer=$(ipc "$id" call mockup scene)
-    [ -n "$scene_answer" ] && { window_answer=$(ipc "$id" call mockup window); break; }
-    # A condition polled (the instance answering), not a fixed wait
-    sleep 0.05
-done
-kill -TERM "${pids[scene]}" 2> /dev/null
-finish_entry scene
+on_screen scene components/good checked
 check "$([ "$scene_answer" = checked ]; echo $?)" "ipc scene answers checked (was '$scene_answer')"
 check "$([ "$window_answer" = floating ]; echo $?)" "a floating window, not the panel (ipc window was '$window_answer')"
+check "$([ "$buttons_answer" = "2 of 2 shown, checked checked" ]; echo $?)" "both scene buttons inside the window, 'checked' checked (was '$buttons_answer')"
 check "$(! grep -q -E 'MOCKUP-SHOT|MOCKUP-ERROR|TypeError|ReferenceError' "${logs[scene]}"; echo $?)" "no shot, no error"
+
+echo "on screen: a mockup taller than the screen keeps its scene buttons in the window"
+on_screen tall planning/tall second
+check "$([ "$window_answer" = floating ]; echo $?)" "a floating window (ipc window was '$window_answer')"
+check "$([ "$buttons_answer" = "3 of 3 shown, checked second" ]; echo $?)" "the three scene buttons inside the window, 'second' checked (was '$buttons_answer')"
+check "$(! grep -q -E 'MOCKUP-ERROR|TypeError|ReferenceError' "${logs[tall]}"; echo $?)" "no error"
 
 echo "isolation: a view that reaches modules, notifications and the helper"
 start_entry isolation "$REPO/mockup.qml" "${fixtures[@]}" H2S_MOCKUP=views/isolation \

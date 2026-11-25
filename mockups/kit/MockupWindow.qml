@@ -12,9 +12,10 @@ import qs.components
 //   shooting   a panel anchored at the output's top-left corner, ignoring exclusive zones
 //              (layer-shell namespace h2s-mockup), so that an item's window coordinates are
 //              output coordinates and a shooter can crop to them
-//   on screen  a normal window titled with the mockup's name, of the content's size with
-//              the scene buttons under it, which the compositor moves and resizes like any
-//              other
+//   on screen  a normal window titled with the mockup's name, which the compositor
+//              moves and resizes like any other: the scene buttons along its top, the
+//              content under them, scrolled when the window is smaller than it (the window
+//              opens at the content's size, at most the screen's)
 //
 // The scene contract:
 //   scenes        the names of the scenes, in their fixed order; each non-empty, without
@@ -46,7 +47,7 @@ import qs.components
 // scene `finished` comes; an error (a bad scene list, a subject without a size, the shots
 // taking longer than shotLimitMs in all) `failed`.
 // On screen: the scene the entry names (H2S_MOCKUP_SCENE), else the first, and a row of
-// buttons under the content that switches between them.
+// buttons above the content that switches between them, the current one checked.
 //
 // Over IPC (the config path is the entry's, the same for every mockup, so `name` tells
 // running ones apart):
@@ -55,6 +56,9 @@ import qs.components
 //   qs -p <tree>/mockup.qml ipc call mockup scene  the current scene
 //   qs -p <tree>/mockup.qml ipc call mockup window the window made: "panel" while shooting,
 //                                                  "floating" on screen, "" before start()
+//   qs -p <tree>/mockup.qml ipc call mockup buttons
+//                         the scene buttons inside the window: "<shown> of <scenes> shown,
+//                         checked <scene>" (none while shooting)
 // With several mockups running on one display, `qs ipc --id <instance id>` (or --pid) picks
 // one: the target is the same in all of them.
 QtObject {
@@ -90,6 +94,23 @@ QtObject {
     readonly property int _windowWidth: Math.max(contentWidth, shooting ? 0 : _switcher.implicitWidth)
     readonly property int _windowHeight: contentHeight + (shooting ? 0 : _switcher.implicitHeight)
 
+    // The scene buttons wholly inside the window, and the checked one's scene
+    function _buttonsShown() {
+        let shown = 0, checked = "";
+        for (let i = 0; i < _buttons.count; i++) {
+            const button = _buttons.itemAt(i);
+            if (!button || !button.visible || !(button.width > 0 && button.height > 0))
+                continue;
+            const origin = button.mapToItem(null, 0, 0);
+            if (origin.x < 0 || origin.y < 0 || origin.x + button.width > _window.width || origin.y + button.height > _window.height)
+                continue;
+            shown++;
+            if (button.checked)
+                checked = button.modelData;
+        }
+        return shown + " of " + scenes.length + " shown, checked " + checked;
+    }
+
     // Why the scene list cannot be used, or ""
     function _scenesError() {
         if (!Array.isArray(scenes) && !(scenes && typeof scenes.length === "number"))
@@ -122,6 +143,8 @@ QtObject {
         if (!window)
             return "the window cannot be made";
         _body.parent = window.contentItem;
+        if (!shooting)
+            content.parent = _scroller.contentItem;
         _window = window;
         if (shooting) {
             _show(0);
@@ -203,14 +226,16 @@ QtObject {
     readonly property Component _floatingWindow: Component {
         FloatingWindow {
             title: root.mockupName
-            implicitWidth: root._windowWidth
-            implicitHeight: root._windowHeight
+            implicitWidth: Math.min(root._windowWidth, screen ? screen.width : root._windowWidth)
+            implicitHeight: Math.min(root._windowHeight, screen ? screen.height : root._windowHeight)
             color: Theme.popupBackground
             visible: root.visible
         }
     }
 
-    // The content and the scene buttons, put into the window start() makes
+    // The content and the scene buttons, put into the window start() makes: while shooting
+    // the content at the window's corner; on screen the buttons, and under them the content
+    // moved into the scroller
     readonly property Item _body: Item {
         width: parent ? parent.width : root._windowWidth
         height: parent ? parent.height : root._windowHeight
@@ -223,14 +248,27 @@ QtObject {
             height: root.contentHeight
         }
 
+        Flickable {
+            id: _scroller
+            visible: !root.shooting
+            y: _switcher.height
+            width: parent.width
+            height: Math.max(0, parent.height - y)
+            contentWidth: root.contentWidth
+            contentHeight: root.contentHeight
+            boundsBehavior: Flickable.StopAtBounds
+            // Nothing of the mockup's own reaches over the buttons
+            clip: true
+        }
+
         Flow {
             id: _switcher
             visible: !root.shooting
-            y: root.contentHeight
             width: parent.width
             padding: Theme.popup.contentPadding
             spacing: Theme.popup.contentPadding
             Repeater {
+                id: _buttons
                 model: ScriptModel {
                     values: root.shooting ? [] : Array.prototype.slice.call(root.scenes)
                 }
@@ -286,6 +324,10 @@ QtObject {
 
         function window(): string {
             return !root._window ? "" : root.shooting ? "panel" : "floating";
+        }
+
+        function buttons(): string {
+            return root._window ? root._buttonsShown() : "";
         }
     }
 }
