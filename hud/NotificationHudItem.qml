@@ -336,8 +336,8 @@ Item {
         compactDismiss: true
         keepsTab: true
         imageMaxHeight: 120
-        // A toast stays small: a long body is cut, the notification centre shows it whole
-        bodyMaxLines: 6
+        // A toast stays small: fewer lines of a long body than the centre shows
+        bodyMaxLines: NotificationRules.bodyLines.toast
         contentPadding: Theme.osdToast.padding
         cornerRadius: Theme.osdToast.radius
         // A modal: the accent outline (a critical one keeps the critical outline)

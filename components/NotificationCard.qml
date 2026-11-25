@@ -30,12 +30,15 @@ Rectangle {
     property color borderColor: Theme.outline
     property color replyBackground: Theme.surfaceSunken
 
-    // At most this many lines of the body show, the rest cut under a fade (a toast); 0: the
-    // whole body (the notification centre)
-    property int bodyMaxLines: 0
-    // The body has more lines than it may show, and is cut; the height it shows
-    readonly property bool bodyCut: _body.length > 0 && bodyMaxLines > 0 && _bodyBox.edit.lineCount > bodyMaxLines
+    // At most this many lines of the body show, the rest scrolls inside the card
+    // (NotificationRules.bodyLines: the centre's by default, a toast sets its own); 0: the
+    // whole body
+    property int bodyMaxLines: NotificationRules.bodyLines.centre
+    // The body has more lines than it may show, and is cut; the height it shows; how far it
+    // is scrolled
+    readonly property bool bodyCut: _bodyBox.view.cut
     readonly property real bodyShownHeight: _bodyBox.implicitHeight
+    readonly property real bodyOffset: _bodyBox.offset
 
     // Tab stays inside the card while it has the keyboard (a toast: the HUD's other controls
     // are not the card's)
@@ -164,6 +167,7 @@ Rectangle {
         _progressBar.startAgain();
         _pendingLink = "";
         _reply.clear();
+        _bodyBox.offset = 0;
         _swipeLayer.stop();
         x = 0;
         opacity = 1;
@@ -285,8 +289,8 @@ Rectangle {
                     }
                 }
 
-                // Body (optional — hidden when empty), in a box that cuts it at
-                // bodyMaxLines lines (a toast)
+                // Body (optional — hidden when empty), in a box that caps it at
+                // bodyMaxLines lines, scrolling the rest
                 NotificationBody {
                     id: _bodyBox
                     card: notifCard

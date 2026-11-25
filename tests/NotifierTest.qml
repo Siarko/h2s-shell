@@ -111,7 +111,7 @@ TestCase {
         assert(texts.some(text => text.text === crafted), "shell toast: the summary as written");
         toast.destroy();
 
-        // --- a toast cuts a long body; the notification centre's card shows it whole ---
+        // --- a long body capped, the rest scrolling: 6 lines in a toast, 12 in the centre ---
         const longText = Array.from({ length: 20 }, (_, i) => "line " + (i + 1)).join("\n");
         const notification = { id: 7, appName: "Test", appIcon: "", summary: "Long", body: longText, image: "", actions: [], hasInlineReply: false };
         const hudItem = _toast.createObject(null);
@@ -120,27 +120,51 @@ TestCase {
         assert(toastCard !== null, "the toast has its card");
         assertEqual(toastCard?.bodyMaxLines, 6, "the toast: at most 6 lines of the body");
         const centreCard = _card.createObject(null, { notification: notification });
-        assertEqual(centreCard.bodyMaxLines, 0, "the centre's card: the whole body");
+        assertEqual(centreCard.bodyMaxLines, 12, "the centre's card: at most 12 lines");
         const isBody = item => item instanceof TextEdit && String(item.text).includes("line ");
         // Laid out at a toast's width: without a window the layouts here are not run, so the
         // body's box is given its width (the text wraps and counts its lines at it)
         const toastBody = _layOut(toastCard, isBody);
         const centreBody = _layOut(centreCard, isBody);
+        const toastBox = toastBody.parent;
+        const centreBox = centreBody.parent;
         const lineHeight = toastBody.implicitHeight / toastBody.lineCount;
         assert(toastBody.width === 300 && toastBody.lineCount === 20 && lineHeight >= toastBody.font.pixelSize, "the toast's body laid out at 300, one line each ("
                + toastBody.lineCount + " lines of " + lineHeight + ")");
         assert(toastCard.bodyCut && Math.abs(toastCard.bodyShownHeight - 6 * lineHeight) < 0.5,
                "the toast: 20 lines cut to 6 lines' height (" + toastCard.bodyShownHeight + " of " + toastBody.implicitHeight + ")");
-        assert(toastBody.parent.clip, "… clipped");
-        assert(!centreCard.bodyCut && Math.abs(centreCard.bodyShownHeight - centreBody.implicitHeight) < 0.5 && !centreBody.parent.clip,
-               "the centre's card: the whole body, not clipped (" + centreCard.bodyShownHeight + " of " + centreBody.implicitHeight + ")");
+        assert(toastBox.clip, "… clipped");
+        assert(centreCard.bodyCut && Math.abs(centreCard.bodyShownHeight - 12 * lineHeight) < 0.5 && centreBox.clip,
+               "the centre's card: 20 lines cut to 12 lines' height, clipped (" + centreCard.bodyShownHeight + " of " + centreBody.implicitHeight + ")");
+        // Scrolled within the text: from its start to its end, never past either
+        // A fade at each edge where more is hidden (the box's moreAbove, moreBelow, which the
+        // fades show: a toast off screen shows nothing itself)
+        assert(toastCard.bodyOffset === 0 && !toastBox.moreAbove && toastBox.moreBelow,
+               "the toast: at the start, a fade at the bottom only");
+        toastBox.scrollBy(-2 * lineHeight);
+        assert(Math.abs(toastCard.bodyOffset - 2 * lineHeight) < 0.5 && Math.abs(toastBody.y + toastCard.bodyOffset) < 0.5,
+               "a scroll of two lines down moves the text up by two lines (" + toastCard.bodyOffset + ", y " + toastBody.y + ")");
+        assert(toastBox.moreAbove && toastBox.moreBelow, "… midway: fades at both edges");
+        toastBox.scrollBy(-1000);
+        assert(Math.abs(toastCard.bodyOffset - 14 * lineHeight) < 0.5 && !toastBox.moreBelow && toastBox.moreAbove,
+               "scrolled to the end: the last 6 lines show, no fade at the bottom (" + toastCard.bodyOffset + ")");
+        toastBox.scrollBy(1000);
+        assertEqual(toastCard.bodyOffset, 0, "… and back to the start, no further");
+        toastBox.scrollBy(-3 * lineHeight);
         const lines = count => Array.from({ length: count }, (_, i) => "line " + (i + 1)).join("\n");
+        hudItem.currentNotif = Object.assign({}, notification, { id: 8, body: lines(30) });
+        assertEqual(toastCard.bodyOffset, 0, "the next notification in the toast starts at its start");
         hudItem.currentNotif = Object.assign({}, notification, { body: lines(6) });
-        assert(toastBody.lineCount === 6 && !toastCard.bodyCut && Math.abs(toastCard.bodyShownHeight - toastBody.implicitHeight) < 0.5,
+        assert(toastBody.lineCount === 6 && !toastCard.bodyCut && Math.abs(toastCard.bodyShownHeight - toastBody.implicitHeight) < 0.5 && !toastBox.clip,
                "the toast: a body of exactly 6 lines whole, not cut (" + toastCard.bodyShownHeight + " of " + toastBody.implicitHeight + ")");
+        toastBox.scrollBy(-100);
+        assertEqual(toastCard.bodyOffset, 0, "… and it does not scroll");
+        assert(!toastBox.moreAbove && !toastBox.moreBelow, "… no fades");
         hudItem.currentNotif = Object.assign({}, notification, { body: lines(7) });
         assert(toastBody.lineCount === 7 && toastCard.bodyCut && Math.abs(toastCard.bodyShownHeight - 6 * toastBody.implicitHeight / 7) < 0.5,
                "the toast: 7 lines cut to 6 (" + toastCard.bodyShownHeight + " of " + toastBody.implicitHeight + ")");
+        centreCard.notification = Object.assign({}, notification, { body: lines(12) });
+        assert(centreBody.lineCount === 12 && !centreCard.bodyCut, "the centre: 12 lines whole");
         hudItem.currentNotif = Object.assign({}, notification, { body: "one line" });
         assert(!toastCard.bodyCut, "the toast: a short body not cut");
         // A word longer than the line breaks onto the next lines rather than running off the side

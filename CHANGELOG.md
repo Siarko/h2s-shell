@@ -246,6 +246,9 @@ The interface modules are written against (`qs.api`), versioned on its own
   Without polkit rules it works as before; set to true beside them, it stops the build.
 
 ### Fixed
+- A notification's long body can be read: in a toast (6 lines) and in the notification centre
+  (12 lines) the rest scrolls inside the card with the wheel, a touchpad or a finger, a fade
+  showing where more is hidden.
 - An open dropdown or picker list stays attached to its control while the page scrolls or
   the control moves, and closes when the control scrolls out of view; it opens upwards, or
   on the side with more room, when there is no room below. The wheel over a long list

@@ -48,6 +48,31 @@ Singleton {
         return { bar: progress?.shown === true && !(ended && counting === true), mark: result.mark, tone: result.tone };
     }
 
+    // How many lines of a body a card shows at most before the rest scrolls inside it: a toast
+    // stays small, the notification centre has room for more
+    readonly property var bodyLines: ({ toast: 6, centre: 12 })
+
+    // How a body of `lineCount` lines, `textHeight` tall as laid out, shows on a card that
+    // shows at most `maxLines` (0: no cap): `cut` whether it has more than that, `height` the
+    // height of the box it shows in (a whole number of its lines when cut).
+    function bodyView(lineCount, maxLines, textHeight) {
+        const lines = Math.max(0, Math.floor(Number(lineCount) || 0));
+        const cap = Math.max(0, Math.floor(Number(maxLines) || 0));
+        const height = Math.max(0, Number(textHeight) || 0);
+        if (cap === 0 || lines <= cap)
+            return { cut: false, height: height };
+        return { cut: true, height: cap * height / lines };
+    }
+
+    // Where a cut body's text stands after a scroll of `delta` pixels (positive: towards its
+    // start, as a wheel's deltas are signed), from `offset`: within 0 and what is hidden, the
+    // text `textHeight` tall in a box `shownHeight` tall
+    function bodyScroll(offset, delta, textHeight, shownHeight) {
+        const hidden = Math.max(0, (Number(textHeight) || 0) - (Number(shownHeight) || 0));
+        const next = (Number(offset) || 0) - (Number(delta) || 0);
+        return Math.max(0, Math.min(hidden, next));
+    }
+
     // How long a progress bar's wave runs after its value last grew (ms)
     readonly property int progressWaveMs: 10000
 

@@ -22,9 +22,10 @@ QtObject {
 
     property var _floatingListInput: FloatingListInputTest {}
     property var _authPromptInput: AuthPromptInputTest { after: root._floatingListInput }
+    property var _notificationScrollInput: NotificationScrollInputTest { after: root._authPromptInput }
     // A new suite: its one line above this comment
 
-    readonly property var _suites: [_floatingListInput, _authPromptInput]
+    readonly property var _suites: [_floatingListInput, _authPromptInput, _notificationScrollInput]
     readonly property int _limitMs: 120000
     property int _waited: 0
 

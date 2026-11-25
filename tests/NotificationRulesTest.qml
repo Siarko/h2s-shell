@@ -64,6 +64,21 @@ TestCase {
         assert(!wave("running", undefined) && !NotificationRules.progressWave("running", now - 2000, undefined), "a time that is not a number: no wave");
         assert(NotificationRules.progressWave("running", now - 200, now, 300) && !NotificationRules.progressWave("running", now - 400, now, 300), "another window when given");
 
+        // --- a long body: capped at whole lines, the rest scrolls ---
+        assertEqual(NotificationRules.bodyLines.toast + " " + NotificationRules.bodyLines.centre, "6 12", "the caps: 6 lines in a toast, 12 in the centre");
+        const bodyView = (lines, cap, height) => JSON.stringify(NotificationRules.bodyView(lines, cap, height));
+        assertEqual(bodyView(20, 6, 400), JSON.stringify({ cut: true, height: 120 }), "20 lines on a cap of 6: cut to 6 lines' height");
+        assertEqual(bodyView(7, 6, 140), JSON.stringify({ cut: true, height: 120 }), "7 lines on 6: cut");
+        assertEqual(bodyView(6, 6, 120), JSON.stringify({ cut: false, height: 120 }), "exactly 6: whole");
+        assertEqual(bodyView(40, 0, 800), JSON.stringify({ cut: false, height: 800 }), "no cap: whole");
+        assertEqual(bodyView(0, 6, 0), JSON.stringify({ cut: false, height: 0 }), "no body: nothing cut");
+        assertEqual(bodyView(undefined, "x", NaN), JSON.stringify({ cut: false, height: 0 }), "values that are no numbers: nothing cut, no height");
+        assertEqual(NotificationRules.bodyScroll(0, -48, 400, 120), 48, "a scroll down (a negative delta) moves into the text");
+        assertEqual(NotificationRules.bodyScroll(260, -48, 400, 120), 280, "… no further than its end");
+        assertEqual(NotificationRules.bodyScroll(30, 48, 400, 120), 0, "a scroll up stops at its start");
+        assertEqual(NotificationRules.bodyScroll(0, -48, 100, 120), 0, "a text that fits does not move");
+        assertEqual(NotificationRules.bodyScroll(undefined, NaN, 400, 120), 0, "values that are no numbers: at the start");
+
         // --- after an action ---
         assert(NotificationRules.dismissAfterAction({ resident: false }), "not resident: the entry goes");
         assert(NotificationRules.dismissAfterAction({}), "resident not said: the entry goes");

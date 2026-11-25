@@ -124,7 +124,9 @@ for body markup, hyperlinks, images, action buttons, action icons and inline rep
 Arrival times are recorded, and the regex patterns in Settings → Notifications extract
 codes from the summary and body, so a verification code can be copied without opening the
 sending app. A notification stays in the panel until it is dismissed; a critical one is
-outlined in red, in its toast and in the panel. An app's action buttons and the reply's
+outlined in red, in its toast and in the panel. A long body shows 6 lines in a toast and 12
+in the panel; the rest scrolls inside the card under the wheel, a touchpad or a finger, a
+fade at the edge where more is hidden. An app's action buttons and the reply's
 Send are filled with the theme's accent, their labels in its "On accent" colour, lighter
 under the pointer or a finger. Running an action takes the toast away — except on a
 resident notification (one its app keeps until dismissed, such as a music player's

@@ -16,6 +16,7 @@ import qs.tests
 //                         output's top left corner)
 //   click(item, x, y)     there, then a left click
 //   wheel(notches)        a mouse wheel's notches, positive down
+//   stroke(pixels)        a touchpad's two-finger vertical stroke, positive down
 //   key(keysym)           one key by its keysym name (Down, Return, Escape, space, …)
 //   type(text)            the text typed
 Item {
@@ -61,6 +62,10 @@ Item {
 
     function wheel(notches) {
         return send("scroll vertical " + notches);
+    }
+
+    function stroke(pixels) {
+        return send("swipe vertical " + pixels);
     }
 
     function key(keysym) {

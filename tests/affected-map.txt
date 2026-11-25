@@ -152,6 +152,10 @@ tests/input/* self:tests/run-input.sh
 +components/WheelScroll.qml self:tests/run-input.sh
 +tests/lock/input/ltinput.py self:tests/run-input.sh
 +components/ReorderList.qml self:tests/run-input.sh
++components/NotificationCard.qml self:tests/run-input.sh
++components/notification/NotificationBody.qml self:tests/run-input.sh
++hud/NotificationHudItem.qml self:tests/run-input.sh
++hud/ToastStack.qml self:tests/run-input.sh
 +components/PointerArea.qml self:tests/run-input.sh
 +components/FloatingListHeader.qml self:tests/run-input.sh
 +polkit/AuthPrompt.qml self:tests/run-input.sh
