@@ -708,8 +708,9 @@ LazyLoader {
                     WheelScroll {
                         target: null
                         enabled: popup._overflow > 0
+                        notchPixels: 60
                         onWheel: event => {
-                            popup._keyboardScroll = Math.max(0, Math.min(popup._overflow, popup._keyboardScroll - event.angleDelta.y / 2));
+                            popup._keyboardScroll = Math.max(0, Math.min(popup._overflow, popup._keyboardScroll - step(event)));
                         }
                     }
 

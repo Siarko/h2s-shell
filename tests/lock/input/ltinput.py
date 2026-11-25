@@ -36,6 +36,9 @@ always exactly the one asked for. Commands, one per line, are written to <fifo>:
                        wheel notches on one axis, as a mouse wheel sends them, signed as
                        Wayland signs them: positive is down, and on the horizontal axis right;
                        with `shift`, Shift held down over them
+  swipe <vertical|horizontal> <pixels>
+                       a touchpad's two-finger stroke on one axis: the movement in surface
+                       units in four steps, then the stroke's end, signed as `scroll`
   sleep <seconds>
   quit
 
@@ -67,6 +70,7 @@ BUTTONS = {"left": 0x110, "right": 0x111, "middle": 0x112}
 # wl_pointer's axes, and its wheel as their source
 AXES = {"vertical": 0, "horizontal": 1}
 AXIS_SOURCE_WHEEL = 0
+AXIS_SOURCE_FINGER = 1
 # The movement a wheel's notch sends, in Wayland's surface units (libinput's 15 degrees)
 NOTCH_VALUE = 15.0
 KEYMAP_FORMAT_XKB_V1 = 1
@@ -288,6 +292,18 @@ def main():
                         display.roundtrip()
                         keyboard.key(milliseconds(), modifier_codes["Shift"], 0)
                         send_modifiers(0)
+                elif command == "swipe":
+                    axis, pixels = argument.split()
+                    if axis not in AXES:
+                        fatal(f"swipe: no axis {axis!r} (vertical or horizontal)")
+                    for _ in range(4):
+                        pointer.axis_source(AXIS_SOURCE_FINGER)
+                        pointer.axis(milliseconds(), AXES[axis], float(pixels) / 4)
+                        pointer.frame()
+                        display.roundtrip()
+                    pointer.axis_source(AXIS_SOURCE_FINGER)
+                    pointer.axis_stop(milliseconds(), AXES[axis])
+                    pointer.frame()
                 elif command == "sleep":
                     time.sleep(float(argument))
                 elif command == "quit":

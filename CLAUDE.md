@@ -463,7 +463,8 @@ new kind.
 - **A wheel handler takes a mouse wheel:** in the shell every WheelHandler is
   `components/WheelScroll.qml` (it accepts `PointerDevice.Mouse | PointerDevice.TouchPad`:
   Qt on Wayland hands a mouse wheel over as from its touchpad device; a module's own
-  WheelHandler sets the same), one per orientation; a wheel is tested with a real virtual
+  WheelHandler sets the same), one per orientation, moving by its `step(event)` (a notch by
+  its angle, a touchpad's stroke by its pixels, never a raw angle delta); a wheel is tested with a real virtual
   pointer (`tests/lock/input/ltinput.py`, as `tests/run-mockups-selftest.sh` does), never
   only by setting properties. — Wheels were turned away in the mockup window, a popup and
   the event form, and no test sent one.

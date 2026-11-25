@@ -278,13 +278,11 @@ QtObject {
             // A drag belongs to the mockups, never to the scroller
             interactive: false
 
-            // As the mockup window's scroller (MockupWindow.qml): a notch moves by its angle
             WheelScroll {
                 target: null
                 onWheel: event => {
                     root._anchored = "";
-                    const dy = event.phase === Qt.NoScrollPhase || event.pixelDelta.y === 0
-                        ? event.angleDelta.y / 120 * 48 : event.pixelDelta.y;
+                    const dy = step(event);
                     _scroller.contentY = Math.max(0, Math.min(_scroller.contentHeight - _scroller.height, _scroller.contentY - dy));
                 }
             }

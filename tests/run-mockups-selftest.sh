@@ -16,9 +16,10 @@
 #     content never scrolls by a drag (a drag is the mockup's), only by the wheel and a
 #     vertical scroll bar shown while it does not fit; a real wheel (the lock bed's virtual
 #     pointer, tests/lock/input/ltinput.py) scrolls a component's, a plan's and the gallery's
-#     window by 48 px a notch, a plan's sideways by a horizontal wheel and by Shift; and the
-#     shell's own: the event form's colour row (a fixture plan), no plain WheelHandler in
-#     the tree but components/WheelScroll.qml;
+#     window by 48 px a notch, a plan's sideways by a horizontal wheel and by Shift, and a
+#     touchpad's stroke (its virtual two-finger swipe) by its pixels; and the shell's own:
+#     the event form's colour row (a fixture plan), sideways only by Shift or a sideways
+#     stroke, no plain WheelHandler in the tree but components/WheelScroll.qml;
 #   - with state cells (the kit's StateGrid): shot in their grid, each cropped to its cell; on
 #     screen with no state named, every state's cell shown, none overlapping, labelled with its
 #     name and about.txt's description in order, a pointer state saying how to see it, no
@@ -585,10 +586,10 @@ check "$([ "$wheel_scroller" = "wheel, vertical bar shown" ]; echo $?)" "small-b
 check "$([ "$wheel_positions" = "$(printf '%s\n' 0,0 0,144)" ]; echo $?)" "three notches down: 48 px each (positions were '$(paste -s -d ' ' <<< "$wheel_positions")')"
 check "$(! grep -q -E 'MOCKUP-ERROR|TypeError|ReferenceError' "${logs[wheel-component]}"; echo $?)" "no error"
 
-echo "on screen: a real wheel scrolls a plan both ways: down, sideways by a horizontal wheel and by Shift, up"
-wheel_run wheel-plan "scroll vertical 3;scroll horizontal 2;scroll vertical 2 shift;scroll vertical -1" \
+echo "on screen: a real wheel scrolls a plan both ways: down, sideways by a horizontal wheel and by Shift, up; a touchpad's stroke with the finger"
+wheel_run wheel-plan "scroll vertical 3;scroll horizontal 2;scroll vertical 2 shift;scroll vertical -1;swipe vertical 40" \
     H2S_MOCKUP_BASE=tests/fixtures/mockups H2S_MOCKUP=plans/tall H2S_MOCKUP_SCENE=first
-check "$([ "$wheel_positions" = "$(printf '%s\n' 0,0 0,144 96,144 192,144 192,96)" ]; echo $?)" "down 3, right 2, Shift+down 2 to the right, up 1 (positions were '$(paste -s -d ' ' <<< "$wheel_positions")')"
+check "$([ "$wheel_positions" = "$(printf '%s\n' 0,0 0,144 96,144 192,144 192,96 192,136)" ]; echo $?)" "down 3, right 2, Shift+down 2 to the right, up 1, a touchpad's 40 px stroke down by 40 px (positions were '$(paste -s -d ' ' <<< "$wheel_positions")')"
 check "$(! grep -q -E 'MOCKUP-ERROR|TypeError|ReferenceError' "${logs[wheel-plan]}"; echo $?)" "no error"
 
 echo "on screen: a real wheel scrolls the gallery"
@@ -600,21 +601,25 @@ start_entry wheel-row "$REPO/mockup.qml" H2S_MOCKUP_BASE=tests/fixtures/mockups 
 row_answer="" deadline=$((SECONDS + 30))
 while [ $SECONDS -lt $deadline ] && kill -0 "${pids[wheel-row]}" 2> /dev/null; do
     id=$(instance_of wheel-row)
-    # The window made, a condition polled
-    [ -n "$id" ] && [ "$(ipc "$id" call mockup window)" = floating ] && break
+    # The window made and given the keyboard (Shift goes to it), a condition polled
+    [ -n "$id" ] && grep -q WHEEL-ACTIVE "${logs[wheel-row]}" && break
     sleep 0.05
 done
 if [ -n "$id" ]; then
     send_input "abs 1 1 2 2"
+    # A plain vertical wheel passes it by; Shift with it and a touchpad's sideways stroke move it
     send_input "scroll vertical 3"
+    send_input "scroll vertical 3 shift"
+    send_input "swipe horizontal -40"
     # The row scrolled, a condition polled; five seconds for a wheel that does nothing
     row_deadline=$((SECONDS + 5))
-    while [ $SECONDS -lt $row_deadline ] && ! grep -q -E 'WHEEL-ROW [1-9]' "${logs[wheel-row]}"; do sleep 0.05; done
-    row_answer=$(grep -o -E 'WHEEL-ROW [0-9]+' "${logs[wheel-row]}" | tail -n 1)
+    while [ $SECONDS -lt $row_deadline ] && ! grep -q -E 'WHEEL-ROW 140$' "${logs[wheel-row]}"; do sleep 0.05; done
+    row_answer=$(grep -o -E 'WHEEL-ROW [0-9]+' "${logs[wheel-row]}" | paste -s -d ' ')
 fi
 kill -TERM "${pids[wheel-row]}" 2> /dev/null
 finish_entry wheel-row
-check "$(grep -q -E '^WHEEL-ROW [1-9][0-9]*$' <<< "$row_answer"; echo $?)" "three notches move the swatches sideways (was '$row_answer')"
+# (the stroke's steps may come one by one or together: its last value is the check)
+check "$([ "${row_answer%% WHEEL-ROW *}" = "WHEEL-ROW 180" ] && [ "${row_answer##* }" = 140 ]; echo $?)" "three plain notches leave the swatches, three with Shift move them 180 px (60 a notch), a 40 px stroke back by 40 (was '$row_answer')"
 check "$(! grep -q -E 'MOCKUP-ERROR|TypeError|ReferenceError' "${logs[wheel-row]}"; echo $?)" "no error"
 
 # Every wheel handler in the tree is the shell's WheelScroll, which takes a mouse wheel as

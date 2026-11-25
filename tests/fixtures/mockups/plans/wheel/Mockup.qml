@@ -6,7 +6,8 @@ import qs.mockups.kit
 
 // A fixture plan for tests/run-mockups-selftest.sh's real wheel: the event form's colour row
 // (EventColorRow), narrower than its swatches, put under the pointer wherever it enters.
-// Prints "WHEEL-ROW <contentX>" as the row scrolls.
+// Prints "WHEEL-ROW <contentX>" as the row scrolls, and "WHEEL-ACTIVE" once the window has
+// the keyboard.
 MockupWindow {
     id: root
     contentWidth: 400
@@ -39,5 +40,8 @@ MockupWindow {
 
         readonly property real scrolled: children[0].contentX
         onScrolledChanged: console.info("WHEEL-ROW " + Math.round(scrolled))
+        // The window has the keyboard (Shift reaches it): "WHEEL-ACTIVE"
+        readonly property bool active: Window.active
+        onActiveChanged: if (active) console.info("WHEEL-ACTIVE")
     }
 }

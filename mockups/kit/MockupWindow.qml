@@ -428,26 +428,20 @@ QtObject {
                 contentX = Math.max(0, Math.min(contentWidth - width, contentX - dx));
                 contentY = Math.max(0, Math.min(contentHeight - height, contentY - dy));
             }
-            // How far an event moves along one axis: a notch (no scroll phase) by its angle,
-            // a touchpad's stroke by its pixels
-            function _step(pixel, angle, phase) {
-                return phase === Qt.NoScrollPhase || pixel === 0 ? angle / 120 * 48 : pixel;
-            }
-
             WheelScroll {
                 target: null
                 onWheel: event => {
-                    const step = _scroller._step(event.pixelDelta.y, event.angleDelta.y, event.phase);
+                    const moved = step(event);
                     if (event.modifiers & Qt.ShiftModifier)
-                        _scroller._scrollBy(step, 0);
+                        _scroller._scrollBy(moved, 0);
                     else
-                        _scroller._scrollBy(0, step);
+                        _scroller._scrollBy(0, moved);
                 }
             }
             WheelScroll {
                 target: null
                 orientation: Qt.Horizontal
-                onWheel: event => _scroller._scrollBy(_scroller._step(event.pixelDelta.x, event.angleDelta.x, event.phase), 0)
+                onWheel: event => _scroller._scrollBy(step(event), 0)
             }
 
             ScrollBar.vertical: ScrollBar {
