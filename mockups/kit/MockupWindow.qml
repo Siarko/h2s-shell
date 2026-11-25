@@ -136,7 +136,7 @@ QtObject {
             return "names is not a list";
         if (names.length === 0)
             return "no " + _word + "s";
-        const seen = {};
+        const seen = Object.create(null);
         for (let i = 0; i < names.length; i++) {
             const name = names[i];
             if (typeof name !== "string" || name === "")

@@ -64,7 +64,7 @@ ShellRoot {
             return answer;
         }
         const errors = [];
-        const seen = {};
+        const seen = Object.create(null);
         let descriptions = 0, declared = 0;
         const lines = text.split("\n");
         if (lines.length > 0 && lines[lines.length - 1] === "")

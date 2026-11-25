@@ -32,7 +32,8 @@
 #     (the renderer draws MultiEffect and layer.effect), and each state drawn twice in one
 #     process is the same file;
 #   - H2S_MOCKUP_CHECK=1 checks a plan and a component without a window: MOCKUP-CHECKED
-#     with the count, exit 0;
+#     with the count, exit 0; also a plan whose scenes are named constructor, toString and
+#     hasOwnProperty (a plain object's own names, never taken as repeated);
 #   - a load error, a repeated state, a missing about.txt, names set in Mockup.qml and a QML
 #     warning from the mockup's own file FAIL, the others in the same run still PASS;
 #   - with no name it runs every component and view fixture, and --load-only checks every
@@ -323,8 +324,10 @@ done
 echo "H2S_MOCKUP_CHECK: an element checked without a window"
 start_entry check-plan "$REPO/mockup.qml" H2S_MOCKUP_BASE=tests/fixtures/mockups H2S_MOCKUP_CHECK=1 H2S_MOCKUP=plans/tall
 start_entry check-component "$REPO/mockup.qml" H2S_MOCKUP_BASE=tests/fixtures/mockups H2S_MOCKUP_CHECK=1 H2S_MOCKUP=components/good
-drive no check-plan check-component
-for entry in "check-plan|MOCKUP-CHECKED 3 scenes" "check-component|MOCKUP-CHECKED 2 states"; do
+# Names that a plain object already has (constructor, toString): names like any other
+start_entry check-object-names "$REPO/mockup.qml" H2S_MOCKUP_BASE=tests/fixtures/mockups H2S_MOCKUP_CHECK=1 H2S_MOCKUP=plans/object-names
+drive no check-plan check-component check-object-names
+for entry in "check-plan|MOCKUP-CHECKED 3 scenes" "check-component|MOCKUP-CHECKED 2 states" "check-object-names|MOCKUP-CHECKED 3 scenes"; do
     IFS='|' read -r case expected <<< "$entry"
     check "$([ "${statuses[$case]}" = 0 ]; echo $?)" "$case: exits 0 (was ${statuses[$case]})"
     check "$(grep -q -F -- "$expected" "${logs[$case]}"; echo $?)" "$case: says $expected"

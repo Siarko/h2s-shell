@@ -1,0 +1,6 @@
+# Names that are also the names of a plain JavaScript object's own properties: each is
+# a name like any other, never taken as already seen
+description: A fixture plan whose scene names are an object's property names
+scene: constructor      A scene named like Object.prototype.constructor
+scene: toString         A scene named like Object.prototype.toString
+scene: hasOwnProperty   A scene named like Object.prototype.hasOwnProperty
