@@ -299,7 +299,10 @@ TestCase {
         });
         _then("still one backup after the installer's", () => _out !== null, () => assertEqual(_out.lines.filter(line => line !== "").length, 1, "… none on disk either"));
 
-        // A first install: no settings of its own, no store, no records
+        // A first install: no settings of its own, no store, no records (as after a removal
+        // with its data in this session: the handle's store had read the old file)
+        _then("its store's file deleted", _settled, () => _sh("rm -f \"$1/config/h2s_shell/modules/migrating.json\"", [temp]));
+        _then("its store's file is deleted", () => _out !== null, () => assert(_out.ok, "its store's file deleted"));
         _offAndOn("a first install", () => {
             Config.migratedKeys = host._plainList(Config.migratedKeys).filter(entry => !entry.includes("mod.migrating/"));
             const without = set => {
@@ -311,9 +314,6 @@ TestCase {
             };
             Config.profiles = JSON.stringify(JSON.parse(Config.profiles).map(profile => Object.assign({}, profile, { set: without(profile.set) })));
             Config.globals = JSON.stringify(without(_globalsNow()));
-            const store = host.handle("migrating").store;
-            for (const key of Object.keys(store.data))
-                store.remove(key);
         }, () => {
             assertEqual(_state("migrating"), "loaded", "loaded");
             assertEqual(JSON.stringify(_records()), JSON.stringify(["mod.migrating/city-rename", "mod.migrating/broken", "mod.migrating/after-broken",
@@ -325,6 +325,48 @@ TestCase {
             _backupNames();
         });
         _then("no backup for a first install", () => _out !== null, () => assertEqual(_out.lines.filter(line => line !== "").length, 1, "… and no backup taken"));
+        // The store's file changed on disk since the handle read it (a restore, a removal with
+        // its data and a new install): the run reads it again, and never writes the old one over it
+        _then("the store's file written", _settled, () => _sh("printf '%s' '{\"folders\":\"c:d\"}' > \"$1/config/h2s_shell/modules/migrating.json\"", [temp]));
+        _then("the store's file is written", () => _out !== null, () => assert(_out.ok, "the store's file written on disk"));
+        _offAndOn("the store's file changed on disk", () => {
+            Config.migratedKeys = host._plainList(Config.migratedKeys).filter(entry => entry !== "mod.migrating/store-shape");
+        }, () => {
+            assertEqual(_state("migrating"), "loaded", "loaded");
+            assertEqual(JSON.stringify(_store_()), JSON.stringify({ folders: ["c", "d"] }), "store-shape ran on the file as it is now, not on what the handle had read");
+            assert(_records().includes("mod.migrating/store-shape"), "… recorded");
+        });
+
+        // The store cannot be written: no record, the run repeats next time
+        _then("the stores' directory read-only", _settled, () => _sh("chmod 500 \"$1/config/h2s_shell/modules\"", [temp]));
+        _then("the stores' directory is read-only", () => _out !== null, () => assert(_out.ok, "the stores' directory made read-only"));
+        _offAndOn("a store that cannot be written", () => {
+            Config.migratedKeys = host._plainList(Config.migratedKeys).filter(entry => entry !== "mod.migrating/store-shape");
+            host.handle("migrating").store.writable = true;
+        }, () => {
+            const status = _status("migrating");
+            assertEqual(status?.state, "failed", "the module fails");
+            assert(_has(status?.errors, "its store could not be written"), "… said: " + (status?.errors ?? []).join("; "));
+            assert(!_records().includes("mod.migrating/store-shape"), "… store-shape not recorded: it runs again next time");
+            host.handle("migrating").store.writable = false;
+            _sh("chmod 700 \"$1/config/h2s_shell/modules\"", [temp]);
+        });
+
+        _then("the stores' directory writable again", () => _out !== null, () => assert(_out.ok, "the stores' directory writable again"));
+
+        // After a restore of an older backup (records as the installer leaves them): the
+        // migrations run again on what came back, a held one stays held
+        _offAndOn("after a restore", () => {
+            const list = JSON.parse(Config.profiles);
+            list[0].set["mod.migrating.town"] = "Narvik";
+            Config.profiles = JSON.stringify(list);
+            Config.migratedKeys = ModuleMigrationRules.recordsAfterRestore("migrating", host._plainList(Config.migratedKeys).concat(["held:mod.migrating/broken@2.0.0"]));
+        }, () => {
+            assertEqual(_state("migrating"), "loaded", "loaded");
+            assertEqual(_set("Full")["mod.migrating.town"] + " " + _set("Full")["mod.migrating.city"], "undefined Narvik", "city-rename ran again, on the restored town");
+            assertEqual(JSON.stringify(host.migrationReports.migrating?.held), JSON.stringify(["broken"]), "… broken held");
+            assert(_records().includes("mod.migrating/city-rename") && !_records().includes("mod.migrating/broken"), "… records: city-rename again, broken still held");
+        });
         _then("idempotence", () => true, _idempotence);
         _clock.start();
     }

@@ -1206,8 +1206,14 @@ Scope {
     // Ids whose configuration the installer has just backed up: their next run takes none
     property var _switchBackups: []
     property int _migrationToken: 0
-    // Runs waiting for their module's store: [{ record, token, store, deadline }]
+    // Runs waiting for their module's store to be read again: [{ record, token, store, reads
+    // (its read count before), deadline }]
     property var _migrationWaits: []
+
+    // The job that took it failed: the run that follows takes its own
+    function forgetBackupTaken(id) {
+        _switchBackups = _switchBackups.filter(each => each !== id);
+    }
 
     // The installer has just backed up module `id`'s configuration, before switching its
     // version or restoring a backup — what the run that follows starts from is in that backup
@@ -1232,7 +1238,11 @@ Scope {
             Qt.callLater(() => _migrationsDone(record, token, "its store could not be reached", null));
             return;
         }
-        _migrationWaits = _migrationWaits.concat([{ record: record, token: token, store: store, deadline: Date.now() + migrationStoreTimeoutMs }]);
+        // Read again from disk: the handle lives for the host's life, and since its last read
+        // the file may have been restored from a backup, or deleted with the module's data
+        const reads = store._reads;
+        store._load();
+        _migrationWaits = _migrationWaits.concat([{ record: record, token: token, store: store, reads: reads, deadline: Date.now() + migrationStoreTimeoutMs }]);
         _migrationClock.start();
     }
 
@@ -1242,12 +1252,13 @@ Scope {
         onTriggered: {
             const now = Date.now();
             const waits = root._migrationWaits;
-            const due = waits.filter(wait => wait.store.ready || now >= wait.deadline);
+            const read = wait => wait.store.ready && wait.store._reads > wait.reads;
+            const due = waits.filter(wait => read(wait) || now >= wait.deadline);
             root._migrationWaits = waits.filter(wait => !due.includes(wait));
             if (root._migrationWaits.length === 0)
                 stop();
             for (const wait of due) {
-                if (!wait.store.ready)
+                if (!read(wait))
                     root._migrationsDone(wait.record, wait.token, "its store was not read within " + root.migrationStoreTimeoutMs / 1000 + " s", null);
                 else
                     root._migrationsStoreRead(wait.record, wait.token, wait.store);
@@ -1384,7 +1395,11 @@ Scope {
             }
             for (const change of ModuleMigrationRules.storeChanges(run.part.store, report.part.store))
                 store.set(change.key, change.value);
-            store.flush();
+            // Records only once the store holds what they say: else the run repeats next time
+            if (!store.flush()) {
+                _migrationsDone(record, token, "its store could not be written; its settings migrations run again next time", built.objects);
+                return;
+            }
         }
         if (report.write)
             Config.migratedKeys = report.records;
@@ -2011,6 +2026,9 @@ Scope {
         if (["disabled", "unconfirmed", "approval", "safe-mode", "missing-program"].includes(known.base) && !record.migrating) {
             record.migrated = false;
             record.migrationError = "";
+            // What its store has waiting goes to disk now, before anything (a restore, a
+            // removal) writes the file: the next run reads the file again
+            _handles.get(record.manifest.id)?.store?.flush();
         }
         if (Object.keys(record.facts).length > 0)
             record.facts = {};

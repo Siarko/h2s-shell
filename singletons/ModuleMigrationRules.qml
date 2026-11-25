@@ -125,6 +125,17 @@ Singleton {
         return (Array.isArray(migrations) ? migrations : []).filter(migration => !isDone(moduleId, migration?.migrationId, records));
     }
 
+    // The records after the module's settings and store are restored from a backup: its
+    // applied and reset records go, so its migrations run again on what came back (each is
+    // idempotent; a backup from before a migration is migrated, one from after is unchanged);
+    // its holds stay; every other entry is kept
+    function recordsAfterRestore(moduleId, records) {
+        return _records(records).filter(entry => {
+            const kind = parseRecord(moduleId, entry).kind;
+            return kind !== "applied" && kind !== "reset";
+        });
+    }
+
     // A first install with no settings of its own: every migration recorded, none run
     function baseline(moduleId, migrations, records) {
         const kept = _records(records);

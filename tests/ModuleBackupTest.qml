@@ -47,6 +47,7 @@ TestCase {
     property var _savedEnabled: []
     property string _savedProfiles: ""
     property string _savedGlobals: ""
+    property var _savedMigrated: []
     property string _updateBackup: ""
 
     readonly property var _profiles: [
@@ -97,6 +98,7 @@ TestCase {
         if (_saved) {
             Config.profiles = _savedProfiles;
             Config.globals = _savedGlobals;
+            Config.migratedKeys = _savedMigrated;
             Config.setAcknowledgedModulesText(_savedAcknowledged);
             Config.disabledModules = _savedDisabled;
             Config.enabledModules = _savedEnabled;
@@ -166,6 +168,7 @@ TestCase {
             _savedEnabled = host._plainList(Config.enabledModules);
             _savedProfiles = Config.profiles;
             _savedGlobals = Config.globals;
+            _savedMigrated = host._plainList(Config.migratedKeys);
             _saved = true;
             Config.setAcknowledgedModules({});
             Config.disabledModules = [];
@@ -264,6 +267,7 @@ TestCase {
             changed[0].set["mod.kappax.city"] = "Paris";
             Config.profiles = JSON.stringify(changed);
             Config.globals = JSON.stringify({ "mod.kappax.refresh": 30 });
+            Config.migratedKeys = ["2.1.0-core", "mod.kappa/rename", "reset:mod.kappa/broken", "held:mod.kappa/broken@1.1.0", "mod.kappax/rename"];
         });
         _job("the update's backup restored", () => installer.restore("kappa", _updateBackup), result => {
             assert(result.ok, "restored (" + result.message + ")");
@@ -279,6 +283,10 @@ TestCase {
             assert(host.isEnabled("kappa"), "kappa turned on again: it was on");
             assertEqual(_backups().length, 2, "two backups now");
             assertEqual(_backups()[0].reason, "restore", "… the newest taken before the restore");
+            assertEqual(JSON.stringify(host._plainList(Config.migratedKeys)), JSON.stringify(["2.1.0-core", "held:mod.kappa/broken@1.1.0", "mod.kappax/rename"]),
+                        "its settings migrations' applied and reset records gone (they run again on what came back), its hold and every other record kept");
+            assert(host._switchBackups.includes("kappa"), "… the restore's backup marked for its migrations' next run (it takes none of its own)");
+            host.forgetBackupTaken("kappa");
         });
         _shell("restored: the files", "d=" + _dataDir + "; b=" + _backupsDir + "; "
                + "printf 'notes\\t%s\\n' \"$(cat \"$d/notes.db\")\"; printf 'a\\t%s\\n' \"$(cat \"$d/sub/a.txt\" 2>/dev/null)\"; "
@@ -399,6 +407,7 @@ TestCase {
         _then("the restore under the lock: done", () => !installer.busy, () => {
             const result = installer.lastResult ?? {};
             assert(!result.ok && result.message.includes("locked"), "the lock stops it before anything is written (" + result.message + ")");
+            assert(!host._switchBackups.includes("kappa"), "… the backup it took before failing is not marked: a migration run takes its own");
             host.locked = false;
             assert(host.isEnabled("kappa"), "… kappa still on");
         });

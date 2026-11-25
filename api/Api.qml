@@ -1119,7 +1119,8 @@ import qs.singletons.network
 //   restored backup), after its store is read and before its main is made — so its main
 //   and views never see the old shape. Each runs once per configuration (recorded in the
 //   shell's config as "mod.<id>/<id>"); a first install with no settings or store of its own
-//   records them all without running any. Before a run changes anything the shell backs
+//   records them all without running any; restoring one of its backups drops its records
+//   but holds, so they run again on what came back. Before a run changes anything the shell backs
 //   up the module's configuration (Settings → Modules, its backups; none of its own right
 //   after an update's or a restore's), then writes its settings, its store and the records.
 //   The file: a QML object with `migrate(part, context)` and optionally `summary` (one line,

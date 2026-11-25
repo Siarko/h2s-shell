@@ -148,6 +148,12 @@ Scope {
                                                   cancelled: job.cancelled === true }, job.details ?? {}) };
         _job = null;
         preview = null;
+        // A job that failed backs nothing up for the module's settings migrations: their next
+        // run takes its own backup (the mark is set when the backup is taken, as a run may
+        // start before the job ends)
+        if (!ok)
+            for (const taken of job.backups ?? [])
+                host.forgetBackupTaken(String(taken).split("/")[0]);
         if (!ok)
             steps = steps.map(step => step.state === "verified" ? step : Object.assign({}, step, { state: "failed" }));
         phase = "";
@@ -1680,6 +1686,10 @@ Scope {
                                 return;
                             }
                             const why = Profiles.restoreModuleSettings(prefix, saved);
+                            // Its settings migrations run again on what comes back (each is
+                            // idempotent); a hold stays, so a broken one does not reset it again
+                            if (why === "")
+                                Config.migratedKeys = ModuleMigrationRules.recordsAfterRestore(id, host._plainList(Config.migratedKeys));
                             _backups.writeBack(id, plan, problems => {
                                 if (!_alive(job))
                                     return;

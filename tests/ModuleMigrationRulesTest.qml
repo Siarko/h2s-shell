@@ -332,6 +332,10 @@ TestCase {
         assertEqual(rules.summaryOf("Town is now City"), "Town is now City", "summaryOf: the file's text");
         assertEqual(rules.summaryOf("two\nlines<b>"), "two lines<b>", "… one line, plain");
         assertEqual(rules.summaryOf("x".repeat(300)).length, 200, "… at most 200 characters");
+        assertEqual(JSON.stringify(rules.recordsAfterRestore("tailscale", ["2.1.0-core", "mod.tailscale/a", "reset:mod.tailscale/b", "held:mod.tailscale/b@1.0.0",
+                                                                         "mod.tailscalex/a", "reset:mod.other/c", 5])),
+                    JSON.stringify(["2.1.0-core", "held:mod.tailscale/b@1.0.0", "mod.tailscalex/a", "reset:mod.other/c"]),
+                    "recordsAfterRestore: its applied and reset records go, its hold and every other record stay");
         assertEqual(rules.summaryOf(undefined) + rules.summaryOf(5), "", "… none declared: empty");
     }
 }

@@ -1138,14 +1138,17 @@ close this section.
   each time a module comes on — a start, an update, turned on again, a restored backup —
   the host keeps it pending until its pending migrations have run (`ModuleMergeRules`'
   `migrationsKnown`): once its store is read, each migration file is built (without the
-  module's handle) and run on the module's part only — its `mod.<id>.*` settings in every
+  module's handle; the store's file read again first, as a restore or a removal may have
+  changed it) and run on the module's part only — its `mod.<id>.*` settings in every
   profile and the pinned globals, and its store — with the core's failure model (a failed
   one's scope reset, its dependents left for the next start, the others run). When
   something changes a backup is taken first (reason `migration`), unless the installer has
   just taken one for an update, switch or restore (`ModuleHost.noteBackupTaken`); then the
   settings are written through `Profiles`, then the store, then the records
   (`mod.<id>/<id>`, `reset:`, `held:…@<module version>` in `Config.migratedKeys`, dropped
-  when the module is removed with its data and settings). A first install with no settings
+  when the module is removed with its data and settings; a restore of a module backup drops
+  the applied and reset ones, holds kept, so its migrations run again on what came back).
+  A store that cannot be written leaves the records unwritten: the run repeats. A first install with no settings
   or store of its own records them all, none run. The migration files pass the file check
   as its other files (a missing or linked-out one fails the module before anything is
   built); one that does not build, a store or settings that cannot be read, or a backup that

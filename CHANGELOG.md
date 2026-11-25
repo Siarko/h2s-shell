@@ -29,7 +29,8 @@ The interface modules are written against (`qs.api`), versioned on its own
   its configuration first (reason "migration"), then its settings, store and records; each
   file a QML object with `migrate(part, context)` and an optional `summary`, checked as the
   module's other files (a missing, linked-out or unbuildable one fails the module). The scope
-  guards against mistakes; it is not a sandbox.
+  guards against mistakes; it is not a sandbox. A restored module backup has its migrations
+  run again. `module.store.flush()` returns false when a write was due and did not happen.
 - 1.42: a module's VPN provider must have its module id as `providerId`: another id (one
   of another module, or the shell's reserved `fake`) is refused, the reason among the
   module's errors — a module that loaded first could otherwise take another module's id and

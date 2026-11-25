@@ -16,7 +16,10 @@ import qs.singletons
 //   set(key, value)      plain JSON (undefined removes the key); false when refused (not
 //                        plain JSON, or the store would pass ModuleRules.maxStoreBytes)
 //   remove(key)
-//   flush()       writes what is waiting, now: synchronously, before it returns
+//   flush()       writes what is waiting, now: synchronously, before it returns; false
+//                 when a write was due and did not happen (before the read, a refused file,
+//                 a failed write) — true when written, nothing waited, or the store is not
+//                 written at all (`writable` off, as under the test runners)
 //
 // How it is kept (API 1.2):
 //   - The directory is private (700) before anything is written: the module host makes
@@ -61,6 +64,10 @@ QtObject {
     // Keys set before the read answered: kept over what it reads
     property var _early: ({})
     property bool _protected: false
+    // How many reads have answered: the module host reads the file again before running the
+    // module's migrations and waits for this to move
+    property int _reads: 0
+    property string _writeError: ""
 
     function get(key, fallback) {
         return Object.prototype.hasOwnProperty.call(_data, key) ? _data[key] : fallback;
@@ -91,20 +98,28 @@ QtObject {
 
     function flush() {
         _saveTimer.stop();
+        if (!_dirty || !writable)
+            return true;
         // Not before the read (it would overwrite the file with only the early sets), never
         // over a refused file
-        if (!_dirty || !_ready || _refused !== "" || !writable || path === "")
-            return;
+        if (!_ready || _refused !== "" || path === "")
+            return false;
         const text = ModuleRules.storeText(_data);
         if (text === null)
-            return;
+            return false;
         _dirty = false;
+        _writeError = "";
         _file.path = path;
         _file.setText(text);
+        if (_writeError !== "") {
+            console.warn("[Modules] " + moduleId + ": its store " + path + " could not be written: " + _writeError);
+            return false;
+        }
         if (!_protected) {
             _protected = true;
             Quickshell.execDetached(["chmod", "600", "--", path]);
         }
+        return true;
     }
 
     onPathChanged: if (_completed) _load()
@@ -163,6 +178,7 @@ QtObject {
         _early = {};
         _data = Object.freeze(merged);
         _ready = true;
+        _reads++;
         if (_dirty)
             _saveTimer.restart();
     }
@@ -177,6 +193,7 @@ QtObject {
         blockWrites: true
         atomicWrites: true
         printErrors: false
+        onSaveFailed: error => root._writeError = FileViewError.toString(error)
     }
 
     property Process _reader: Process {
