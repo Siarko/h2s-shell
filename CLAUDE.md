@@ -169,7 +169,9 @@ ticks, cells respond to clicks, and popups toggle.
 `H2S_MOCKUP=<kind>/<name>` (`H2S_MOCKUP_SCENE=<scene>` opens a scene;
 `H2S_MOCKUP_SHOT=1` steps through the scenes headless). Its root is the kit's
 `MockupWindow` (`import qs.mockups.kit`), which holds the scene contract — `scenes`,
-`scene`, `subject`, `subjectRect` — and the shot protocol (`mockups/kit/MockupWindow.qml`). The entry isolates the process from
+`scene`, `subject`, `subjectRect` — and the shot protocol (`mockups/kit/MockupWindow.qml`); it
+makes the window itself: a layer-shell panel at the output's corner while shooting, a normal
+window titled with the mockup's name on a screen. The entry isolates the process from
 the session it runs in (`singletons/Isolation.qml`): no module loads, no notification server
 is registered, nothing is sent, whatever environment it inherited.
 `tests/run-mockups.sh --load-only | --shoot | --compare [<kind>/<name>…]` runs them headless, each in a

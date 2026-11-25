@@ -7,8 +7,10 @@
 #   - a good mockup loads with its qs.* imports, prints one MOCKUP-SHOT line per scene with
 #     the subject's bounds, steps on `ipc call mockup next`, answers `ipc call mockup name`,
 #     and ends with MOCKUP-DONE and exit 0; also with the tree reached through a symbolic
-#     link, and two at once on one display, each stepped by its instance id;
-#   - on screen (no H2S_MOCKUP_SHOT), H2S_MOCKUP_SCENE opens that scene;
+#     link, and two at once on one display, each stepped by its instance id; its window is
+#     the layer-shell panel (`ipc call mockup window`);
+#   - on screen (no H2S_MOCKUP_SHOT), H2S_MOCKUP_SCENE opens that scene, in a floating
+#     window (a normal toplevel, never the panel);
 #   - a view that reaches the module host, the notification server, Notifier and the helper,
 #     started with H2S_SHELL_MODULES and H2S_SHELL_HELPER set, loads no module, registers no
 #     server, sends nothing and has no helper;
@@ -131,13 +133,14 @@ finish_entry() {
 
 # drive <answer: yes|no> <case>…: each new MOCKUP-SHOT line of each case answered with
 # `ipc call mockup next` addressed to its instance (with `yes`), its name asked at its first
-# shot (names[case]); until all have ended (a 30 s deadline guards a hang)
-declare -A names=()
+# shot (names[case]), and its window (windows[case]); until all have ended (a 30 s deadline
+# guards a hang)
+declare -A names=() windows=()
 drive() {
     local answer=$1 case shots id deadline=$((SECONDS + 30)) alive
     shift
     declare -A answered=()
-    for case in "$@"; do answered[$case]=0; names[$case]=""; done
+    for case in "$@"; do answered[$case]=0; names[$case]=""; windows[$case]=""; done
     while [ $SECONDS -lt $deadline ]; do
         alive=0
         for case in "$@"; do
@@ -147,7 +150,10 @@ drive() {
             [ "$shots" -gt "${answered[$case]}" ] || continue
             id=$(instance_of "$case")
             [ -n "$id" ] || continue
-            [ "${answered[$case]}" = 0 ] && names[$case]=$(ipc "$id" call mockup name)
+            if [ "${answered[$case]}" = 0 ]; then
+                names[$case]=$(ipc "$id" call mockup name)
+                windows[$case]=$(ipc "$id" call mockup window)
+            fi
             answered[$case]=$shots
             [ "$answer" = yes ] && ipc "$id" call mockup next > /dev/null
         done
@@ -171,6 +177,7 @@ check_good() {
     check "$([ "$(grep -c . <<< "$shot_lines")" = 2 ]; echo $?)" "two shot lines, one per scene"
     check "$(grep -q 'MOCKUP-DONE' "$log"; echo $?)" "MOCKUP-DONE after the last scene"
     check "$([ "${names[$case]}" = components/good ]; echo $?)" "ipc name answers components/good (was '${names[$case]}')"
+    check "$([ "${windows[$case]}" = panel ]; echo $?)" "shot in the layer-shell panel (ipc window was '${windows[$case]}')"
     check "$(! grep -q -E 'MOCKUP-ERROR|TypeError|ReferenceError|is not a type|module .* is not installed' "$log"; echo $?)" "no error: the qs.* imports resolve"
     grep -q -E 'MOCKUP-ERROR|TypeError|ReferenceError' "$log" && sed 's/^/    /' "$log" | head -n 20
 }
@@ -193,20 +200,22 @@ drive yes first second
 check_good first
 check_good second
 
-echo "on screen: H2S_MOCKUP_SCENE opens that scene"
+echo "on screen: H2S_MOCKUP_SCENE opens that scene, in a floating window"
 start_entry scene "$REPO/mockup.qml" H2S_MOCKUP_BASE=tests/fixtures/mockups H2S_MOCKUP=components/good H2S_MOCKUP_SCENE=checked
 scene_answer=""
+window_answer=""
 deadline=$((SECONDS + 30))
 while [ $SECONDS -lt $deadline ] && kill -0 "${pids[scene]}" 2> /dev/null; do
     id=$(instance_of scene)
     [ -n "$id" ] && scene_answer=$(ipc "$id" call mockup scene)
-    [ -n "$scene_answer" ] && break
+    [ -n "$scene_answer" ] && { window_answer=$(ipc "$id" call mockup window); break; }
     # A condition polled (the instance answering), not a fixed wait
     sleep 0.05
 done
 kill -TERM "${pids[scene]}" 2> /dev/null
 finish_entry scene
 check "$([ "$scene_answer" = checked ]; echo $?)" "ipc scene answers checked (was '$scene_answer')"
+check "$([ "$window_answer" = floating ]; echo $?)" "a floating window, not the panel (ipc window was '$window_answer')"
 check "$(! grep -q -E 'MOCKUP-SHOT|MOCKUP-ERROR|TypeError|ReferenceError' "${logs[scene]}"; echo $?)" "no shot, no error"
 
 echo "isolation: a view that reaches modules, notifications and the helper"
