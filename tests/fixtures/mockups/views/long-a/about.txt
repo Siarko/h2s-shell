@@ -1,0 +1,6 @@
+# One of three tall views: the gallery's sections grow far from their placeholders
+description: A tall fixture view, a
+state: one     The first tall cell
+state: two     The second tall cell
+state: three   The third tall cell
+state: four    The fourth tall cell

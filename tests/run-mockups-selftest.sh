@@ -25,7 +25,8 @@
 #   - `ipc call mockup theme <name>` on screen shows it in that theme and answers the name;
 #   - the gallery (H2S_MOCKUP=gallery, on mockups/), in the built-in theme and opened in a
 #     fixture theme (tests/fixtures/mockup-themes/, H2S_MOCKUP_THEME): a section per
-#     component and view on disk, in order, each built once jumped to, in all its states
+#     component and view on disk, in order, the last one not built before it is reached, each
+#     built once jumped to and at the top of the view then, in all its states
 #     labelled from about.txt, no error or warning, at rest using next to no processor time;
 #     the filter keeps only matching sections; the theme switched over IPC to default and
 #     back, an unknown one refused with the list;
@@ -388,13 +389,13 @@ done
 # sections_answer then, cells_of[<section>] each one's cells, idle_ticks the processor time
 # it used over the next two seconds at rest, and theme_answers what `ipc call mockup theme`
 # answered to "", contrast, "", default, "", nope (a line each)
-declare -A cells_of=()
+declare -A cells_of=() top_of=()
 gallery_run() {
     local case=$1 id="" deadline=$((SECONDS + 60)) sections="" section qs_pid before
     shift
     start_entry "$case" "$REPO/mockup.qml" H2S_MOCKUP=gallery "$@"
-    sections_answer="" idle_ticks="" theme_answers="" filter_answer=""
-    cells_of=()
+    sections_answer="" idle_ticks="" theme_answers="" filter_answer="" far_before=""
+    cells_of=() top_of=()
     while [ $SECONDS -lt $deadline ] && kill -0 "${pids[$case]}" 2> /dev/null; do
         id=$(instance_of "$case")
         [ -n "$id" ] && [ "$(ipc "$id" call mockup window)" = floating ] && sections=$(ipc "$id" call mockup sections)
@@ -403,10 +404,20 @@ gallery_run() {
         sleep 0.05
     done
     if [ -n "$sections" ]; then
-        for section in $(awk '{ print $1 }' <<< "$sections"); do
+        # The first section built where it stands, a condition polled; the last one, far below,
+        # not built before it is reached
+        local first last
+        first=$(head -n 1 <<< "$sections" | awk '{ print $1 }') last=$(tail -n 1 <<< "$sections" | awk '{ print $1 }')
+        while [ $SECONDS -lt $deadline ] && ! ipc "$id" call mockup sections | grep -q -x -F "$first built"; do sleep 0.05; done
+        far_before=$(ipc "$id" call mockup sections | grep -F "$last ")
+        # The last first: the placeholders above it grow as they are built under the view
+        for section in "$last" $(awk '{ print $1 }' <<< "$sections" | grep -v -x -F "$last"); do
             ipc "$id" call mockup jump "$section" > /dev/null
             # Built (or failed) once jumped to, a condition polled
             while [ $SECONDS -lt $deadline ] && ipc "$id" call mockup sections | grep -q -x -F "$section waiting"; do sleep 0.05; done
+            # At the top of the view once the sections above it have grown, a condition polled
+            while [ $SECONDS -lt $deadline ] && [ "$(ipc "$id" call mockup top)" != "$section" ]; do sleep 0.05; done
+            top_of[$section]=$(ipc "$id" call mockup top)
             cells_of[$section]=$(ipc "$id" call mockup cells "$section")
         done
         sections_answer=$(ipc "$id" call mockup sections)
@@ -441,7 +452,10 @@ for run in built-in contrast; do
         gallery_run gallery-$run XDG_CONFIG_HOME="$theme_config" H2S_MOCKUP_THEME=contrast
     fi
     check "$([ "$(awk '{ print $1 }' <<< "$sections_answer")" = "$elements_on_disk" ]; echo $?)" "$run: a section per component and view on disk, components first, each alphabetical (was '$(awk '{ print $1 }' <<< "$sections_answer" | paste -s -d ' ')')"
+    check "$([ "$far_before" = "views/settings-modal waiting" ]; echo $?)" "$run: before any jump the last section, far below the view, is not built (was '$far_before')"
     check "$([ -n "$sections_answer" ] && ! grep -q -v ' built$' <<< "$sections_answer"; echo $?)" "$run: every section built once jumped to ($(grep -v ' built$' <<< "$sections_answer" | paste -s -d ';'))"
+    tops=$(for element in $elements_on_disk; do [ "${top_of[$element]:-}" = "$element" ] || echo "$element:${top_of[$element]:-}"; done)
+    check "$([ -z "$tops" ]; echo $?)" "$run: each section jumped to at the top of the view, the sections above it grown ($tops)"
     for element in $elements_on_disk; do
         declared=$(source "$REPO/tests/mockup-about.sh" && about_read "$REPO/mockups/$element" state > /dev/null && printf '%s\n' "${about_names[@]}")
         count=$(grep -c . <<< "$declared")
@@ -452,6 +466,34 @@ for run in built-in contrast; do
     grep -E 'MOCKUP-ERROR|TypeError|ReferenceError|Binding loop|\[Theme\]|file://' "${logs[gallery-$run]}" | head -n 5 | sed 's/^/    | /'
     check "$([ -n "$idle_ticks" ] && [ "$idle_ticks" -lt 50 ]; echo $?)" "$run: every section built, at rest: under 50 ticks of processor time in 2 s (was '$idle_ticks')"
 done
+echo "the gallery on the fixtures: sections built only as they come near, a jump kept at the top while those above grow"
+start_entry gallery-lazy "$REPO/mockup.qml" H2S_MOCKUP=gallery H2S_MOCKUP_BASE=tests/fixtures/mockups XDG_CONFIG_HOME="$theme_config"
+lazy_id="" lazy_sections="" lazy_before="" lazy_after="" lazy_top="" deadline=$((SECONDS + 60))
+while [ $SECONDS -lt $deadline ] && kill -0 "${pids[gallery-lazy]}" 2> /dev/null; do
+    lazy_id=$(instance_of gallery-lazy)
+    [ -n "$lazy_id" ] && lazy_sections=$(ipc "$lazy_id" call mockup sections)
+    # The folders listed and the first section built or failed where it stands, a condition polled
+    [ -n "$lazy_sections" ] && ! head -n 1 <<< "$lazy_sections" | grep -q ' waiting$' && break
+    sleep 0.05
+done
+if [ -n "$lazy_sections" ]; then
+    lazy_before=$(ipc "$lazy_id" call mockup sections)
+    ipc "$lazy_id" call mockup jump views/long-c > /dev/null
+    # The section above it built (it grows by some 2000 px), a condition polled
+    while [ $SECONDS -lt $deadline ] && ipc "$lazy_id" call mockup sections | grep -q -x -E 'views/long-[bc] waiting'; do sleep 0.05; done
+    lazy_after=$(ipc "$lazy_id" call mockup sections)
+    # Placed again once the column is laid out: polled, five seconds guarding a hang
+    top_deadline=$((SECONDS + 5))
+    while [ $SECONDS -lt $top_deadline ] && [ "$(ipc "$lazy_id" call mockup top)" != views/long-c ]; do sleep 0.05; done
+    lazy_top=$(ipc "$lazy_id" call mockup top)
+fi
+kill -TERM "${pids[gallery-lazy]}" 2> /dev/null
+finish_entry gallery-lazy
+check "$(grep -q -x 'views/long-b waiting' <<< "$lazy_before" && grep -q -x 'views/long-c waiting' <<< "$lazy_before"; echo $?)" "before any jump the tall sections far below are not built ($(grep long- <<< "$lazy_before" | paste -s -d ';'))"
+check "$(grep -q -x 'views/long-b built' <<< "$lazy_after" && grep -q -x 'views/long-c built' <<< "$lazy_after"; echo $?)" "jumped to views/long-c: it and the section above it built ($(grep long- <<< "$lazy_after" | paste -s -d ';'))"
+check "$([ "$lazy_top" = views/long-c ]; echo $?)" "views/long-c stays at the top of the view while views/long-b above it grows (top was '$lazy_top')"
+check "$(grep -q '^components/load-error failed: .*NoSuchFixtureType' <<< "$lazy_before" && grep -q '^components/no-about failed: about.txt is missing' <<< "$lazy_before"; echo $?)" "a mockup that does not load and a missing about.txt: their sections say why"
+check "$(! grep -q -E 'MOCKUP-ERROR|TypeError|ReferenceError|Binding loop' "${logs[gallery-lazy]}"; echo $?)" "no error"
 check "$([ "$filter_answer" = components/pill ]; echo $?)" "the filter: only the section whose state holds every word (was '$filter_answer')"
 expected_themes=$(printf '%s\n' contrast contrast contrast default default "no theme 'nope'; the themes: default, contrast")
 check "$([ "$theme_answers" = "$expected_themes" ]; echo $?)" "opened in contrast; theme switches to default and back, asks, refuses an unknown one with the list (was '$(paste -s -d '|' <<< "$theme_answers")')"

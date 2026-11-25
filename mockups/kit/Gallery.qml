@@ -28,7 +28,9 @@ import qs.components
 //   sections        a line per section, in order: "<kind>/<name> <built|waiting|failed: …>"
 //                   ("" until the folders are read)
 //   cells <section> the section's cells as a mockup's `cells` answers ("not built" before)
-//   jump <section>  scrolls to it (and so builds it): "" or why not
+//   jump <section>  scrolls to it (and so builds it), kept at the top while the sections
+//                   above it are built and grow, until the wheel scrolls: "" or why not
+//   top             the section at the top of the view
 //   filter <text>   sets the filter: the sections shown, a line each
 //   theme <name>    shows every section in that theme ("" only asks): the name in force, or
 //                   why not
@@ -81,10 +83,47 @@ QtObject {
             return "no section '" + key + "'";
         if (!section.visible)
             return "'" + key + "' is hidden by the filter";
-        _scroller.contentY = Math.max(0, Math.min(section.y, _scroller.contentHeight - _scroller.height));
+        _anchored = key;
         section.build();
+        _place();
+        Qt.callLater(_place);
         return "";
     }
+
+    // The section a jump keeps at the top of the view while sections above it are built and
+    // grow from their placeholders, until the wheel scrolls; "" for none
+    property string _anchored: ""
+
+    function _place() {
+        const section = _anchored !== "" ? _section(_anchored) : null;
+        if (section && section.visible)
+            _scroller.contentY = Math.max(0, Math.min(section.y, _scroller.contentHeight - _scroller.height));
+    }
+
+    // Builds the sections near the view where the column has placed them: laid out again
+    // after each one built, so that a section that grew (or shrank to its error) moves the
+    // ones below before they are looked at, never built for where its placeholder stood
+    function _buildNear() {
+        for (let i = 0; i < _sections.count; i++) {
+            const section = _sections.itemAt(i);
+            if (section && section.near && !section._tried) {
+                section.build();
+                _column.forceLayout();
+            }
+        }
+    }
+
+    // The section at the top of the view, or ""
+    function _top() {
+        for (let i = 0; i < _sections.count; i++) {
+            const section = _sections.itemAt(i);
+            if (section && section.visible && section.y <= _scroller.contentY && _scroller.contentY < section.y + section.height)
+                return section.key;
+        }
+        return "";
+    }
+
+    onFilterTextChanged: Qt.callLater(_buildNear)
 
     // Reads both folders once they are listed: the sections and their about.txt
     function _list() {
@@ -234,6 +273,7 @@ QtObject {
             WheelHandler {
                 target: null
                 onWheel: event => {
+                    root._anchored = "";
                     const dy = event.pixelDelta.y !== 0 ? event.pixelDelta.y : event.angleDelta.y / 120 * 48;
                     _scroller.contentY = Math.max(0, Math.min(_scroller.contentHeight - _scroller.height, _scroller.contentY - dy));
                 }
@@ -248,9 +288,20 @@ QtObject {
                 }
             }
 
+            onContentYChanged: Qt.callLater(root._buildNear)
+            onHeightChanged: Qt.callLater(root._buildNear)
+
             Column {
                 id: _column
                 width: _scroller.width - 12
+                // Room under the last section, so that a jump puts any section at the top
+                bottomPadding: _scroller.height
+                // Laid out again (a section placed, built or grown): the jumped-to section
+                // kept at the top, then what is near built
+                onImplicitHeightChanged: {
+                    Qt.callLater(root._place);
+                    Qt.callLater(root._buildNear);
+                }
 
                 Repeater {
                     id: _sections
@@ -279,8 +330,6 @@ QtObject {
                         width: _column.width
                         height: visible ? _heading.implicitHeight + _holder.height : 0
 
-                        onNearChanged: if (near) Qt.callLater(build)
-                        Component.onCompleted: if (near) Qt.callLater(build)
 
                         // Creates the section's mockup, hosted, in all its states (once)
                         function build() {
@@ -406,6 +455,10 @@ QtObject {
 
         function jump(key: string): string {
             return root.jump(key);
+        }
+
+        function top(): string {
+            return root._top();
         }
 
         function filter(text: string): string {
