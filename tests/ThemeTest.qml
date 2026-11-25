@@ -216,6 +216,23 @@ TestCase {
         assert(ThemeRules.validThemeName("Power save"), "a theme name may have spaces inside");
         assert(!ThemeRules.validThemeName("a/b") && !ThemeRules.validThemeName(".hidden") && !ThemeRules.validThemeName(" x"),
             "but no slash, no leading dot, no spaces at its ends");
+        // A deleted theme's backup: <name>.json.bak-<stamp>, parsed back to the theme it holds
+        const backupName = ThemeRules.themeBackupName("Power save", "2026-11-26T09:05:07.042Z");
+        assertEqual(backupName, "Power save.json.bak-2026-11-26T09-05-07-042Z", "a theme backup is named after the theme and the time");
+        assertEqual(ThemeRules.themeBackupName("a/b", "2026-11-26T09:05:07.042Z") + "|" + ThemeRules.themeBackupName(".x", "2026-11-26T09:05:07.042Z")
+                    + "|" + ThemeRules.themeBackupName("dark", "yesterday") + "|" + ThemeRules.themeBackupName("dark", "2026-11-26T09:05:07Z"),
+                    "|||", "no backup name for a name that is no theme's, or a time that is not one");
+        const parsedBackup = ThemeRules.parseThemeBackupName(backupName);
+        assertEqual(parsedBackup.ok + "|" + parsedBackup.theme + "|" + parsedBackup.time, "true|Power save|" + Date.UTC(2026, 10, 26, 9, 5, 7, 42),
+                    "a theme backup's name gives back its theme and time");
+        assertEqual(ThemeRules.parseThemeBackupName("/somewhere/dark.json.bak-2026-11-26T09-05-07-042Z").theme, "dark", "a path: its last part");
+        assertEqual(ThemeRules.parseThemeBackupName("x.json.bak-2026-11-26T09-05-07-042Z.json.bak-2026-11-26T09-05-07-043Z").theme,
+                    "x.json.bak-2026-11-26T09-05-07-042Z", "the stamp is the name's end");
+        for (const other of ["dark.json", "dark.json.bak-2026-11-26T09-05-07-042Z.part", ".dark.json.bak-2026-11-26T09-05-07-042Z",
+                             ".json.bak-2026-11-26T09-05-07-042Z", "dark.json.bak-2026-11-26T09-05-07Z", "dark.json.bak-2026-11-26T09-05-07-042Zx",
+                             " dark.json.bak-2026-11-26T09-05-07-042Z", "", null, 42])
+            assertEqual(JSON.stringify(ThemeRules.parseThemeBackupName(other)), JSON.stringify({ ok: false, theme: "", time: 0 }),
+                        "not a theme backup: " + JSON.stringify(other));
         const family = { base: { extends: "root", colors: {} }, child: { extends: "base" }, other: { extends: "child" }, alone: {} };
         const renamedFamily = ThemeRules.renameExtends(family, "base", "core");
         assertEqual(JSON.stringify(Object.keys(renamedFamily)), JSON.stringify(["child"]), "renaming re-points only the themes extending it");

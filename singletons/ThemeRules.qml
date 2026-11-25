@@ -533,6 +533,30 @@ Singleton {
             && !name.includes("/") && !name.startsWith(".");
     }
 
+    // A deleted theme's file is kept in the theme backups folder (ThemeBackups) as
+    // <name>.json.bak-<stamp>: its theme readable from the name, the time making it unique.
+    // "" for a name that is no theme's or a time that is not one (Date.toISOString())
+    function themeBackupName(name, isoTime) {
+        if (!validThemeName(name) || typeof isoTime !== "string"
+                || !/^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z$/.test(isoTime))
+            return "";
+        return name + ".json.bak-" + isoTime.replace(/[:.]/g, "-");
+    }
+
+    readonly property var _themeBackupPattern: /^(.+)\.json\.bak-([0-9]{4})-([0-9]{2})-([0-9]{2})T([0-9]{2})-([0-9]{2})-([0-9]{2})-([0-9]{3})Z$/
+
+    // A theme backup's name (bare, or a path: its last part) → { ok, theme, time (ms since
+    // the epoch, UTC) }. Only names of the exact pattern holding a valid theme name are backups
+    function parseThemeBackupName(path) {
+        const file = typeof path === "string" ? path.replace(/^.*\//, "") : "";
+        const match = _themeBackupPattern.exec(file);
+        if (!match || !validThemeName(match[1]))
+            return { ok: false, theme: "", time: 0 };
+        const numbers = match.slice(2).map(Number);
+        return { ok: true, theme: match[1],
+                 time: Date.UTC(numbers[0], numbers[1] - 1, numbers[2], numbers[3], numbers[4], numbers[5], numbers[6]) };
+    }
+
     // The themes (`{ name: parsed file }`) that extend `oldName`, pointed at `newName`:
     // only those that changed. Inputs are not modified.
     function renameExtends(themes, oldName, newName) {

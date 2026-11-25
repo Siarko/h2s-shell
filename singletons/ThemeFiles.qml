@@ -3,6 +3,7 @@ pragma Singleton
 import Quickshell
 import Quickshell.Io
 import QtQuick
+import qs.components
 
 // The theme files on disk: where they live, reading and writing them, and changing them
 // for the settings — themes created, copied, re-parented, renamed and deleted (the Themes
@@ -20,6 +21,8 @@ Singleton {
     readonly property string _configDir: themesDir.replace(/\/[^\/]*$/, "")
     readonly property string curvesPath: _configDir + "/curves.json"
     readonly property string draftsDir: _configDir + "/theme-drafts"
+    // A deleted theme's file is kept here first (ThemeBackups), restorable
+    readonly property string backupsDir: _configDir + "/theme-backups"
 
     function themePath(name) {
         return themesDir + "/" + name + ".json";
@@ -169,18 +172,73 @@ Singleton {
         return true;
     }
 
-    // Deletes a theme: the themes extending it extend its parent instead, and the
-    // profiles using it fall back to the default theme. The config is backed up first.
+    // Deletes a theme: its file is kept in the theme backups first — not kept, nothing
+    // changes —, then the themes extending it extend its parent instead, the profiles using
+    // it fall back to the default theme (the config backed up first), and the file goes.
+    // Deletes run one at a time, in the order asked. true when it is under way
     function deleteTheme(name) {
-        if (Config.readOnly || !Theme.themeNames.includes(name))
+        if (Config.readOnly || !Theme.themeNames.includes(name) || _deletes.includes(name))
             return false;
+        _deletes = _deletes.concat([name]);
+        if (!_backups.running)
+            _nextDelete();
+        return true;
+    }
+
+    property var _deletes: []
+
+    property ThemeBackups _backups: ThemeBackups {}
+
+    function _nextDelete() {
+        if (_deletes.length === 0 || _backups.running)
+            return;
+        const name = _deletes[0];
+        _deletes = _deletes.slice(1);
+        const started = _backups.backUp(themesDir, backupsDir, name, result => {
+            root._backedUp(name, result);
+            root._nextDelete();
+        });
+        if (!started) {
+            console.warn("[Theme] Not deleting", themePath(name), "— its file could not be kept");
+            _nextDelete();
+        }
+    }
+
+    function _backedUp(name, result) {
+        if (!result.ok) {
+            console.warn("[Theme] Not deleting", themePath(name), "— its file could not be kept:", result.problem);
+            return;
+        }
+        // What changed while the copy was made wins: a theme gone or settings that cannot be
+        // saved now are left alone
+        if (Config.readOnly || !Theme.themeNames.includes(name))
+            return;
+        if (result.backup !== "")
+            console.log("[Theme] Theme", name, "kept in", backupsDir + "/" + result.backup);
         const changed = ThemeRules.withoutExtends(Theme.themeFiles, name);
         for (const other of Object.keys(changed))
             writeTheme(other, changed[other]);
         _retargetProfiles(name, "default");
         Theme.dropDraft(name);
         remove(themePath(name));
-        return true;
+    }
+
+    // Puts the kept file `backup` (a name in the theme backups) back as its theme, unless a
+    // theme of that name exists; the backup stays. → "" started, else why not
+    function restoreTheme(backup) {
+        if (Config.readOnly)
+            return "Settings are read-only";
+        if (!ThemeRules.parseThemeBackupName(backup).ok || String(backup).includes("/"))
+            return "Not a theme backup: " + String(backup ?? "").slice(0, 80);
+        const started = _backups.restore(themesDir, backupsDir, backup, result => {
+            if (result.ok)
+                console.log("[Theme] Theme", result.theme, "restored from", backupsDir + "/" + backup);
+            else
+                console.warn("[Theme] Not restoring", backupsDir + "/" + backup, "—", result.problem);
+            Qt.callLater(Theme.reload);
+            root._nextDelete();
+        });
+        return started ? "" : "Busy: try again";
     }
 
     function _retargetProfiles(oldName, newName) {

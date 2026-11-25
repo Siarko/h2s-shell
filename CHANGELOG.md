@@ -265,6 +265,9 @@ The interface modules are written against (`qs.api`), versioned on its own
   Without polkit rules it works as before; set to true beside them, it stops the build.
 
 ### Fixed
+- Deleting a theme keeps its file first, in `theme-backups/` beside the themes folder, as the
+  hint now says; `qs ipc call settings restoreTheme <name>` brings one back. When the file
+  cannot be kept, nothing is deleted.
 - A notification's long body can be read: in a toast (6 lines) and in the notification centre
   (12 lines) the rest scrolls inside the card with the wheel, a touchpad or a finger, a fade
   showing where more is hidden.

@@ -230,7 +230,7 @@ Flickable {
                 }
             }
             Hint {
-                text: "Profiles using it go back to the default theme; themes extending it extend what it extended. The config is backed up first."
+                text: "Profiles using it go back to the default theme; themes extending it extend what it extended. Its file is kept in theme-backups."
             }
         }
     }

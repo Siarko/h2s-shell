@@ -178,6 +178,7 @@ QtObject {
     //   qs ipc call settings restoreBackup <name>    (apply one: backs up the current, restarts)
     //   qs ipc call settings backup                  (make a backup now: kept until deleted)
     //   qs ipc call settings deleteBackup <name>     (delete one backup)
+    //   qs ipc call settings restoreTheme <name>     (a deleted theme back from theme-backups)
     property var _settingsIpc: IpcHandler {
         target: "settings"
 
@@ -234,6 +235,11 @@ QtObject {
         // "" when the delete started, else why not
         function deleteBackup(name: string): string {
             return MigrationNotice.backups.deleteBackup(name, null);
+        }
+
+        // "" when the restore started, else why not
+        function restoreTheme(name: string): string {
+            return ThemeFiles.restoreTheme(name);
         }
 
         // For tests driving the window from outside: the first shown item with that

@@ -929,7 +929,9 @@ inherited from the theme it extends or its palette, built in — with Reset and 
 Changes are drafts (`~/.config/h2s_shell/theme-drafts/`), kept until saved, also across
 restarts: each page has Save and Cancel, a banner saves or throws away all of the theme's
 changes, and ✎ marks pages and themes with unsaved changes. Themes are files in
-`~/.config/h2s_shell/themes/`.
+`~/.config/h2s_shell/themes/`. A deleted theme's file is kept first in
+`~/.config/h2s_shell/theme-backups/` as `<name>.json.bak-<time>`; `qs ipc call settings
+restoreTheme <that name>` brings it back (not over a theme of the same name).
 
 ### Backups
 
