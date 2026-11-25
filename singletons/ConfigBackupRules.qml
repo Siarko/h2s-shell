@@ -18,6 +18,9 @@ Singleton {
     // current config before a restore, before a module version switch, made by the user
     readonly property var reasons: ["migration", "restore", "module", "manual"]
 
+    // A backup larger than this is not read for the list (a settings file is far smaller)
+    readonly property real maxBackupBytes: 4 * 1024 * 1024
+
     readonly property string _prefix: "config.json.bak-"
     readonly property var _namePattern: /^config\.json\.bak-([0-9]{4})-([0-9]{2})-([0-9]{2})T([0-9]{2})-([0-9]{2})-([0-9]{2})-([0-9]{3})Z(?:-(migration|restore|manual)|-(module)(?:~([a-z][a-z0-9_-]{0,31})~([A-Za-z0-9._+-]{1,40})~([A-Za-z0-9._+-]{1,40}))?)?$/
     readonly property var _versionPattern: /^[A-Za-z0-9._+-]{1,40}$/
@@ -62,15 +65,20 @@ Singleton {
         return parsed.ok ? Qt.formatDateTime(new Date(parsed.time), "d MMM yyyy, hh:mm") : "";
     }
 
-    // Why it was made, in words
-    function reasonText(parsed) {
+    // Why it was made, in words. `moduleName`: the display name of a module switch's module
+    // ("" when it is gone: its id stands); a switch to an older version is a way back
+    function reasonText(parsed, moduleName) {
         switch (parsed?.reason) {
         case "migration": return "Before a settings update";
         case "restore": return "Before a restore";
         case "manual": return "Made by you";
-        case "module":
-            return parsed.module ? "Before updating " + parsed.module.id + " " + parsed.module.from + " → " + parsed.module.to
-                                 : "Before a module update";
+        case "module": {
+            if (!parsed.module)
+                return "Before a module update";
+            const name = ModuleInstallRules._plain(typeof moduleName === "string" ? moduleName : "", 60) || parsed.module.id;
+            const back = ModuleUpdateRules.compareVersions(parsed.module.to, parsed.module.from) === -1;
+            return (back ? "Before going back: " : "Before updating ") + name + " " + parsed.module.from + " → " + parsed.module.to;
+        }
         default: return "Older backup, reason not recorded";
         }
     }
@@ -96,28 +104,32 @@ Singleton {
         return config !== null && typeof config === "object" && !Array.isArray(config) ? config : null;
     }
 
-    // The list's rows. `entries`: [{ name, text, readable }] — each file in the config's
-    // folder with its content (`readable` false: it could not be read); `version` the running
-    // shell's; `registry` the migrations (a newer writer by its records). Names that are no
-    // backup are left out; a backup that cannot be read or is not a settings file stays, as
-    // such. Newest first; equal times by name, the same each time.
+    // The list's rows. `entries`: [{ name, text, readable, tooLarge }] — each file in the
+    // config's folder with its content (`readable` false: it could not be read; `tooLarge`: over
+    // maxBackupBytes, not read); `version` the running shell's; `registry` the migrations (a
+    // newer writer by its records); `moduleNames` { id: display name } of the modules there now.
+    // Names that are no backup are left out; a backup that cannot be read or is not a settings
+    // file stays, as such. Newest first; equal times by name, the same each time.
     // → [{ key, name, time, date, reason, reasonText, module, kept, readable, writtenBy,
     //   versionText, newer, newerLine }]
-    function rows(entries, version, registry) {
+    function rows(entries, version, registry, moduleNames) {
+        const names = moduleNames !== null && typeof moduleNames === "object" ? moduleNames : {};
         const result = [];
         for (const entry of _list(entries)) {
             const parsed = parseName(entry?.name);
             if (!parsed.ok)
                 continue;
-            const config = entry?.readable === false ? null : _parsed(entry?.text);
+            const tooLarge = entry?.tooLarge === true;
+            const config = entry?.readable === false || tooLarge ? null : _parsed(entry?.text);
+            const moduleName = parsed.module && Object.prototype.hasOwnProperty.call(names, parsed.module.id) ? names[parsed.module.id] : "";
             const writtenBy = typeof config?.writtenBy === "string" ? config.writtenBy : "";
             const newer = config ? MigrationRules.newerConfig(config.writtenBy, config.migratedKeys, version, registry) : { newer: false };
             const byVersion = writtenBy !== "" && ModuleUpdateRules.compareVersions(writtenBy, version) === 1;
             result.push({
                 key: parsed.name, name: parsed.name, time: parsed.time, date: date(parsed.name),
-                reason: parsed.reason, reasonText: reasonText(parsed), module: parsed.module,
+                reason: parsed.reason, reasonText: reasonText(parsed, moduleName), module: parsed.module,
                 kept: parsed.reason === "manual", readable: config !== null, writtenBy: writtenBy,
-                versionText: config === null ? "can't be read" : writtenBy !== "" ? writtenBy : "version unknown",
+                versionText: tooLarge ? "too large" : config === null ? "can't be read" : writtenBy !== "" ? writtenBy : "version unknown",
                 newer: newer.newer === true,
                 newerLine: newerLine({ newer: newer.newer, writtenBy: writtenBy, byVersion: byVersion })
             });

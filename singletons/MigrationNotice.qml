@@ -23,6 +23,7 @@ Singleton {
         releaseSaves: () => Config.releaseSaves()
         restartShell: () => Modules.restartShell()
         canRestart: () => Modules.canRestartShell()
+        moduleBusy: () => Modules.jobRunning()
         busy: Config.migrationBusy
         openSettings: () => Shell.showSettings()
     }
@@ -31,6 +32,7 @@ Singleton {
         configPath: Config.path
         registry: Migrations.all()
         notice: root.notice
+        moduleNames: () => Modules.displayNames()
     }
 
     // The last runs as JSON (MigrationNoticeRules.reportText)

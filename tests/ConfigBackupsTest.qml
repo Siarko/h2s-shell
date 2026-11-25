@@ -76,6 +76,7 @@ TestCase {
             property int restarts: 0
             property bool restartAllowed: true
             property bool restartWorks: true
+            property bool moduleJob: false
             logging: false
             settleMs: 50
             version: "2.2.0"
@@ -180,6 +181,7 @@ TestCase {
             return notice.restartWorks;
         };
         notice.canRestart = () => notice.restartAllowed;
+        notice.moduleBusy = () => notice.moduleJob;
         const quiet = { phase: "load", fresh: false, records: [], applied: [], reset: [], skipped: [], held: [], failure: null, problem: "", backup: "" };
         notice.reports = { load: quiet, afterSeed: Object.assign({}, quiet, { phase: "afterSeed" }) };
         return notice;
@@ -195,6 +197,7 @@ TestCase {
         _listAndApply();
         _newer();
         _moduleBackup();
+        _guards();
         _clock.start();
     }
 
@@ -257,6 +260,9 @@ TestCase {
             notice.busy = true;
             assertEqual(list.apply(older, preview.held), "The settings update is still running", "refused: a migration run goes on");
             notice.busy = false;
+            notice.moduleJob = true;
+            assertEqual(list.apply(older, preview.held), "A module update is running", "refused: a module job runs (a restart would cut it in half)");
+            notice.moduleJob = false;
             assertEqual(list.apply("../config.json", []), "Not a backup: ../config.json", "refused: not a backup's name");
             assertEqual(list.apply("notes.txt", []), "Not a backup: notes.txt", "refused: another file");
             assertEqual(notice.holds + notice.restarts, 0, "refused: nothing held, nothing restarted");
@@ -362,6 +368,55 @@ TestCase {
         });
         _then("the module backup's mode", () => listing.names !== null, () => {
             assertEqual(listing.names.join(""), "600", "module: readable by the user only");
+        });
+    }
+
+    // ---- One pruning entry point keeps what a restore needs; a file too large is not read ----
+    function _guards() {
+        const dir = _scratch + "/guards";
+        const failureBackup = _stamp(5, 1) + "-migration";
+        let notice = null;
+        let list = null;
+        let result = null;
+        let made = null;
+        let listing = null;
+        _then("the guards' folder", () => true, () => {
+            _write(dir + "/config.json", _currentText);
+            _write(dir + "/" + failureBackup, _configText([], "2.1.0"));
+            for (let day = 2; day <= 12; day++)
+                _write(dir + "/" + _stamp(5, day) + "-migration", _configText([], "2.1.0"));
+            // A settings file all the same: only its size keeps it from being read
+            _write(dir + "/" + _stamp(6, 1) + "-restore", JSON.stringify({ writtenBy: "2.2.0", pad: "x".repeat(ConfigBackupRules.maxBackupBytes) }));
+            made = _run(["true"]);
+            notice = _newNotice(dir);
+            notice.reports = { load: { phase: "load", reset: [{ id: "2026-11-25-x-music-popup", error: "x" }], skipped: [], held: [], applied: [],
+                                       backup: dir + "/" + failureBackup },
+                               afterSeed: { phase: "afterSeed", reset: [], skipped: [], held: [], applied: [] } };
+        });
+        _then("the failure known", () => made.code !== -1 && notice.current.backup !== "", () => {
+            assertEqual(made.code, 0, "a file too large made");
+            assert(notice.backUp("module", { id: "kappa", from: "1.1.0", to: "1.0.0" }, answer => result = answer), "a module switch's backup through the notice");
+        });
+        _then("the module backup taken", () => result !== null, () => {
+            assert(result.ok, "taken");
+            listing = _run(["ls", "-1A", "--", dir]);
+        });
+        _then("the folder after its pruning", () => listing.names !== null, () => {
+            assert(listing.names.includes(failureBackup), "pruning keeps the failure notice's backup, the oldest though it is");
+            assert(!listing.names.includes(_stamp(5, 2) + "-migration"), "pruning takes the oldest other one");
+            notice.restartAllowed = true;
+            assertEqual(notice.restore(""), "", "a restore started");
+            list = _newList(dir, notice);
+            list.moduleNames = () => ({ kappa: "Kappa Weather" });
+            list.refresh();
+        });
+        _then("the guards listed", () => list.known && !list.listing && notice.restarts > 0, () => {
+            const large = list.rows.find(row => row.name === _stamp(6, 1) + "-restore");
+            assert(large && !large.readable && large.versionText === "too large", "a file too large: shown, not read");
+            assert(!list.preview(_stamp(6, 1) + "-restore").ok, "a file too large: no preview");
+            assert(!notice.backUp("module", { id: "kappa", from: "1.0.0", to: "1.1.0" }, () => {}), "no module backup once a restore wrote the config");
+            const module = list.rows.find(row => row.reason === "module");
+            assertEqual(module?.reasonText, "Before going back: Kappa Weather 1.1.0 → 1.0.0", "a module's display name; to an older version a way back");
         });
     }
 }

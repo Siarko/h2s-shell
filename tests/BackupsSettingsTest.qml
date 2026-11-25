@@ -144,6 +144,7 @@ TestCase {
         assertEqual(_named(older, "backupPreview")[0].text, "Apply: 1 settings update brings it up to 2.2.0. Fails for: music widget presets.",
                     "opened: what Apply would do");
         assert(!_named(older, "backupNewer")[0].visible, "opened: no newer line for an older one");
+        assertEqual(_named(older, "backupApply")[0].tooltip, "Load this backup and restart the shell", "Apply: its tooltip");
         _named(older, "backupApply")[0].clicked();
         assertEqual(backups.applied.length, 0, "Apply: nothing before the answer");
         assertEqual(modalHost.spec?.title, "Apply the backup of " + ConfigBackupRules.date(_entries[0].name) + "?", "Apply: the question");

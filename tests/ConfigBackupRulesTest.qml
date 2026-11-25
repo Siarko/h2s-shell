@@ -101,7 +101,21 @@ TestCase {
                     "2026-01-14,2026-01-12,2026-01-10,2026-01-08,2026-01-07,2026-01-05,2025-12-20,2025-12-01,2025-11-01,2025-10-01", "rows: newest first");
         const by = prefix => rows.find(row => row.name.startsWith("config.json.bak-" + prefix));
         assertEqual(by("2026-01-14").reasonText, "Before a restore", "rows: before a restore");
-        assertEqual(by("2026-01-12").reasonText, "Before updating tailscale 1.2.0 → 1.3.0", "rows: a module switch names the module and versions");
+        assertEqual(by("2026-01-12").reasonText, "Before updating tailscale 1.2.0 → 1.3.0", "rows: a module gone: its id and the versions");
+        const named = rules.rows(entries, "2.2.0", [_rename], { tailscale: "Tailscale" });
+        assertEqual(named.find(row => row.reason === "module").reasonText, "Before updating Tailscale 1.2.0 → 1.3.0", "rows: a module there: its display name");
+        const odd = rules.rows(entries, "2.2.0", [_rename], { tailscale: "<b>Tail</b>\nscale " + "x".repeat(80) });
+        const oddText = odd.find(row => row.reason === "module").reasonText;
+        assert(!oddText.includes("\n") && oddText.length < 100, "rows: a display name on one line, capped");
+        const capped = rules.reasonText(rules.parseName("config.json.bak-2026-01-12T09-14-40-000Z-module~t~1~2"), "y".repeat(61));
+        assertEqual(capped, "Before updating " + "y".repeat(59) + "… 1 → 2", "rows: a display name capped at 60 characters");
+        assertEqual(rules.maxBackupBytes, 4194304, "rows: files over 4 MB are not read");
+        assertEqual(rules.rows(entries, "2.2.0", [_rename], { other: "Other" }).find(row => row.reason === "module").reasonText,
+                    "Before updating tailscale 1.2.0 → 1.3.0", "rows: another module's name not taken");
+        assertEqual(rules.reasonText(rules.parseName("config.json.bak-2026-01-12T09-14-40-000Z-module~tailscale~1.3.0~1.2.0"), "Tailscale"),
+                    "Before going back: Tailscale 1.3.0 → 1.2.0", "rows: to an older version: a way back");
+        const large = rules.rows([{ name: "config.json.bak-2026-01-12T09-14-40-000Z", text: _config([], "2.2.0"), tooLarge: true }], "2.2.0", [])[0];
+        assert(!large.readable && large.versionText === "too large", "rows: a file too large: not read, said");
         assertEqual(by("2026-01-10").reasonText, "Before a settings update", "rows: before a settings update");
         assertEqual(by("2026-01-05").reasonText, "Made by you", "rows: manual");
         assert(by("2026-01-05").kept && !by("2026-01-10").kept && !by("2025-12-20").kept, "rows: only a manual one kept");

@@ -19,6 +19,8 @@ QtObject {
     property bool readOnly: false
     property string version: Version.number
     readonly property bool running: _running
+    // Backups its pruning always keeps (names or paths): the failure notice's backup
+    property var keep: () => []
     // The backup a restore reads ("" none): kept by pruning, never deleted while it runs
     readonly property string reading: _reading
 
@@ -170,11 +172,19 @@ QtObject {
             }
             // Pruned before config.json is written: the shell restarts right after that
             root._pruning = true;
-            root._pruner.prune(root._backup, root._reading !== "" ? [root._reading] : []);
+            root._pruner.prune(root._backup, root._protected());
         }
     }
 
     property bool _pruning: false
+
+    function _protected() {
+        let kept = [];
+        try {
+            kept = Array.from(keep() ?? []).filter(name => typeof name === "string" && name !== "");
+        } catch (error) {}
+        return _reading !== "" ? kept.concat([_reading]) : kept;
+    }
 
     property ConfigBackupPruner _pruner: ConfigBackupPruner {
         dir: root._dir

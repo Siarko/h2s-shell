@@ -20,6 +20,8 @@ QtObject {
     property var registry: []
     // MigrationFailureNotice: its restoreBackup carries Apply out
     property var notice: null
+    // The modules there now, { id: display name } (a module switch's row names it)
+    property var moduleNames: () => ({})
 
     // The rows (ConfigBackupRules.rows), and whether the folder was read once
     property var rows: []
@@ -57,11 +59,14 @@ QtObject {
             return;
         }
         _again = false;
-        _lister.command = ["ls", "-1A", "--", dir];
+        // Each file with its size: one too large is not read
+        _lister.command = ["find", dir, "-mindepth", "1", "-maxdepth", "1", "-type", "f", "-printf", "%s\\t%f\\n"];
         _lister.running = true;
     }
 
     property bool _again: false
+    // The sizes the last listing found, by name
+    property var _sizes: ({})
 
     property Process _lister: Process {
         stdout: StdioCollector { id: _names }
@@ -77,13 +82,26 @@ QtObject {
                 return;
             }
             const entries = [];
-            for (const name of _names.text.split("\n")) {
-                if (!ConfigBackupRules.parseName(name).ok)
+            const sizes = {};
+            for (const line of _names.text.split("\n")) {
+                const tab = line.indexOf("\t");
+                const name = line.slice(tab + 1);
+                if (tab < 0 || !ConfigBackupRules.parseName(name).ok)
                     continue;
-                const text = root._read(root.dir + "/" + name);
-                entries.push({ name: name, text: text });
+                const size = Number(line.slice(0, tab));
+                Object.defineProperty(sizes, name, { value: size, enumerable: true });
+                if (!(size <= ConfigBackupRules.maxBackupBytes)) {
+                    entries.push({ name: name, text: "", tooLarge: true });
+                    continue;
+                }
+                entries.push({ name: name, text: root._read(root.dir + "/" + name) });
             }
-            root.rows = ConfigBackupRules.rows(entries, root.version, root.registry);
+            root._sizes = sizes;
+            let names = {};
+            try {
+                names = root.moduleNames() ?? {};
+            } catch (error) {}
+            root.rows = ConfigBackupRules.rows(entries, root.version, root.registry, names);
             root.known = true;
         }
     }
@@ -98,7 +116,7 @@ QtObject {
     // What Apply would do with backup `name` (ConfigBackupRules.preview), read now
     function preview(name) {
         const path = _path(name);
-        if (path === "")
+        if (path === "" || _sizes[name] > ConfigBackupRules.maxBackupBytes)
             return ConfigBackupRules.preview(registry, "", version);
         return ConfigBackupRules.preview(registry, _read(path), version);
     }

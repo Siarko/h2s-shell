@@ -41,6 +41,9 @@ QtObject {
     property var canRestart: () => true
     // A migration run goes on (Config.migrationBusy)
     property bool busy: false
+    // A module job runs (Modules.jobRunning: an install, update, switch or rollback) — a restart
+    // would cut it in half
+    property var moduleBusy: () => false
     // Shows the Settings window (Shell.showSettings)
     property var openSettings: () => {}
     // How long after the load phase's report the notice waits for the after-seed phase's
@@ -183,6 +186,15 @@ QtObject {
                     "applying the backup " + path + (ids.length > 0 ? ", holding " + ids.join(", ") : ""));
     }
 
+    // A backup of config.json as it is now (a module switch's, ConfigRestore.backUp), through
+    // the one restorer: its pruning keeps the backup a restore reads and this notice's backup.
+    // false when it cannot start (a restore under way, the test runner)
+    function backUp(reason, module, done) {
+        if (_acting || _restartPending)
+            return false;
+        return _restorer.backUp(reason, module, done);
+    }
+
     // Start with default settings (a session that saves nothing): the current config backed
     // up, a new one with the defaults written, the shell restarted. → "" started, else why not
     function startWithDefaults(key) {
@@ -201,6 +213,8 @@ QtObject {
             return "Already under way";
         if (!_settled || busy)
             return "The settings update is still running";
+        if (moduleBusy())
+            return "A module update is running";
         if (!canRestart())
             return "The shell cannot restart now";
         _problem = "";
@@ -254,5 +268,6 @@ QtObject {
         configPath: root.configPath
         readOnly: root.testRunner
         version: root.version
+        keep: () => root.current.backup !== "" ? [root.current.backup] : []
     }
 }

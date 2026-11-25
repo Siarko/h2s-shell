@@ -239,6 +239,7 @@ Item {
                     objectName: "backupApply"
                     visible: _row.row?.readable === true
                     label: "Apply…"
+                    tooltip: "Load this backup and restart the shell"
                     onClicked: root.askApply()
                 }
             }
