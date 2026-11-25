@@ -25,16 +25,20 @@ Dashboard's other lines (the Dashboard itself is HS-176, a sketch).
    title, the new manual row at the top, selected.
 3. `selected`: a row clicked opens: its file name, what Apply would do (from the in-memory
    preview: how many settings updates run), Apply… and Delete….
-4. `apply-confirm`: Apply's question (warning modal): reason and version, then the steps —
-   current settings backed up, this one loaded and brought up to date, the shell restarts.
+4. `apply-confirm`: Apply's question (warning modal): reason and version, then "Steps:" —
+   create a new backup, load the selected backup, the settings update (only for a backup
+   older than this version), restart the shell; numbered 1–3 or 1–4.
 5. `apply-confirm-failing`: the same when the preview finds an update that fails under this
-   version: the named part is loaded as it was and stays unused until the next shell update.
-6. `newer-version`: the 2.3.0 backup selected: the full warning in the row; Apply available.
-7. `newer-confirm`: its question, led by the warning in bold; no updates run.
+   version: the update step says which part it skips.
+6. `newer-version`: the 2.3.0 backup selected: the one-line warning in the row; Apply available.
+7. `newer-confirm`: "Load a backup from a newer shell?", the warning in bold, the steps (no
+   settings update).
 8. `delete-confirm`: Delete's question (danger modal), naming date, reason, version.
-9. `failure-notification`: the critical notification after a failed update at start.
-10. `failure-dashboard`: the same notice as a Dashboard entry with the same three choices.
-11. `failure-restore-confirm`: Restore previous settings… asks first.
+9. `failure-notification`: the critical notification after a failed update at start, short;
+   clicking it opens Settings at the Dashboard entry.
+10. `failure-dashboard`: the Dashboard entry: the failed parts as a bullet list, everything
+    shown at once (not expandable, no Details); Keep defaults, Restore previous settings….
+11. `failure-restore-confirm`: Restore previous settings… asks first, with the steps.
 12. `config-backups-live`: the same window working, on its own copy of the stand-in data,
     with the theme's animations (every other scene and every shot is drawn without motion).
     Make a backup now adds a manual row at the top (the stand-in clock gives each the next
@@ -45,48 +49,44 @@ Dashboard's other lines (the Dashboard itself is HS-176, a sketch).
     Delete asks to delete, Escape closes the row; in a question Tab moves between the
     buttons, Space or Enter presses, Escape cancels. The sidebar's Dashboard and Backups
     switch pages. Under the window: "Failed update" raises the critical notification over
-    the window's top right and the Dashboard entry (⚠ on the sidebar); its Keep defaults
-    clears both, Restore previous settings asks on the Dashboard and restores, Details opens
-    the entry with the backup's file name; "Reset" puts the stand-in data back.
+    the window's top right and the Dashboard entry (⚠ on the sidebar); clicking the
+    notification opens the Dashboard; its Keep defaults clears both, Restore previous
+    settings asks on the Dashboard and restores; "Reset" puts the stand-in data back.
 
 Open the live scene: `tests/mockup.sh open plans/config-backups/config-backups-live`.
 
 ## Proposed wording
 
-- Page: "Backups" (System tab). Intro: "Copies of your settings file, all profiles included.
-  Apply loads one, brings it up to this version and restarts the shell. Modules' stores and
-  data have their own backups, on the Modules page."
+Short, to the point; the docs explain (the owner, 2026-11-25).
+
+- Page: "Backups" (System tab). Intro: "Copies of your settings file, all profiles
+  included. Modules' stores and data: on the Modules page."
 - Section "Settings backups", button "Make a backup now"; after it: "✓ Backup made: <date>".
 - Reasons: "Before a settings update", "Before updating <module> <from> → <to>", "Before a
   restore", "Made by you" (+ chip "Kept"), "Older backup, reason not recorded"; missing
   version: "version unknown".
-- Under the list: "Automatic backups (before a settings update, a module update or a
-  restore): the newest 10 are kept. Manual backups stay until you delete them."
-- Opened row: "<file name>" (manual: "· kept until you delete it"); "Apply: 1 settings
-  update brings it up to 2.2.0." / "Apply: No settings updates are needed: it is loaded as it
-  is." / "… One fails under this version (music widget presets)."; buttons "Apply…",
+- Under the list: "Automatic backups: the newest 10 are kept."
+- Opened row: "<file name>"; "Apply: 1 settings update brings it up to 2.2.0." / "Apply: No
+  settings updates are needed." / "… Fails for: music widget presets."; buttons "Apply…",
   "Delete…".
-- Newer: "⚠ Written by h2s-shell 2.3.0, newer than this version: what this version does not
-  know is kept, unused; nothing is converted back." (doc-004 §5.1).
-- Apply question: title "Apply the backup of <date>?"; body "<reason> · written by h2s-shell
-  <v>." / "1. Your current settings are saved first, as a new backup (Before a restore):
-  nothing is lost." / "2. This backup is loaded. <updates>" / (failing, bold) "One of them
-  fails under this version: <part>. That part is loaded as it was and stays unused (it
-  behaves as defaults) until the next update of the shell, which tries again." / "3. The
-  shell restarts to finish."; buttons "Apply and restart", "Cancel".
+- Newer: "⚠ Written by shell 2.3.0 (newer than current) — may be incompatible, expect odd
+  behaviour".
+- Apply question: title "Apply the backup of <date>?" (newer: "Load a backup from a newer
+  shell?", then the newer line in bold); body "<reason> · <version>", then "Steps:" / "1.
+  Create a new backup" / "2. Load the selected backup" / ["3. Settings update to 2.2.0"
+  (failing: ", skipping <part>"), only for an older backup] / "3./4. Restart the shell";
+  buttons "Apply and restart", "Cancel".
 - Delete question: "Delete the backup of 5 Jan 2026, 21:30 (manual, 2.1.0)?" / "Only this
   backup is removed. This cannot be undone."; buttons "Delete", "Cancel" (the owner's draft
   in HS-179.12).
-- Failure notice (notification and Dashboard): "Some settings were reset to defaults" /
-  "Updating your settings for 2.2.0 failed for: music widget presets (Popup mode is now a
-  widget action). That part now uses its defaults; the rest of your settings were updated.
-  Your previous settings are kept in the backup of 15 Jan 2026, 10:29."; actions "Keep
-  defaults", "Restore previous settings", "Details".
-- Restore question: "Restore your settings from before the update?" / "Your current settings
-  are saved first, as a new backup (Before a restore): nothing set since is lost." / "Your
-  settings from before the update come back. The part that failed (music widget presets)
-  stays unused until the next update of the shell, which tries again." / "The shell restarts
-  to finish."; buttons "Restore and restart", "Cancel".
+- Failure notification (critical): "Updating settings to 2.2.0 failed" / "Defaults are used
+  where possible. See Settings for details."; clicking it opens Settings at the Dashboard
+  entry; buttons "Keep defaults", "Restore previous settings".
+- Dashboard entry: "Updating settings to 2.2.0 failed" / "Defaults are used for:" and the
+  failed parts as a bullet list; buttons "Keep defaults", "Restore previous settings…".
+- Restore question: "Restore the settings from before the update?" / "Steps:" / "1. Create a
+  new backup" / "2. Load the backup of <date>" / "3. Settings update to 2.2.0, skipping
+  <parts>" / "4. Restart the shell"; buttons "Restore and restart", "Cancel".
 
 ## Open questions
 
@@ -96,8 +96,8 @@ Open the live scene: `tests/mockup.sh open plans/config-backups/config-backups-l
    "Restore". One word for both?
 3. Selecting a row to show Apply/Delete (shown) vs both buttons on every row at all times
    (busier, one click less).
-4. The notice names the backup by its date (shown) instead of the file name doc-004 §2.5
-   drafts; the file name stays in Details and in the opened row.
+4. The restore question names the backup by its date (shown); the file name is in the
+   opened row on the Backups page.
 5. Restore previous settings from the notification: does its question open the Settings
    window at the Dashboard (as in scene 11), or a standalone modal?
 6. The Dashboard does not exist yet (HS-176): until it does, does the entry go to the top

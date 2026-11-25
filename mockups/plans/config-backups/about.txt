@@ -3,11 +3,11 @@ scene: list                     System → Backups: newest first, date, reason, 
 scene: backup-made              After Make a backup now: the confirmation and the new row, selected
 scene: selected                 A row opened: its file name, what Apply would do, Apply… and Delete…
 scene: apply-confirm            Apply's question: reason and version, then the steps
-scene: apply-confirm-failing    The same when an update fails under this version
-scene: newer-version            The 2.3.0 backup selected: the full warning; Apply available
-scene: newer-confirm            Its question, led by the warning in bold; no updates run
+scene: apply-confirm-failing    The same when an update fails: the update step names the part skipped
+scene: newer-version            The 2.3.0 backup selected: the one-line warning; Apply available
+scene: newer-confirm            Load a backup from a newer shell?: the warning, the steps
 scene: delete-confirm           Delete's question (danger modal), naming date, reason, version
-scene: failure-notification     The critical notification after a failed update at start
-scene: failure-dashboard        The same notice as a Dashboard entry with the same three choices
-scene: failure-restore-confirm  Restore previous settings… asks first
+scene: failure-notification     The critical notification after a failed update; a click opens Settings
+scene: failure-dashboard        The Dashboard entry: the failed parts as a list, all shown at once
+scene: failure-restore-confirm  Restore previous settings… asks first, with the steps
 scene: config-backups-live      Live, stand-in data: make, select, apply, delete; Failed update raises the notice

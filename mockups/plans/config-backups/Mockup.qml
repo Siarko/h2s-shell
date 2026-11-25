@@ -79,7 +79,6 @@ MockupWindow {
     property string liveMade: ""
     property bool liveToast: false
     property bool liveFailure: false
-    property bool liveDetails: false
     // The stand-in clock: each backup made takes the next minute after 10:30
     property int liveMinute: 30
     property int liveSerial: 0
@@ -94,7 +93,6 @@ MockupWindow {
         liveMade = "";
         liveToast = false;
         liveFailure = false;
-        liveDetails = false;
         liveMinute = 30;
         liveEvent = "";
         listKeys.forceActiveFocus();
@@ -152,7 +150,6 @@ MockupWindow {
             liveAdd("restore");
             liveFailure = false;
             liveToast = false;
-            liveDetails = false;
             livePage = "backups";
             liveEvent = "The shell restarted with the settings from before the update.";
         }
@@ -161,14 +158,12 @@ MockupWindow {
     function liveFail() {
         liveFailure = true;
         liveToast = true;
-        liveDetails = false;
         liveEvent = "The shell started after an update to 2.2.0; one settings update failed.";
     }
 
     function liveKeepDefaults() {
         liveFailure = false;
         liveToast = false;
-        liveDetails = false;
     }
 
     readonly property string selectedKey: {
@@ -215,11 +210,20 @@ MockupWindow {
 
     function updatesText(count) {
         if (count === 0)
-            return "No settings updates are needed: it is loaded as it is.";
+            return "No settings updates are needed.";
         return count + (count === 1 ? " settings update brings" : " settings updates bring") + " it up to " + root.thisVersion + ".";
     }
 
-    readonly property string newerWarning: "Written by h2s-shell 2.3.0, newer than this version: what this version does not know is kept, unused; nothing is converted back."
+    readonly property string newerWarning: "Written by shell 2.3.0 (newer than current) — may be incompatible, expect odd behaviour"
+
+    // The confirmations' steps; the settings update only for a backup older than this version
+    function stepsBody(load, updates, except) {
+        const steps = ["Create a new backup", load];
+        if (updates > 0)
+            steps.push("Settings update to " + thisVersion + (except.length > 0 ? ", skipping " + except.join(", ") : ""));
+        steps.push("Restart the shell");
+        return ["Steps:"].concat(steps.map((step, index) => (index + 1) + ". " + step));
+    }
 
     // The modal each scene shows, as SettingsModal takes it
     readonly property string modalWhich: live ? liveModal
@@ -229,16 +233,11 @@ MockupWindow {
     readonly property var modalSpec: {
         const backup = selectedBackup;
         if (modalWhich === "apply" && backup) {
-            const body = [];
-            if (backup.newer)
-                body.push({ text: newerWarning, strong: true });
-            body.push(reasonText(backup) + " · written by h2s-shell " + versionText(backup) + ".");
-            body.push("1. Your current settings are saved first, as a new backup (Before a restore): nothing is lost.");
-            body.push("2. This backup is loaded. " + updatesText(backup.updates));
-            if (backup.failing)
-                body.push({ text: "One of them fails under this version: " + backup.failing + ". That part is loaded as it was and stays unused (it behaves as defaults) until the next update of the shell, which tries again.", strong: true });
-            body.push("3. The shell restarts to finish.");
-            return { kind: "warning", title: "Apply the backup of " + backup.date + "?", body: body,
+            const body = backup.newer ? [{ text: "⚠ " + newerWarning, strong: true }]
+                                      : [reasonText(backup) + " · " + versionText(backup)];
+            return { kind: "warning",
+                     title: backup.newer ? "Load a backup from a newer shell?" : "Apply the backup of " + backup.date + "?",
+                     body: body.concat(stepsBody("Load the selected backup", backup.updates, backup.failing ? [backup.failing] : [])),
                      buttons: [{ label: "Apply and restart", kind: "warning" }], cancelLabel: "Cancel" };
         }
         if (modalWhich === "delete" && backup)
@@ -246,40 +245,46 @@ MockupWindow {
                      body: ["Only this backup is removed. This cannot be undone."],
                      buttons: [{ label: "Delete", kind: "delete" }], cancelLabel: "Cancel" };
         if (modalWhich === "restore")
-            return { kind: "warning", title: "Restore your settings from before the update?",
-                     body: ["Your current settings are saved first, as a new backup (Before a restore): nothing set since is lost.",
-                            "Your settings from before the update come back. The part that failed (music widget presets) stays unused until the next update of the shell, which tries again.",
-                            "The shell restarts to finish."],
+            return { kind: "warning", title: "Restore the settings from before the update?",
+                     body: stepsBody("Load the backup of " + failureBackupDate, 1, failedParts),
                      buttons: [{ label: "Restore and restart", kind: "warning" }], cancelLabel: "Cancel" };
         return null;
     }
 
-    readonly property string failureSummary: "Some settings were reset to defaults"
-    readonly property string failureBody: "Updating your settings for 2.2.0 failed for: music widget presets (Popup mode is now a widget action). That part now uses its defaults; the rest of your settings were updated. Your previous settings are kept in the backup of 15 Jan 2026, 10:29."
+    readonly property string failureSummary: "Updating settings to 2.2.0 failed"
+    readonly property string failureBody: "Defaults are used where possible. See Settings for details."
+    // The parts whose settings update failed (their scopes in words), and the backup from
+    // before that update, which Restore loads
+    readonly property var failedParts: ["music widget presets", "Tailscale module settings"]
+    readonly property string failureBackupDate: "15 Jan 2026, 10:29"
+
+    function liveOpenFailure() {
+        livePage = "dashboard";
+    }
 
     // Plain object: what NotificationCard reads
     readonly property var failureNotification: ({
         id: 9101, appName: "h2s-shell", summary: failureSummary, body: failureBody, appIcon: "", hints: ({}),
         urgency: NotificationUrgency.Critical,
         // The live scene's answers, after the card's own click handler is done: they remove the card
-        actions: [{ identifier: "keep", text: "Keep defaults", invoke: () => Qt.callLater(root.liveKeepDefaults) },
-                  { identifier: "restore", text: "Restore previous settings", invoke: () => Qt.callLater(() => { root.livePage = "dashboard"; root.liveModal = "restore"; }) },
-                  { identifier: "details", text: "Details", invoke: () => Qt.callLater(() => { root.livePage = "dashboard"; root.liveDetails = true; }) }]
+        // Clicking the card opens Settings at the failure's Dashboard entry
+        actions: [{ identifier: "default", text: "Open Settings", invoke: () => Qt.callLater(root.liveOpenFailure) },
+                  { identifier: "keep", text: "Keep defaults", invoke: () => Qt.callLater(root.liveKeepDefaults) },
+                  { identifier: "restore", text: "Restore previous settings", invoke: () => Qt.callLater(() => { root.livePage = "dashboard"; root.liveModal = "restore"; }) }]
     })
-    readonly property string failureFile: "config.json.bak-2026-01-15T10-29-00-migration"
 
     readonly property var notes: ({
-        "list": "System → Backups (proposed place). Newest first: the date, why it was made, the version that wrote it. Manual backups carry \"Kept\": only the automatic ones are pruned to the newest 10. The older backups made before reasons were recorded say so. Make a backup now is on the section's title line.",
-        "backup-made": "After Make a backup now: the new manual backup at the top, selected, and a line under the title that says it was made. No toast, no notification.",
-        "selected": "A row clicked is selected and opens: its file name, what Apply would do (how many settings updates would run, from the preview), and its two buttons — Apply and Delete. Every backup has both, manual or automatic.",
-        "apply-confirm": "Apply asks first (Settings modal, warning): the backup's reason and version, then the three steps — the current settings backed up, this one loaded and brought up to date, the shell restarts.",
-        "apply-confirm-failing": "The same question when the preview finds an update that would fail under this version: the part it names is loaded as it was and stays unused until the next shell update tries again. Apply stays available.",
-        "newer-version": "A backup written by a newer shell (2.3.0): the version in the warning colour with ⚠ in the row, and the full warning when selected. Apply is still there — never refused.",
-        "newer-confirm": "Its question leads with the warning (bold), then the usual steps; no settings updates run (nothing is converted back).",
-        "delete-confirm": "Delete asks in the Settings modal (danger), naming the date, reason and version, as the owner's draft: only that one file goes.",
-        "failure-notification": "A settings update failed at start: one critical notification (red border, no timeout, kept in the history) with Keep defaults / Restore previous settings / Details. A successful update is never announced.",
-        "failure-dashboard": "The same notice as an entry on the Settings Dashboard (HS-176, still a sketch: only this entry is proposed), kept until Keep defaults. The same three choices.",
-        "failure-restore-confirm": "Restore previous settings asks first (from the notification or the Dashboard): the current settings backed up, the pre-update ones back, the failed part unused until the next shell update; restart.",
+        "list": "System → Backups (proposed place). Newest first: date, reason, version. Manual backups carry \"Kept\" (never pruned). Make a backup now on the section's title line.",
+        "backup-made": "After Make a backup now: the new manual backup at the top, selected, and a line under the title. No toast.",
+        "selected": "A row clicked opens: its file name, what Apply would do (from the preview), Apply and Delete. Every backup has both.",
+        "apply-confirm": "Apply asks first (Settings modal, warning): reason and version, then the steps. The settings update step only for a backup older than this version.",
+        "apply-confirm-failing": "The same when the preview finds an update that fails under this version: the step names the part skipped. Apply stays available.",
+        "newer-version": "A backup written by a newer shell (2.3.0): ⚠ and the version in the warning colour; the one-line warning when selected. Apply never refused.",
+        "newer-confirm": "Its question: the warning, then the steps; no settings update (nothing is converted back).",
+        "delete-confirm": "Delete asks in the Settings modal (danger), naming the date, reason and version (the owner's draft).",
+        "failure-notification": "A settings update failed at start: one critical notification (no timeout, kept in the history). Clicking it opens Settings at the Dashboard entry. A successful update is never announced.",
+        "failure-dashboard": "The same failure on the Settings Dashboard (HS-176, a sketch: only this entry is proposed): the failed parts as a list, all shown at once; kept until Keep defaults.",
+        "failure-restore-confirm": "Restore previous settings asks first (from the notification or the Dashboard): the steps, naming the backup and the parts skipped.",
         "config-backups-live": "Live, on stand-in data. Keys: ↑ ↓ select, Enter apply, Delete delete, Esc deselect; Tab in the questions."
     })
 
@@ -380,7 +385,7 @@ MockupWindow {
             Label {
                 visible: _row.selected && _row.backup.newer === true
                 Layout.fillWidth: true
-                wrapMode: Text.WordWrap
+                elide: Text.ElideRight
                 text: "⚠ " + root.newerWarning
                 color: Theme.warning
                 font.pixelSize: Theme.fontSizeSmall
@@ -388,7 +393,7 @@ MockupWindow {
             Label {
                 visible: _row.selected
                 Layout.fillWidth: true
-                text: _row.backup.file + (_row.backup.reason === "manual" ? " · kept until you delete it" : "")
+                text: _row.backup.file
                 color: Theme.textMuted
                 font.pixelSize: Theme.fontSizeSmall
                 elide: Text.ElideRight
@@ -401,7 +406,7 @@ MockupWindow {
                     Layout.fillWidth: true
                     wrapMode: Text.WordWrap
                     text: "Apply: " + root.updatesText(_row.backup.updates)
-                          + (_row.backup.failing ? " One fails under this version (" + _row.backup.failing + ")." : "")
+                          + (_row.backup.failing ? " Fails for: " + _row.backup.failing + "." : "")
                     color: _row.backup.failing ? Theme.warning : Theme.textSecondary
                     font.pixelSize: Theme.fontSizeSmall
                 }
@@ -539,7 +544,7 @@ MockupWindow {
                 Text {
                     Layout.fillWidth: true
                     wrapMode: Text.WordWrap
-                    text: "Copies of your settings file, all profiles included. Apply loads one, brings it up to this version and restarts the shell. Modules' stores and data have their own backups, on the Modules page."
+                    text: "Copies of your settings file, all profiles included. Modules' stores and data: on the Modules page."
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.fontSizeSmall
                     color: Theme.textSecondary
@@ -575,7 +580,7 @@ MockupWindow {
                         Layout.fillWidth: true
                         Layout.topMargin: 4
                         wrapMode: Text.WordWrap
-                        text: "Automatic backups (before a settings update, a module update or a restore): the newest 10 are kept. Manual backups stay until you delete them."
+                        text: "Automatic backups: the newest 10 are kept."
                         font.family: Theme.fontFamily
                         font.pixelSize: Theme.fontSizeSmall
                         color: Theme.textMuted
@@ -612,30 +617,30 @@ MockupWindow {
                         }
                         Label {
                             Layout.fillWidth: true
-                            wrapMode: Text.WordWrap
-                            text: root.failureBody
+                            text: "Defaults are used for:"
                             color: Theme.textSecondary
                         }
-                        Label {
-                            visible: root.live && root.liveDetails
-                            Layout.fillWidth: true
-                            text: root.failureFile
-                            color: Theme.textMuted
-                            font.pixelSize: Theme.fontSizeSmall
-                            elide: Text.ElideRight
+                        Repeater {
+                            model: ScriptModel { values: root.failedParts }
+                            Label {
+                                required property string modelData
+                                Layout.fillWidth: true
+                                Layout.leftMargin: 12
+                                text: "•  " + modelData
+                                color: Theme.textSecondary
+                            }
                         }
                         RowLayout {
                             Layout.fillWidth: true
                             spacing: 8
                             Item { Layout.fillWidth: true }
-                            SmallButton { label: "Keep defaults"; tooltip: "Close this notice; the old values stay in the backup"; onClicked: root.liveKeepDefaults() }
+                            SmallButton { label: "Keep defaults"; tooltip: "Close this notice"; onClicked: root.liveKeepDefaults() }
                             SmallButton {
                                 label: "Restore previous settings…"
                                 kind: "warning"
                                 checked: root.modalWhich === "restore"
                                 onClicked: if (root.live) root.liveAsk("restore")
                             }
-                            SmallButton { label: "Details"; checked: root.live && root.liveDetails; onClicked: root.liveDetails = !root.liveDetails }
                         }
                     }
                 }
