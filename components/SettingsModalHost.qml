@@ -18,7 +18,8 @@ import qs.singletons
 //     the button clicked, "cancel" when cancelled; `reason` "button", "close" (×),
 //     "escape", "lock" (the session locked), "window" (the window hid or went), "page"
 //     (the window turned to another page: `page` changed), "subject" (withdrawn); `values` the checkboxes' states by key and the content's; `subject` the
-//     spec's, so the answer acts on what was asked about.
+//     spec's, so the answer acts on what was asked about. A host destroyed while open
+//     answers cancelled for "window" with `values` {} (its content is going with it).
 //
 // `ask` returns "" when the modal opens, else why not: another is open (a question never
 // replaces another under the user's pointer), or the session is locked — said in the log
@@ -53,11 +54,13 @@ Item {
         const asking = _asking;
         Component.destruction.connect(() => {
             const callback = asking.onAnswer;
+            const subject = asking.subject;
             asking.onAnswer = null;
+            asking.subject = undefined;
             if (!callback)
                 return;
             try {
-                callback({ button: "cancel", cancelled: true, reason: "window", values: {}, subject: asking.subject });
+                callback({ button: "cancel", cancelled: true, reason: "window", values: {}, subject: subject });
             } catch (error) {
                 console.warn("[SettingsModal] the answer's handler threw: " + error);
             }
@@ -107,6 +110,7 @@ Item {
         const callback = _asking.onAnswer;
         _spec = null;
         _asking.onAnswer = null;
+        _asking.subject = undefined;
         _lastRefusal = "";
         if (!callback)
             return;

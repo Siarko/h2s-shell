@@ -512,7 +512,9 @@ new kind.
   undone in `Component.onDestruction`; a destruction handler calls no function of its own and
   reads no property of its own: what it needs is in a JavaScript object a closure holds
   (`Component.destruction.connect` from `Component.onCompleted`, as `components/AnchorBlock.qml`),
-  or it passes only its id to a singleton that forgets it. A new one gets a step in
+  or it passes only its id to a singleton that forgets it. That object and closure never hold
+  the item itself (that would keep its wrapper alive and hide the case): the item is reached
+  by its id, looked up when the closure runs. A new one gets a step in
   `tests/TeardownTest.qml`, which reaches that case. — Holds, a module's store write and
   answers owed were lost at destruction; handlers ran on items already gone.
 - **One slice = one change with its test.** While iterating run only the suites the change

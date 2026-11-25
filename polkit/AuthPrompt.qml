@@ -117,7 +117,6 @@ PanelWindow {
             _step({ kind: "request", echo: flow.responseVisible });
         _input.forceActiveFocus();
     }
-    Component.onDestruction: _forget()
 
     Connections {
         target: root.flow
@@ -152,6 +151,10 @@ PanelWindow {
     }
 
     Component.onCompleted: {
+        // The password field cleared at the destruction by a closure over the field (its text
+        // is the field's own, kept where Qt may have dropped the prompt's properties)
+        const input = _input;
+        Component.destruction.connect(() => input.text = "");
         if ((flow?.supplementaryMessage ?? "") !== "")
             _step({ kind: "message" });
         if (flow?.isResponseRequired)
