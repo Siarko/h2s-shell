@@ -25,8 +25,10 @@
 #                                         every component and view in all their states in one
 #                                         window (mockups/kit/Gallery.qml; no state of its own,
 #                                         no baseline: review and approve refuse it)
-#   tests/mockup.sh [-n] close [<element>] close that mockup (with none: every running
-#                                         mockup of this tree)
+#   tests/mockup.sh [-n] close [<element>] [--main <tree>] [--also <tree>=<label>]...
+#                                         close that mockup (with none: every running
+#                                         mockup of this tree, or of the --main and --also
+#                                         trees)
 #   tests/mockup.sh [-n] review <element> compare it with its baseline (tests/run-mockups.sh
 #                                         --compare), then show each differing state's old, new
 #                                         and diff images (not a plan: it has no baseline)
@@ -37,7 +39,7 @@
 #                   <element>/<state> (also <kind>/<name>/<state>) names one state or scene
 #     -n            print the commands instead of running them (review still shows the images
 #                   of the last run there is)
-#     --main <tree> list, search, open, close <element>, review, approve: that shell tree's
+#     --main <tree> list, search, open, close, review, approve: that shell tree's
 #                   elements instead of this one's
 #     --also <tree>=<label>
 #                   list, search: also the elements the main tree lacks and that tree changed
@@ -46,7 +48,9 @@
 #                   copy, one more for a different copy, none for a copy whose tree only lags
 #                   behind another's; a tree in the old layout (mockups/planning/, no
 #                   about.txt) is read as well;
-#                   open, close <element>, review, approve: the tree whose copy is taken — the
+#                   close: the mockup closed in whichever of the --main and --also trees
+#                   runs it (one rule with list's "*", whichever tree's tool started it);
+#                   open, review, approve: the tree whose copy is taken — the
 #                   main tree's, unless the --also trees that changed it since they left the
 #                   main tree's history hold one copy (said on a line), or the one copy the
 #                   --also trees added of an element the main tree lacks; several different
@@ -65,8 +69,11 @@
 #       qs -p <tree>/mockup.qml
 #
 # A running mockup is an instance in `qs list --all` whose config path is this tree's
-# mockup.qml, and its name what `qs ipc --pid <pid> call mockup name` answers: close never
-# picks by a pattern, and never the shell or another tree's mockups.
+# mockup.qml (or a --main or --also tree's), and its name what
+# `qs ipc --pid <pid> call mockup name` answers (an older tool's planning/<name> read as
+# plans/<name>); list marks it and close closes it by that one rule (mockups_running): close
+# never picks by a pattern, and never the shell or a tree it was not given.
+# Closing a mockup's window on the screen ends its process (mockup.qml).
 #
 # review shows the images inline when the terminal draws the kitty graphics protocol
 # (KITTY_WINDOW_ID set, TERM=xterm-kitty, or the terminal answers the protocol's query), each
@@ -261,28 +268,40 @@ resolve_or_gallery() {
     resolve "$1"
 }
 
-# instances: this tree's running entries, "<pid> <config path>" from `qs list --all`
-instances() {
-    local entry_real
-    entry_real=$(readlink -f "$ENTRY")
-    qs list --all 2> /dev/null | awk -v a="$ENTRY" -v b="$entry_real" '
+# mockups_running <tree>...: "<pid>\t<tree>\t<name>" for each running mockup of those trees:
+# an instance in `qs list --all` whose config path is one of their mockup.qml (as given or
+# resolved), its name what it answers over IPC (`mockup name`): <kind>/<name> or gallery, an
+# older tool's planning/<name> read as plans/<name>. The one rule list and close go by.
+mockups_running() {
+    local -A entry_of=()
+    local tree pid path name
+    for tree in "$@"; do
+        entry_of[$tree/mockup.qml]=$tree
+        entry_of[$(readlink -f "$tree/mockup.qml")]=$tree
+    done
+    while IFS=$'\t' read -r pid path; do
+        tree=${entry_of[$path]:-}
+        [ -n "$tree" ] || continue
+        name=$(qs ipc --pid "$pid" call mockup name 2> /dev/null | tr -d '[:space:]')
+        name=${name/#planning\//plans/}
+        [[ "$name" =~ ^((components|views|plans)/[a-z0-9-]+|gallery)$ ]] && printf '%s\t%s\t%s\n' "$pid" "$tree" "$name"
+    done < <(qs list --all 2> /dev/null | awk '
         /^[[:space:]]*Process ID:/ { pid = $NF }
         /^[[:space:]]*Config path:/ {
             path = $0
             sub(/^[[:space:]]*Config path:[[:space:]]*/, "", path)
-            if (pid ~ /^[0-9]+$/ && (path == a || path == b)) print pid
+            if (pid ~ /^[0-9]+$/) print pid "\t" path
             pid = ""
         }
-        /^Instance / { pid = "" }'
+        /^Instance / { pid = "" }')
+    return 0
 }
 
-# running: "<pid> <kind>/<name>" for each running mockup of this tree, its name asked over IPC
+# running [<tree>...]: "<pid> <kind>/<name>" for each running mockup of those trees (this one
+# by default)
 running() {
-    local pid name
-    while IFS= read -r pid; do
-        name=$(qs ipc --pid "$pid" call mockup name 2> /dev/null | tr -d '[:space:]')
-        [[ "$name" =~ ^((components|views|plans)/[a-z0-9-]+|gallery)$ ]] && echo "$pid $name"
-    done < <(instances)
+    [ $# -gt 0 ] || set -- "$REPO"
+    mockups_running "$@" | awk -F '\t' '{ print $1 " " $3 }'
 }
 
 pids_of() { running | awk -v n="$1" '$2 == n { print $1 }'; }
@@ -375,34 +394,20 @@ add_tree() {
     done
 }
 
-# mark_open: el_open[i]=1 for each element open in one of its trees, asked once of
-# `qs list --all` and each instance of a known tree's entry over IPC
+# mark_open: el_open[i]=1 for each element open in one of its trees (mockups_running, asked
+# once of all of them)
 declare -A el_open=()
 mark_open() {
-    local -A entry_of=() open=()
-    local i tree pid path name t
+    local -A known=() open=()
+    local i tree pid name t
     for i in "${!el_key[@]}"; do
         IFS='|' read -r -a trees_of <<< "${el_trees[i]}"
-        for tree in "${trees_of[@]}"; do
-            entry_of[$tree/mockup.qml]=$tree
-            entry_of[$(readlink -f "$tree/mockup.qml")]=$tree
-        done
+        for tree in "${trees_of[@]}"; do known[$tree]=1; done
     done
-    while IFS=$'\t' read -r pid path; do
-        tree=${entry_of[$path]:-}
-        [ -n "$tree" ] || continue
-        name=$(qs ipc --pid "$pid" call mockup name 2> /dev/null | tr -d '[:space:]')
-        name=${name/#planning\//plans/}
-        [[ "$name" =~ ^(components|views|plans)/[a-z0-9-]+$ ]] && open[$tree|$name]=1
-    done < <(qs list --all 2> /dev/null | awk '
-        /^[[:space:]]*Process ID:/ { pid = $NF }
-        /^[[:space:]]*Config path:/ {
-            path = $0
-            sub(/^[[:space:]]*Config path:[[:space:]]*/, "", path)
-            if (pid ~ /^[0-9]+$/) print pid "\t" path
-            pid = ""
-        }
-        /^Instance / { pid = "" }')
+    [ ${#known[@]} -gt 0 ] || return 0
+    while IFS=$'\t' read -r pid tree name; do
+        open[$tree|$name]=1
+    done < <(mockups_running "${!known[@]}")
     for i in "${!el_key[@]}"; do
         IFS='|' read -r -a trees_of <<< "${el_trees[i]}"
         for t in "${trees_of[@]}"; do
@@ -831,19 +836,37 @@ across_trees() {
     exec "$tree/tests/mockup.sh" "${pass_args[@]}"
 }
 
+# cmd_close [<element>]: by the rule list marks open by (mockups_running): in this tree, or
+# with --main or --also in each of those trees, whichever tree's tool started it
 cmd_close() {
-    local name verb lines pids
+    local name verb entry i across=0
+    local -a lines=() pids=() trees=("$REPO")
     verb=$([ "$dry" = 1 ] && echo "Would close" || echo Closed)
+    if [ -n "$main_tree" ] || [ ${#also_trees[@]} -gt 0 ]; then
+        across=1
+        trees=("$(cd "${main_tree:-$REPO}" && pwd -P)")
+        for entry in "${also_trees[@]}"; do trees+=("$(cd "${entry%=*}" && pwd -P)"); done
+    fi
     if [ $# -gt 0 ]; then
         element_only close "$1"
-        name=$(resolve_or_gallery "$address_element") || exit 2
-        mapfile -t pids < <(pids_of "$name")
+        if [ "$across" = 1 ] && [ "$address_element" != gallery ]; then
+            [[ "$address_element" != planning/* ]] || { resolve "$address_element"; exit 2; }
+            collect quiet
+            i=$(find_element "$address_element") || exit 2
+            name=${el_key[i]}
+        else
+            name=$(resolve_or_gallery "$address_element") || exit 2
+        fi
+        mapfile -t pids < <(running "${trees[@]}" | awk -v n="$name" '$2 == n { print $1 }')
         [ ${#pids[@]} -gt 0 ] || { echo "$name is not running"; return; }
         kill_pids "${pids[@]}"
         echo "$verb $name"
     else
-        mapfile -t lines < <(running)
-        [ ${#lines[@]} -gt 0 ] || { echo "No mockup of this tree is running"; return; }
+        mapfile -t lines < <(running "${trees[@]}")
+        if [ ${#lines[@]} -eq 0 ]; then
+            if [ "$across" = 1 ]; then echo "No mockup of these trees is running"; else echo "No mockup of this tree is running"; fi
+            return
+        fi
         mapfile -t pids < <(printf '%s\n' "${lines[@]}" | awk '{ print $1 }')
         kill_pids "${pids[@]}"
         printf '%s\n' "${lines[@]}" | awk -v w="$verb" '{ print w " " $2 }' | sort -u
@@ -1036,8 +1059,11 @@ if [[ "$command" =~ ^(open|close|review|approve)$ ]] && [ ${#args[@]} -ge 2 ]; t
         fi
         [[ "$keys" == *"${address_element#planning/}"* ]] || usage "\"${args[1]}\" is neither a command nor an element"
     fi
-    [ "$address_element" = gallery ] || across_trees "$command" "$address_element"
-    main_tree="" also_trees=()
+    # close needs no copy: it closes the element in whichever of the trees it runs
+    if [ "$command" != close ]; then
+        [ "$address_element" = gallery ] || across_trees "$command" "$address_element"
+        main_tree="" also_trees=()
+    fi
 fi
 
 case "$command" in
@@ -1045,7 +1071,6 @@ case "$command" in
     list) [ ${#args[@]} -le 2 ] || usage "list takes one element at most"; cmd_list "${args[@]:1}" ;;
     search) cmd_search "${args[@]:1}" ;;
     close) [ ${#args[@]} -le 2 ] || usage "close takes one element at most"
-        [ -z "$main_tree" ] || [ ${#args[@]} -eq 2 ] || usage "--main and --also are for list, search and a named element"
         cmd_close "${args[@]:1}" ;;
     open) [ ${#args[@]} -eq 2 ] || usage "open takes one element"
         cmd_open "${args[1]}" ;;

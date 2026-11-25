@@ -146,6 +146,7 @@ mockup.qml self:tests/run-mockups-selftest.sh mockup:all
 mockups/kit/* self:tests/run-mockups-selftest.sh mockup:all
 tests/fixtures/mockups/* self:tests/run-mockups-selftest.sh self:tests/mockup-selftest.sh
 tests/fixtures/mockup-themes/* self:tests/run-mockups-selftest.sh
+tests/fixtures/mockup-closer/* self:tests/run-mockups-selftest.sh
 # The mockups' screen tool
 tests/mockup.sh self:tests/mockup-selftest.sh
 # The reader of an element's about.txt, shared by the screen tool and the runner

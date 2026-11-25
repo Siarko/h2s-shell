@@ -191,7 +191,7 @@ the same rules). Its root is the kit's
 `states`/`state`, which every Qt Quick Item has), `current`, `subject`,
 `subjectRect` — and the shot protocol (`mockups/kit/MockupWindow.qml`); it
 makes the window itself: a layer-shell panel at the output's corner while shooting, a normal
-window titled with the mockup's name on a screen. The entry isolates the process from
+window titled with the mockup's name on a screen, whose closing ends the process. The entry isolates the process from
 the session it runs in (`singletons/Isolation.qml`): no module loads, no notification server
 is registered, nothing is sent, whatever environment it inherited.
 `tests/run-mockups.sh --load-only | --shoot | --compare [<kind>/<name>…]` runs them headless, each in a
@@ -225,7 +225,8 @@ baseline from the last run this tree made of the mockup, when it passed and the 
 at its commit and uncommitted changes. Limits: 300 KB a PNG, 30 states a mockup, 15 MB all
 baselines. A baseline changes only in the commit of the code change that causes it, after the
 maintainer approved the review images. On a screen, `tests/mockup.sh` lists (by kind, each
-element with its states or scenes, from `about.txt`), searches, opens, closes,
+element with its states or scenes, from `about.txt`), searches, opens, closes (by the
+rule `list` marks one open by: in the trees it is given, also one an older tool started),
 reviews (the images inline in a kitty terminal, else their paths) and approves them (`-n`
 prints the commands, `help` the commands and options); `open <element>/<state>` opens one
 state or scene, `--theme <name>` in one of the user's theme files (`H2S_MOCKUP_THEME`, set as

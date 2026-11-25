@@ -23,7 +23,10 @@
 #   - a name or a unique part of one; a part that matches several is refused;
 #   - close picks only instances whose config is this tree's mockup.qml, by the name each
 #     answers over IPC: never another tree's mockup, never the shell, never an instance that
-#     answers no name (with -n the commands printed, without it `qs kill --pid` run);
+#     answers no name (with -n the commands printed, without it `qs kill --pid` run); with
+#     --main and --also, by list's own rule, in those trees: a plan an old tool started in a
+#     working tree (IPC name planning/<name>) marked open by list and closed by close, with
+#     and without the element named, by this tool;
 #   - open, -n: through Hyprland's exec when Hyprland is there, else setsid; every address
 #     form (<element>, <kind>/<name>, <element>/<state>, <kind>/<name>/<state>, a part, with
 #     and without the word open) built into the right __exec; a state or scene about.txt does
@@ -517,6 +520,23 @@ tool across-review -- -n review delta "${over[@]}"
 check "$(has across-review 'Using the working copy from side (not merged)' && has across-review 'TOOL side -n review delta'; echo $?)" "review across trees: the working copy's tool"
 tool across-here -- -n open clock --main "$REPO" --also "$trees/side=side"
 check "$([ "${status[across-here]}" = 0 ] && has across-here "setsid -f $TOOL __exec tests/fixtures/mockups components/clock" && ! has across-here 'working copy'; echo $?)" "the main tree is this one: opened here"
+echo "list and close: one rule for a running mockup (--main, --also)"
+# An old tool's instance in a working tree: its IPC name under planning/, the plans' old folder
+cp "$work/list.txt" "$work/list.saved"
+printf 'Instance gggg:\n  Process ID: 4194307\n  Config path: %s\n' "$trees/old/mockup.qml" >> "$work/list.txt"
+echo planning/legacy > "$work/name-4194307"
+tool rule-list COLUMNS=60 -- list legacy "${over[@]}"
+check "$(has rule-list 'Plan legacy (open)'; echo $?)" "list: a plan an old tool started in a working tree (IPC name planning/legacy) is open"
+tool rule-close -- -n close legacy "${over[@]}"
+check "$([ "$(grep '^qs kill' "$work/rule-close.out" | sed 's/ *$//')" = "qs kill --pid 4194307" ] && has rule-close 'Would close plans/legacy' && ! has rule-close 'TOOL'; echo $?)" "close <element>: the same instance found, by this tool, not the copy's tree's ($(out rule-close | paste -s -d ' '))"
+tool rule-close-all -- -n close "${over[@]}"
+check "$([ "$(grep '^qs kill' "$work/rule-close-all.out" | sed 's/ *$//' | sort | paste -s -d ,)" = "qs kill --pid 4194306,qs kill --pid 4194307" ] \
+    && has rule-close-all 'Would close plans/legacy' && has rule-close-all 'Would close components/alpha'; echo $?)" "close: every mockup list marks open in the trees given, none of a tree not given ($(out rule-close-all | paste -s -d ' '))"
+tool rule-close-none -- -n close panel "${over[@]}"
+check "$(has rule-close-none 'views/panel is not running' && ! has rule-close-none 'qs kill'; echo $?)" "close <element> not running in any tree: said, nothing killed"
+mv "$work/list.saved" "$work/list.txt"
+rm -f "$work/name-4194307"
+
 # Trees in git: a working tree that only lags behind the main one (stale), or behind another
 # working tree (lag), holds no copy of its own; two trees on one branch (work, ahead) hold one
 gitwork=$work/git

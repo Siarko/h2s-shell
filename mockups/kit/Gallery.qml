@@ -22,6 +22,9 @@ import qs.components
 // and state descriptions do not hold every word are hidden, in any case, as the screen
 // tool's search matches) and a button per section that scrolls to it.
 //
+// The window closed by the user or the compositor emits `closed`, on which the entry ends the
+// process.
+//
 // Over IPC (target `mockup`, as every mockup, so the screen tool's close reaches it):
 //   name            "gallery"
 //   window          "floating" once the window is made, else ""
@@ -51,6 +54,9 @@ QtObject {
     property var _window: null
 
     readonly property var _kinds: ["components", "views"]
+
+    // The window closed by the user or the compositor
+    signal closed
 
     // Whether the section matches the filter: every word in its name and description, or in
     // one state's name and description
@@ -183,6 +189,7 @@ QtObject {
             implicitHeight: Math.min(900, screen ? screen.height : 900)
             color: Theme.popupBackground
             visible: root.visible
+            onClosed: root.closed()
         }
     }
 

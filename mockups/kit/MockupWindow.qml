@@ -47,6 +47,8 @@ import qs.components
 // looping one is off through the component's own property. A text field shows no cursor
 // while shooting: the panel never takes the keyboard focus.
 // `visible` shows and hides the window (the entry shows it once the mockup has started).
+// On screen, the window closed by the user or the compositor emits `closed`, on which the
+// entry ends the process: a mockup is never left running without a window.
 // A component's or a view's states are cells: a StateGrid among its items, a StateCell per
 // state in it (StateGrid.qml). The grid then sets the content's size and the subject (the
 // current cell), and lays the cells out by `layout`: while shooting all side by side (or on
@@ -148,6 +150,8 @@ QtObject {
 
     signal finished
     signal failed(string text)
+    // The floating window closed by the user or the compositor (never while shooting)
+    signal closed
 
     property int _index: -1
     property bool _waitingForNext: false
@@ -380,6 +384,7 @@ QtObject {
             implicitHeight: Math.min(root._windowHeight, screen ? screen.height : root._windowHeight)
             color: Theme.popupBackground
             visible: root.visible
+            onClosed: root.closed()
         }
     }
 

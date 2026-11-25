@@ -36,6 +36,8 @@ import qs.mockups.kit
 // tests/mockup-about.sh, whose rules the reader below keeps), handed to the kit as the
 // mockup is created. Any error prints MOCKUP-ERROR <text> and exits with status 2.
 //
+// On screen, closing the window (by the user or the compositor) ends the process, status 0.
+//
 // The process is isolated from the session it runs in (Isolation: no module loads, no
 // notification server, nothing sent), the configuration is read-only, the tree's files are
 // not watched (a reload would start the states again), and animations are instant.
@@ -173,6 +175,7 @@ ShellRoot {
             return;
         }
         _window = gallery;
+        gallery.closed.connect(() => root._exit(0));
         const error = gallery.start();
         if (error !== "") {
             _fail("gallery: " + error);
@@ -286,6 +289,8 @@ ShellRoot {
             root._exit(0);
         });
         window.failed.connect(text => _fail(name + ": " + text));
+        // On screen, a closed window ends the process: none is left running without one
+        window.closed.connect(() => root._exit(0));
         const error = window.start(shooting ? "" : plan ? sceneWanted : stateWanted);
         if (error !== "") {
             window.destroy();

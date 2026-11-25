@@ -30,6 +30,8 @@
 #     labelled from about.txt, no error or warning, at rest using next to no processor time;
 #     the filter keeps only matching sections; the theme switched over IPC to default and
 #     back, an unknown one refused with the list;
+#   - on screen, the window closed through the compositor (as by its close button) ends the
+#     process with status 0: a component's, a plan's and the gallery's;
 #   - a view that reaches the module host, the notification server, Notifier and the helper,
 #     started with H2S_SHELL_MODULES and H2S_SHELL_HELPER set, loads no module, registers no
 #     server, sends nothing and has no helper;
@@ -497,6 +499,41 @@ check "$(! grep -q -E 'MOCKUP-ERROR|TypeError|ReferenceError|Binding loop' "${lo
 check "$([ "$filter_answer" = components/pill ]; echo $?)" "the filter: only the section whose state holds every word (was '$filter_answer')"
 expected_themes=$(printf '%s\n' contrast contrast contrast default default "no theme 'nope'; the themes: default, contrast")
 check "$([ "$theme_answers" = "$expected_themes" ]; echo $?)" "opened in contrast; theme switches to default and back, asks, refuses an unknown one with the list (was '$(paste -s -d '|' <<< "$theme_answers")')"
+
+# closed_by_user <case> <title> [VAR=value…]: the entry started on screen; once its window
+# is made, closed through the compositor as its close button does (the closer fixture);
+# closer_answer what the closer said, ended_answer "ended <status>" when the entry ended
+# within ten seconds after, else "still running" (then ended here)
+closed_by_user() {
+    local case=$1 title=$2 id="" deadline=$((SECONDS + 30))
+    shift 2
+    start_entry "$case" "$REPO/mockup.qml" "$@"
+    closer_answer="" ended_answer="still running"
+    while [ $SECONDS -lt $deadline ] && kill -0 "${pids[$case]}" 2> /dev/null; do
+        id=$(instance_of "$case")
+        # The window made, a condition polled
+        [ -n "$id" ] && [ "$(ipc "$id" call mockup window)" = floating ] && break
+        sleep 0.05
+    done
+    start_entry "$case-closer" "$REPO/tests/fixtures/mockup-closer/shell.qml" H2S_CLOSE_TITLE="$title"
+    finish_entry "$case-closer"
+    closer_answer=$(grep -o -E 'CLOSER-(CLOSED [0-9]+|NONE)' "${logs[$case-closer]}" | head -n 1)
+    # The entry gone, a condition polled; ten seconds guard a process left without a window
+    deadline=$((SECONDS + 10))
+    while [ $SECONDS -lt $deadline ] && kill -0 "${pids[$case]}" 2> /dev/null; do sleep 0.05; done
+    kill -0 "${pids[$case]}" 2> /dev/null && kill -TERM "${pids[$case]}" 2> /dev/null
+    finish_entry "$case"
+    [ "${statuses[$case]}" = 143 ] || ended_answer="ended ${statuses[$case]}"
+}
+
+echo "on screen: the window closed by the user ends the process"
+closed_by_user close-one components/good H2S_MOCKUP_BASE=tests/fixtures/mockups H2S_MOCKUP=components/good
+check "$([ "$closer_answer" = "CLOSER-CLOSED 1" ]; echo $?)" "the compositor asked to close the window titled components/good (closer said '$closer_answer')"
+check "$([ "$ended_answer" = "ended 0" ]; echo $?)" "the process ends, status 0, with no window left (was '$ended_answer')"
+closed_by_user close-plan plans/idea H2S_MOCKUP_BASE=tests/fixtures/mockups H2S_MOCKUP=plans/idea
+check "$([ "$closer_answer" = "CLOSER-CLOSED 1" ] && [ "$ended_answer" = "ended 0" ]; echo $?)" "a plan's window closed: the process ends, status 0 (closer '$closer_answer', '$ended_answer')"
+closed_by_user close-gallery gallery H2S_MOCKUP_BASE=tests/fixtures/mockups H2S_MOCKUP=gallery XDG_CONFIG_HOME="$theme_config"
+check "$([ "$closer_answer" = "CLOSER-CLOSED 1" ] && [ "$ended_answer" = "ended 0" ]; echo $?)" "the gallery's window closed: the process ends, status 0 (closer '$closer_answer', '$ended_answer')"
 
 echo "isolation: a view that reaches modules, notifications and the helper"
 start_entry isolation "$REPO/mockup.qml" "${fixtures[@]}" H2S_MOCKUP=views/isolation \
