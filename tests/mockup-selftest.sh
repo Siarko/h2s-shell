@@ -5,8 +5,13 @@
 # tool needs, so that neither a real Quickshell, the compositor nor a terminal's images are
 # reached. Nothing is opened on a screen.
 #
-#   - list: every fixture mockup with its kind and about.txt's description, "*" on the
-#     running ones, a broken about.txt said;
+#   - list: every fixture element under its kind's heading with about.txt's description and
+#     its states or scenes, "*" on the open ones, a broken about.txt said; on fixture trees
+#     (--main, --also) the exact output at COLUMNS=60: each element once, the main tree's
+#     version, a working tree's own elements [not merged: <label>] (an old-layout one too), a
+#     tree that only duplicates the main one adding nothing, no colour off a terminal;
+#     list <element> with each state's description; search in names and descriptions of
+#     elements, states and scenes, any case, every word, no match status 1;
 #   - tests/mockup-about.sh: the fixtures' about.txt read, each broken form (missing, no
 #     description, the wrong keyword, a bad, a repeated, an empty or an undescribed name, too long, a
 #     second description, an unknown keyword, over 30 states) refused, naming the line; every
@@ -118,14 +123,119 @@ has() { grep -q -F -- "$2" "$work/$1.out"; }
 
 echo "list"
 tool list -- list
-check "$(out list | grep -q -E '^\* components/good +component +The runners. fixture mockup that loads'; echo $?)" "components/good: running, its kind and title"
-check "$(out list | grep -q -E '^\* views/isolation +view '; echo $?)" "views/isolation: running (another instance of the entry)"
-check "$(out list | grep -q -E '^  components/clock +component '; echo $?)" "components/clock: not running"
-check "$(out list | grep -q -E '^  plans/idea +plan '; echo $?)" "plans/idea: listed with its kind"
+check "$(out list | grep -q -E '^Components$' && out list | grep -q -E '^Views$' && out list | grep -q -E '^Plans$'; echo $?)" "kind headings: Components, Views, Plans"
+check "$(out list | grep -q -E "^  good +\* The runners' fixture mockup that loads$" && out list | grep -q -E '^ +states: normal, checked$'; echo $?)" "components/good: open, its description and states"
+check "$(out list | grep -q -E '^  isolation +\* '; echo $?)" "views/isolation: open (another instance of the entry)"
+check "$(out list | grep -q -E '^  clock +A fixture' && out list | grep -q -E '^ +scenes: first, second, third$'; echo $?)" "components/clock: not open; plans/tall: its scenes"
 check "$(! has list planning; echo $?)" "no old planning folder in the fixtures: nothing said of it"
 check "$(log_of list qs | grep -q -E 'ipc --pid (4194303|4194304) '; [ $? = 1 ]; echo $?)" "another tree's instance and the shell are never asked their name"
-check "$(out list | grep -q -E '^  components/no-about +component +\(broken: about.txt is missing'; echo $?)" "components/no-about: listed, its missing about.txt said"
-check "$(out list | grep -q -E "^  plans/wrong-keyword +plan +\(broken: about.txt line 2: 'state:' is a component's"; echo $?)" "plans/wrong-keyword: listed, its broken line said"
+check "$(out list | grep -q -E '^  no-about +\(broken: about.txt is missing'; echo $?)" "components/no-about: listed, its missing about.txt said"
+check "$(out list | grep -q -E "^  wrong-keyword +\(broken: about.txt line 2: 'state:' is a component's"; echo $?)" "plans/wrong-keyword: listed, its broken line said"
+
+echo "list and search over trees (--main, --also)"
+# Fixture trees: a main one, a working tree with a plan of its own and a copy of a main
+# element, one in the old layout (planning/, no about.txt) sharing that plan, and a copy of
+# the main tree (a pinned tree that only duplicates it)
+trees=$work/trees
+fix=tests/fixtures/mockups
+# element <tree> <kind>/<name> [<about.txt line>...]: its Mockup.qml and, with lines, about.txt
+element() {
+    local folder=$trees/$1/$fix/$2
+    shift 2
+    mkdir -p "$folder"
+    : > "$folder/Mockup.qml"
+    [ $# -eq 0 ] || printf '%s\n' "$@" > "$folder/about.txt"
+}
+element main components/alpha "description: The first component" "state: rest The alpha at rest" "state: hover The pointer over alpha"
+element main components/beta-long "description: A component whose description is long enough to wrap at sixty columns" \
+    "state: one Its first" "state: two Its second" "state: three Its third" "state: four Its fourth" "state: five Its fifth" "state: six-and-more The last, HOVERED by nothing"
+element main components/broken "description: Broken" "scene: x A plan's line"
+element main views/panel "description: A panel view" "state: only The panel"
+element main plans/idea "description: An idea" "scene: first The first scene" "scene: hover-test Where the pointer rests"
+mkdir -p "$trees/main/mockups/kit"
+: > "$trees/main/mockups/kit/Gallery.qml"
+element side components/alpha "description: The first component, changed in a working tree" "state: rest At rest"
+element side plans/fresh "description: A plan only in a working tree" "scene: start The start"
+element side plans/both "description: A plan in two working trees" "scene: one The one scene"
+element old components/alpha
+element old planning/both
+element old planning/legacy
+echo "# Mockup: An old plan's notes" > "$trees/old/$fix/planning/legacy/MOCKUP.md"
+cp -r "$trees/main" "$trees/pin"
+for t in main side old pin; do : > "$trees/$t/mockup.qml"; done
+printf 'Instance ffff:\n  Process ID: 4194306\n  Config path: %s\n' "$trees/main/mockup.qml" >> "$work/list.txt"
+echo components/alpha > "$work/name-4194306"
+over=(--main "$trees/main" --also "$trees/side=side" --also "$trees/old=old" --also "$trees/pin=pin")
+tool trees COLUMNS=60 -- list "${over[@]}"
+cat > "$work/trees.expected" << EXPECTED
+Components
+  alpha     * The first component
+              states: rest, hover
+  beta-long   A component whose description is long enough
+              to wrap at sixty columns
+              states: one, two, three, four, five,
+                      six-and-more
+  broken      (broken: about.txt line 2: 'scene:' is a
+              plan's; a component or a view declares
+              'state:' lines)
+              about.txt: no 'state:' line
+Views
+  panel       A panel view
+              states: only
+Plans
+  both        A plan in two working trees
+              [not merged: side, old]
+              scenes: one
+  fresh       A plan only in a working tree
+              [not merged: side]
+              scenes: start
+  idea        An idea
+              scenes: first, hover-test
+  legacy      An old plan's notes
+              [not merged: old]
+              old layout: no about.txt, its scenes not
+              declared
+
+Gallery: tests/mockup.sh open gallery    * open now
+EXPECTED
+check "$(diff "$work/trees.expected" "$work/trees.out" > "$work/trees.diff"; echo $?)" "list: grouped by kind, each element once, the main tree's version, working trees' own elements not merged, wrapped at COLUMNS=60 $(cat "$work/trees.diff")"
+check "$([ "$(grep -c -E '^  alpha ' "$work/trees.out")" = 1 ] && ! has trees changed && ! has trees '[not merged: pin' && ! has trees '== '; echo $?)" "no duplicates: a copy in a working tree and a tree that only duplicates the main one add nothing, no tree headings"
+check "$(! grep -q $'\e' "$work/trees.out"; echo $?)" "not a terminal: no colour"
+tool one COLUMNS=60 H2S_MOCKUP_COMMAND=tools/mockup.sh -- list alpha "${over[@]}"
+cat > "$work/one.expected" << EXPECTED
+Component alpha (open) — The first component
+  rest   The alpha at rest
+  hover  The pointer over alpha
+Open: tools/mockup.sh open components/alpha   one state: tools/mockup.sh open components/alpha --state rest
+EXPECTED
+check "$(diff "$work/one.expected" "$work/one.out" > "$work/one.diff"; echo $?)" "list <element>: each state with its description, the command named by H2S_MOCKUP_COMMAND $(cat "$work/one.diff")"
+tool one-fresh COLUMNS=60 -- list fresh "${over[@]}"
+check "$(has one-fresh 'Plan fresh — A plan only in a working tree' && has one-fresh '[not merged: side]' && has one-fresh '  start  The start' && has one-fresh '--scene start'; echo $?)" "list <plan> not merged: its note and scenes, --scene"
+tool one-several -- list a "${over[@]}"
+check "$([ "${status[one-several]}" = 2 ] && has one-several 'matches several elements'; echo $?)" "list <part> matching several: refused (status ${status[one-several]})"
+tool search COLUMNS=60 -- search HOVER "${over[@]}"
+cat > "$work/search.expected" << EXPECTED
+Components
+  alpha     * The first component
+              hover  The pointer over alpha
+  beta-long   A component whose description is long enough
+              to wrap at sixty columns
+              six-and-more  The last, HOVERED by nothing
+Plans
+  idea        An idea
+              hover-test  Where the pointer rests
+EXPECTED
+check "$(diff "$work/search.expected" "$work/search.out" > "$work/search.diff"; echo $?)" "search: names and descriptions of states, any case, shown like list with the matching states $(cat "$work/search.diff")"
+tool search-element COLUMNS=60 -- search working tree "${over[@]}"
+check "$(has search-element '  both ' && has search-element '  fresh ' && has search-element 'scenes: start' && ! has search-element '  alpha' && ! has search-element '  idea'; echo $?)" "search of several words in an element's description: the element whole, every word needed"
+tool search-mixed COLUMNS=60 -- search panel only "${over[@]}"
+check "$(has search-mixed '  panel ' && has search-mixed '  only  The panel' && ! has search-mixed 'states:'; echo $?)" "search: a word in the name, another in a state: that state shown"
+tool search-none -- search nothing-like-this "${over[@]}"
+check "$([ "${status[search-none]}" = 1 ] && [ "$(out search-none)" = 'Nothing matches "nothing-like-this" (tests/mockup.sh list shows everything)' ]; echo $?)" "search with no match: said, status 1 (status ${status[search-none]})"
+tool also-open -- -n open alpha --also "$trees/side=side"
+check "$([ "${status[also-open]}" = 2 ] && has also-open '--main and --also are for list and search'; echo $?)" "--also with open: refused"
+tool also-bad -- list --also "$trees/side"
+check "$([ "${status[also-bad]}" = 2 ] && has also-bad 'needs <tree folder>=<label>'; echo $?)" "--also without a label: refused"
 
 echo "about.txt (tests/mockup-about.sh)"
 # shellcheck source=mockup-about.sh

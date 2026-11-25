@@ -224,7 +224,8 @@ run's, or there is no baseline. `tests/run-mockups.sh --approve <kind>/<name>` m
 baseline from the last run this tree made of the mockup, when it passed and the tree is still
 at its commit and uncommitted changes. Limits: 300 KB a PNG, 30 states a mockup, 15 MB all
 baselines. A baseline changes only in the commit of the code change that causes it, after the
-maintainer approved the review images. On a screen, `tests/mockup.sh` lists, opens, closes,
+maintainer approved the review images. On a screen, `tests/mockup.sh` lists (by kind, each
+element with its states or scenes, from `about.txt`), searches, opens, closes,
 reviews (the images inline in a kitty terminal, else their paths) and approves them (`-n`
 prints the commands).
 
