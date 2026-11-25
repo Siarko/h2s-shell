@@ -1398,7 +1398,14 @@ TestCase {
         // The list lives in the window's top item, over everything else
         const list = Array.from(_within(dropdown).Window.contentItem.children).find(child => child.toString().startsWith("FloatingList") && child.visible);
         assert(!!list, "its list is shown over the content");
-        const rows = list ? Array.from(list.children[0].contentItem.children[0].children).filter(child => child.toString().startsWith("QQuickRectangle")) : [];
+        // Its rows: the list's entries (FloatingList's floatingEntry), in order
+        const entriesOf = item => {
+            let found = [];
+            for (const child of item.children)
+                found = found.concat(child.floatingEntry === true ? [child] : entriesOf(child));
+            return found;
+        };
+        const rows = list ? entriesOf(list) : [];
         assertEqual(rows.length, 2, "with a row for each option");
         if (rows.length === 2) {
             assert(_until(() => rows[1].width > 0 && list.y > 0), "placed under the dropdown");

@@ -2,9 +2,11 @@ import QtQuick
 import Quickshell
 import qs.singletons
 
-// A choice among `options` — [{ value, label, color? }], `color` drawing a dot before the
-// label — shown as a button with the current one, opening a FloatingList of them over the
-// content. `picked` reports the choice; the owner sets `value`.
+// A choice among `options` — [{ value, label, color?, group?, disabled? }], `color` drawing
+// a dot before the label — shown as a button with the current one, opening a FloatingList
+// of them over the content. `picked` reports the choice; the owner sets `value`. Options
+// that follow each other with the same `group` are listed under its title; a `disabled`
+// one is shown dimmed and cannot be picked (the keys pass it by).
 //
 // It takes the focus on Tab and on a click (a ring shows it). Space, Enter, Down or Up open
 // the list on the current choice; open, the list's keys apply (FloatingList: arrows, Home,
@@ -113,57 +115,81 @@ Rectangle {
         Repeater {
             model: _optionsModel.model
 
-            Rectangle {
-                id: _row
+            // The group's title above its first option, then the option
+            Column {
+                id: _box
                 required property string modelData
                 readonly property var option: _optionsModel.byKey[modelData] ?? ({})
-                readonly property bool picked: option.value === root.value
-                // An entry of the list, for its keys (FloatingList)
-                readonly property bool floatingEntry: true
-                readonly property string floatingEntryText: option.label ?? ""
-                readonly property bool current: _list.currentItem === _row
-                function floatingActivate() {
-                    root.open = false;
-                    root.picked(option.value);
+                readonly property bool groupStart: {
+                    const group = option.group ?? "";
+                    if (group === "")
+                        return false;
+                    const at = root.options.findIndex(other => other.value === option.value);
+                    return at <= 0 || (root.options[at - 1].group ?? "") !== group;
                 }
-                // A row the Repeater lets go of while everything goes has no parent any more
+                // A box the Repeater lets go of while everything goes has no parent any more
                 width: parent ? parent.width : 0
-                height: Math.max(24, _optionLabel.implicitHeight + 6)
-                radius: Theme.listItem.radius
-                color: picked ? Theme.accentTint : (_optionArea.lit || current ? Theme.surfaceHover : Theme.surfaceHoverClear)
-                // The keys' entry, also when it is the picked one
-                border.width: current ? Theme.border.width : 0
-                border.color: Theme.textSecondary
-                Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
-                Row {
-                    anchors { left: parent.left; right: parent.right; leftMargin: 6; rightMargin: 6; verticalCenter: parent.verticalCenter }
-                    spacing: 6
-
-                    Dot {
-                        visible: option.color !== undefined
-                        anchors.verticalCenter: parent.verticalCenter
-                        color: option.color ?? "transparent"
-                    }
-                    Text {
-                        id: _optionLabel
-                        width: parent.width - (option.color !== undefined ? 16 : 0)
-                        text: option.label ?? ""
-                        textFormat: Text.PlainText
-                        maximumLineCount: 1
-                        elide: Text.ElideRight
-                        font.family: Theme.fontFamily
-                        font.pixelSize: root.fontSize
-                        color: parent.parent.picked ? Theme.textPrimary : Theme.textSecondary
-                    }
+                FloatingListHeader {
+                    visible: _box.groupStart
+                    text: _box.option.group ?? ""
                 }
 
-                PointerArea {
-                    id: _optionArea
-                    centred: false
-                    anchors.fill: parent
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: _row.floatingActivate()
+                Rectangle {
+                    id: _row
+                    readonly property var option: _box.option
+                    readonly property bool picked: option.value === root.value
+                    readonly property bool available: option.disabled !== true
+                    // An entry of the list, for its keys (FloatingList)
+                    readonly property bool floatingEntry: true
+                    readonly property string floatingEntryText: option.label ?? ""
+                    readonly property bool floatingEntryEnabled: available
+                    readonly property bool current: _list.currentItem === _row
+                    function floatingActivate() {
+                        if (!available)
+                            return;
+                        root.open = false;
+                        root.picked(option.value);
+                    }
+                    width: _box.width
+                    height: Math.max(24, _optionLabel.implicitHeight + 6)
+                    radius: Theme.listItem.radius
+                    color: picked ? Theme.accentTint : ((_optionArea.lit || current) && available ? Theme.surfaceHover : Theme.surfaceHoverClear)
+                    // The keys' entry, also when it is the picked one
+                    border.width: current ? Theme.border.width : 0
+                    border.color: Theme.textSecondary
+                    Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
+
+                    Row {
+                        anchors { left: parent.left; right: parent.right; leftMargin: 6; rightMargin: 6; verticalCenter: parent.verticalCenter }
+                        spacing: 6
+                        opacity: _row.available ? 1 : 0.5
+
+                        Dot {
+                            visible: _row.option.color !== undefined
+                            anchors.verticalCenter: parent.verticalCenter
+                            color: _row.option.color ?? "transparent"
+                        }
+                        Text {
+                            id: _optionLabel
+                            width: parent.width - (_row.option.color !== undefined ? 16 : 0)
+                            text: _row.option.label ?? ""
+                            textFormat: Text.PlainText
+                            maximumLineCount: 1
+                            elide: Text.ElideRight
+                            font.family: Theme.fontFamily
+                            font.pixelSize: root.fontSize
+                            color: !_row.available ? Theme.textDisabled : _row.picked ? Theme.textPrimary : Theme.textSecondary
+                        }
+                    }
+
+                    PointerArea {
+                        id: _optionArea
+                        centred: false
+                        anchors.fill: parent
+                        cursorShape: _row.available ? Qt.PointingHandCursor : Qt.ArrowCursor
+                        onClicked: _row.floatingActivate()
+                    }
                 }
             }
         }

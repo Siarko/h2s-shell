@@ -348,6 +348,7 @@ TestCase {
         _keyboard();
         _addPicker();
         _closeOnHide();
+        _groups();
         finish();
     }
 }
