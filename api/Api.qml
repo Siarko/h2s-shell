@@ -1124,7 +1124,7 @@ import qs.singletons.network
 //   up the module's configuration (Settings → Modules, its backups; none of its own right
 //   after an update's or a restore's), then writes its settings, its store and the records.
 //   The file: a QML object with `migrate(part, context)` and optionally `summary` (one line,
-//   what it does, for the log and the failure notice); `context` is { fromVersion ("" when
+//   what it does, for the log and the run's report); `context` is { fromVersion ("" when
 //   not known), toVersion (the module's version now) }. It is built without the module's
 //   handle and destroyed after the run. It must be idempotent: run on its own result it
 //   gives the same result (a run cut short runs again). A migration file is checked as the

@@ -238,6 +238,10 @@ The interface modules are written against (`qs.api`), versioned on its own
 ### Fixed
 - Settings updates for a new version run before the shell reads the config, take one backup
   per run, and keep only the newest ten automatic backups; backups made by hand are kept.
+- When a settings update for a new version fails, only the settings it covers go back to
+  their defaults and the rest of the update goes on; the previous settings stay in the
+  backup. An update that cannot be limited to its part leaves the config file as it was and
+  the shell does not save changes until the next start.
 - Moving the bar's geometry from an older version's profiles into themes can no longer undo
   other settings brought over from that version at the same start.
 - A profile list in the config file that cannot be read is no longer replaced by an empty

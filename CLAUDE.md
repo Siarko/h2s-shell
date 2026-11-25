@@ -14,8 +14,9 @@ Quickshell cannot do from QML.
 `docs/` holds user and developer documentation only; for now that is:
 
 - **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** — runtime model, directory layout,
-  module resolution, the Process/SplitParser I/O idiom, the config system, the widget
-  contract, how to add a widget, testing and where the test tools come from.
+  module resolution, the Process/SplitParser I/O idiom, the config system and its settings
+  migrations, the widget contract, how to add a widget, testing and where the test tools
+  come from.
 - **[docs/FEATURES.md](docs/FEATURES.md)** — what the shell does: every widget, panel,
   HUD element, settings page, and the external tools it depends on.
 
@@ -286,7 +287,9 @@ Shell code never imports from `mockups/`.
   `builtin-modules/`; see "Modules" in `docs/ARCHITECTURE.md`.)
 - **Versioning:** the number is in `singletons/Version.qml` (semver — major for changes
   to behaviour people rely on, minor for features, patch for fixes; a settings migration
-  may ship in a minor release, never in a patch). The module API has its own number
+  may ship in a minor release, never in a patch — the core's registered in
+  `singletons/Migrations.qml`, each with its fixture in `tests/fixtures/migrations/<id>/`,
+  a module's in its manifest's `migrations`). The module API has its own number
   (`Api.version`): until the first release announced as open to module authors, its minor
   version may tighten or remove things; from then a removal comes only with a major, after
   being listed as deprecated for at least one release. With every
@@ -434,6 +437,15 @@ new kind.
 - **Docs and comments describe the code as it is,** never how or when it was built.
   User-visible strings are the few plain words a person would put on a control. — History
   in comments goes stale; long hints read as machine-written.
+- **A settings change that moves, renames or reshapes stored keys ships with a migration**
+  ("Settings migrations" in `docs/ARCHITECTURE.md`): a file in `singletons/migrations/`
+  registered in `singletons/Migrations.qml` (a module: its manifest's `migrations`), with a
+  golden fixture (`tests/fixtures/migrations/<id>/`, `before.json` and `after.json`) covering
+  every profile, the globals and a target key already set; frozen (never the live schema),
+  idempotent, its scope as narrow as the change (`*` only with its reason). It ships in a
+  minor or major release, never a patch. — Ad-hoc migrations each had their own trigger,
+  marker and backup, ran after readers had seen the old shape, and wrote outside what they
+  meant to change.
 - **One slice = one change with its test.** While iterating run only the suites the change
   touches, `--quick` before the commit; the full set before merging to `master`. — Small reviewed
   steps, fast feedback; the full set on both machines took longer than the work it checked.

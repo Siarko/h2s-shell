@@ -435,42 +435,351 @@ config written by a newer version (`writtenBy` newer, or migration records this 
 does not know, `MigrationRules.newerConfig`) gets one log line and a startup banner; it is
 never refused.
 
+### Settings migrations
+
+A settings change that moves, renames or reshapes stored keys ships as a **migration**: a
+small pure function from the config as an older version left it to the shape this version
+reads. The core's run before any reader sees the config; a module's run before its main is
+made. Each runs once per configuration and is recorded by its id.
+
+**Where they live.** `singletons/MigrationRules.qml` decides (pure, `tests/MigrationRulesTest.qml`):
+which are pending, each one's scope, running them on one document, the reset on a failure,
+the records, a new config's baseline, a config written by a newer version, the backups kept.
+`singletons/MigrationHelpers.qml` does what most migrations need the same way —
+`renameKey`, `mapValue`, `removeKey`, `forEachSetting` — across every profile and the pinned
+globals (and the presets of named widget types when asked), so none forgets a profile; a
+rename never overwrites a target key already set. Each migration is a file in
+`singletons/migrations/`, registered in order in `singletons/Migrations.qml`; the registry's
+order is the order they run in. A module's are declared in its manifest
+(`ModuleMigrationRules`, below).
+
+#### How the core's run
+
 Before the file is read, the settings migrations run on it (`components/ConfigMigration.qml`,
 deciding through `MigrationRules.startup`): `Config` builds, then one event-loop turn later
-`ConfigFile.load()` reads `config.json` and the side files the registered migrations
-(`singletons/Migrations.qml`) name, runs the pending ones of the load phase, and writes —
-one backup `config.json.bak-<stamp>-migration` first when something changed or a part was
-reset (the side files the run overwrites or removes kept beside it in
-`backup-side-files/<backup>/`, all of it readable by the user only), then the side files,
-then the config with the records in `migratedKeys`, and only then removes side files —
-before the adapter reads the file and `Config.ready` turns true. A new config records every
-registered id without running any. A failing migration has its part reset to defaults and
-`reset:<id>` recorded; a failing whole-config (`*`) one, a config that is no document, a
-side file in a pending migration's scope that does not parse, or a write that fails leaves
-the files as they are and blocks saving for the session (`Config.saveBlocked`; read by the
-save only — `Config.readOnly` stays the test runner's). The readers then see the migrated
-content in memory, through a copy in the runtime folder (`XDG_RUNTIME_DIR`, mode 600,
-removed once read; without a runtime folder no copy is made and the file is read as it is).
-After a backup, the automatic ones beyond the newest ten are deleted with their side files;
-manual ones (`-manual`) never. Migrations with `phase: "afterSeed"` run from `Profiles`
-once the profiles exist (`Config.runAfterSeedMigrations`), on the config as it stands when
-it is written, so a save made while they ran is kept. Each run's report is
-`Config.migrationReports`; under the test runner nothing is written.
+`ConfigFile.load()` reads `config.json` and the side files the registered migrations name,
+runs the pending ones of the load phase in memory on one document, and writes — one backup
+`config.json.bak-<stamp>-migration` first when something changed or a part was reset (the
+side files the run overwrites or removes kept beside it in `backup-side-files/<backup>/`, all
+of it readable by the user only), then the side files, then the config with the records in
+`migratedKeys`, and only then removes side files — before the adapter reads the file and
+`Config.ready` turns true. No reader ever sees the old shape. The readers see the migrated
+content through a copy in the runtime folder (`XDG_RUNTIME_DIR`, mode 600, removed once read;
+without a runtime folder no copy is made and the file is read as it is).
 
-Each migration is a file in `singletons/migrations/` (its tables frozen in it: it never reads
-the live schema), registered in order in `Migrations.qml`. Its `scope` names the paths it writes — a failure
-resets only those — and, prefixed `read:`, those it only reads: handed to it, never written
-(a change there is a failure) and never reset. A migration that took over from
-code older than the runner may say `appliedBefore(config)`: a config that code already
-migrated is neither run nor recorded; and `ownsRecord(entry)`: the per-key markers that code
-wrote in `migratedKeys` (`general.debug`, `default:<key>`) are its own, handed to it and
-written back, so an older shell does not migrate the same keys again. The settings from
-before profiles (`1.0.0-legacy-settings`, after seeding), the widget preset library from the
-old widget settings (`1.0.0-widget-presets`), the bar's geometry from the profiles into theme
-files (`theme.barLayout`, after seeding, after the settings from before profiles: its id is the
-marker older code wrote, the one id of neither form) and the lock screen's former default
-(`2.1.0-lock-notification-detail-default`) are such migrations; `tests/MigrationsGoldenTest.qml`
-holds old configs and what the code before the runner made of them.
+- **A new config** (no file, or one with no profiles, no pinned or preset values and none of
+  the keys or side files a registered migration names) records every registered id without
+  running any: the defaults are current.
+- **After seeding.** Migrations with `phase: "afterSeed"` run from `Profiles` once the
+  profiles exist (`Config.runAfterSeedMigrations`), on the config as it stands when it is
+  written, so a save made while they ran is kept. Only the migrations that must land in the
+  seeded Full profile use it; a new migration runs in the load phase.
+- **Reported, not announced.** Each applied migration logs one `[Migrations] <id>: <summary>`
+  line, a failure its error, the part reset and the skipped ones; each run's report is
+  `Config.migrationReports`. A successful run shows nothing else.
+- **Under the test runner** (`Config.readOnly`) nothing is written: no backup, no file.
+
+#### Scopes
+
+Each migration declares `scope`, the list of paths it writes. The runner hands it **only
+those paths** (a projection of the document) and merges its result back; a result that adds,
+changes or removes anything outside them is that migration's failure (its result discarded),
+so a wrong scope shows in its fixture, never as a silent write elsewhere.
+
+| Path | Covers |
+|---|---|
+| `setting:<key>` | that setting in every profile and in the pinned globals |
+| `setting:<prefix>.*` | every setting under the prefix (`setting:bar.layout.*`) |
+| `setting:<a>.*.<b>` | `*` is one part of the key between dots |
+| `preset:<type>` / `preset:*` | every preset of a widget type / the whole preset library |
+| `preset:<type>/<name>` | one preset |
+| `preset:<type>/*/<key>`, `preset:<type>/<name>/<key>` | one key in every preset of the type / in one preset |
+| `raw:<key>` | a top-level key of `config.json` (old sections no adapter declares) |
+| `file:<path>` | a side file relative to the config's folder; `*` within one folder level (`file:themes/*.json`) |
+| `read:<path>` | any path above, handed to it to read only: never written (a change there is a failure) and never reset |
+| `*` | the whole config; stands alone and needs `wholeScopeReason` |
+
+`migratedKeys` and `writtenBy` are the runner's, never in a scope. Below `*`, the profiles
+themselves are not in a scope either: a migration may not add, remove or rename a profile.
+A `read:` path may not overlap a path the same migration writes.
+
+**Dependency is derived, not declared:** a later migration depends on an earlier one when
+their scopes overlap (a path of one equals or lies under a path of the other; a `read:`
+path counts against a path the other writes, two `read:` paths never overlap; `*` overlaps
+everything), and transitively through the ones that depend on it.
+
+**Split by scope, avoid `*`.** On a failure the scope is what is reset; a narrow scope
+loses the least. A whole-config migration cannot be reset in part (below), so it is allowed
+only with a `wholeScopeReason`, and two changes to unrelated settings are two migrations.
+
+#### Records
+
+Strings in `Config.migratedKeys`, so a shell that does not know them keeps them:
+
+| Entry | Means | Runs again |
+|---|---|---|
+| `<id>` | applied | never |
+| `reset:<id>` | failed; its scope was reset to defaults — counts as applied | never |
+| `held:<id>@<version>` | held: not run while the running version is `<version>` | under any other version |
+
+A held migration is not run, and the later ones that overlap it are skipped as after a
+failure; once it runs, its `held:` record is replaced. A core id is
+`<yyyy-mm-dd>-<what>` (`2026-12-01-clock-time-format`), or `<x.y.z>-<what>` for the
+migrations converted from code older than the runner (the release they first shipped in),
+lower-case words joined by `-`; `theme.barLayout` is the one id of neither form (the marker
+that older code wrote). A module's are recorded as `mod.<module id>/<its id>`.
+
+#### When one fails
+
+A migration fails when it throws, returns something that is not a document, or writes
+outside its scope. When its scope is not `*`:
+
+1. the migrations before it stay applied;
+2. its result is discarded and **its scope is reset to defaults**: the settings it names
+   removed from every profile and the globals, the named presets and raw keys removed, its
+   side files not written. A missing key means "the default" to every reader (the live
+   schema supplies it), so the reset needs no knowledge of today's defaults;
+3. the later migrations that depend on it are **skipped**: not recorded, pending again at
+   the next start, when they run on the reset scope;
+4. the later independent ones run as normal;
+5. the result is written with `reset:<id>` recorded. The old values stay in the run's backup.
+
+`reset:<id>` counts as applied so that a broken migration does not reset its part again at
+every start, throwing away what the user set there since.
+
+**A `*` migration that fails** cannot be reset in part. The run stops at it; the ones before
+it are applied in memory only, so the readers see their shape; nothing is written —
+`config.json` stays byte-identical, no record is added — and saving is blocked for the
+session (`Config.saveBlocked`; read by the save only — `Config.readOnly` stays the test
+runner's). The same happens for a config that is no document, a side file in a pending
+migration's scope that does not parse, or a write that fails. The next start tries again:
+nothing was reset, so retrying loses nothing.
+
+#### Backups and pruning
+
+One backup per run, before the first write, only when some migration changed something or a
+scope was reset: `config.json.bak-<stamp>-migration` (`MigrationRules.backupName`), the side
+files the run overwrites or removes beside it. After a backup is written, the automatic
+backups (`-migration`, `-restore`, `-module`, and those with no reason) beyond the newest ten
+(`MigrationRules.backupsKept`, by the stamp in the name) are deleted with their side files
+(`MigrationRules.backupsToKeep`). Only names of that exact pattern count; nothing else in the
+folder is touched. The backup just written is always kept; a manual backup (`-manual`) is
+never pruned. A module's own backups (its store and data, `ModuleBackups`) keep their own
+limit.
+
+#### Downgrade
+
+Migrations never run backwards. Going back to an older version:
+
+- **Unknown keys are kept.** `JsonAdapter` writes only the properties it declares; this
+  version's save puts back the keys the file holds that it does not declare (above), so what
+  a newer version wrote survives this one's saves. Version 2.1.0 and earlier write only the
+  keys they declare.
+- **The records are kept**: `migratedKeys` is a declared list of strings, so an older shell
+  saves the ids it does not know; going forward again, a migration already recorded does not
+  run again.
+- **A moved key is not kept at its old place**: the older shell finds its old key missing and
+  uses its default there. The run's backup holds the old shape.
+- **Detected and said.** A config whose `writtenBy` is newer than `Version.number`, or whose
+  records name core migrations this version does not know, gets one log line and a startup
+  banner ("Settings written by h2s-shell …"); it is never refused.
+
+#### System settings files
+
+The runner migrates only `config.json`, the side files a registered migration names (theme
+files) and modules' settings and stores.
+
+##### NixOS
+
+The data file the configuration names (`programs.h2s-shell.settingsFile`) and
+`/etc/h2s-shell/settings.json` are not migrated by the runner: `/etc/h2s-shell/settings.json`
+is root's and read-only for the shell, and the data file has its own integer `version`,
+checked exactly by `nix/settings.nix` — the Nix module, not the shell, owns its schema. Values
+the configuration puts in force never live in `config.json`, so a migration cannot change
+them.
+
+##### Arch
+
+There is no system settings file: everything the runner migrates is in the user's config
+folder.
+
+#### Converted migrations
+
+The four migrations that existed before the runner are files like any other, with two
+hooks for the markers their older code wrote. `appliedBefore(config)`: a config that code
+already migrated is neither run nor recorded. `ownsRecord(entry)`: the per-key markers that
+code wrote in `migratedKeys` (`general.debug`, `default:<key>`) are its own, handed to it as
+`document.records` and written back, so an older shell does not migrate the same keys again.
+They are the settings from before profiles (`1.0.0-legacy-settings`, after seeding), the
+widget preset library from the old widget settings (`1.0.0-widget-presets`), the bar's
+geometry from the profiles into theme files (`theme.barLayout`, after seeding, after the
+settings from before profiles) and the lock screen's former default
+(`2.1.0-lock-notification-detail-default`); `tests/MigrationsGoldenTest.qml` holds old
+configs and what the code before the runner made of them, and the converted ones must give
+the same.
+
+#### A module's migrations
+
+Declared in its `module.json` (`migrations`, API 1.43; the reference in `api/Api.qml`, the
+rules in `singletons/ModuleMigrationRules.qml`) and run by the host each time the module comes
+on, before its main is made (the "Settings migrations" entry under "Modules"). The model is the core's,
+inside the module's own part — its `mod.<id>.*` settings in every profile and the pinned
+globals, and its store:
+
+- a scope is `setting:<name>` or `setting:<prefix>.*` (written without `mod.<id>.`; the host
+  adds it), `store:<key>`, or `*` — the module's whole part, never more; omitted, `*`. The
+  host refuses a result with a key outside the scope, so a module's migration cannot write
+  the core's settings or another module's;
+- a failure resets its scope (those settings and store keys removed), skips the later ones
+  that overlap it, runs the others — a failing `*` resets the module's whole part, never the
+  strict outcome, since a module's part can always be reset on its own;
+- records `mod.<id>/<mid>`, `reset:mod.<id>/<mid>`, `held:mod.<id>/<mid>@<module version>`,
+  dropped when the module is removed with its data and settings;
+- its data directory is never migrated nor reset by the host: the module's own code handles
+  its files.
+
+The scope guards against a migration's mistakes; it is **not a sandbox**: a migration file is
+the module's own code and runs with all the rights the module's code has.
+
+#### Writing a migration
+
+**When.** A change that moves, renames or reshapes a stored key, or changes a default that
+seeding spelled out, ships with a migration — in a minor or major release, never a patch.
+While a feature is still in development and not in use, no migration is needed. A new key
+with a default needs none: a missing key reads as the default.
+
+**Rules every migration keeps:**
+
+- **A frozen snapshot.** It never reads `SettingsSchema`, `WidgetRegistry` or today's
+  defaults: whatever it needs (old paths, former defaults, the keys a pattern covers) is
+  written into its file, so it keeps meaning what it meant when the schema moves on. No
+  file, no process, no clock, no singleton but `MigrationHelpers`.
+- **Transforming, not keeping.** A rename removes the old key (the backup has it), and
+  never overwrites a target key that is already set (the user may have set it since): it
+  then only removes the old key. A migration that must overwrite says why in
+  `overwritesReason`.
+- **Changes only what it finds**, and leaves every key it does not know alone.
+- **Idempotent**: run on its own result it gives the same result (a run cut short between
+  the side files and the config runs again).
+- **One concern, a narrow scope.**
+
+##### In the core
+
+1. A file in `singletons/migrations/`, a `QtObject` with `migrationId`, `since` (the release
+   it ships in, `x.y.0`, not older than the migration before it), `summary` (one plain line
+   for the log), `scope`, and `migrate(document, context)`. The `document` holds only its
+   scope: `{ raw, profiles: [{ name, set }], globals, presets, files }`; `context` is
+   `{ version }` (the running shell's). It returns the document; its input may be changed.
+2. Its line at the end of `_registered` in `singletons/Migrations.qml`.
+3. Its fixture, `tests/fixtures/migrations/<id>/before.json` and `after.json` — whole config
+   files, the profiles and globals as the JSON strings the config holds; `files-before.json`
+   and `files-after.json` (path → content) when it reads or writes side files. Cover a value
+   to move, a target already set, and every profile and the globals.
+4. `tests/affected.sh --run`: `tests/MigrationsTest.qml` runs every registered migration on
+   its fixture and fails for one without a fixture; it checks the output, idempotence,
+   unknown keys surviving, the result inside the scope, a target already set not
+   overwritten, `appliedBefore` not taking its own fixture for done, and the registry (ids,
+   `since`, a `*` scope's reason). Break `after.json` once and watch it fail.
+5. A `CHANGELOG.md` line for what the user notices.
+
+A worked example (made up: the shell has no such keys): suppose a setting `clock.format`
+becomes `clock.timeFormat`, its values `"12"`/`"24"` becoming `"12h"`/`"24h"`.
+
+```qml
+// singletons/migrations/ClockTimeFormat.qml
+import QtQuick
+import qs.singletons
+
+// The clock's "format" became "timeFormat", "12"/"24" becoming "12h"/"24h"; a timeFormat
+// already set is the user's and stays
+QtObject {
+    readonly property string migrationId: "2026-12-01-clock-time-format"
+    readonly property string since: "2.2.0"
+    readonly property string summary: "The clock's format is now its time format"
+    readonly property var scope: ["setting:clock.format", "setting:clock.timeFormat"]
+
+    readonly property var _values: ({ "12": "12h", "24": "24h" })
+
+    function migrate(document, context) {
+        const mapped = MigrationHelpers.mapValue(document, "clock.format",
+            value => _values[value] ?? value);
+        return MigrationHelpers.renameKey(mapped, "clock.format", "clock.timeFormat");
+    }
+}
+```
+
+`tests/fixtures/migrations/2026-12-01-clock-time-format/before.json`:
+
+```json
+{
+    "profiles": "[{\"name\":\"Full\",\"enabled\":true,\"when\":{},\"set\":{\"clock.format\":\"24\"}},{\"name\":\"Night\",\"enabled\":true,\"when\":{},\"set\":{\"clock.format\":\"12\",\"clock.timeFormat\":\"24h\"}}]",
+    "globals": "{\"clock.format\":\"12\"}",
+    "migratedKeys": []
+}
+```
+
+and `after.json`:
+
+```json
+{
+    "profiles": "[{\"name\":\"Full\",\"enabled\":true,\"when\":{},\"set\":{\"clock.timeFormat\":\"24h\"}},{\"name\":\"Night\",\"enabled\":true,\"when\":{},\"set\":{\"clock.timeFormat\":\"24h\"}}]",
+    "globals": "{\"clock.timeFormat\":\"12h\"}",
+    "migratedKeys": []
+}
+```
+
+Night's `clock.timeFormat` was already set, so it stays and the old key only goes. The
+records in a fixture are the migration's own markers only (`ownsRecord`); the runner adds
+its id.
+
+##### In a module
+
+1. A file inside the module's directory, a QML object with `migrate(part, context)` and
+   optionally `summary`. The `part` holds only its scope: `{ settings: { profiles: [{ name,
+   set }], globals }, store }`, settings by their full keys (`mod.<id>.<name>`); `context` is
+   `{ fromVersion, toVersion }` (`fromVersion` `""` when not known). It returns the same
+   shape. It is built without the module's handle and destroyed after the run.
+2. Its entry at the end of the manifest's `migrations`: `id` (lower-case words joined by
+   `-`, once in the list), `since` (the module version it first ships in: not newer than the
+   module's, not older than the one before it), `file`, `scope`. The manifest's `api` at least
+   `"1.43"` (a lower one is read all the same, with a warning).
+3. A fault in the list, a file that is missing, links out or does not build fails the module
+   with nothing changed. The host's own runs are checked by `tests/ModuleMigrationsTest.qml`
+   on the fixture module `tests/fixtures/modules/migrating`; the module test kit does not run
+   a module's migrations through the host, so a module's suite builds its migration file and
+   checks `migrate()` on a part it writes, its own result included (idempotence).
+
+A worked example, a made-up module `weather` whose `town` setting becomes `city`:
+
+```json
+"migrations": [
+    { "id": "city-rename", "since": "1.1.0", "file": "migrations/CityRename.qml",
+      "scope": ["setting:town", "setting:city"] }
+]
+```
+
+```qml
+// migrations/CityRename.qml
+import QtQuick
+
+// The old "town" becomes "city", in every profile and the pinned globals; a "city" already
+// set is the user's and stays
+QtObject {
+    readonly property string summary: "Town is now City"
+
+    function migrate(part, context) {
+        const sets = part.settings.profiles.map(profile => profile.set).concat([part.settings.globals]);
+        for (const set of sets) {
+            if (set["mod.weather.town"] === undefined)
+                continue;
+            if (set["mod.weather.city"] === undefined)
+                set["mod.weather.city"] = set["mod.weather.town"];
+            delete set["mod.weather.town"];
+        }
+        return part;
+    }
+}
+```
 
 ### Version
 
@@ -1134,9 +1443,9 @@ close this section.
   module off, writes its settings through `Profiles`, its store and named files back by
   temporary names and renames (folders made one level at a time, never through a link), and
   turns it on again when it was on.
-- **Settings migrations** (API 1.43; the manifest's `migrations`, `ModuleMigrationRules`):
-  each time a module comes on — a start, an update, turned on again, a restored backup —
-  the host keeps it pending until its pending migrations have run (`ModuleMergeRules`'
+- **Settings migrations** (API 1.43; the manifest's `migrations`, `ModuleMigrationRules`;
+  the model and how to write one: "Settings migrations" above): each time a module comes
+  on — a start, an update, turned on again, a restored backup — the host keeps it pending until its pending migrations have run (`ModuleMergeRules`'
   `migrationsKnown`): once its store is read, each migration file is built (without the
   module's handle; the store's file read again first, as a restore or a removal may have
   changed it) and run on the module's part only — its `mod.<id>.*` settings in every

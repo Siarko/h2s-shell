@@ -16,7 +16,7 @@ import qs.singletons
 //   set(key, value)      plain JSON (undefined removes the key); false when refused (not
 //                        plain JSON, or the store would pass ModuleRules.maxStoreBytes)
 //   remove(key)
-//   flush()       writes what is waiting, now: synchronously, before it returns; false
+//   flush()       writes what is waiting, now: synchronously, before it returns; (1.43) false
 //                 when a write was due and did not happen (before the read, a refused file,
 //                 a failed write) — true when written, nothing waited, or the store is not
 //                 written at all (`writable` off, as under the test runners)
