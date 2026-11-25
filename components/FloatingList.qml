@@ -6,6 +6,9 @@ import qs.singletons
 // window — or of the nearest ancestor named "overlayHost", e.g. a popup's panel, so it
 // stays where clicks reach — opens upwards when there is no room below, and a press
 // anywhere else closes it. Its items go inside it, as children; `closed` tells the owner.
+// Moved out from under the anchor, it no longer hides with it: it shows only while the
+// anchor is shown, so a page hidden with its list open (or a plan's scene that holds one
+// open) leaves neither the list nor its press catcher over the window.
 //
 //   FloatingList { anchorItem: button; open: menuOpen; onClosed: menuOpen = false; … }
 Rectangle {
@@ -30,9 +33,14 @@ Rectangle {
         return anchorItem?.Window.window?.contentItem ?? null;
     }
 
+    // The anchor's own visibility counts its ancestors; the window check keeps a list whose
+    // anchor moved to another window from covering this one
+    readonly property bool _anchorShown: anchorItem !== null && anchorItem.visible && _host !== null
+        && anchorItem.Window.window === _host.Window.window
+
     parent: _host
     z: 1000
-    visible: open && _host !== null
+    visible: open && _anchorShown
     width: listWidth
     height: Math.min(_items.implicitHeight + 6, maximumHeight)
     radius: Theme.dropdown.radius
@@ -52,6 +60,8 @@ Rectangle {
         y = below.y + height <= _host.height || above.y < 0 ? below.y : above.y;
     }
     onOpenChanged: if (open) Qt.callLater(_place)
+    // The anchor may have moved while it was hidden
+    onVisibleChanged: if (visible) Qt.callLater(_place)
     onHeightChanged: if (open) _place()
 
     Flickable {

@@ -1,0 +1,3 @@
+description: A fixture plan with a list held open in one scene and a button in the other
+scene: open     A dropdown's list held open
+scene: button   A button to click, the open list's scene hidden

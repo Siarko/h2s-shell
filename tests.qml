@@ -144,6 +144,7 @@ QtObject {
     property var _moduleWaitingRules: ModuleWaitingRulesTest {}
     property var _keyedViews: KeyedViewsTest {}
     property var _settingsCard: SettingsCardTest {}
+    property var _floatingList: FloatingListTest {}
     property var _moduleContribution: ModuleContributionTest {}
     property var _networkCardGeometry: NetworkCardGeometryTest {}
     property var _quickshellPin: QuickshellPinTest {}

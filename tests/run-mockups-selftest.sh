@@ -27,6 +27,8 @@
 #     fixture, and each component and view mockup);
 #     H2S_MOCKUP_STATE one cell alone, labelled, current; a plan has no cells, its scene
 #     buttons each with its scene's description as tooltip;
+#   - a plan on a scene that holds a list open (plans/open-list), switched to another scene:
+#     a click on that scene's button lands (the hidden scene's list leaves no press catcher);
 #   - `ipc call mockup theme <name>` on screen shows it in that theme and answers the name;
 #   - the gallery (H2S_MOCKUP=gallery, on mockups/), in the built-in theme and opened in a
 #     fixture theme (tests/fixtures/mockup-themes/, H2S_MOCKUP_THEME): a section per
@@ -374,6 +376,28 @@ on_screen_cells plan-tips tests/fixtures/mockups plans/tall
 check "$([ "$cells_answer" = "no cells: a plan, its scene buttons" ]; echo $?)" "no cells (was '$cells_answer')"
 check "$([ "$buttons_answer" = "3 of 3 shown, checked first" ]; echo $?)" "its three buttons, the first scene checked (was '$buttons_answer')"
 check "$([ "$tooltips_answer" = "$(printf '%s\n' "first: The first scene" "second: The second scene" "third: The third scene")" ]; echo $?)" "each button's tooltip its scene's description (was '$tooltips_answer')"
+
+echo "on screen: a scene with a list held open, then another scene: its clicks still land"
+start_entry open-list "$REPO/mockup.qml" H2S_MOCKUP_BASE=tests/fixtures/mockups H2S_MOCKUP=plans/open-list H2S_MOCKUP_SCENE=open
+click_answer="" deadline=$((SECONDS + 30))
+while [ $SECONDS -lt $deadline ] && kill -0 "${pids[open-list]}" 2> /dev/null; do
+    id=$(instance_of open-list)
+    if [ -n "$id" ] && [ "$(ipc "$id" call mockup window)" = floating ] && [ "$(ipc "$id" call probe scene button)" = button ]; then
+        # The button shown, a condition polled
+        while [ $SECONDS -lt $deadline ]; do
+            click_answer=$(ipc "$id" call probe click)
+            [ "$click_answer" != hidden ] && break
+            sleep 0.05
+        done
+        break
+    fi
+    # A condition polled (the window made), not a fixed wait
+    sleep 0.05
+done
+kill -TERM "${pids[open-list]}" 2> /dev/null
+finish_entry open-list
+check "$([ "$click_answer" = "clicks 1" ]; echo $?)" "the hidden scene's list and its press catcher are gone: the click reaches the button (was '$click_answer')"
+check "$(! grep -q -E 'MOCKUP-ERROR|TypeError|ReferenceError' "${logs[open-list]}"; echo $?)" "no error"
 
 echo "on screen: a cell among all the states drawn as when its state opens alone"
 grab_state=on grab_file=$work/toggle-all-on.png

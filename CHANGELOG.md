@@ -236,6 +236,8 @@ The interface modules are written against (`qs.api`), versioned on its own
   Without polkit rules it works as before; set to true beside them, it stops the build.
 
 ### Fixed
+- A dropdown or picker list left open on a page that was then hidden no longer stays over
+  the window taking every click; it is back when the page shows again.
 - "Lock before the computer sleeps": a sleep that began while the shell was starting or
   reloading, before it had read its settings, now locks the screen too.
 - A fast wheel turn of two notches or more over the Music widget skips a track per notch,
