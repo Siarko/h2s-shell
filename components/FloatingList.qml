@@ -218,33 +218,39 @@ Rectangle {
 
     // Following the anchor: every item from the anchor up to the host moves it when it moves
     // or changes size (a Flickable's content item is one of them, so a scroll is a move), and
-    // a change of parent on the way makes the chain anew
-    property var _watched: []
+    // a change of parent on the way makes the chain anew. Each item is followed by a
+    // Connections object made inside the list, so the connections end with it: nothing is
+    // left to undo on destruction, when the engine may already count the list as deleted and
+    // its own functions are no longer found.
+    property Component _follower: Component {
+        Connections {
+            function onXChanged() { root._place(); }
+            function onYChanged() { root._place(); }
+            function onWidthChanged() { root._place(); }
+            function onHeightChanged() { root._place(); }
+            function onParentChanged() { root._rewatch(); }
+        }
+    }
+    property var _followers: []
     function _watch() {
         _unwatch();
         if (!open || !anchorItem || !_host)
             return;
-        const watched = [];
+        const followers = [];
         for (let item = anchorItem; item; item = item.parent) {
-            for (const name of ["xChanged", "yChanged", "widthChanged", "heightChanged"]) {
-                item[name].connect(_place);
-                watched.push({ item: item, name: name, handler: _place });
-            }
-            item.parentChanged.connect(_rewatch);
-            watched.push({ item: item, name: "parentChanged", handler: _rewatch });
+            followers.push(_follower.createObject(root, { target: item }));
             if (item === _host)
                 break;
         }
-        _watched = watched;
+        _followers = followers;
     }
     function _unwatch() {
-        for (const entry of _watched) {
-            // An item of the old chain may be gone already
-            try {
-                entry.item[entry.name].disconnect(entry.handler);
-            } catch (error) {}
+        for (const follower of _followers) {
+            // Stopped at once: destroy() takes effect only later
+            follower.target = null;
+            follower.destroy();
         }
-        _watched = [];
+        _followers = [];
     }
     function _rewatch() {
         _watch();
@@ -277,7 +283,6 @@ Rectangle {
         else if (open && _anchorWasShown)
             closed();
     }
-    Component.onDestruction: _unwatch()
 
     Flickable {
         id: _flick

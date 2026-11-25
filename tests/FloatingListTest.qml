@@ -54,6 +54,23 @@ TestCase {
             }
         }
 
+        // A list made and destroyed while open, watching its anchor's chain
+        Item {
+            id: movingBox
+            x: 150; y: 120
+            width: 140; height: 40
+            Rectangle {
+                id: movingAnchor
+                width: 60; height: 20
+                color: Theme.surface
+            }
+        }
+        Item {
+            id: otherBox
+            x: 150; y: 170
+            width: 140; height: 40
+        }
+
         // What is under it once the page is hidden
         Rectangle {
             id: below
@@ -70,6 +87,12 @@ TestCase {
         WindowDriver {
             id: driver
             name: "FloatingListDriver"
+        }
+    }
+
+    property Component _listComponent: Component {
+        FloatingList {
+            Text { text: "Gone soon" }
         }
     }
 
@@ -115,6 +138,25 @@ TestCase {
         assertEqual(_catchers().filter(catcher => catcher.visible).length, 1, "… one press catcher, the held list's");
         driver.mouseClick(anchor, 5, 5);
         assertEqual(closes, 2, "a press beside the held list closes it");
+
+        // Destroyed while open: the anchor's chain it watched moves, resizes and changes
+        // parent afterwards, and nothing of the list runs (an error line fails the run)
+        const listsBefore = _lists().length;
+        const gone = _listComponent.createObject(page, { anchorItem: movingAnchor, open: true });
+        assert(_until(() => gone.visible), "a list opened on the moving anchor");
+        // (past the placing a list does once it is shown)
+        driver.wait(50);
+        movingAnchor.x = 20;
+        assert(_until(() => Math.round(gone.x) === Math.round(movingAnchor.mapToItem(gone.parent, 0, 0).x)), "… follows it while it stands");
+        gone.destroy();
+        assert(_until(() => _lists().length === listsBefore), "destroyed: gone from the window");
+        movingAnchor.x = 40;
+        movingAnchor.width = 80;
+        movingBox.y = 125;
+        movingAnchor.parent = otherBox;
+        movingAnchor.parent = movingBox;
+        driver.wait(50);
+        assertEqual(_lists().length, listsBefore, "… its anchor moved, resized and moved to another parent and back after it: no list back");
         finish();
     }
 }
