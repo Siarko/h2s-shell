@@ -476,7 +476,8 @@ without a runtime folder no copy is made and the file is read as it is).
   seeded Full profile use it; a new migration runs in the load phase.
 - **Reported, not announced.** Each applied migration logs one `[Migrations] <id>: <summary>`
   line, a failure its error, the part reset and the skipped ones; each run's report is
-  `Config.migrationReports`. A successful run shows nothing else.
+  `Config.migrationReports`. A successful run shows nothing else; a failed one is told
+  (below, "Telling the user").
 - **Under the test runner** (`Config.readOnly`) nothing is written: no backup, no file.
 
 #### Scopes
@@ -554,6 +555,27 @@ session (`Config.saveBlocked`; read by the save only — `Config.readOnly` stays
 runner's). The same happens for a config that is no document, a side file in a pending
 migration's scope that does not parse, or a write that fails. The next start tries again:
 nothing was reset, so retrying loses nothing.
+
+#### Telling the user
+
+Once the start's runs are done (`components/MigrationFailureNotice.qml`, held by
+`singletons/MigrationNotice.qml`; its texts and records from `MigrationNoticeRules`), a run
+with a reset part sends one critical notification without timeout, plain text: "Updating
+settings to <version> failed", with Keep defaults and Restore previous settings; its click
+opens Settings, where the same failure stands over the pages as an entry
+(`panels/settings/MigrationFailureEntry.qml`): the parts reset, as a list (each migration's
+`scopeLabel`), and the same two buttons, until one is pressed. The questions are the entry's,
+in the Settings modal, as steps lists. **Restore previous settings** holds saving
+(`Config.holdSaves`), copies `config.json` to `config.json.bak-<stamp>-restore`, writes the
+run's backup back with `held:<id>@<this version>` for the failed migrations and those skipped
+after them (`components/ConfigRestore.qml`), and restarts the shell; at the next start under
+this version those are held — their part keeps its old values, unused —, and under any other
+version they run again on the old values. A session that saves nothing (a `*` failure, a
+write that failed) gets the same notification with "Changes are not saved." and **Start with
+default settings**: the file is copied the same way and a new config holding only the
+new-config baseline is written, then the shell restarts. IPC: `settings migrations` (the
+notice and the last runs' reports, JSON), `settings restoreMigrationBackup`. Nothing is sent
+or written under the test runner.
 
 #### Backups and pruning
 

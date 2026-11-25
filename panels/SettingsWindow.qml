@@ -145,6 +145,10 @@ FloatingWindow {
     // gives a stand-in), and the banner's "Restart shell" clicked: whether a restart started
     property var restartUpdater: Modules.updater
     readonly property alias restartBanner: _restartBanner
+    // The failed settings update the entry over the pages shows (the shell's; a suite gives a
+    // stand-in)
+    property var migrationNotice: MigrationNotice.notice
+    readonly property alias migrationEntry: _migrationEntry
     signal restartClicked(bool started)
 
     // Where a page asks a question that needs more than a button's word (SettingsModalHost.ask)
@@ -585,6 +589,16 @@ FloatingWindow {
 
                 // A new page fades in, rising a little. Its root takes its place's base from
                 // here (anchorBase, root._showPage)
+                // A settings update failed at start (MigrationNotice): over every page until
+                // it is answered — the Dashboard's entry once there is a Dashboard
+                MigrationFailureEntry {
+                    id: _migrationEntry
+                    objectName: "migrationFailureEntry"
+                    notice: root.migrationNotice
+                    modalHost: root.modalHost
+                    anchors { left: parent.left; right: parent.right; top: parent.top; margins: visible ? Theme.settings.pageMargin : 0 }
+                }
+
                 // After "Later": a restart is pending for the modules an update queue updated —
                 // over every page until the shell restarts (ModuleUpdateRules.restartBannerText).
                 // Only the updater's list: a file changed under the host is no update the user ran
@@ -594,7 +608,7 @@ FloatingWindow {
                     readonly property string text: root.restartUpdater && root.restartUpdater.restartOffer === null
                         ? ModuleUpdateRules.restartBannerText(root.restartUpdater.restartNeeded) : ""
                     visible: text !== ""
-                    anchors { left: parent.left; right: parent.right; top: parent.top; margins: visible ? Theme.settings.pageMargin : 0 }
+                    anchors { left: parent.left; right: parent.right; top: _migrationEntry.visible ? _migrationEntry.bottom : parent.top; margins: visible ? Theme.settings.pageMargin : 0 }
                     height: visible ? _restartRow.implicitHeight + 16 : 0
                     radius: Theme.settings.cardRadius
                     color: Qt.alpha(Theme.warning, 0.10)
@@ -625,7 +639,7 @@ FloatingWindow {
                 Loader {
                     id: _page
                     property string anchorBase: ""
-                    anchors { left: parent.left; right: parent.right; bottom: parent.bottom; top: _restartBanner.visible ? _restartBanner.bottom : parent.top }
+                    anchors { left: parent.left; right: parent.right; bottom: parent.bottom; top: _restartBanner.visible ? _restartBanner.bottom : _migrationEntry.visible ? _migrationEntry.bottom : parent.top }
                     transform: Translate { id: _pageShift }
                     onLoaded: _pageEnter.restart()
                 }

@@ -114,6 +114,8 @@ QtObject {
     property var _energyUsage: EnergyUsage
     // Asks the helper program (H2S_SHELL_HELPER) its version once, so its state is known
     property var _helper: Helper
+    // Tells of a settings update that failed at start, once the runs are done
+    property var _migrationNotice: MigrationNotice
 
     // No Quickshell reload popup, after a reload that worked or one that failed. The popup is
     // an engine of its own for some 2 s (6 s after a failure), and while it lives Quickshell
@@ -155,6 +157,9 @@ QtObject {
             settingsWindow.openAt(pageId, section);
             settingsWindow.visible = true;
         }
+        function onShowSettings() {
+            settingsWindow.visible = true;
+        }
         function onToggleSettings() {
             settingsWindow.visible = !settingsWindow.visible;
         }
@@ -167,6 +172,8 @@ QtObject {
     //   qs ipc call settings itemRect profileSettings   (where a shown item is, for tests)
     //   qs ipc call settings toggle
     //   qs ipc call settings close
+    //   qs ipc call settings migrations              (the last settings update at start, JSON)
+    //   qs ipc call settings restoreMigrationBackup  (after a failed one: the settings from before it)
     property var _settingsIpc: IpcHandler {
         target: "settings"
 
@@ -191,6 +198,15 @@ QtObject {
 
         function close(): void {
             settingsWindow.visible = false;
+        }
+
+        function migrations(): string {
+            return MigrationNotice.reportText();
+        }
+
+        // "" when the restore started (the shell restarts once it is written), else why not
+        function restoreMigrationBackup(): string {
+            return MigrationNotice.notice.restore("");
         }
 
         // For tests driving the window from outside: the first shown item with that

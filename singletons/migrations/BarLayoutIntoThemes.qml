@@ -18,6 +18,8 @@ QtObject {
     readonly property string migrationId: "theme.barLayout"
     readonly property string since: "2.0.0"
     readonly property string summary: "The bar's geometry moved from the profiles into themes"
+    // The part reset when it fails, in words (the failure notice lists it)
+    readonly property string scopeLabel: "bar layout and themes"
     // The profiles must exist (seeded before it runs)
     readonly property string phase: "afterSeed"
     readonly property string overwritesReason: "A profile that set its own bar geometry picks the theme made from it: that geometry applied over its theme before"

@@ -11,6 +11,8 @@ QtObject {
     readonly property string migrationId: "2.1.0-lock-notification-detail-default"
     readonly property string since: "2.1.0"
     readonly property string summary: "The lock screen's notification detail is at its new default"
+    // The part reset when it fails, in words (the failure notice lists it)
+    readonly property string scopeLabel: "lock screen notification detail"
     readonly property var scope: ["setting:lockscreen.lockNotificationDetail"]
 
     readonly property string _key: "lockscreen.lockNotificationDetail"

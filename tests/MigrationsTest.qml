@@ -158,6 +158,8 @@ TestCase {
         const registry = Migrations.all();
         const problems = _all(registry, migration => "tests/fixtures/migrations/" + migration.migrationId);
         assertEqual(problems.join("\n"), "", "registered: every migration (" + registry.length + ") valid on its fixture");
+        const unlabelled = registry.filter(migration => typeof migration.scopeLabel !== "string" || migration.scopeLabel.trim() === "").map(migration => migration.migrationId);
+        assertEqual(unlabelled.join(", "), "", "registered: every migration names its part in words (scopeLabel, for the failure notice)");
         registry.push(null);
         assertEqual(Migrations.all().length, registry.length - 1, "registered: the registry is a new list at each call");
     }

@@ -138,6 +138,9 @@ QtObject {
     property var _migrationsGolden: MigrationsGoldenTest {}
     property var _configFile: ConfigFileTest {}
     property var _configMigration: ConfigMigrationTest {}
+    property var _migrationNoticeRules: MigrationNoticeRulesTest {}
+    property var _migrationRestore: MigrationRestoreTest {}
+    property var _migrationFailureEntry: MigrationFailureEntryTest {}
     property var _devRules: DevRulesTest {}
     property var _moduleDependencyRules: ModuleDependencyRulesTest {}
     property var _moduleUpdateRules: ModuleUpdateRulesTest {}

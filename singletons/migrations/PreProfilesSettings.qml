@@ -18,6 +18,8 @@ QtObject {
     readonly property string migrationId: "1.0.0-legacy-settings"
     readonly property string since: "1.0.0"
     readonly property string summary: "Settings from before profiles moved into the profiles"
+    // The part reset when it fails, in words (the failure notice lists it)
+    readonly property string scopeLabel: "settings from before profiles"
     // Full must exist: it runs once the profiles are seeded
     readonly property string phase: "afterSeed"
     readonly property string overwritesReason: "Full and the globals hold the defaults seeded before it runs; the old value is the user's choice"

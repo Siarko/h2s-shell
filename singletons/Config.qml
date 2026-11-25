@@ -94,6 +94,21 @@ Singleton {
     // reads it; everything else runs as normal (readOnly means the test runner)
     readonly property bool saveBlocked: _file.migrationReadOnly
     property bool _refusedSave: false
+    // config.json is being replaced (MigrationFailureNotice's restore): nothing is saved over it
+    property bool savesHeld: false
+
+    // Saves what is pending now, then nothing until releaseSaves (or the restart)
+    function holdSaves() {
+        if (_saveTimer.running) {
+            _saveTimer.stop();
+            _saveNow();
+        }
+        savesHeld = true;
+    }
+
+    function releaseSaves() {
+        savesHeld = false;
+    }
 
     signal saved
 
@@ -166,22 +181,25 @@ Singleton {
     Timer {
         id: _saveTimer
         interval: 1000
-        onTriggered: {
-            // Not while the migrations hold the file (they said so in the log)
-            if (root.saveBlocked)
-                return;
-            // Never from the test runners, never over a file that could not be read
-            // (ProfileRules.configSaveAllowed)
-            if (!ProfileRules.configSaveAllowed(root.readOnly, root.loadFailed)) {
-                if (!root.readOnly && !root._refusedSave)
-                    console.warn("[Config] " + _file.path + " could not be read: changes are not saved over it");
-                root._refusedSave = !root.readOnly;
-                return;
-            }
-            _file.saveStamped();
-            root.saved();
-            _log.log("Saved");
+        onTriggered: root._saveNow()
+    }
+
+    function _saveNow() {
+        // Not while the migrations hold the file (they said so in the log), nor while it
+        // is being replaced
+        if (saveBlocked || savesHeld)
+            return;
+        // Never from the test runners, never over a file that could not be read
+        // (ProfileRules.configSaveAllowed)
+        if (!ProfileRules.configSaveAllowed(root.readOnly, root.loadFailed)) {
+            if (!root.readOnly && !root._refusedSave)
+                console.warn("[Config] " + _file.path + " could not be read: changes are not saved over it");
+            root._refusedSave = !root.readOnly;
+            return;
         }
+        _file.saveStamped();
+        root.saved();
+        _log.log("Saved");
     }
 
     Logger {

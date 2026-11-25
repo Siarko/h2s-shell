@@ -11,6 +11,8 @@ QtObject {
     readonly property string migrationId: "1.0.0-widget-presets"
     readonly property string since: "1.0.0"
     readonly property string summary: "Widget profiles are now widget presets"
+    // The part reset when it fails, in words (the failure notice lists it)
+    readonly property string scopeLabel: "widget presets"
     readonly property var scope: ["read:raw:widgetProfiles", "preset:*"]
 
     // Older versions made the library whenever it was empty text, and only then
