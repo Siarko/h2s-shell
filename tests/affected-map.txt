@@ -32,8 +32,8 @@
 @lock-roots screensaver/* singletons/lock/* singletons/Lockscreen.qml pam/* scripts/launch.sh tests/lock/launcher.sh
 @lazy singletons/WidgetRegistry.qml singletons/ModuleRules.qml
 # The HUD's own (toasts, the bar's clearance), the module host's fixtures, and the methods
-# script run alone (no compositor, no shell)
-@not-lock toast-* hud-bar-bottom modules modules-notify modules-reload methods-script
+# script run alone (no compositor, no shell), a bar cell's wheel
+@not-lock toast-* hud-bar-bottom modules modules-notify modules-reload methods-script cell-wheel
 
 # ---- No test needed ------------------------------------------------------------------
 site/* none
@@ -205,6 +205,7 @@ singletons/io/NotificationHandle.qml lock:notifier-progress lock:modules-notify
 +components/notification/* lock:notification*
 components/NotificationCard.qml lock:notification* lock:toast-*
 Hud.qml lock:toast-* lock:hud-bar-bottom
++components/BarWidget.qml lock:cell-wheel
 +hud/* lock:toast-* lock:hud-bar-bottom
 +singletons/Toast* lock:toast-* lock:hud-bar-bottom
 singletons/BarGeometry.qml lock:hud-bar-bottom lock:toast-*

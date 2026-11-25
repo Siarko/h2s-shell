@@ -32,6 +32,9 @@ always exactly the one asked for. Commands, one per line, are written to <fifo>:
   click [left|right|middle]
   press [left|right|middle]    held down (a drag: press, moves, release)
   release [left|right|middle]
+  scroll <vertical|horizontal> <notches>
+                       wheel notches on one axis, as a mouse wheel sends them, signed as
+                       Wayland signs them: positive is down, and on the horizontal axis right
   sleep <seconds>
   quit
 
@@ -60,6 +63,11 @@ from ltproto.wlr_virtual_pointer_unstable_v1 import ZwlrVirtualPointerManagerV1 
 from ltproto.virtual_keyboard_unstable_v1 import ZwpVirtualKeyboardManagerV1  # noqa: E402
 
 BUTTONS = {"left": 0x110, "right": 0x111, "middle": 0x112}
+# wl_pointer's axes, and its wheel as their source
+AXES = {"vertical": 0, "horizontal": 1}
+AXIS_SOURCE_WHEEL = 0
+# The movement a wheel's notch sends, in Wayland's surface units (libinput's 15 degrees)
+NOTCH_VALUE = 15.0
 KEYMAP_FORMAT_XKB_V1 = 1
 # The real modifiers' masks: their order is fixed in every keymap xkbcommon compiles
 MASKS = {"Shift": 1, "Lock": 2, "Control": 4, "Mod1": 8, "Mod2": 16, "Mod3": 32, "Mod4": 64, "Mod5": 128}
@@ -260,6 +268,14 @@ def main():
                     pointer.frame()
                 elif command in ("press", "release"):
                     pointer.button(milliseconds(), BUTTONS[argument or "left"], 1 if command == "press" else 0)
+                    pointer.frame()
+                elif command == "scroll":
+                    axis, _, notches = argument.partition(" ")
+                    if axis not in AXES:
+                        fatal(f"scroll: no axis {axis!r} (vertical or horizontal)")
+                    notches = int(notches)
+                    pointer.axis_source(AXIS_SOURCE_WHEEL)
+                    pointer.axis_discrete(milliseconds(), AXES[axis], NOTCH_VALUE * notches, notches)
                     pointer.frame()
                 elif command == "sleep":
                     time.sleep(float(argument))

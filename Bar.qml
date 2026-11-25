@@ -348,6 +348,9 @@ PanelWindow {
     }
 
     // Helpers for the shelltest IPC below (outside it: an IpcHandler offers every function)
+    property var _testInteractions: []
+    property Item _testWatched: null
+
     function _testFind(root, test) {
         if (!root)
             return null;
@@ -382,6 +385,8 @@ PanelWindow {
     //   qs ipc call shelltest notificationAction 7 cancel
     //   qs ipc call shelltest notificationDismiss 7
     //   qs ipc call shelltest toastDismiss 7
+    //   qs ipc call shelltest watchInteractions clock
+    //   qs ipc call shelltest interactionsSeen
     IpcHandler {
         target: "shelltest"
         enabled: bar.modelData === Quickshell.screens[0]
@@ -459,6 +464,28 @@ PanelWindow {
                 return "not shown";
             Toasts.dismissToast(id);
             return "";
+        }
+
+        // The interactions a cell reports (BarWidget.interaction) recorded from now on, for a
+        // test that sends real input through the compositor: "" when watched, else why not
+        function watchInteractions(widgetType: string): string {
+            const cell = bar._testFind(bar.contentItem, item => item.widgetType === widgetType && item.visible);
+            if (!cell || !cell.interaction)
+                return "no cell";
+            bar._testInteractions = [];
+            if (bar._testWatched !== cell) {
+                bar._testWatched = cell;
+                cell.interaction.connect((name, details) => {
+                    if (bar._testWatched === cell)
+                        bar._testInteractions = bar._testInteractions.concat([name]);
+                });
+            }
+            return "";
+        }
+
+        // Their names, oldest first
+        function interactionsSeen(): string {
+            return JSON.stringify(bar._testInteractions);
         }
 
         function popupState(): string {

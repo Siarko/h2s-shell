@@ -584,7 +584,8 @@ were expanded once: to wait on something that changes, pass a function (`no_fing
 `dead_acute`, `Multi_key`, `KP_1`, `KP_Enter`, `Caps_Lock`, `Num_Lock`, …), `keys_text`
 (the keys for a text with Caps Lock off, whatever the locks are), `hold_key <keysym>
 <seconds>` (auto-repeat), `move_pointer x y` (pixels of the 1920x1080 output),
-`send_input "abs x y w h" "click left|middle|right"`, `wake_prompt`; `caps_led`,
+`send_input "abs x y w h" "click left|middle|right"`, `send_input "scroll vertical|horizontal
+<notches>"` (wheel notches, signed as Wayland signs them: positive down and right), `wake_prompt`; `caps_led`,
 `finger_timeout` (above). `type_text` refuses while Caps
 Lock is on (the text typed would not be the one asked for). Input goes through
 a FIFO to `input/ltinput.py`; a client that has died, or does not read within 5 s, aborts

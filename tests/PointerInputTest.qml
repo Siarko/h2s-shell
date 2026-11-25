@@ -5,7 +5,8 @@ import qs.components
 import qs.singletons
 
 // The bar's cells under real input events: a mouse, a finger (QtTest's touch screen),
-// and what each does to hover and to a popup. What Qt makes of a touch is what this
+// what each does to hover and to a popup, and the interactions a cell reports
+// (BarWidget.interaction). What Qt makes of a touch is what this
 // guards — measured on the Framework 12, relied on by
 // BarWidget and PopupWidget. The rules alone: PointerRulesTest. A stylus cannot be sent
 // from QtTest; it was checked on the device.
@@ -20,7 +21,7 @@ TestCase {
     property var _window: PanelWindow {
         anchors { top: true; left: true }
         implicitWidth: 400
-        implicitHeight: 300
+        implicitHeight: 380
         color: "transparent"
         exclusionMode: ExclusionMode.Ignore
         WlrLayershell.layer: WlrLayer.Overlay
@@ -126,6 +127,41 @@ TestCase {
             onDismissRequested: dismissals++
         }
 
+        // The interactions it reports, and the old signals beside them
+        BarWidget {
+            id: inputCell
+            x: 60
+            y: 330
+            width: 100
+            height: 40
+            // What is bound, by interaction: only whether something is bound matters here
+            property var bound: ({})
+            bindingLookup: {
+                const bound = inputCell.bound;
+                return name => bound[name];
+            }
+            property var seen: []
+            property int clicks: 0
+            property int middleClicks: 0
+            property var scrolls: []
+            property var notches: []
+            property var hovers: []
+            onInteraction: (name, details) => {
+                let entry = name;
+                if (details.phase !== "")
+                    entry += ":" + details.phase;
+                if (details.amount !== 0)
+                    entry += " " + (Math.round(details.amount * 100) / 100) + " " + details.direction;
+                assert(details.byTouch === false, "the details of " + name + " say the pointer");
+                seen.push(entry);
+            }
+            onClicked: clicks++
+            onMiddleClicked: middleClicks++
+            onScrolled: delta => scrolls.push(Math.round(delta * 100) / 100)
+            onScrollNotch: direction => notches.push(direction)
+            onHover: state => hovers.push(state)
+        }
+
         WindowDriver {
             id: driver
             name: "PointerInputDriver"
@@ -172,6 +208,154 @@ TestCase {
         return condition();
     }
 
+    // A bound action, of no consequence: the cell only asks whether one is bound
+    readonly property var _anything: ({ mode: "single", action: { action: "shell:popup.toggle" } })
+
+    function _resetInput(bound = {}) {
+        inputCell.bound = bound;
+        inputCell.seen = [];
+        inputCell.clicks = 0;
+        inputCell.middleClicks = 0;
+        inputCell.scrolls = [];
+        inputCell.notches = [];
+        inputCell.hovers = [];
+    }
+
+    function _seen() {
+        return inputCell.seen.join(", ");
+    }
+
+    // The cell's interactions, each event QtTest can send. Hover first: the mouse is still
+    // over the cell for every step after it, so it is entered once and left at the end.
+    function _checkInteractions() {
+        const cell = inputCell;
+        const x = cell.width / 2;
+        const y = cell.height / 2;
+        _reset();
+        _resetInput();
+
+        driver.mouseMove(cell, x, y);
+        _until(() => cell.seen.length > 0);
+        assertEqual(_seen(), "hover:start", "the mouse coming over the cell is hover starting");
+        assertEqual(cell.hovers.join(","), "true", "and the old hover signal, as before");
+
+        // Nothing bound: every click is reported as it is released, nothing waits
+        _resetInput();
+        driver.mouseClick(cell, x, y, Qt.LeftButton);
+        assertEqual(_seen(), "leftClick", "a left click, at once");
+        driver.mouseClick(cell, x, y, Qt.MiddleButton);
+        assertEqual(_seen(), "leftClick, middleClick", "a middle click");
+        driver.mouseClick(cell, x, y, Qt.RightButton);
+        assertEqual(_seen(), "leftClick, middleClick, rightClick", "a right click: the cell takes the right button");
+        assertEqual(cell.clicks + "," + cell.middleClicks, "1,1", "the old clicked and middleClicked, once each: a right click is neither");
+        _resetInput();
+        driver.mouseClick(cell, x, y, Qt.LeftButton, Qt.ShiftModifier);
+        driver.mouseClick(cell, x, y, Qt.LeftButton, Qt.ControlModifier);
+        driver.mouseClick(cell, x, y, Qt.LeftButton, Qt.AltModifier);
+        driver.mouseClick(cell, x, y, Qt.LeftButton, Qt.ShiftModifier | Qt.ControlModifier);
+        assertEqual(_seen(), "shiftClick, ctrlClick, altClick", "clicks with Shift, Ctrl, Alt; two modifiers are no interaction");
+        assertEqual(cell.clicks, 4, "each still the old clicked, as before");
+        driver.mouseClick(cell, x, y, Qt.MiddleButton, Qt.ShiftModifier);
+        driver.mouseClick(cell, x, y, Qt.RightButton, Qt.ControlModifier);
+        assertEqual(_seen(), "shiftClick, ctrlClick, altClick, middleClick, rightClick", "a middle or right click ignores modifiers");
+        _resetInput();
+        driver.mouseDoubleClickSequence(cell, x, y);
+        assertEqual(_seen(), "leftClick, leftClick", "no double click bound: a double click is two clicks, at once");
+        assertEqual(cell.clicks, 2, "and two old clicks");
+
+        // A double click bound: a plain click waits for a second one
+        _resetInput({ doubleClick: _anything });
+        driver.mouseDoubleClickSequence(cell, x, y);
+        assertEqual(_seen(), "doubleClick", "a double click bound: one double click, no click");
+        assertEqual(cell.clicks, 2, "the old clicked still fires for both, as before");
+        _resetInput({ doubleClick: _anything });
+        driver.mouseClick(cell, x, y);
+        assertEqual(_seen(), "", "a single click waits for the double-click interval");
+        assert(_until(() => cell.seen.length > 0), "and then comes");
+        assertEqual(_seen(), "leftClick", "as a left click");
+        assertEqual(cell.clicks, 1, "the old clicked at once, as before");
+        _resetInput({ doubleClick: _anything });
+        driver.mouseClick(cell, x, y);
+        driver.mouseClick(cell, x, y, Qt.RightButton);
+        assertEqual(_seen(), "leftClick, rightClick", "another click while one waits: the waiting one goes first");
+
+        // A long press bound: the hold starts it, the release ends it and is no click
+        _resetInput({ longPress: _anything });
+        driver.mousePress(cell, x, y);
+        assert(_until(() => cell.seen.length > 0), "the hold is reported while the button is down");
+        assertEqual(_seen(), "longPress:start", "as a long press starting");
+        driver.mouseRelease(cell, x, y);
+        assertEqual(_seen(), "longPress:start, longPress:end", "the release ends it, and is no click");
+        assertEqual(cell.clicks, 1, "the old clicked fires on the release, as before");
+        // A press that moves away is a drag: no hold
+        _resetInput({ longPress: _anything });
+        driver.mousePress(cell, x, y);
+        driver.mouseMove(cell, x + 30, y, -1, Qt.LeftButton);
+        driver.mouseMove(cell, x + 31, y, -1, Qt.LeftButton);
+        // A negative claim: the hold had its time and did not come
+        driver.wait(Qt.styleHints.mousePressAndHoldInterval + 300);
+        driver.mouseRelease(cell, x + 31, y);
+        assertEqual(_seen(), "leftClick", "a press moved past the drag distance holds nothing: it is a click");
+        // Held as long with no long press bound, or with the right button: a click
+        _resetInput({ rightClick: _anything });
+        driver.mousePress(cell, x, y);
+        driver.wait(Qt.styleHints.mousePressAndHoldInterval + 300);
+        driver.mouseRelease(cell, x, y);
+        _resetInput({ longPress: _anything });
+        driver.mousePress(cell, x, y, Qt.RightButton);
+        driver.wait(Qt.styleHints.mousePressAndHoldInterval + 300);
+        driver.mouseRelease(cell, x, y, Qt.RightButton);
+        assertEqual(_seen(), "rightClick", "a held right button is its click: only the left one has a long press");
+
+        // The wheel, nothing bound: each whole notch is a step
+        _resetInput();
+        driver.mouseWheel(cell, x, y, 0, 120);
+        driver.mouseWheel(cell, x, y, 0, -120);
+        driver.mouseWheel(cell, x, y, 0, 240);
+        assertEqual(_seen(), "scrollUp 1 up, scrollDown -1 down, scrollUp 1 up, scrollUp 1 up",
+                    "up, down, and an event of two notches is two steps");
+        _resetInput();
+        driver.mouseWheel(cell, x, y, 0, 60);
+        assertEqual(_seen(), "", "half a notch is no step yet");
+        driver.mouseWheel(cell, x, y, 0, 60);
+        assertEqual(_seen(), "scrollUp 1 up", "the second half makes it");
+        // (the old scrollNotch keeps its own remainder, which the two-notch event left at one)
+        assertEqual(cell.scrolls.join(",") + " / " + cell.notches.join(","), "0.54,0.54 / 1,1",
+                    "the old scrolled and scrollNotch, as before");
+        // Qt's angleDelta.x is positive to the left (the compositor's own sign:
+        // tests/lock/tests/cell-wheel.sh)
+        _resetInput();
+        driver.mouseWheel(cell, x, y, -120, 0);
+        driver.mouseWheel(cell, x, y, 120, 0);
+        assertEqual(_seen(), "scrollRight 1 right, scrollLeft -1 left", "the horizontal wheel: right, then left");
+        assertEqual(cell.scrolls.join(",") + " / " + cell.notches.join(","), "0,0 / ",
+                    "the old signals see no vertical movement in it, as before");
+        // A continuous scroll bound: it takes the movement as measured, and the steps go
+        _resetInput({ scroll: _anything, scrollSideways: _anything });
+        driver.mouseWheel(cell, x, y, 0, 60);
+        driver.mouseWheel(cell, x, y, 0, -224);
+        driver.mouseWheel(cell, x, y, -56, 0);
+        driver.mouseWheel(cell, x, y, 0, 0);
+        assertEqual(_seen(), "scroll 0.54 up, scroll -2 down, scrollSideways 0.5 right",
+                    "scroll and scrollSideways bound: one each per event, with the movement; an empty event is none");
+        _resetInput({ scroll: _anything });
+        driver.mouseWheel(cell, x, y, 120, 0);
+        assertEqual(_seen(), "scrollLeft -1 left", "only the vertical one bound: the horizontal wheel still steps");
+
+        // Hover ends as the mouse leaves
+        _resetInput();
+        driver.mouseMove(away, 5, 5);
+        _until(() => cell.seen.length > 0);
+        assertEqual(_seen(), "hover:end", "the mouse leaving the cell is hover ending");
+        assertEqual(cell.hovers.join(","), "false", "and the old hover signal");
+
+        // A finger's tap is the finger interactions', not reported here
+        _resetInput();
+        _tap(cell);
+        assertEqual(_seen(), "", "a tap reports no pointer interaction");
+        assertEqual(cell.clicks, 1, "and is still the old click");
+    }
+
     function _reset() {
         driver.mouseMove(away, 5, 5);
         driver.wait(120);
@@ -189,6 +373,9 @@ TestCase {
             finish();
             return;
         }
+
+        // --- the interactions a cell reports ---
+        _checkInteractions();
 
         // --- the mouse: hover and click, as before ---
         _reset();
