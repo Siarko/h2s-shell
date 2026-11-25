@@ -314,7 +314,8 @@ TestCase {
         _then("the root run going", () => rebuild.phase === "switching" || rebuild.phase === "applied", () => {});
         _then("applied", () => rebuild.phase === "applied" && !writer.busy && !builder.busy, () => {
             assertEqual(rebuild.state.outcome.generation, 2, "applied: generation 2");
-            assert(rebuild.times.built === _builtAt && rebuild.times.ended > rebuild.times.built, "… the run's end timed after its build");
+            assert(rebuild.times.built === _builtAt && rebuild.times.applying > rebuild.times.built && rebuild.times.ended > rebuild.times.applying,
+                   "… the root run timed from the Apply now click, after its build");
             assert(rebuild.lines.includes("activating the configuration..."), "… the root run's lines kept");
             assert(!creator.busy, "… Create free again");
             _look();

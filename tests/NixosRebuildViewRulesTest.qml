@@ -13,14 +13,19 @@ TestCase {
         const subject = more => Object.assign({ key: "sleep.hibernateDelay", value: "3h", text: "{}", reading: {}, previous: null, undo: false,
                                                 drvPath: "/nix/store/a.drv", outPath: "/nix/store/a" }, more ?? {});
         const state = (phase, more) => Object.assign(NixosRebuildRules.initial(), { phase, run: 3, subject: subject() }, more ?? {});
-        const times = { started: 10000, built: 82000, ended: 91000 };
+        // Built after 72 s, Apply now clicked an hour later, switched in 9 s
+        const times = { started: 10000, built: 82000, applying: 3682000, ended: 3691000 };
+        const buildTimes = { started: 10000, built: 0, applying: 0, ended: 55000 };
 
         // Durations
         assertEqual(["0", "999", "41000", "60000", "72500", "-5"].map(ms => rules.duration(Number(ms))).join("|"), "0 s|0 s|41 s|1 min 0 s|1 min 12 s|0 s",
                     "duration: seconds, minutes and seconds, never negative");
-        assertEqual([rules.elapsedMs(state("building"), times, 51000), rules.elapsedMs(state("built"), times, 99999), rules.elapsedMs(state("switching"), times, 95000),
-                     rules.elapsedMs(state("applied"), times, 99999), rules.elapsedMs(state("idle"), { started: 0 }, 5), rules.elapsedMs(state("cancelled"), { started: 1, ended: 0 }, 5)].join(" "),
-                    "41000 72000 85000 81000 0 0", "elapsedMs: counting while it runs, the build's time while built, the run's once ended");
+        assertEqual([rules.elapsedMs(state("building"), times, 51000), rules.elapsedMs(state("built"), times, 99999), rules.elapsedMs(state("authorizing"), times, 3684000),
+                     rules.elapsedMs(state("switching"), times, 3687000), rules.elapsedMs(state("applied"), times, 9999999),
+                     rules.elapsedMs(state("cancelled"), buildTimes, 9999999), rules.elapsedMs(state("idle"), { started: 0 }, 5),
+                     rules.elapsedMs(state("cancelled"), { started: 1, ended: 0 }, 5)].join(" "),
+                    "41000 72000 2000 5000 9000 45000 0 0",
+                    "elapsedMs: the build's time while it builds and once built; the root run's from the Apply now click, not the wait before it");
         assertEqual(["building", "built", "authorizing", "switching", "applied", "idle"].map(phase => rules.counting(state(phase))).join(" "),
                     "true false true true false false", "counting: only while a process runs");
 
@@ -67,8 +72,8 @@ TestCase {
         assertEqual(box(state("built", { stale: true, error: "Not possible now." })),
                     "true privileged Built in 1 min 12 s. / Not possible now. Built for 3h: the setting changed since. Apply now asks for your password. Cancelling it changes nothing.",
                     "… a refused root run and a stale candidate said");
-        assertEqual(box(state("applied", { outcome: { kind: "applied", generation: 15 } })), "true success Applied in 1 min 21 s. Generation 15 is in use. / ", "… applied");
-        assertEqual(box(state("applied", { subject: subject({ undo: true }), outcome: { kind: "applied", generation: 0 } })), "true success Undone in 1 min 21 s. / ",
+        assertEqual(box(state("applied", { outcome: { kind: "applied", generation: 15 } })), "true success Applied in 9 s. Generation 15 is in use. / ", "… applied: the switch's time, from Apply now");
+        assertEqual(box(state("applied", { subject: subject({ undo: true }), outcome: { kind: "applied", generation: 0 } })), "true success Undone in 9 s. / ",
                     "… undone, the generation not known");
         assertEqual(box(state("appliedWithErrors", { outcome: { kind: "appliedWithErrors" } })),
                     "true warning Applied, with errors: some services did not start again. / The new values are in force.", "… applied with errors");

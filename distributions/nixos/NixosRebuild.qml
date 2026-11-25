@@ -29,15 +29,15 @@ QtObject {
     readonly property var lines: _lines.slice()
     readonly property int maxLines: 200
     readonly property int lineMaxLength: 500
-    // When the run started building, was built and ended (ms by `clock`; 0 not yet), for the
-    // panel's elapsed time
+    // When the run started building, was built, was applied (the Apply now click) and ended
+    // (ms by `clock`; 0 not yet), for the panel's elapsed times
     readonly property var times: _times
     // A suite's seam: the clock the times are read from
     property var clock: () => Date.now()
 
     property var _state: NixosRebuildRules.initial()
     property var _lines: []
-    property var _times: ({ started: 0, built: 0, ended: 0 })
+    property var _times: ({ started: 0, built: 0, applying: 0, ended: 0 })
     property var _notification: null
 
     // The Apply: the announcing modal for `request` { key, value, text (the shell's file with
@@ -107,9 +107,11 @@ QtObject {
             return;
         const now = clock();
         if (after === "building")
-            _times = { started: now, built: 0, ended: 0 };
+            _times = { started: now, built: 0, applying: 0, ended: 0 };
         else if (after === "built" && before === "building")
             _times = Object.assign({}, _times, { built: now });
+        else if (after === "authorizing" && before === "built")
+            _times = Object.assign({}, _times, { applying: now, ended: 0 });
         else if (NixosRebuildRules.settled.includes(after) && ["building", "authorizing", "switching"].includes(before))
             _times = Object.assign({}, _times, { ended: now });
     }

@@ -64,20 +64,26 @@ Singleton {
         return seconds >= 60 ? Math.floor(seconds / 60) + " min " + (seconds % 60) + " s" : seconds + " s";
     }
 
-    // How long the run has taken at `now`, from its `times` { started, built, ended } (ms; 0
-    // not yet): counting while it builds or the root run goes, the build's time while built,
-    // the whole run's once it ended
+    // How long the run has taken at `now`, from its `times` { started (the build began),
+    // built, applying (the Apply now click), ended } (ms; 0 not yet): the build's time while it
+    // builds and once built; the root run's from the Apply now click — never the wait at Built
+    // between them — while it goes and once it ended; a run that ended in its build, the build's
     function elapsedMs(state, times, now) {
         const started = Number(times?.started) || 0;
         if (started <= 0)
             return 0;
+        const applying = Number(times?.applying) || 0;
         const phase = state?.phase ?? "idle";
-        if (phase === "building" || phase === "authorizing" || phase === "switching")
+        if (phase === "building")
             return Math.max(0, now - started);
         if (phase === "built")
             return Math.max(0, (Number(times?.built) || now) - started);
+        if (phase === "authorizing" || phase === "switching")
+            return applying > 0 ? Math.max(0, now - applying) : 0;
         const ended = Number(times?.ended) || 0;
-        return ended > 0 ? Math.max(0, ended - started) : 0;
+        if (ended <= 0)
+            return 0;
+        return Math.max(0, ended - (applying > 0 ? applying : started));
     }
 
     // The run's time is counting (the panel's clock ticks only then)

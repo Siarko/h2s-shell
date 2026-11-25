@@ -36,7 +36,7 @@ TestCase {
         readonly property string phase: state.phase
         property var progress: null
         property var lines: []
-        property var times: ({ started: 0, built: 0, ended: 0 })
+        property var times: ({ started: 0, built: 0, applying: 0, ended: 0 })
         property real nowMs: 1000000
         property var clock: () => nowMs
         property var calls: []
@@ -325,10 +325,25 @@ TestCase {
         assert(_click("modalButton:0") && _until(() => _rebuild.phase === "building"), "… Build: building again");
         _rebuild.times = { started: _rebuild.nowMs, built: 0, ended: 0 };
 
+        // The keyboard on Cancel build when the build ends: Space and Enter then ask nothing
+        let onCancel = false;
+        for (let presses = 0; presses < 12 && !onCancel; presses++) {
+            driver.keyClick(Qt.Key_Tab);
+            onCancel = _until(() => _window.contentItem.Window.activeFocusItem?.objectName === "rebuild:cancel", 200);
+        }
+        assert(onCancel, "Tab reaches Cancel build");
+
         // --- built: Apply now ---
         _rebuild.nowMs += 72000;
         _rebuild.step({ type: "built", run: _rebuild.state.run, outcome: { ok: true, drvPath: "/nix/store/a1hd-system.drv", outPath: "/nix/store/a1hd-system" } });
         _rebuild.times = Object.assign({}, _rebuild.times, { built: _rebuild.nowMs });
+        assert(_until(() => _shown("rebuild:applyNow") && !_shown("rebuild:cancel")), "built with the keyboard on Cancel build: Cancel gone, Apply now there");
+        driver.keyClick(Qt.Key_Space);
+        driver.keyClick(Qt.Key_Return);
+        driver.keyClick(Qt.Key_Enter);
+        driver.wait(50);
+        assertEqual(_rebuild.phase + " " + _applies() + " " + _rebuild.calls.filter(call => call.startsWith("applyNow:")).length, "built 0 0",
+                    "… Space and Enter ask nothing: no root run, no password");
         assert(_until(() => _text("rebuild:outcomeText") === "Built in 1 min 12 s."), "built: Built in …");
         assertEqual(_text("rebuild:outcomeCaption") + " | " + _marks() + " | " + _text("rebuild:phase"),
                     "Apply now asks for your password. Cancelling it changes nothing. | done current todo | Built", "… what Apply now does, the password next");
@@ -351,8 +366,13 @@ TestCase {
         }
         assert(reached, "Tab reaches Apply now");
         assertEqual(_applies(), 0, "… moving the keyboard asks nothing");
+        // An hour waiting at Built
+        _rebuild.nowMs += 3600000;
         driver.keyClick(Qt.Key_Space);
         assert(_until(() => _rebuild.phase === "authorizing"), "Space on Apply now: the root run asked");
+        _rebuild.times = Object.assign({}, _rebuild.times, { applying: _rebuild.nowMs });
+        _rebuild.nowMs += 2000;
+        assert(_until(() => _text("rebuild:elapsed") === "2 s"), "… its time counted from that click, not the wait at Built");
         assertEqual(_applies() + " " + _rebuild.calls[_rebuild.calls.length - 1], "1 applyNow:/nix/store/a1hd-system.drv", "… once, naming the system built");
         assertEqual(_marks() + " | " + _text("rebuild:phase") + " | " + _shown("rebuild:applyNow"), "done current todo | Waiting for the password | false", "… waiting for the password");
 
@@ -368,7 +388,7 @@ TestCase {
         _rebuild.nowMs += 9000;
         _rebuild.step({ type: "applied", run: _rebuild.state.run, outcome: { ok: true, kind: "applied", generation: 15 } });
         _rebuild.times = Object.assign({}, _rebuild.times, { ended: _rebuild.nowMs });
-        assert(_until(() => _text("rebuild:outcomeText") === "Applied in 1 min 21 s. Generation 15 is in use."), "applied: said with the generation");
+        assert(_until(() => _text("rebuild:outcomeText") === "Applied in 11 s. Generation 15 is in use."), "applied: the switch's time, from the Apply now click, with the generation");
         assertEqual(_marks() + " | " + _shown("rebuild:undo") + " " + _shown("rebuild:applyAgain"), "done done done | true false", "… every step done, Undo offered");
         assert(_clickClose() && _panelClosed(), "Close");
         assertEqual(_text("nixos:rebuildLine") + " | " + _shown("nixos:undo"), "Applied. Generation 15. | true", "… the page: applied, Undo");

@@ -18,7 +18,7 @@ ColumnLayout {
 
     readonly property var rebuild: flow?.rebuild ?? null
     readonly property var state: rebuild?.state ?? NixosRebuildRules.initial()
-    readonly property var times: rebuild?.times ?? ({ started: 0, built: 0, ended: 0 })
+    readonly property var times: rebuild?.times ?? ({ started: 0, built: 0, applying: 0, ended: 0 })
     readonly property var steps: NixosRebuildViewRules.steps(state)
     readonly property var controls: NixosRebuildViewRules.controls(state)
     readonly property var outcome: NixosRebuildViewRules.outcome(state, times)
