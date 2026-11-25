@@ -323,6 +323,24 @@ TestCase {
         assertEqual(Object.keys(moveBar([{ name: "Full", set: {} }], {}, undefined).document.files).length, 0,
             "no geometry anywhere: no themes");
 
+        // A file name has at most 255 bytes: a long profile name gives a shorter theme name,
+        // still one of its own, the profile keeping its name
+        const utf8Bytes = text => encodeURIComponent(text).replace(/%[0-9A-F]{2}/g, "x").length;
+        assertEqual(utf8Bytes("\u{1F600}a\u00e9"), 7, "(the byte count: 4 + 1 + 2)");
+        const longName = "\u{1F600}".repeat(75);
+        const otherLongName = "\u{1F600}".repeat(74) + "\u{1F601}";
+        const longMove = moveBar([{ name: longName, set: { "bar.layout.barHeight": 30 } }, { name: otherLongName, set: { "bar.layout.barHeight": 31 } },
+                                  { name: longName + "x", set: { "bar.layout.barHeight": 32 } }], {}, undefined);
+        assert(longMove.ok, "a 300-byte profile name: migrated" + (longMove.ok ? "" : ": " + longMove.error));
+        const longThemes = longMove.document.profiles.map(profile => profile.set["appearance.theme"]);
+        assert(longThemes.every(name => typeof name === "string" && utf8Bytes(name + ".json") <= 255),
+               "a 300-byte profile name: each theme file name within 255 bytes (" + longThemes.map(name => utf8Bytes(String(name) + ".json")).join(", ") + ")");
+        assertEqual(new Set(longThemes).size, 3, "… each of its own, though they start alike");
+        assert(longThemes[0] !== longThemes[1] && !longThemes[1].endsWith(" 2"), "… apart by what follows their start, not by a number");
+        assert(longThemes.every(name => ("themes/" + name + ".json") in longMove.document.files), "… the file the profile picks");
+        assertEqual(longMove.document.profiles[0].name, longName, "… the profile keeps its name");
+        assert(longThemes[0].startsWith("\u{1F600}".repeat(40)), "… the theme named after its start");
+
         assertEqual(ThemeRules.freeName("Power/save", name => false), "Power-save", "freeName: the name, a \"/\" made \"-\"");
         assertEqual(ThemeRules.freeName("Ease", name => name === "Ease"), "Ease 2", "freeName: taken, the next number");
         assertEqual(ThemeRules.freeName("Ease", name => name === "Ease" || name === "Ease 2"), "Ease 3", "freeName: the first number free");

@@ -42,9 +42,46 @@ QtObject {
         return "themes/" + name + ".json";
     }
 
-    // `wanted`, or the first of "<wanted> 2", "<wanted> 3", … not taken
+    // A file name has at most 255 bytes: a longer name is cut to its start, under this many
+    // bytes with its hash, leaving room for a number and ".json"
+    readonly property int _nameBytes: 200
+
+    // The characters of `text` (a surrogate pair is one) with their UTF-8 sizes; a lone
+    // surrogate counts as the three bytes it is written as
+    function _characters(text) {
+        return (text.match(/[\uD800-\uDBFF][\uDC00-\uDFFF]|[\s\S]/g) ?? []).map(character => {
+            const code = character.charCodeAt(0);
+            return { text: character, bytes: character.length === 2 ? 4 : code < 0x80 ? 1 : code < 0x800 ? 2 : 3 };
+        });
+    }
+
+    // FNV-1a over the UTF-16 units, 8 hex digits: two long names alike at the start stay apart
+    function _hash(text) {
+        let hash = 0x811c9dc5;
+        for (let i = 0; i < text.length; i++)
+            hash = Math.imul(hash ^ text.charCodeAt(i), 0x01000193) >>> 0;
+        return ("0000000" + hash.toString(16)).slice(-8);
+    }
+
+    // `wanted` within _nameBytes: as it is, or its start and its hash
+    function _shortened(wanted) {
+        const characters = _characters(wanted);
+        if (characters.reduce((sum, character) => sum + character.bytes, 0) <= _nameBytes)
+            return wanted;
+        let start = "";
+        let bytes = 0;
+        for (const character of characters) {
+            if (bytes + character.bytes > _nameBytes - 9)
+                break;
+            start += character.text;
+            bytes += character.bytes;
+        }
+        return start.trim() + " " + _hash(wanted);
+    }
+
+    // `wanted` (shortened), or the first of "<wanted> 2", "<wanted> 3", … not taken
     function _freeName(wanted, taken) {
-        const base = wanted.replace(/[\/]/g, "-").trim() || "Theme";
+        const base = _shortened(wanted.replace(/[\/]/g, "-").trim()) || "Theme";
         let name = base;
         for (let i = 2; taken(name); i++)
             name = base + " " + i;
