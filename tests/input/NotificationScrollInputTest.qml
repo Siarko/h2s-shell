@@ -310,6 +310,19 @@ TestCase {
         assert(card.bodyOffset > 30, "a finger dragged up scrolls the centre's body (" + card.bodyOffset + ")");
         assertEqual(centreList.contentY, 0, "… not the list");
 
+        // Dragged on past the body's end, the rest of the drag moves the list
+        const endOffset = body.edit.implicitHeight - body.height;
+        _drag(body, body.width / 2, body.height - 10, 0, -(endOffset + 120), 12);
+        assert(Math.abs(card.bodyOffset - endOffset) < 0.5, "a long finger drag up takes the body to its end (" + card.bodyOffset + " of " + endOffset + ")");
+        assert(centreList.contentY > 60, "… and the rest of it scrolls the list on (" + centreList.contentY + ")");
+        // And back down, from where the body shows in the list: the body to its start, then
+        // the list back to its top
+        const shownY = Math.max(10, Math.min(body.height - 10, centreList.mapToItem(body, 0, centreList.height / 2).y));
+        _drag(body, body.width / 2, shownY, 0, endOffset + 240, 12);
+        assert(card.bodyOffset === 0 && centreList.contentY === 0,
+               "a long finger drag down: the body at its start, the list at its top (" + card.bodyOffset + ", " + centreList.contentY + ")");
+        _until(() => body.mapToItem(screenArea, 0, 0).y >= centreList.y);
+
         // A click on the body runs the default action
         const entry = centreItems[0];
         assert(input.click(body, body.width / 2, body.height / 2), "a click on the centre's body");

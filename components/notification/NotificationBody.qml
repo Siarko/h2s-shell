@@ -70,6 +70,18 @@ Item {
         readOnly: true
         selectByMouse: true
 
+        // A selection made in a cut body (dragged past its edge, or by keys) keeps its moving
+        // end in view
+        onCursorRectangleChanged: {
+            if (!_bodyBox.view.cut || selectedText === "")
+                return;
+            const rect = cursorRectangle;
+            if (rect.y < _bodyBox.offset)
+                _bodyBox.offset = rect.y;
+            else if (rect.y + rect.height > _bodyBox.offset + _bodyBox.height)
+                _bodyBox.scrollBy(_bodyBox.offset + _bodyBox.height - rect.y - rect.height);
+        }
+
         onSelectedTextChanged: {
             if (selectedText !== "")
                 _bodyBox.card._activeEdit = _bodyEdit;
@@ -139,34 +151,56 @@ Item {
         }
     }
 
-    // The nearest Flickable around the card, moved by `delta` within its ends
-    function _scrollList(delta) {
+    // The nearest Flickable around the card (the centre's list), null in a toast
+    function _list() {
         for (let item = card.parent; item; item = item.parent) {
-            if (item instanceof Flickable) {
-                const top = item.originY - item.topMargin;
-                const bottom = item.originY + item.contentHeight + item.bottomMargin - item.height;
-                item.contentY = Math.max(top, Math.min(Math.max(top, bottom), item.contentY - delta));
-                return;
-            }
+            if (item instanceof Flickable)
+                return item;
         }
+        return null;
+    }
+    // A list's contentY moved to `contentY`, within its ends
+    function _placeList(list, contentY) {
+        const top = list.originY - list.topMargin;
+        const bottom = list.originY + list.contentHeight + list.bottomMargin - list.height;
+        list.contentY = Math.max(top, Math.min(Math.max(top, bottom), contentY));
+    }
+    function _scrollList(delta) {
+        const list = _list();
+        if (list)
+            _placeList(list, list.contentY - delta);
     }
 
-    // A finger dragged up or down scrolls it. Over the text, holding only the handler: a
-    // press still reaches the text and its links; a sideways drag is the card's swipe
+    // A finger dragged up or down scrolls it; what of the drag goes past the body's end
+    // moves the list it stands in, as the wheel does. Over the text, holding only the
+    // handler: a press still reaches the text and its links; a sideways drag is the card's
+    // swipe
     Item {
         anchors.fill: parent
         z: 1
         enabled: _bodyBox.view.cut
 
         SwipeGesture {
+            // Kept once it scrolls: the list moves through it, it does not take the drag over
             xAxis.enabled: false
-            // Kept once it scrolls: the centre's list does not take the drag over
             grabPermissions: PointerHandler.CanTakeOverFromAnything
             property real _startOffset: 0
-            onActiveChanged: if (active) _startOffset = _bodyBox.offset
+            property var _startList: null
+            property real _startListY: 0
+            onActiveChanged: {
+                if (!active)
+                    return;
+                _startOffset = _bodyBox.offset;
+                _startList = _bodyBox._list();
+                _startListY = _startList ? _startList.contentY : 0;
+            }
             onDeltaYChanged: {
-                if (active)
-                    _bodyBox.offset = NotificationRules.bodyScroll(_startOffset, deltaY, _bodyEdit.implicitHeight, _bodyBox.height);
+                if (!active)
+                    return;
+                _bodyBox.offset = NotificationRules.bodyScroll(_startOffset, deltaY, _bodyEdit.implicitHeight, _bodyBox.height);
+                const beyond = (_startOffset - deltaY) - _bodyBox.offset;
+                if (_startList)
+                    _bodyBox._placeList(_startList, _startListY + beyond);
             }
         }
     }

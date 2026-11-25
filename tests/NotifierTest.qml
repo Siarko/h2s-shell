@@ -150,6 +150,12 @@ TestCase {
                "scrolled to the end: the last 6 lines show, no fade at the bottom (" + toastCard.bodyOffset + ")");
         toastBox.scrollBy(1000);
         assertEqual(toastCard.bodyOffset, 0, "… and back to the start, no further");
+        // A selection whose moving end leaves the box brings it into view
+        toastBody.select(0, toastBody.length);
+        assert(Math.abs(toastCard.bodyOffset - 14 * lineHeight) < 0.5, "a selection to the body's end scrolls to it (" + toastCard.bodyOffset + ")");
+        toastBody.select(toastBody.length, 0);
+        assertEqual(toastCard.bodyOffset, 0, "… and one back to its start scrolls back");
+        toastBody.deselect();
         toastBox.scrollBy(-3 * lineHeight);
         const lines = count => Array.from({ length: count }, (_, i) => "line " + (i + 1)).join("\n");
         hudItem.currentNotif = Object.assign({}, notification, { id: 8, body: lines(30) });
