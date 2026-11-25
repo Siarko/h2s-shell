@@ -374,8 +374,11 @@ over its own `rowExtras` and `cardExtras` (`VpnManager.ownExtrasOf`, built by
 `components/VpnExtras.qml` beside the hosts) and `pageUrl`. A module's provider — traced
 by the file that declared it and the module code on the registering call's stack — has its
 module id as `providerId`, never another module's or the stand-in's reserved `fake`, and
-its `pageUrl` is a file of its own folder (`VpnProviderRules.providerRegistration`,
-`providerPageUrl`); a refusal goes among the module's errors.
+its `pageUrl` is a file of its own folder, symlinks followed (`realpath`; the page waits for
+the answer) (`VpnProviderRules.providerRegistration`, `providerPageUrl`); a refusal goes among
+the errors of the module whose code made the provider. The tracing guards against mistakes,
+not against a hostile module: a module that builds an object from another module's file
+(a `Loader`, `Qt.createQmlObject` with a made-up file path) is not traced to itself.
 The contract is in `components/VpnProvider.qml`; the stand-in provider
 for tests is `tests/FakeVpnProvider.qml` (by hand: a test tree started with
 `H2S_FAKE_VPN_PROVIDER=1`, "The test tree" under "Testing"; IPC target `fakevpn`).

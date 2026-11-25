@@ -102,44 +102,66 @@ TestCase {
         // --- whose provider: a module's has its module id, never a reserved one ---
         const registration = (id, owners) => VpnProviderRules.providerRegistration(id, owners);
         const tailscale = { directory: "/m/tailscale", moduleId: "tailscale" };
-        assertEqual(JSON.stringify(registration("fake", [])), JSON.stringify({ moduleId: "", directory: "", problem: "" }),
+        assertEqual(JSON.stringify(registration("fake", [])), JSON.stringify({ moduleId: "", directory: "", problem: "", reportTo: [] }),
                     "registration: traced to no module — the core's, any id, the reserved one too");
-        assertEqual(JSON.stringify(registration("tailscale", undefined)), JSON.stringify({ moduleId: "", directory: "", problem: "" }),
+        assertEqual(JSON.stringify(registration("tailscale", undefined)), JSON.stringify({ moduleId: "", directory: "", problem: "", reportTo: [] }),
                     "registration: no list — the core's");
-        assertEqual(JSON.stringify(registration("tailscale", [tailscale])), JSON.stringify({ moduleId: "tailscale", directory: "/m/tailscale", problem: "" }),
+        assertEqual(JSON.stringify(registration("tailscale", [tailscale])), JSON.stringify({ moduleId: "tailscale", directory: "/m/tailscale", problem: "", reportTo: [] }),
                     "registration: a module's provider with its module id — taken, the module and its folder kept");
         const impostor = registration("tailscale", [{ directory: "/m/other", moduleId: "other" }]);
-        assert(impostor.moduleId === "other" && impostor.directory === "/m/other" && impostor.problem.includes("must be its module id \"other\""),
+        assert(impostor.moduleId === "other" && impostor.directory === "/m/other" && impostor.problem.includes("must be its module id \"other\"")
+               && JSON.stringify(impostor.reportTo) === "[\"other\"]",
                "registration: another module's id — refused, the reason for the module claiming it: " + impostor.problem);
         assert(registration("fake", [{ directory: "/m/fake", moduleId: "fake" }]).problem.includes("\"fake\" is reserved"),
                "registration: the reserved id, even by a module of that id — refused");
         assertEqual(JSON.stringify(VpnProviderRules.reservedProviderIds), "[\"fake\"]", "registration: the reserved ids — the stand-in's");
-        const crossing = registration("tailscale", [tailscale, { directory: "/m/other", moduleId: "other" }]);
-        assert(crossing.moduleId === "tailscale" && crossing.problem.includes("more than one module"),
-               "registration: traced to two modules (one's code making the other's file) — refused, even with the first's id");
+        const tailscaleFile = Object.assign({ via: "file" }, tailscale);
+        const crossing = registration("tailscale", [tailscaleFile, { directory: "/m/other", moduleId: "other", via: "stack" }]);
+        assert(crossing.problem.includes("more than one module") && JSON.stringify(crossing.reportTo) === "[\"other\"]",
+               "registration: traced to two modules (other's code making tailscale's file) — refused, even with the file's module's id, told to the maker, not tailscale: "
+               + JSON.stringify(crossing.reportTo));
+        assertEqual(JSON.stringify(registration("x", [{ directory: "/m/a", moduleId: "a", via: "stack" }, { directory: "/m/b", moduleId: "b", via: "stack" },
+                                                      { directory: "/m/c", moduleId: "", via: "stack" }]).reportTo), "[\"a\",\"b\"]",
+                    "registration: two modules' code on the stack (no module's file) — told to both, not to one without a handle");
+        assertEqual(JSON.stringify(registration("x", [{ directory: "/m/a", moduleId: "a" }, { directory: "/m/b", moduleId: "b" }]).reportTo), "[\"a\",\"b\"]",
+                    "registration: two modules, neither seen on the stack — told to both");
         const shadowed = registration("tailscale", [{ directory: "/m/copy", moduleId: "" }]);
-        assert(shadowed.moduleId === "" && shadowed.problem.includes("not loaded"), "registration: a module directory with no loaded module — refused");
+        assert(shadowed.moduleId === "" && shadowed.problem.includes("not loaded") && shadowed.reportTo.length === 0,
+               "registration: a module directory with no loaded module — refused, no module to tell");
 
         // --- a module's provider's page: a file of its own folder ---
-        const page = (url, own) => VpnProviderRules.providerPageUrl(url, own, ["/m/tailscale", "/m/tailscale/nested", "/m/other"]);
-        assertEqual(JSON.stringify(page("file:///m/tailscale/Page.qml", "/m/tailscale")), JSON.stringify({ url: "file:///m/tailscale/Page.qml", problem: "" }),
-                    "page: a file of its own folder — kept");
-        assertEqual(page("file:///m/tailscale/sub/Page%20x.qml?a#b", "/m/tailscale").url, "file:///m/tailscale/sub/Page%20x.qml?a#b",
-                    "page: in a subfolder, encoded, with a query — kept as given");
-        assertEqual(JSON.stringify(page("", "/m/tailscale")), JSON.stringify({ url: "", problem: "" }), "page: none — none, no problem");
+        const page = (url, own, resolved) => VpnProviderRules.providerPageUrl(url, own, ["/m/tailscale", "/m/tailscale/nested", "/m/other"], resolved);
+        const real = { directory: "/real/tailscale", file: "/real/tailscale/Page.qml" };
+        assertEqual(JSON.stringify(page("file:///m/tailscale/Page.qml", "/m/tailscale")), JSON.stringify({ url: "", problem: "", resolve: "/m/tailscale/Page.qml" }),
+                    "page: a file of its own folder, links not yet followed — held back, its path to resolve");
+        assertEqual(JSON.stringify(page("file:///m/tailscale/Page.qml", "/m/tailscale", real)), JSON.stringify({ url: "file:///m/tailscale/Page.qml", problem: "", resolve: "" }),
+                    "page: … resolved inside its folder's real path — kept");
+        assertEqual(page("file:///m/tailscale/sub/Page%20x.qml?a#b", "/m/tailscale").resolve, "/m/tailscale/sub/Page x.qml",
+                    "page: in a subfolder, encoded, with a query — the decoded path to resolve");
+        assertEqual(page("file:///m/tailscale/sub/Page%20x.qml?a#b", "/m/tailscale", real).url, "file:///m/tailscale/sub/Page%20x.qml?a#b",
+                    "page: … kept as given");
+        for (const [resolved, why] of [[null, "realpath failed (missing, a loop)"], [{ directory: "/real/tailscale", file: "/real/other/Page.qml" }, "a link out"],
+                                       [{ directory: "/real/tailscale", file: "/real/tailscale" }, "a link to its folder"],
+                                       [{ directory: "/real/tailscale", file: "/real/tailscale-x/Page.qml" }, "a link to a folder sharing its name's start"],
+                                       [{ directory: "", file: "/x" }, "no directory"], [{ directory: "/real/tailscale" }, "no file"], [{}, "nothing"], [7, "not an object"]]) {
+            const checked = page("file:///m/tailscale/Page.qml", "/m/tailscale", resolved);
+            assert(checked.url === "" && checked.resolve === "" && checked.problem.includes("leaves the module's own folder through a link"),
+                   "page: " + why + " — refused: " + JSON.stringify(checked));
+        }
+        assertEqual(JSON.stringify(page("", "/m/tailscale")), JSON.stringify({ url: "", problem: "", resolve: "" }), "page: none — none, no problem");
         assertEqual(page("qs:@/qs/panels/Settings.qml", "").url, "qs:@/qs/panels/Settings.qml", "page: the core's provider — as given");
         for (const [url, why] of [["file:///m/other/Page.qml", "another module's file"], ["file:///m/tailscale/nested/Page.qml", "a module nested in its folder"],
                                   ["file:///m/tailscale/../other/Page.qml", "out through .."], ["file:///m/tailscale/%2e%2e/other/Page.qml", "out through an encoded .."],
                                   ["file:///m/tailscale", "its folder itself"], ["file:///m/tailscale-x/Page.qml", "a folder sharing its name's start"],
                                   ["/m/tailscale/Page.qml", "a bare path"], ["qs:@/qs/panels/Settings.qml", "a shell file"],
                                   ["file:///m/tailscale/%E0%A4%A.qml", "a broken escape"], ["Page.qml", "a relative URL"]]) {
-            const checked = page(url, "/m/tailscale");
-            assert(checked.url === "" && checked.problem.includes("not a file in the module's own folder"), "page: " + why + " — refused: " + JSON.stringify(checked));
+            const checked = page(url, "/m/tailscale", real);
+            assert(checked.url === "" && checked.resolve === "" && checked.problem.includes("not a file in the module's own folder"), "page: " + why + " — refused: " + JSON.stringify(checked));
         }
         assertEqual(page(7, "/m/tailscale").url, "", "page: not text — none");
         const longUrl = "file:///m/other/" + "a".repeat(990);
         assertEqual(JSON.stringify(page(longUrl, "/m/tailscale")),
-                    JSON.stringify({ url: "", problem: "pageUrl \"" + longUrl.slice(0, 200) + "\" refused: not a file in the module's own folder" }),
+                    JSON.stringify({ url: "", problem: "pageUrl \"" + longUrl.slice(0, 200) + "\" refused: not a file in the module's own folder", resolve: "" }),
                     "page: a long URL refused — the URL in its reason cut at 200");
 
         // --- entries checked ---

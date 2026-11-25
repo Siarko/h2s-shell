@@ -102,7 +102,8 @@ import qs.singletons.network
 //               Item (a ColumnLayout) laid out at the page's width, scrolled by its
 //               implicitHeight; it must not scroll itself. Unused while settingsPage is
 //               there. Neither: no "Settings…". A module's provider: only a file:// URL of
-//               a file in its own folder (VpnProviderRules.providerPageUrl), else no page.
+//               a file in its own folder, symlinks followed (VpnProviderRules
+//               .providerPageUrl), else no page.
 //   A contribution's root item may declare `property var context`; the core sets it to
 //   { vpnId, entryId, vpn, provider, otherVpnsUp, otherVpns } — `provider` this object, to
 //   call its functions and read its state; `otherVpnsUp` the other VPNs up by name,

@@ -30,22 +30,29 @@ Singleton {
     readonly property var reservedProviderIds: ["fake"]
 
     // Whose provider a registration is, and whether it may have `id` (a valid provider id).
-    // `owners`: [{ directory, moduleId }], each module directory the provider was traced to
-    // (the file that declared it, a module's code on the call's stack), `moduleId` "" for a
-    // directory whose module has no handle (a shadowed copy). → { moduleId, directory,
-    // problem }: none traced, the core's — any id; else exactly one module, whose provider
-    // id is its module id and not reserved — the views, the own-provider places and the page
-    // slot take a provider's id as its module's, so another id would put its VPNs and
-    // pages in that module's places. `problem` "" when it may register.
+    // `owners`: [{ directory, moduleId, via }], each module directory the provider was traced
+    // to — `via` "file": the folder of the file that declared it, "stack": a module's code on
+    // the registering call's stack —, `moduleId` "" for a directory whose module has no
+    // handle (a shadowed copy). → { moduleId, directory, problem, reportTo }: none traced,
+    // the core's — any id; else exactly one module, whose provider id is its module id and
+    // not reserved — the views, the own-provider places and the page slot take a provider's
+    // id as its module's, so another id would put its VPNs and pages in that module's places.
+    // `problem` "" when it may register; `reportTo` the module ids whose status gets the
+    // refusal: traced to two modules, the ones whose code made it (the stack's), not the
+    // module whose file was used.
     function providerRegistration(id, owners) {
         const list = Array.isArray(owners) ? owners : [];
         if (list.length === 0)
-            return { moduleId: "", directory: "", problem: "" };
+            return { moduleId: "", directory: "", problem: "", reportTo: [] };
+        const idOf = owner => typeof owner?.moduleId === "string" ? owner.moduleId : "";
         const owner = list[0];
-        const moduleId = typeof owner?.moduleId === "string" ? owner.moduleId : "";
-        const refused = problem => ({ moduleId: moduleId, directory: typeof owner?.directory === "string" ? owner.directory : "", problem: problem });
-        if (list.length > 1)
-            return refused("a VPN provider traced to more than one module is refused");
+        const moduleId = idOf(owner);
+        const refused = (problem, reportTo) => ({ moduleId: moduleId, directory: typeof owner?.directory === "string" ? owner.directory : "",
+                                                  problem: problem, reportTo: problem === "" ? [] : reportTo ?? (moduleId !== "" ? [moduleId] : []) });
+        if (list.length > 1) {
+            const makers = list.filter(entry => entry?.via === "stack").map(idOf).filter(each => each !== "");
+            return refused("a VPN provider traced to more than one module is refused", makers.length > 0 ? makers : list.map(idOf).filter(each => each !== ""));
+        }
         if (moduleId === "")
             return refused("a VPN provider of a module that is not loaded is refused");
         if (reservedProviderIds.includes(id))
@@ -58,12 +65,15 @@ Singleton {
     // A provider's pageUrl as the core may load it: a module's provider (`ownDirectory`, a
     // canonical module directory) only a file:// URL of a file in its own folder — in
     // `directories` (the module directories) the deepest holding it is its own, not one
-    // nested inside it —, else "" with the reason; the core's (`ownDirectory` "") as given.
-    // → { url, problem }
-    function providerPageUrl(pageUrl, ownDirectory, directories) {
+    // nested inside it — and, symlinks followed, still in it: `resolved` is what realpath
+    // made of the page's path and of `ownDirectory` ({ file, directory }), null when it could
+    // not, undefined while not asked. The core's (`ownDirectory` "") as given.
+    // → { url, problem, resolve }: `url` "" with the reason in `problem` when refused, ""
+    // with `resolve` (the path to give realpath) while the link check has not answered.
+    function providerPageUrl(pageUrl, ownDirectory, directories, resolved) {
         const url = typeof pageUrl === "string" ? pageUrl : "";
         if (url === "" || typeof ownDirectory !== "string" || ownDirectory === "")
-            return { url: url, problem: "" };
+            return { url: url, problem: "", resolve: "" };
         const list = Array.isArray(directories) ? directories : [];
         let path = "";
         try {
@@ -71,10 +81,17 @@ Singleton {
         } catch (error) {
             path = "";
         }
+        const refused = why => ({ url: "", problem: "pageUrl " + JSON.stringify(url.slice(0, 200)) + " refused: " + why, resolve: "" });
         // The deepest module directory holding it is its own (list[-1] is undefined)
-        if (path.startsWith(ownDirectory + "/") && list[ModuleFileRules.directoryIndexOf(list, "file://" + encodeURI(path))] === ownDirectory)
-            return { url: url, problem: "" };
-        return { url: "", problem: "pageUrl " + JSON.stringify(url.slice(0, 200)) + " refused: not a file in the module's own folder" };
+        if (!path.startsWith(ownDirectory + "/") || list[ModuleFileRules.directoryIndexOf(list, "file://" + encodeURI(path))] !== ownDirectory)
+            return refused("not a file in the module's own folder");
+        if (resolved === undefined)
+            return { url: "", problem: "", resolve: path };
+        const file = typeof resolved?.file === "string" ? resolved.file : "";
+        const directory = typeof resolved?.directory === "string" ? resolved.directory : "";
+        if (directory.startsWith("/") && file.startsWith(directory + "/"))
+            return { url: url, problem: "", resolve: "" };
+        return refused("it leaves the module's own folder through a link, or does not exist");
     }
 
     function vpnId(providerId, entryId) {

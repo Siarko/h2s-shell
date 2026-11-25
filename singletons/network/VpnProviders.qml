@@ -4,6 +4,7 @@ import Quickshell
 import QtQuick
 import qs.singletons
 import qs.singletons.network
+import qs.singletons.io
 
 // The VPN providers: objects registered here (components/VpnProvider.qml registers itself,
 // through VpnManager.registerProvider), each read through VpnProviderRules.vpnProviderEntries:
@@ -59,8 +60,8 @@ Singleton {
             return true;
         const registration = VpnProviderRules.providerRegistration(id, _ownersOf(provider, new Error().stack));
         if (registration.problem !== "") {
-            if (registration.moduleId !== "")
-                Modules.reportError(registration.moduleId, registration.problem);
+            if (registration.reportTo.length > 0)
+                registration.reportTo.forEach(moduleId => Modules.reportError(moduleId, registration.problem));
             else
                 console.warn("VpnProviders: " + registration.problem);
             return false;
@@ -89,6 +90,7 @@ Singleton {
     function _ownersOf(provider, stack) {
         const directories = Modules.host.directories;
         const found = [];
+        const via = {};
         let declared = "";
         try {
             declared = String(Qt.resolvedUrl(".", provider));
@@ -96,12 +98,17 @@ Singleton {
             declared = "";
         }
         const index = ModuleFileRules.directoryIndexOf(directories, declared);
-        if (index >= 0)
+        if (index >= 0) {
             found.push(directories[index]);
+            via[directories[index]] = "file";
+        }
         for (const directory of ModuleRules.stackDirectories(stack, directories))
-            if (!found.includes(directory))
+            if (!found.includes(directory)) {
                 found.push(directory);
-        return found.map(directory => ({ directory: directory, moduleId: Modules.handleAt("file://" + encodeURI(directory) + "/")?.moduleId ?? "" }));
+                via[directory] = "stack";
+            }
+        return found.map(directory => ({ directory: directory, via: via[directory],
+                                         moduleId: Modules.handleAt("file://" + encodeURI(directory) + "/")?.moduleId ?? "" }));
     }
 
     // Lets the provider `id` go; with `provider` given, only if it is that object (a
@@ -153,7 +160,7 @@ Singleton {
             const checked = VpnProviderRules.vpnProviderEntries(entry.id, provider.entries);
             const text = (value, most) => typeof value === "string" ? value.slice(0, most) : "";
             const component = value => value !== null && value !== undefined && typeof value.createObject === "function" ? value : null;
-            const page = VpnProviderRules.providerPageUrl(text(provider.pageUrl, 1000), entry.directory ?? "", Modules.host.directories);
+            const page = _pageOf(text(provider.pageUrl, 1000), entry.directory ?? "");
             return {
                 providerId: entry.id, alive: true, typeName: text(provider.typeName, 60) || "VPN", glyph: text(provider.glyph, 8),
                 busy: provider.busy === true, canChange: provider.canChange !== false, ready: provider.ready === true,
@@ -166,6 +173,51 @@ Singleton {
             return gone(entry.id + ": reading it threw: " + error);
         }
     }
+
+    // A module's provider's pageUrl, checked (VpnProviderRules.providerPageUrl): the link
+    // check's answers by "<path>\n<module directory>" — { file, directory } (realpath of
+    // each) or null — asked once per pair, the page held back until it answers. At most
+    // _maxResolved kept; past that the oldest go and are asked again when read
+    property var _resolved: ({})
+    property var _resolving: []
+    readonly property int _maxResolved: 64
+
+    function _pageOf(url, directory) {
+        const key = page => page + "\n" + directory;
+        const page = VpnProviderRules.providerPageUrl(url, directory, Modules.host.directories);
+        if (page.resolve === "")
+            return page;
+        const known = _resolved[key(page.resolve)];
+        if (known !== undefined)
+            return VpnProviderRules.providerPageUrl(url, directory, Modules.host.directories, known);
+        const path = page.resolve;
+        if (!_resolving.includes(key(path)))
+            Qt.callLater(() => root._resolve(path, directory));
+        return page;
+    }
+
+    function _resolve(path, directory) {
+        const key = path + "\n" + directory;
+        if (_resolving.includes(key) || _resolved[key] !== undefined)
+            return;
+        _resolving = _resolving.concat([key]);
+        _linkCheck.start(["realpath", "-e", "--", directory, path], {
+            timeoutMs: 5000, killAfterMs: 1000,
+            done: result => {
+                const lines = result.ok ? result.stdout.split("\n") : [];
+                const answer = lines.length === 2 && lines[0].startsWith("/") && lines[1].startsWith("/") ? { directory: lines[0], file: lines[1] } : null;
+                const kept = Object.keys(root._resolved).slice(-(root._maxResolved - 1));
+                const next = {};
+                for (const each of kept)
+                    next[each] = root._resolved[each];
+                next[key] = answer;
+                root._resolving = root._resolving.filter(each => each !== key);
+                root._resolved = next;
+            }
+        });
+    }
+
+    property CommandRunner _linkCheck: CommandRunner {}
 
     // A module's provider's refused pageUrl goes into its module's status, once per text
     readonly property string _pageProblemsText: JSON.stringify(reads.filter(read => read.pageProblem !== "" && read.moduleId !== "")

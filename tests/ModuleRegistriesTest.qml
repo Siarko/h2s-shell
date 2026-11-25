@@ -720,8 +720,16 @@ TestCase {
             assertEqual(VpnProviders.pageOf(own), "", "a pageUrl naming another module's file: no page");
             assert((Modules.status("vpn-impostor")?.errors ?? []).some(error => error.includes("not a file in the module's own folder")),
                    "… the reason among its module's errors");
-            VpnProviders.providerOf(own).object.pageUrl = "file://" + fixtures + "/vpn-impostor/Main.qml";
-            assertEqual(VpnProviders.pageOf(own), "file://" + fixtures + "/vpn-impostor/Main.qml", "a file of its own folder: its page");
+            VpnProviders.providerOf(own).object.pageUrl = "file://" + fixtures + "/vpn-impostor/OwnPage.qml";
+        });
+        _then("vpn-impostor's own page resolved", () => VpnProviders.pageOf(VpnManager.vpns.find(each => each.uuid === "vpn-impostor:one") ?? null) !== "", () => {
+            const own = VpnManager.vpns.find(each => each.uuid === "vpn-impostor:one") ?? null;
+            assertEqual(VpnProviders.pageOf(own), "file://" + fixtures + "/vpn-impostor/OwnPage.qml", "a file of its own folder: its page, once realpath answered");
+            VpnProviders.providerOf(own).object.pageUrl = "file://" + fixtures + "/vpn-impostor/LinkOut.qml";
+        });
+        _then("vpn-impostor's link out refused", () => (Modules.status("vpn-impostor")?.errors ?? []).some(error => error.includes("through a link")), () => {
+            const own = VpnManager.vpns.find(each => each.uuid === "vpn-impostor:one") ?? null;
+            assertEqual(VpnProviders.pageOf(own), "", "a file in its folder that links into another module's: no page");
             Modules.host.unload();
         });
         _then("the impostors unloaded", () => Modules.host.statuses.length === 0, () => {});
