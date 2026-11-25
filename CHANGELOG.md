@@ -238,6 +238,9 @@ The interface modules are written against (`qs.api`), versioned on its own
 ### Fixed
 - "Lock before the computer sleeps": a sleep that began while the shell was starting or
   reloading, before it had read its settings, now locks the screen too.
+- A fast wheel turn of two notches or more over the Music widget skips a track per notch,
+  not one; a popup mode stored with a value the shell does not know opens the popup on click
+  (the default) instead of never.
 - Settings updates for a new version run before the shell reads the config, take one backup
   per run, and keep only the newest ten automatic backups; backups made by hand are kept.
 - When a settings update for a new version fails, only the settings it covers go back to

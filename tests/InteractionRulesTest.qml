@@ -365,6 +365,84 @@ TestCase {
         assertEqual(R.warnings("hover", undefined, info, false).length, 0, "unassigned has none");
 
         _presetBindings();
+        _dispatch();
+    }
+
+    // What one reported interaction runs on an entry: InteractionRules.dispatch, and what a
+    // ref names for the layer
+    function _dispatch() {
+        const R = InteractionRules;
+        const text = value => JSON.stringify(value);
+        assertEqual(text(R.target({ action: "own:mute" })), text({ kind: "own", id: "mute" }), "target: an own action");
+        assertEqual(text(R.target({ action: "shell:popup.open" })), text({ kind: "shell", id: "popup.open" }), "… a shell action");
+        assertEqual(text(R.target({ action: "command", command: "x" })), text({ kind: "command", id: "" }), "… a command");
+        assertEqual(text(R.target(null)) + text(R.target({ action: 3 })) + text(R.target({ action: "bogus" })) + text(R.target([])),
+                    text({ kind: "", id: "" }).repeat(4), "… nothing for nothing or what is no ref");
+        assert(!R.popupStays("hover") && R.popupStays("leftClick") && R.popupStays("tap") && R.popupStays("scrollUp"),
+               "popupStays: opened by hovering it closes as the pointer leaves, otherwise it stays");
+        assert(R.shellHolds("popup.open", true) === true && R.shellHolds("popup.open", false) === false, "shellHolds: opening holds while it shows");
+        assert(R.shellHolds("popup.close", false) === true && R.shellHolds("popup.close", true) === false, "… closing while it does not");
+        assert(R.shellHolds("popup.toggle", true) === undefined && R.shellHolds("lock", true) === undefined, "… unknown for the others");
+        assert(R.shellHolds("popup.open", undefined) === false && R.shellHolds("popup.close", undefined) === true, "… an unknown popup state counts as not showing");
+
+        const own = id => ({ action: "own:" + id });
+        const single = ref => ({ mode: "single", action: ref });
+        const kinds = { volume: "adjust" };
+        const kindOf = ref => kinds[R.target(ref).id] ?? "run";
+        const noState = ref => undefined;
+        const noMemory = key => undefined;
+        const go = (interaction, details, stored, holdsOf, memoryOf) =>
+            R.dispatch(interaction, details, lookup(stored, {}, true, "click"), holdsOf ?? noState, memoryOf ?? noMemory, kindOf);
+        const plain = { phase: "", byTouch: false, amount: 0, direction: "" };
+
+        const clicked = go("leftClick", plain, {});
+        assertEqual(text(clicked.ref) + clicked.memoryKey, text(toggle.action) + "leftClick", "dispatch: the popup's left click toggles it");
+        assertEqual(text(clicked.target), text({ kind: "shell", id: "popup.toggle" }), "… named for the layer");
+        const tapped = go("tap", Object.assign({}, plain, { byTouch: true }), { leftClick: single(own("mute")) });
+        assertEqual(text(tapped.ref) + tapped.memoryKey, text(own("mute")) + "leftClick", "an unassigned tap: its fallback's binding, kept under the left click");
+        assertEqual(text(go("tap", plain, {}, undefined, undefined).ref), text(toggle.action), "… the popup's toggle on a tap");
+        const shifted = go("shiftClick", plain, {});
+        assertEqual(text(shifted.ref), text(toggle.action), "a Shift click unassigned: the left click's");
+        const none = go("rightClick", plain, {});
+        assertEqual(text(none.ref) + "|" + none.memoryKey + "|" + text(none.target), "undefined||" + text({ kind: "", id: "" }), "unassigned: nothing runs, nothing kept");
+        assertEqual(go("leftClick", plain, { leftClick: null }).ref, undefined, "bound to nothing: nothing");
+        assertEqual(text(R.dispatch("leftClick", plain, null, noState, noMemory, kindOf)), text(none),
+                    "no lookup (a cell taking no interactions): nothing runs, nothing kept");
+
+        // Movement and amounts
+        const scrolled = go("scroll", { phase: "", byTouch: false, amount: 0.5, direction: "up" }, { scroll: single(own("volume")) });
+        assertEqual(text([scrolled.ref, scrolled.amount, scrolled.direction]), text([own("volume"), 0.5, "up"]), "an adjust action on a scroll: the movement as measured");
+        assertEqual(go("scroll", { phase: "", amount: 0.5 }, { scroll: single(own("mute")) }).ref, undefined, "a run action on a continuous scroll: does not run");
+        assertEqual(go("scroll", { phase: "", amount: 0 }, { scroll: single(own("volume")) }).ref, undefined, "… nor an adjust one with no movement");
+        assertEqual(go("scroll", { phase: "" }, { scroll: single(own("volume")) }).ref, undefined, "… nor when the details carry no amount");
+        const stepped = go("scrollDown", { phase: "", amount: -1 }, { scrollDown: single(own("mute")) });
+        assertEqual(text([stepped.ref, stepped.amount, stepped.direction]), text([own("mute"), -1, "down"]), "a step: any action, ±1");
+
+        // Phases
+        const pair = { mode: "pair", on: own("on"), off: own("off") };
+        assertEqual(text(go("hover", { phase: "start" }, { hover: pair }).ref), text(own("on")), "a pair: on at the start");
+        assertEqual(text(go("hover", { phase: "end" }, { hover: pair }).ref), text(own("off")), "… off at the end");
+        assertEqual(go("hover", { phase: "end" }, { hover: single(own("x")) }).ref, undefined, "a single at the end: nothing");
+        assertEqual(text(go("hover", { phase: "start" }, { hover: single(own("x")) }).ref), text(own("x")), "… at the start: it");
+
+        // Cycles: from state where every step tells it, else from memory
+        const cycle = { mode: "cycle", actions: [own("a"), own("b"), own("c")] };
+        const first = go("middleClick", plain, { middleClick: cycle });
+        assertEqual(text(first.ref) + first.memoryKey, text(own("a")) + "middleClick", "a cycle with no memory: the first");
+        const second = go("middleClick", plain, { middleClick: cycle }, undefined, key => key === "middleClick" ? first.memory : undefined);
+        assertEqual(text(second.ref), text(own("b")), "… then the next, from its memory");
+        const third = go("middleClick", plain, { middleClick: cycle }, undefined, key => second.memory);
+        assertEqual(text(third.ref), text(own("c")), "… and the next");
+        const holding = { a: false, b: true, c: false };
+        assertEqual(text(go("middleClick", plain, { middleClick: cycle }, ref => holding[R.target(ref).id], key => first.memory).ref), text(own("c")),
+                    "every step tells its state: the one after the last that holds, whatever the memory");
+        assertEqual(text(go("middleClick", plain, { middleClick: cycle }, ref => R.target(ref).id === "a" ? undefined : false, key => first.memory).ref), text(own("b")),
+                    "a step that cannot tell: the memory");
+        const withNothing = { mode: "cycle", actions: [own("a"), null] };
+        assert(go("middleClick", plain, { middleClick: withNothing }, ref => true, noMemory).ref === undefined,
+               "a nothing among its steps counts as not holding: after a, the nothing");
+        assertEqual(text(go("middleClick", plain, { middleClick: withNothing }, ref => true, noMemory).memoryKey), text("middleClick"), "… its memory still kept");
+        assert(go("middleClick", { phase: "end" }, { middleClick: cycle }).ref === undefined, "a cycle at an end: nothing");
     }
 
     // Bindings stored in widget presets as "on.<interaction>" keys, and the defaults they fall

@@ -6,9 +6,8 @@ import qs.singletons
 // The widget preset library's bindings: "on.<interaction>" keys in a preset, the type's
 // defaults they fall back to (declared bindings and what the popup implies, from the active
 // profile's popup mode), the lookup a bar entry reads in a binding, and the log line for a
-// binding that fails its shape check. A config written before bindings
-// (tests/fixtures/widget-bindings/existing-config.json) gives every bar entry what its clicks
-// and hover did before. The rules alone: InteractionRulesTest.
+// binding that fails its shape check. The rules alone: InteractionRulesTest; what a bar
+// entry's interactions do through the cell's input layer: WidgetActionsTest.
 TestCase {
     id: suite
     suiteName: "WidgetPresets"
@@ -57,7 +56,8 @@ TestCase {
         }
     }
 
-    // What every entry of a config written before bindings runs: what it did before
+    // A config written before bindings: the widgets' own preset keys read as before (what
+    // each entry's interactions run, through the cell's input layer: WidgetActionsTest)
     function _existingConfig() {
         const fixture = _json("tests/fixtures/widget-bindings/existing-config.json");
         assert(fixture !== null, "the fixture reads");
@@ -65,38 +65,9 @@ TestCase {
             return;
         Config.profiles = JSON.stringify(fixture.profiles);
         Config.widgetPresets = JSON.stringify(fixture.widgetPresets);
-        const named = { toggle: toggle, open: open };
-        const sections = fixture.profiles[0].set;
-        const seen = [];
-        for (const side of ["left", "center", "right"]) {
-            sections["bar." + side].forEach((entry, index) => {
-                const label = side + "/" + index + " " + entry.type;
-                seen.push(label);
-                const look = WidgetPresets.bindingLookup(entry.type, entry.preset);
-                const wanted = fixture.expected[label];
-                if (typeof wanted === "string") {
-                    assertEqual(look, null, label + ": " + wanted);
-                    return;
-                }
-                const found = {};
-                for (const interaction of InteractionRules.interactions()) {
-                    const binding = look(interaction);
-                    if (binding !== undefined)
-                        found[interaction] = binding;
-                }
-                const tap = InteractionRules.effective("tap", look).binding;
-                if (tap !== undefined)
-                    found.tap = tap;
-                const expected = {};
-                for (const key of Object.keys(wanted))
-                    expected[key] = named[wanted[key]];
-                assertEqual(_text(found), _text(expected), label + ": runs what it did before bindings");
-            });
-        }
-        assertEqual(seen.join(","), Object.keys(fixture.expected).join(","), "every entry of the fixture checked");
-        assertEqual(new Set(seen.map(label => label.split(" ")[1])).size, WidgetRegistry.coreEntries.length, "… every core widget type among them");
         assertEqual(WidgetPresets.value("clock", "Clock 1", "format"), "hh:mm", "the widgets' own preset keys read as before");
         assertEqual(WidgetPresets.value("clock", "", "format"), "hh:mm:ss", "… and their defaults");
+        assertEqual(WidgetPresets.bindingProblems.length, 0, "… and no key of theirs is taken for a binding");
     }
 
     // The lookup in a binding follows edits of the preset, the entry's preset and the popup mode
@@ -123,7 +94,8 @@ TestCase {
         _probeType = "tray";
         assertEqual(_probe, null, "the tray's cell takes no interactions: no lookup");
         _probeType = "settings";
-        assertEqual(_probe("leftClick"), undefined, "a type without a popup or declared bindings: unassigned");
+        assertEqual(_text(_probe("leftClick")), _text({ mode: "single", action: { action: "own:toggle" } }), "a type's declared binding: its default");
+        assertEqual(_probe("rightClick"), undefined, "an interaction it declares nothing for, with no popup: unassigned");
         WidgetPresets.create("settings", "Settings 1");
         WidgetPresets.set("settings", "Settings 1", "on.rightClick", settingsToggle);
         _probePreset = "Settings 1";

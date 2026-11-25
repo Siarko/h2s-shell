@@ -814,8 +814,9 @@ and renames or deletes it while repointing the bar entries of every profile.
 
 A preset also holds what the entry's interactions run, one key per interaction:
 `on.<interaction>` (`on.middleClick`, `on.hover`, …), a binding in `InteractionRules`'
-shape. Every widget type whose cell takes interactions has presets (all but the tray,
-whose registry entry says `cellInteractions: []`); a key the preset does not set, or one
+shape. Every widget type with a settings page or whose cell takes interactions has presets
+(all but the tray; the tray's and the workspaces' cells take none, their registry entries
+say `cellInteractions: []`, their icons and buttons keep their own clicks); a key the preset does not set, or one
 that fails its shape check (logged once when it appears), falls back to the type's
 default. Those defaults join `WidgetPresets.defaults` as the same keys: the registry
 entry's `bindings`, and for a popup widget what `widgets.<type>.popupMode` of the active
@@ -910,8 +911,17 @@ the image drawn plainly before and after.
 ### Widget contract
 
 A bar widget extends `components/BarWidget.qml`, which provides the cell background,
-hover state, and the `clicked` / `hover` / `scrolled` / `scrollNotch` / `middleClicked`
-signals. Children go into a zero-sized centred `contentItem`, and the cell's width comes
+hover state, and the cell's one input layer: each pointer interaction (and a finger's
+tap) is reported as `interaction(name, details)` and handed to
+`singletons/WidgetActions.qml`, which runs what the entry's `bindingLookup` binds to it
+(`InteractionRules.dispatch` decides which action, with what amount). A widget's own
+actions are declared in its registry entry (`actions`: id, label, kind `run` or
+`adjust`, `state`) with their default `bindings`, and run in the widget's
+`runAction(id, details)`; one that declares `state` answers `actionHolds(id)`, so
+alternate and cycle go on from the state. The popup's actions (`shell:popup.toggle`,
+`popup.open`, `popup.close`) run in `components/PopupWidget.qml`. The older `clicked` /
+`hover` / `scrolled` / `scrollNotch` / `middleClicked` signals still fire, for module
+widgets; the core's widgets connect none. Children go into a zero-sized centred `contentItem`, and the cell's width comes
 from `contentItem.childrenRect.width + 16` — which is why a widget cannot draw a
 full-width child of its own without a binding loop (hence `borderColor`/`borderWidth`
 on BarWidget itself).

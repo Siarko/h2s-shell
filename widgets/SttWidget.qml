@@ -31,7 +31,33 @@ BarWidget {
     readonly property bool _previewExpanded: _previewEnabled && _previewWidth > 0
         && (_dictating || Stt.previewText !== "")
 
-    onClicked: Stt.toggle()
+    // What its actions act on (a stand-in in tests)
+    property var actionTarget: Stt
+
+    function runAction(id, details) {
+        const action = id === "serverToggle" ? CoreActionRules.sttServerAction(actionTarget.server) : id;
+        switch (action) {
+        case "toggle":
+            actionTarget.toggle();
+            break;
+        case "start":
+            actionTarget.start();
+            break;
+        case "stop":
+            actionTarget.stop();
+            break;
+        case "serverStart":
+            actionTarget.serverStart();
+            break;
+        case "serverStop":
+            actionTarget.serverStop();
+            break;
+        }
+    }
+
+    function actionHolds(id) {
+        return CoreActionRules.sttHolds(id, actionTarget.server, actionTarget.dictation) === true;
+    }
 
     BarRow {
         anchors.centerIn: parent

@@ -5,15 +5,17 @@ import qs.singletons
 PopupWidget {
     widgetType: "sound"
 
-    onMiddleClicked: {
-        if (Audio.sink?.audio)
-            Audio.sink.audio.muted = !Audio.sink.audio.muted
-    }
-    onScrolled: delta => {
-        if (Audio.sink?.audio) {
-            const amount = Audio.sink.audio.volume + delta * 0.01
-            Audio.sink.audio.volume = Math.max(0, Math.min(1.5, amount))
-        }
+    // What its actions act on (a stand-in in tests): the default output's audio
+    property var actionTarget: Audio
+
+    function runAction(id, details) {
+        const audio = actionTarget.sink?.audio;
+        if (!audio)
+            return;
+        if (id === "mute")
+            audio.muted = !audio.muted;
+        else if (id === "volume")
+            audio.volume = CoreActionRules.volumeAfter(audio.volume, details.amount);
     }
 
     BarRow {

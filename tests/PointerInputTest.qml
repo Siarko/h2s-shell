@@ -152,7 +152,7 @@ TestCase {
                     entry += ":" + details.phase;
                 if (details.amount !== 0)
                     entry += " " + (Math.round(details.amount * 100) / 100) + " " + details.direction;
-                assert(details.byTouch === false, "the details of " + name + " say the pointer");
+                assert(details.byTouch === (name === "tap"), "the details of " + name + " say the pointer, a tap's the finger");
                 seen.push(entry);
             }
             onClicked: clicks++
@@ -349,10 +349,10 @@ TestCase {
         assertEqual(_seen(), "hover:end", "the mouse leaving the cell is hover ending");
         assertEqual(cell.hovers.join(","), "false", "and the old hover signal");
 
-        // A finger's tap is the finger interactions', not reported here
+        // A finger's tap is a tap, by touch
         _resetInput();
         _tap(cell);
-        assertEqual(_seen(), "", "a tap reports no pointer interaction");
+        assertEqual(_seen(), "tap", "a tap is reported as a tap, no pointer click");
         assertEqual(cell.clicks, 1, "and is still the old click");
     }
 
@@ -399,7 +399,7 @@ TestCase {
 
         // --- a popup in hover mode ---
         _reset();
-        popupCell.popupMode = "hover";
+        popupCell.bindingLookup = InteractionRules.lookupFor({}, {}, true, "hover", []);
         driver.mouseMove(popupCell, 10, 10);
         _until(() => fakePopup.calls.length > 0);
         assertEqual(fakePopup.calls.join("; "), "open persistent=false byTouch=false",
@@ -421,7 +421,7 @@ TestCase {
 
         // --- a popup in click mode ---
         _reset();
-        popupCell.popupMode = "click";
+        popupCell.bindingLookup = InteractionRules.lookupFor({}, {}, true, "click", []);
         driver.mouseClick(popupCell);
         driver.wait(50);
         assertEqual(fakePopup.calls.join("; "), "open persistent=true byTouch=false",

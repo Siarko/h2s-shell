@@ -516,6 +516,69 @@ Singleton {
         return { runs: true, amount: 0, direction: "" };
     }
 
+    // ---- Running a reported interaction ---------------------------------------------------
+
+    // What a ref names, for the layer to run: { kind: "own" | "shell" | "command" | "", id }
+    // (id: the own or shell action's id, "" otherwise)
+    function target(ref): var {
+        if (!_plainObject(ref) || typeof ref.action !== "string")
+            return { kind: "", id: "" };
+        if (ref.action === "command")
+            return { kind: "command", id: "" };
+        if (ref.action.startsWith("own:"))
+            return { kind: "own", id: ref.action.slice(4) };
+        if (ref.action.startsWith("shell:"))
+            return { kind: "shell", id: ref.action.slice(6) };
+        return { kind: "", id: "" };
+    }
+
+    // Whether a popup opened by `interaction` stays until it is closed: opened by hovering it
+    // closes when the pointer leaves it, opened any other way it stays
+    function popupStays(interaction): bool {
+        return interaction !== "hover";
+    }
+
+    // Whether a shell action's effect holds, where it can be known: opening the popup holds
+    // while this entry's popup shows, closing it while it does not; undefined otherwise
+    function shellHolds(id, popupOpen) {
+        if (id === "popup.open")
+            return popupOpen === true;
+        if (id === "popup.close")
+            return popupOpen !== true;
+        return undefined;
+    }
+
+    // What one reported interaction runs on a bar entry. `details`: the cell's ({ phase,
+    // amount, byTouch, … }); `lookup`: the entry's bindings; `holdsOf(ref)`: whether a ref's
+    // effect holds (a bool, undefined where it cannot tell); `memoryOf(interaction)`: where
+    // that interaction's cycle stood; `kindOf(ref)`: the action's kind ("run" or "adjust").
+    // { ref (undefined: nothing runs), target (InteractionRules.target), amount, direction,
+    //   memoryKey (the interaction whose binding ran: its fallback's, for one unassigned;
+    //   "" when nothing was bound), memory (to keep under it) }
+    function dispatch(interaction, details, lookup, holdsOf, memoryOf, kindOf): var {
+        const none = { ref: undefined, target: target(undefined), amount: 0, direction: "", memoryKey: "", memory: null };
+        if (typeof lookup !== "function")
+            return none;
+        const found = effective(interaction, lookup);
+        if (!isBound(found.binding))
+            return none;
+        const binding = found.binding;
+        const phase = details?.phase === "end" ? "end" : "start";
+        const holds = binding.mode === "cycle" ? binding.actions.map(ref => ref === null ? false : holdsOf(ref)) : [];
+        const chosen = step(binding, phase, holds, memoryOf(found.interaction));
+        const result = { ref: undefined, target: target(undefined), amount: 0, direction: "", memoryKey: found.interaction, memory: chosen.memory };
+        if (!chosen.ref)
+            return result;
+        const run = runFor(interaction, chosen.ref, kindOf(chosen.ref), details?.amount ?? 0);
+        if (!run.runs)
+            return result;
+        result.ref = chosen.ref;
+        result.target = target(chosen.ref);
+        result.amount = run.amount;
+        result.direction = run.direction;
+        return result;
+    }
+
     // ---- The editor's warnings -------------------------------------------------------------
 
     // The warnings a binding on `interaction` gets in the editor — never a refusal. `info(ref)`

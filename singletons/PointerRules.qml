@@ -19,12 +19,6 @@ Singleton {
         return source !== Qt.MouseEventNotSynthesized;
     }
 
-    // Whether a click or tap on a popup widget opens (or closes) its popup. In hover mode a
-    // mouse click does nothing — hovering opens it — but a tap does: a finger cannot hover.
-    function tapTogglesPopup(popupMode: string, byTouch: bool): bool {
-        return popupMode === "click" || (popupMode === "hover" && byTouch);
-    }
-
     // What a click (or tap) that toggles a popup does: "close" when the popup is open with
     // this widget's content and this widget opened it, else "open" — from another bar entry
     // of the same widget type it switches the open popup there, as hovering does.

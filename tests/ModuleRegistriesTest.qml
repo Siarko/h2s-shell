@@ -382,18 +382,16 @@ TestCase {
             assert(_widgetA.popupOpen, "the widget: its popup open");
             _builtBefore = _goodState.panelsBuilt;
             // The same panel told of another opener: the other entry, by hover
-            _widgetB.popupMode = "hover";
-            _widgetB.hover(true);
+            _widgetB.openPopup(false, false);
         });
         _then("the open panel is told its new opener", () => _goodState.panel?.opener?.preset === "Beta", () => {
             assertEqual(_goodState.panelsBuilt, _builtBefore, "… not built again");
             assertEqual(JSON.stringify(_goodState.panel.opener), JSON.stringify({ widgetType: "good", preset: "Beta", edge: "top", byTouch: false }),
                         "… the entry on Beta");
             const same = _goodState.panel.opener;
-            _widgetB.hover(true);
+            _widgetB.openPopup(false, false);
             assert(_goodState.panel.opener === same, "… opened again from the same entry: the object unchanged");
             assert(_widgetB.popupOpen && !_widgetA.popupOpen, "popupOpen: only the entry that opened it");
-            _widgetB.popupMode = "click";
             // A click on the other entry of the same type switches the popup to it, as hover does
             _widgetA.togglePopup(false);
         });
@@ -567,14 +565,12 @@ TestCase {
             assertEqual(JSON.stringify(Modules.status("panel-opener")?.errors), "[]",
                         "… no error: it declares neither availableHeight nor popupAnimating, and neither was tried");
             const before = _openedCount;
-            _widgetB.popupMode = "hover";
-            _widgetB.hover(true);
+            _widgetB.openPopup(false, false);
             assertEqual(_openedCount, before + 1, "opened again from Beta by hover: opened() said");
             assertEqual(_popup.popupPosition, _widgetB.mapToItem(null, 0, 0).x, "… the popup moved to Beta's entry");
             assert(_popup.active && !_popup.closing, "… and stays open");
             assertEqual(_openerState.panel.opener, null, "… its opener not written (decided as at its first build)");
             assert(!_has(Modules.status("panel-opener")?.errors, "opener"), "… no error: nothing was tried");
-            _widgetB.popupMode = "click";
             _widgetB.togglePopup(false);
         });
         _then("its popup closes", () => _popup?.active === false && _openerState.panel === null, () => {

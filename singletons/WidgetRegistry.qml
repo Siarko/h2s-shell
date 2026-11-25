@@ -25,9 +25,14 @@ import QtQuick
 //   bindings    — what its interactions run when the preset does not say,
 //                 { <interaction>: binding } (InteractionRules); the popup's left click
 //                 is implied by `popup`, a declared left click overrides it
-//   actions     — its own actions, [{ id, … }]; a binding names one as "own:<id>"
+//   actions     — its own actions, [{ id, label, kind, state }], which the widget runs
+//                 (runAction); a binding names one as "own:<id>". kind: "run" (once) or
+//                 "adjust" (takes a signed amount: a scroll's movement, ±1 a step);
+//                 state: true where the widget tells whether its effect holds
+//                 (actionHolds), so alternate and cycle start from the state
 //   cellInteractions — the interactions its cell takes, absent: all; [] for a widget
-//                 whose cell takes none (the tray: each icon has its own clicks)
+//                 whose cell takes none (the tray and the workspaces: their icons and
+//                 buttons have their own clicks)
 Singleton {
     id: root
 
@@ -38,16 +43,31 @@ Singleton {
     readonly property var coreEntries: [
         { type: "power", name: "Power", widget: "widgets/PowerWidget.qml",
           popup: "power", popupPanel: "panels/PowerMenu.qml" },
-        { type: "settings", name: "Settings", widget: "widgets/SettingsWidget.qml" },
+        { type: "settings", name: "Settings", widget: "widgets/SettingsWidget.qml",
+          actions: [{ id: "toggle", label: "Open or close Settings", kind: "run" }],
+          bindings: { leftClick: { mode: "single", action: { action: "own:toggle" } } } },
         { type: "workspaces", name: "Workspaces", widget: "widgets/WorkspacesWidget.qml",
-          settings: "panels/widget_settings/WorkspacesWidgetSettings.qml", multiple: true },
+          settings: "panels/widget_settings/WorkspacesWidgetSettings.qml", multiple: true,
+          cellInteractions: [] },
         { type: "clock", name: "Clock", widget: "widgets/ClockWidget.qml",
           popup: "calendar", popupPanel: "panels/Calendar.qml",
           settings: "panels/widget_settings/ClockWidgetSettings.qml", multiple: true },
         { type: "music", name: "Music", widget: "widgets/MusicWidget.qml",
-          popup: "music", popupPanel: "panels/MusicPanel.qml" },
+          popup: "music", popupPanel: "panels/MusicPanel.qml",
+          actions: [{ id: "playPause", label: "Play or pause", kind: "run" },
+                    { id: "next", label: "Next track", kind: "run" },
+                    { id: "previous", label: "Previous track", kind: "run" },
+                    { id: "play", label: "Play", kind: "run", state: true },
+                    { id: "pause", label: "Pause", kind: "run", state: true }],
+          bindings: { middleClick: { mode: "single", action: { action: "own:playPause" } },
+                      scrollUp: { mode: "single", action: { action: "own:next" } },
+                      scrollDown: { mode: "single", action: { action: "own:previous" } } } },
         { type: "sound", name: "Sound", widget: "widgets/SoundWidget.qml",
-          popup: "sound", popupPanel: "panels/SoundPanel.qml" },
+          popup: "sound", popupPanel: "panels/SoundPanel.qml",
+          actions: [{ id: "mute", label: "Mute or unmute", kind: "run" },
+                    { id: "volume", label: "Volume", kind: "adjust" }],
+          bindings: { middleClick: { mode: "single", action: { action: "own:mute" } },
+                      scroll: { mode: "single", action: { action: "own:volume" } } } },
         { type: "bluetooth", name: "Bluetooth", widget: "widgets/BluetoothWidget.qml",
           popup: "bluetooth", popupPanel: "panels/BluetoothPanel.qml" },
         { type: "tray", name: "System Tray", widget: "widgets/TrayWidget.qml", cellInteractions: [] },
@@ -63,7 +83,14 @@ Singleton {
           popup: "battery", popupPanel: "panels/BatteryPanel.qml",
           settings: "panels/widget_settings/BatteryWidgetSettings.qml", multiple: true },
         { type: "stt", name: "Dictation", widget: "widgets/SttWidget.qml",
-          settings: "panels/widget_settings/SttWidgetSettings.qml" }
+          settings: "panels/widget_settings/SttWidgetSettings.qml",
+          actions: [{ id: "toggle", label: "Start or stop dictation", kind: "run" },
+                    { id: "start", label: "Start dictation", kind: "run", state: true },
+                    { id: "stop", label: "Stop dictation", kind: "run", state: true },
+                    { id: "serverToggle", label: "Start or stop the server", kind: "run" },
+                    { id: "serverStart", label: "Start the server", kind: "run", state: true },
+                    { id: "serverStop", label: "Stop the server", kind: "run", state: true }],
+          bindings: { leftClick: { mode: "single", action: { action: "own:toggle" } } } }
     ]
 
     // Every widget type: the core's, then the loaded modules' (Modules.widgetEntries — their
@@ -142,6 +169,19 @@ Singleton {
     function actionIds(type) {
         const actions = entry(type)?.actions;
         return Array.isArray(actions) ? actions.filter(action => typeof action?.id === "string").map(action => action.id) : [];
+    }
+
+    // One of its own actions: { id, label, kind ("run" when it names none), state } (a copy),
+    // or null when it declares no such action
+    function action(type, id) {
+        const actions = entry(type)?.actions;
+        const found = Array.isArray(actions) ? actions.find(action => action?.id === id) : undefined;
+        if (!found)
+            return null;
+        const copy = JSON.parse(JSON.stringify(found));
+        copy.kind = copy.kind === "adjust" ? "adjust" : "run";
+        copy.state = copy.state === true;
+        return copy;
     }
 
     function allowsMultiple(type) {

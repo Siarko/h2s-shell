@@ -5,8 +5,14 @@ import qs.singletons
 BarWidget {
     widgetType: "settings"
 
-    // The one settings window lives in shell.qml, not on each screen's bar
-    onClicked: Shell.toggleSettings()
+    // What its action acts on (a stand-in in tests). The one settings window lives in
+    // shell.qml, not on each screen's bar.
+    property var actionTarget: Shell
+
+    function runAction(id, details) {
+        if (id === "toggle")
+            actionTarget.toggleSettings();
+    }
 
     // A Nerd Font glyph, like the other bar icons: "⚙" is missing from the font, and the
     // fallback font that draws it sat below the middle of the cell

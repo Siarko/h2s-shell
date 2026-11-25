@@ -1,9 +1,10 @@
 import QtQuick
 import qs.singletons
 
-// A bar widget that opens a popup panel, by click or by hover as configured per widget
-// type. The seven popup widgets each used to carry their own copy of this wiring, with
-// their own default mode; input handling for the popup now changes in one place.
+// A bar widget that opens a popup panel. What opens it is the entry's bindings, through the
+// cell's input layer (WidgetActions): the shell actions popup.toggle, popup.open and
+// popup.close run here. By default the widget type's popup mode decides them (click: a
+// left click toggles it; hover: hovering opens it, a tap toggles it; none: neither).
 BarWidget {
     id: root
 
@@ -11,9 +12,6 @@ BarWidget {
     // Which panel the popup shows, as registered in WidgetRegistry (the clock's is
     // "calendar")
     readonly property string popupContent: WidgetRegistry.popupContent(widgetType)
-
-    // A setting of the active shell profile, per widget type (writable for tests only)
-    property string popupMode: Profiles.value("widgets." + widgetType + ".popupMode") ?? WidgetRegistry.defaultPopupMode
 
     // Its popup shows, opened from this entry: another entry of the same widget type
     // showing it does not count
@@ -66,13 +64,17 @@ BarWidget {
             popup.open(root, true, popupContent, _openerData(), byTouch);
     }
 
-    // A tap opens even a hover-mode popup: a finger cannot hover, so it is a click there
-    onClicked: {
-        if (PointerRules.tapTogglesPopup(popupMode, lastPressByTouch))
-            togglePopup(lastPressByTouch);
+    // Opens it from this entry: to stay until closed (`persistent`), or to close when the
+    // pointer leaves it (opened by hovering). From another entry of the same type it moves here.
+    function openPopup(persistent, byTouch) {
+        if (popup)
+            popup.open(root, persistent, popupContent, _openerData(), byTouch);
     }
-    onHover: state => {
-        if (popupMode === "hover" && state && popup)
-            popup.open(root, false, popupContent, _openerData(), false);
+
+    // Closes it where it shows this widget type's panel opened here (or by an entry that is
+    // gone); another widget's popup, or another entry's, stays
+    function closePopup() {
+        if (popup && PointerRules.popupClick(!!popup.active, popup.contentType === popupContent, popup.openedBy === root || _openerGone()) === "close")
+            popup.close();
     }
 }

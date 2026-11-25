@@ -5,12 +5,31 @@ import qs.singletons
 PopupWidget {
     widgetType: "music"
 
-    onMiddleClicked: Music.togglePlay()
-    onScrollNotch: delta => {
-        if (delta > 0)
-            Music.next();
-        else
-            Music.previous();
+    // What its actions act on (a stand-in in tests)
+    property var actionTarget: Music
+
+    function runAction(id, details) {
+        switch (id) {
+        case "playPause":
+            actionTarget.togglePlay();
+            break;
+        case "next":
+            actionTarget.next();
+            break;
+        case "previous":
+            actionTarget.previous();
+            break;
+        case "play":
+            actionTarget.play();
+            break;
+        case "pause":
+            actionTarget.pause();
+            break;
+        }
+    }
+
+    function actionHolds(id) {
+        return CoreActionRules.musicHolds(id, actionTarget.playing) === true;
     }
 
     BarRow {

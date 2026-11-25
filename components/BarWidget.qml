@@ -44,14 +44,32 @@ Item {
     // { phase: "start" or "end" for an interaction with an end (hover, longPress), else "";
     //   byTouch; amount: the movement in notches for a continuous scroll (positive up and
     //   right), ±1 for a step, else 0; direction: "up", "down", "left", "right" or "" }.
-    // A finger's taps are not reported here yet. The signals above keep firing as they
-    // always have, whatever this one reports.
+    // A finger's tap is reported as "tap" (byTouch true); its double tap, hold and swipes
+    // are not reported yet. The signals above keep firing as they always have, whatever
+    // this one reports. Each interaction goes to WidgetActions, which runs what the entry
+    // binds to it: the cell's one input layer.
     signal interaction(name: string, details: var)
     // What the entry binds, interaction => resolved binding (InteractionRules.lookupFor);
-    // null: nothing bound. It decides whether a plain click waits for a second one (only
-    // when a double click is bound) and whether a scroll is reported as one continuous
-    // movement or as whole notches.
-    property var bindingLookup: null
+    // null: nothing bound. It decides what each interaction runs, whether a plain click
+    // waits for a second one (only when a double click is bound) and whether a scroll is
+    // reported as one continuous movement or as whole notches. The bar sets its entry's;
+    // a cell made elsewhere has its type's, with its preset where it declares one.
+    property var bindingLookup: WidgetPresets.bindingLookup(widgetType, typeof container.preset === "string" ? container.preset : "")
+
+    // Runs one of the widget's own actions (WidgetRegistry `actions`), named by its id, when
+    // an interaction bound to it occurs. `details`, frozen: { interaction, amount (an adjust
+    // action's signed amount), direction, byTouch, preset }. A widget with actions overrides it.
+    function runAction(id, details) {
+    }
+
+    // Whether the effect of an own action that declares `state` holds now, so alternate
+    // and cycle go on from the state
+    function actionHolds(id) {
+        return false;
+    }
+
+    // Where each interaction's alternate or cycle stands, for this bar entry
+    property var _actionMemory: ({})
 
     Layout.fillHeight: true
     Layout.preferredHeight: 20
@@ -156,9 +174,12 @@ Item {
     property bool _holdOpen: false
     property point _pressAt: Qt.point(0, 0)
 
-    function _report(name, phase, amount, direction) {
-        if (name !== "")
-            interaction(name, { phase: phase, byTouch: false, amount: amount, direction: direction });
+    function _report(name, phase, amount, direction, byTouch = false) {
+        if (name === "")
+            return;
+        const details = { phase: phase, byTouch: byTouch, amount: amount, direction: direction };
+        interaction(name, details);
+        WidgetActions.handle(container, name, details);
     }
 
     // A plain click held back while a second one may come: it goes now, before what follows
@@ -177,10 +198,12 @@ Item {
     }
 
     function _reportClick(button, modifiers) {
-        // A finger's taps come with the finger interactions; the release of a hold was the
-        // hold's
-        if (lastPressByTouch)
+        // A finger's press is a tap (its double tap and hold come with the finger
+        // interactions); the release of a hold was the hold's
+        if (lastPressByTouch) {
+            _report(InteractionRules.pressInteraction({ button: button, modifiers: modifiers, byTouch: true, held: false, second: false, swiped: false }), "", 0, "", true);
             return;
+        }
         const event = { button: button, modifiers: modifiers, byTouch: false, held: _held, second: false, swiped: false };
         const name = InteractionRules.pressInteraction(event);
         if (name === "leftClick" && InteractionRules.waitsForDouble(false, _lookup)) {
