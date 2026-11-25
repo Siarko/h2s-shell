@@ -36,8 +36,8 @@ Item {
         clip: true
         flickableDirection: Flickable.HorizontalFlick
 
-        WheelHandler {
-            acceptedDevices: PointerDevice.Mouse
+        WheelScroll {
+            target: null
             onWheel: event => {
                 _colorFlickable.contentX = Math.max(0, Math.min(_colorFlickable.contentWidth - _colorFlickable.width, _colorFlickable.contentX - event.angleDelta.y / 2));
             }

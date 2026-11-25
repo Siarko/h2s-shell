@@ -1,0 +1,2 @@
+description: A fixture plan with the shell's event colour row under the pointer, for a real wheel
+scene: colour-row   The colour swatches, narrower than their row

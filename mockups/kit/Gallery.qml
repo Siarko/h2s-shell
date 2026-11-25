@@ -278,11 +278,9 @@ QtObject {
             // A drag belongs to the mockups, never to the scroller
             interactive: false
 
-            // As the mockup window's scroller (MockupWindow.qml): a mouse wheel arrives as
-            // from a touchpad device on Wayland, a notch moves by its angle
-            WheelHandler {
+            // As the mockup window's scroller (MockupWindow.qml): a notch moves by its angle
+            WheelScroll {
                 target: null
-                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
                 onWheel: event => {
                     root._anchored = "";
                     const dy = event.phase === Qt.NoScrollPhase || event.pixelDelta.y === 0

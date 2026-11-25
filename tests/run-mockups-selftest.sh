@@ -16,7 +16,9 @@
 #     content never scrolls by a drag (a drag is the mockup's), only by the wheel and a
 #     vertical scroll bar shown while it does not fit; a real wheel (the lock bed's virtual
 #     pointer, tests/lock/input/ltinput.py) scrolls a component's, a plan's and the gallery's
-#     window by 48 px a notch, a plan's sideways by a horizontal wheel and by Shift;
+#     window by 48 px a notch, a plan's sideways by a horizontal wheel and by Shift; and the
+#     shell's own: the event form's colour row (a fixture plan), no plain WheelHandler in
+#     the tree but components/WheelScroll.qml;
 #   - with state cells (the kit's StateGrid): shot in their grid, each cropped to its cell; on
 #     screen with no state named, every state's cell shown, none overlapping, labelled with its
 #     name and about.txt's description in order, a pointer state saying how to see it, no
@@ -593,6 +595,34 @@ echo "on screen: a real wheel scrolls the gallery"
 wheel_run wheel-gallery "scroll vertical 3" H2S_MOCKUP=gallery H2S_MOCKUP_BASE=tests/fixtures/mockups XDG_CONFIG_HOME="$theme_config"
 check "$([ "$wheel_positions" = "$(printf '%s\n' 0,0 0,144)" ]; echo $?)" "three notches down (positions were '$(paste -s -d ' ' <<< "$wheel_positions")')"
 check "$(! grep -q -E 'MOCKUP-ERROR|TypeError|ReferenceError|Binding loop' "${logs[wheel-gallery]}"; echo $?)" "no error"
+echo "the shell's wheel handlers: the event form's colour row scrolls by a real wheel"
+start_entry wheel-row "$REPO/mockup.qml" H2S_MOCKUP_BASE=tests/fixtures/mockups H2S_MOCKUP=plans/wheel
+row_answer="" deadline=$((SECONDS + 30))
+while [ $SECONDS -lt $deadline ] && kill -0 "${pids[wheel-row]}" 2> /dev/null; do
+    id=$(instance_of wheel-row)
+    # The window made, a condition polled
+    [ -n "$id" ] && [ "$(ipc "$id" call mockup window)" = floating ] && break
+    sleep 0.05
+done
+if [ -n "$id" ]; then
+    send_input "abs 1 1 2 2"
+    send_input "scroll vertical 3"
+    # The row scrolled, a condition polled; five seconds for a wheel that does nothing
+    row_deadline=$((SECONDS + 5))
+    while [ $SECONDS -lt $row_deadline ] && ! grep -q -E 'WHEEL-ROW [1-9]' "${logs[wheel-row]}"; do sleep 0.05; done
+    row_answer=$(grep -o -E 'WHEEL-ROW [0-9]+' "${logs[wheel-row]}" | tail -n 1)
+fi
+kill -TERM "${pids[wheel-row]}" 2> /dev/null
+finish_entry wheel-row
+check "$(grep -q -E '^WHEEL-ROW [1-9][0-9]*$' <<< "$row_answer"; echo $?)" "three notches move the swatches sideways (was '$row_answer')"
+check "$(! grep -q -E 'MOCKUP-ERROR|TypeError|ReferenceError' "${logs[wheel-row]}"; echo $?)" "no error"
+
+# Every wheel handler in the tree is the shell's WheelScroll, which takes a mouse wheel as
+# Qt on Wayland hands it over (from its touchpad device); a plain WheelHandler turns it away
+plain_handlers=$(cd "$REPO" && grep -r -l -E '(^|[^A-Za-z.])WheelHandler[[:space:]]*\{' --include='*.qml' . | sed 's|^\./||' \
+    | grep -v -x -F components/WheelScroll.qml)
+check "$([ -z "$plain_handlers" ]; echo $?)" "no plain WheelHandler outside components/WheelScroll.qml ($(paste -s -d ' ' <<< "$plain_handlers"))"
+
 kill -TERM "$input_pid" 2> /dev/null
 wait "$input_pid" 2> /dev/null
 input_pid=""

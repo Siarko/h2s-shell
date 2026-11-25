@@ -147,6 +147,9 @@ tests/run-mockups.sh self:tests/run-mockups-selftest.sh
 mockup.qml self:tests/run-mockups-selftest.sh mockup:all
 mockups/kit/* self:tests/run-mockups-selftest.sh mockup:all
 tests/fixtures/mockups/* self:tests/run-mockups-selftest.sh self:tests/mockup-selftest.sh
++components/WheelScroll.qml self:tests/run-mockups-selftest.sh
++panels/calendar/EventColorRow.qml self:tests/run-mockups-selftest.sh
++panels/Popup.qml self:tests/run-mockups-selftest.sh
 tests/fixtures/mockup-themes/* self:tests/run-mockups-selftest.sh
 tests/fixtures/mockup-closer/* self:tests/run-mockups-selftest.sh
 # The mockups' screen tool

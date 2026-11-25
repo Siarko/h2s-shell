@@ -460,6 +460,13 @@ new kind.
   `context`) is a getter returning a new copy at each read (`ReadOnlyRules.copy`, or
   `ReadOnlyRules.context` beside live objects: plain objects copied too); the five old list properties are deprecated in
   `ModuleSourceRules.deprecatedCode`. — One shared list carried one module's `push` or `sort` to every other.
+- **A wheel handler takes a mouse wheel:** in the shell every WheelHandler is
+  `components/WheelScroll.qml` (it accepts `PointerDevice.Mouse | PointerDevice.TouchPad`:
+  Qt on Wayland hands a mouse wheel over as from its touchpad device; a module's own
+  WheelHandler sets the same), one per orientation; a wheel is tested with a real virtual
+  pointer (`tests/lock/input/ltinput.py`, as `tests/run-mockups-selftest.sh` does), never
+  only by setting properties. — Wheels were turned away in the mockup window, a popup and
+  the event form, and no test sent one.
 - **Animations stop when nothing shows them**: a running animation or timer is gated on the
   window and the item being visible (and on reduce motion). — Hidden windows kept animating
   every frame.

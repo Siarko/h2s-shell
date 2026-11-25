@@ -705,7 +705,8 @@ LazyLoader {
                         onActiveChanged: if (active) _scrollAtStart = popup._keyboardScroll
                         onTranslationChanged: popup._keyboardScroll = Math.max(0, Math.min(popup._overflow, _scrollAtStart - translation.y))
                     }
-                    WheelHandler {
+                    WheelScroll {
+                        target: null
                         enabled: popup._overflow > 0
                         onWheel: event => {
                             popup._keyboardScroll = Math.max(0, Math.min(popup._overflow, popup._keyboardScroll - event.angleDelta.y / 2));

@@ -422,10 +422,8 @@ QtObject {
             interactive: false
 
             // Scrolls by the wheel where the mockup's own items did not take it; a
-            // horizontal wheel, or Shift with a vertical one, scrolls sideways. Qt on Wayland
-            // hands a mouse wheel's notches over as from a touchpad device (every axis event
-            // has a pixel delta), so both devices are taken; and a WheelHandler takes one
-            // orientation only, so there is one for each
+            // horizontal wheel, or Shift with a vertical one, scrolls sideways (a wheel
+            // handler takes one orientation only: one for each)
             function _scrollBy(dx, dy) {
                 contentX = Math.max(0, Math.min(contentWidth - width, contentX - dx));
                 contentY = Math.max(0, Math.min(contentHeight - height, contentY - dy));
@@ -436,9 +434,8 @@ QtObject {
                 return phase === Qt.NoScrollPhase || pixel === 0 ? angle / 120 * 48 : pixel;
             }
 
-            WheelHandler {
+            WheelScroll {
                 target: null
-                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
                 onWheel: event => {
                     const step = _scroller._step(event.pixelDelta.y, event.angleDelta.y, event.phase);
                     if (event.modifiers & Qt.ShiftModifier)
@@ -447,10 +444,9 @@ QtObject {
                         _scroller._scrollBy(0, step);
                 }
             }
-            WheelHandler {
+            WheelScroll {
                 target: null
                 orientation: Qt.Horizontal
-                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
                 onWheel: event => _scroller._scrollBy(_scroller._step(event.pixelDelta.x, event.angleDelta.x, event.phase), 0)
             }
 
