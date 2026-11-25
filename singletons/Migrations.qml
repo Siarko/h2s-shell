@@ -14,6 +14,7 @@ Singleton {
     readonly property list<QtObject> _registered: [
         PreProfilesSettings {},
         WidgetPresetsFromProfiles {},
+        BarLayoutIntoThemes {},
         LockNotificationDetailDefault {}
     ]
 

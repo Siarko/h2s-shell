@@ -1,0 +1,26 @@
+{
+    "themes/Full.json": {
+        "extends": "default",
+        "colors": {
+            "accent": "#a3be8c"
+        }
+    },
+    "themes/nord.json": {
+        "extends": "default"
+    },
+    "themes/Full 2.json": {
+        "extends": "default",
+        "bar": {
+            "barHeight": 40,
+            "rightPadding": 5,
+            "reservedSpace": 44
+        }
+    },
+    "themes/Power-save.json": {
+        "extends": "Full 2",
+        "bar": {
+            "leftMargin": 300,
+            "reservedSpace": 44
+        }
+    }
+}

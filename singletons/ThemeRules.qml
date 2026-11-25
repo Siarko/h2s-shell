@@ -645,70 +645,13 @@ Singleton {
             && !isQtCurve(name) && name !== "BezierSpline" && name !== "Bezier";
     }
 
-    // A file name for a theme named after `wanted` that `exists(name)` does not report
-    // taken: the name itself, else "<name> 2", "<name> 3", …
+    // A name after `wanted` that `exists(name)` does not report taken: the name itself, else
+    // "<name> 2", "<name> 3", … ("/" made "-", so it can name a file)
     function freeName(wanted, exists) {
         const base = wanted.replace(/[\/]/g, "-").trim() || "Theme";
         let name = base;
         for (let i = 2; exists(name); i++)
             name = base + " " + i;
         return name;
-    }
-
-    // Whether the bar-geometry migration (ThemeFiles) is to run now: the config read, writable
-    // (neither the test runner's read-only nor saves blocked — its marker would never be
-    // saved, and each start would make the themes again, under new names), the profiles
-    // there, none under way, not done. `state`: { ready, readOnly, saveBlocked, profiles
-    // (Config.profiles' text), pending, migratedKeys, marker }
-    function barLayoutMigrationDue(state) {
-        return state?.ready === true && state.readOnly !== true && state.saveBlocked !== true
-            && typeof state.profiles === "string" && state.profiles !== "" && !state.pending
-            && !Array.from(state.migratedKeys ?? []).includes(state.marker);
-    }
-
-    // Moves the bar geometry from profiles into themes, once, so the bar looks the same in
-    // every profile afterwards. Each profile that sets any `bar.layout.*` gets a theme named
-    // after it holding those values, extending the theme of the nearest profile before it that
-    // got one ("default" for the first), and picks it with `appearance.theme` — the same
-    // layering profiles had. Geometry pinned as global goes into every such theme (and gives
-    // the first profile one if none has its own). `legacyLayout`: the `bar.layout` section of
-    // a config from before profiles whose values never reached a profile, or undefined; it
-    // counts as the first profile's. Inputs are not modified. Returns { profiles, globals,
-    // themes: [{ name, theme }] }.
-    function themesFromBarLayout(profiles, globals, legacyLayout, exists) {
-        const newProfiles = JSON.parse(JSON.stringify(profiles ?? []));
-        const newGlobals = Object.assign({}, globals ?? {});
-        const take = set => {
-            const values = {};
-            for (const token of barTokens) {
-                if (set && ("bar.layout." + token) in set) {
-                    values[token] = set["bar.layout." + token];
-                    delete set["bar.layout." + token];
-                }
-            }
-            return values;
-        };
-        const pinned = take(newGlobals);
-        const themes = [];
-        const taken = name => exists(name) || themes.some(entry => entry.name === name);
-        let parent = "default";
-        newProfiles.forEach((profile, index) => {
-            profile.set = profile.set ?? {};
-            const own = take(profile.set);
-            if (index === 0 && legacyLayout) {
-                for (const token of barTokens) {
-                    if (!(token in own) && legacyLayout[token] !== undefined)
-                        own[token] = legacyLayout[token];
-                }
-            }
-            const needed = Object.keys(own).length > 0 || (index === 0 && Object.keys(pinned).length > 0);
-            if (!needed)
-                return;
-            const name = freeName(profile.name ?? "Theme", taken);
-            themes.push({ name: name, theme: { extends: parent, bar: Object.assign(own, pinned) } });
-            profile.set["appearance.theme"] = name;
-            parent = name;
-        });
-        return { profiles: newProfiles, globals: newGlobals, themes: themes };
     }
 }

@@ -280,45 +280,52 @@ TestCase {
         const toDefault = ThemeRules.chainFor("wallpaper", name => name === "wallpaper" ? { extends: "default" } : null);
         assertEqual(toDefault.errors.length, 0, "extending a default theme that has no file is not an error");
 
-        // --- bar geometry moves from profiles into themes ---
+        // --- bar geometry moves from profiles into themes (the registered migration) ---
+        const barLayout = Migrations.all().find(migration => migration.migrationId === "theme.barLayout");
+        // → { document, records, ok } of one run on profiles, globals, the old bar section and theme files
+        const moveBar = (profiles, globals, legacy, files, records) => {
+            const document = { raw: legacy === undefined ? {} : { bar: { layout: legacy } }, profiles: profiles, globals: globals, presets: {}, files: files ?? {} };
+            return MigrationRules.applyOne(barLayout, document, {}, records ?? []);
+        };
         const profiles = [
             { name: "Full", when: {}, set: { "bar.layout.barHeight": 40, "bar.layout.rightPadding": 5, "polling.x": 1 } },
             { name: "Quiet", when: {}, set: {} },
             { name: "Power/save", when: {}, set: { "bar.layout.leftMargin": 300 } }
         ];
-        const due = { ready: true, readOnly: false, saveBlocked: false, profiles: "[]", pending: false, migratedKeys: ["bar.height"], marker: "theme.barLayout" };
-        assert(ThemeRules.barLayoutMigrationDue(due), "bar geometry migration: due once the config is read and writable");
-        assert(!ThemeRules.barLayoutMigrationDue(Object.assign({}, due, { saveBlocked: true })), "bar geometry migration: not while saves are blocked (its marker would never be saved)");
-        assert(!ThemeRules.barLayoutMigrationDue(Object.assign({}, due, { readOnly: true })), "bar geometry migration: not under the test runner");
-        assert(!ThemeRules.barLayoutMigrationDue(Object.assign({}, due, { ready: false })), "bar geometry migration: not before the config is read");
-        assert(!ThemeRules.barLayoutMigrationDue(Object.assign({}, due, { profiles: "" })), "bar geometry migration: not before the profiles exist");
-        assert(!ThemeRules.barLayoutMigrationDue(Object.assign({}, due, { pending: true })), "bar geometry migration: not twice at once");
-        assert(!ThemeRules.barLayoutMigrationDue(Object.assign({}, due, { migratedKeys: ["theme.barLayout"] })), "bar geometry migration: not once done");
-        assert(!ThemeRules.barLayoutMigrationDue(null), "bar geometry migration: no state, not due");
-        const moved = ThemeRules.themesFromBarLayout(profiles, { "general.debug": true }, undefined, name => name === "Full");
-        assertEqual(JSON.stringify(moved.themes.map(entry => entry.name)), JSON.stringify(["Full 2", "Power-save"]),
+        const moved = moveBar(profiles, { "general.debug": true }, undefined, { "themes/Full.json": { extends: "default" } });
+        assert(moved.ok, "bar geometry migration: runs inside its scope" + (moved.ok ? "" : ": " + moved.error));
+        assertEqual(JSON.stringify(Object.keys(moved.document.files)), JSON.stringify(["themes/Full.json", "themes/Full 2.json", "themes/Power-save.json"]),
             "a theme per profile with geometry, under a free file name");
-        assertEqual(JSON.stringify(moved.themes[0].theme), JSON.stringify({ extends: "default", bar: { barHeight: 40, rightPadding: 5 } }),
+        assertEqual(JSON.stringify(moved.document.files["themes/Full 2.json"]), JSON.stringify({ extends: "default", bar: { barHeight: 40, rightPadding: 5 } }),
             "holding the profile's geometry, over the default theme");
-        assertEqual(moved.themes[1].theme.extends, "Full 2", "a later profile's theme extends the one before it");
-        assertEqual(moved.profiles[0].set["appearance.theme"], "Full 2", "the profile picks its theme");
-        assertEqual(moved.profiles[1].set["appearance.theme"], undefined, "a profile without geometry keeps inheriting");
-        assert(!("bar.layout.barHeight" in moved.profiles[0].set), "the geometry leaves the profile");
-        assertEqual(moved.profiles[0].set["polling.x"], 1, "other settings stay");
+        assertEqual(JSON.stringify(moved.document.files["themes/Full.json"]), JSON.stringify({ extends: "default" }), "an existing theme file is left as it is");
+        assertEqual(moved.document.files["themes/Power-save.json"].extends, "Full 2", "a later profile's theme extends the one before it");
+        assertEqual(moved.document.profiles[0].set["appearance.theme"], "Full 2", "the profile picks its theme");
+        assertEqual(moved.document.profiles[1].set["appearance.theme"], undefined, "a profile without geometry keeps inheriting");
+        assert(!("bar.layout.barHeight" in moved.document.profiles[0].set), "the geometry leaves the profile");
+        assertEqual(moved.document.profiles[0].set["polling.x"], 1, "other settings stay");
         assertEqual(profiles[0].set["bar.layout.barHeight"], 40, "the inputs are not modified");
-        assertEqual(moved.globals["general.debug"], true, "other globals stay");
+        assertEqual(moved.document.globals["general.debug"], true, "other globals stay");
 
-        const pinnedMove = ThemeRules.themesFromBarLayout([{ name: "Full", set: {} }, { name: "B", set: { "bar.layout.topOffset": 3 } }],
-            { "bar.layout.barHeight": 30 }, undefined, name => false);
-        assertEqual(pinnedMove.themes.length, 2, "pinned geometry gives the first profile a theme");
-        assertEqual(pinnedMove.themes[1].theme.bar.barHeight, 30, "and goes into every theme, as it applied everywhere");
-        assert(!("bar.layout.barHeight" in pinnedMove.globals), "and leaves the globals");
+        const pinnedMove = moveBar([{ name: "Full", set: {} }, { name: "B", set: { "bar.layout.topOffset": 3 } }],
+            { "bar.layout.barHeight": 30 }, undefined);
+        assertEqual(Object.keys(pinnedMove.document.files).length, 2, "pinned geometry gives the first profile a theme");
+        assertEqual(pinnedMove.document.files["themes/B.json"].bar.barHeight, 30, "and goes into every theme, as it applied everywhere");
+        assert(!("bar.layout.barHeight" in pinnedMove.document.globals), "and leaves the globals");
 
-        const legacyMove = ThemeRules.themesFromBarLayout([{ name: "Full", set: { "bar.layout.topOffset": 1 } }], {},
-            { barHeight: 33, topOffset: 9 }, name => false);
-        assertEqual(legacyMove.themes[0].theme.bar.barHeight, 33, "geometry from before profiles goes to the first profile's theme");
-        assertEqual(legacyMove.themes[0].theme.bar.topOffset, 1, "under what the profile set itself");
-        assertEqual(ThemeRules.themesFromBarLayout([{ name: "Full", set: {} }], {}, undefined, name => false).themes.length, 0,
+        const legacyMove = moveBar([{ name: "Full", set: { "bar.layout.topOffset": 1 } }], {}, { barHeight: 33, topOffset: 9 });
+        assertEqual(legacyMove.document.files["themes/Full.json"].bar.barHeight, 33, "geometry from before profiles goes to the first profile's theme");
+        assertEqual(legacyMove.document.files["themes/Full.json"].bar.topOffset, 1, "under what the profile set itself");
+        assertEqual(legacyMove.document.raw.bar.layout.barHeight, 33, "the old section stays in the file");
+        const copiedBefore = moveBar([{ name: "Full", set: {} }], {}, { barHeight: 33 }, {}, ["bar.layout.barHeight", "bar.left"]);
+        assertEqual(Object.keys(copiedBefore.document.files).length, 0, "geometry from before profiles that reached a profile already (marked): not again");
+        assertEqual(JSON.stringify(copiedBefore.records), JSON.stringify(["bar.layout.barHeight", "bar.left"]), "the markers it reads stay as they were");
+        assertEqual(Object.keys(moveBar([{ name: "Full", set: {} }], {}, undefined).document.files).length, 0,
             "no geometry anywhere: no themes");
+
+        assertEqual(ThemeRules.freeName("Power/save", name => false), "Power-save", "freeName: the name, a \"/\" made \"-\"");
+        assertEqual(ThemeRules.freeName("Ease", name => name === "Ease"), "Ease 2", "freeName: taken, the next number");
+        assertEqual(ThemeRules.freeName("Ease", name => name === "Ease" || name === "Ease 2"), "Ease 3", "freeName: the first number free");
+        assertEqual(ThemeRules.freeName("  ", name => false), "Theme", "freeName: an empty name: \"Theme\"");
     }
 }

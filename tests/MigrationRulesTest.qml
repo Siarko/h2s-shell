@@ -88,7 +88,11 @@ TestCase {
         assertEqual(rules.parseRecord("reset:Not an id").kind, "other", "record: reset: before something that is no id is not a record");
         assert(rules.validId("2026-11-25-" + "a".repeat(85)) && !rules.validId("2026-11-25-" + "a".repeat(86)), "id: at most 96 characters");
         assert(rules.validId("2026-11-25-popup-mode") && rules.validId("1.0.0-legacy-settings"), "id: dated and versioned forms");
-        assert(!rules.validId("2026-11-25") && !rules.validId("Popup-Mode") && !rules.validId("2026-11-25-a--b") && !rules.validId("theme.barLayout"), "id: other forms are not ids");
+        assert(!rules.validId("2026-11-25") && !rules.validId("Popup-Mode") && !rules.validId("2026-11-25-a--b") && !rules.validId("theme.layout") && !rules.validId("theme.barlayout"), "id: other forms are not ids");
+        assert(rules.validId("theme.barLayout"), "id: the marker older code wrote for the bar geometry is one (compat)");
+        assertEqual(JSON.stringify([rules.parseRecord("theme.barLayout"), rules.parseRecord("reset:theme.barLayout"), rules.parseRecord("held:theme.barLayout@2.2.0")].map(record => record.kind)),
+                    JSON.stringify(["applied", "reset", "held"]), "id: the compat id is read as a record like any other");
+        assert(rules.isDone("theme.barLayout", ["bar.height", "theme.barLayout"]) && !rules.isDone("theme.barLayout", ["bar.layout.barHeight"]), "id: a config the old code migrated has the compat id done");
 
         const registry = _failing;
         const ids = list => list.map(migration => migration.migrationId).join(",");
@@ -348,8 +352,8 @@ TestCase {
         }
         for (const part of ["raw", "profiles", "globals", "presets", "files"])
             assert(!apply(["setting:clock.*"], doc => { delete doc[part]; return doc; }).ok, "not a document: " + part + " missing is a failure");
-        for (const [profile, what] of [[3, "no object"], [{ set: {} }, "no name"], [{ name: "Full", set: 3 }, "settings no object"]])
-            assert(!apply(["setting:clock.*"], doc => { doc.profiles[0] = profile; return doc; }).ok, "not a document: a profile with " + what + " is a failure");
+        for (const [profile, what] of [[3, "no object"], [null, "null"], [{ set: {} }, "no name"], [{ name: "Full", set: 3 }, "settings no object"]])
+            assert(!apply(["setting:clock.*"], doc => { doc.profiles[0] = profile; return doc; }).ok, "not a document: a profile " + (profile === null ? "that is null" : "with " + what) + " is a failure");
         for (const reserved of ["profiles", "globals", "widgetPresets", "migratedKeys", "writtenBy"])
             assert(!apply(["*"], doc => { doc.raw[reserved] = "[]"; return doc; }).ok, "not a document: a \"*\" result with raw." + reserved + " (the runner's)");
         assert(!apply(["*"], doc => { doc.profiles[0] = { set: {} }; return doc; }).ok, "not a document: a \"*\" result with a profile without a name");

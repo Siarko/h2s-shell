@@ -6,9 +6,8 @@ import QtQuick
 
 // The theme files on disk: where they live, reading and writing them, and changing them
 // for the settings — themes created, copied, re-parented, renamed and deleted (the Themes
-// page), curves written, renamed and deleted in the library (the Curves page) — plus the
-// one-time move of the bar's geometry into themes. Theme resolves what these files say,
-// and keeps the drafts; a change here reloads it.
+// page), curves written, renamed and deleted in the library (the Curves page). Theme
+// resolves what these files say, and keeps the drafts; a change here reloads it.
 Singleton {
     id: root
 
@@ -33,7 +32,6 @@ Singleton {
     Component.onCompleted: {
         if (!Config.readOnly)
             _ensureThemesDir.running = true;
-        _migrateBarLayoutIfNeeded();
     }
 
     // ---- Reading and writing ----
@@ -264,57 +262,10 @@ Singleton {
         return true;
     }
 
-    // ---- Migration: the bar's geometry moves from profiles into themes, once ----
-    readonly property string _barLayoutMigration: "theme.barLayout"
-
-    function _migrateBarLayoutIfNeeded() {
-        if (!ThemeRules.barLayoutMigrationDue({ ready: Config.ready, readOnly: Config.readOnly, saveBlocked: Config.saveBlocked,
-                                                 profiles: Config.profiles, pending: _pendingMigration !== null,
-                                                 migratedKeys: Config.migratedKeys, marker: _barLayoutMigration }))
-            return;
-        // Geometry from before profiles that never reached one (the per-key migration
-        // marks the keys it copied)
-        const legacy = Config.migratedKeys.includes("bar.layout.barHeight")
-            ? undefined : Profiles.oldConfig().bar?.layout;
-        const result = ThemeRules.themesFromBarLayout(Profiles.profiles, Profiles.globals, legacy,
-            name => readFile(themePath(name)).exists);
-        if (result.themes.length > 0)
-            Profiles.backUpConfig();
-        _pendingMigration = result;
-        // The theme files first, once their folder exists, then the profiles that pick them
-        _ensureThemesDir.running = true;
-    }
-
-    property var _pendingMigration: null
-
-    function _finishMigration() {
-        const result = _pendingMigration;
-        _pendingMigration = null;
-        if (result === null || Config.migratedKeys.includes(_barLayoutMigration))
-            return;
-        for (const entry of result.themes)
-            writeTheme(entry.name, entry.theme);
-        if (result.themes.length > 0) {
-            // Always shown, not only in debug: a one-time change to the user's config
-            console.log("[Theme] Moved the bar geometry into themes:",
-                        result.themes.map(entry => entry.name + " (" + Object.keys(entry.theme.bar).join(", ") + ")").join("; "));
-        }
-        Config.profiles = JSON.stringify(result.profiles);
-        Config.globals = JSON.stringify(result.globals);
-        Config.migratedKeys = Config.migratedKeys.concat([_barLayoutMigration]);
-    }
-
-    // FileView does not create folders: the themes folder is made at start, for
-    // drafts and saves, and before the migration writes into it
+    // FileView does not create folders: the themes folder is made at start, for drafts and
+    // saves
     Process {
         id: _ensureThemesDir
         command: ["mkdir", "-p", root.themesDir, root.draftsDir]
-        onExited: root._finishMigration()
-    }
-
-    Connections {
-        target: Config
-        function onReadyChanged() { Qt.callLater(root._migrateBarLayoutIfNeeded) }
-        function onProfilesChanged() { Qt.callLater(root._migrateBarLayoutIfNeeded) }
     }
 }

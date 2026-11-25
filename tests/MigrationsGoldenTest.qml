@@ -9,13 +9,17 @@ import qs.singletons
 // the config as the migrations see it; files-before.json, the theme files then, path →
 // content), what that code left behind (after.json, files-after.json). The registered
 // migrations run here as Config runs them — the load phase, then the after-seed phase once
-// the profiles exist (MigrationRules.startup, without file I/O or backups) — and then
-// ThemeFiles' bar geometry, not on the runner yet, on the same rules function. What the save
-// adds (writtenBy, the declared keys' defaults) is not part of it.
+// the profiles exist (MigrationRules.startup, without file I/O or backups). The order is the
+// runner's, the registry's (the bar geometry after the settings from before profiles, on the
+// document that one left), not assumed: the code before the runner ran them side by side, and
+// its bar geometry could write profiles it had read before the other wrote them. The same
+// cases also run in that old order (the bar geometry first) and must give the same result.
+// What the save adds (writtenBy, the declared keys' defaults) is not part of it.
 //
 // The records (migratedKeys) are compared as a set, without the ids of the registered
-// migrations, which the code before the runner did not write: the per-key markers it wrote
-// must be the same. A case with differs.json is where the runner deliberately does otherwise
+// migrations, which the code before the runner did not write (theme.barLayout it did, and it
+// is the id of the migration that took over): the per-key markers it wrote must be the same.
+// A case with differs.json is where the runner deliberately does otherwise
 // than that code did (old-code.json): its after.json is the runner's result, and differs.json
 // says whether the session is left read-only.
 //
@@ -51,18 +55,18 @@ TestCase {
     }
 
     // The startup migrations on `config` (the file's object) and `files` (theme files,
-    // "themes/<name>.json" → content). → { config, files, readOnly }
-    function startup(config, files) {
-        const registry = Migrations.all();
+    // "themes/<name>.json" → content), the registered ones or `registry`.
+    // → { config, files, readOnly }
+    function startup(config, files, registry) {
+        const migrations = registry ?? Migrations.all();
         const options = phase => ({ phase: phase, version: Version.number, context: { version: Version.number } });
         let out = JSON.parse(JSON.stringify(config));
         const outFiles = JSON.parse(JSON.stringify(files));
-        const old = JSON.parse(JSON.stringify(config));
         for (const phase of ["load", "afterSeed"]) {
             // ConfigFile.runAfterSeed: once the profiles exist
             if (phase === "afterSeed" && (out.profiles ?? "") === "")
                 continue;
-            const run = MigrationRules.startup(registry, out, outFiles, [], options(phase));
+            const run = MigrationRules.startup(migrations, out, outFiles, [], options(phase));
             if (run.readOnly)
                 return { config: out, files: outFiles, readOnly: true };
             if (run.write)
@@ -70,25 +74,18 @@ TestCase {
             for (const path of Object.keys(run.files))
                 outFiles[path] = run.files[path];
         }
-        const parsedProfiles = () => JSON.parse(out.profiles);
-        const parsedGlobals = () => {
-            const parsed = JSON.parse(out.globals ?? "{}");
-            return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
-        };
-        const markers = () => out.migratedKeys ?? [];
-
-        // ThemeFiles._migrateBarLayoutIfNeeded and _finishMigration: the bar geometry into themes
-        if ((out.profiles ?? "") !== "" && !markers().includes("theme.barLayout")) {
-            const legacy = markers().includes("bar.layout.barHeight") ? undefined : old.bar?.layout;
-            const result = ThemeRules.themesFromBarLayout(parsedProfiles(), parsedGlobals(), legacy,
-                                                          name => ("themes/" + name + ".json") in outFiles);
-            for (const entry of result.themes)
-                outFiles["themes/" + entry.name + ".json"] = entry.theme;
-            out.profiles = JSON.stringify(result.profiles);
-            out.globals = JSON.stringify(result.globals);
-            out.migratedKeys = markers().concat(["theme.barLayout"]);
-        }
         return { config: out, files: outFiles, readOnly: false };
+    }
+
+    // The registry in the order the code before the runner could run them in: the bar
+    // geometry before the settings from before profiles
+    function _oldRaceOrder() {
+        const registry = Migrations.all();
+        const barLayout = registry.findIndex(migration => migration.migrationId === "theme.barLayout");
+        const legacy = registry.findIndex(migration => migration.migrationId === "1.0.0-legacy-settings");
+        const moved = registry.splice(barLayout, 1)[0];
+        registry.splice(legacy, 0, moved);
+        return registry;
     }
 
     // A config compared by what it holds: the JSON texts read, key order not counted, a
@@ -113,6 +110,9 @@ TestCase {
     }
 
     function run() {
+        const order = _oldRaceOrder().map(migration => migration.migrationId);
+        assert(order.indexOf("theme.barLayout") !== -1 && order.indexOf("theme.barLayout") < order.indexOf("1.0.0-legacy-settings"),
+               "the old order puts the bar geometry first");
         for (const name of _cases)
             _case(name);
     }
@@ -148,6 +148,10 @@ TestCase {
         if (!sameFiles)
             console.log("  " + name + " gave files: " + JSON.stringify(result.files));
         assert(sameFiles, name + ": the theme files as expected (files-after.json)");
+        const raced = startup(before, filesBefore, _oldRaceOrder());
+        assert(raced.readOnly === result.readOnly && _comparable(raced.config) === _comparable(after)
+               && MigrationRules.canonical(raced.files) === MigrationRules.canonical(filesAfter),
+               name + ": in the old order (the bar geometry first) the same result");
         const again = startup(after, filesAfter);
         assert(_comparable(again.config) === _comparable(after) && MigrationRules.canonical(again.files) === MigrationRules.canonical(filesAfter),
                name + ": the next start changes nothing");

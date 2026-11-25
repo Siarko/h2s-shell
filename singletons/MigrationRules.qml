@@ -67,9 +67,16 @@ Singleton {
 
     // ---- Ids and records ----
 
+    // Ids older code wrote as its markers, kept as the ids of the migrations that took over
+    // from it (an older shell then sees them done)
+    readonly property var _compatIds: ["theme.barLayout"]
+
     // A migration's id: "<yyyy-mm-dd>-<what>" (new migrations) or "<x.y.z>-<what>" (the
-    // release a converted one first shipped in), lower-case words joined by "-"
+    // release a converted one first shipped in), lower-case words joined by "-"; or one of
+    // _compatIds
     function validId(id) {
+        if (_compatIds.includes(id))
+            return true;
         return typeof id === "string" && id.length <= 96
             && /^([0-9]{4}-[0-9]{2}-[0-9]{2}|(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*))-[a-z0-9]+(-[a-z0-9]+)*$/.test(id);
     }

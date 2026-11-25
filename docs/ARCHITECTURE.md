@@ -466,7 +466,9 @@ migrated is neither run nor recorded; and `ownsRecord(entry)`: the per-key marke
 wrote in `migratedKeys` (`general.debug`, `default:<key>`) are its own, handed to it and
 written back, so an older shell does not migrate the same keys again. The settings from
 before profiles (`1.0.0-legacy-settings`, after seeding), the widget preset library from the
-old widget settings (`1.0.0-widget-presets`) and the lock screen's former default
+old widget settings (`1.0.0-widget-presets`), the bar's geometry from the profiles into theme
+files (`theme.barLayout`, after seeding, after the settings from before profiles: its id is the
+marker older code wrote, the one id of neither form) and the lock screen's former default
 (`2.1.0-lock-notification-detail-default`) are such migrations; `tests/MigrationsGoldenTest.qml`
 holds old configs and what the code before the runner made of them.
 

@@ -1,0 +1,17 @@
+{
+    "profiles": "[{\"name\": \"Full\", \"enabled\": true, \"when\": {}, \"set\": {\"bar.layout.barHeight\": 40, \"bar.layout.rightPadding\": 5, \"bar.left\": [{\"type\": \"clock\", \"preset\": \"\"}]}}, {\"name\": \"Quiet\", \"enabled\": true, \"when\": {}, \"set\": {\"graphs.heartbeat\": false}}, {\"name\": \"Power/save\", \"enabled\": true, \"when\": {\"all\": [{\"fact\": \"power.onBattery\", \"is\": true}]}, \"set\": {\"appearance.theme\": \"nord\", \"bar.layout.leftMargin\": 300}}]",
+    "globals": "{\"bar.layout.reservedSpace\": 44, \"general.debug\": true}",
+    "migratedKeys": [
+        "bar.left",
+        "bar.layout.barHeight"
+    ],
+    "bar": {
+        "layout": {
+            "barHeight": 33,
+            "topOffset": 9
+        }
+    },
+    "gcal": {
+        "enabled": false
+    }
+}

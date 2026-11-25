@@ -31,30 +31,20 @@ Singleton {
                                                                         _powerProfileName(PowerProfiles.profile)))
     }
 
-    // The config file as JSON, with the sections from before profiles that Config no
-    // longer declares (ThemeFiles' bar geometry); read fresh each time
-    function oldConfig() {
-        _configFile.reload()
-        try {
-            return JSON.parse(_configFile.text() || "{}")
-        } catch (error) {
-            return {}
-        }
-    }
-
     // Not while saves are blocked: the change it would guard is not saved either
     function backUpConfig() {
         if (Config.readOnly || Config.saveBlocked)
             return
         const stamp = new Date().toISOString().replace(/[:.]/g, "-")
         _configCopy.path = Config.path + ".bak-" + stamp
+        _configFile.reload()
         _configCopy.setText(_configFile.text())
     }
 
     FileView {
         id: _configFile
         path: Config.path
-        // Every read, not only the first: oldConfig reloads it each time
+        // The backup copies the file as it is now
         blockAllReads: true
         printErrors: false
     }
