@@ -78,7 +78,7 @@ Singleton {
     // `withDraft`: the theme `name` with its draft laid over it — what the settings show,
     // and the shell while it is previewed
     function _resolve(name, withDraft) {
-        const draft = withDraft ? drafts[name] : undefined;
+        const draft = withDraft ? ThemeRules.ownValue(drafts, name) : undefined;
         // Local, not a property: a property written and read here would make any binding
         // that ends up calling this loop
         const readErrors = [];
@@ -108,7 +108,7 @@ Singleton {
             if (palette === null)
                 result.errors.push("Palette \"" + path + "\" of theme \"" + entry.name + "\" not found");
             else
-                palettes[entry.name] = palette.colors ?? palette;
+                ThemeRules.putOwn(palettes, entry.name, palette.colors ?? palette);
         }
         // The curves library, read with the theme, so a change to either reloads both
         const library = readWatched(curvesPath) ?? {};
@@ -121,14 +121,15 @@ Singleton {
         // What the draft sets is marked as such; a value it resets keeps where its
         // inherited value comes from, marked as reset
         const origins = ThemeRules.origins(result.chain, palettes);
-        for (const group in draft ?? {}) {
-            for (const token in draft[group]) {
-                if (!origins[group])
-                    continue;
+        for (const group of Object.keys(draft ?? {})) {
+            const marked = ThemeRules.ownValue(origins, group);
+            if (!marked || draft[group] === null || typeof draft[group] !== "object")
+                continue;
+            for (const token of Object.keys(draft[group])) {
                 if (draft[group][token] === null)
-                    origins[group][token] = Object.assign({}, origins[group][token] ?? {}, { reset: true });
+                    ThemeRules.putOwn(marked, token, Object.assign({}, ThemeRules.ownValue(marked, token) ?? {}, { reset: true }));
                 else
-                    origins[group][token] = { theme: name, palette: false, draft: true };
+                    ThemeRules.putOwn(marked, token, { theme: name, palette: false, draft: true });
             }
         }
         return {
@@ -178,7 +179,7 @@ Singleton {
             allNames.push(name);
             const theme = _read(ThemeFiles.themePath(name));
             if (theme !== null)
-                allThemes[name] = theme;
+                ThemeRules.putOwn(allThemes, name, theme);
         }
         themeFiles = allThemes;
         allNames.sort((a, b) => a.localeCompare(b));
@@ -188,11 +189,11 @@ Singleton {
         const others = {};
         const otherErrors = {};
         const otherOrigins = {};
-        for (const other in _otherValues) {
+        for (const other of Object.keys(_otherValues)) {
             const otherResolved = _resolve(other, true);
-            others[other] = otherResolved.values;
-            otherErrors[other] = otherResolved.errors;
-            otherOrigins[other] = otherResolved.origins;
+            ThemeRules.putOwn(others, other, otherResolved.values);
+            ThemeRules.putOwn(otherErrors, other, otherResolved.errors);
+            ThemeRules.putOwn(otherOrigins, other, otherResolved.origins);
         }
         _otherErrors = otherErrors;
         _otherOrigins = otherOrigins;
@@ -208,7 +209,7 @@ Singleton {
     function valuesOf(name) {
         if (_showsDraftOf(name))
             return values;
-        const known = _otherValues[name];
+        const known = ThemeRules.ownValue(_otherValues, name);
         if (known === undefined) {
             Qt.callLater(_resolveOther, name);
             return values;
@@ -223,16 +224,16 @@ Singleton {
     property var origins: ({})
 
     function _resolveOther(name) {
-        if (name in _otherValues)
+        if (ThemeRules.hasOwn(_otherValues, name))
             return;
         const resolved = _resolve(name, true);
-        const others = Object.assign({}, _otherValues);
-        others[name] = resolved.values;
-        const otherErrors = Object.assign({}, _otherErrors);
-        otherErrors[name] = resolved.errors;
+        const others = ThemeRules.ownCopy(_otherValues);
+        ThemeRules.putOwn(others, name, resolved.values);
+        const otherErrors = ThemeRules.ownCopy(_otherErrors);
+        ThemeRules.putOwn(otherErrors, name, resolved.errors);
         _otherErrors = otherErrors;
-        const otherOrigins = Object.assign({}, _otherOrigins);
-        otherOrigins[name] = resolved.origins;
+        const otherOrigins = ThemeRules.ownCopy(_otherOrigins);
+        ThemeRules.putOwn(otherOrigins, name, resolved.origins);
         _otherOrigins = otherOrigins;
         _otherValues = others;
     }
@@ -242,7 +243,7 @@ Singleton {
     function errorsOf(name) {
         if (_showsDraftOf(name))
             return errors;
-        if (!(name in _otherErrors)) {
+        if (!ThemeRules.hasOwn(_otherErrors, name)) {
             Qt.callLater(_resolveOther, name);
             return [];
         }
@@ -254,7 +255,7 @@ Singleton {
     function originsOf(name) {
         if (_showsDraftOf(name))
             return origins;
-        if (!(name in _otherOrigins)) {
+        if (!ThemeRules.hasOwn(_otherOrigins, name)) {
             Qt.callLater(_resolveOther, name);
             return ({});
         }
@@ -273,28 +274,28 @@ Singleton {
     // Whether the active values are what the settings should show for `name`: the theme
     // shown, with its draft if it has one (it is shown with it only while previewed)
     function _showsDraftOf(name) {
-        return name === themeName && (preview !== "" || !(name in drafts));
+        return name === themeName && (preview !== "" || !ThemeRules.hasOwn(drafts, name));
     }
 
     function _loadDrafts() {
         if (_draftsLoaded)
             return;
         _draftsLoaded = true;
-        const read = Object.assign({}, drafts);
+        const read = ThemeRules.ownCopy(drafts);
         for (let i = 0; i < _draftFiles.count; i++) {
             const name = _draftFiles.get(i, "fileBaseName");
             const draft = _read(ThemeFiles.draftPath(name));
-            if (draft !== null && Object.keys(draft).length > 0 && !(name in read))
-                read[name] = draft;
+            if (draft !== null && Object.keys(draft).length > 0 && !ThemeRules.hasOwn(read, name))
+                ThemeRules.putOwn(read, name, draft);
         }
         drafts = read;
         Qt.callLater(reload);
     }
 
     function _writeDraft(name, draft) {
-        const all = Object.assign({}, drafts);
+        const all = ThemeRules.ownCopy(drafts);
         if (Object.keys(draft).length > 0) {
-            all[name] = draft;
+            ThemeRules.putOwn(all, name, draft);
             ThemeFiles.write(ThemeFiles.draftPath(name), draft);
         } else {
             delete all[name];
@@ -306,7 +307,7 @@ Singleton {
 
     // A theme renamed takes its draft along (ThemeFiles.renameTheme)
     function moveDraft(oldName, newName) {
-        if (!(oldName in drafts))
+        if (!ThemeRules.hasOwn(drafts, oldName))
             return;
         _writeDraft(newName, drafts[oldName]);
         _writeDraft(oldName, {});
@@ -314,7 +315,7 @@ Singleton {
 
     // A theme deleted loses its draft (ThemeFiles.deleteTheme)
     function dropDraft(name) {
-        if (name in drafts)
+        if (ThemeRules.hasOwn(drafts, name))
             _writeDraft(name, {});
     }
 
@@ -331,7 +332,7 @@ Singleton {
 
     // Whether the theme `name` has unsaved changes, in `group` or in any
     function hasDraft(name, group) {
-        return group ? !!drafts[name]?.[group] : name in drafts;
+        return group ? !!ThemeRules.ownValue(ThemeRules.ownValue(drafts, name), group) : ThemeRules.hasOwn(drafts, name);
     }
 
     // Changes one token in the draft of `name`; `value` null resets it (ThemeRules.draftWith)
@@ -341,13 +342,13 @@ Singleton {
         const file = _fileForEdit(name);
         if (file === null)
             return false;
-        _writeDraft(name, ThemeRules.draftWith(drafts[name], file, group, token, value));
+        _writeDraft(name, ThemeRules.draftWith(ThemeRules.ownValue(drafts, name), file, group, token, value));
         return true;
     }
 
     // Takes back the draft's change to one token: it is as saved again
     function undraftToken(name, group, token) {
-        if (Config.readOnly || !(name in drafts))
+        if (Config.readOnly || !ThemeRules.hasOwn(drafts, name))
             return false;
         _writeDraft(name, ThemeRules.draftWithout(drafts[name], group, token));
         return true;
@@ -356,7 +357,7 @@ Singleton {
     // Writes the draft of `name` into its theme file — the groups given, or all of it — and
     // keeps the rest as the draft. Built on the file as it is now, not as last read.
     function saveDraft(name, groups) {
-        if (Config.readOnly || !(name in drafts))
+        if (Config.readOnly || !ThemeRules.hasOwn(drafts, name))
             return false;
         const file = _fileForEdit(name);
         if (file === null)
@@ -369,7 +370,7 @@ Singleton {
 
     // Throws away the draft of `name` — the groups given, or all of it
     function discardDraft(name, groups) {
-        if (Config.readOnly || !(name in drafts))
+        if (Config.readOnly || !ThemeRules.hasOwn(drafts, name))
             return false;
         _writeDraft(name, ThemeRules.splitDraft(drafts[name], groups).rest);
         return true;

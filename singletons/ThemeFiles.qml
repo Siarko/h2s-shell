@@ -128,22 +128,22 @@ Singleton {
     function duplicateTheme(source, name) {
         if (Config.readOnly || !ThemeRules.validThemeName(name) || Theme.themeExists(name))
             return false;
-        if (Theme.themeNames.includes(source) && !(source in Theme.themeFiles)) {
+        if (Theme.themeNames.includes(source) && !ThemeRules.hasOwn(Theme.themeFiles, source)) {
             console.warn("[Theme] Not copying", themePath(source), "— it does not parse");
             return false;
         }
-        writeTheme(name, JSON.parse(JSON.stringify(Theme.themeFiles[source] ?? {})));
+        writeTheme(name, JSON.parse(JSON.stringify(ThemeRules.ownValue(Theme.themeFiles, source) ?? {})));
         return true;
     }
 
     // Points the theme `name` at a new parent, unless that would make a cycle
     function setExtends(name, base) {
         const themes = Theme.themeFiles;
-        if (Config.readOnly || !(name in themes))
+        if (Config.readOnly || !ThemeRules.hasOwn(themes, name))
             return false;
-        if (ThemeRules.extendsCycle(name, base, themeName => themes[themeName] ?? null))
+        if (ThemeRules.extendsCycle(name, base, themeName => ThemeRules.ownValue(themes, themeName) ?? null))
             return false;
-        const theme = Object.assign({}, themes[name]);
+        const theme = JSON.parse(JSON.stringify(themes[name]));
         if (base === "default")
             delete theme.extends;
         else
@@ -156,12 +156,12 @@ Singleton {
     // profiles using it follow, and the old file goes. The config is backed up first.
     function renameTheme(oldName, newName) {
         const themes = Theme.themeFiles;
-        if (Config.readOnly || oldName === "default" || !(oldName in themes)
+        if (Config.readOnly || oldName === "default" || !ThemeRules.hasOwn(themes, oldName)
                 || !ThemeRules.validThemeName(newName) || Theme.themeExists(newName))
             return false;
         writeTheme(newName, themes[oldName]);
         const changed = ThemeRules.renameExtends(themes, oldName, newName);
-        for (const name in changed)
+        for (const name of Object.keys(changed))
             writeTheme(name, changed[name]);
         _retargetProfiles(oldName, newName);
         Theme.moveDraft(oldName, newName);
@@ -175,7 +175,7 @@ Singleton {
         if (Config.readOnly || !Theme.themeNames.includes(name))
             return false;
         const changed = ThemeRules.withoutExtends(Theme.themeFiles, name);
-        for (const other in changed)
+        for (const other of Object.keys(changed))
             writeTheme(other, changed[other]);
         _retargetProfiles(name, "default");
         Theme.dropDraft(name);
@@ -223,7 +223,7 @@ Singleton {
         const library = _libraryForEdit();
         if (library === null)
             return false;
-        library[name] = points;
+        ThemeRules.putOwn(library, name, points);
         _writeLibrary(library);
         return true;
     }
@@ -233,7 +233,7 @@ Singleton {
         if (Config.readOnly)
             return false;
         const library = _libraryForEdit();
-        if (library === null || !(name in library))
+        if (library === null || !ThemeRules.hasOwn(library, name))
             return false;
         delete library[name];
         _writeLibrary(library);
@@ -246,17 +246,17 @@ Singleton {
         if (Config.readOnly || !ThemeRules.validCurveName(newName))
             return false;
         const library = _libraryForEdit();
-        if (library === null || !(oldName in library) || (newName in library))
+        if (library === null || !ThemeRules.hasOwn(library, oldName) || ThemeRules.hasOwn(library, newName))
             return false;
         const renamed = {};
         for (const name of Object.keys(library))
-            renamed[name === oldName ? newName : name] = library[name];
+            ThemeRules.putOwn(renamed, name === oldName ? newName : name, library[name]);
         _writeLibrary(renamed);
         const changed = ThemeRules.renameCurveIn(Theme.themeFiles, oldName, newName);
-        for (const name in changed)
+        for (const name of Object.keys(changed))
             writeTheme(name, changed[name]);
         for (const name of Theme.themeNames) {
-            if (!(name in Theme.themeFiles))
+            if (!ThemeRules.hasOwn(Theme.themeFiles, name))
                 console.warn("[Theme] Not renaming curve", oldName, "in", themePath(name), "— it does not parse");
         }
         return true;

@@ -30,15 +30,23 @@ Singleton {
     // Keys from a theme file, a palette, a draft or a theme's name are data: one may be
     // "__proto__", "constructor" or "toString". So a key is looked up only among an object's
     // own properties, and written as an own property: assigning "__proto__" would replace
-    // the object's prototype, and `in` sees what every object inherits.
-    function _has(object, key) {
+    // the object's prototype, and `in` sees what every object inherits. Theme and
+    // ThemeFiles keep their records by theme name the same way.
+    function hasOwn(object, key) {
         return object !== null && typeof object === "object" && Object.prototype.hasOwnProperty.call(object, key);
     }
-    function _own(object, key) {
-        return _has(object, key) ? object[key] : undefined;
+    function ownValue(object, key) {
+        return hasOwn(object, key) ? object[key] : undefined;
     }
-    function _put(object, key, value) {
+    function putOwn(object, key, value) {
         Object.defineProperty(object, key, { value: value, writable: true, enumerable: true, configurable: true });
+    }
+    // A shallow copy of `object`'s own keys (Object.assign would assign a "__proto__" key)
+    function ownCopy(object) {
+        const copy = {};
+        for (const key of _keys(object))
+            putOwn(copy, key, object[key]);
+        return copy;
     }
 
     // Groups of tokens a theme file may set
@@ -85,9 +93,9 @@ Singleton {
     }
     function _buttonColours(kind, state) {
         const hot = state?.hot === true;
-        const tone = _own({ "delete": "error", "warning": "warning", "success": "success" }, kind) ?? "";
-        const filled = _own({ "save": "confirm", "saveChange": "confirmSecondary", "action": "accent" }, kind) ?? "";
-        const group = _own({ "save": "saveButton", "saveChange": "saveButton", "cancel": "cancelButton", "delete": "deleteButton",
+        const tone = ownValue({ "delete": "error", "warning": "warning", "success": "success" }, kind) ?? "";
+        const filled = ownValue({ "save": "confirm", "saveChange": "confirmSecondary", "action": "accent" }, kind) ?? "";
+        const group = ownValue({ "save": "saveButton", "saveChange": "saveButton", "cancel": "cancelButton", "delete": "deleteButton",
             "warning": "warningButton", "success": "successButton" }, kind) ?? "button";
         const plain = hot ? "surfaceHover" : "surface";
         if (state?.asking === true) {
@@ -154,7 +162,7 @@ Singleton {
                 break;
             }
             chain.push({ name: current, theme: theme });
-            current = typeof _own(theme, "extends") === "string" ? theme.extends : "";
+            current = typeof ownValue(theme, "extends") === "string" ? theme.extends : "";
         }
         return { chain: chain, errors: errors };
     }
@@ -177,22 +185,22 @@ Singleton {
         for (let i = chain.length - 1; i >= 0; i--) {
             const entry = chain[i];
             const layers = [];
-            if (_own(palettes, entry.name))
+            if (ownValue(palettes, entry.name))
                 layers.push({ group: "colors", values: palettes[entry.name] });
             for (const group of groups)
-                layers.push({ group: group, values: _own(entry.theme, group) });
+                layers.push({ group: group, values: ownValue(entry.theme, group) });
             for (const layer of layers) {
                 if (layer.values === null || typeof layer.values !== "object")
                     continue;
                 for (const token of Object.keys(layer.values)) {
-                    if (_has(result[layer.group], token))
+                    if (hasOwn(result[layer.group], token))
                         result[layer.group][token] = layer.values[token];
                 }
             }
         }
         // Followers left unset take their leader's value
         for (const token in colorFollows) {
-            if (_has(result.colors, token) && !result.colors[token])
+            if (hasOwn(result.colors, token) && !result.colors[token])
                 result.colors[token] = result.colors[colorFollows[token]];
         }
         return result;
@@ -435,16 +443,16 @@ Singleton {
             result[group] = {};
         for (let i = chain.length - 1; i >= 0; i--) {
             const entry = chain[i];
-            for (const token of _keys(_own(palettes, entry.name)))
-                _put(result.colors, token, { theme: entry.name, palette: true });
+            for (const token of _keys(ownValue(palettes, entry.name)))
+                putOwn(result.colors, token, { theme: entry.name, palette: true });
             for (const group of groups) {
-                for (const token of _keys(_own(entry.theme, group)))
-                    _put(result[group], token, { theme: entry.name, palette: false });
+                for (const token of _keys(ownValue(entry.theme, group)))
+                    putOwn(result[group], token, { theme: entry.name, palette: false });
             }
         }
         // A follower nothing sets: its leader's value
         for (const token in colorFollows) {
-            if (!_has(result.colors, token))
+            if (!hasOwn(result.colors, token))
                 result.colors[token] = { follows: colorFollows[token] };
         }
         return result;
@@ -459,17 +467,15 @@ Singleton {
     function applyDraft(theme, draft) {
         const result = JSON.parse(JSON.stringify(theme ?? {}));
         for (const group of _keys(draft)) {
-            const values = {};
-            for (const token of _keys(_own(result, group)))
-                _put(values, token, result[group][token]);
+            const values = ownCopy(ownValue(result, group));
             for (const token of _keys(draft[group])) {
                 if (draft[group][token] === null)
                     delete values[token];
                 else
-                    _put(values, token, draft[group][token]);
+                    putOwn(values, token, draft[group][token]);
             }
             if (Object.keys(values).length > 0)
-                _put(result, group, values);
+                putOwn(result, group, values);
             else
                 delete result[group];
         }
@@ -480,12 +486,12 @@ Singleton {
     // the theme if `theme` sets it, else dropped from the draft. Empty groups go.
     function draftWith(draft, theme, group, token, value) {
         const result = JSON.parse(JSON.stringify(draft ?? {}));
-        if (!_has(result, group))
-            _put(result, group, {});
-        if (value === null && !_has(_own(theme, group), token))
+        if (!hasOwn(result, group))
+            putOwn(result, group, {});
+        if (value === null && !hasOwn(ownValue(theme, group), token))
             delete result[group][token];
         else
-            _put(result[group], token, value);
+            putOwn(result[group], token, value);
         if (Object.keys(result[group]).length === 0)
             delete result[group];
         return result;
@@ -494,7 +500,7 @@ Singleton {
     // `draft` without its change to one token: back to what the theme file has
     function draftWithout(draft, group, token) {
         const result = JSON.parse(JSON.stringify(draft ?? {}));
-        if (_has(result, group)) {
+        if (hasOwn(result, group)) {
             delete result[group][token];
             if (Object.keys(result[group]).length === 0)
                 delete result[group];
@@ -509,9 +515,9 @@ Singleton {
         const rest = {};
         for (const group of _keys(draft)) {
             if (!groups || groups.includes(group))
-                _put(taken, group, draft[group]);
+                putOwn(taken, group, draft[group]);
             else
-                _put(rest, group, draft[group]);
+                putOwn(rest, group, draft[group]);
         }
         return { taken: taken, rest: rest };
     }
@@ -530,11 +536,11 @@ Singleton {
     function renameExtends(themes, oldName, newName) {
         const changed = {};
         for (const name of _keys(themes)) {
-            if (_own(themes[name], "extends") === oldName) {
+            if (ownValue(themes[name], "extends") === oldName) {
                 // A copy through JSON: Object.assign would assign a "__proto__" key
                 const copy = JSON.parse(JSON.stringify(themes[name]));
                 copy.extends = newName;
-                _put(changed, name, copy);
+                putOwn(changed, name, copy);
             }
         }
         return changed;
@@ -543,7 +549,7 @@ Singleton {
     // The themes that extend `removed`, extending what it extended instead (the default
     // theme when it extended nothing): only those that changed
     function withoutExtends(themes, removed) {
-        const parent = typeof _own(_own(themes, removed), "extends") === "string" ? themes[removed].extends : "default";
+        const parent = typeof ownValue(ownValue(themes, removed), "extends") === "string" ? themes[removed].extends : "default";
         return renameExtends(themes, removed, parent);
     }
 
@@ -555,12 +561,12 @@ Singleton {
         const newGlobals = JSON.parse(JSON.stringify(globals ?? {}));
         const changed = [];
         for (const profile of newProfiles) {
-            if (_own(profile.set, "appearance.theme") === oldName) {
+            if (ownValue(profile.set, "appearance.theme") === oldName) {
                 profile.set["appearance.theme"] = newName;
                 changed.push(profile.name);
             }
         }
-        if (_own(newGlobals, "appearance.theme") === oldName) {
+        if (ownValue(newGlobals, "appearance.theme") === oldName) {
             newGlobals["appearance.theme"] = newName;
             changed.push("global");
         }
@@ -638,7 +644,7 @@ Singleton {
     function curveUsages(themes, name) {
         const usages = [];
         for (const theme of Object.keys(themes ?? {}).sort()) {
-            const curves = _own(themes[theme], "curves") ?? {};
+            const curves = ownValue(themes[theme], "curves") ?? {};
             for (const role of _keys(curves)) {
                 if (curves[role] === name)
                     usages.push({ theme: theme, role: role });
@@ -652,7 +658,7 @@ Singleton {
     function renameCurveIn(themes, oldName, newName) {
         const changed = {};
         for (const theme of _keys(themes)) {
-            const curves = _own(themes[theme], "curves");
+            const curves = ownValue(themes[theme], "curves");
             if (curves === null || typeof curves !== "object" || !Object.values(curves).includes(oldName))
                 continue;
             const copy = JSON.parse(JSON.stringify(themes[theme]));
@@ -660,7 +666,7 @@ Singleton {
                 if (copy.curves[role] === oldName)
                     copy.curves[role] = newName;
             }
-            _put(changed, theme, copy);
+            putOwn(changed, theme, copy);
         }
         return changed;
     }

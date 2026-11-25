@@ -56,6 +56,7 @@ QtObject {
     property var _workspaces: WorkspacesTest {}
     property var _version: VersionTest {}
     property var _theme: ThemeTest {}
+    property var _themeMaps: ThemeMapsTest {}
     property var _apiThemeTokens: ApiThemeTokensTest {}
     property var _format: FormatTest {}
     property var _addressRules: AddressRulesTest {}
