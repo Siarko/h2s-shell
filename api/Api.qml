@@ -9,7 +9,7 @@ import qs.singletons.network
 // The module API: everything a
 // module may use of the shell. A module imports `qs.api` and reaches:
 //
-//   Api.version            "1.42" — this shell's module API, "major.minor". A module's manifest
+//   Api.version            "1.43" — this shell's module API, "major.minor". A module's manifest
 //                          asks for one ("api"); it loads when the major is the same, this
 //                          minor is at least the one asked for, and the one asked for is not
 //                          below the shell's floor (ModuleRules.apiFloor: the oldest version
@@ -1093,6 +1093,28 @@ import qs.singletons.network
 //                          answerChooser(moduleId, paths), cancelChooser(moduleId)); the
 //                          lock is the test kit's (setSessionLocked, or setChooserLocked for
 //                          the chooser alone).
+//
+// A module's settings migrations (1.43; the format and the rules:
+// singletons/ModuleMigrationRules.qml). Declared in module.json, in the order they run:
+//   "migrations": [{ "id": "taildrop-folder", "since": "0.8.0",
+//                    "file": "migrations/TaildropFolder.qml",
+//                    "scope": ["setting:taildrop.*", "store:folders"] }]
+//   id     lowercase words joined by "-", once in the list; recorded as applied, so a
+//          migration runs once per configuration whatever version it arrives in
+//   since  the module version it first ships in: not newer than the module's, not older
+//          than the one before it
+//   file   a .qml file inside the module's directory
+//   scope  what it reads and writes, never more than the module's own part:
+//          "setting:<name>" or "setting:<prefix>.*" — its settings, written without
+//          "mod.<id>." (the shell adds it); "store:<key>" — a key of its store; "*" — all its
+//          settings and its store, standing alone. Omitted: "*". Prefer narrow scopes: on a
+//          failure the scope is what is reset.
+//   A migration is handed only its scope — { settings: { profiles: [{ name, set }], globals },
+//   store }, settings by their full keys ("mod.<id>.<name>") — and returns the same shape;
+//   a key outside its scope (another module's, the core's) fails it. When one fails, its
+//   scope is reset to defaults (those settings and store keys removed), the later ones whose
+//   scopes overlap it wait for the next start, the others run. A fault in the list fails
+//   the module. Its data directory is never migrated nor reset by the shell.
 //
 // A module's API for other modules (1.18; the manifest's fields: singletons/ModuleManifestRules.qml,
 // the plan: ModuleMergeRules.dependencyPlan).

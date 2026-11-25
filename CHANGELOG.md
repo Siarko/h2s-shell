@@ -18,6 +18,13 @@ section to the new version and date.
 ### Module API
 The interface modules are written against (`qs.api`), versioned on its own
 (`Api.version`; its reference is `api/Api.qml`).
+- 1.43: module.json's `migrations`, an ordered list of the module's settings migrations
+  (`{ "id": "taildrop-folder", "since": "0.8.0", "file": "migrations/TaildropFolder.qml",
+  "scope": ["setting:taildrop.*", "store:folders"] }`): each a file inside the module, its
+  scope within the module's own settings (written without `mod.<id>.`) and store, or `*`
+  for all of them (the default). A migration is handed only its scope and may not write
+  outside it; one that fails has its scope reset to defaults, and the later ones that
+  overlap it wait. A fault in the list fails the module. The shell does not run them yet.
 - 1.42: a module's VPN provider must have its module id as `providerId`: another id (one
   of another module, or the shell's reserved `fake`) is refused, the reason among the
   module's errors — a module that loaded first could otherwise take another module's id and

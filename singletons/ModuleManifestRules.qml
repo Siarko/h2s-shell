@@ -128,6 +128,11 @@ import QtQuick
 //                 directory itself never goes in a backup (what the module can fetch again);
 //                 the module's settings and store always do. A path that is not such a path
 //                 is dropped with a warning (ModuleUpdateRules.backupPlan reads the list).
+//   migrations    optional (API 1.43): an ordered list of the module's settings migrations,
+//                 { id, since, file, scope? } — each a file inside the module's directory
+//                 whose scope stays within the module's own settings and store
+//                 (ModuleMigrationRules.qml has the format and the rules). Any fault in it
+//                 fails the module.
 //
 // Files are paths inside the module's directory: relative, "/"-separated, no "..", no
 // leading "/", ending in .qml (an icon's in .svg, .png or .webp). Any other field is kept (in `raw`) and reported as a warning,
@@ -171,7 +176,7 @@ Singleton {
 
     readonly property var _topFields: ["id", "name", "version", "api", "description", "main", "widgets",
         "settingsPages", "settings", "facts", "slots", "anchors", "requires", "optionalPrograms", "testPrograms", "setupHints", "tests",
-        "exports", "uses", "icon", "author", "privileged", "backup"]
+        "exports", "uses", "icon", "author", "privileged", "backup", "migrations"]
 
     // ---- Author and the privileged declaration (API 1.36) ----
 
@@ -756,7 +761,7 @@ Singleton {
             valid: false, id: "", name: "", version: "", api: "", description: "", main: "",
             widgets: [], settingsPages: [], settings: [], facts: [], slots: [], anchors: [],
             programs: [], optionalPrograms: [], testPrograms: "", setupHints: [], tests: [], unknownFields: [], raw: null,
-            exports: null, uses: [], icon: null, author: "", privileged: null, backup: [],
+            exports: null, uses: [], icon: null, author: "", privileged: null, backup: [], migrations: [],
             errors: [], warnings: []
         };
         const errors = result.errors;
@@ -857,7 +862,7 @@ Singleton {
         // Fields of a newer API than the manifest asks for: read all the same, and said —
         // the module is written against an API that does not have them
         const asked = ModuleRules.parseApi(result.api);
-        for (const [field, minor] of [["exports", 18], ["uses", 18], ["anchors", 20], ["icon", 26], ["backup", 37]]) {
+        for (const [field, minor] of [["exports", 18], ["uses", 18], ["anchors", 20], ["icon", 26], ["backup", 37], ["migrations", 43]]) {
             if (asked && (asked.major < 1 || (asked.major === 1 && asked.minor < minor)) && ModuleRules.get(raw, field) !== undefined)
                 warnings.push(field + ": a field of API 1." + minor + ", the manifest asks for API " + result.api + " (read all the same)");
         }
@@ -867,6 +872,10 @@ Singleton {
         if (result.id === "") {
             if (ModuleRules.get(raw, "privileged") !== undefined) {
                 errors.push("privileged: not read without a module id");
+                result.valid = false;
+            }
+            if (ModuleRules.get(raw, "migrations") !== undefined) {
+                errors.push("migrations: not read without a module id");
                 result.valid = false;
             }
             return result;
@@ -934,6 +943,13 @@ Singleton {
             errors.push(...privilegedErrors);
             result.valid = false;
         }
+        // A migration not run leaves data its code no longer reads: any fault fails the module
+        const migrations = ModuleMigrationRules.readMigrations(ModuleRules.get(raw, "migrations"), moduleId, result.version);
+        if (migrations.errors.length > 0) {
+            errors.push(...migrations.errors);
+            result.valid = false;
+        }
+        result.migrations = migrations.migrations;
         _list(raw, "setupHints", errors).forEach((hint, index) => {
             if (typeof hint !== "string" || hint.length === 0 || hint.length > 1000)
                 errors.push("setupHints[" + index + "]: not a text of at most 1000 characters (dropped)");
