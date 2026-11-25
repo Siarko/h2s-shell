@@ -8,8 +8,8 @@ import qs.singletons
 // reset to defaults as a list, Keep defaults and Restore previous settings… — all shown at
 // once; a session that saves nothing says so (with Start with default settings… when a
 // whole-config migration failed). The questions open in the Settings modal, keyed to the
-// failure they answer. A restore written but not restarted shows its problem and Restart
-// shell.
+// failure they answer. A restore written but not restarted (also a backup applied from the
+// list) shows its problem and Restart shell.
 Rectangle {
     id: root
 
@@ -59,7 +59,10 @@ Rectangle {
         width: parent.width - 28
         spacing: 8
 
+        // A backup applied from the list with no failure behind it shows only the problem and
+        // Restart shell
         RowLayout {
+            visible: (root._current.summary ?? "") !== ""
             Layout.fillWidth: true
             spacing: 8
             Text {
@@ -83,6 +86,7 @@ Rectangle {
 
         Text {
             objectName: "migrationFailureLead"
+            visible: root._current.kind !== ""
             Layout.fillWidth: true
             text: root._readOnly ? "Changes are not saved." : "Defaults are used for:"
             textFormat: Text.PlainText

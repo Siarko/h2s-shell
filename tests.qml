@@ -141,6 +141,9 @@ QtObject {
     property var _migrationNoticeRules: MigrationNoticeRulesTest {}
     property var _migrationRestore: MigrationRestoreTest {}
     property var _migrationFailureEntry: MigrationFailureEntryTest {}
+    property var _configBackupRules: ConfigBackupRulesTest {}
+    property var _configBackups: ConfigBackupsTest {}
+    property var _backupsSettings: BackupsSettingsTest {}
     property var _devRules: DevRulesTest {}
     property var _moduleDependencyRules: ModuleDependencyRulesTest {}
     property var _moduleUpdateRules: ModuleUpdateRulesTest {}

@@ -92,21 +92,16 @@ Singleton {
         return result;
     }
 
-    // The time in a config backup's name (config.json.bak-<stamp>[-<reason>], the stamp an
-    // ISO time in UTC with ":" and "." as "-"), a path or a bare name → a Date, or null
+    // The time in a config backup's name (ConfigBackupRules.parseName), a path or a bare
+    // name → a Date, or null
     function backupTime(path) {
-        const name = String(path ?? "").replace(/^.*\//, "");
-        const match = /^config\.json\.bak-([0-9]{4})-([0-9]{2})-([0-9]{2})T([0-9]{2})-([0-9]{2})-([0-9]{2})-([0-9]{3})Z(-[a-z]+)?$/.exec(name);
-        if (!match)
-            return null;
-        const numbers = match.slice(1, 8).map(Number);
-        return new Date(Date.UTC(numbers[0], numbers[1] - 1, numbers[2], numbers[3], numbers[4], numbers[5], numbers[6]));
+        const parsed = ConfigBackupRules.parseName(path);
+        return parsed.ok ? new Date(parsed.time) : null;
     }
 
     // A backup named for people: "15 Jan 2026, 10:29" in local time; "" when the name has no time
     function backupDate(path) {
-        const time = backupTime(path);
-        return time === null ? "" : Qt.formatDateTime(time, "d MMM yyyy, hh:mm");
+        return ConfigBackupRules.date(path);
     }
 
     // The question before Restore previous settings: the steps, naming the backup by its date
@@ -118,7 +113,7 @@ Singleton {
             + (parts.length > 0 ? ", skipping " + parts.join(", ") : "");
         const steps = ["Create a new backup", "Load the backup of " + (date !== "" ? date : "before the update"), update, "Restart the shell"];
         return { kind: "warning", title: "Restore the settings from before the update?",
-                 body: ["Steps:"].concat(steps.map((step, index) => (index + 1) + ". " + step)),
+                 body: ConfigBackupRules.steps(steps),
                  buttons: [{ id: "restore", label: "Restore and restart", kind: "warning" }], cancelLabel: "Cancel" };
     }
 
@@ -126,7 +121,7 @@ Singleton {
     function defaultsQuestion() {
         const steps = ["Create a new backup", "Start with default settings", "Restart the shell"];
         return { kind: "warning", title: "Start with default settings?",
-                 body: ["Steps:"].concat(steps.map((step, index) => (index + 1) + ". " + step)),
+                 body: ConfigBackupRules.steps(steps),
                  buttons: [{ id: "defaults", label: "Start and restart", kind: "warning" }], cancelLabel: "Cancel" };
     }
 

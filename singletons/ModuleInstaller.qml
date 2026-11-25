@@ -67,6 +67,10 @@ Scope {
     // and how often a download's directory is measured while git writes it
     property real maxDownloadBytes: ModuleInstallRules.maxDownloadBytes
     property int measureIntervalMs: 1000
+    // Takes a config backup before a module's version switches (ConfigRestore.backUp: the
+    // shell's on config.json; null under the test runners — a suite hands one on a scratch
+    // file)
+    property var configBackup: null
 
     readonly property var places: ModuleInstallRules.paths(dataHome, configHome)
     // A job runs (one at a time)
@@ -284,6 +288,7 @@ Scope {
                     _finish(job, false, id + " " + plan.dir + ": " + problem);
                     return;
                 }
+                const toVersion = (record?.versions ?? []).find(each => each?.dir === plan.dir)?.version ?? plan.dir;
                 _backUp(job, id, options?.reason === "update" ? "update" : "switch", job.records, backup => {
                     if (!backup.ok) {
                         _finish(job, false, id + ": its configuration could not be backed up (" + backup.problem + "); nothing switched");
@@ -294,7 +299,7 @@ Scope {
                         _reload(job, loaded => _afterStart(job, [step], loaded, () =>
                             _finish(job, true, id + " switched to " + plan.dir + _notesText(job))));
                     });
-                });
+                }, [], toVersion);
             });
         });
         return "";
@@ -1112,7 +1117,7 @@ Scope {
                 return;
             }
             _backUpUpdates(job, updates, index + 1, next);
-        });
+        }, [], String(updates[index].staged?.manifest?.version ?? updates[index].dir ?? ""));
     }
 
     // The record before any link moves: every new version listed, the active ones as they
@@ -1308,7 +1313,7 @@ Scope {
                 if (!backup.ok)
                     reasons[index] += " — its configuration could not be backed up first (" + backup.problem + ")";
                 backUpAll(index + 1);
-            });
+            }, [], _versionOf(job.records, back[index].id, back[index].previousDir));
         };
         backUpAll(0);
     }
@@ -1595,25 +1600,55 @@ Scope {
 
     // A backup of module `id` now, inside `job` (`records`: the record as the job read it —
     // the active version's commit). → done({ ok, problem, name, meta }) while the job lives
-    function _backUp(job, id, reason, records, done, protect) {
+    // `toVersion`: the version a switch goes to — a switch (update, switch, rollback) takes a
+    // config backup as well, naming the module and both versions
+    function _backUp(job, id, reason, records, done, protect, toVersion) {
         const before = phase;
         phase = "backingUp";
         const status = host.status(id);
         const record = records?.ok && ModuleRules.has(records.modules, id) ? records.modules[id] : null;
         const active = (record?.versions ?? []).find(each => each.dir === record.active) ?? null;
+        const fromVersion = status?.version || active?.version || "";
         _backups.take(id, status ? host.manifestOf(status.directory) : null,
-                      { version: status?.version || active?.version || "", commit: active?.commit ?? "", reason: reason, protect: protect ?? [] }, backup => {
+                      { version: fromVersion, commit: active?.commit ?? "", reason: reason, protect: protect ?? [] }, backup => {
             if (!_alive(job))
                 return;
-            phase = before;
             if (backup.ok) {
                 job.backups = (job.backups ?? []).concat([id + "/" + backup.name]);
                 // What the module's settings migrations start from next is in this backup (or,
                 // for a restore, in the one restored): they take none of their own
                 host.noteBackupTaken(id);
             }
-            done(backup);
+            const finish = () => {
+                phase = before;
+                done(backup);
+            };
+            if (!backup.ok || !["update", "switch", "rollback"].includes(reason) || !_backUpConfig(id, fromVersion, toVersion, () => {
+                if (_alive(job))
+                    finish();
+            }))
+                finish();
         });
+    }
+
+    // The config backup before module `id` switches from `fromVersion` to `toVersion`
+    // (ConfigRestore.backUp, reason "module"): one that fails is said in the log, the switch
+    // goes on — the module's own backup holds its part. false when none is taken (no
+    // configBackup, or it cannot start now)
+    function _backUpConfig(id, fromVersion, toVersion, next) {
+        if (!configBackup)
+            return false;
+        return configBackup.backUp("module", { id: id, from: String(fromVersion ?? ""), to: String(toVersion ?? "") }, result => {
+            if (!result.ok)
+                console.warn("[Modules] the settings could not be backed up before " + id + " switched: " + result.problem);
+            next();
+        }) === true;
+    }
+
+    // The version a kept directory of module `id` holds (its record), else the directory's name
+    function _versionOf(records, id, dir) {
+        const record = records?.ok && ModuleRules.has(records.modules, id) ? records.modules[id] : null;
+        return (record?.versions ?? []).find(each => each?.dir === dir)?.version ?? String(dir ?? "");
     }
 
     // Reads the backups of module `id` again ("" — every module's) into backupLists

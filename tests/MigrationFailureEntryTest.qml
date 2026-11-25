@@ -9,7 +9,8 @@ import qs.singletons
 // parts as a list, all shown at once, Keep defaults and Restore previous settings…; Restore
 // asks the steps question keyed to the failure, and only its answer restores; a session
 // that saves nothing says so, with Start with default settings…; the notice's own `asked`
-// opens the same question.
+// opens the same question; a backup applied from the list whose restart was refused shows
+// only the problem and Restart shell.
 TestCase {
     id: suite
     suiteName: "MigrationFailureEntry"
@@ -27,7 +28,7 @@ TestCase {
         property bool testRunner: false
         readonly property var current: MigrationNoticeRules.notice(reports, saveBlocked, "2.2.0", suite._registry)
         property bool hidden: false
-        readonly property bool entryShown: current.kind !== "" && !hidden
+        readonly property bool entryShown: (current.kind !== "" || restartPending) && !hidden
         readonly property bool canRestore: current.kind === "reset" && current.backup !== ""
         property string problem: ""
         property bool restartPending: false
@@ -158,5 +159,16 @@ TestCase {
         notice.hidden = false;
         notice.saveBlocked = false;
         notice.reports = { load: null };
+
+        // A backup applied from the list, its restart refused: no failure behind it
+        notice.restartPending = true;
+        notice.problem = "Restart the shell to finish. Changes are not saved until then.";
+        assert(entry.visible, "applied, not restarted: the entry shown");
+        assert(!_named(entry, "migrationFailureTitle")[0].parent.visible && !_named(entry, "migrationFailureLead")[0].visible,
+               "applied, not restarted: no failure's heading or lead");
+        assert(_shown(entry, "migrationFailureProblem").length === 1 && _shown(entry, "migrationRestartShell").length === 1,
+               "applied, not restarted: the problem and Restart shell");
+        notice.restartPending = false;
+        notice.problem = "";
     }
 }

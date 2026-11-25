@@ -986,12 +986,10 @@ Singleton {
     }
 
     // A config backup's name for the time `isoTime` (Date.toISOString()) and `reason` (one of
-    // backupReasons, or "" for none); "" for a time that is not one
-    function backupName(isoTime, reason) {
-        if (typeof isoTime !== "string" || !/^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z$/.test(isoTime))
-            return "";
-        const suffix = backupReasons.includes(reason) ? "-" + reason : "";
-        return "config.json.bak-" + isoTime.replace(/[:.]/g, "-") + suffix;
+    // backupReasons, or "" for none); `module` names a module switch's module and versions
+    // (ConfigBackupRules.name); "" for a time that is not one
+    function backupName(isoTime, reason, module) {
+        return ConfigBackupRules.name(isoTime, reason, module);
     }
 
     // ---- The registry ----
@@ -1035,10 +1033,11 @@ Singleton {
     // ---- Backups ----
 
     // Why a config backup was made, the last part of its name
-    readonly property var backupReasons: ["migration", "restore", "module", "manual"]
+    readonly property var backupReasons: ConfigBackupRules.reasons
 
     // Which config backups stay after a new one: of the names in the config's folder only
-    // "config.json.bak-<stamp>" (and "-<reason>" after it, one of backupReasons) count; every
+    // "config.json.bak-<stamp>" (and "-<reason>" after it, one of backupReasons;
+    // ConfigBackupRules.parseName) count; every
     // other name is left alone. A manual backup ("-manual") is never pruned: kept, not
     // counted. `options`: { written (the backup just written: always kept, whatever its stamp
     // says — the clock may have gone back —, and counted), protect: [names] (one being
@@ -1046,9 +1045,8 @@ Singleton {
     // The rest by their stamps, newest first, fill up to `backupsKept`; equal stamps by name.
     // → { keep, delete } (newest first)
     function backupsToKeep(names, options) {
-        const pattern = new RegExp("^config\\.json\\.bak-[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}-[0-9]{2}-[0-9]{2}-[0-9]{3}Z(-(" + backupReasons.join("|") + "))?$");
         // The stamp has a fixed width and comes first: the names sort as their stamps do
-        const backups = (Array.isArray(names) ? names : []).filter(name => typeof name === "string" && pattern.test(name)).sort().reverse();
+        const backups = (Array.isArray(names) ? names : []).filter(name => typeof name === "string" && !name.includes("/") && ConfigBackupRules.parseName(name).ok).sort().reverse();
         const listed = value => Array.isArray(value) ? value : [];
         const written = typeof options?.written === "string" ? options.written : "";
         const kept = listed(options?.protect).concat(listed(options?.neverPrune));
@@ -1056,7 +1054,7 @@ Singleton {
         const keep = [];
         const deleted = [];
         for (const name of backups) {
-            if (name === written || kept.includes(name) || name.endsWith("-manual")) {
+            if (name === written || kept.includes(name) || ConfigBackupRules.parseName(name).reason === "manual") {
                 keep.push(name);
             } else if (room > 0) {
                 keep.push(name);

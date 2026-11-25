@@ -4,6 +4,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import QtCore
+import qs.components
 
 // The shell's modules: one ModuleHost fed from the environment the
 // launcher builds — H2S_SHELL_MODULES, the canonical module directories in search order, and
@@ -202,6 +203,15 @@ Singleton {
     ModuleInstaller {
         id: _installer
         host: _host
+        // Never under the test runners (Config.readOnly): their config is the user's
+        configBackup: Config.readOnly ? null : _configBackup
+    }
+
+    // The config backup a module's version switch takes (reason "module")
+    ConfigRestore {
+        id: _configBackup
+        configPath: Config.path
+        readOnly: Config.readOnly
     }
 
     // Never by itself under the test runners (Config.readOnly); its state remembered in the

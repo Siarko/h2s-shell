@@ -68,6 +68,8 @@ The interface modules are written against (`qs.api`), versioned on its own
 - 1.42: on a VPN card's name's line (`settings.network_vpn.vpns.card.title`, every module's
   elements) `context.provider` is null for an element of another module than the VPN's
   provider: a module's live provider object goes only to its own module's elements.
+- 1.43: the id `backups` is reserved (the core's Settings page of that id): a module can no
+  longer take it.
 - 1.42: the id `nixos` is reserved (the core's Settings page of that id): a module can no
   longer take it.
 - 1.41: a list or object inside the plain data the API hands out is a new frozen copy at
@@ -104,6 +106,14 @@ The interface modules are written against (`qs.api`), versioned on its own
   from before the update, with the failed parts held until another version). When a
   whole-settings update fails (nothing can be saved), Start with default settings. IPC `settings migrations`
   and `settings restoreMigrationBackup`.
+- Settings → System → Backups lists the settings backups, newest first, with the date, why
+  each was made (before a settings update, before a restore, before a module update naming
+  the module and versions, made by you — kept, never pruned) and the version that wrote it.
+  Apply loads one: it backs up the current settings, brings the backup up to this version at
+  the next start (a part whose update fails under this version is held, as after a failed
+  update) and restarts the shell; a backup from a newer shell is marked and loaded as it is.
+  A module update or version switch now backs up the settings first. IPC `settings backups`
+  and `settings restoreBackup <name>`.
 - Settings → System → NixOS, listed only on NixOS: the system's NixOS configuration as the
   shell finds it (a flake or a classic configuration.nix, in any folder; Change… picks
   another), its facts one per line, and whether it is connected — the shell's file

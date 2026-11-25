@@ -5,10 +5,12 @@ import qs.singletons
 // Replaces config.json, keeping what it held: the current file is first copied to a backup
 // (config.json.bak-<stamp>-restore, readable by the user only), then the new content is
 // written (atomic). Two contents: a backup with migrations held (restore(): the settings from
-// before a failed update, MigrationNoticeRules.restoredConfig), or a new config with the
-// defaults (startWithDefaults(): MigrationNoticeRules.defaultsConfig). The shell restarts
-// afterwards (the caller's): the migrations run once, before any reader, at start.
-// Read-only (the test runner): nothing written. One at a time.
+// before a failed update, or any backup from the list, MigrationNoticeRules.restoredConfig),
+// or a new config with the defaults (startWithDefaults(): MigrationNoticeRules.defaultsConfig).
+// The shell restarts afterwards (the caller's): the migrations run once, before any reader, at
+// start. backUp() only copies the current file to a backup (a module version switch's). After
+// a backup is written the automatic ones are pruned (ConfigBackupPruner), the one a restore
+// reads kept. Read-only (the test runner): nothing written. One at a time.
 QtObject {
     id: root
 
@@ -17,8 +19,11 @@ QtObject {
     property bool readOnly: false
     property string version: Version.number
     readonly property bool running: _running
+    // The backup a restore reads ("" none): kept by pruning, never deleted while it runs
+    readonly property string reading: _reading
 
     property bool _running: false
+    property string _reading: ""
     property string _writeError: ""
 
     readonly property string _file: {
@@ -68,13 +73,16 @@ QtObject {
         if (_running || readOnly || _file === "" || typeof backupPath !== "string" || backupPath === "")
             return false;
         const plain = backupPath.replace(/^file:\/\//, "");
+        _reading = plain;
         const text = _read(plain);
         if (text.trim() === "") {
+            _reading = "";
             _later(done, { ok: false, problem: "the backup " + plain + " could not be read", backup: "" });
             return true;
         }
         const restored = MigrationNoticeRules.restoredConfig(text, held, version);
         if (!restored.ok) {
+            _reading = "";
             _later(done, { ok: false, problem: restored.problem + ": " + plain, backup: "" });
             return true;
         }
@@ -91,6 +99,27 @@ QtObject {
         return true;
     }
 
+    // A backup of config.json as it is now with `reason` (ConfigBackupRules.reasons; `module`
+    // { id, from, to } for "module"), nothing else written. `done({ ok, problem, backup })`;
+    // false when it cannot start (read-only, one runs). No file: nothing to back up (ok)
+    function backUp(reason, module, done) {
+        if (_running || readOnly || _file === "")
+            return false;
+        _running = true;
+        _onlyBackup = true;
+        _done = done;
+        _backup = "";
+        _reason = reason;
+        _module = module ?? null;
+        const current = _read(_file);
+        if (current === "") {
+            _finish(true, "");
+            return true;
+        }
+        _writeBackup(current);
+        return true;
+    }
+
     function _later(done, result) {
         Qt.callLater(() => {
             if (typeof done === "function")
@@ -101,9 +130,15 @@ QtObject {
     property string _text: ""
     property string _backup: ""
     property var _done: null
+    property bool _onlyBackup: false
+    property string _reason: "restore"
+    property var _module: null
 
     function _start(text, done) {
         _running = true;
+        _onlyBackup = false;
+        _reason = "restore";
+        _module = null;
         _text = text;
         _done = done;
         _backup = "";
@@ -112,7 +147,11 @@ QtObject {
             _writeConfig();
             return;
         }
-        const backup = _dir + "/" + MigrationRules.backupName(new Date().toISOString(), "restore");
+        _writeBackup(current);
+    }
+
+    function _writeBackup(current) {
+        const backup = _dir + "/" + ConfigBackupRules.name(new Date().toISOString(), _reason, _module);
         if (!_write(backup, current)) {
             _finish(false, "could not write the backup " + backup + ": " + _writeError);
             return;
@@ -129,7 +168,24 @@ QtObject {
                 root._finish(false, "could not restrict the backup's permissions");
                 return;
             }
-            root._writeConfig();
+            // Pruned before config.json is written: the shell restarts right after that
+            root._pruning = true;
+            root._pruner.prune(root._backup, root._reading !== "" ? [root._reading] : []);
+        }
+    }
+
+    property bool _pruning: false
+
+    property ConfigBackupPruner _pruner: ConfigBackupPruner {
+        dir: root._dir
+        onPruned: {
+            if (!root._pruning)
+                return;
+            root._pruning = false;
+            if (root._onlyBackup)
+                root._finish(true, "");
+            else
+                root._writeConfig();
         }
     }
 
@@ -145,6 +201,7 @@ QtObject {
         const done = _done;
         const result = { ok: ok, problem: problem, backup: _backup };
         _running = false;
+        _reading = "";
         _done = null;
         _text = "";
         if (typeof done === "function")

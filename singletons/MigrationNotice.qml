@@ -7,7 +7,9 @@ import qs.components
 // The shell's notice of a failed settings update at start, and its answers
 // (components/MigrationFailureNotice.qml on the real Config, Notifier and launcher). The
 // Settings window shows its entry; IPC `settings migrations` and `settings
-// restoreMigrationBackup` reach the same without the notification.
+// restoreMigrationBackup` reach the same without the notification. `backups`: the config
+// backups for the Settings list and IPC (`settings backups`, `settings restoreBackup`),
+// applied through the notice's restore.
 Singleton {
     id: root
 
@@ -23,6 +25,12 @@ Singleton {
         canRestart: () => Modules.canRestartShell()
         busy: Config.migrationBusy
         openSettings: () => Shell.showSettings()
+    }
+
+    readonly property ConfigBackupList backups: ConfigBackupList {
+        configPath: Config.path
+        registry: Migrations.all()
+        notice: root.notice
     }
 
     // The last runs as JSON (MigrationNoticeRules.reportText)

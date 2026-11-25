@@ -174,6 +174,8 @@ QtObject {
     //   qs ipc call settings close
     //   qs ipc call settings migrations              (the last settings update at start, JSON)
     //   qs ipc call settings restoreMigrationBackup  (after a failed one: the settings from before it)
+    //   qs ipc call settings backups                 (the config backups, JSON; reads them again)
+    //   qs ipc call settings restoreBackup <name>    (apply one: backs up the current, restarts)
     property var _settingsIpc: IpcHandler {
         target: "settings"
 
@@ -207,6 +209,19 @@ QtObject {
         // "" when the restore started (the shell restarts once it is written), else why not
         function restoreMigrationBackup(): string {
             return MigrationNotice.notice.restore("");
+        }
+
+        // The list as last read ("known": false until read once); each call reads it again
+        function backups(): string {
+            const list = MigrationNotice.backups;
+            const text = ConfigBackupRules.listText(list.known, list.rows);
+            list.refresh();
+            return text;
+        }
+
+        // "" when the restore started (the shell restarts once it is written), else why not
+        function restoreBackup(name: string): string {
+            return MigrationNotice.backups.applyNow(name);
         }
 
         // For tests driving the window from outside: the first shown item with that

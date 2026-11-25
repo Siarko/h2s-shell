@@ -29,7 +29,7 @@ QtObject {
     property bool writesHeld: false
     // A run goes on (until `finished`)
     readonly property bool running: _phase !== ""
-    readonly property bool busy: running || _pruneLister.running || _pruneRemover.running
+    readonly property bool busy: running || _pruner.busy
 
     // A run ended. `result`: { phase, report (MigrationRules.startup's, with `backup`: the
     // backup's path or ""), readOnly (the session stays read-only), written (the config was
@@ -47,7 +47,6 @@ QtObject {
     property string _backup: ""
     property string _diskText: ""
     property var _raw: null
-    property bool _pruneAgain: false
     property var _source: null
     property var _files: ({})
     property var _unreadable: []
@@ -199,7 +198,7 @@ QtObject {
 
     // The folder holding the side files of the backup at `path`
     function _sideBackup(path) {
-        return _dir + "/backup-side-files/" + path.substring(path.lastIndexOf("/") + 1);
+        return _pruner.sideFolder(path.substring(path.lastIndexOf("/") + 1));
     }
 
     function _options() {
@@ -435,49 +434,11 @@ QtObject {
     // ---- Pruning ----
 
     function _prune(backup) {
-        _pruneLister.written = backup.substring(backup.lastIndexOf("/") + 1);
-        if (_pruneLister.running || _pruneRemover.running) {
-            _pruneAgain = true;
-            return;
-        }
-        _pruneAgain = false;
-        _pruneLister.command = ["ls", "-1A", "--", _dir];
-        _pruneLister.running = true;
+        _pruner.prune(backup, []);
     }
 
-    property Process _pruneLister: Process {
-        property string written: ""
-        stdout: StdioCollector { id: _backupNames }
-        onExited: code => {
-            if (code !== 0) {
-                console.warn("[Migrations] could not list " + root._dir + ": no backups pruned");
-                root._prunedOne();
-                return;
-            }
-            const plan = MigrationRules.backupsToKeep(_backupNames.text.split("\n"), { written: written });
-            if (plan.delete.length === 0) {
-                root._prunedOne();
-                return;
-            }
-            console.log("[Migrations] Older backups removed:", plan.delete.join(", "));
-            // Each with the folder of side files it holds, if any
-            const paths = [];
-            for (const name of plan.delete)
-                paths.push(root._dir + "/" + name, root._sideBackup(root._dir + "/" + name));
-            root._pruneRemover.command = ["rm", "-rf", "--"].concat(paths);
-            root._pruneRemover.running = true;
-        }
-    }
-
-    property Process _pruneRemover: Process {
-        onExited: root._prunedOne()
-    }
-
-    function _prunedOne() {
-        if (_pruneAgain) {
-            _prune(_dir + "/" + _pruneLister.written);
-            return;
-        }
-        pruned();
+    property ConfigBackupPruner _pruner: ConfigBackupPruner {
+        dir: root._dir
+        onPruned: root.pruned()
     }
 }

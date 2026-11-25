@@ -55,13 +55,15 @@ QtObject {
     readonly property var current: MigrationNoticeRules.notice(reports, saveBlocked, version, registry)
     // What the entry shows: the failure, until Keep defaults or a restore started; a session
     // that saves nothing until it ends
-    readonly property bool entryShown: _settled && current.kind !== ""
-        && (restartPending || (!_acting && (current.kind === "readOnly" || _keptKey !== current.key)))
+    readonly property bool entryShown: _settled
+        && (restartPending || (current.kind !== "" && !_acting && (current.kind === "readOnly" || _keptKey !== current.key)))
     readonly property bool canRestore: current.kind === "reset" && current.backup !== "" && !testRunner
     // Why the last restore or start with defaults did not finish ("" none)
     readonly property string problem: _problem
     // config.json was replaced but the shell did not restart: saving stays held until it does
     readonly property bool restartPending: _restartPending
+    // The backup a restore reads now ("" none): not to be deleted
+    readonly property string restoring: _restorer.reading
 
     property string _keptKey: ""
     property string _sentKey: ""
@@ -165,6 +167,20 @@ QtObject {
             return "No backup from before the update";
         return _act(() => _restorer.restore(notice.backup, notice.held, root._written),
                     "restoring the settings from " + notice.backup + ", holding " + notice.held.join(", "));
+    }
+
+    // A backup from the list applied (after its question, or IPC): the current config backed
+    // up, the backup at `path` written with `held` held under this version (the migrations its
+    // preview found failing, and those skipped after them), the shell restarted — the same
+    // operation as restore(), on a chosen file. → "" started, else why not
+    function restoreBackup(path, held) {
+        if (testRunner)
+            return "Not under the test runner";
+        if (typeof path !== "string" || path === "")
+            return "No backup named";
+        const ids = MigrationNoticeRules._list(held).filter(id => typeof id === "string");
+        return _act(() => _restorer.restore(path, ids, root._written),
+                    "applying the backup " + path + (ids.length > 0 ? ", holding " + ids.join(", ") : ""));
     }
 
     // Start with default settings (a session that saves nothing): the current config backed

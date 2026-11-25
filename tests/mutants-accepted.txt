@@ -160,3 +160,21 @@ singletons/ModuleMigrationRules.qml	true -> false	#3	Object.defineProperty(objec
 singletons/MigrationNoticeRules.qml	8 -> 9	#1	const numbers = match.slice(1, 8).map(Number);
 # reason: the IPC report's indentation is only its layout
 singletons/MigrationNoticeRules.qml	2 -> 3	#1	}, null, 2);
+
+# reason: the stamp's seven numbers are match[1..7]; match[8] (the reason) taken as an eighth
+# number is never read
+singletons/ConfigBackupRules.qml	8 -> 9	#1	const numbers = match.slice(1, 8).map(Number);
+
+# reason: the pattern matches the module's id and both versions together or none of them, so
+# match[11] is defined exactly when match[10] is
+singletons/ConfigBackupRules.qml	10 -> 11	#1	const module = match[10] !== undefined ? { id: match[10], from: match[11], to: match[12] } : null;
+
+# reason: names in one folder differ, so two rows never have the same name: "<=" decides as "<"
+singletons/ConfigBackupRules.qml	< -> <=	#1	return result.sort((first, second) => first.time !== second.time ? second.time - first.time : first.name < second.name ? 1 : -1);
+
+# reason: a comparator's answer counts only by its sign
+singletons/ConfigBackupRules.qml	1 -> 2	#1	return result.sort((first, second) => first.time !== second.time ? second.time - first.time : first.name < second.name ? 1 : -1);
+singletons/ConfigBackupRules.qml	1 -> 2	#2	return result.sort((first, second) => first.time !== second.time ? second.time - first.time : first.name < second.name ? 1 : -1);
+
+# reason: the indent of the IPC text is layout for people; the JSON read back is the same
+singletons/ConfigBackupRules.qml	2 -> 3	#1	})) }, null, 2);

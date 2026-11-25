@@ -890,7 +890,7 @@ A separate floating window, reachable from the Settings widget, from
 the bar: `qs ipc call settings open`, `openPage <id>` (a page's id, e.g. `openPage profiles`,
 `openPage bar_appearance`), `currentPage` (the open page's id), `itemRect <objectName>` (where a shown item is in the window, for tests), `toggle`, `close`. Three tabs: **Behaviour**, whose pages edit
 a profile; **Appearance**, whose pages edit a theme; and **System** (Authentication,
-Network, NixOS on NixOS), whose pages change this computer's settings, at once and in every profile. The sidebar shows which profiles
+Network, NixOS on NixOS, Modules, Backups), whose pages change this computer's settings, at once and in every profile. The sidebar shows which profiles
 are active right now, and picks what the tab's pages edit — the profile (with the theme it
 uses, a click away) or the theme (with the profiles that use it, and Preview to show it
 on the whole shell while editing).
@@ -930,6 +930,20 @@ Changes are drafts (`~/.config/h2s_shell/theme-drafts/`), kept until saved, also
 restarts: each page has Save and Cancel, a banner saves or throws away all of the theme's
 changes, and ✎ marks pages and themes with unsaved changes. Themes are files in
 `~/.config/h2s_shell/themes/`.
+
+### Backups
+
+Settings → System → Backups lists the backups of the settings file (all profiles included;
+modules' stores and data are on the Modules page), newest first: the date, why it was made
+(before a settings update, before a restore, before updating a module from one version to
+another, made by you — marked Kept, never pruned — or an older backup with no reason), and the
+shell version that wrote it. Of the automatic ones the newest 10 are kept. A row clicked shows
+its file and what Apply would do ("Apply: 1 settings update brings it up to 2.2.0.", the parts
+whose update would fail). Apply… asks with the steps: create a new backup, load the selected
+backup, the settings update (only for a backup from an older version), restart the shell. A
+backup written by a newer shell is marked "Written by shell 2.3.0 (newer than current) — may be
+incompatible, expect odd behaviour" and loaded as it is. `qs ipc call settings backups` lists
+them; `settings restoreBackup <name>` applies one.
 
 ### A page for the distribution
 

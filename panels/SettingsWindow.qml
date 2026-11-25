@@ -75,7 +75,9 @@ FloatingWindow {
         { id: "nixos", label: "NixOS", tab: "system", component: nixosComp, exists: () => NixosViewRules.pageShown(Distribution.detection.id) },
         // Every module, then the modules' own pages under the group
         { id: "modules", label: "Modules", tab: "system", group: true },
-        { id: "modules_installed", label: "Installed", tab: "system", parent: "modules", component: modulesComp }
+        { id: "modules_installed", label: "Installed", tab: "system", parent: "modules", component: modulesComp },
+        // The config file's backups: this computer's, never per profile
+        { id: "backups", label: "Backups", tab: "system", component: backupsComp }
     ]
 
     // Every page: the core's, with the loaded modules' put in (ModuleMergeRules.mergeSettingsPages:
@@ -720,6 +722,7 @@ FloatingWindow {
     Component { id: networkVpnComp; NetworkVpnSettings {} }
     Component { id: nixosComp; NixosSettings { flow: root.nixosRebuild } }
     Component { id: modulesComp; ModulesSettings { modalHost: root.modalHost } }
+    Component { id: backupsComp; BackupsSettings { modalHost: root.modalHost } }
     Component { id: sttComp;           SttSettings           { editIndex: root.editIndex } }
     Component { id: curvesComp;        CurvesSettings {} }
     Component { id: colorsComp;        ColorsSettings { themeName: root.editTheme } }

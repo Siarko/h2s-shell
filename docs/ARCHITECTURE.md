@@ -591,7 +591,36 @@ backups (`-migration`, `-restore`, `-module`, and those with no reason) beyond t
 (`MigrationRules.backupsToKeep`). Only names of that exact pattern count; nothing else in the
 folder is touched. The backup just written is always kept; a manual backup (`-manual`) is
 never pruned. A module's own backups (its store and data, `ModuleBackups`) keep their own
-limit.
+limit. The pruning is `components/ConfigBackupPruner.qml`, run after every config backup:
+the run's, a restore's and a module switch's.
+
+Every automatic backup records why in its name (`ConfigBackupRules.name` and `parseName`):
+`-migration` before a run, `-restore` the file a restore replaced, and
+`-module~<id>~<from>~<to>` before a module's version switches (an update, a switch, a way
+back after a failed start: the installer's `configBackup`, `ConfigRestore.backUp`, next to the
+module's own backup; one that cannot be taken is logged, the switch goes on).
+
+#### The backups list
+
+Settings → System → Backups (`panels/settings/BackupsSettings.qml`) lists the config backups
+(`components/ConfigBackupList.qml`, held by `MigrationNotice.backups`, read each time the page
+shows): newest first, the date, the reason, the version that wrote it (`writtenBy`; "version
+unknown" when absent), a manual one marked Kept, one written by a newer shell (by
+`writtenBy`, or records this version does not know) with one warning line, and a file that
+cannot be read or is no settings file shown as such, without Apply (`ConfigBackupRules.rows`).
+A row opened runs the backup's pending migrations in memory (`ConfigBackupRules.preview`: the
+same runner, on the config alone — side files are read at the next start): how many would
+run, which fail under this version, a `*` failure ("would start read-only"). **Apply** asks
+in the Settings modal as a steps list (a newer backup: "Load a backup from a newer shell?",
+no update step) and is the failure restore with a chosen file
+(`MigrationFailureNotice.restoreBackup`): saving held, the current file backed up
+(`-restore`), the backup written with `held:<id>@<this version>` for the migrations the
+preview found failing and those skipped after them, its other records and unknown keys as
+written, the backup protected from the pruning that follows (`ConfigRestore.reading`), and the
+shell restarted; the next start runs its pending migrations with the usual per-scope reset
+and notice. No migration runs backwards; a newer backup is never refused. Refused while a run
+goes on, while the shell cannot restart, and under the test runner. IPC: `settings backups`
+(the list as last read, JSON; reads it again), `settings restoreBackup <name>`.
 
 #### Downgrade
 

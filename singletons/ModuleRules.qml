@@ -460,7 +460,7 @@ Singleton {
     // facts battery.* — and words that mean the shell itself. ModuleRulesTest checks that
     // every prefix of a core setting and fact is here.
     readonly property var reservedIds: [
-        "animation", "animations", "api", "app", "appearance", "audio", "auth", "authentication", "bar", "battery",
+        "animation", "animations", "api", "app", "appearance", "audio", "auth", "authentication", "backups", "bar", "battery",
         "bluetooth", "calendar", "clock", "colors", "components", "config", "constructor",
         "core", "curves", "debug", "dictation", "energy", "fonts", "gcal", "general", "graphs", "h2s",
         "h2s-shell", "hardware", "hud", "idle", "input", "ipc", "launcher", "lock", "lockscreen",

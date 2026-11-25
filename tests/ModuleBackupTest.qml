@@ -1,5 +1,6 @@
 import QtQuick
 import Quickshell
+import qs.components
 import qs.singletons
 import qs.singletons.io
 
@@ -37,6 +38,8 @@ TestCase {
         }
     }
     property CommandRunner runner: CommandRunner {}
+    // The config backup a switch takes, on a scratch config.json in the temporary config home
+    property ConfigRestore configBackup: ConfigRestore {}
 
     property string temp: ""
     property var _out: null
@@ -191,6 +194,8 @@ TestCase {
             installer.dataHome = temp + "/data";
             installer.configHome = temp + "/config";
             installer.home = temp;
+            configBackup.configPath = temp + "/config/h2s_shell/config.json";
+            installer.configBackup = configBackup;
             assertEqual(host.rediscover(), "", "the host searches the temporary data home");
         });
         _job("kappa 1.0.0 from a folder", () => installer.install(temp + "/folders/kappa", {}), result =>
@@ -210,6 +215,7 @@ TestCase {
 
     // An update (the folder copied again at 1.1.0) backs up 1.0.0's configuration first
     function _update() {
+        _shell("a config file", "mkdir -p \"$1/config/h2s_shell\" && printf '%s\\n' '{\"writtenBy\": \"2.2.0\"}' > \"$1/config/h2s_shell/config.json\"", () => {});
         _shell("kappa 1.1.0 in its folder", "printf '%s\\n' '" + _version("1.1.0") + "' > \"$1/folders/kappa/module.json\"", () => {});
         _job("kappa updated to 1.1.0", () => installer.install(temp + "/folders/kappa", {}), result => {
             assert(result.ok, "kappa updated (" + result.message + ")");
@@ -340,6 +346,12 @@ TestCase {
             assert(!_backups().some(each => each.name === _updateBackup), "… the oldest (the update's) deleted");
             assertEqual(_backups()[0].reason, "switch", "… the newest taken before a switch");
             assertEqual(installer.backupLists.kappa.unknown.join(","), ".incoming-1.0.0-20000101-000000", "the staging leftover: unknown, not counted");
+        });
+        _shell("the config backups", "ls -A \"$1/config/h2s_shell\"", lines => {
+            const named = lines.filter(line => /^config\.json\.bak-[0-9T-]+Z-module~kappa~/.test(line)).map(line => line.replace(/^.*-module~/, ""));
+            assert(named.includes("kappa~1.0.0~1.1.0"), "the update took a config backup naming the module and both versions");
+            assert(named.includes("kappa~1.1.0~1.0.0"), "a switch back took one too");
+            assertEqual(named.length, 5, "one per update and switch");
         });
         _shell("the backups on disk", "ls -A \"" + _backupsDir + "\"", lines => {
             assertEqual(lines.filter(line => line !== "").length, 6, "five backups and the leftover on disk");
