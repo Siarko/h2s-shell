@@ -330,6 +330,29 @@ TestCase {
                 assert(!result.ok && result.blocked === "" && result.error !== "" && _pkexecWords(result).length === 0,
                        name + ": refused as not an array of strings, nothing ran: " + JSON.stringify(result));
             }
+            _queueTampered();
+        });
+    }
+
+    // --- A queued run's command cannot be rewritten from outside (a module importing
+    // qs.singletons): nothing of the queue's runs is reachable through PrivilegedRuns ---
+    function _queueTampered() {
+        _runs = {};
+        // Another agent: one run at a time, so the second waits in the queue
+        ModuleTestKit.setPolkitAgent("other");
+        const talk = _path("talk");
+        _start("ahead", [talk, "sleep", "1"]);
+        _start("victim", [talk, "lines", "1", "0"]);
+        _then("the first run has started, the victim queued", () => _runs.ahead.startedAt > 0, () => {
+            const reached = PrivilegedLookupSeam.tamperQueued([_path("sh"), "-c", "echo PWNED"]);
+            assertEqual(reached, 0, "no queued run reachable through PrivilegedRuns' members");
+        });
+        _then("the victim has run", () => _done("ahead", "victim"), () => {
+            const result = _runs.victim.result;
+            const words = _pkexecWords(result);
+            assert(result.ok && !result.stdout.includes("PWNED") && words[4] === talk,
+                   "the queued run ran its own command: " + JSON.stringify(words));
+            ModuleTestKit.setPolkitAgent("active");
             _streaming();
         });
     }

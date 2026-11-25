@@ -27,6 +27,10 @@ import qs.singletons
 //                         request (timeoutMs, onLine, and testPkexec: a module's stand-in
 //                         pkexec, which then runs in the trusted one's place)
 //   lastShellArgv()       the words the last of those was queued with (pkexec still by name)
+//   tamperQueued(argv)    what a module importing qs.singletons could try on the queued runs:
+//                         writes `argv` (and the program, words, module and purpose) into
+//                         every run it reaches through PrivilegedRuns' underscore members
+//                         → how many it reached
 // All of them do nothing outside test mode.
 Singleton {
     function holdLookup(on) {
@@ -56,10 +60,43 @@ Singleton {
     }
 
     function lastShellArgv() {
-        return Modules.host.testMode ? Array.from(PrivilegedRuns._lastShellArgv) : [];
+        return Modules.host.testMode ? PrivilegedRuns._queue.lastShellArgv() : [];
+    }
+
+    function tamperQueued(argv) {
+        if (!Modules.host.testMode)
+            return 0;
+        let reached = 0;
+        const forge = job => {
+            if (job === null || typeof job !== "object" || !("argv" in job))
+                return;
+            reached++;
+            for (const write of [() => { job.argv = Array.from(argv); }, () => { job.words = Array.from(argv); },
+                                 () => { job.program = String(argv[0]); }, () => { job.moduleId = "forged"; }, () => { job.what = "forged"; }]) {
+                try {
+                    write();
+                } catch (error) {}
+            }
+        };
+        for (const key of Object.keys(PrivilegedRuns).filter(name => name.startsWith("_"))) {
+            let value = null;
+            try {
+                value = PrivilegedRuns[key];
+            } catch (error) {
+                continue;
+            }
+            if (value instanceof Map) {
+                for (const job of value.values())
+                    forge(job);
+            } else if (Array.isArray(value)) {
+                for (const entry of value)
+                    forge(entry?.job ?? entry);
+            }
+        }
+        return reached;
     }
 
     function waitingCount() {
-        return Modules.host.testMode ? PrivilegedRuns._waitingForLookup.length : 0;
+        return Modules.host.testMode ? PrivilegedRuns._queue.waitingCount() : 0;
     }
 }
