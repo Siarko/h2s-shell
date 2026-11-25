@@ -1,0 +1,11 @@
+{
+    "id": "migrating-escape",
+    "name": "Migrating escape fixture",
+    "version": "1.0.0",
+    "api": "1.43",
+    "description": "Its migration file is a link out of its directory: never built, the module fails",
+    "main": "Main.qml",
+    "migrations": [
+        { "id": "outside", "since": "1.0.0", "file": "migrations/Outside.qml" }
+    ]
+}

@@ -46,6 +46,7 @@ TestCase {
         _confinement();
         _runs();
         _failure();
+        _hostDecisions();
     }
 
     function _manifestField() {
@@ -302,5 +303,35 @@ TestCase {
         assert(noDocument.reset.length === 1 && noDocument.reset[0].error.includes("no settings and store"), "no part returned: reset");
         const badId = rules.run("tailscale", [_migration("Bad", ["*"], doc => doc)], part, { records: [] });
         assert(badId.applied.length === 0 && badId.reset.length === 0 && !badId.write, "a migration with a bad id: not run");
+    }
+
+    // What the host does with a run: a first install, the backup, the store's writes, a summary
+    function _hostDecisions() {
+        const empty = { settings: { profiles: [{ name: "Full", set: {} }], globals: {} }, store: {} };
+        assert(rules.isFresh("tailscale", empty, ["2.1.0-core", "mod.other/x"]), "isFresh: no setting, no store key, no record of its own");
+        assert(!rules.isFresh("tailscale", empty, ["mod.tailscale/x"]), "… a record of its own: not fresh");
+        assert(!rules.isFresh("tailscale", empty, ["held:mod.tailscale/x@1.0.0"]), "… a hold of its own: not fresh");
+        assert(!rules.isFresh("tailscale", { settings: { profiles: [{ name: "Full", set: { "mod.tailscale.a": 1 } }], globals: {} }, store: {} }, []), "… a setting in a profile: not fresh");
+        assert(!rules.isFresh("tailscale", { settings: { profiles: [], globals: { "mod.tailscale.a": 1 } }, store: {} }, []), "… a pinned one: not fresh");
+        assert(!rules.isFresh("tailscale", { settings: { profiles: [], globals: {} }, store: { token: "t" } }, []), "… a store key: not fresh");
+        assert(!rules.isFresh("tailscale", null, []) && !rules.isFresh("Bad id", empty, []), "… nothing readable: not fresh");
+        assert(!rules.isFresh("tailscale", { settings: { profiles: [], globals: {} }, store: null }, [])
+               && !rules.isFresh("tailscale", { settings: null, store: {} }, []), "… a store or settings not read: not fresh");
+
+        assert(rules.backupNeeded({ write: true, changed: true, reset: [] }, false), "backupNeeded: something changed");
+        assert(rules.backupNeeded({ write: true, changed: false, reset: [{ id: "x" }] }, false), "… a scope reset (even one that held nothing)");
+        assert(!rules.backupNeeded({ write: true, changed: false, reset: [] }, false), "… only records written: none");
+        assert(!rules.backupNeeded({ write: true, changed: true, reset: [] }, true), "… right after a switch's backup: none");
+        assert(!rules.backupNeeded({ write: false, changed: true, reset: [] }, false) && !rules.backupNeeded(null, false), "… nothing written: none");
+
+        assertEqual(JSON.stringify(rules.storeChanges({ a: 1, b: [1], c: "x", d: { k: 1, j: 2 } }, { b: [1, 2], c: "x", d: { j: 2, k: 1 }, e: null })),
+                    JSON.stringify([{ key: "a" }, { key: "b", value: [1, 2] }, { key: "e", value: null }]),
+                    "storeChanges: a key removed (value undefined), one changed, one added; equal values in another key order left out");
+        assertEqual(JSON.stringify(rules.storeChanges(null, undefined)), "[]", "… nothing: nothing");
+
+        assertEqual(rules.summaryOf("Town is now City"), "Town is now City", "summaryOf: the file's text");
+        assertEqual(rules.summaryOf("two\nlines<b>"), "two lines<b>", "… one line, plain");
+        assertEqual(rules.summaryOf("x".repeat(300)).length, 200, "… at most 200 characters");
+        assertEqual(rules.summaryOf(undefined) + rules.summaryOf(5), "", "… none declared: empty");
     }
 }

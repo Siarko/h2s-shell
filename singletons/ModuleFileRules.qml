@@ -114,6 +114,17 @@ Singleton {
         return files;
     }
 
+    // (1.43) The module's migration files, in the manifest's order, each once: checked as its
+    // other files (inside the module, a regular file, not a link out, imports read) before
+    // any is built; one that fails the check fails the module (migrationsProblem)
+    function migrationFiles(manifest) {
+        const files = [];
+        for (const migration of Array.isArray(manifest?.migrations) ? manifest.migrations : [])
+            if (typeof migration?.file === "string" && migration.file !== "" && !files.includes(migration.file))
+                files.push(migration.file);
+        return files;
+    }
+
     // The QML files a qmldir names (its types and singletons), relative to its directory;
     // plugins, imports and other directives are skipped
     function qmldirFiles(text) {
@@ -242,7 +253,7 @@ Singleton {
     }
 
     // The files of a module the check looks at: { file, kind } — kind "main", "entry",
-    // "test" or "qmldir"; each file once (the first kind wins)
+    // "migration", "test" or "qmldir"; each file once (the first kind wins)
     function filesToCheck(manifest, qmldirText) {
         const files = [];
         const add = (file, kind) => {
@@ -252,6 +263,8 @@ Singleton {
         add(manifest?.main, "main");
         for (const file of manifestFiles(manifest))
             add(file, "entry");
+        for (const file of migrationFiles(manifest))
+            add(file, "migration");
         for (const file of qmldirFiles(qmldirText))
             add(file, "qmldir");
         for (const file of manifest?.tests ?? [])
@@ -373,6 +386,12 @@ Singleton {
         for (const file of qmldirFiles(qmldirText)) {
             if (fatal === "" && failing(file))
                 fatal = "qmldir names " + why(file);
+        }
+        // A migration that cannot run would leave the module's data in a shape its code no
+        // longer reads, and the later ones would run on a guess: the module fails
+        for (const migration of Array.isArray(manifest?.migrations) ? manifest.migrations : []) {
+            if (fatal === "" && failing(migration?.file))
+                fatal = "migration " + migration.id + ": " + why(migration.file);
         }
         const copy = Object.assign({}, manifest ?? {});
         const keep = (list, files, what) => (list ?? []).filter(entry => {

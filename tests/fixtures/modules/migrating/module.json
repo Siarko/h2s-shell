@@ -1,0 +1,20 @@
+{
+    "id": "migrating",
+    "name": "Migrating fixture",
+    "version": "2.0.0",
+    "api": "1.43",
+    "description": "Settings migrations run by the host before its main (tests/ModuleMigrationsTest.qml): one that moves a setting, one that reshapes a store key, one that throws, one that depends on it, one that writes outside its scope",
+    "main": "Main.qml",
+    "settings": [
+        { "key": "mod.migrating.city", "label": "City", "type": "string", "default": "" },
+        { "key": "mod.migrating.town", "label": "Town (old)", "type": "string", "default": "" },
+        { "key": "mod.migrating.loud", "label": "Loud", "type": "bool", "default": false, "global": true }
+    ],
+    "migrations": [
+        { "id": "city-rename", "since": "1.1.0", "file": "migrations/CityRename.qml", "scope": ["setting:town", "setting:city"] },
+        { "id": "broken", "since": "1.2.0", "file": "migrations/Broken.qml", "scope": ["setting:broken.*"] },
+        { "id": "after-broken", "since": "1.2.0", "file": "migrations/AfterBroken.qml", "scope": ["setting:broken.level"] },
+        { "id": "hostile", "since": "2.0.0", "file": "migrations/Hostile.qml", "scope": ["store:hostile"] },
+        { "id": "store-shape", "since": "2.0.0", "file": "migrations/StoreShape.qml", "scope": ["store:folders"] }
+    ]
+}

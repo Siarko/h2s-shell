@@ -152,3 +152,7 @@ singletons/NixosApplyRules.qml	1 -> 2	#1	return /^[0-9]+$/.test(field) ? Number(
 # reason: a prompt of exactly whatMaxLength taken into the shortening comes out the same: its
 # folder and host each fit the room left (_middle returns a text that fits as it is)
 singletons/NixosApplyRules.qml	<= -> <	#1	if (full.length <= PrivilegedRules.whatMaxLength)
+
+# reason: _put's objects are only read, copied through JSON (_copy) or merged into such a copy,
+# never have a key deleted or redefined, so whether their keys are configurable is never seen
+singletons/ModuleMigrationRules.qml	true -> false	#3	Object.defineProperty(object, key, { value: value, enumerable: true, writable: true, configurable: true });

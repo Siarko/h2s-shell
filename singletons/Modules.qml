@@ -190,6 +190,9 @@ Singleton {
         id: _host
         // (The lock screen is never read under the test runners, which build no lock)
         locked: !Config.readOnly && (Lockscreen.locked || Lockscreen.restoring)
+        // A module's settings migrations back its configuration up first (never under the
+        // test runners, whose installer has no data home)
+        backups: Config.readOnly ? null : _installer.backups
     }
 
     ModuleInstaller {

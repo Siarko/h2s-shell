@@ -39,10 +39,13 @@ QtObject {
     id: root
 
     property string moduleId: ""
+    // The stores' directory: the module host's (ModuleHost.storeDirectory) when it has one —
+    // the suites point theirs at a temporary one —, else the standard place
+    property string directory: ""
     // The file; the suites may point it elsewhere
     property string path: moduleId === "" ? ""
-        : String(StandardPaths.writableLocation(StandardPaths.GenericConfigLocation)).replace(/^file:\/\//, "")
-          + "/h2s_shell/modules/" + moduleId + ".json"
+        : (directory !== "" ? directory : String(StandardPaths.writableLocation(StandardPaths.GenericConfigLocation)).replace(/^file:\/\//, "") + "/h2s_shell/modules")
+          + "/" + moduleId + ".json"
     // Whether it writes at all (the suites' seam: the runners' Config is read-only)
     property bool writable: !Config.readOnly
 

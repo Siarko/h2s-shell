@@ -1134,6 +1134,26 @@ close this section.
   module off, writes its settings through `Profiles`, its store and named files back by
   temporary names and renames (folders made one level at a time, never through a link), and
   turns it on again when it was on.
+- **Settings migrations** (API 1.43; the manifest's `migrations`, `ModuleMigrationRules`):
+  each time a module comes on — a start, an update, turned on again, a restored backup —
+  the host keeps it pending until its pending migrations have run (`ModuleMergeRules`'
+  `migrationsKnown`): once its store is read, each migration file is built (without the
+  module's handle) and run on the module's part only — its `mod.<id>.*` settings in every
+  profile and the pinned globals, and its store — with the core's failure model (a failed
+  one's scope reset, its dependents left for the next start, the others run). When
+  something changes a backup is taken first (reason `migration`), unless the installer has
+  just taken one for an update, switch or restore (`ModuleHost.noteBackupTaken`); then the
+  settings are written through `Profiles`, then the store, then the records
+  (`mod.<id>/<id>`, `reset:`, `held:…@<module version>` in `Config.migratedKeys`, dropped
+  when the module is removed with its data and settings). A first install with no settings
+  or store of its own records them all, none run. The migration files pass the file check
+  as its other files (a missing or linked-out one fails the module before anything is
+  built); one that does not build, a store or settings that cannot be read, or a backup that
+  cannot be taken fails the module with nothing changed, until it is turned off and on. The
+  scope protects against a migration's mistakes, not against the module: a migration file
+  is the module's own code with its rights — no sandbox. The last run of each module:
+  `ModuleHost.migrationReports`. `tests/ModuleMigrationsTest.qml` runs them on the fixture
+  module `migrating`.
 - **The registries** read the merged lists — through `ModuleLists` (plain values the
   `Modules` singleton feeds; never `Modules` itself, so the lock screen, which reads its
   settings through Profiles, never constructs or waits for the host; modules arrive after the

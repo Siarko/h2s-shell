@@ -310,6 +310,7 @@ QtObject {
     // ---- Its store (data, not preferences: api/ModuleStore.qml) ----
     readonly property ModuleStore store: ModuleStore {
         moduleId: root.moduleId
+        directory: ModuleHandleHosts.hostOf(root._hostKey)?.storeDirectory ?? ""
     }
 
     // ---- The shell ----

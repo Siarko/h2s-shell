@@ -1,0 +1,11 @@
+{
+    "id": "migrating-syntax",
+    "name": "Migrating syntax fixture",
+    "version": "1.0.0",
+    "api": "1.43",
+    "description": "Its migration file does not compile: the module fails, its main never made",
+    "main": "Main.qml",
+    "migrations": [
+        { "id": "unbuildable", "since": "1.0.0", "file": "migrations/Unbuildable.qml" }
+    ]
+}

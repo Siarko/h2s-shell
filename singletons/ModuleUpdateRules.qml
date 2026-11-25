@@ -40,7 +40,7 @@ Singleton {
     readonly property int dayMs: 24 * 60 * 60 * 1000
     readonly property int firstRetryMs: 15 * 60 * 1000
     // Why a backup is taken (meta.json's `reason`)
-    readonly property var backupReasons: ["update", "switch", "rollback", "restore"]
+    readonly property var backupReasons: ["update", "switch", "rollback", "restore", "migration"]
 
     // ---- Small helpers ----
 
@@ -376,7 +376,7 @@ Singleton {
 
     // Why a backup was taken, in words
     readonly property var _backupReasonWords: ({ update: "before an update", switch: "before a switch", rollback: "before going back",
-                                                 restore: "before a restore" })
+                                                 restore: "before a restore", migration: "before its settings were updated" })
 
     // A backup's line in the list: "19 Nov 10:12 · before an update · data included"
     function backupRowText(backup) {

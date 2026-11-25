@@ -56,6 +56,7 @@ TestCase {
     property var _savedEnabled: []
     property bool _saved: false
     property string _savedProfiles: ""
+    property var _savedMigrated: []
     property real _largeStarted: 0
 
     // ---- A tiny scheduler: each step waits for its condition (or its deadline), then runs ----
@@ -100,6 +101,7 @@ TestCase {
         if (_saved)
             assertEqual(Config.profiles + "|" + Config.globals, _savedProfiles, "the profiles and globals untouched (a removal with data of a module without settings)");
         if (_saved) {
+            Config.migratedKeys = _savedMigrated;
             Config.setAcknowledgedModulesText(_savedAcknowledged);
             Config.disabledModules = _savedDisabled;
             Config.enabledModules = _savedEnabled;
@@ -220,6 +222,7 @@ TestCase {
             _savedAcknowledged = Config.acknowledgedModulesText;
             _savedDisabled = host._plainList(Config.disabledModules);
             _savedEnabled = host._plainList(Config.enabledModules);
+            _savedMigrated = host._plainList(Config.migratedKeys);
             _saved = true;
             _savedProfiles = Config.profiles + "|" + Config.globals;
             // A list written (empty): what is new asks, nothing is acknowledged as a baseline
@@ -637,7 +640,10 @@ TestCase {
         _then("gamma stays", () => _idle() && _status("beta") === null, () => assert(_status("gamma") !== null, "gamma stays without being chosen"));
         _then("beta again", _idle, () => assertEqual(installer.install(_url("beta"), {}), "", "beta installed again"));
         _then("beta is back", () => _idle() && _status("beta")?.state === "loaded", () => {});
+        _then("beta has a settings migration record", _idle, () => Config.migratedKeys = ["mod.beta/one"]);
         _job("the chain with its dependency", () => installer.remove("beta", _status("beta").directory, { alsoRemove: ["gamma"] }), result => {
+            assertEqual(JSON.stringify(host._plainList(Config.migratedKeys)), JSON.stringify(["mod.beta/one"]),
+                        "removed without its data: its settings stay, and so do its settings migrations' records");
             assert(result.ok, "beta removed with gamma (" + result.message + ")");
             assertEqual(JSON.stringify(result.ids), JSON.stringify(["beta", "gamma"]), "… both");
         });
@@ -664,12 +670,17 @@ TestCase {
               () => assertEqual(_status("alpha").source, "repository", "… still the shell's own"));
         _then("alpha has data", _idle, () => _sh("mkdir -p \"$1/data/h2s-shell/module-data/alpha\" \"$1/config/h2s_shell/modules\" && touch \"$1/data/h2s-shell/module-data/alpha/x\" && printf '{}' > \"$1/config/h2s_shell/modules/alpha.json\" && printf '{}' > \"$1/config/h2s_shell/modules/alphax.json\"", [temp]));
         _then("alpha's data is made", () => _out !== null, () => assert(_out.ok, "alpha's data directory and store made"));
+        _then("alpha has settings migration records", _idle, () => {
+            Config.migratedKeys = ["2.1.0-core", "mod.alpha/one", "reset:mod.alpha/two", "held:mod.alpha/three@1.0.0", "mod.alphax/one"];
+        });
         _job("a module with its data", () => installer.remove("alpha", _status("alpha").directory, { withData: true }), result =>
              assert(result.ok && result.message.includes("with its data"), "alpha removed with its data (" + result.message + ")"));
         _check("alpha removed", state => {
             assert(state.links.alpha === undefined && !state.versions.some(each => each.startsWith("alpha")), "its link and every kept version gone");
             assertEqual(state.record?.alpha, undefined, "… its record");
             assert(!ModuleRules.has(host.acknowledgements, "alpha"), "… its acknowledgement: installed again, it asks again");
+            assertEqual(JSON.stringify(host._plainList(Config.migratedKeys)), JSON.stringify(["2.1.0-core", "mod.alphax/one"]),
+                        "… its settings migrations' records, with its settings; the core's and a similar id's (alphax) kept");
         });
         _then("alpha's data is read", () => true, () => _sh("ls -A \"$1/data/h2s-shell/module-data\" \"$1/config/h2s_shell/modules\"", [temp]));
         _then("alpha's data was read", () => _out !== null, () =>

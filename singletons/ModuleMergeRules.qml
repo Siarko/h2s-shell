@@ -38,6 +38,8 @@ Singleton {
     //   filesChecked       the check of the module's files has answered (false: pending)
     //   guardKnown         the start guard has answered (false: pending; see startGuard)
     //   dataDirectoryKnown making its data directory has answered (false: pending)
+    //   migrationsKnown    its pending settings migrations have run (API 1.43; false: pending)
+    //   migrationError     why they could not run ("" for none): it fails, its main never made
     //   confirmed          false: a module that needs the user's confirmation and has none;
     //                      "approval": one held for the user's approval (both from
     //                      ModuleInstallRules.needsConfirmation) — it stays off; absent: true
@@ -76,6 +78,12 @@ Singleton {
         // Its data directory is being made (API 1.13)
         if (facts.dataDirectoryKnown === false)
             return "pending";
+        // Its settings migrations run before its main is made (API 1.43): a main never reads
+        // its part in a shape its code no longer knows
+        if (facts.migrationsKnown === false)
+            return "pending";
+        if (facts.migrationError)
+            return "failed";
         if (facts.mainError)
             return "failed";
         return "loaded";

@@ -1115,6 +1115,23 @@ import qs.singletons.network
 //   scope is reset to defaults (those settings and store keys removed), the later ones whose
 //   scopes overlap it wait for the next start, the others run. A fault in the list fails
 //   the module. Its data directory is never migrated nor reset by the shell.
+//   When they run: each time the module comes on (a start, an update, turned on again, a
+//   restored backup), after its store is read and before its main is made — so its main
+//   and views never see the old shape. Each runs once per configuration (recorded in the
+//   shell's config as "mod.<id>/<id>"); a first install with no settings or store of its own
+//   records them all without running any. Before a run changes anything the shell backs
+//   up the module's configuration (Settings → Modules, its backups; none of its own right
+//   after an update's or a restore's), then writes its settings, its store and the records.
+//   The file: a QML object with `migrate(part, context)` and optionally `summary` (one line,
+//   what it does, for the log and the failure notice); `context` is { fromVersion ("" when
+//   not known), toVersion (the module's version now) }. It is built without the module's
+//   handle and destroyed after the run. It must be idempotent: run on its own result it
+//   gives the same result (a run cut short runs again). A migration file is checked as the
+//   module's other files — inside its directory, not a link out, its imports read —, and one
+//   that is missing or does not build fails the module, nothing changed; so does a store or
+//   settings that cannot be read, or a backup that cannot be taken.
+//   The scope keeps a mistake inside the module's part; it is no sandbox: a migration file is
+//   the module's own code and runs with all the rights the module's code has.
 //
 // A module's API for other modules (1.18; the manifest's fields: singletons/ModuleManifestRules.qml,
 // the plan: ModuleMergeRules.dependencyPlan).

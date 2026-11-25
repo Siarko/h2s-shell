@@ -630,7 +630,8 @@ Singleton {
     //   link itself, never its target; "deleteTree" { path } — a directory the shell owns,
     //   never followed through a link at its top; "deleteFile" { path } — the store's file
     //   (<stores>/<id>.json; a link there removed itself); "dropRecord" { id }; "dropAcknowledgement"
-    //   { id }; "deleteSettings" { prefix } (mod.<id>. in every profile).
+    //   { id }; "deleteSettings" { prefix, id } (mod.<id>. in every profile, and its
+    //   settings migrations' records).
     //   A link placed by hand: the link only. A folder placed by hand: that folder. Installed
     //   by the shell: its link and every kept version. With data: its data directory, store,
     //   backups and settings. `also`: the plans of the dependencies chosen with it, each with
@@ -685,7 +686,7 @@ Singleton {
                 steps.push({ op: "deleteFile", path: places.stores + "/" + id + ".json" });
             if (places.backups !== "")
                 steps.push({ op: "deleteTree", path: places.backups + "/" + id });
-            steps.push({ op: "deleteSettings", prefix: "mod." + id + "." });
+            steps.push({ op: "deleteSettings", prefix: "mod." + id + ".", id: id });
             lines.push("Its data and settings are deleted too.");
         }
         const hard = _list(options?.dependents?.hard).map(each => _plain(String(each ?? ""))).filter(text => text !== "");

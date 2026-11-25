@@ -97,6 +97,9 @@ Scope {
     // data }), unknown }), by id — read at the start (refreshBackups("")) and after each change
     readonly property var backupLists: _backups.lists
     readonly property bool backupsRead: _backups.allRead
+    // The backups themselves: the host takes one before a module's settings migrations change
+    // anything (ModuleHost.backups)
+    readonly property ModuleBackups backups: _backups
 
     signal finished(var result)
 
@@ -1402,8 +1405,11 @@ Scope {
                 for (const step of steps) {
                     if (step.op === "dropAcknowledgement")
                         host.dropAcknowledgement(step.id);
-                    else if (step.op === "deleteSettings")
+                    else if (step.op === "deleteSettings") {
                         Profiles.deleteSettings(step.prefix);
+                        // Its settings migrations' records go with its settings
+                        Config.migratedKeys = ModuleMigrationRules.withoutModuleRecords(step.id, host._plainList(Config.migratedKeys));
+                    }
                 }
                 job.ids = plans.map(each => each.subject.id);
                 if (!written)
@@ -1594,8 +1600,12 @@ Scope {
             if (!_alive(job))
                 return;
             phase = before;
-            if (backup.ok)
+            if (backup.ok) {
                 job.backups = (job.backups ?? []).concat([id + "/" + backup.name]);
+                // What the module's settings migrations start from next is in this backup (or,
+                // for a restore, in the one restored): they take none of their own
+                host.noteBackupTaken(id);
+            }
             done(backup);
         });
     }

@@ -24,7 +24,12 @@ The interface modules are written against (`qs.api`), versioned on its own
   scope within the module's own settings (written without `mod.<id>.`) and store, or `*`
   for all of them (the default). A migration is handed only its scope and may not write
   outside it; one that fails has its scope reset to defaults, and the later ones that
-  overlap it wait. A fault in the list fails the module. The shell does not run them yet.
+  overlap it wait. A fault in the list fails the module. The shell runs a module's pending
+  migrations each time it comes on, after its store is read and before its main: a backup of
+  its configuration first (reason "migration"), then its settings, store and records; each
+  file a QML object with `migrate(part, context)` and an optional `summary`, checked as the
+  module's other files (a missing, linked-out or unbuildable one fails the module). The scope
+  guards against mistakes; it is not a sandbox.
 - 1.42: a module's VPN provider must have its module id as `providerId`: another id (one
   of another module, or the shell's reserved `fake`) is refused, the reason among the
   module's errors — a module that loaded first could otherwise take another module's id and

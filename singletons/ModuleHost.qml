@@ -862,7 +862,10 @@ Scope {
             testVerdicts: null,
             // Where it comes from (sourceOf, null until known), whether it waits for the user
             // (needsConfirmation), and its files' fingerprint as the file check read them
-            found: null, confirmation: { needed: false, state: "", reasons: [], baseline: false }, fingerprint: ""
+            found: null, confirmation: { needed: false, state: "", reasons: [], baseline: false }, fingerprint: "",
+            // (1.43) Its settings migrations: run for this time it is on, running, why they
+            // could not run ("" none), and the run a late answer is checked against
+            migrated: false, migrating: false, migrationError: "", migrationToken: 0
         };
     }
 
@@ -1103,6 +1106,11 @@ Scope {
         if (checked.fatal !== "")
             return;
         const files = ModuleFileRules.manifestFiles(record.manifest);
+        // (1.43) Its migration files: their imports are checked as every other file's
+        for (const listed of ModuleFileRules.migrationFiles(record.manifest)) {
+            if (!files.includes(listed))
+                files.push(listed);
+        }
         for (const listed of ModuleFileRules.qmldirFiles(record.qmldirText)) {
             if (!files.includes(listed))
                 files.push(listed);
@@ -1168,6 +1176,251 @@ Scope {
             record.warnings.push(scanWarning);
         // The old ways its files still use: listed in its status, the module loads as before
         record.deprecations = ModuleSourceRules.importDeprecations(read).concat(ModuleSourceRules.codeDeprecations(read, codes));
+    }
+
+    // ---- Settings migrations (API 1.43) ----
+
+    // Before its main is made, at each time a module comes on, the host runs the module's
+    // pending migrations (module.json's `migrations`, ModuleMigrationRules) on its own part —
+    // its settings in every profile and the pinned globals, and its store, once the store is
+    // read —, with the core's failure model: a failed one's scope reset to defaults, its
+    // dependents left for the next start, the others run. When something changes a backup of
+    // the module's configuration is taken first (`backups`, reason "migration"), unless the
+    // installer has just taken one for an update, a switch or a restore (noteBackupTaken).
+    // Then its settings are written, then its store, then the records (Config.migratedKeys).
+    // A migration file is built
+    // without the module's handle and destroyed after the run, but it is the module's code
+    // with the module's rights: the scope keeps a mistake inside the module's part, it is no
+    // sandbox. What cannot be read (its store refused, the settings unreadable), a file that
+    // does not build, or a backup that fails: nothing is changed and the module fails, with
+    // the reason, until it is turned off and on.
+
+    // Where the backup before a run is taken (a ModuleBackups: the installer's in the shell;
+    // null — the suites' default — none is taken)
+    property var backups: null
+    // How long a run waits for the module's store to be read
+    property int migrationStoreTimeoutMs: 10000
+    // The last run of each module's migrations, by id: { applied: [{ id, summary }], reset:
+    // [{ id, summary, scope, error }], skipped: [{ id, after }], held: [id], backup, fresh }
+    property var migrationReports: ({})
+    // Ids whose configuration the installer has just backed up: their next run takes none
+    property var _switchBackups: []
+    property int _migrationToken: 0
+    // Runs waiting for their module's store: [{ record, token, store, deadline }]
+    property var _migrationWaits: []
+
+    // The installer has just backed up module `id`'s configuration, before switching its
+    // version or restoring a backup — what the run that follows starts from is in that backup
+    // or in the one restored: the run does not take another
+    function noteBackupTaken(id) {
+        if (typeof id === "string" && ModuleManifestRules.validId(id) && !_switchBackups.includes(id))
+            _switchBackups = _switchBackups.concat([id]);
+    }
+
+    function _migrationsKnown(record) {
+        return (record.manifest.migrations ?? []).length === 0 || record.migrated === true;
+    }
+
+    function _runMigrations(record) {
+        if (record.migrating || record.migrated)
+            return;
+        const token = ++_migrationToken;
+        record.migrating = true;
+        record.migrationToken = token;
+        const store = handle(record.manifest.id)?.store ?? null;
+        if (!store) {
+            Qt.callLater(() => _migrationsDone(record, token, "its store could not be reached", null));
+            return;
+        }
+        _migrationWaits = _migrationWaits.concat([{ record: record, token: token, store: store, deadline: Date.now() + migrationStoreTimeoutMs }]);
+        _migrationClock.start();
+    }
+
+    property Timer _migrationClock: Timer {
+        interval: 25
+        repeat: true
+        onTriggered: {
+            const now = Date.now();
+            const waits = root._migrationWaits;
+            const due = waits.filter(wait => wait.store.ready || now >= wait.deadline);
+            root._migrationWaits = waits.filter(wait => !due.includes(wait));
+            if (root._migrationWaits.length === 0)
+                stop();
+            for (const wait of due) {
+                if (!wait.store.ready)
+                    root._migrationsDone(wait.record, wait.token, "its store was not read within " + root.migrationStoreTimeoutMs / 1000 + " s", null);
+                else
+                    root._migrationsStoreRead(wait.record, wait.token, wait.store);
+            }
+        }
+    }
+
+    function _migrationLive(record, token) {
+        return _records.includes(record) && record.migrationToken === token;
+    }
+
+    // Each migration file built (no handle given) → { problem, migrations, objects }
+    function _buildMigrations(record) {
+        const migrations = [];
+        const objects = [];
+        const failed = problem => {
+            for (const object of objects)
+                object.destroy();
+            return { problem: problem, migrations: [], objects: [] };
+        };
+        // From here the engine keeps what it builds of this directory for its life
+        if (!_builtFingerprints.has(record.directory))
+            _builtFingerprints.set(record.directory, record.fingerprint);
+        for (const entry of record.manifest.migrations ?? []) {
+            const where = "migration " + entry.id + ": " + entry.file;
+            let component = null;
+            try {
+                component = Qt.createComponent(ModuleFileRules.fileUrl(record.directory, entry.file), Component.PreferSynchronous);
+            } catch (error) {
+                return failed(where + ": " + error);
+            }
+            if (!component || component.status === Component.Error)
+                return failed(component ? component.errorString().trim() : where + ": cannot be loaded");
+            if (component.status !== Component.Ready)
+                return failed(where + ": did not load at once (status " + component.status + ")");
+            let object = null;
+            try {
+                object = component.createObject(root, {});
+            } catch (error) {
+                return failed(where + ": threw while being created: " + error);
+            }
+            if (!object)
+                return failed(where + ": could not be created");
+            objects.push(object);
+            const made = object;
+            migrations.push({
+                migrationId: entry.id, scope: entry.scope, summary: ModuleMigrationRules.summaryOf(made.summary),
+                migrate: typeof made.migrate === "function" ? (part, context) => made.migrate(part, context) : undefined
+            });
+        }
+        return { problem: "", migrations: migrations, objects: objects };
+    }
+
+    // The module's part now and the run on it → { problem, part, report }
+    function _migrationRun(record, store, migrations) {
+        const id = record.manifest.id;
+        if (Profiles.moduleSettings("mod." + id + ".") === null)
+            return { problem: "your settings could not be read", part: null, report: null };
+        const part = ModuleMigrationRules.partOf(id, Profiles.profiles, Profiles.globals, JSON.parse(JSON.stringify(store.data)));
+        if (!part.ok)
+            return { problem: part.problem, part: null, report: null };
+        const records = _plainList(Config.migratedKeys);
+        const version = record.manifest.version;
+        const fresh = ModuleMigrationRules.isFresh(id, part.part, records);
+        const report = ModuleMigrationRules.run(id, migrations, part.part, {
+            records: records, version: version, fresh: fresh, context: { fromVersion: "", toVersion: version }
+        });
+        report.fresh = fresh;
+        return { problem: "", part: part.part, report: report };
+    }
+
+    function _migrationsStoreRead(record, token, store) {
+        if (!_migrationLive(record, token))
+            return;
+        const id = record.manifest.id;
+        if (store.refusedReason !== "") {
+            _migrationsDone(record, token, store.refusedReason, null);
+            return;
+        }
+        const built = _buildMigrations(record);
+        if (built.problem !== "") {
+            _migrationsDone(record, token, built.problem, null);
+            return;
+        }
+        const first = _migrationRun(record, store, built.migrations);
+        if (first.problem !== "") {
+            _migrationsDone(record, token, first.problem, built.objects);
+            return;
+        }
+        const switchBackup = _switchBackups.includes(id);
+        _switchBackups = _switchBackups.filter(each => each !== id);
+        if (!ModuleMigrationRules.backupNeeded(first.report, switchBackup) || !backups) {
+            _migrationWrite(record, token, store, built, first, "");
+            return;
+        }
+        backups.take(id, record.manifest, { version: record.manifest.version, commit: "", reason: "migration", protect: [] }, backup => {
+            if (!_migrationLive(record, token)) {
+                for (const object of built.objects)
+                    object.destroy();
+                return;
+            }
+            if (!backup.ok) {
+                _migrationsDone(record, token, "its configuration could not be backed up first (" + backup.problem + "); nothing changed", built.objects);
+                return;
+            }
+            console.log("[Modules] " + id + ": its configuration backed up before its settings migrations: " + backup.name);
+            // Run again on the part as it is now: the backup took a moment
+            const now = _migrationRun(record, store, built.migrations);
+            if (now.problem !== "") {
+                _migrationsDone(record, token, now.problem, built.objects);
+                return;
+            }
+            _migrationWrite(record, token, store, built, now, backup.name);
+        });
+    }
+
+    // Settings first, then the store, then the records: a write cut short leaves the records
+    // unwritten and the run repeats (each migration is idempotent)
+    function _migrationWrite(record, token, store, built, run, backupName) {
+        const id = record.manifest.id;
+        const report = run.report;
+        const summaries = {};
+        for (const migration of built.migrations)
+            summaries[migration.migrationId] = migration.summary;
+        if (report.write && report.changed) {
+            if (ModuleRules.storeText(report.part.store) === null) {
+                _migrationsDone(record, token, "its migrated store would be larger than " + ModuleRules.maxStoreBytes + " bytes; nothing changed", built.objects);
+                return;
+            }
+            const why = Profiles.restoreModuleSettings("mod." + id + ".", { profiles: report.part.settings.profiles, globals: report.part.settings.globals });
+            if (why !== "") {
+                _migrationsDone(record, token, "its settings could not be written (" + why + ")", built.objects);
+                return;
+            }
+            for (const change of ModuleMigrationRules.storeChanges(run.part.store, report.part.store))
+                store.set(change.key, change.value);
+            store.flush();
+        }
+        if (report.write)
+            Config.migratedKeys = report.records;
+        if (report.fresh && report.write)
+            console.log("[Modules] " + id + ": a first install: " + built.migrations.length + " settings migration(s) recorded as done");
+        for (const migrationId of report.applied)
+            console.log("[Modules] " + id + ": settings migration " + migrationId + ": " + summaries[migrationId]);
+        const resets = report.reset.map(entry => {
+            const scope = (record.manifest.migrations.find(each => each.id === entry.id)?.scope ?? ["*"]).join(", ");
+            const line = "settings migration " + entry.id + " failed (" + entry.error + "): its part was reset to defaults (" + scope + ")";
+            console.warn("[Modules] " + id + ": " + line);
+            record.errors.push(line);
+            return { id: entry.id, summary: summaries[entry.id] ?? "", scope: scope, error: entry.error };
+        });
+        for (const entry of report.skipped)
+            console.warn("[Modules] " + id + ": settings migration " + entry.id + " not run: it depends on " + entry.after + ", which did not run");
+        for (const migrationId of report.held)
+            console.log("[Modules] " + id + ": settings migration " + migrationId + " held: the previous settings were restored after it failed under this version");
+        const reports = Object.assign({}, migrationReports);
+        reports[id] = { applied: report.applied.map(each => ({ id: each, summary: summaries[each] ?? "" })), reset: resets,
+                        skipped: report.skipped.slice(), held: report.held.slice(), backup: backupName, fresh: report.fresh === true && report.write };
+        migrationReports = reports;
+        _migrationsDone(record, token, "", built.objects);
+    }
+
+    function _migrationsDone(record, token, problem, objects) {
+        for (const object of objects ?? [])
+            object.destroy();
+        if (!_migrationLive(record, token))
+            return;
+        record.migrating = false;
+        record.migrated = true;
+        record.migrationError = problem === "" ? "" : "its settings migrations did not run: " + problem;
+        if (problem !== "")
+            console.warn("[Modules] " + record.manifest.id + ": " + record.migrationError);
+        _applyGuarded();
     }
 
     // ---- The stores' directory ----
@@ -1549,6 +1802,7 @@ Scope {
         const unknownPrograms = [];
         const unknownStandIns = [];
         const unknownData = [];
+        const unknownMigrations = [];
         let waitingForGoing = false;
         // Each module's own state, from its own checks: record → { base (before its main),
         // state (a main that failed counted), facts }
@@ -1570,13 +1824,19 @@ Scope {
                 programsKnown: programs.every(program => _verdictFor(record, program) !== undefined),
                 missingPrograms: (manifest.programs ?? []).filter(program => _verdictFor(record, program)?.path === ""),
                 dataDirectoryKnown: _dataDirectoryKnown(manifest.id),
+                migrationsKnown: _migrationsKnown(record), migrationError: record.migrationError,
                 mainError: ""
             };
             const base = ModuleMergeRules.stateOf(facts);
-            // Waiting for its data directory alone: asked for below
+            // Waiting for its data directory alone (its migrations, which come after it, aside):
+            // asked for below
             if (base === "pending" && !facts.dataDirectoryKnown
-                    && ModuleMergeRules.stateOf(Object.assign({}, facts, { dataDirectoryKnown: true })) === "loaded")
+                    && ModuleMergeRules.stateOf(Object.assign({}, facts, { dataDirectoryKnown: true, migrationsKnown: true })) === "loaded")
                 unknownData.push(manifest.id);
+            // Waiting for its settings migrations alone: run below
+            if (base === "pending" && !facts.migrationsKnown
+                    && ModuleMergeRules.stateOf(Object.assign({}, facts, { migrationsKnown: true })) !== "pending")
+                unknownMigrations.push(record);
             // Its main failed before: failed until it is turned off and on, or reloaded.
             // Turned off and on again before its old main is gone (in one turn of the event
             // loop): pending until it is, so a new main never lives beside the old one — and
@@ -1681,6 +1941,8 @@ Scope {
             _checkTestPrograms(unknownStandIns);
         if (unknownData.length > 0)
             _makeDataDirectories(unknownData);
+        for (const record of unknownMigrations)
+            _runMigrations(record);
         _waitingForGoing = waitingForGoing;
         _askBaseline();
         _publish();
@@ -1744,6 +2006,12 @@ Scope {
         // Off, or waiting: a later start tries the main again (not when its own main failed)
         if (known.base !== "loaded")
             record.mainError = "";
+        // Off: its migrations run again when it comes back (on again, or after a restore of
+        // its settings) — not when they failed, which would run them again at once
+        if (["disabled", "unconfirmed", "approval", "safe-mode", "missing-program"].includes(known.base) && !record.migrating) {
+            record.migrated = false;
+            record.migrationError = "";
+        }
         if (Object.keys(record.facts).length > 0)
             record.facts = {};
         record.state = entry.state;
@@ -1981,6 +2249,8 @@ Scope {
                 errors.push(record.mainFileError);
             if (record.state === "failed" && record.mainError !== "")
                 errors.push(record.mainError);
+            if (record.state === "failed" && record.migrationError !== "")
+                errors.push(record.migrationError);
             if (record.state === "duplicate")
                 errors.push("the id " + record.manifest.id + " is already taken by " + record.shadowedBy);
             for (const program of record.missingPrograms ?? [])

@@ -795,6 +795,12 @@ TestCase {
         assertEqual(state({ dataDirectoryKnown: false, missingPrograms: ["tailscale"] }), "missing-program", "… a program missing first: no directory made for it");
         assertEqual(state({ dataDirectoryKnown: false, enabled: false }), "disabled", "… nor for one turned off");
         assertEqual(state({ mainError: "Main.qml: syntax error" }), "failed", "a main that failed");
+        // (1.43) Its settings migrations run before its main
+        assertEqual(state({ migrationsKnown: false }), "pending", "its migrations not run yet: pending");
+        assertEqual(state({ migrationsKnown: false, dataDirectoryKnown: false, enabled: false }), "disabled", "… none run for one turned off");
+        assertEqual(state({ migrationsKnown: false, missingPrograms: ["tailscale"] }), "missing-program", "… nor for one missing a program");
+        assertEqual(state({ migrationsKnown: true, migrationError: "its settings could not be read" }), "failed", "migrations that could not run: failed");
+        assertEqual(state({ migrationsKnown: true, migrationError: "" }), "loaded", "… run: loaded");
         assertEqual(ModuleMergeRules.stateOf(null), "failed", "nothing known: failed, no throw");
         // Not confirmed by the user (modules-management §5)
         assert(rules.states.includes("unconfirmed"), "the states include unconfirmed");
@@ -2205,6 +2211,20 @@ TestCase {
         assertEqual(alpha.widgets.length, 2, "… the manifest given is not changed");
         assert(ModuleFileRules.withoutBadFiles({ main: "Main.qml" }, { "Main.qml": "x" }, "").fatal !== "", "a bad main: fatal");
         assert(ModuleFileRules.withoutBadFiles({}, { "S.qml": "x" }, "singleton S 1.0 S.qml").fatal !== "", "a bad qmldir file: fatal");
+        // (1.43) Migration files: checked as the others, before any is built; a bad one fails the module
+        const migrating = { main: "Main.qml", migrations: [{ id: "one", file: "migrations/One.qml" }, { id: "two", file: "Main.qml" },
+                                                           { id: "three", file: "migrations/One.qml" }, { id: "four", file: "migrations/Four.qml" }] };
+        assertEqual(JSON.stringify(ModuleFileRules.migrationFiles(migrating)), JSON.stringify(["migrations/One.qml", "Main.qml", "migrations/Four.qml"]),
+                    "migrationFiles: in order, each once");
+        assertEqual(JSON.stringify(ModuleFileRules.migrationFiles({ migrations: "x" })) + JSON.stringify(ModuleFileRules.migrationFiles(null)), "[][]",
+                    "… none from a list that is not one");
+        assertEqual(ModuleFileRules.filesToCheck(migrating, "").map(entry => entry.file + ":" + entry.kind).join(","),
+                    "Main.qml:main,migrations/One.qml:migration,migrations/Four.qml:migration", "filesToCheck: the migration files, each once");
+        assertEqual(ModuleFileRules.withoutBadFiles(migrating, { "migrations/Four.qml": "leaves the module directory through a link" }, "").fatal,
+                    "migration four: migrations/Four.qml leaves the module directory through a link", "withoutBadFiles: a bad migration file is fatal, named");
+        assertEqual(ModuleFileRules.withoutBadFiles(migrating, { "migrations/One.qml": "does not exist" }, "").fatal,
+                    "migration one: migrations/One.qml does not exist", "… the first migration naming it");
+        assertEqual(ModuleFileRules.withoutBadFiles(migrating, {}, "").fatal, "", "… good ones: not fatal");
 
         // The start guard
         assertEqual(JSON.stringify(ModuleFileRules.startGuard("0 77:")), JSON.stringify({ safeMode: false, count: 0, identity: "77:", reason: "" }), "guard: a fresh process, 0");

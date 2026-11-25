@@ -424,6 +424,51 @@ Singleton {
         return { ok: true, error: "", part: _merged(moduleId, part, result, scope) };
     }
 
+    // ---- What the host does with a run ----
+
+    // A first install with no settings of its own: no record of the module's, and its part
+    // (partOf's) holds no setting and no store key — then every migration is recorded, none
+    // run (defaults are current by definition)
+    function isFresh(moduleId, part, records) {
+        if (!_moduleIdOk(moduleId) || !_object(part) || !_object(part.settings) || !_object(part.store))
+            return false;
+        if (moduleRecords(moduleId, records).length > 0)
+            return false;
+        const empty = set => _object(set) && Object.keys(set).length === 0;
+        return (part.settings.profiles ?? []).every(profile => empty(profile?.set)) && empty(part.settings.globals)
+            && Object.keys(part.store).length === 0;
+    }
+
+    // Whether a run's write needs a module backup first: something changed or a scope was
+    // reset — not when only records are written (a baseline, a hold dropped), nor right after
+    // the backup a version switch took (`switchBackup`)
+    function backupNeeded(report, switchBackup) {
+        if (!report?.write || switchBackup === true)
+            return false;
+        return report.changed === true || (Array.isArray(report.reset) && report.reset.length > 0);
+    }
+
+    // The store's changes from `before` to `after` (both objects): [{ key, value }] — value
+    // undefined for a key removed; unchanged keys left out
+    function storeChanges(before, after) {
+        const changes = [];
+        const old = _object(before) ? before : {};
+        const next = _object(after) ? after : {};
+        for (const key of Object.keys(old))
+            if (!Object.prototype.hasOwnProperty.call(next, key))
+                changes.push({ key: key, value: undefined });
+        for (const key of Object.keys(next))
+            if (!Object.prototype.hasOwnProperty.call(old, key) || MigrationRules.canonical(old[key]) !== MigrationRules.canonical(next[key]))
+                changes.push({ key: key, value: _copy(next[key]) });
+        return changes;
+    }
+
+    // A migration's summary as its file declares it, for the log and the failure notice: one
+    // line of plain text, at most 200 characters ("" when it declares none)
+    function summaryOf(value) {
+        return typeof value === "string" ? ModuleInstallRules._plain(value, 200) : "";
+    }
+
     // ---- The run ----
 
     // Module `moduleId`'s pending migrations run in their order on `part` (partOf's).
