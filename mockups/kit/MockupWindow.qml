@@ -85,6 +85,9 @@ import qs.components
 //                         on screen, how the content scrolls: "wheel, vertical bar shown"
 //                         (or hidden while the content fits; never "drag": a drag belongs
 //                         to the mockup); "" while shooting
+//   qs -p <tree>/mockup.qml ipc call mockup position
+//                         on screen, how far the content is scrolled: "<x>,<y>" in pixels
+//                         ("" while shooting)
 //   qs -p <tree>/mockup.qml ipc call mockup buttons
 //                         the buttons inside the window: "<shown> of <names> shown,
 //                         checked <name>" (none while shooting)
@@ -419,21 +422,36 @@ QtObject {
             interactive: false
 
             // Scrolls by the wheel where the mockup's own items did not take it; a
-            // horizontal wheel, or Shift with a vertical one, scrolls sideways
+            // horizontal wheel, or Shift with a vertical one, scrolls sideways. Qt on Wayland
+            // hands a mouse wheel's notches over as from a touchpad device (every axis event
+            // has a pixel delta), so both devices are taken; and a WheelHandler takes one
+            // orientation only, so there is one for each
+            function _scrollBy(dx, dy) {
+                contentX = Math.max(0, Math.min(contentWidth - width, contentX - dx));
+                contentY = Math.max(0, Math.min(contentHeight - height, contentY - dy));
+            }
+            // How far an event moves along one axis: a notch (no scroll phase) by its angle,
+            // a touchpad's stroke by its pixels
+            function _step(pixel, angle, phase) {
+                return phase === Qt.NoScrollPhase || pixel === 0 ? angle / 120 * 48 : pixel;
+            }
+
             WheelHandler {
                 target: null
+                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
                 onWheel: event => {
-                    const step = (pixel, angle) => pixel !== 0 ? pixel : angle / 120 * 48;
-                    let dx = step(event.pixelDelta.x, event.angleDelta.x);
-                    let dy = step(event.pixelDelta.y, event.angleDelta.y);
-                    if (event.modifiers & Qt.ShiftModifier && dx === 0) {
-                        dx = dy;
-                        dy = 0;
-                    }
-                    const flick = _scroller;
-                    flick.contentX = Math.max(0, Math.min(flick.contentWidth - flick.width, flick.contentX - dx));
-                    flick.contentY = Math.max(0, Math.min(flick.contentHeight - flick.height, flick.contentY - dy));
+                    const step = _scroller._step(event.pixelDelta.y, event.angleDelta.y, event.phase);
+                    if (event.modifiers & Qt.ShiftModifier)
+                        _scroller._scrollBy(step, 0);
+                    else
+                        _scroller._scrollBy(0, step);
                 }
+            }
+            WheelHandler {
+                target: null
+                orientation: Qt.Horizontal
+                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                onWheel: event => _scroller._scrollBy(_scroller._step(event.pixelDelta.x, event.angleDelta.x, event.phase), 0)
             }
 
             ScrollBar.vertical: ScrollBar {
@@ -562,6 +580,12 @@ QtObject {
             const bar = _scroller.ScrollBar.vertical;
             return (_scroller.interactive ? "drag" : "wheel") + ", vertical bar "
                 + (bar && bar.visible && bar.policy === ScrollBar.AlwaysOn ? "shown" : "hidden");
+        }
+
+        function position(): string {
+            if (!root._window || root.shooting)
+                return "";
+            return Math.round(_scroller.contentX) + "," + Math.round(_scroller.contentY);
         }
     }
 }

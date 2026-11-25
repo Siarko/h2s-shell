@@ -2,11 +2,12 @@ import QtQuick
 import qs.singletons
 import qs.mockups.kit
 
-// A fixture plan taller than any screen, with an item reaching above its content:
-// on screen the scene buttons stay inside the window, above the content
+// A fixture plan wider and taller than the test compositor's screen, with an item reaching
+// above its content: on screen the scene buttons stay inside the window, above the
+// content, and the content scrolls both ways
 MockupWindow {
     id: root
-    contentWidth: 300
+    contentWidth: 2400
     contentHeight: 4000
 
     Rectangle {

@@ -628,17 +628,18 @@ exits 2
 prints err "driver: xkbcli could not compile the us keymap (output above)"
 silent_on out "made="
 
-# The set is made for the lock need with the system's tools only: asked for with the unit
-# need, or with the pinned tools, it is refused and nothing is made
+# The set is made for the lock need (or the mockups need with LOCKTEST_INPUT=1) with the
+# system's tools only: asked for with the unit need, or with the pinned tools, it is refused
+# and nothing is made
 resolve make-for-unit unit "base session system qs" MAKE_ANYWAY=1
 exits 2
-prints err "driver: make_system_tools is for the lock need with the system's tools"
+prints err "driver: make_system_tools is for the lock need (or the mockups need with LOCKTEST_INPUT=1) with the system's tools"
 silent_on out "made="
 is "nothing was made" test ! -e "$made"
 
 resolve make-with-nix lock "base session nix launcher" MAKE_ANYWAY=1
 exits 2
-prints err "driver: make_system_tools is for the lock need with the system's tools"
+prints err "driver: make_system_tools is for the lock need (or the mockups need with LOCKTEST_INPUT=1) with the system's tools"
 silent_on out "made="
 is "nothing was made" test ! -e "$made"
 
@@ -1071,6 +1072,42 @@ resolve mockups-nix-no-magick mockups "base session nix qs"
 exits 2
 prints err "$missing_header_nix"
 prints err "  the pinned tool set ($store) lacks bin/magick (makes the mockups' shots smaller, losslessly)"
+hands_over_nothing
+
+# ---- The mockups need with the virtual keyboard and pointer (LOCKTEST_INPUT=1) ---
+# With the system's tools: python3, xkbcli and pkg-config besides, the protocol files, and the
+# set made with the two programs and share/
+resolve mockups-input-system mockups "base session system lockset wlr-randr magick python xkbcli pkg-config qs" \
+    LOCKTEST_INPUT=1 MAKE_ANYWAY=1
+exits 0
+prints out "made=$made"
+is "bin/ holds python3 and xkbcli only" test "$(ls "$made/bin" | tr '\n' ' ')" = "python3 xkbcli "
+is "bin/python3 is the system's" test "$(readlink "$made/bin/python3")" = "$work/python/python3"
+is "share/ltproto holds what the scanner wrote" test -f "$made/share/ltproto/wayland.py"
+is "share/us.xkb is the plain layout" test "$(cat "$made/share/us.xkb")" = "keymap for: compile-keymap --rules evdev --model pc105 --layout us"
+
+resolve mockups-input-system-missing mockups "base session system lockset wlr-randr magick qs" LOCKTEST_INPUT=1 H2S_TEST_TOOLS=system
+exits 2
+prints err "$missing_header_system"
+prints err "  python3 not found on PATH (the virtual keyboard and pointer)"
+prints err "  xkbcli not found on PATH (tells the virtual keyboard which keys type a character)"
+prints err "  pkg-config not found on PATH (finds the Wayland protocol files the input bindings are generated from)"
+silent_on err "Hyprland"
+hands_over_nothing
+
+# With nix: the pinned set holds them; one without python3 is refused
+resolve mockups-input-nix mockups "base session nix-mockups qs" LOCKTEST_INPUT=1
+exits 0
+prints out "python=$mockups_store/bin/python3"
+resolve mockups-input-nix-no-python mockups "base session nix-no-python qs" LOCKTEST_INPUT=1
+exits 2
+prints err "  the pinned tool set ($work/store/eeeeeeee-h2s-locktest-tools) lacks bin/python3 (the virtual keyboard and pointer)"
+hands_over_nothing
+
+# Any other need refuses it
+resolve input-for-unit unit "base session system qs" LOCKTEST_INPUT=1
+exits 2
+prints err "driver: resolve.sh: LOCKTEST_INPUT=1 is for the mockups need, not 'unit'"
 hands_over_nothing
 
 # ---- A caller that does not say what it needs ---

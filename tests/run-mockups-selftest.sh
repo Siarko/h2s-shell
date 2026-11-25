@@ -14,7 +14,9 @@
 #     it and that state's checked; H2S_MOCKUP_SCENE a plan on that scene, also for a plan
 #     taller than the screen, whose own item reaches above its content; on screen the
 #     content never scrolls by a drag (a drag is the mockup's), only by the wheel and a
-#     vertical scroll bar shown while it does not fit;
+#     vertical scroll bar shown while it does not fit; a real wheel (the lock bed's virtual
+#     pointer, tests/lock/input/ltinput.py) scrolls a component's, a plan's and the gallery's
+#     window by 48 px a notch, a plan's sideways by a horizontal wheel and by Shift;
 #   - with state cells (the kit's StateGrid): shot in their grid, each cropped to its cell; on
 #     screen with no state named, every state's cell shown, none overlapping, labelled with its
 #     name and about.txt's description in order, a pointer state saying how to see it, no
@@ -100,6 +102,9 @@ HEADLESS_NAME=run-mockups-selftest.sh
 # there is nix)
 # shellcheck disable=SC2034  # read by headless.sh
 HEADLESS_NEED=mockups
+# The lock bed's virtual pointer and keyboard too: a real wheel on the window
+# shellcheck disable=SC2034  # read by resolve.sh
+LOCKTEST_INPUT=1
 # shellcheck source=headless.sh
 source "$REPO/tests/headless.sh"
 
@@ -112,6 +117,7 @@ selftest_cleanup() {
     local written
     for written in "${tree_writes[@]}"; do rm -rf -- "$written"; done
     local case
+    [ -n "${input_pid:-}" ] && { kill -TERM "$input_pid" 2> /dev/null; wait "$input_pid" 2> /dev/null; }
     for case in "${!pids[@]}"; do
         kill -TERM "${pids[$case]}" 2> /dev/null
     done
@@ -499,6 +505,97 @@ check "$(! grep -q -E 'MOCKUP-ERROR|TypeError|ReferenceError|Binding loop' "${lo
 check "$([ "$filter_answer" = components/pill ]; echo $?)" "the filter: only the section whose state holds every word (was '$filter_answer')"
 expected_themes=$(printf '%s\n' contrast contrast contrast default default "no theme 'nope'; the themes: default, contrast")
 check "$([ "$theme_answers" = "$expected_themes" ]; echo $?)" "opened in contrast; theme switches to default and back, asks, refuses an unknown one with the list (was '$(paste -s -d '|' <<< "$theme_answers")')"
+
+# ---- A real wheel ---------------------------------------------------------------------
+# The lock bed's virtual pointer and keyboard (tests/lock/input/ltinput.py) on the compositor:
+# the wheel arrives as a mouse's does through a compositor, with Qt's own idea of the device,
+# which the scroller's properties (ipc scroller) never showed
+if [ "$LOCKTEST_TOOL_SOURCE" = system ]; then
+    make_system_tools "$work/input-tools"
+    input_share=$work/input-tools/share
+else
+    input_share=$LOCKTEST_TOOLS/share
+fi
+input_fifo=$work/input.fifo
+mkfifo "$input_fifo"
+"${isolated[@]}" WAYLAND_DISPLAY=wayland-0 "$SETPRIV" --no-new-privs timeout 300 "$LOCKTEST_PYTHON" -I -B \
+    "$REPO/tests/lock/input/ltinput.py" "$input_share" "$input_share/us.xkb" "$input_fifo" > "$work/input.log" 2>&1 < /dev/null &
+input_pid=$!
+deadline=$((SECONDS + 10))
+# The client ready, a condition polled
+while [ $SECONDS -lt $deadline ] && ! grep -q 'ltinput ready' "$work/input.log"; do sleep 0.05; done
+input_ready=$(grep -c 'ltinput ready' "$work/input.log")
+check "$([ "$input_ready" = 1 ]; echo $?)" "the virtual pointer started ($(tail -n 1 "$work/input.log"))"
+
+# send_input <command>: handed to the input client; returns once the compositor has it (the
+# client's acknowledgement), five seconds at most
+send_input() {
+    local before
+    before=$(cat "$input_fifo.ack" 2> /dev/null | wc -l)
+    timeout 5 bash -c 'printf "%s\n" "$2" > "$1"' _ "$input_fifo" "$1" || return 1
+    local deadline=$((SECONDS + 5))
+    # The acknowledgement, a condition polled
+    while [ $SECONDS -lt $deadline ] && [ "$(cat "$input_fifo.ack" 2> /dev/null | wc -l)" -le "$before" ]; do sleep 0.05; done
+}
+
+# wheel_run <case> <command;command…> [VAR=value…]: the entry started on screen; once its
+# window is made (the gallery: its first section built or failed) the pointer put at the output's
+# centre, inside the window (which opens centred), and each wheel command sent in turn:
+# wheel_scroller what `ipc scroller` answered first, wheel_positions `ipc position` before
+# the first and after each (once it changed, or after five seconds), a line each
+wheel_run() {
+    local case=$1 commands=$2 id="" deadline=$((SECONDS + 60)) made="" command position steps=()
+    shift 2
+    start_entry "$case" "$REPO/mockup.qml" "$@"
+    wheel_scroller="" wheel_positions=""
+    while [ $SECONDS -lt $deadline ] && kill -0 "${pids[$case]}" 2> /dev/null; do
+        id=$(instance_of "$case")
+        [ -n "$id" ] && made=$(ipc "$id" call mockup window)
+        if [ "$made" = floating ] && { [ "$(ipc "$id" call mockup name)" != gallery ] \
+            || ipc "$id" call mockup sections | head -n 1 | grep -q -E ' (built|failed: .*)$'; }; then
+            break
+        fi
+        # A condition polled (the window made), not a fixed wait
+        sleep 0.05
+    done
+    if [ "$made" = floating ]; then
+        wheel_scroller=$(ipc "$id" call mockup scroller)
+        send_input "abs 1 1 2 2"
+        position=$(ipc "$id" call mockup position)
+        wheel_positions=$position
+        IFS=';' read -r -a steps <<< "$commands"
+        for command in "${steps[@]}"; do
+            send_input "$command"
+            local moved_deadline=$((SECONDS + 5)) now
+            # Moved, a condition polled; five seconds for a wheel that does nothing
+            while now=$(ipc "$id" call mockup position) && [ "$now" = "$position" ] && [ $SECONDS -lt $moved_deadline ]; do sleep 0.05; done
+            position=$now
+            wheel_positions+=$'\n'$position
+        done
+    fi
+    kill -TERM "${pids[$case]}" 2> /dev/null
+    finish_entry "$case"
+}
+
+echo "on screen: a real mouse wheel scrolls a component's window (the pointer over its cells)"
+wheel_run wheel-component "scroll vertical 3" H2S_MOCKUP=components/small-button
+check "$([ "$wheel_scroller" = "wheel, vertical bar shown" ]; echo $?)" "small-button's states taller than the window (scroller was '$wheel_scroller')"
+check "$([ "$wheel_positions" = "$(printf '%s\n' 0,0 0,144)" ]; echo $?)" "three notches down: 48 px each (positions were '$(paste -s -d ' ' <<< "$wheel_positions")')"
+check "$(! grep -q -E 'MOCKUP-ERROR|TypeError|ReferenceError' "${logs[wheel-component]}"; echo $?)" "no error"
+
+echo "on screen: a real wheel scrolls a plan both ways: down, sideways by a horizontal wheel and by Shift, up"
+wheel_run wheel-plan "scroll vertical 3;scroll horizontal 2;scroll vertical 2 shift;scroll vertical -1" \
+    H2S_MOCKUP_BASE=tests/fixtures/mockups H2S_MOCKUP=plans/tall H2S_MOCKUP_SCENE=first
+check "$([ "$wheel_positions" = "$(printf '%s\n' 0,0 0,144 96,144 192,144 192,96)" ]; echo $?)" "down 3, right 2, Shift+down 2 to the right, up 1 (positions were '$(paste -s -d ' ' <<< "$wheel_positions")')"
+check "$(! grep -q -E 'MOCKUP-ERROR|TypeError|ReferenceError' "${logs[wheel-plan]}"; echo $?)" "no error"
+
+echo "on screen: a real wheel scrolls the gallery"
+wheel_run wheel-gallery "scroll vertical 3" H2S_MOCKUP=gallery H2S_MOCKUP_BASE=tests/fixtures/mockups XDG_CONFIG_HOME="$theme_config"
+check "$([ "$wheel_positions" = "$(printf '%s\n' 0,0 0,144)" ]; echo $?)" "three notches down (positions were '$(paste -s -d ' ' <<< "$wheel_positions")')"
+check "$(! grep -q -E 'MOCKUP-ERROR|TypeError|ReferenceError|Binding loop' "${logs[wheel-gallery]}"; echo $?)" "no error"
+kill -TERM "$input_pid" 2> /dev/null
+wait "$input_pid" 2> /dev/null
+input_pid=""
 
 # closed_by_user <case> <title> [VAR=value…]: the entry started on screen; once its window
 # is made, closed through the compositor as its close button does (the closer fixture);

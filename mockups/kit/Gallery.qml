@@ -34,6 +34,7 @@ import qs.components
 //   jump <section>  scrolls to it (and so builds it), kept at the top while the sections
 //                   above it are built and grow, until the wheel scrolls: "" or why not
 //   top             the section at the top of the view
+//   position        how far the page is scrolled: "0,<y>" in pixels ("" before the window)
 //   filter <text>   sets the filter: the sections shown, a line each
 //   theme <name>    shows every section in that theme ("" only asks): the name in force, or
 //                   why not
@@ -277,11 +278,15 @@ QtObject {
             // A drag belongs to the mockups, never to the scroller
             interactive: false
 
+            // As the mockup window's scroller (MockupWindow.qml): a mouse wheel arrives as
+            // from a touchpad device on Wayland, a notch moves by its angle
             WheelHandler {
                 target: null
+                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
                 onWheel: event => {
                     root._anchored = "";
-                    const dy = event.pixelDelta.y !== 0 ? event.pixelDelta.y : event.angleDelta.y / 120 * 48;
+                    const dy = event.phase === Qt.NoScrollPhase || event.pixelDelta.y === 0
+                        ? event.angleDelta.y / 120 * 48 : event.pixelDelta.y;
                     _scroller.contentY = Math.max(0, Math.min(_scroller.contentHeight - _scroller.height, _scroller.contentY - dy));
                 }
             }
@@ -466,6 +471,10 @@ QtObject {
 
         function top(): string {
             return root._top();
+        }
+
+        function position(): string {
+            return root._window ? "0," + Math.round(_scroller.contentY) : "";
         }
 
         function filter(text: string): string {

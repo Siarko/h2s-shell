@@ -32,9 +32,10 @@ always exactly the one asked for. Commands, one per line, are written to <fifo>:
   click [left|right|middle]
   press [left|right|middle]    held down (a drag: press, moves, release)
   release [left|right|middle]
-  scroll <vertical|horizontal> <notches>
+  scroll <vertical|horizontal> <notches> [shift]
                        wheel notches on one axis, as a mouse wheel sends them, signed as
-                       Wayland signs them: positive is down, and on the horizontal axis right
+                       Wayland signs them: positive is down, and on the horizontal axis right;
+                       with `shift`, Shift held down over them
   sleep <seconds>
   quit
 
@@ -270,13 +271,23 @@ def main():
                     pointer.button(milliseconds(), BUTTONS[argument or "left"], 1 if command == "press" else 0)
                     pointer.frame()
                 elif command == "scroll":
-                    axis, _, notches = argument.partition(" ")
+                    axis, notches, *rest = argument.split()
                     if axis not in AXES:
                         fatal(f"scroll: no axis {axis!r} (vertical or horizontal)")
+                    if rest not in ([], ["shift"]):
+                        fatal(f"scroll: {' '.join(rest)!r} is not `shift`")
                     notches = int(notches)
+                    if rest:
+                        keyboard.key(milliseconds(), modifier_codes["Shift"], 1)
+                        send_modifiers(MASKS["Shift"])
+                        display.roundtrip()
                     pointer.axis_source(AXIS_SOURCE_WHEEL)
                     pointer.axis_discrete(milliseconds(), AXES[axis], NOTCH_VALUE * notches, notches)
                     pointer.frame()
+                    if rest:
+                        display.roundtrip()
+                        keyboard.key(milliseconds(), modifier_codes["Shift"], 0)
+                        send_modifiers(0)
                 elif command == "sleep":
                     time.sleep(float(argument))
                 elif command == "quit":

@@ -89,6 +89,8 @@ tests/lock/lint.sh self:tests/lock/selftest.sh
 tests/lock/lib.sh lock:all
 tests/lock/pam/* lock:all
 tests/lock/input/* lock:all
++tests/lock/input/ltinput.py self:tests/run-mockups-selftest.sh
++tests/lock/protocols/* self:tests/run-mockups-selftest.sh
 tests/lock/locker/* lock:foreign-lock
 tests/lock/protocols/* lock:all
 tests/lock/seams/* lock:all

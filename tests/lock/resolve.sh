@@ -16,6 +16,12 @@
 #          pinned set's bin/python3, or the one on PATH; no launcher, no Quickshell. Sets
 #          LOCKTEST_PYTHON and prints one tools line
 #
+# LOCKTEST_INPUT=1 with the mockups need (tests/run-mockups-selftest.sh: a real wheel on the
+# mockup window) adds the lock bed's virtual keyboard and pointer: python3 with pywayland,
+# xkbcli and share/ (ltproto, us.xkb); with the system's tools also pkg-config and the
+# protocol files, the caller having share/ made with make_system_tools (below). Any other
+# need refuses it.
+#
 # The tools come from one source for the whole run, never tool by tool (they depend on each
 # other, and a mix of pinned and system parts is a configuration nobody tests):
 #
@@ -115,6 +121,14 @@ case "${LOCKTEST_NEED:-}" in
     unit | lock | python | mockups) ;;
     *) setup_error "resolve.sh: LOCKTEST_NEED must be unit, lock, python or mockups, not '${LOCKTEST_NEED:-}'" ;;
 esac
+# The virtual keyboard and pointer besides the mockups' tools (LOCKTEST_INPUT=1), or ""
+input_need=""
+case "${LOCKTEST_INPUT:-}" in
+    "") ;;
+    1) [ "$LOCKTEST_NEED" = mockups ] || setup_error "resolve.sh: LOCKTEST_INPUT=1 is for the mockups need, not '$LOCKTEST_NEED'"
+       input_need=1 ;;
+    *) setup_error "resolve.sh: LOCKTEST_INPUT must be 1 or unset, not '$LOCKTEST_INPUT'" ;;
+esac
 
 # ---- The source -----------------------------------------------------------------------
 case "${H2S_TEST_TOOLS:-}" in
@@ -173,6 +187,7 @@ pinned_parts() {
         echo bin/python3
     elif [ "$LOCKTEST_NEED" = mockups ]; then
         printf '%s\n' bin/labwc bin/setpriv bin/grim bin/wlr-randr bin/magick bin/fc-match
+        [ -z "$input_need" ] || printf '%s\n' bin/python3 bin/xkbcli share/ltproto share/us.xkb
     else
         printf '%s\n' bin/labwc bin/setpriv bin/fc-match
     fi
@@ -258,6 +273,7 @@ else
         needed_tools=(python3 timeout)
     elif [ "$LOCKTEST_NEED" = mockups ]; then
         needed_tools=(labwc setpriv setsid timeout grim wlr-randr magick fc-match cmp sha256sum)
+        [ -z "$input_need" ] || needed_tools+=(python3 xkbcli pkg-config)
     elif [ "$LOCKTEST_NEED" = lock ]; then
         needed_tools=("${lock_programs[@]}" pkg-config setsid timeout)
     else
@@ -290,7 +306,7 @@ protocol_file() {
     directory=$(timeout 5 "$system_pkg_config" --variable=pkgdatadir "$1" 2> /dev/null < /dev/null) || return 1
     [ -n "$directory" ] && [ -f "$directory/$2" ] && echo "$directory/$2"
 }
-if [ "$LOCKTEST_NEED" = lock ] && [ "$LOCKTEST_TOOL_SOURCE" = system ]; then
+if { [ "$LOCKTEST_NEED" = lock ] || [ -n "$input_need" ]; } && [ "$LOCKTEST_TOOL_SOURCE" = system ]; then
     system_python=$(type -P python3)
     system_pkg_config=$(type -P pkg-config)
     system_xkbcli=$(type -P xkbcli)
@@ -309,16 +325,18 @@ fi
 
 # make_system_tools <directory>: the lock bed's set from the system's tools, as tools.nix
 # lays it out (the caller then hands <directory> on as LOCKTEST_TOOLS). <directory> is new
-# and the run's own. bin/ links to the programs found on PATH above; share/ is generated
-# with them, by the commands tools.nix runs, with nothing of the user's (an XKB config in
-# the home directory would change the keymaps). A failure is a set-up error.
+# and the run's own. bin/ links to the programs found on PATH above (for the mockups need
+# with LOCKTEST_INPUT=1 python3 and xkbcli only); share/ is generated with them, by the
+# commands tools.nix runs, with nothing of the user's (an XKB config in the home directory
+# would change the keymaps). A failure is a set-up error.
 make_system_tools() {
-    local directory=$1 tool log
-    [ "$LOCKTEST_NEED" = lock ] && [ "$LOCKTEST_TOOL_SOURCE" = system ] \
-        || setup_error "make_system_tools is for the lock need with the system's tools"
+    local directory=$1 tool log programs=("${lock_programs[@]}")
+    { [ "$LOCKTEST_NEED" = lock ] || [ -n "$input_need" ]; } && [ "$LOCKTEST_TOOL_SOURCE" = system ] \
+        || setup_error "make_system_tools is for the lock need (or the mockups need with LOCKTEST_INPUT=1) with the system's tools"
+    [ "$LOCKTEST_NEED" = lock ] || programs=(python3 xkbcli)
     mkdir -p "$directory/bin" "$directory/share/keymaps" "$directory/home" \
         || setup_error "cannot create the tool set in $directory"
-    for tool in "${lock_programs[@]}"; do
+    for tool in "${programs[@]}"; do
         ln -s "$(type -P "$tool")" "$directory/bin/$tool" || setup_error "cannot link $tool into $directory/bin"
     done
     log=$directory/generate.log
