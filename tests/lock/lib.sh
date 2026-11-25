@@ -789,13 +789,16 @@ while [ "\${1#--}" != "\$1" ]; do
 done
 # As logind's Inhibit() does (systemd v260 src/login/logind-dbus.c, method_inhibit): no new
 # delay lock while the sleep it would delay is under way — from PrepareForSleep(true) until
-# the wake (logind/preparing, written by logind_signal)
+# the wake (logind/preparing, written by logind_signal). The time is taken before the look,
+# as logind's answer is one step: a hold recorded is one asked before the signal's time
+# (LOGIND_SIGNAL_AT, taken after logind/preparing is written), never after it
+asked=\${EPOCHREALTIME/,/.}
 if [ "\$(cat "$WORK/logind/preparing" 2> /dev/null)" = true ]; then
-    echo "\${kind}refuse \$\$ \${EPOCHREALTIME/,/.}" >> "\$log"
+    echo "\${kind}refuse \$\$ \$asked" >> "\$log"
     echo "Failed to inhibit: The operation inhibition has been requested for is already running" >&2
     exit 1
 fi
-echo "\${kind}hold \$\$ \${EPOCHREALTIME/,/.}" >> "\$log"
+echo "\${kind}hold \$\$ \$asked" >> "\$log"
 "\$@"
 status=\$?
 echo "\${kind}release \$\$ \${EPOCHREALTIME/,/.}" >> "\$log"

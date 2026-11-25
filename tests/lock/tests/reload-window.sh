@@ -17,7 +17,9 @@
 # (3) A PrepareForSleep while the shell reloads: the lock goes up, and logind — which
 #     refuses new inhibitors once the sleep is under way — would sleep only after the
 #     compositor locked: the last inhibitor held when the signal came is let go after the
-#     lock, and the lock comes within logind's 5 s maximum delay of the signal.
+#     lock, and the lock comes within logind's 5 s maximum delay of the signal. The new
+#     generation may hear of the sleep before it has read its settings (lock before sleep
+#     still at its default, off): the setting read then locks (LockRules._settingsChanged).
 # Lock before sleep is off by default: switched on here.
 
 stack_start --dev --logind --settings '{"lockscreen.lockOnSleep": true}'
@@ -103,11 +105,16 @@ for offset in 0 0.4; do
     echo "// written by tests/lock reload-window.sh, unlocked (3, $offset)" >> "$LOCKTEST_SHELL/singletons/Theme.qml"
     wait_until 5 reloading_since "$before" || abort "the shell did not reload on a file change"
     sleep "$offset" # fixed sleep: the moment into the reload is the subject (SERIAL)
-    # The inhibitors held when the signal goes out — the ones logind waits for — oldest first
-    held_at_signal=$(awk '$1 == "hold" { held[$2] = ++n } $1 == "release" { delete held[$2] } END { for (pid in held) print held[pid], pid }' "$WORK/logind/log" | sort -n | awk '{ print $2 }')
     signal_line=$(wc -l < "$WORK/shell.log")
-    signal_at=${EPOCHREALTIME/,/.}
     logind_signal sleep
+    # The signal's time: taken by logind_signal once the stand-in refuses new inhibitors, and
+    # each hold's time is taken before the stand-in looks — so a hold recorded is one granted
+    # before the signal, and one granted just before it (the new generation starting as the
+    # signal goes out) is held at the signal, as logind would count it
+    signal_at=$LOGIND_SIGNAL_AT
+    # The inhibitors held when the signal went out — the ones logind waits for — oldest first;
+    # read again at each use, as a hold granted just before the signal may be written after it
+    held_at_signal() { awk -v since="$signal_at" '$3 + 0 > since + 0 { next } $1 == "hold" { held[$2] = ++n } $1 == "release" { delete held[$2] } END { for (pid in held) print held[pid], pid }' "$WORK/logind/log" | sort -n | awk '{ print $2 }'; }
     if wait_until 8 compositor_locked; then
         pass "[$offset] a PrepareForSleep during a reload locks"
     else
@@ -119,11 +126,12 @@ for offset in 0 0.4; do
         [ -n "$(confirmed_after "$signal_line")" ] || return 1
         awk -v now="${EPOCHREALTIME/,/.}" -v since="$signal_at" -v max="$delay_max" 'BEGIN { exit !(now + 0 > since + max) }' && return 0
         local pid
-        for pid in $held_at_signal; do
+        for pid in $(held_at_signal); do
             awk -v pid="$pid" '$1 == "release" && $2 == pid { found = 1 } END { exit !found }' "$WORK/logind/log" || return 1
         done
     }
     wait_until 8 settled || log "[$offset] not settled within 8 s (confirmation logged and the inhibitors let go)"
+    held_at_signal=$(held_at_signal)
     locked_at=$(confirmed_after "$signal_line")
     last_release=0
     released=""

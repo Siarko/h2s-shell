@@ -1306,7 +1306,15 @@ Singleton {
             changes.offered = LockStepRules.offeredFrom(values.offered, transaction.state.settings.offered);
         if (Object.keys(changes).length === 0)
             return "no known setting";
+        const switchedOn = changes.lockOnSleep === true && !transaction.state.settings.lockOnSleep;
         LockStepRules.setRegion(transaction, "settings", changes);
+        // Lock before sleep switched on while a sleep is under way locks now, as the
+        // PrepareForSleep would have. That is how a shell that starts or reloads during a
+        // sleep reads it: its settings file is read a moment after its logind monitor
+        // listens, so the PrepareForSleep (or PreparingForSleep found true) can come first,
+        // with the setting still at its default (off) — and the lid-close lock was lost
+        if (switchedOn && transaction.state.sleep.status === "suspending" && transaction.state.phase.status === "unlocked")
+            _enterLock(transaction, "sleep");
         // A switch changed: what is offered follows at once, also while the methods are
         // asked again (the configs known so far serve meanwhile) — a method switched off
         // stops, one switched on starts (_reconcile); the password goes on as it was

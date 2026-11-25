@@ -236,6 +236,8 @@ The interface modules are written against (`qs.api`), versioned on its own
   Without polkit rules it works as before; set to true beside them, it stops the build.
 
 ### Fixed
+- "Lock before the computer sleeps": a sleep that began while the shell was starting or
+  reloading, before it had read its settings, now locks the screen too.
 - Settings updates for a new version run before the shell reads the config, take one backup
   per run, and keep only the newest ten automatic backups; backups made by hand are kept.
 - When a settings update for a new version fails, only the settings it covers go back to

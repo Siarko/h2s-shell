@@ -1488,6 +1488,13 @@ TestCase {
         const notWhileDown = started({ lockOnSleep: false, passwordFallback: fallback }).sendAll([
             { type: "prepareForSleep" }, { type: "settings", values: { lockOnSleep: true } }]);
         assert(!has(notWhileDown.effects, "holdInhibitor"), "7: switched on while going down: taken only after the wake");
+        assert(has(notWhileDown.effects, "lockCompositor", { source: "sleep" }) && notWhileDown.state.phase.status === "locking",
+               "7: … and it locks now, as the PrepareForSleep would have (a shell that started or reloaded during a sleep reads its settings after hearing it)");
+        const lockedWhileDown = locked(null, { lockOnSleep: false, passwordFallback: fallback }).sendAll([
+            { type: "prepareForSleep" }, { type: "settings", values: { lockOnSleep: true } }]);
+        assert(!has(lockedWhileDown.effects, "lockCompositor"), "7: … not again when it is locked already");
+        const onAwake = started({ lockOnSleep: false, passwordFallback: fallback }).send({ type: "settings", values: { lockOnSleep: true } });
+        assert(!has(onAwake.effects, "lockCompositor"), "7: switched on while awake: no lock, only the inhibitor");
         notWhileDown.send({ type: "resumed" });
         assert(has(notWhileDown.effects, "holdInhibitor"), "7: … which it is");
     }
