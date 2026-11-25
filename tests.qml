@@ -89,6 +89,7 @@ QtObject {
     property var _barText: BarTextTest {}
     property var _barGeometry: BarGeometryTest {}
     property var _pointerRules: PointerRulesTest {}
+    property var _interactionRules: InteractionRulesTest {}
     property var _batteryRules: BatteryRulesTest {}
     property var _toastRules: ToastRulesTest {}
     property var _notificationRules: NotificationRulesTest {}
