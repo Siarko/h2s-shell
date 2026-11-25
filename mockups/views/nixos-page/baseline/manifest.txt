@@ -1,0 +1,35 @@
+# The approved baseline of views/nixos-page: a PNG per scene (<NN>-<scene>.png), compared pixel
+# for pixel by tests/run-mockups.sh --compare, and what it was drawn with (a run drawn
+# otherwise is NOT RUN). Written by tests/run-mockups.sh --approve; never by hand.
+environment renderer OpenGL VENDOR: Mesa RENDERER: llvmpipe (LLVM 23.1.5, 256 bits) VERSION: 4.6 (Compatibility Profile) Mesa 26.3.1-arch1.2
+environment backend llvmpipe
+environment quickshell Quickshell 0.3.2 (revision , distributed by Arch Linux)
+environment font:JetBrainsMono-Nerd-Font 1c680e8cde9fcf8b88a5605ce8d1fb94dd3fb15841f7ca7bf4c55664855e5611 /usr/share/fonts/TTF/JetBrainsMonoNerdFont-Regular.ttf
+environment font:JetBrainsMono-Nerd-Font:bold e490660ad75e0b152c93b1604c2ea1a4ea675f1b8a3fe0d005b1998568f99f1f /usr/share/fonts/TTF/JetBrainsMonoNerdFont-Bold.ttf
+environment font:sans-serif 6038a160b491e121c1f12c7bccb4a9c8730296e3adc1086a059404ed84b7451c /usr/share/fonts/TTF/DejaVuSans.ttf
+environment font:monospace b5babc084554ebdd142fe099d8b7c573ff161738bca913723d3e84f5c3df1c78 /usr/share/fonts/TTF/DejaVuSansMono.ttf
+environment font:emoji 15671215ab769fdc7162a045d56fd7d7e477c51b04e6b3c761d914d8fdd6cc44 /usr/share/fonts/noto/NotoColorEmoji.ttf
+environment font-rendering hinting=True hintstyle=1 antialias=True rgba= lcdfilter=1 autohint=False embeddedbitmap=True
+environment qt-core 5205d073601b17d36c2e988378157747870122fef75b81d3ef5e38e05ca26f77 /usr/lib/libQt6Core.so.6.12.0
+environment qt-gui f259d516cf7624ef5ba9155eb10bf043f361cfb7ec58a3a54f958793aa1c1d10 /usr/lib/libQt6Gui.so.6.12.0
+environment qt-quick 81c159125a0084a8980eb603a550fb09befaebd720c79d22318dac71eb625f29 /usr/lib/libQt6Quick.so.6.12.0
+environment qt-svg (not loaded)
+environment freetype 0b0e16faaaed2145c89e193bc52f308bfb909ccd182fbed0d2f245329c248fca /usr/lib/libfreetype.so.6.20.7
+environment fontconfig ea856e202615c9198c76bbd72a4de6b4bd91ad160a33eb51500ef132d8fc6536 /usr/lib/libfontconfig.so.1.17.0
+environment harfbuzz 70b65f53855877c74f99189eaa3652c8abd67ce3c9d5e3611a6d0e36291c6482 /usr/lib/libharfbuzz.so.0.61510.0
+scene 00 not-connected 890x960 f1e7024ebd15e30950f414564c702e3aa5c2dc7281ae712d60de59e4b1a2258d
+scene 01 found-not-in-force 890x960 d53a21981dfef491515a495d2e3b576d8c443c86f3f8e39977afdc1fecf88328
+scene 02 home-folder 890x960 6d6152a70e6d332d5a5e31dbe0cca6163d02dc0dd568186ff4b55a69b340e232
+scene 03 ready 890x960 ecb0f368f9d215b607a89a7e7233159734597d0b816d0bfd1535b09d9650a507
+scene 04 apply-announcement 890x960 5e351962edb80194f5a21903309016a0118ed92a9fde914bd1215b2c2c694ccc
+scene 05 building 890x960 647e7cc6feeb9bd7f9e652e0d005d5acb1ce971329f428172c0d904e9a84229e
+scene 06 built-apply-now 890x960 fb62e0c4e9fb316ff976b29a243f242af62769248c3cea18026ad9b10fa3b856
+scene 07 waiting-password 890x960 e8bd2da59d7c8344dc740526152c1eab4ffef4c1ce9ee7a486aacd363160253b
+scene 08 switching 890x960 8b5b75ea039e1cfbedf646896ffc8f7a6790fcc3db565e6457ba78a06185e8dd
+scene 09 applied 890x960 375d4e7b5b7b71ded8d90ffdda346ae35ddd6268b035c73bf05ac11b598ace3c
+scene 10 build-failed 890x960 c5590bd6ad7394e8fff9f699504059cd99b01f43affe44bf960d189b3e87d29c
+scene 11 applied-with-errors 890x960 0cbf327b61d91fe4c984613bf62a7592b3e6ed7b81b6bc87c4ec025794048a89
+scene 12 cancelled 890x960 320898b8213138d3b02094107c4cd088cd10762018ff00fcbe661f24af00f5b0
+scene 13 set-in-configuration 890x960 43a9072212904188a789962b38cb720ecaa05ec68560425c6ec4c784488e19cb
+scene 14 undo-announcement 890x960 d48b7174a0dc2066f6af26a7112fad061554d1aaf1f298dead692c7397e21aac
+scene 15 undo-building 890x960 8ecc943d9f1e6a1ccaa28a9814cb1d9212ac6033512e7bbb275190f8491ed3a4
