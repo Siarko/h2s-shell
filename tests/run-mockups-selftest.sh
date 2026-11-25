@@ -32,6 +32,8 @@
 #     and with a real pointer (plans/held-list), in a scene holding a list open, a press on
 #     another scene's button switches scenes (the kit's buttons lie above every overlay), the
 #     scene's own button brings the list back, a press outside closes it;
+#     and the gallery with a section's list held open (views/held-list): a section button in
+#     its bar takes the press, a press outside closes the list;
 #   - `ipc call mockup theme <name>` on screen shows it in that theme and answers the name;
 #   - the gallery (H2S_MOCKUP=gallery, on mockups/), in the built-in theme and opened in a
 #     fixture theme (tests/fixtures/mockup-themes/, H2S_MOCKUP_THEME): a section per
@@ -703,6 +705,35 @@ kill -TERM "${pids[held-list]}" 2> /dev/null
 finish_entry held-list
 check "$([ "$held_steps" = "other hidden open shown hidden open" ]; echo $?)" "the other scene's button switches scenes, the open one's brings the list back, a press outside closes it (was '$held_steps')"
 check "$(! grep -q -E 'MOCKUP-ERROR|TypeError|ReferenceError' "${logs[held-list]}"; echo $?)" "no error"
+
+echo "on screen: a real pointer in the gallery with a section's list held open: a section button in the bar takes the press, a press outside closes the list"
+start_entry gallery-held "$REPO/mockup.qml" H2S_MOCKUP=gallery H2S_MOCKUP_BASE=tests/fixtures/mockups XDG_CONFIG_HOME="$theme_config"
+gallery_steps="" deadline=$((SECONDS + 60)) id=""
+while [ $SECONDS -lt $deadline ] && kill -0 "${pids[gallery-held]}" 2> /dev/null; do
+    id=$(instance_of gallery-held)
+    if [ -n "$id" ] && [ "$(ipc "$id" call mockup window)" = floating ] && ipc "$id" call mockup sections | grep -q -x 'views/held-list .*'; then
+        ipc "$id" call mockup jump views/held-list > /dev/null
+        [ "$(ipc "$id" call probe list)" = shown ] && break
+    fi
+    id=""
+    # A condition polled (the window made, the section built, its list shown), not a fixed wait
+    sleep 0.05
+done
+if [ -n "$id" ]; then
+    send_input "abs 1 1 2 2"
+    send_input "move 1 1"
+    pointer_deadline=$((SECONDS + 5))
+    # The pointer seen in the window, a condition polled
+    while [ $SECONDS -lt $pointer_deadline ] && [ -z "$(ipc "$id" call probe pointer)" ]; do sleep 0.05; done
+    point_at "$id" "$(ipc "$id" call mockup place components/good)" && send_input "click left"
+    gallery_steps="$(await "$id" components/good mockup top) $(ipc "$id" call probe list)"
+    point_at "$id" "$(ipc "$id" call probe outside)" && send_input "click left"
+    gallery_steps+=" $(await "$id" hidden probe list) $(ipc "$id" call mockup top)"
+fi
+kill -TERM "${pids[gallery-held]}" 2> /dev/null
+finish_entry gallery-held
+check "$([ "$gallery_steps" = "components/good shown hidden components/good" ]; echo $?)" "the bar's section button scrolls to its section past the open list, a press outside then closes it (was '$gallery_steps')"
+check "$(! grep -q -E 'MOCKUP-ERROR|TypeError|ReferenceError|Binding loop' "${logs[gallery-held]}"; echo $?)" "no error"
 
 # Every wheel handler in the tree is the shell's WheelScroll, which takes a mouse wheel as
 # Qt on Wayland hands it over (from its touchpad device); a plain WheelHandler turns it away

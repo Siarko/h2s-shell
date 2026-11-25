@@ -34,6 +34,8 @@ import qs.components
 //   jump <section>  scrolls to it (and so builds it), kept at the top while the sections
 //                   above it are built and grow, until the wheel scrolls: "" or why not
 //   top             the section at the top of the view
+//   place <section> the centre of its button in the bar, in window coordinates: "<x>,<y>"
+//                   ("" while it is not shown)
 //   position        how far the page is scrolled: "0,<y>" in pixels ("" before the window)
 //   filter <text>   sets the filter: the sections shown, a line each
 //   theme <name>    shows every section in that theme ("" only asks): the name in force, or
@@ -198,74 +200,6 @@ QtObject {
         width: parent ? parent.width : 0
         height: parent ? parent.height : 0
 
-        Rectangle {
-            id: _bar
-            z: 1
-            width: parent.width
-            height: _barColumn.implicitHeight + 2 * Theme.popup.contentPadding
-            color: Theme.surface
-
-            Column {
-                id: _barColumn
-                x: Theme.popup.contentPadding
-                y: Theme.popup.contentPadding
-                width: parent.width - 2 * Theme.popup.contentPadding
-                spacing: Theme.popup.contentPadding
-
-                Row {
-                    spacing: Theme.popup.contentPadding
-
-                    Text {
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: "Theme"
-                        font.family: Theme.fontFamily
-                        font.pixelSize: Theme.fontSizeBody
-                        color: Theme.textSecondary
-                    }
-                    Dropdown {
-                        id: _themes
-                        anchors.verticalCenter: parent.verticalCenter
-                        implicitWidth: 180
-                        options: MockupTheme.names.map(name => ({ value: name, label: name }))
-                        value: MockupTheme.inForce
-                        onPicked: value => MockupTheme.apply(value)
-                    }
-                    Text {
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: "Filter"
-                        font.family: Theme.fontFamily
-                        font.pixelSize: Theme.fontSizeBody
-                        color: Theme.textSecondary
-                    }
-                    InputField {
-                        id: _filter
-                        anchors.verticalCenter: parent.verticalCenter
-                        implicitWidth: 240
-                        outlined: true
-                        placeholder: "Name or state"
-                        onTextChanged: root.filterText = text
-                    }
-                }
-
-                Flow {
-                    width: parent.width
-                    spacing: 6
-                    Repeater {
-                        model: ScriptModel {
-                            values: root.sectionKeys
-                        }
-                        SmallButton {
-                            required property string modelData
-                            visible: root.matches(modelData)
-                            label: modelData.replace(/^[^\/]*\//, "")
-                            tooltip: modelData
-                            onClicked: root.jump(modelData)
-                        }
-                    }
-                }
-            }
-        }
-
         Flickable {
             id: _scroller
             y: _bar.height
@@ -287,7 +221,12 @@ QtObject {
                 }
             }
 
+            // In the controls' layer, over the scroller's edge
             ScrollBar.vertical: ScrollBar {
+                parent: root._controls
+                x: _scroller.x + _scroller.width - width
+                y: _scroller.y
+                height: _scroller.height
                 policy: _scroller.contentHeight > _scroller.height ? ScrollBar.AlwaysOn : ScrollBar.AlwaysOff
                 contentItem: Rectangle {
                     implicitWidth: 6
@@ -433,6 +372,88 @@ QtObject {
         }
     }
 
+    // The bar and the scroll bar: a layer of their own in the Qt window's top item (which
+    // holds the Quickshell window's contentItem), above every overlay a section's items put
+    // there (a FloatingList held open and its press catcher, z 1000, over the whole window),
+    // so that they always take a press. The bar's own lists (the theme's dropdown) float in
+    // this layer, its overlay host, above the bar
+    readonly property Item _controls: Item {
+        objectName: "overlayHost"
+        parent: _body.Window.window ? _body.Window.window.contentItem : null
+        z: 2000
+        width: parent ? parent.width : 0
+        height: parent ? parent.height : 0
+
+        Rectangle {
+            id: _bar
+            z: 1
+            width: parent.width
+            height: _barColumn.implicitHeight + 2 * Theme.popup.contentPadding
+            color: Theme.surface
+
+            Column {
+                id: _barColumn
+                x: Theme.popup.contentPadding
+                y: Theme.popup.contentPadding
+                width: parent.width - 2 * Theme.popup.contentPadding
+                spacing: Theme.popup.contentPadding
+
+                Row {
+                    spacing: Theme.popup.contentPadding
+
+                    Text {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: "Theme"
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.fontSizeBody
+                        color: Theme.textSecondary
+                    }
+                    Dropdown {
+                        id: _themes
+                        anchors.verticalCenter: parent.verticalCenter
+                        implicitWidth: 180
+                        options: MockupTheme.names.map(name => ({ value: name, label: name }))
+                        value: MockupTheme.inForce
+                        onPicked: value => MockupTheme.apply(value)
+                    }
+                    Text {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: "Filter"
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.fontSizeBody
+                        color: Theme.textSecondary
+                    }
+                    InputField {
+                        id: _filter
+                        anchors.verticalCenter: parent.verticalCenter
+                        implicitWidth: 240
+                        outlined: true
+                        placeholder: "Name or state"
+                        onTextChanged: root.filterText = text
+                    }
+                }
+
+                Flow {
+                    width: parent.width
+                    spacing: 6
+                    Repeater {
+                        id: _sectionButtons
+                        model: ScriptModel {
+                            values: root.sectionKeys
+                        }
+                        SmallButton {
+                            required property string modelData
+                            visible: root.matches(modelData)
+                            label: modelData.replace(/^[^\/]*\//, "")
+                            tooltip: modelData
+                            onClicked: root.jump(modelData)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     readonly property IpcHandler _ipc: IpcHandler {
         target: "mockup"
 
@@ -467,6 +488,19 @@ QtObject {
 
         function top(): string {
             return root._top();
+        }
+
+        // The centre of a section's button in the bar, in window coordinates: "<x>,<y>", or ""
+        // while it is not shown
+        function place(key: string): string {
+            for (let i = 0; i < _sectionButtons.count; i++) {
+                const button = _sectionButtons.itemAt(i);
+                if (!button || button.modelData !== key || !button.visible)
+                    continue;
+                const centre = button.mapToItem(null, button.width / 2, button.height / 2);
+                return Math.round(centre.x) + "," + Math.round(centre.y);
+            }
+            return "";
         }
 
         function position(): string {
