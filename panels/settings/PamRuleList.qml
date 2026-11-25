@@ -603,6 +603,30 @@ Item {
                     cursorShape: Qt.PointingHandCursor
                     onClicked: _picker.open = !_picker.open
                 }
+                // The keyboard as a dropdown's: Space, Enter or Down open the list, its keys
+                // while open (FloatingList.handleKey)
+                activeFocusOnTab: true
+                Keys.onShortcutOverride: event => event.accepted = _picker.open && event.key === Qt.Key_Escape
+                Keys.onPressed: event => {
+                    if (_picker.open) {
+                        if (event.key === Qt.Key_Tab || event.key === Qt.Key_Backtab)
+                            _picker.open = false;
+                        else
+                            event.accepted = _picker.handleKey(event);
+                    } else if ([Qt.Key_Space, Qt.Key_Return, Qt.Key_Enter, Qt.Key_Down].includes(event.key)) {
+                        _picker.open = true;
+                        event.accepted = true;
+                    }
+                }
+                // The focus ring
+                Rectangle {
+                    anchors { fill: parent; margins: 2 }
+                    visible: _addRow.activeFocus
+                    radius: Theme.listItem.radius
+                    color: "transparent"
+                    border.width: Theme.border.width
+                    border.color: Theme.textSecondary
+                }
             }
         }
     }
@@ -623,11 +647,20 @@ Item {
                 readonly property var option: PamRuleViewRules.addOptions(root.facts, root.distributionFacts).find(item => item.method === modelData) ?? ({})
                 readonly property bool available: option.available === true
                 objectName: "add:" + modelData
+                // An entry of the list, for its keys (FloatingList); one not available is passed by
+                readonly property bool floatingEntry: true
+                readonly property string floatingEntryText: option.label ?? ""
+                readonly property bool floatingEntryEnabled: available
+                function floatingActivate() {
+                    root._add(modelData);
+                }
                 width: parent ? parent.width : 0
                 // Taller where the note wraps (what a missing reader needs)
                 height: Math.max(44, _addTexts.implicitHeight + 12)
                 radius: Theme.listItem.radius
-                color: _optionArea.lit && available ? Theme.surfaceHover : Theme.surfaceHoverClear
+                color: (_optionArea.lit || _picker.currentItem === _option) && available ? Theme.surfaceHover : Theme.surfaceHoverClear
+                border.width: _picker.currentItem === _option ? Theme.border.width : 0
+                border.color: Theme.textSecondary
                 opacity: available ? 1 : 0.5
 
                 RowLayout {

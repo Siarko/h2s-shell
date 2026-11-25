@@ -338,6 +338,25 @@ TestCase {
         assert(_until(() => _ids() === "r1,r2,r3,system"), "… added above the fixed row");
         assert(_until(() => _item("word:r3/sufficient")?.visible === true && _item("word:r3/sufficient").picked), "… opened, sufficient picked");
         assert(!list.addOpen, "… the methods closed");
+        // The keyboard on the add row: the keys pass the method that is off
+        const addRow = _item("addRow");
+        const picker = Array.from(addRow.Window.window.contentItem.children).find(child => child.floatingList === true && child.anchorItem === addRow);
+        // The rows added have pushed it below the window: the page scrolled to it (a list
+        // whose anchor is out of view does not show)
+        page.contentY = 300;
+        assert(_click("addRow"), "Add a row clicked again");
+        assert(_until(() => list.addOpen && _item("add:password")?.visible === true), "… the methods listed");
+        addRow.forceActiveFocus();
+        driver.keyClick(Qt.Key_End);
+        const last = picker.currentItem?.objectName ?? "";
+        driver.keyClick(Qt.Key_Up);
+        driver.keyClick(Qt.Key_Up);
+        assert(last !== "" && picker.currentItem?.objectName !== "add:securityKey" && picker.currentItem?.objectName !== last,
+               "the keys move among the methods, passing the one off (" + last + " to " + picker.currentItem?.objectName + ")");
+        driver.keyClick(Qt.Key_Escape);
+        assert(_until(() => !list.addOpen), "Escape closes the list");
+        assert(addRow.activeFocus, "… the focus kept on the add row");
+        page.contentY = 0;
 
         // --- a row deleted, after its question ---
         assert(_click("remove:r3", 4), "its × clicked");

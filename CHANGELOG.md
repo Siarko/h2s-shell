@@ -172,6 +172,11 @@ The interface modules are written against (`qs.api`), versioned on its own
   reloads when it changes.
 
 ### Changed
+- Dropdowns and "Add" lists work from the keyboard: Tab reaches them (a ring shows the
+  focus), Space, Enter or Down open the list on the current choice, the arrows, Home, End,
+  Page Up and Page Down move, a letter jumps to the next entry starting with it, Enter
+  picks, Escape closes the list and leaves the focus on the control. Modules' dropdowns
+  get the same.
 - A missing package is named as this system gets it, never as a command to type: the
   warning about a missing Nerd Font names Arch's package or NixOS's option, or the package
   for `fonts.packages` (and,

@@ -17,12 +17,13 @@ TestCase {
     asynchronous: true
 
     property var pickedValues: []
+    property var added: []
 
     readonly property var _many: Array.from({ length: 30 }, (_, i) => ({ value: "v" + i, label: "Item " + i }))
 
     property var _window: PanelWindow {
         anchors { top: true; left: true }
-        implicitWidth: 420
+        implicitWidth: 680
         implicitHeight: 320
         color: Theme.surface
         exclusionMode: ExclusionMode.Ignore
@@ -85,6 +86,16 @@ TestCase {
                 options: [{ value: "x", label: "X" }, { value: "y", label: "Y" }]
                 value: "x"
             }
+        }
+
+        // A "+ Add" picker (ReorderList's)
+        ReorderList {
+            id: reorder
+            x: 430; y: 10
+            width: 240
+            items: ["one"]
+            addOptions: ["two", "three"]
+            onAdded: value => suite.added = suite.added.concat([value])
         }
 
         WindowDriver {
@@ -218,10 +229,11 @@ TestCase {
 
         input.key("Down");
         assert(_until(() => plain.open), "Down opens it too");
+        assert(_until(() => _current(plain) === "Cherry"), "… on the picked entry (" + _current(plain) + ")");
         input.key("b");
-        assert(_until(() => _current(plain) === "Banana"), "b: the first entry from b (" + _current(plain) + ")");
+        assert(_until(() => _current(plain) === "Blueberry"), "b: the next entry from b after it (" + _current(plain) + ")");
         input.key("b");
-        assert(_until(() => _current(plain) === "Blueberry"), "b again: the next from b (" + _current(plain) + ")");
+        assert(_until(() => _current(plain) === "Banana"), "b again: round to the first from b (" + _current(plain) + ")");
         input.key("Escape");
         assert(_until(() => !plain.open), "Escape closes the list");
         assertEqual(JSON.stringify(pickedValues), JSON.stringify(["c"]), "… picking nothing");
@@ -232,6 +244,49 @@ TestCase {
         input.key("Tab");
         assert(_until(() => !plain.open), "Tab away closes it");
         assert(_until(() => long.activeFocus), "… and moves on");
+
+        // The pages, on a list longer than its view
+        input.key("space");
+        assert(_until(() => long.open && _current(long) === "Item 0"), "the long list open on its first entry");
+        input.key("Next");
+        assert(_until(() => Number(_current(long).replace("Item ", "")) > 3), "Page Down moves a view's worth (" + _current(long) + ")");
+        const list = _listOf(long);
+        const row = list.currentItem;
+        const rowTop = row.mapToItem(list, 0, 0).y;
+        assert(rowTop >= 0 && rowTop + row.height <= list.height + 1, "… and scrolls it into view");
+        input.key("Prior");
+        assert(_until(() => _current(long) === "Item 0"), "Page Up back (" + _current(long) + ")");
+        input.key("Escape");
+        assert(_until(() => !long.open), "Escape closes it");
+    }
+
+    // A "+ Add" picker takes the keys as a dropdown does
+    function _addPicker() {
+        const find = item => {
+            for (const child of item.children) {
+                if (child.objectName === "addRow")
+                    return child;
+                const found = find(child);
+                if (found)
+                    return found;
+            }
+            return null;
+        };
+        const addRow = find(reorder);
+        const picker = Array.from(addRow.Window.window.contentItem.children).find(child => child.floatingList === true && child.anchorItem === addRow);
+        addRow.forceActiveFocus();
+        input.key("Down");
+        assert(_until(() => picker.visible), "Down on the add row opens its list");
+        input.key("Down");
+        assert(_until(() => picker.currentItem?.floatingEntryText === "two"), "Down: its first entry");
+        input.key("Return");
+        assert(_until(() => added.length === 1), "Enter adds it");
+        assertEqual(JSON.stringify(added), JSON.stringify(["two"]), "… the entry the keys were on");
+        input.key("space");
+        assert(_until(() => picker.visible), "Space opens it again");
+        input.key("Escape");
+        assert(_until(() => !picker.visible), "Escape closes it");
+        assert(addRow.activeFocus, "… the focus kept on the add row");
     }
 
     // A dropdown hidden while open closes its list and says so: back, it is closed
@@ -290,6 +345,8 @@ TestCase {
         assert(input.pointAt(page, 5, 5), "the virtual pointer answers");
         _attachment();
         _ownWheel();
+        _keyboard();
+        _addPicker();
         _closeOnHide();
         finish();
     }

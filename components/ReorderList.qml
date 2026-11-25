@@ -326,8 +326,34 @@ Item {
                 // Add row
                 Item {
                     id: _addRow
+                    objectName: "addRow"
                     width: _container.width
                     height: 32
+                    // The keyboard as a dropdown's: Space, Enter or Down open the list, its
+                    // keys while open (FloatingList.handleKey)
+                    activeFocusOnTab: true
+                    Keys.onShortcutOverride: event => event.accepted = _picker.open && event.key === Qt.Key_Escape
+                    Keys.onPressed: event => {
+                        if (_picker.open) {
+                            if (event.key === Qt.Key_Tab || event.key === Qt.Key_Backtab)
+                                _picker.open = false;
+                            else
+                                event.accepted = _picker.handleKey(event);
+                        } else if ([Qt.Key_Space, Qt.Key_Return, Qt.Key_Enter, Qt.Key_Down].includes(event.key)) {
+                            _picker.open = true;
+                            event.accepted = true;
+                        }
+                    }
+
+                    // The focus ring
+                    Rectangle {
+                        anchors { fill: parent; margins: 2 }
+                        visible: _addRow.activeFocus
+                        radius: Theme.listItem.radius
+                        color: "transparent"
+                        border.width: Theme.border.width
+                        border.color: Theme.textSecondary
+                    }
 
                     Text {
                         anchors.centerIn: parent
@@ -368,13 +394,21 @@ Item {
                                 required property var modelData
                                 width: _pickerColumn.width
                                 height: 28
+                                // An entry of the list, for its keys (FloatingList)
+                                readonly property bool floatingEntry: true
+                                readonly property string floatingEntryText: root.optionLabel(modelData)
+                                function floatingActivate() {
+                                    root._add(modelData);
+                                }
 
                                 Rectangle {
                                     anchors.fill: parent
                                     anchors.leftMargin: 4
                                     anchors.rightMargin: 4
                                     radius: Theme.listItem.radius
-                                    color: _optionArea.lit ? Theme.surfaceHover : Theme.surfaceHoverClear
+                                    color: _optionArea.lit || _picker.currentItem === _option ? Theme.surfaceHover : Theme.surfaceHoverClear
+                                    border.width: _picker.currentItem === _option ? Theme.border.width : 0
+                                    border.color: Theme.textSecondary
                                     Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
                                     Text {

@@ -18,6 +18,16 @@ import qs.singletons
 // than `maximumHeight`, it scrolls by itself; a wheel over it never reaches the page.
 //
 //   FloatingList { anchorItem: button; open: menuOpen; onClosed: menuOpen = false; … }
+//
+// The keyboard, as a combobox's: the focus stays on the control that opened it, which hands
+// its keys to `handleKey(event)` while the list is open (true: taken). Up and Down, Home
+// and End, Page Up and Page Down move `currentItem` among the entries, Enter activates it,
+// Escape emits `closed`, a letter moves to the next entry starting with it. An entry is an
+// item inside the list with `floatingEntry: true`, its text for the letters in
+// `floatingEntryText`, `floatingEntryEnabled: false` when it cannot be picked (passed by the
+// keys), and `floatingActivate()`, what Enter does; it shows itself current when
+// `currentItem` is it. Other items (a group's title, FloatingListHeader) are passed by.
+// `highlight(entry)` makes an entry current and scrolls it into view (null: none).
 Rectangle {
     id: root
 
@@ -30,6 +40,8 @@ Rectangle {
     signal closed
     // What a side panel looks for to close an open list before itself (SideDrawer)
     readonly property bool floatingList: true
+    // The entry the keys are on (null: none yet)
+    property Item currentItem: null
 
     // Where it lives: the nearest overlay host above the anchor, else the window's top
     readonly property Item _host: {
@@ -96,6 +108,101 @@ Rectangle {
         y = below ? top.y + anchorItem.height + 2 : top.y - height - 2;
     }
 
+    // The entries shown, in the order they stand
+    function _entries() {
+        const found = [];
+        const walk = item => {
+            for (const child of item.children) {
+                if (!child.visible)
+                    continue;
+                if (child.floatingEntry === true)
+                    found.push(child);
+                else
+                    walk(child);
+            }
+        };
+        walk(_items);
+        return found.map(entry => ({ entry: entry, y: entry.mapToItem(_items, 0, 0).y }))
+            .sort((first, second) => first.y - second.y).map(item => item.entry);
+    }
+    function _enabled(entry) {
+        return entry.floatingEntryEnabled !== false;
+    }
+
+    function highlight(entry) {
+        currentItem = entry ?? null;
+        if (!currentItem)
+            return;
+        const top = currentItem.mapToItem(_items, 0, 0).y;
+        if (top < _flick.contentY)
+            _flick.contentY = top;
+        else if (top + currentItem.height > _flick.contentY + _flick.height)
+            _flick.contentY = Math.min(_flick.contentHeight - _flick.height, top + currentItem.height - _flick.height);
+    }
+
+    // `steps` enabled entries on from the current one (negative: back), at most to the
+    // first or last; with none current, Down starts at the first, Up at the last
+    function _move(steps) {
+        const entries = _entries().filter(_enabled);
+        if (entries.length === 0)
+            return;
+        const at = entries.indexOf(currentItem);
+        let next;
+        if (at < 0)
+            next = steps > 0 ? Math.min(steps - 1, entries.length - 1) : Math.max(entries.length + steps, 0);
+        else
+            next = Math.max(0, Math.min(entries.length - 1, at + steps));
+        highlight(entries[next]);
+    }
+    // As many entries as one view of the list holds
+    function _pageSteps() {
+        const entries = _entries();
+        if (entries.length === 0)
+            return 1;
+        const tallest = Math.max(...entries.map(entry => entry.height), 1);
+        return Math.max(1, Math.floor(_flick.height / tallest));
+    }
+    // The next enabled entry after the current one whose text starts with `letter`, round
+    function _typeAhead(letter) {
+        const wanted = letter.toLocaleLowerCase();
+        const entries = _entries().filter(_enabled);
+        const at = entries.indexOf(currentItem);
+        for (let offset = 1; offset <= entries.length; offset++) {
+            const entry = entries[(at + offset + entries.length) % entries.length];
+            if (String(entry.floatingEntryText ?? "").toLocaleLowerCase().startsWith(wanted)) {
+                highlight(entry);
+                return;
+            }
+        }
+    }
+
+    function handleKey(event) {
+        if (!visible)
+            return false;
+        const plain = (event.modifiers & (Qt.ControlModifier | Qt.AltModifier | Qt.MetaModifier)) === 0;
+        switch (event.key) {
+        case Qt.Key_Down: _move(1); return true;
+        case Qt.Key_Up: _move(-1); return true;
+        case Qt.Key_Home: _move(-_entries().length); return true;
+        case Qt.Key_End: _move(_entries().length); return true;
+        case Qt.Key_PageDown: _move(_pageSteps()); return true;
+        case Qt.Key_PageUp: _move(-_pageSteps()); return true;
+        case Qt.Key_Escape: closed(); return true;
+        case Qt.Key_Return:
+        case Qt.Key_Enter:
+            if (currentItem && currentItem.visible && _enabled(currentItem) && typeof currentItem.floatingActivate === "function")
+                currentItem.floatingActivate();
+            else
+                closed();
+            return true;
+        }
+        if (plain && event.text.length === 1 && event.text.trim() !== "") {
+            _typeAhead(event.text);
+            return true;
+        }
+        return false;
+    }
+
     // Following the anchor: every item from the anchor up to the host moves it when it moves
     // or changes size (a Flickable's content item is one of them, so a scroll is a move), and
     // a change of parent on the way makes the chain anew
@@ -133,6 +240,7 @@ Rectangle {
 
     onOpenChanged: {
         _watch();
+        currentItem = null;
         if (open) {
             _place();
             // Once the layouts that are still pending have run
