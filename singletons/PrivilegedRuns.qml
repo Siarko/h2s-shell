@@ -38,12 +38,12 @@ Singleton {
     id: root
 
     // The look-up of pkexec is done (`pkexec` holds what it found)
-    readonly property bool known: _known
+    readonly property bool known: _pkexecFound.known
     // The system's pkexec: the first on PrivilegedRules.pkexecSearchPath (the distribution's
     // places, looked at once Distribution has answered) that only root can
     // change and that is setuid root; "" when none (`pkexecReason` says why)
-    readonly property string pkexec: _pkexec
-    readonly property string pkexecReason: _pkexecReason
+    readonly property string pkexec: _pkexecFound.pkexec
+    readonly property string pkexecReason: _pkexecFound.reason
     // No run waits, checks or runs
     readonly property bool idle: _state.jobs.length === 0
     // How many runs are queued or running
@@ -281,14 +281,53 @@ Singleton {
     property bool _dispatching: false
     property var _outbox: []
 
-    property bool _known: false
     // The look-up has answered (in test mode, and not held by the suite)
-    readonly property bool _lookupAnswered: _known && !(_testMode && testLookupHeld)
+    readonly property bool _lookupAnswered: _pkexecFound.known && !(_testMode && testLookupHeld)
     // The old type's runs whose program was looked at before the look-up of pkexec answered:
     // still "checking" in the queue (PrivilegedRules.legacyCheckWaits)
     property var _waitingForLookup: []
-    property string _pkexec: ""
-    property string _pkexecReason: "pkexec is still being looked for"
+    // What the look-up of pkexec found, frozen { known, pkexec, reason }. Every run as
+    // administrator starts that program, so it is held where nothing outside can write it
+    // (a module importing qs.singletons sees this singleton's properties): the look-up, its
+    // runner and its answer live in _pkexecLookup's closures, which only look up and read
+    readonly property var _pkexecFound: _pkexecLookup.current()
+    readonly property var _pkexecLookup: (function () {
+        const box = Qt.createQmlObject("import QtQuick; QtObject { property var value }", root, "PrivilegedRunsPkexec");
+        box.value = Object.freeze({ known: false, pkexec: "", reason: "pkexec is still being looked for" });
+        let runner = null;
+        const answer = (path, reason) => {
+            box.value = Object.freeze({ known: true, pkexec: String(path), reason: String(reason) });
+            if (path === "")
+                console.warn("[Privileged] running as administrator is not available: " + reason);
+        };
+        return Object.freeze({
+            current: () => box.value,
+            lookUp: () => {
+                const searched = PrivilegedRules.pkexecSearchPath(Distribution.detection.facts);
+                const toolPath = ModuleRules.probeToolPath(Distribution.detection.facts);
+                if (searched === "" || toolPath === "") {
+                    answer("", "the distribution is not known, so neither is where pkexec is");
+                    return;
+                }
+                if (runner === null)
+                    runner = Qt.createQmlObject("import qs.singletons.io; CommandRunner {}", root, "PrivilegedRunsPkexecLookup");
+                const lines = [];
+                runner.start([ModuleRules.probeShell, "-c", ModuleRules.programProbeScript, "sh", "all", searched, "pkexec"], {
+                    timeoutMs: 5000,
+                    keepOutput: false,
+                    environment: { PATH: toolPath },
+                    onLine: (line, stream) => {
+                        if (stream === "stdout")
+                            lines.push(line);
+                    },
+                    done: () => {
+                        const choice = PrivilegedRules.pkexecChoice(lines);
+                        answer(choice.path, choice.reason);
+                    }
+                });
+            }
+        });
+    })()
 
     // The agent is looked at only while a run may still ask: Authentication is not made
     // (nor polkit reached) by a shell or a suite that never runs one
@@ -351,7 +390,7 @@ Singleton {
     // The queue's clock (ms): monotonic (Quickshell's ElapsedTimer, a QElapsedTimer), so a
     // step of the wall clock neither stalls a deadline nor ends one early. Never 0, which
     // means "no deadline".
-    property ElapsedTimer _clock: ElapsedTimer {}
+    readonly property ElapsedTimer _clock: ElapsedTimer {}
 
     function _now() {
         return Number(_clock.elapsedMs()) + 1;
@@ -480,7 +519,7 @@ Singleton {
             _lastShellArgv = argv;
         }
         // The old type's default "pkexec": the trusted one, once the look-up has answered
-        const launch = PrivilegedRules.legacyLaunch(job.argv, job.systemPkexec === true, _lookupAnswered, _pkexec, _pkexecReason);
+        const launch = PrivilegedRules.legacyLaunch(job.argv, job.systemPkexec === true, _lookupAnswered, pkexec, pkexecReason);
         job.argv = launch.argv;
         // Test mode: no pkexec but the stand-ins allowed (ModuleRules.testRunProblem)
         const problem = launch.problem !== "" ? launch.problem : ModuleRules.testRunProblem(job.argv, job.testMode, job.standIns);
@@ -643,21 +682,20 @@ Singleton {
         }
     }
 
-    property Timer _flush: Timer {
+    readonly property Timer _flush: Timer {
         interval: 0
         onTriggered: root._flushOutbox()
     }
 
-    property Timer _tick: Timer {
+    readonly property Timer _tick: Timer {
         onTriggered: root._dispatch({ type: "tick" })
     }
 
-    property Io.CommandRunner _runner: Io.CommandRunner {}
-    property Io.CommandRunner _probe: Io.CommandRunner {}
+    readonly property Io.CommandRunner _runner: Io.CommandRunner {}
+    readonly property Io.CommandRunner _probe: Io.CommandRunner {}
 
     // ---- Where pkexec is ----
 
-    property Io.CommandRunner _lookup: Io.CommandRunner {}
 
     Component.onCompleted: {
         // Locked already when this is made (a shell restarted under its lock)
@@ -668,32 +706,6 @@ Singleton {
     }
 
     function _lookUpPkexec() {
-        const searched = PrivilegedRules.pkexecSearchPath(Distribution.detection.facts);
-        const toolPath = ModuleRules.probeToolPath(Distribution.detection.facts);
-        if (searched === "" || toolPath === "") {
-            _pkexec = "";
-            _pkexecReason = "the distribution is not known, so neither is where pkexec is";
-            _known = true;
-            console.warn("[Privileged] running as administrator is not available: " + _pkexecReason);
-            return;
-        }
-        const lines = [];
-        _lookup.start([ModuleRules.probeShell, "-c", ModuleRules.programProbeScript, "sh", "all", searched, "pkexec"], {
-            timeoutMs: 5000,
-            keepOutput: false,
-            environment: { PATH: toolPath },
-            onLine: (line, stream) => {
-                if (stream === "stdout")
-                    lines.push(line);
-            },
-            done: () => {
-                const choice = PrivilegedRules.pkexecChoice(lines);
-                root._pkexec = choice.path;
-                root._pkexecReason = choice.reason;
-                root._known = true;
-                if (choice.path === "")
-                    console.warn("[Privileged] running as administrator is not available: " + choice.reason);
-            }
-        });
+        _pkexecLookup.lookUp();
     }
 }

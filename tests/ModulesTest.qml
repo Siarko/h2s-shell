@@ -647,6 +647,27 @@ TestCase {
             assertEqual(_shellOwnedMembers(handle, "module").concat(_shellOwnedMembers(handle.privileged, "module.privileged"),
                                                                     _shellOwnedMembers(Api, "Api")).join(", "), "",
                         "no underscore member of the handle or Api hands out a writable or shell-owned object");
+            // What PrivilegedRuns found for pkexec, the program every run as administrator
+            // starts, cannot be written from outside (a module importing qs.singletons): a
+            // write leaves it, and whether it is known, as they were
+            const lookedUp = JSON.stringify([PrivilegedRuns.known, PrivilegedRuns.pkexec, PrivilegedRuns.pkexecReason]);
+            for (const write of [() => { PrivilegedRuns._pkexec = "/tmp/fake-pkexec"; }, () => { PrivilegedRuns._pkexecReason = "faked"; },
+                                 () => { PrivilegedRuns._known = !PrivilegedRuns.known; }, () => { PrivilegedRuns._lookup = null; },
+                                 () => { PrivilegedRuns._pkexecLookup = null; }, () => { PrivilegedRuns._pkexecFound = { known: true, pkexec: "/tmp/fake-pkexec" }; }]) {
+                try {
+                    write();
+                } catch (error) {}
+            }
+            assertEqual(JSON.stringify([PrivilegedRuns.known, PrivilegedRuns.pkexec, PrivilegedRuns.pkexecReason]), lookedUp,
+                        "PrivilegedRuns' pkexec: a write from outside changes nothing");
+            const replaceable = [[ApiInternals, "opener"], [PrivilegedRuns, "_runner"], [PrivilegedRuns, "_probe"]].filter(([object, name]) => {
+                const before = object[name];
+                try {
+                    object[name] = null;
+                } catch (error) {}
+                return object[name] !== before;
+            });
+            assertEqual(replaceable.map(([object, name]) => name).join(","), "", "Api's link opener and the runners pkexec starts in: not replaceable");
             const reached = host;
             let threw = false;
             try {
