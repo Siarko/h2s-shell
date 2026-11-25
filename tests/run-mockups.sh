@@ -26,7 +26,8 @@
 # (status 2).
 # With no name and no component or view mockup in the tree it has nothing to check, and
 # says so with status 0 (the other modes: status 2).
-# A plan otherwise steps through its scenes only when it is named; a name under planning/, the folder's
+# A plan otherwise steps through its scenes only when it is named, and has no baseline:
+# --compare and --approve (and --by-system where it compares) refuse one; a name under planning/, the folder's
 # old name, is refused with the move to make. H2S_MOCKUP_BASE=
 # tests/fixtures/mockups takes the runners' fixture mockups instead (the self-test's).
 #
@@ -640,6 +641,9 @@ for name in "$@"; do
         || { echo "run-mockups.sh: '$name' is not <kind>/<name> (the kind components, views or plans); nothing was run" >&2; exit 2; }
     [ -f "$REPO/$base/$name/Mockup.qml" ] \
         || { echo "run-mockups.sh: no mockup $name ($base/$name/Mockup.qml); nothing was run" >&2; exit 2; }
+    # A plan is not tested: it has no baseline to compare with or to approve
+    [[ "$name" != plans/* ]] || { [ "$mode" != compare ] && [ "$mode" != approve ]; } \
+        || { echo "run-mockups.sh: $name is a plan: plans have no baseline (they are not tested), so --$mode does not take one; nothing was run" >&2; exit 2; }
     names+=("$name")
 done
 # shots_root: where the runs' shots are (--shoot, --compare, --approve)

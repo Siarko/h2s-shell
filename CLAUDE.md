@@ -207,7 +207,8 @@ importable folder. Three kinds (a "mockup" is any of them):
 - `views/<name>`: one view on stand-in data, in its states.
 - `plans/<feature>` (once `planning/`, a name refused now): an idea in **scenes**, with
   notes (`MOCKUP.md`: the purpose, the scenes, the proposed wording, open questions), only
-  for making the plan and the implementation; not tested; deleted a longer while after the
+  for making the plan and the implementation; not tested, so no baseline (`--compare`,
+  `--approve` and the screen tool's `review`, `approve` refuse a plan); deleted a longer while after the
   feature is merged.
 
 Components and views have a baseline under `baseline/`, compared exactly (on Arch; NixOS

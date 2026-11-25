@@ -14,9 +14,9 @@
 #                                         mockup of this tree)
 #   tests/mockup.sh [-n] review <name>    compare it with its baseline (tests/run-mockups.sh
 #                                         --compare), then show each differing state's old, new
-#                                         and diff images
+#                                         and diff images (not a plan: it has no baseline)
 #   tests/mockup.sh [-n] approve <name>   the reviewed run becomes the baseline
-#                                         (tests/run-mockups.sh --approve)
+#                                         (tests/run-mockups.sh --approve; not a plan)
 #     <name>        <kind>/<name> (components, views, plans), or a unique part of one
 #                   (e.g. "pill"); planning/, the plans' old folder, is refused
 #     -n            print the commands instead of running them (review still shows the images
@@ -290,10 +290,18 @@ icat_command() {
     fi
 }
 
+# no_baseline_for_plan <kind>/<name> <command>: a plan is refused (it has no baseline)
+no_baseline_for_plan() {
+    [[ "$1" == plans/* ]] || return 0
+    echo "mockup.sh: $1 is a plan: plans have no baseline (they are not tested), nothing to $2" >&2
+    exit 2
+}
+
 cmd_review() {
     local name shots_root tree_key run_id run inline=0 icat="" folder one label kind file
     local -a images=()
     name=$(resolve "$1") || exit 2
+    no_baseline_for_plan "$name" review
     run "$REPO/tests/run-mockups.sh" --compare "$name"
     shots_root=${H2S_MOCKUP_SHOTS:-${XDG_CACHE_HOME:-${HOME:?}/.cache}/h2s-shell-mockups}
     [ "$base" = mockups ] || shots_root=$shots_root/fixtures
@@ -357,6 +365,7 @@ case "${args[0]:-list}" in
         cmd_review "${args[1]}" ;;
     approve) [ ${#args[@]} -eq 2 ] || { echo "mockup.sh: approve needs one name" >&2; exit 2; }
         name=$(resolve "${args[1]}") || exit 2
+        no_baseline_for_plan "$name" approve
         run "$REPO/tests/run-mockups.sh" --approve "$name" ;;
     *) [ ${#args[@]} -eq 1 ] || usage; cmd_open "${args[0]}" ;;
 esac

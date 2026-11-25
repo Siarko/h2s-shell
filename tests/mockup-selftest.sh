@@ -25,7 +25,7 @@
 #   - review: under a kitty terminal (KITTY_WINDOW_ID, TERM=xterm-kitty) each differing
 #     state's old, new and diff go to `kitten icat`, labelled; elsewhere, and in kitty without
 #     kitten, their paths are printed; a mockup with no baseline shows its new shots; no run
-#     is said.
+#     is said; review and approve of a plan are refused (plans have no baseline).
 #
 #   tests/mockup-selftest.sh
 #
@@ -254,6 +254,12 @@ tool review-new "${review_env[@]}" -- -n review clock
 check "$(has review-new "components/clock, state ticking: new (no baseline): $fresh/00-ticking.png"; echo $?)" "no baseline: the new shots shown"
 tool review-none "${review_env[@]}" -- -n review effects
 check "$([ "${status[review-none]}" = 2 ] && has review-none 'nothing to review'; echo $?)" "no run of the mockup: said, status 2 (status ${status[review-none]})"
+
+echo "plans have no baseline"
+for command in review approve; do
+    tool plan-$command -- -n $command plans/tall
+    check "$([ "${status[plan-$command]}" = 2 ] && has plan-$command "plans/tall is a plan: plans have no baseline" && ! has plan-$command run-mockups.sh; echo $?)" "$command of a plan: refused, status 2, nothing run (status ${status[plan-$command]})"
+done
 
 echo "__exec, -n"
 tool exec-dry H2S_SHELL_MODULES=/modules -- -n __exec mockups components/good

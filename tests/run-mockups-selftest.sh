@@ -37,7 +37,8 @@
 #     warning from the mockup's own file FAIL, the others in the same run still PASS;
 #   - with no name it runs every component and view fixture, and --load-only checks every
 #     plan without a window (a broken plan's about.txt FAILs); a plan steps through its
-#     scenes when named; a name that is not <kind>/<name>, under planning/ (with the move to make)
+#     scenes when named, and --compare or --approve of a plan is refused (plans have no
+#     baseline); a name that is not <kind>/<name>, under planning/ (with the move to make)
 #     or not a mockup runs nothing;
 #   - --by-system takes --compare on Arch and --load-only on NixOS and any other system,
 #     saying which (made-up systems' os-release), and runs nothing (status 2) on a system
@@ -465,6 +466,12 @@ for entry in "Bad_Name|is not <kind>/<name>" "plans/../idea|is not <kind>/<name>
     IFS='|' read -r name expected <<< "$entry"
     runner bad-name -- --load-only components/good "$name"
     check "$([ "${runner_status[bad-name]}" = 2 ] && grep -q -F -- "$expected" "${out[bad-name]}" && ! grep -q -E '^  (PASS|FAIL)' "${out[bad-name]}"; echo $?)" "'$name': exit 2, '$expected', nothing run"
+done
+# Plans have no baseline: comparing or approving one is refused
+for mode in compare approve; do
+    runner plan-$mode -- --$mode components/good plans/idea
+    check "$([ "${runner_status[plan-$mode]}" = 2 ] && grep -q -F "plans/idea is a plan: plans have no baseline" "${out[plan-$mode]}" \
+        && ! grep -q -E '^  (PASS|FAIL|NOT RUN) |^(APPROVED|REFUSED|NOT DONE) ' "${out[plan-$mode]}"; echo $?)" "--$mode of a plan: refused, exit 2, nothing run"
 done
 runner no-mode -- components/good
 check "$([ "${runner_status[no-mode]}" = 2 ] && grep -q '^usage:' "${out[no-mode]}"; echo $?)" "no mode: the usage, exit 2"
