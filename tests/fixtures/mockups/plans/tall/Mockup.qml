@@ -6,7 +6,6 @@ import qs.mockups.kit
 // on screen the scene buttons stay inside the window, above the content
 MockupWindow {
     id: root
-    names: ["first", "second", "third"]
     contentWidth: 300
     contentHeight: 4000
 

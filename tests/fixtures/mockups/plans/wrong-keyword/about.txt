@@ -1,0 +1,2 @@
+description: A fixture plan with a component's keyword
+state: first   The one state

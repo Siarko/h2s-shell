@@ -15,8 +15,6 @@ import qs.mockups.kit
 MockupWindow {
     id: root
 
-    names: ["off", "on", "disabled-off", "disabled-on"]
-
     readonly property int cellWidth: 124
     readonly property int cellHeight: 48
     readonly property int cellsPerRow: 4

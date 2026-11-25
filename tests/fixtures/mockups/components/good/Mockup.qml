@@ -5,7 +5,6 @@ import qs.mockups.kit
 // The runners' fixture mockup that loads: two states of a real component, cropped to it
 MockupWindow {
     id: root
-    names: ["normal", "checked"]
     contentWidth: 200
     contentHeight: 80
     subject: button

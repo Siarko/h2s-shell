@@ -1,0 +1,8 @@
+# Each state's cell is a row of the three sizes (s, m, l).
+description: The rounded label every bar widget sits in, in three sizes
+state: idle         Not picked, no pointer
+state: picked       Picked: filled with the accent
+state: hover-s      The pointer over the small pill
+state: hover-m      The pointer over the middle pill
+state: hover-l      The pointer over the large pill
+state: long-label   A label longer than the pill: cut at the right, idle and picked

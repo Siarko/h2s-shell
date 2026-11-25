@@ -182,13 +182,8 @@ MockupWindow {
 
     // ---- Scenes ----
 
-    // The scenes' titles, as the side column shows them; the kit's scene names are the same
-    // in kebab case (a scene name has no whitespace)
-    readonly property var sceneTitles: ["Not connected", "Found, line not in force", "In the home folder", "Ready", "Apply: the announcement",
-                                        "Building", "Password after the build", "Switching", "Applied, Undo offered", "Build failed",
-                                        "Applied, with errors", "Locked during the build", "Cancelled", "Set in your configuration",
-                                        "Undo: the announcement", "Undo: building"]
-    names: sceneTitles.map(title => title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""))
+    // The scenes' titles, as the side column shows them: their descriptions in about.txt
+    readonly property var sceneTitles: Array.prototype.slice.call(descriptions)
     readonly property int sceneIndex: Math.max(0, Array.prototype.indexOf.call(names, current))
     onCurrentChanged: showScene(Math.max(0, Array.prototype.indexOf.call(names, current)))
     readonly property var sceneNotes: [

@@ -3,8 +3,9 @@
 # list them, open and close them on this machine's display, review a comparison's images and
 # approve them. The headless runs are tests/run-mockups.sh's.
 #
-#   tests/mockup.sh [-n] [list]           the tree's mockups, their kind and title; "*" marks
-#                                         a running one
+#   tests/mockup.sh [-n] [list]           the tree's mockups, their kind and description
+#                                         (about.txt's; a broken one says so); "*" marks a
+#                                         running one
 #   tests/mockup.sh [-n] [open] <name> [--state <s> | --scene <s>] [--restart]
 #                                         start the mockup on the display (a component or view
 #                                         on a state, a plan on a scene); if it already runs,
@@ -43,6 +44,8 @@ set -uo pipefail
 REPO=$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd -P)
 ENTRY=$REPO/mockup.qml
 SELF=$REPO/tests/mockup.sh
+# shellcheck source=mockup-about.sh
+source "$REPO/tests/mockup-about.sh" || { echo "mockup.sh: cannot read tests/mockup-about.sh" >&2; exit 2; }
 
 base=${H2S_MOCKUP_BASE:-mockups}
 case "$base" in
@@ -78,7 +81,7 @@ if [ "${1:-}" = __exec ] || { [ "${1:-}" = -n ] && [ "${2:-}" = __exec ]; }; the
 fi
 
 usage() {
-    sed -n '6,22p' "$SELF" >&2
+    sed -n '6,23p' "$SELF" >&2
     exit 2
 }
 
@@ -100,7 +103,7 @@ while [ $# -gt 0 ]; do
             [[ "$first" =~ ^[A-Za-z0-9_-]+$ ]] || { echo "mockup.sh: $1 needs a $first_option name of letters, digits, '_' and '-'" >&2; exit 2; }
             shift 2
             ;;
-        -h | --help) sed -n '2,40p' "$SELF"; exit 0 ;;
+        -h | --help) sed -n '2,41p' "$SELF"; exit 0 ;;
         -*) echo "mockup.sh: unknown option $1" >&2; usage ;;
         *) args+=("$1"); shift ;;
     esac
@@ -141,12 +144,15 @@ resolve() {
     esac
 }
 
-# title <kind>/<name>: MOCKUP.md's first heading, else the first comment line of Mockup.qml
+# title <kind>/<name>: about.txt's description, or what is wrong with about.txt
 title() {
-    local folder=$REPO/$base/$1 t=""
-    [ -f "$folder/MOCKUP.md" ] && t=$(grep -m1 '^#' "$folder/MOCKUP.md" | sed 's/^#* *//')
-    [ -n "$t" ] || t=$(grep -m1 -E '^[[:space:]]*//' "$folder/Mockup.qml" | sed -E 's|^[[:space:]]*//+[[:space:]]*||')
-    echo "$t"
+    local word=state
+    [[ "$1" == plans/* ]] && word=scene
+    if about_read "$REPO/$base/$1" "$word"; then
+        echo "$about_description"
+    else
+        echo "(broken: ${about_errors[0]})"
+    fi
 }
 
 # instances: this tree's running entries, "<pid> <config path>" from `qs list --all`

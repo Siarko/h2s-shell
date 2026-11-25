@@ -168,9 +168,25 @@ ticks, cells respond to clicks, and popups toggle.
 `mockups/<kind>/<name>/Mockup.qml`, run against this tree (no copy of it), with
 `H2S_MOCKUP=<kind>/<name>` (`H2S_MOCKUP_STATE=<state>` opens a component or view on a
 state, `H2S_MOCKUP_SCENE=<scene>` a plan on a scene, each refused for the other kind;
-`H2S_MOCKUP_SHOT=1` steps through them headless). Its root is the kit's
-`MockupWindow` (`import qs.mockups.kit`), which holds the contract — `names` (the states or
-scenes; not `states`/`state`, which every Qt Quick Item has), `current`, `subject`,
+`H2S_MOCKUP_SHOT=1` steps through them headless, `H2S_MOCKUP_CHECK=1` checks one without a
+window). **Every element has an `about.txt`** beside its `Mockup.qml`, the one place its
+list is declared:
+
+```
+# Comments and blank lines are skipped.
+description: The rounded label every bar widget sits in, in three sizes
+state: idle         Not picked, no pointer
+state: hover-s      The pointer over the small pill
+```
+
+one `description:` line, then a `state:` line per state (a plan: `scene:` per scene; the
+other kind's word is an error) in shot order — the name (letters, digits, `-`, unique, at
+most 30) and its description (required); each description at most 100 characters
+(`tests/mockup-about.sh`, the runner's and the screen tool's reader; the entry reads it by
+the same rules). Its root is the kit's
+`MockupWindow` (`import qs.mockups.kit`), which holds the contract — `names` and
+`descriptions` (about.txt's, read-only: a `Mockup.qml` that sets them fails; not
+`states`/`state`, which every Qt Quick Item has), `current`, `subject`,
 `subjectRect` — and the shot protocol (`mockups/kit/MockupWindow.qml`); it
 makes the window itself: a layer-shell panel at the output's corner while shooting, a normal
 window titled with the mockup's name on a screen. The entry isolates the process from
@@ -180,7 +196,8 @@ is registered, nothing is sent, whatever environment it inherited.
 compositor of its own, side by side, in a fixed environment (Mesa's llvmpipe, which draws
 shader effects; scale 1, 96 DPI, `QT_HASH_SEED=0`, UTC); `--shoot` writes a PNG per state,
 cropped to the subject, into `$H2S_MOCKUP_SHOTS` (else `~/.cache/h2s-shell-mockups/`).
-With no name it runs every component and view mockup, never a plan; `--by-system`,
+With no name it runs every component and view mockup, and `--load-only` also checks every plan
+without a window; a missing or broken `about.txt` fails its element before it starts; `--by-system`,
 the part `tests/run-all.sh` runs and the command `tests/affected.sh` gives (a mockup covers its
 folder's closure), is `--compare` on Arch and `--load-only` elsewhere. Folder names are lowercase with hyphens, so no `import qs.…` reaches them; `kit/` is the only
 importable folder. Three kinds (a "mockup" is any of them):

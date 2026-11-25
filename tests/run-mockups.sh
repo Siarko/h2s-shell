@@ -16,7 +16,9 @@
 #                                                       half the processors, at most 16, and
 #                                                       no more than memory allows)
 #
-# With no name: every component and view mockup (mockups/components/*, mockups/views/*).
+# With no name: every component and view mockup (mockups/components/*, mockups/views/*);
+# --load-only also checks every plan (mockups/plans/*) without making a window
+# (H2S_MOCKUP_CHECK=1: its about.txt read, its Mockup.qml loaded, the list accepted).
 # --by-system takes the system as tests/run-system.sh does (scripts/distribution.sh,
 # H2S_DISTRIBUTION_ROOT before the paths it reads), and says which mode it took: the
 # baselines are drawn on Arch, and another system's libraries and fonts draw other pixels,
@@ -24,12 +26,15 @@
 # (status 2).
 # With no name and no component or view mockup in the tree it has nothing to check, and
 # says so with status 0 (the other modes: status 2).
-# A plan (mockups/plans/*) runs only when it is named; a name under planning/, the folder's
+# A plan otherwise steps through its scenes only when it is named; a name under planning/, the folder's
 # old name, is refused with the move to make. H2S_MOCKUP_BASE=
 # tests/fixtures/mockups takes the runners' fixture mockups instead (the self-test's).
 #
+# Every element declares its description and its states (a plan its scenes) in about.txt,
+# read by tests/mockup-about.sh before anything starts: a missing or broken one FAILs the
+# element, naming each line at fault.
 # A mockup passes when its entry reached every state (a MOCKUP-SHOT line for each, in order,
-# then MOCKUP-DONE) and exited 0, with no MOCKUP-ERROR, no TypeError or ReferenceError, and
+# the names about.txt's, then MOCKUP-DONE) and exited 0, with no MOCKUP-ERROR, no TypeError or ReferenceError, and
 # no line of the log naming the mockup's own folder (a QML warning from its files). With
 # --shoot, each state is cropped to the subject's bounds the entry gives (grim -g), made
 # smaller losslessly (magick -strip, compression level 9), and written as
@@ -115,6 +120,8 @@
 set -uo pipefail
 
 REPO=$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd -P)
+# shellcheck source=mockup-about.sh
+source "$REPO/tests/mockup-about.sh" || { echo "run-mockups.sh: cannot read tests/mockup-about.sh; nothing was run" >&2; exit 2; }
 # shellcheck disable=SC2034  # read by tests/headless.sh
 HEADLESS_NAME=run-mockups.sh
 # shellcheck disable=SC2034  # read by tests/headless.sh
@@ -238,6 +245,16 @@ if [ -n "$one_mark" ] && [ "${one_mark%%:*}" = "$PPID" ]; then
     }
     reasons=()
     differences=()
+    # Only with the mark above: a plan of a run of all, checked without a window
+    checking=0
+    [ "${H2S_MOCKUP_ONE_CHECK:-}" = 1 ] && checking=1
+
+    # The element's declaration first: nothing is started for a broken one
+    if ! about_read "$REPO/$base/$name" "$word"; then
+        echo "FAIL     $name (0 s)"
+        printf '           %s\n' "${about_errors[@]}"
+        exit 1
+    fi
 
     # complete_log: the entry's log up to its last full line (a line still being written is
     # left for the next look)
@@ -360,11 +377,12 @@ if [ -n "$one_mark" ] && [ "${one_mark%%:*}" = "$PPID" ]; then
 
     log=$work/mockup.log
     : > "$log"
+    if [ "$checking" = 1 ]; then step_variable=H2S_MOCKUP_CHECK=1; else step_variable=H2S_MOCKUP_SHOT=1; fi
     memory_cap_wrap quickshell
     headless_cap_unit=$MEMORY_CAP_UNIT
     # Above the entry's own limit on the shots (60 s); labwc's (540 s) outlasts this
     "${MEMORY_CAP_PREFIX[@]}" "${isolated[@]}" "${renderer_env[@]}" QT_SCALE_FACTOR=1 QT_ENABLE_HIGHDPI_SCALING=0 \
-        QT_FONT_DPI=96 QT_HASH_SEED=0 TZ=UTC H2S_MOCKUP="$name" H2S_MOCKUP_BASE="$base" H2S_MOCKUP_SHOT=1 \
+        QT_FONT_DPI=96 QT_HASH_SEED=0 TZ=UTC H2S_MOCKUP="$name" H2S_MOCKUP_BASE="$base" "$step_variable" \
         WAYLAND_DISPLAY=wayland-0 QT_QPA_PLATFORM=wayland \
         "$SETPRIV" --no-new-privs timeout -k 5 120 "$LOCKTEST_QS" -p "$REPO/mockup.qml" > "$log" 2>&1 < /dev/null &
     # (headless_cleanup ends it when this is interrupted)
@@ -450,7 +468,18 @@ if [ -n "$one_mark" ] && [ "${one_mark%%:*}" = "$PPID" ]; then
         read -r _ number _ <<< "${lines[$index]}"
         [ "$number" = "$index" ] || { reasons+=("shot line $index is for $word $number"); break; }
     done
-    grep -q 'MOCKUP-DONE' "$log" || reasons+=("no MOCKUP-DONE: not every $word was reached (${#lines[@]} shot)")
+    if [ "$checking" = 1 ]; then
+        [ ${#lines[@]} = 0 ] || reasons+=("a shot while only checking")
+        grep -q -x "MOCKUP-CHECKED ${#about_names[@]} ${word}s" <(grep -o 'MOCKUP-CHECKED.*' "$log") \
+            || reasons+=("no MOCKUP-CHECKED ${#about_names[@]} ${word}s: the check did not end")
+    else
+        grep -q 'MOCKUP-DONE' "$log" || reasons+=("no MOCKUP-DONE: not every $word was reached (${#lines[@]} shot)")
+        # The states shot are about.txt's, in its order
+        shot_names=$(printf '%s\n' "${lines[@]}" | awk 'NF { print $3 }' | paste -s -d ' ')
+        declared_names=$(printf '%s\n' "${about_names[@]}" | paste -s -d ' ')
+        [ "$shot_names" = "$declared_names" ] || [ ${#reasons[@]} -gt 0 ] \
+            || reasons+=("the ${word}s shot are not about.txt's: shot '$shot_names', declared '$declared_names'")
+    fi
     if [ -n "$shots" ]; then
         for line in "${lines[@]}"; do
             read -r _ index one _ size <<< "$line"
@@ -594,7 +623,11 @@ if [ -n "$one_mark" ] && [ "${one_mark%%:*}" = "$PPID" ]; then
         echo "PASS     $name (${#lines[@]} states, the same as the baseline, $((SECONDS - started)) s)"
         exit 0
     fi
-    echo "PASS     $name (${#lines[@]} ${word}s, $((SECONDS - started)) s)${shots:+; shots: $shots}"
+    if [ "$checking" = 1 ]; then
+        echo "PASS     $name (checked: ${#about_names[@]} ${word}s declared, no window, $((SECONDS - started)) s)"
+    else
+        echo "PASS     $name (${#lines[@]} ${word}s, $((SECONDS - started)) s)${shots:+; shots: $shots}"
+    fi
     exit 0
 fi
 
@@ -726,13 +759,22 @@ if [ "$mode" = approve ]; then
     exit 0
 fi
 
+declare -A check_only=()
 if [ ${#names[@]} = 0 ]; then
-    # Plans only by name: no test run includes them
+    # Plans step through their scenes only by name: a run of all only checks them, and only
+    # with --load-only
     mapfile -t names < <(cd "$REPO/$base" 2> /dev/null && find components views -mindepth 2 -maxdepth 2 -name Mockup.qml -printf '%h\n' 2> /dev/null \
         | grep -E '^(components|views)/[a-z0-9-]+$' | LC_ALL=C sort)
     if [ ${#names[@]} = 0 ]; then
         echo "run-mockups.sh: no component or view mockup in $base/: nothing to run"
         exit $((by_system ? 0 : 2))
+    fi
+    if [ "$mode" = load-only ]; then
+        while IFS= read -r name; do
+            names+=("$name")
+            check_only[$name]=1
+        done < <(cd "$REPO/$base" 2> /dev/null && find plans -mindepth 2 -maxdepth 2 -name Mockup.qml -printf '%h\n' 2> /dev/null \
+            | grep -E '^plans/[a-z0-9-]+$' | LC_ALL=C sort)
     fi
 fi
 
@@ -794,7 +836,7 @@ start_mockup() {
         cp -- "$work/origin-$index.txt" "$shots/origin.txt"
         echo "${shots##*/}" > "$shots_root/$name/last-run-$tree_key"
     fi
-    H2S_MOCKUP_ONE=$$:$name:$shots HEADLESS_QUIET_RESOLVE=1 LOCKTEST_QS=$LOCKTEST_QS H2S_TEST_TOOLS=$LOCKTEST_TOOL_SOURCE \
+    H2S_MOCKUP_ONE=$$:$name:$shots H2S_MOCKUP_ONE_CHECK=${check_only[$name]:-0} HEADLESS_QUIET_RESOLVE=1 LOCKTEST_QS=$LOCKTEST_QS H2S_TEST_TOOLS=$LOCKTEST_TOOL_SOURCE \
         H2S_MOCKUP_BASE=$base H2S_MOCKUP_RENDERER=$renderer "$REPO/tests/run-mockups.sh" "--$mode" \
         > "$work/mockup-$index.out" 2>&1 < /dev/null &
     index_of[$!]=$index

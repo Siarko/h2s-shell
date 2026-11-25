@@ -21,7 +21,6 @@ MockupWindow {
     id: root
 
     readonly property var sizes: ["s", "m", "l"]
-    names: ["idle", "picked"].concat(sizes.map(size => "hover-" + size)).concat(["long-label"])
 
     function _stateOf(name) {
         return name.replace(/-.*$/, "");

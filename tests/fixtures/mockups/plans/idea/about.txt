@@ -1,0 +1,2 @@
+description: A fixture plan that loads
+scene: only     The one scene

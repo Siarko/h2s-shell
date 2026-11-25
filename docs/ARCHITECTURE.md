@@ -2797,10 +2797,19 @@ trees, on either system.
 `tests/run-all.sh` (`--quick` too) runs the component and view mockups
 (`mockups/components/`, `mockups/views/`) through `tests/run-mockups.sh --by-system`, which
 takes the system as `tests/run-system.sh` does and says which mode it took. A plan
-(`mockups/plans/`) is never run by a test. With no component or view mockup in the tree there is
-nothing to check, and the part passes saying so.
+(`mockups/plans/`) never steps through its scenes in a test; `--load-only` with no name only
+checks it without a window (`H2S_MOCKUP_CHECK=1`). With no component or view mockup in the tree
+there is nothing to check, and the part passes saying so.
 
-On a screen, `tests/mockup.sh` lists the tree's mockups (`*` on a running one), opens one
+Every element declares itself in `about.txt` beside its `Mockup.qml`: a `description:` line,
+then a `state:` line per state (a plan: `scene:` per scene) with the name and its
+description, in shot order. The entry hands that list to the kit (a `Mockup.qml` never sets
+it); the runner and the screen tool read the file with `tests/mockup-about.sh`, the runner
+failing an element whose file is missing or broken before starting it, and
+`tests/mockup-selftest.sh` checks every element's file, plans included, on both systems.
+
+On a screen, `tests/mockup.sh` lists the tree's mockups with their descriptions (`*` on a
+running one), opens one
 (`open <name> [--state <s> | --scene <s>] [--restart]`, a state of a component or view, a
 scene of a plan: through Hyprland's exec when Hyprland is there,
 else detached; the entry starts with every inherited `H2S_*` variable dropped), closes them

@@ -29,9 +29,6 @@ import qs.mockups.kit
 MockupWindow {
     id: root
 
-    names: ["informing", "enable-module", "disable-module", "remove-module", "remove-checked", "remove-password",
-             "content-list", "long-text", "focus-button", "short-window"]
-
     // The stand-in removal preview (ModuleInstaller.removalPreview's answer)
     readonly property var removal: ({
         ok: true, title: "Remove Player?",

@@ -1,0 +1,3 @@
+description: The runners' fixture mockup that loads
+state: normal   The button at rest
+state: checked  The button checked

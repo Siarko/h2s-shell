@@ -4,7 +4,6 @@ import qs.mockups.kit
 // A fixture mockup that loads and steps through its states, with a QML warning from its own
 // file on the way: a load-only run must fail it
 MockupWindow {
-    names: ["first"]
     contentWidth: 100
     contentHeight: 50
 

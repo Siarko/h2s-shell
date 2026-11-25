@@ -1,0 +1,18 @@
+# The scenes' titles in the plan's side column are their descriptions here.
+description: The NixOS page in Settings and the rebuild side panel (planned)
+scene: not-connected              Not connected
+scene: found-line-not-in-force    Found, line not in force
+scene: in-the-home-folder         In the home folder
+scene: ready                      Ready
+scene: apply-the-announcement     Apply: the announcement
+scene: building                   Building
+scene: password-after-the-build   Password after the build
+scene: switching                  Switching
+scene: applied-undo-offered       Applied, Undo offered
+scene: build-failed               Build failed
+scene: applied-with-errors        Applied, with errors
+scene: locked-during-the-build    Locked during the build
+scene: cancelled                  Cancelled
+scene: set-in-your-configuration  Set in your configuration
+scene: undo-the-announcement      Undo: the announcement
+scene: undo-building              Undo: building

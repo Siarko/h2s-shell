@@ -15,8 +15,6 @@ import qs.mockups.kit
 // is there before its state, whatever the order of frames
 MockupWindow {
     id: root
-    names: ["text", "rounded-image", "shadow-blur", "layer-effect",
-        "text-again", "rounded-image-again", "shadow-blur-again", "layer-effect-again"]
     readonly property string shown: current.replace(/-again$/, "")
     contentWidth: 240
     contentHeight: 120

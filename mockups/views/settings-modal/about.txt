@@ -1,0 +1,11 @@
+description: The settings window's modal, one question of the shell's per state
+state: informing         Success, no button of its own: the one "OK" informs (size s)
+state: enable-module     Enabling a module: a warning, a strong line first, Enable and Cancel
+state: disable-module    Disabling a module: a warning, what goes with it, Disable
+state: remove-module     Removing a module: danger, checkboxes, Remove and Keep
+state: remove-checked    The same with its first checkbox ticked
+state: remove-password   Removing a fixed password rule: the danger confirmation, three lines
+state: content-list      Info, a list under the body
+state: long-text         A long title and long lines wrapping at the small panel's width
+state: focus-button      Enabling a module after Tab: the keyboard on the first button
+state: short-window      The password removal in a window 200 px tall: the middle cut and scrolled

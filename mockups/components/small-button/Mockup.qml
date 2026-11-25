@@ -33,12 +33,6 @@ MockupWindow {
     id: root
 
     readonly property var kinds: ["normal", "save", "saveChange", "action", "cancel", "delete", "warning", "success"]
-    readonly property var pressedKinds: ["normal", "save", "delete"]
-    names: ["rest", "disabled", "checked"]
-        .concat(kinds.map(kind => "hover-" + kind))
-        .concat(["checked-hover-normal", "disabled-hover-normal"])
-        .concat(kinds.map(kind => "focus-" + kind))
-        .concat(pressedKinds.map(kind => "pressed-" + kind))
 
     // A state's name taken apart: { state (the look), pointer ("hover", "pressed" or ""), kind ("" for
     // none) }

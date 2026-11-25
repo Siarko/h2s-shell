@@ -7,7 +7,6 @@ import qs.mockups.kit
 // reach it, whatever the process inherited (H2S_SHELL_MODULES, H2S_SHELL_HELPER)
 MockupWindow {
     id: root
-    names: ["only"]
     contentWidth: 100
     contentHeight: 50
 

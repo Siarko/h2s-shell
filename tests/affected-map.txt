@@ -147,6 +147,8 @@ mockups/kit/* self:tests/run-mockups-selftest.sh mockup:all
 tests/fixtures/mockups/* self:tests/run-mockups-selftest.sh self:tests/mockup-selftest.sh
 # The mockups' screen tool
 tests/mockup.sh self:tests/mockup-selftest.sh
+# The reader of an element's about.txt, shared by the screen tool and the runner
+tests/mockup-about.sh self:tests/mockup-selftest.sh self:tests/run-mockups-selftest.sh mockup:all
 # The migration harness's test-only migration and its fixture, read by path
 tests/fixtures/migrations-testonly/* unit:MigrationsTest
 # The golden outputs of the startup migrations, read by path

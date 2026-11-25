@@ -1,0 +1,2 @@
+description: A fixture view that reaches what touches the session
+state: only     The one state

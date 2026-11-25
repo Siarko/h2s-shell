@@ -1,0 +1,2 @@
+description: A fixture still setting the kit's old list
+state: first    The one state

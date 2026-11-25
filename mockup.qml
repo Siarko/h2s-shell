@@ -1,6 +1,7 @@
 //@ pragma UseQApplication
 import QtQuick
 import Quickshell
+import Quickshell.Io
 import qs.singletons
 // Imported so that Quickshell takes the kit into the tree it resolves `qs.…` against: it
 // follows the imports of the files it loads at the start, not of a file created later
@@ -21,8 +22,13 @@ import qs.mockups.kit
 //   H2S_MOCKUP_STATE=<state>   on screen: opens a component or view on that state
 //   H2S_MOCKUP_SCENE=<scene>   on screen: opens a plan on that scene (each variable is
 //                              refused for the other kind)
+//   H2S_MOCKUP_CHECK=1         checks the element and exits, without making a window:
+//                              about.txt read, Mockup.qml loaded, the kit's list accepted;
+//                              then MOCKUP-CHECKED <count> <states|scenes>, exit 0
 //
-// Any error prints MOCKUP-ERROR <text> and exits with status 2.
+// The states or scenes come from the element's about.txt, beside Mockup.qml (the format:
+// tests/mockup-about.sh, whose rules the reader below keeps), handed to the kit as the
+// mockup is created. Any error prints MOCKUP-ERROR <text> and exits with status 2.
 //
 // The process is isolated from the session it runs in (Isolation: no module loads, no
 // notification server, nothing sent), the configuration is read-only, the tree's files are
@@ -42,6 +48,92 @@ ShellRoot {
 
     readonly property var _bases: ["mockups", "tests/fixtures/mockups"]
     property var _window: null
+
+    // _readAbout(<kind>/<name> folder URL, word): { description, names, descriptions, error },
+    // by tests/mockup-about.sh's rules
+    function _readAbout(folder, word) {
+        const other = word === "state" ? "scene" : "state";
+        const path = decodeURIComponent(folder.toString().replace(/^file:\/\//, "")) + "/about.txt";
+        const file = _aboutReader.createObject(root, { path: path });
+        const text = file.text();
+        const failed = file.failed;
+        file.destroy();
+        const answer = { description: "", names: [], descriptions: [], error: "" };
+        if (failed || text === "") {
+            answer.error = "about.txt is missing, empty or unreadable: every element declares its description and its " + word + "s there";
+            return answer;
+        }
+        const errors = [];
+        const seen = {};
+        let descriptions = 0, declared = 0;
+        const lines = text.split("\n");
+        if (lines.length > 0 && lines[lines.length - 1] === "")
+            lines.pop();
+        for (let i = 0; i < lines.length; i++) {
+            const at = "about.txt line " + (i + 1) + ": ";
+            const line = lines[i].replace(/\r$/, "");
+            if (/^\s*(#.*)?$/.test(line))
+                continue;
+            const match = /^([a-z]+):(.*)$/.exec(line);
+            if (!match) {
+                errors.push(at + "not 'description:', '" + word + ":' or a comment");
+                continue;
+            }
+            const rest = match[2].trim();
+            if (match[1] === "description") {
+                if (++descriptions > 1)
+                    errors.push(at + "a second description");
+                else if (rest === "")
+                    errors.push(at + "the description is empty");
+                else if (rest.length > 100)
+                    errors.push(at + "the description is " + rest.length + " characters, over 100");
+                else
+                    answer.description = rest;
+            } else if (match[1] === word) {
+                declared++;
+                const name = rest.split(/\s/)[0];
+                const description = rest.slice(name.length).trim();
+                if (name === "")
+                    errors.push(at + "a " + word + " without a name");
+                else if (!/^[A-Za-z0-9][A-Za-z0-9-]*$/.test(name))
+                    errors.push(at + "the " + word + " name '" + name + "' is not letters, digits and '-' (starting with a letter or digit)");
+                else if (seen[name])
+                    errors.push(at + "the " + word + " name '" + name + "' is repeated (line " + seen[name] + ")");
+                else if (description === "")
+                    errors.push(at + "the " + word + " '" + name + "' has no description");
+                else if (description.length > 100)
+                    errors.push(at + "the " + word + " '" + name + "' has a description of " + description.length + " characters, over 100");
+                else {
+                    seen[name] = i + 1;
+                    answer.names.push(name);
+                    answer.descriptions.push(description);
+                }
+            } else if (match[1] === other) {
+                errors.push(at + (word === "state" ? "'scene:' is a plan's; a component or a view declares 'state:' lines"
+                                                   : "'state:' is a component's or a view's; a plan declares 'scene:' lines"));
+            } else {
+                errors.push(at + "'" + match[1] + ":' is not 'description:' or '" + word + ":'");
+            }
+        }
+        if (descriptions === 0)
+            errors.push("about.txt: no 'description:' line");
+        if (declared === 0)
+            errors.push("about.txt: no '" + word + ":' line");
+        if (answer.names.length > 30)
+            errors.push("about.txt: " + answer.names.length + " " + word + "s, over 30");
+        answer.error = errors.join("; ");
+        return answer;
+    }
+
+    // One read of an about.txt: the first load, blocking, so text() is the file's
+    readonly property Component _aboutReader: Component {
+        FileView {
+            property bool failed: false
+            blockLoading: true
+            printErrors: false
+            onLoadFailed: failed = true
+        }
+    }
 
     function _fail(text) {
         console.error("MOCKUP-ERROR " + text);
@@ -83,17 +175,30 @@ ShellRoot {
             _fail("H2S_MOCKUP_BASE is '" + base + "': " + _bases.join(" or "));
             return;
         }
+        const checking = Quickshell.env("H2S_MOCKUP_CHECK") === "1";
+        if (checking && shooting) {
+            _fail("H2S_MOCKUP_CHECK and H2S_MOCKUP_SHOT are both set: one of them");
+            return;
+        }
+        const word = plan ? "scene" : "state";
+        const about = _readAbout(Qt.resolvedUrl(base + "/" + name), word);
+        if (about.error !== "") {
+            _fail(name + ": " + about.error);
+            return;
+        }
         const component = Qt.createComponent(Qt.resolvedUrl(base + "/" + name + "/Mockup.qml"), Component.PreferSynchronous);
         if (component.status !== Component.Ready) {
             const error = component.errorString().replace(/\s+/g, " ").trim();
-            // The kit's list was `scenes` before it said `names`
-            const renamed = /non-existent property "scenes?"/.test(error) || /onSceneChanged/.test(error)
-                ? " (the kit's scenes and scene are now names and current)" : "";
-            _fail(name + ": " + error + renamed);
+            // The list is about.txt's: the kit's read-only names, or its old name scenes
+            const declared = /non-existent property "scenes?"/.test(error) || /onSceneChanged/.test(error)
+                ? " (the kit's scenes and scene are now names and current, and the " + word + "s are declared in about.txt)"
+                : /"names" is a read-only property/.test(error) || /read-only property.*names/.test(error)
+                ? " (the " + word + "s are declared in about.txt, not in Mockup.qml)" : "";
+            _fail(name + ": " + error + declared);
             return;
         }
         // Hidden until its root is known to be a MockupWindow: nothing else is ever shown
-        const window = component.createObject(root, { visible: false });
+        const window = component.createObject(root, { visible: false, declaredNames: about.names, declaredDescriptions: about.descriptions });
         if (!window) {
             _fail(name + ": " + component.errorString().replace(/\s+/g, " ").trim());
             return;
@@ -105,6 +210,17 @@ ShellRoot {
         }
         _window = window;
         window.mockupName = name;
+        if (checking) {
+            const problem = window.check();
+            window.destroy();
+            if (problem !== "") {
+                _fail(name + ": " + problem);
+                return;
+            }
+            console.info("MOCKUP-CHECKED " + about.names.length + " " + word + "s");
+            _exit(0);
+            return;
+        }
         window.shooting = shooting;
         const limit = Number(Quickshell.env("H2S_MOCKUP_SHOT_LIMIT_MS") || 60000);
         if (!(limit > 0)) {

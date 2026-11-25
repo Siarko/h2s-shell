@@ -21,10 +21,13 @@ import qs.components
 //
 // A component or a view has states, a plan has scenes; the kit treats both alike (not
 // `states`/`state`, which every Qt Quick Item has: a binding to `state` inside a mockup's item
-// would read that item's own property). The contract:
-//   names         the names of the states or scenes, in their fixed order; each non-empty,
-//                 without whitespace or "/" (a name goes into the shot line and a file
-//                 name), none repeated
+// would read that item's own property). The states or scenes are declared in the element's
+// about.txt (its description, then a `state:` or `scene:` line each), never in Mockup.qml:
+// the entry reads it and hands the list over before the mockup's bindings run. The contract:
+//   names         the names of the states or scenes, in their fixed order (read-only: a
+//                 Mockup.qml that sets it fails to load); each non-empty, without whitespace
+//                 or "/" (a name goes into the shot line and a file name), none repeated
+//   descriptions  each one's description from about.txt, in the same order (read-only)
 //   current       the current state or scene: the mockup binds its stand-in data to it
 //   subject       the item a shot is cropped to; the content by default
 //   subjectRect   overrides the crop, in window coordinates, for a subject spread over
@@ -74,7 +77,11 @@ import qs.components
 QtObject {
     id: root
 
-    property var names: []
+    readonly property var names: declaredNames
+    readonly property var descriptions: declaredDescriptions
+    // Set by the entry from about.txt, as the mockup is created
+    property var declaredNames: []
+    property var declaredDescriptions: []
     property string current: ""
     // "state" for a component or a view, "scene" for a plan: the word in the messages
     readonly property string _word: mockupName.startsWith("plans/") ? "scene" : "state"
@@ -141,6 +148,11 @@ QtObject {
             seen[name] = true;
         }
         return "";
+    }
+
+    // Whether the list of names can be used, without making a window: "" or why not
+    function check() {
+        return _namesError();
     }
 
     // Starts the mockup on `first` ("" for the first); "" or why it cannot start

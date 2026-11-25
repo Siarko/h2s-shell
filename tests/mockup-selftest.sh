@@ -5,7 +5,12 @@
 # tool needs, so that neither a real Quickshell, the compositor nor a terminal's images are
 # reached. Nothing is opened on a screen.
 #
-#   - list: every fixture mockup with its kind and title, "*" on the running ones;
+#   - list: every fixture mockup with its kind and about.txt's description, "*" on the
+#     running ones, a broken about.txt said;
+#   - tests/mockup-about.sh: the fixtures' about.txt read, each broken form (missing, no
+#     description, the wrong keyword, a bad, a repeated, an empty or an undescribed name, too long, a
+#     second description, an unknown keyword, over 30 states) refused, naming the line; every
+#     element of mockups/ as the format says;
 #   - a name or a unique part of one; a part that matches several is refused;
 #   - close picks only instances whose config is this tree's mockup.qml, by the name each
 #     answers over IPC: never another tree's mockup, never the shell, never an instance that
@@ -119,6 +124,56 @@ check "$(out list | grep -q -E '^  components/clock +component '; echo $?)" "com
 check "$(out list | grep -q -E '^  plans/idea +plan '; echo $?)" "plans/idea: listed with its kind"
 check "$(! has list planning; echo $?)" "no old planning folder in the fixtures: nothing said of it"
 check "$(log_of list qs | grep -q -E 'ipc --pid (4194303|4194304) '; [ $? = 1 ]; echo $?)" "another tree's instance and the shell are never asked their name"
+check "$(out list | grep -q -E '^  components/no-about +component +\(broken: about.txt is missing'; echo $?)" "components/no-about: listed, its missing about.txt said"
+check "$(out list | grep -q -E "^  plans/wrong-keyword +plan +\(broken: about.txt line 2: 'state:' is a component's"; echo $?)" "plans/wrong-keyword: listed, its broken line said"
+
+echo "about.txt (tests/mockup-about.sh)"
+# shellcheck source=mockup-about.sh
+source "$REPO/tests/mockup-about.sh"
+fixtures=$REPO/tests/fixtures/mockups
+about_read "$fixtures/components/good" state
+check "$([ $? = 0 ] && [ "$about_description" = "The runners' fixture mockup that loads" ] && [ "${about_names[*]}" = "normal checked" ] \
+    && [ "${about_descriptions[1]}" = "The button checked" ]; echo $?)" "components/good: its description, names and descriptions"
+about_read "$fixtures/plans/tall" scene
+check "$([ $? = 0 ] && [ "${about_names[*]}" = "first second third" ]; echo $?)" "plans/tall: its three scenes"
+# Each broken form: kind/name | word | the error expected
+for entry in \
+    "components/no-about|state|about.txt is missing" \
+    "components/no-description|state|about.txt: no 'description:' line" \
+    "components/wrong-keyword|state|about.txt line 2: 'scene:' is a plan's" \
+    "plans/wrong-keyword|scene|about.txt line 2: 'state:' is a component's or a view's" \
+    "components/bad-name|state|the state name 'Bad_Name' is not letters, digits and '-'" \
+    "components/repeated-name|state|about.txt line 4: the state name 'first' is repeated (line 2)" \
+    "components/empty-name|state|about.txt line 2: a state without a name" \
+    "components/no-state-description|state|about.txt line 2: the state 'first' has no description" \
+    "components/too-long|state|about.txt line 1: the description is 101 characters, over 100"; do
+    IFS='|' read -r element word expected <<< "$entry"
+    about_read "$fixtures/$element" "$word"
+    verdict=$?
+    check "$([ "$verdict" = 1 ] && printf '%s\n' "${about_errors[@]}" | grep -q -F -- "$expected"; echo $?)" "$element: refused, '$expected'"
+done
+# A description of exactly 100 characters, a state's too; then one over, a second
+# description, 31 states and an unknown keyword
+about_dir=$work/about
+mkdir -p "$about_dir"
+long=$(printf 'x%.0s' $(seq 100))
+printf 'description: %s\nstate: a %s\n' "$long" "$long" > "$about_dir/about.txt"
+about_read "$about_dir" state
+check "$?" "100 characters, the description's and a state's: taken"
+printf 'description: d\ndescription: e\nstate: a %sx\nlabel: x\n' "$long" > "$about_dir/about.txt"
+about_read "$about_dir" state
+check "$([ $? = 1 ] && [ "${about_errors[*]}" = "about.txt line 2: a second description about.txt line 3: the state 'a' has a description of 101 characters, over 100 about.txt line 4: 'label:' is not 'description:' or 'state:'" ]; echo $?)" "a second description, a state's 101 characters and an unknown keyword, each named (${about_errors[*]})"
+{ echo "description: d"; for i in $(seq 31); do echo "state: s$i The state $i"; done; } > "$about_dir/about.txt"
+about_read "$about_dir" state
+check "$([ $? = 1 ] && [ "${about_errors[*]}" = "about.txt: 31 states, over 30" ]; echo $?)" "31 states: over the limit"
+# Every real element's about.txt is as the format says, plans included
+for folder in "$REPO"/mockups/{components,views,plans}/*/; do
+    folder=${folder%/}
+    word=state
+    [[ "$folder" == */plans/* ]] && word=scene
+    about_read "$folder" "$word"
+    check "$?" "mockups/${folder#"$REPO/mockups/"}: about.txt as the format says ${about_errors[*]}"
+done
 
 echo "names"
 tool part -- -n close isol

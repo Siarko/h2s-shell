@@ -1,0 +1,2 @@
+description: A fixture that keeps time of its own
+state: first    The one state

@@ -49,10 +49,6 @@ import qs.mockups.kit
 MockupWindow {
     id: root
 
-    names: ["not-connected", "found-not-in-force", "home-folder", "ready", "apply-announcement", "building", "built-apply-now",
-             "waiting-password", "switching", "applied", "build-failed", "applied-with-errors", "cancelled", "set-in-configuration",
-             "undo-announcement", "undo-building"]
-
     // A settings window's page area: the page, the side panel over its right part, the modal
     readonly property int cellWidth: 890
     readonly property int cellHeight: 960

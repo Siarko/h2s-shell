@@ -1,0 +1,9 @@
+description: A fixture whose states are drawn through shader effects
+state: text     text, drawn
+state: rounded-image rounded-image, drawn
+state: shadow-blur shadow-blur, drawn
+state: layer-effect layer-effect, drawn
+state: text-again text-again, drawn
+state: rounded-image-again rounded-image-again, drawn
+state: shadow-blur-again shadow-blur-again, drawn
+state: layer-effect-again layer-effect-again, drawn

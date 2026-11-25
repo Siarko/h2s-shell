@@ -1,0 +1,4 @@
+description: A fixture naming a state twice
+state: first   The first state
+state: second  The second state
+state: first   The first state again

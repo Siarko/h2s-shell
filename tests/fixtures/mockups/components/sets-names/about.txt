@@ -1,0 +1,2 @@
+description: A fixture still setting its states in Mockup.qml
+state: first   The one state

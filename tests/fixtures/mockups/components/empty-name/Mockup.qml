@@ -1,9 +1,8 @@
 import QtQuick
 import qs.mockups.kit
 
-// A fixture mockup with an empty state name: an error
+// A fixture mockup whose about.txt has a state line without a name: an error
 MockupWindow {
-    names: ["first", ""]
     contentWidth: 100
     contentHeight: 50
 }

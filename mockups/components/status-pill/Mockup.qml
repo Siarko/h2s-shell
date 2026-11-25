@@ -28,7 +28,6 @@ MockupWindow {
         { icon: "", text: "1", kind: "muted", tip: "1 queued", line: "1 queued" },
         { icon: "", text: "1", kind: "danger", tip: "1 failed", line: "1 failed: no connection" }
     ]
-    names: ["kinds", "parts", "hover", "expanded", "not-expandable"]
     // The states the pointer is over the pill in
     readonly property var pointed: ["hover", "not-expandable"]
 

@@ -1,0 +1,2 @@
+description: A fixture whose root is not a MockupWindow
+state: first    The one state

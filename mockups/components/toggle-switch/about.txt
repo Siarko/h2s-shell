@@ -1,0 +1,6 @@
+# Each state's cell is the settings' small switch and the popups' larger one side by side.
+description: The on/off switch, small and large
+state: off            Off
+state: on             On
+state: disabled-off   Not enabled, off: dimmed
+state: disabled-on    Not enabled, on: dimmed

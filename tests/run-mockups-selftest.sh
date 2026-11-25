@@ -19,7 +19,9 @@
 #     started with H2S_SHELL_MODULES and H2S_SHELL_HELPER set, loads no module, registers no
 #     server, sends nothing and has no helper;
 #   - a bad name, a base it does not take, a missing file, a load error, a root that is not
-#     a MockupWindow, a repeated and an empty state name, an unknown first state, the old
+#     a MockupWindow, each broken form of about.txt (missing, no description, the other
+#     kind's keyword, a bad, a repeated, an empty or an undescribed name, too long), a Mockup.qml still
+#     setting names, an unknown first state, the old
 #     planning/ folder, H2S_MOCKUP_SCENE for a component and H2S_MOCKUP_STATE for a plan, a
 #     mockup still setting the kit's old `scenes`, and shots that take longer than their
 #     limit each end with MOCKUP-ERROR and exit 2.
@@ -29,10 +31,13 @@
 #     of the subject's size, into H2S_MOCKUP_SHOTS; the effects fixture's effects are drawn
 #     (the renderer draws MultiEffect and layer.effect), and each state drawn twice in one
 #     process is the same file;
-#   - a load error, a repeated state and a QML warning from the mockup's own file FAIL, the
-#     others in the same run still PASS;
-#   - with no name it runs every component and view fixture, never the plan, which runs
-#     when named; a name that is not <kind>/<name>, under planning/ (with the move to make)
+#   - H2S_MOCKUP_CHECK=1 checks a plan and a component without a window: MOCKUP-CHECKED
+#     with the count, exit 0;
+#   - a load error, a repeated state, a missing about.txt, names set in Mockup.qml and a QML
+#     warning from the mockup's own file FAIL, the others in the same run still PASS;
+#   - with no name it runs every component and view fixture, and --load-only checks every
+#     plan without a window (a broken plan's about.txt FAILs); a plan steps through its
+#     scenes when named; a name that is not <kind>/<name>, under planning/ (with the move to make)
 #     or not a mockup runs nothing;
 #   - --by-system takes --compare on Arch and --load-only on NixOS and any other system,
 #     saying which (made-up systems' os-release), and runs nothing (status 2) on a system
@@ -280,14 +285,24 @@ errors=(
     "missing file|components/no-such-mockup:|H2S_MOCKUP_SHOT=1 H2S_MOCKUP=components/no-such-mockup"
     "load error|NoSuchFixtureType|${fixtures[*]} H2S_MOCKUP=components/load-error"
     "not a MockupWindow|is not a MockupWindow|${fixtures[*]} H2S_MOCKUP=components/not-a-window"
-    "repeated state|state name 'first' is repeated|${fixtures[*]} H2S_MOCKUP=components/repeated-name"
-    "empty state|state 1 has an empty name|${fixtures[*]} H2S_MOCKUP=components/empty-name"
+    "about.txt: missing|about.txt is missing, empty or unreadable|${fixtures[*]} H2S_MOCKUP=components/no-about"
+    "about.txt: no description|about.txt: no 'description:' line|${fixtures[*]} H2S_MOCKUP=components/no-description"
+    "about.txt: a plan's keyword in a component|about.txt line 2: 'scene:' is a plan's|${fixtures[*]} H2S_MOCKUP=components/wrong-keyword"
+    "about.txt: a component's keyword in a plan|about.txt line 2: 'state:' is a component's or a view's|${fixtures[*]} H2S_MOCKUP=plans/wrong-keyword"
+    "about.txt: a bad name|the state name 'Bad_Name' is not letters, digits and '-'|${fixtures[*]} H2S_MOCKUP=components/bad-name"
+    "about.txt: a repeated name|about.txt line 4: the state name 'first' is repeated (line 2)|${fixtures[*]} H2S_MOCKUP=components/repeated-name"
+    "about.txt: a state without a name|about.txt line 2: a state without a name|${fixtures[*]} H2S_MOCKUP=components/empty-name"
+    "about.txt: a state without its description|about.txt line 2: the state 'first' has no description|${fixtures[*]} H2S_MOCKUP=components/no-state-description"
+    "about.txt: a description too long|about.txt line 1: the description is 101 characters, over 100|${fixtures[*]} H2S_MOCKUP=components/too-long"
+    "names set in Mockup.qml|the states are declared in about.txt, not in Mockup.qml|${fixtures[*]} H2S_MOCKUP=components/sets-names"
+    "a check of a broken about.txt|about.txt line 2: 'state:' is a component's or a view's|H2S_MOCKUP_BASE=tests/fixtures/mockups H2S_MOCKUP_CHECK=1 H2S_MOCKUP=plans/wrong-keyword"
+    "check and shots at once|H2S_MOCKUP_CHECK and H2S_MOCKUP_SHOT are both set|${fixtures[*]} H2S_MOCKUP_CHECK=1 H2S_MOCKUP=components/good"
     "unknown first state on screen|no state 'nope'|H2S_MOCKUP_BASE=tests/fixtures/mockups H2S_MOCKUP=components/good H2S_MOCKUP_STATE=nope"
     "unknown first scene of a plan on screen|no scene 'nope'|H2S_MOCKUP_BASE=tests/fixtures/mockups H2S_MOCKUP=plans/tall H2S_MOCKUP_SCENE=nope"
     "the old planning folder|mockups/planning/ is now mockups/plans/|${fixtures[*]} H2S_MOCKUP=planning/idea"
     "a scene for a component|H2S_MOCKUP_SCENE is set for components/good|H2S_MOCKUP_BASE=tests/fixtures/mockups H2S_MOCKUP=components/good H2S_MOCKUP_SCENE=checked"
     "a state for a plan|H2S_MOCKUP_STATE is set for the plan plans/tall|H2S_MOCKUP_BASE=tests/fixtures/mockups H2S_MOCKUP=plans/tall H2S_MOCKUP_STATE=second"
-    "the kit's old scenes|the kit's scenes and scene are now names and current|${fixtures[*]} H2S_MOCKUP=components/old-scenes"
+    "the kit's old scenes|the kit's scenes and scene are now names and current, and the states are declared in about.txt|${fixtures[*]} H2S_MOCKUP=components/old-scenes"
     "bad shot limit|H2S_MOCKUP_SHOT_LIMIT_MS is 'soon'|${fixtures[*]} H2S_MOCKUP=components/good H2S_MOCKUP_SHOT_LIMIT_MS=soon"
 )
 for entry in "${errors[@]}"; do
@@ -302,6 +317,18 @@ for entry in "${errors[@]}"; do
     check "$(grep 'MOCKUP-ERROR ' "$log" | grep -q -F -- "$expected"; echo $?)" "MOCKUP-ERROR names it: $expected"
     check "$(! grep -q -E 'MOCKUP-SHOT|MOCKUP-DONE' "$log"; echo $?)" "no shot, no MOCKUP-DONE"
     grep -q 'MOCKUP-ERROR ' "$log" || sed 's/^/    /' "$log" | head -n 10
+done
+
+echo "H2S_MOCKUP_CHECK: an element checked without a window"
+start_entry check-plan "$REPO/mockup.qml" H2S_MOCKUP_BASE=tests/fixtures/mockups H2S_MOCKUP_CHECK=1 H2S_MOCKUP=plans/tall
+start_entry check-component "$REPO/mockup.qml" H2S_MOCKUP_BASE=tests/fixtures/mockups H2S_MOCKUP_CHECK=1 H2S_MOCKUP=components/good
+drive no check-plan check-component
+for entry in "check-plan|MOCKUP-CHECKED 3 scenes" "check-component|MOCKUP-CHECKED 2 states"; do
+    IFS='|' read -r case expected <<< "$entry"
+    check "$([ "${statuses[$case]}" = 0 ]; echo $?)" "$case: exits 0 (was ${statuses[$case]})"
+    check "$(grep -q -F -- "$expected" "${logs[$case]}"; echo $?)" "$case: says $expected"
+    check "$(! grep -q -E 'MOCKUP-SHOT|MOCKUP-ERROR|TypeError|ReferenceError|OpenGL VENDOR' "${logs[$case]}"; echo $?)" "$case: no window drawn, no shot, no error"
+    grep -q -F -- "$expected" "${logs[$case]}" || sed 's/^/    /' "${logs[$case]}" | head -n 10
 done
 
 # ---- The runner ---------------------------------------------------------------------
@@ -407,24 +434,28 @@ show_on_failure "$before" clock
 
 echo "runner: what fails, beside what passes"
 before=$failures
-runner failing -- --load-only components/good components/load-error components/repeated-name components/warning
+runner failing -- --load-only components/good components/load-error components/repeated-name components/warning components/no-about \
+    components/sets-names
 check "$([ "${runner_status[failing]}" = 1 ]; echo $?)" "exits 1 (was ${runner_status[failing]})"
 check "$([ "$(verdict_of failing components/good)" = PASS ]; echo $?)" "components/good PASS"
-for name in load-error repeated-name warning; do
+for name in load-error repeated-name warning no-about sets-names; do
     check "$([ "$(verdict_of failing components/$name)" = FAIL ]; echo $?)" "components/$name FAIL"
 done
 check "$(grep -q "MOCKUP-ERROR components/load-error: .*NoSuchFixtureType" "${out[failing]}"; echo $?)" "the load error is named"
-check "$(grep -q "MOCKUP-ERROR components/repeated-name: state name 'first' is repeated" "${out[failing]}"; echo $?)" "the repeated state is named"
+check "$(grep -q -F "about.txt line 4: the state name 'first' is repeated (line 2)" "${out[failing]}"; echo $?)" "the repeated state is named, by its line in about.txt"
+check "$(grep -q -F "about.txt is missing: every element declares its description and its states there" "${out[failing]}"; echo $?)" "the missing about.txt is named"
+check "$(grep -q -F "the states are declared in about.txt, not in Mockup.qml" "${out[failing]}"; echo $?)" "names set in Mockup.qml: about.txt named"
 check "$(grep -q "a line about the mockup's own files: .*warning/Mockup.qml.*Unable to assign" "${out[failing]}"; echo $?)" "the warning from the mockup's file is named"
 show_on_failure "$before" failing
 
-echo "runner: no name runs every component and view, never a plan"
+echo "runner: no name runs every component and view, and --load-only checks every plan without a window"
 before=$failures
 runner all -- --load-only
-expected=$(cd "$REPO/tests/fixtures/mockups" && find components views -mindepth 2 -maxdepth 2 -name Mockup.qml -printf '%h\n' | LC_ALL=C sort)
+expected=$(cd "$REPO/tests/fixtures/mockups" && find components views plans -mindepth 2 -maxdepth 2 -name Mockup.qml -printf '%h\n' | LC_ALL=C sort)
 ran=$(awk '/^  (PASS|FAIL) / { print $2 } /^  NOT RUN / { print $3 }' "${out[all]}" | LC_ALL=C sort)
-check "$([ "$ran" = "$expected" ]; echo $?)" "ran each component and view fixture once ($(echo $ran))"
-check "$(! grep -q 'plans/' <<< "$ran"; echo $?)" "no plan"
+check "$([ "$ran" = "$expected" ]; echo $?)" "ran each fixture once, plans included ($(echo $ran))"
+check "$(grep -q -F 'PASS     plans/tall (checked: 3 scenes declared, no window' "${out[all]}"; echo $?)" "plans/tall: checked, its three scenes, no window"
+check "$([ "$(verdict_of all plans/wrong-keyword)" = FAIL ] && grep -q -F "about.txt line 2: 'state:' is a component's or a view's" "${out[all]}"; echo $?)" "plans/wrong-keyword: FAIL, its line named"
 runner plan -- --load-only plans/idea
 check "$([ "${runner_status[plan]}" = 0 ] && [ "$(verdict_of plan plans/idea)" = PASS ] && grep -q -F 'plans/idea (1 scenes,' "${out[plan]}"; echo $?)" "plans/idea runs when named, its verdict counting scenes (status ${runner_status[plan]})"
 show_on_failure "$before" all
@@ -463,7 +494,7 @@ show_on_failure "$before" by-system-run
 # a set-up error for the others
 empty=$work/empty-tree
 mkdir -p "$empty/tests" "$empty/scripts" "$empty/mockups/kit"
-cp "$REPO/tests/run-mockups.sh" "$empty/tests/"
+cp "$REPO/tests/run-mockups.sh" "$REPO/tests/mockup-about.sh" "$empty/tests/"
 cp "$REPO/scripts/distribution.sh" "$empty/scripts/"
 cp -r "$REPO/distributions" "$empty/"
 empty_out=$(H2S_DISTRIBUTION_ROOT="$work/system-arch" "$empty/tests/run-mockups.sh" --by-system 2>&1)

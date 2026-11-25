@@ -6,7 +6,6 @@ import qs.mockups.kit
 // clock, an animation of a literal duration. A load-only run must fail it
 MockupWindow {
     id: root
-    names: ["first"]
     contentWidth: 100
     contentHeight: 50
 

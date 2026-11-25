@@ -1,0 +1,2 @@
+description: A fixture with a bad state name
+state: Bad_Name   A name with an underscore
