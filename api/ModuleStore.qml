@@ -63,7 +63,6 @@ QtObject {
     property string _refused: ""
     // Keys set before the read answered: kept over what it reads
     property var _early: ({})
-    property bool _protected: false
     // How many reads have answered: the module host reads the file again before running the
     // module's migrations and waits for this to move
     property int _reads: 0
@@ -115,8 +114,8 @@ QtObject {
             console.warn("[Modules] " + moduleId + ": its store " + path + " could not be written: " + _writeError);
             return false;
         }
-        if (!_protected) {
-            _protected = true;
+        if (!_due.protected) {
+            _due.protected = true;
             Quickshell.execDetached(["chmod", "600", "--", path]);
         }
         return true;
@@ -125,9 +124,32 @@ QtObject {
     onPathChanged: if (_completed) _load()
     Component.onCompleted: {
         _completed = true;
+        // A store being destroyed writes what is waiting: from what `_due` kept, never from
+        // its own properties and functions, which Qt may have dropped by the time its
+        // destruction runs
+        const due = _due;
+        const file = _file;
+        Component.destruction.connect(() => {
+            const write = due.write;
+            if (write === null)
+                return;
+            due.write = null;
+            file.path = write.path;
+            file.setText(write.text);
+            if (!due.protected) {
+                due.protected = true;
+                Quickshell.execDetached(["chmod", "600", "--", write.path]);
+            }
+        });
         _load();
     }
-    Component.onDestruction: flush()
+
+    // What flush() would write now ({ path, text }, or null), and whether the file was made
+    // 600: kept in a JavaScript object the destruction's closure holds
+    readonly property var _due: ({ write: null, protected: false })
+    readonly property var _pendingWrite: _dirty && writable && _ready && _refused === "" && path !== ""
+        ? { path: path, text: ModuleRules.storeText(_data) } : null
+    on_PendingWriteChanged: _due.write = _pendingWrite !== null && _pendingWrite.text !== null ? _pendingWrite : null
 
     property bool _completed: false
     // The path changed while a read ran: read again when it ends (its answer is for the old path)

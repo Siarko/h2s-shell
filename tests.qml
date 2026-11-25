@@ -38,6 +38,7 @@ QtObject {
     }
 
     property var _promises: PromisesTest {}
+    property var _teardown: TeardownTest {}
     property var _fetch: FetchTest {}
     property var _network: NetworkTest {}
     property var _deviceAddressReading: DeviceAddressReadingTest {}

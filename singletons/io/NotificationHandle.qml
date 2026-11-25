@@ -246,11 +246,19 @@ QtObject {
     }
 
     function _disconnect() {
-        if (!_connected)
-            return;
         _connected = false;
-        server?.notificationClosed.disconnect(_onClosed);
-        server?.actionInvoked.disconnect(_onAction);
+    }
+
+    // The server's signals, followed while connected; owned here, so they end with the handle
+    property Connections _serverSignals: Connections {
+        target: root._connected ? root.server : null
+        ignoreUnknownSignals: true
+        function onNotificationClosed(closedId, reason) {
+            root._onClosed(closedId, reason);
+        }
+        function onActionInvoked(actionId, identifier) {
+            root._onAction(actionId, identifier);
+        }
     }
 
     function _closedBy(reason) {
@@ -307,13 +315,7 @@ QtObject {
             Notifier._recordHandle("show", number, wanted);
             return;
         }
-        if (server) {
-            server.notificationClosed.connect(_onClosed);
-            server.actionInvoked.connect(_onAction);
-            _connected = true;
-        }
+        _connected = !!server;
         _pump();
     }
-
-    Component.onDestruction: _disconnect()
 }

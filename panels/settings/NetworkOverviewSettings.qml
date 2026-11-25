@@ -20,22 +20,11 @@ Flickable {
 
     // The overview's watch (devices, connectivity),
     // held while the page is on screen, not while the window is hidden
-    property bool _held: false
     PageShown {
         id: _onScreen
-        onShownChanged: root._hold(shown)
     }
-    Component.onCompleted: _hold(_onScreen.shown)
-    Component.onDestruction: _hold(false)
-    function _hold(wanted) {
-        if (wanted === _held)
-            return;
-        _held = wanted;
-        if (wanted) {
-            NetworkOverview.watch();
-        } else {
-            NetworkOverview.unwatch();
-        }
+    NetworkHold {
+        wanted: _onScreen.shown
     }
 
     readonly property var _connectivityText: ({

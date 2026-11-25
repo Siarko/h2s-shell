@@ -62,22 +62,26 @@ Item {
         return { block: null, path: "", base: false };
     }
     readonly property var _paths: ModuleRules.anchorBlockPaths(_place.path, _place.base, anchor, kind)
-    property string _reported: ""
+    // The path reported to Anchors, in a JavaScript object the destruction's closure holds:
+    // Qt may drop the block's properties before its destruction runs, and the path must
+    // still be taken back then
+    readonly property var _reported: ({ path: "" })
     property bool _completed: false
 
     function _report() {
-        if (!_completed || path === _reported)
+        if (!_completed || path === _reported.path)
             return;
-        Anchors.remove(_reported);
-        _reported = path;
+        Anchors.remove(_reported.path);
+        _reported.path = path;
         Anchors.add(path);
     }
 
     onPathChanged: _report()
     Component.onCompleted: {
         _completed = true;
+        const reported = _reported;
+        // At the engine's end the singleton may be gone before the block
+        Component.destruction.connect(() => Anchors?.remove(reported.path));
         _report();
     }
-    // At the engine's end the singleton may be gone before the block
-    Component.onDestruction: Anchors?.remove(_reported)
 }
