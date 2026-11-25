@@ -34,8 +34,10 @@
 #     argument counts: the message and the usage line on standard error only, status 2;
 #   - the tree whose copy is taken (--main, --also, on fixture trees with stand-in tools): the
 #     main tree's, one working tree's different copy (said), an element only in one working
-#     tree (said, an old-layout one too), several: refused with their labels; that tree's tool
-#     runs with the same arguments less --main and --also;
+#     tree (said, an old-layout one too), several different copies: refused with their labels;
+#     in git, a tree that only lags behind the main one or another working tree holds no copy,
+#     two trees on one branch hold one (said); that tree's tool runs with the same arguments
+#     less --main and --also; a whole name before a part of a longer one;
 #   - open, run: the entry starts with every inherited H2S_* variable dropped (the shell's
 #     H2S_SHELL_MODULES, a stray H2S_MOCKUP_SHOT), H2S_MOCKUP and H2S_MOCKUP_STATE (a plan:
 #     H2S_MOCKUP_SCENE) set, the rest of the environment kept;
@@ -63,7 +65,7 @@ check() {
 # PATH: the stand-ins, then links to the system tools the screen tool uses (no qs, hyprctl,
 # kitten or kitty among them)
 mkdir -p "$work/fake" "$work/tools"
-for tool in bash env sed grep awk readlink dirname cut tr sort seq sleep sha256sum setsid stty cat diff; do
+for tool in bash env sed grep awk readlink dirname cut tr sort seq sleep sha256sum setsid stty cat diff git; do
     found=$(command -v "$tool") || { echo "mockup-selftest.sh: needs $tool" >&2; exit 2; }
     ln -s "$found" "$work/tools/$tool"
 done
@@ -491,6 +493,57 @@ tool across-review -- -n review delta "${over[@]}"
 check "$(has across-review 'Using the working copy from side (not merged)' && has across-review 'TOOL side -n review delta'; echo $?)" "review across trees: the working copy's tool"
 tool across-here -- -n open clock --main "$REPO" --also "$trees/side=side"
 check "$([ "${status[across-here]}" = 0 ] && has across-here "setsid -f $TOOL __exec tests/fixtures/mockups components/clock" && ! has across-here 'working copy'; echo $?)" "the main tree is this one: opened here"
+# Trees in git: a working tree that only lags behind the main one (stale), or behind another
+# working tree (lag), holds no copy of its own; two trees on one branch (work, ahead) hold one
+gitwork=$work/git
+mkdir -p "$gitwork"
+g() { git -C "$1" -c user.name=t -c user.email=t@t -c commit.gpgsign=false "${@:2}" > /dev/null 2>&1; }
+git init -q "$gitwork/main" > /dev/null 2>&1
+for name in kept gone; do
+    mkdir -p "$gitwork/main/$fix/components/$name"
+    printf 'description: %s\nstate: rest At rest\n' "$name" > "$gitwork/main/$fix/components/$name/about.txt"
+    : > "$gitwork/main/$fix/components/$name/Mockup.qml"
+done
+mkdir -p "$gitwork/main/tests"
+# The stand-in tool says which tree it is in
+printf '#!/usr/bin/env bash\ntree=${0%%/tests/mockup.sh}\necho "TOOL ${tree##*/} $*"\n' > "$gitwork/main/tests/mockup.sh"
+chmod +x "$gitwork/main/tests/mockup.sh"
+: > "$gitwork/main/mockup.qml"
+g "$gitwork/main" add -A && g "$gitwork/main" commit -q -m A
+g "$gitwork/main" worktree add -q --detach "$gitwork/stale"
+g "$gitwork/main" worktree add -q -b work "$gitwork/work"
+echo "state: one More" >> "$gitwork/work/$fix/components/kept/about.txt"
+g "$gitwork/work" commit -q -a -m W1
+g "$gitwork/main" worktree add -q --detach "$gitwork/lag" work
+echo "state: two More" >> "$gitwork/work/$fix/components/kept/about.txt"
+mkdir -p "$gitwork/work/$fix/plans/new"
+printf 'description: New\nscene: one The one\n' > "$gitwork/work/$fix/plans/new/about.txt"
+: > "$gitwork/work/$fix/plans/new/Mockup.qml"
+g "$gitwork/work" add -A && g "$gitwork/work" commit -q -m W2
+g "$gitwork/main" worktree add -q --detach "$gitwork/ahead" work
+g "$gitwork/main" rm -q -r "$fix/components/gone" && g "$gitwork/main" commit -q -m B
+git_over=(--main "$gitwork/main" --also "$gitwork/stale=stale" --also "$gitwork/lag=lag" --also "$gitwork/work=work" --also "$gitwork/ahead=ahead")
+check "$([ -f "$gitwork/ahead/$fix/plans/new/about.txt" ] && [ ! -e "$gitwork/main/$fix/components/gone" ] && grep -q 'state: one' "$gitwork/lag/$fix/components/kept/about.txt"; echo $?)" "the git fixture trees are made"
+tool git-kept -- -n open kept/two "${git_over[@]}"
+check "$(has git-kept 'Opening the working copy from work (not merged; the same in ahead)' && has git-kept 'TOOL work -n open kept/two'; echo $?)" "a working tree's change: taken from it, the tree on the same branch said, a tree lagging behind it and a stale one not counted $(out git-kept | paste -s -d ' ')"
+tool git-new -- -n open new "${git_over[@]}"
+check "$(has git-new 'Opening the working copy from work (not merged; the same in ahead)' && has git-new 'TOOL work -n open new'; echo $?)" "an element only working trees added: taken from them"
+tool git-gone -- -n open gone "${git_over[@]}"
+check "$(has git-gone 'TOOL main -n open gone' && ! has git-gone 'working copy'; echo $?)" "an element the main tree removed: no working tree that only lags behind offers it"
+
+# A whole name before a part of a longer one: the tool itself, copied into a fixture tree
+real=$trees/real
+mkdir -p "$real/tests"
+cp "$TOOL" "$REPO/tests/mockup-about.sh" "$real/tests/"
+: > "$real/mockup.qml"
+element real components/pill "description: Pill" "state: idle Idle"
+element real components/status-pill "description: Status pill" "state: idle Idle"
+env -i HOME="$work/home" PATH="$work/fake:$work/tools" FAKE="$work/state-list" TERM=dumb H2S_MOCKUP_BASE=$fix \
+    bash "$real/tests/mockup.sh" -n open pill/idle > "$work/exact.out" 2>&1
+check "$(grep -q -F "__exec $fix components/pill idle" "$work/exact.out"; echo $?)" "pill, with status-pill beside it: the whole name taken $(cat "$work/exact.out")"
+env -i HOME="$work/home" PATH="$work/fake:$work/tools" FAKE="$work/state-list" TERM=dumb H2S_MOCKUP_BASE=$fix \
+    bash "$real/tests/mockup.sh" -n open ill > "$work/exact-part.out" 2>&1
+check "$(grep -q 'matches several mockups' "$work/exact-part.out"; echo $?)" "a part of both names: refused"
 tool across-none -- -n open nothing-like-this "${over[@]}"
 check "$([ "${status[across-none]}" = 2 ] && has across-none 'no element matches'; echo $?)" "no element in any tree: refused"
 

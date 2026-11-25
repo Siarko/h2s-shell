@@ -40,9 +40,10 @@
 #                   main tree nor an earlier --also), marked [not merged: <label>]; a tree in
 #                   the old layout (mockups/planning/, no about.txt) is read as well;
 #                   open, close <element>, review, approve: the tree whose copy is taken — the
-#                   main tree's, unless exactly one --also tree holds a different copy (said
-#                   on a line), or the one --also tree holding an element the main tree lacks;
-#                   several: refused with their labels. Another tree's own tool then runs.
+#                   main tree's, unless the --also trees that changed it since they left the
+#                   main tree's history hold one copy (said on a line), or the one copy the
+#                   --also trees added of an element the main tree lacks; several different
+#                   copies: refused with their labels. Another tree's own tool then runs.
 #
 # Wrong commands and options print the usage line to standard error, status 2.
 # list and search wrap to the terminal's width (COLUMNS, else the terminal's, else 80), with
@@ -221,7 +222,7 @@ all_names() {
 # resolve <name or part>: the one mockup it names
 resolve() {
     local want=$1 n
-    local -a matches=()
+    local -a matches=() exact=()
     [ -n "$want" ] || { echo "mockup.sh: an empty name" >&2; return 1; }
     if [[ "$want" == planning/* ]]; then
         echo "mockup.sh: \"$want\": mockups/planning/ is now mockups/plans/ (git mv mockups/planning/${want#planning/} mockups/plans/${want#planning/}), the name plans/${want#planning/}" >&2
@@ -229,8 +230,11 @@ resolve() {
     fi
     while IFS= read -r n; do
         [ "$n" = "$want" ] && { echo "$n"; return 0; }
+        [ "${n#*/}" = "$want" ] && exact+=("$n")
         [[ "$n" == *"$want"* ]] && matches+=("$n")
     done < <(all_names)
+    # A whole name before a part of a longer one ("pill", not "status-pill")
+    [ ${#exact[@]} -gt 0 ] && matches=("${exact[@]}")
     case ${#matches[@]} in
         1) echo "${matches[0]}" ;;
         0) echo "mockup.sh: no mockup matches \"$want\" (tests/mockup.sh list)" >&2; return 1 ;;
@@ -669,12 +673,34 @@ folder_in() {
     return 0
 }
 
-# choose_tree <kind>/<name>: the tree whose copy is taken: the main tree's, unless exactly one
-# --also tree holds a different copy; an element the main tree lacks, the one --also tree
-# holding it. Prints "<tree>\t<label>" (no label: the main tree); several trees: refused
+# changed_in <tree> <folder> [<other tree>]: whether that tree changed the folder (a path in
+# it) since it left the main tree's history (or the other tree's): committed, uncommitted or
+# untracked. Without git or without a common history: yes. So a tree that only lags behind
+# (a pinned tree, a branch not rebased) holds no copy of its own
+declare -A tree_base=()
+changed_in() {
+    local tree=$1 path=${2#"$1"/} other=${3:-$list_main} base other_head
+    if [ -z "${tree_base[$tree|$other]+set}" ]; then
+        base=""
+        if command -v git > /dev/null && other_head=$(git -C "$other" rev-parse -q --verify HEAD 2> /dev/null); then
+            base=$(git -C "$tree" merge-base HEAD "$other_head" 2> /dev/null) || base=""
+        fi
+        tree_base[$tree|$other]=$base
+    fi
+    base=${tree_base[$tree|$other]}
+    [ -n "$base" ] || return 0
+    git -C "$tree" diff --quiet "$base" -- "$path" 2> /dev/null || return 0
+    [ -n "$(git -C "$tree" ls-files --others --exclude-standard -- "$path" 2> /dev/null)" ]
+}
+
+# choose_tree <kind>/<name>: the tree whose copy is taken: the main tree's, unless the --also
+# trees that changed it (less those that only lag behind another of them) hold one copy, the same files in each (several trees on one unmerged
+# branch); an element the main tree lacks, the one copy the --also trees added. Of the trees
+# holding that copy, this tree if it is one, else the first. Prints "<tree>\t<label>\t<the
+# other trees' labels>" (no label: the main tree); several different copies: refused
 choose_tree() {
-    local key=$1 main_folder folder entry tree label
-    local -a found=()
+    local key=$1 main_folder folder entry tree j picked=-1 others=""
+    local -a found=() folders=() copies=()
     main_folder=$(folder_in "$list_main" "$key")
     for entry in "${also_trees[@]}"; do
         tree=$(cd "${entry%=*}" && pwd -P)
@@ -682,35 +708,64 @@ choose_tree() {
         folder=$(folder_in "$tree" "$key")
         [ -n "$folder" ] || continue
         [ -n "$main_folder" ] && diff -r -q "$main_folder" "$folder" > /dev/null 2>&1 && continue
+        changed_in "$tree" "$folder" || continue
         found+=("$tree"$'\t'"${entry##*=}")
+        folders+=("$folder")
     done
-    if [ ${#found[@]} -eq 0 ]; then
-        printf '%s\t\n' "$list_main"
-    elif [ ${#found[@]} -eq 1 ]; then
-        echo "${found[0]}"
-    else
+    [ ${#found[@]} -gt 0 ] || { printf '%s\t\t\n' "$list_main"; return 0; }
+    # A tree that only lags behind another holding a different copy holds none of its own
+    local -a kept_found=() kept_folders=()
+    local k lags
+    for j in "${!found[@]}"; do
+        lags=0
+        for k in "${!found[@]}"; do
+            [ "$j" != "$k" ] || continue
+            diff -r -q "${folders[j]}" "${folders[k]}" > /dev/null 2>&1 && continue
+            changed_in "${found[j]%%$'\t'*}" "${folders[j]}" "${found[k]%%$'\t'*}" || { lags=1; break; }
+        done
+        [ "$lags" = 1 ] && continue
+        kept_found+=("${found[j]}")
+        kept_folders+=("${folders[j]}")
+    done
+    found=("${kept_found[@]}") folders=("${kept_folders[@]}")
+    # The copies: the first tree of each set of identical folders
+    for j in "${!folders[@]}"; do
+        local same=0 c
+        for c in "${copies[@]}"; do
+            diff -r -q "${folders[c]}" "${folders[j]}" > /dev/null 2>&1 && { same=1; break; }
+        done
+        [ "$same" = 1 ] || copies+=("$j")
+    done
+    if [ ${#copies[@]} -gt 1 ]; then
         if [ -n "$main_folder" ]; then
-            echo "mockup.sh: $key differs from the main tree's in several working trees; choose one with --tree:" >&2
+            echo "mockup.sh: $key differs from the main tree's in several working trees, each its own way; choose one with --tree:" >&2
         else
-            echo "mockup.sh: $key is in several working trees; choose one with --tree:" >&2
+            echo "mockup.sh: $key is in several working trees, each its own way; choose one with --tree:" >&2
         fi
         for entry in "${found[@]}"; do echo "  ${entry#*$'\t'}" >&2; done
         exit 2
     fi
+    for j in "${!found[@]}"; do
+        [ "${found[j]%%$'\t'*}" = "$REPO" ] && picked=$j
+    done
+    [ "$picked" -ge 0 ] || picked=0
+    for j in "${!found[@]}"; do
+        [ "$j" = "$picked" ] || others+="${others:+, }${found[j]#*$'\t'}"
+    done
+    printf '%s\t%s\n' "${found[picked]}" "$others"
 }
 
 # across_trees <command> <element>: with --main or --also, the tree whose copy of the element is taken;
 # another tree's own tool then runs on the same arguments (without --main and --also)
 across_trees() {
-    local i chosen tree label verb=Using
+    local i chosen tree label others verb=Using
     [ -n "$main_tree" ] || [ ${#also_trees[@]} -gt 0 ] || return 0
     [ "$1" = open ] && verb=Opening
     collect quiet
     i=$(find_element "$2") || exit 2
     chosen=$(choose_tree "${el_key[i]}") || exit 2
-    tree=${chosen%%$'\t'*}
-    label=${chosen#*$'\t'}
-    [ -z "$label" ] || echo "$verb the working copy from $label (not merged)"
+    IFS=$'\t' read -r tree label others <<< "$chosen"
+    [ -z "$label" ] || echo "$verb the working copy from $label (not merged${others:+; the same in $others})"
     [ "$tree" = "$REPO" ] && return 0
     [ -x "$tree/tests/mockup.sh" ] || { echo "mockup.sh: no tests/mockup.sh in $tree" >&2; exit 2; }
     exec "$tree/tests/mockup.sh" "${pass_args[@]}"

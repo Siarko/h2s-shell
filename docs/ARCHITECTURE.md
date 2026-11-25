@@ -2820,8 +2820,9 @@ and diff images: inline through `kitten icat` in a terminal that draws the kitty
 protocol, else their paths. `approve <name>` hands the run to `tests/run-mockups.sh
 --approve`; `-n` prints the commands, `help` (or `-h`) the commands and options, and a wrong
 command or option the usage line on standard error with status 2. Given other trees
-(`--main`, `--also`), it takes an element from the main tree, or from the one other tree
-holding a different copy or holding it alone, and runs that tree's own tool.
+(`--main`, `--also`), it takes an element from the main tree, unless the other trees that
+changed it since they left the main tree's history (less those only lagging behind another of
+them) hold one copy, and runs that tree's own tool; several different copies are refused.
 `tests/mockup-selftest.sh`, a part of `--quick`, checks
 it on a stand-in `qs`, `hyprctl` and `kitten`.
 
