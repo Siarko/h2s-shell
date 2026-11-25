@@ -134,9 +134,10 @@ QtObject {
         // The probe's own tools and where a system's pkexec is come from the distribution's
         // facts: looked at once it has answered; not known, the probe is not run (no answer:
         // taken for the real pkexec)
+        const kept = _kept;
         Distribution.whenReady(() => {
             // Gone meanwhile (its module turned off): nothing is asked for it
-            if (root._gone)
+            if (kept.gone)
                 return;
             const toolPath = ModuleRules.probeToolPath(Distribution.detection.facts);
             const verdict = probe => {
@@ -159,8 +160,10 @@ QtObject {
         });
     }
 
-    // Destroyed: a look-up waiting for Distribution asks nothing for it any more
-    property bool _gone: false
+    // Whether it was destroyed (a look-up waiting for Distribution asks nothing for it any
+    // more) and the key its runs are owned under: in a JavaScript object closures hold, as Qt
+    // may drop this object's properties before its destruction runs
+    readonly property var _kept: ({ gone: false, ownerKey: "" })
 
     // Test mode, the gate: the elevating programs the probe found to be stand-ins (REMOVED IN
     // SLICE Z with the gate)
@@ -172,7 +175,6 @@ QtObject {
     // This object's runs, one at a time: the one in the shell's queue, and those after it
     property var _queue: []
     property var _current: null
-    property string _ownerKey: ""
 
     // The id of the module in `directory` ("" for none)
     function _idOf(directory) {
@@ -196,10 +198,10 @@ QtObject {
         const request = _queue[0];
         _queue = _queue.slice(1);
         _current = request;
-        if (_ownerKey === "")
-            _ownerKey = PrivilegedRuns.newOwnerKey();
+        if (_kept.ownerKey === "")
+            _kept.ownerKey = PrivilegedRuns.newOwnerKey();
         PrivilegedRuns.startLegacy({
-            owner: _ownerKey, argv: request.elevating.concat(request.command), systemPkexec: request.systemPkexec, program: request.command[0],
+            owner: _kept.ownerKey, argv: request.elevating.concat(request.command), systemPkexec: request.systemPkexec, program: request.command[0],
             environment: request.environment, testMode: Modules.host.testMode,
             standIns: Modules.host.testStandIns.concat(root._checkedElevate),
             moduleId: request.moduleId, what: request.label
@@ -242,9 +244,12 @@ QtObject {
 
     property Io.CommandAction _probe: Io.CommandAction {}
 
-    Component.onDestruction: {
-        _gone = true;
-        if (_ownerKey !== "")
-            PrivilegedRuns.ownerGone(_ownerKey);
+    Component.onCompleted: {
+        const kept = _kept;
+        Component.destruction.connect(() => {
+            kept.gone = true;
+            if (kept.ownerKey !== "")
+                PrivilegedRuns.ownerGone(kept.ownerKey);
+        });
     }
 }

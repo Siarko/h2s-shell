@@ -136,6 +136,16 @@ Item {
     visible: currentNotif !== null || slideIn.running || slideOut.running
 
     Component.onCompleted: {
+        const kept = _kept;
+        Object.assign(kept, _keptNow);
+        Component.destruction.connect(() => {
+            if (kept.toastId < 0 || !kept.present)
+                return;
+            if (kept.modal)
+                Toasts.modalScreenGone(kept.toastId);
+            else
+                Toasts.toastGone(kept.toastId);
+        });
         if (present)
             _enter();
         Qt.callLater(() => root._placing = false);
@@ -196,14 +206,11 @@ Item {
     // Gone while still in its queue — its screen's HUD destroyed: out of the queue too, or the
     // toasts after it would wait for it to count down, for ever
     // A modal whose screen went waits in its queue again (Toasts.modalScreenGone)
-    Component.onDestruction: {
-        if (toastId < 0 || !present)
-            return;
-        if (modal)
-            Toasts.modalScreenGone(toastId);
-        else
-            Toasts.toastGone(toastId);
-    }
+    // What that reads is kept in a JavaScript object the destruction's closure holds (set in
+    // Component.onCompleted): Qt may drop the item's properties before its destruction runs
+    readonly property var _kept: ({ toastId: -1, present: false, modal: false })
+    readonly property var _keptNow: ({ toastId: toastId, present: present, modal: modal })
+    on_KeptNowChanged: Object.assign(_kept, _keptNow)
 
     onRestXChanged: {
         if (present && !modal && !dragging && !slideIn.running && !slideOut.running)

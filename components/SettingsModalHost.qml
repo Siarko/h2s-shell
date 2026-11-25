@@ -30,7 +30,10 @@ Item {
     readonly property alias modal: _modal
 
     property var _spec: null
-    property var _onAnswer: null
+    // The open modal's answer handler and subject, in a JavaScript object the destruction's
+    // closure holds: Qt may drop the host's properties before its destruction runs, and the
+    // asker must still get its cancelled answer then
+    readonly property var _asking: ({ onAnswer: null, subject: undefined })
     // The last refusal logged: the same one again is not (log on a change of outcome)
     property string _lastRefusal: ""
 
@@ -44,7 +47,22 @@ Item {
 
     on_LockedChanged: if (_locked) cancel("lock")
     on_WindowShownChanged: if (!_windowShown) cancel("window")
-    Component.onDestruction: cancel("window")
+    // Gone while open: cancelled for "window", without the values (the modal's content is
+    // going with it)
+    Component.onCompleted: {
+        const asking = _asking;
+        Component.destruction.connect(() => {
+            const callback = asking.onAnswer;
+            asking.onAnswer = null;
+            if (!callback)
+                return;
+            try {
+                callback({ button: "cancel", cancelled: true, reason: "window", values: {}, subject: asking.subject });
+            } catch (error) {
+                console.warn("[SettingsModal] the answer's handler threw: " + error);
+            }
+        });
+    }
 
     function ask(spec, onAnswer) {
         const refusal = ApiElementRules.modalRefusal(open, _locked);
@@ -56,7 +74,8 @@ Item {
         }
         _lastRefusal = "";
         _spec = spec !== null && typeof spec === "object" ? spec : {};
-        _onAnswer = typeof onAnswer === "function" ? onAnswer : null;
+        _asking.onAnswer = typeof onAnswer === "function" ? onAnswer : null;
+        _asking.subject = _spec.subject;
         return "";
     }
 
@@ -85,9 +104,9 @@ Item {
         const values = Object.assign({}, _modal.values,
             contentValues !== null && typeof contentValues === "object" ? contentValues : {});
         const subject = _spec.subject;
-        const callback = _onAnswer;
+        const callback = _asking.onAnswer;
         _spec = null;
-        _onAnswer = null;
+        _asking.onAnswer = null;
         _lastRefusal = "";
         if (!callback)
             return;

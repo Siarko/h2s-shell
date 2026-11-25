@@ -39,15 +39,31 @@ Item {
             if (handler)
                 handler.destroy();
             handler = root.target ? _handlerMaker.createObject(root.target, { parent: root.target }) : null;
+            made.handler = handler;
         }
+        // The handler made, in a JavaScript object the destruction's closure holds: Qt may
+        // drop the tooltip's properties (and its children's) before its destruction runs, and
+        // the handler on the target must still go then. Here, not on the tooltip: a module
+        // reaches only the tooltip's pinned properties
+        readonly property var made: ({ handler: null })
     }
     Component {
         id: _handlerMaker
         HoverHandler {}
     }
     onTargetChanged: _hover.attach()
-    Component.onCompleted: _hover.attach()
-    Component.onDestruction: if (_hover.handler) _hover.handler.destroy()
+    Component.onCompleted: {
+        const made = _hover.made;
+        Component.destruction.connect(() => {
+            const handler = made.handler;
+            made.handler = null;
+            // A target destroyed took its handler with it
+            try {
+                handler?.destroy();
+            } catch (error) {}
+        });
+        _hover.attach();
+    }
 
     Components.HoverTip {
         target: root.target ?? root

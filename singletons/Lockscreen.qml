@@ -47,6 +47,16 @@ import qs.screensaver
 Singleton {
     id: root
 
+    // Distribution's detection, followed through a Connections owned here (it ends with the
+    // lock): the start's closures listen on this signal of its own
+    signal _distributionDetected()
+    property Connections _distribution: Connections {
+        target: Distribution
+        function onDetectionChanged() {
+            root._distributionDetected();
+        }
+    }
+
     // ---- For the rest of the shell ----
 
     // What the lock surfaces render (LockRules.view): replaced, never mutated
@@ -605,7 +615,7 @@ Singleton {
             probeFallbackDirectly();
         });
 
-        Distribution.detectionChanged.connect(() => {
+        _distributionDetected.connect(() => {
             if (Distribution.detection.ready && fallbackDirectFor !== 0)
                 probeFallbackDirectly();
         });

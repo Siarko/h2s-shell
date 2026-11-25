@@ -48,10 +48,11 @@ WlSessionLockSurface {
         _register();
         _keys.forceActiveFocus();
     }
+    // Unconditional: Qt may drop the surface's properties before its destruction runs, and
+    // the lock forgets only a surface it has (a surface never registered is left alone)
     Component.onDestruction: {
         _gone = true;
-        if (_surfaceId !== null)
-            Lockscreen.removeSurface(root);
+        Lockscreen.removeSurface(root);
     }
 
     // The rules' forwardKey effect, addressed to this instance

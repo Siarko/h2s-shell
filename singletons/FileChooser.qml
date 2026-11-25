@@ -164,31 +164,46 @@ Singleton {
 
     // ---- Inside ----
 
-    Component.onDestruction: _shutDown()
+    // The open call, its dialog and its window, in a JavaScript object the shutdown's closure
+    // holds: Qt may drop the singleton's properties before its destruction runs
+    readonly property var _open: ({ call: null, dialog: null, window: null })
+    on_CurrentChanged: _open.call = _current
+    on_DialogChanged: _open.dialog = _dialog
+    on_WindowChanged: _open.window = _window
 
-    // The shell is going: the open call ends unanswered, and its dialog is closed and its
-    // window hidden now, not after the event loop turns
-    function _shutDown() {
-        _openingLimit.stop();
-        _deliver.stop();
-        _outbox = [];
-        if (_current !== null) {
-            _current.answered = true;
-            _current = null;
-        }
-        const dialog = _dialog;
-        const window = _window;
-        _dialog = null;
-        _window = null;
-        try {
-            if (dialog?.visible)
-                dialog.close();
-        } catch (error) {}
-        dialog?.destroy();
-        if (window) {
-            window.visible = false;
-            window.destroy();
-        }
+    // The shell is going (at the destruction; a suite calls it): the open call ends
+    // unanswered, and its dialog is closed and its window hidden now, not after the event
+    // loop turns. A closure over what it needs, never over the singleton's own members
+    property var _shutDown: null
+    Component.onCompleted: {
+        const open = _open;
+        const openingLimit = _openingLimit;
+        const deliver = _deliver;
+        const shutDown = () => {
+            openingLimit.stop();
+            deliver.stop();
+            if (open.call !== null)
+                open.call.answered = true;
+            const dialog = open.dialog;
+            const window = open.window;
+            open.call = open.dialog = open.window = null;
+            // Writes only (each reaches nothing once Qt dropped the properties)
+            root._outbox = [];
+            root._current = null;
+            root._dialog = null;
+            root._window = null;
+            try {
+                if (dialog?.visible)
+                    dialog.close();
+            } catch (error) {}
+            dialog?.destroy();
+            if (window) {
+                window.visible = false;
+                window.destroy();
+            }
+        };
+        _shutDown = shutDown;
+        Component.destruction.connect(shutDown);
     }
 
     onLockedChanged: {

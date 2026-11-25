@@ -167,12 +167,15 @@ QtObject {
     readonly property bool registered: _registered
     property bool _registered: false
 
+    // Unregistered at its destruction by a closure over the id it registered with: Qt may
+    // drop the provider's properties before its destruction runs
     Component.onCompleted: {
-        if (autoRegister)
-            _registered = VpnManager.registerProvider(root);
-    }
-    Component.onDestruction: {
-        if (_registered)
-            VpnManager.unregisterProvider(providerId, root);
+        if (!autoRegister)
+            return;
+        _registered = VpnManager.registerProvider(root);
+        if (!_registered)
+            return;
+        const id = providerId;
+        Component.destruction.connect(() => VpnManager.unregisterProvider(id, root));
     }
 }

@@ -626,8 +626,13 @@ Scope {
             return null;
         }
         // Its identity is fixed here, for good (readonly in the handle)
-        if (_handleKey === "")
+        if (_handleKey === "") {
             _handleKey = ModuleHandleHosts.register(root);
+            // Forgotten at the host's destruction by a closure over the key: Qt may drop the
+            // host's properties before its destruction runs
+            const key = _handleKey;
+            Component.destruction.connect(() => ModuleHandleHosts.forgetLater(key));
+        }
         const made = component.createObject(root, { moduleId: id, _hostKey: _handleKey });
         if (made)
             _handles.set(id, made);
@@ -2244,11 +2249,7 @@ Scope {
     // Component.onDestruction, newest first — a dependent's main is always newer than its
     // providers' (made after them, and gone before them) — and then deletes them. Nothing is
     // asked of the modules here, and nothing more is scheduled
-    Component.onDestruction: {
-        _dying = true;
-        if (_handleKey !== "")
-            ModuleHandleHosts.forgetLater(_handleKey);
-    }
+    Component.onDestruction: _dying = true
 
     // What this host's handles find it by (ModuleHandleHosts): never handed to a module
     property string _handleKey: ""

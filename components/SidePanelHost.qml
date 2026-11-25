@@ -13,7 +13,10 @@ Item {
 
     // The SidePanel open now, or null, and what closes it
     property Item current: null
-    property var _closer: null
+    // What closes the open panel (its closer), in a JavaScript object the destruction's
+    // closure holds: Qt may drop the host's properties before its destruction runs, and the
+    // open panel must still be told then
+    readonly property var _open: ({ closer: null })
     readonly property alias drawer: _drawer
 
     readonly property bool _locked: ApiElements.sessionLocked
@@ -21,7 +24,15 @@ Item {
 
     on_LockedChanged: if (_locked) close("locked")
     on_WindowShownChanged: if (!_windowShown) close("pageGone")
-    Component.onDestruction: close("pageGone")
+    Component.onCompleted: {
+        const open = _open;
+        Component.destruction.connect(() => {
+            const closing = open.closer;
+            open.closer = null;
+            if (closing)
+                closing(ApiElementRules.sidePanelEvent(true, "pageGone", false).reason);
+        });
+    }
 
     // `panel` asks to open, `closer(reason)` closing it: "" when it shows, else why not (it
     // then stays closed)
@@ -31,8 +42,8 @@ Item {
             return refusal;
         if (current === panel)
             return "";
-        const before = _closer;
-        _closer = closer;
+        const before = _open.closer;
+        _open.closer = closer;
         current = panel;
         if (before)
             before(ApiElementRules.sidePanelEvent(true, "otherOpened", false).reason);
@@ -44,8 +55,8 @@ Item {
         const outcome = ApiElementRules.sidePanelEvent(current !== null, event, false);
         if (!outcome.close)
             return;
-        const closing = _closer;
-        _closer = null;
+        const closing = _open.closer;
+        _open.closer = null;
         current = null;
         if (closing)
             closing(outcome.reason);
@@ -55,7 +66,7 @@ Item {
     function hide(panel) {
         if (current !== panel)
             return;
-        _closer = null;
+        _open.closer = null;
         current = null;
     }
 
@@ -66,7 +77,7 @@ Item {
             return;
         _drawer.dropContent();
         if (current === panel) {
-            _closer = null;
+            _open.closer = null;
             current = null;
         }
         _shown = null;
