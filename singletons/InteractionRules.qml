@@ -146,6 +146,13 @@ Singleton {
         return isBound(effective(byTouch ? "doubleTap" : "doubleClick", lookup).binding);
     }
 
+    // Whether a press arms the hold, so its release after the hold interval is no click: a
+    // pointer's only when a long press is bound (its fallback is the click itself, so a slow
+    // click stays a click); a finger's when its touch hold, or its fallback, is bound
+    function armsLongPress(byTouch, lookup): bool {
+        return byTouch ? isBound(effective("touchHold", lookup).binding) : isBound(lookup("longPress"));
+    }
+
     // A wheel event on one axis ("vertical" or "horizontal"). `notches` is the movement in
     // notches, signed as Qt's angleDelta (positive is up, and on the horizontal axis left);
     // `whole` the signed whole notches it completed (ScrollNotches.feed). The continuous
@@ -360,9 +367,12 @@ Singleton {
         return interaction => resolve(interaction, _own(values, interaction), declared, hasPopup, popupMode, ownIds).binding;
     }
 
-    // A finger interaction's fallback while it is unassigned
+    // An interaction's fallback while it is unassigned: a finger's does what its pointer one
+    // does, and a long press or a modifier click is a left click — as a slow click or a
+    // Shift+click is today
     function fallbackOf(interaction): string {
-        const fallbacks = { tap: "leftClick", doubleTap: "doubleClick", touchHold: "rightClick" };
+        const fallbacks = { tap: "leftClick", doubleTap: "doubleClick", touchHold: "rightClick",
+                            longPress: "leftClick", shiftClick: "leftClick", ctrlClick: "leftClick", altClick: "leftClick" };
         return Object.prototype.hasOwnProperty.call(fallbacks, interaction) ? fallbacks[interaction] : "";
     }
 
@@ -371,8 +381,8 @@ Singleton {
     }
 
     // The binding an interaction runs, its fallback followed: { interaction (whose binding
-    // it is), binding }. An unassigned finger interaction does what its pointer one does; an
-    // explicit nothing stops that. The tap rule: a tap on a cell whose left click runs
+    // it is), binding }. An unassigned interaction with a fallback (fallbackOf) does what
+    // that one does; an explicit nothing stops that. The tap rule: a tap on a cell whose left click runs
     // nothing while hovering opens its popup toggles the popup — a finger cannot hover.
     function effective(interaction, lookup): var {
         const own = lookup(interaction);
