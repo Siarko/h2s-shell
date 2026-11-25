@@ -102,8 +102,13 @@ make_bin() {
     standin sudo << 'STANDIN'
 terminal=no
 [ -t 0 ] && terminal=yes
+# /proc/self/status read whole, in one read: line by line, bash seeks back after each line,
+# the kernel makes the file anew at each seek, and a line before NoNewPrivs that changed
+# length meanwhile (SigQ, the user's queued signals, which load moves across 99/100)
+# shifts the next line's start, so that the key was missed
 privileges=unknown
-while read -r key value; do [ "$key" = NoNewPrivs: ] && privileges=$value; done < /proc/self/status
+IFS= read -r -d '' status < /proc/self/status
+[[ $'\n'$status =~ $'\n'NoNewPrivs:[[:space:]]*([0-9]+) ]] && privileges=${BASH_REMATCH[1]}
 echo "sudo stdin-terminal=$terminal no-new-privs=$privileges: $*" >> "$control/log"
 [ -f "$control/sudo-status" ] && exit "$(cat "$control/sudo-status")"
 exit 0
@@ -143,8 +148,10 @@ case "$*" in
             mkdir -p "$3/scripts"
             {
                 echo "control='$control'"
+                # /proc/self/status read whole, as the stand-in sudo reads it (why: there)
                 echo 'privileges=unknown'
-                echo 'while read -r key value; do [ "$key" = NoNewPrivs: ] && privileges=$value; done < /proc/self/status'
+                echo "IFS= read -r -d '' status < /proc/self/status"
+                echo '[[ $'"'"'\n'"'"'$status =~ $'"'"'\n'"'"'NoNewPrivs:[[:space:]]*([0-9]+) ]] && privileges=${BASH_REMATCH[1]}'
                 echo 'echo "build-helper no-new-privs=$privileges: $*" >> "$control/log"'
                 echo '[ ! -e "$control/build-fails" ] || { echo "a compiler error" >&2; exit 1; }'
                 echo 'echo "$HOME/.cache/h2s-shell/helper/0123456789abcdef/h2s-helper"'
