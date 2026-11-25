@@ -181,6 +181,19 @@ TestCase {
         hosted.y = 262;
         assert(_until(() => _attached(hosted) && _listOf(hosted).y < hosted.y), "no room below: the list opens above the dropdown");
         _close(hosted);
+        // Little room on both sides: no sliver, kept inside the host; and not past its right edge
+        host.height = 120;
+        hosted.y = 45;
+        hosted.x = 120;
+        hosted.open = true;
+        assert(_until(() => _listOf(hosted)?.visible === true), "open in a short host");
+        const short = _listOf(hosted);
+        assert(_until(() => short.height >= Math.min(short._wanted, short.leastHeight) - 0.5), "the list keeps its least height (" + short.height + ")");
+        assert(short.y >= 0 && short.y + short.height <= host.height + 0.5, "… inside the host (" + short.y + " + " + short.height + ")");
+        assert(short.x >= 0 && short.x + short.width <= host.width + 0.5, "… not past the host's right edge (" + short.x + " + " + short.width + ")");
+        _close(hosted);
+        host.height = 300;
+        hosted.x = 10;
         hosted.y = 20;
     }
 
@@ -338,6 +351,17 @@ TestCase {
         const blue = _rowOf(grouped, "Blue");
         input.click(blue, blue.width / 2, blue.height / 2);
         assert(_until(() => !grouped.open && grouped.value === "b"), "a click on an entry picks it");
+        // The current choice disabled: Down goes on from it, not from the first
+        grouped.value = "o";
+        input.key("space");
+        assert(_until(() => grouped.open && _current(grouped) === "Orange"), "opened on the disabled current choice");
+        input.key("Down");
+        assert(_until(() => _current(grouped) === "Yellow"), "Down: the next enabled after it (" + _current(grouped) + ")");
+        input.key("Up");
+        input.key("Up");
+        assert(_until(() => _current(grouped) === "Red"), "Up twice: back past it (" + _current(grouped) + ")");
+        input.key("Escape");
+        assert(_until(() => !grouped.open), "closed");
     }
 
     function runAsync() {

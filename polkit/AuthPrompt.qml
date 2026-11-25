@@ -215,6 +215,9 @@ PanelWindow {
                     actionId: root.flow?.actionId ?? ""
                     onCommandToggled: _input.forceActiveFocus()
                     onIdentityPicked: index => root.flow.selectedIdentity = root._identities[index]
+                    // A click on the account picker takes the keys; once its list closes the
+                    // typing goes to the password again
+                    onIdentityListClosed: _input.forceActiveFocus()
                 }
 
                 // What asks, where polkit's message is the description

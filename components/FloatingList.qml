@@ -10,7 +10,7 @@ import qs.singletons
 // It stays attached to the anchor: while shown it follows the anchor's place in the host —
 // a page scrolled under it, a layout settling, the host resized — and opens upwards when
 // there is no room below (on neither side room for all of it: on the larger side, as tall
-// as fits). The anchor scrolled out of view (out of a clipping ancestor, or of the host)
+// as fits, at least `leastHeight`, and inside the host — over the anchor if need be). The anchor scrolled out of view (out of a clipping ancestor, or of the host)
 // closes it. Moved out from under the anchor, it no longer hides with it: it shows only
 // while the anchor and its window are shown, so a page hidden with its list open (or a
 // plan's scene that holds one open) leaves neither the list nor its press catcher over the
@@ -36,6 +36,9 @@ Rectangle {
     // Wide as the anchor by default
     property real listWidth: anchorItem ? anchorItem.width : 120
     property real maximumHeight: 240
+    // As short as it gets where there is little room (about three rows), unless its items
+    // need less: placed then over the anchor rather than shrunk to a sliver
+    property real leastHeight: 80
     default property alias content: _items.data
     signal closed
     // What a side panel looks for to close an open list before itself (SideDrawer)
@@ -66,8 +69,8 @@ Rectangle {
     parent: _host
     z: 1000
     visible: open && _anchorShown && _anchorInView
-    width: listWidth
-    height: Math.max(0, Math.min(_items.implicitHeight + 6, maximumHeight, _room))
+    width: _host ? Math.min(listWidth, _host.width) : listWidth
+    height: Math.max(Math.min(_wanted, leastHeight), Math.min(_wanted, _room))
     radius: Theme.dropdown.radius
     color: Theme.popupBackground
     border.width: Theme.border.width
@@ -105,7 +108,9 @@ Rectangle {
         const below = wanted <= roomBelow || (wanted > roomAbove && roomBelow >= roomAbove);
         _room = Math.max(0, below ? roomBelow : roomAbove);
         x = Math.max(0, Math.min(top.x, _host.width - width));
-        y = below ? top.y + anchorItem.height + 2 : top.y - height - 2;
+        // Kept inside the host, over the anchor when the room is less than its least height
+        const wantedY = below ? top.y + anchorItem.height + 2 : top.y - height - 2;
+        y = Math.max(0, Math.min(wantedY, _host.height - height));
     }
 
     // The entries shown, in the order they stand
@@ -143,16 +148,24 @@ Rectangle {
     // `steps` enabled entries on from the current one (negative: back), at most to the
     // first or last; with none current, Down starts at the first, Up at the last
     function _move(steps) {
-        const entries = _entries().filter(_enabled);
+        const all = _entries();
+        const entries = all.filter(_enabled);
         if (entries.length === 0)
             return;
         const at = entries.indexOf(currentItem);
+        const shownAt = all.indexOf(currentItem);
         let next;
-        if (at < 0)
-            next = steps > 0 ? Math.min(steps - 1, entries.length - 1) : Math.max(entries.length + steps, 0);
-        else
-            next = Math.max(0, Math.min(entries.length - 1, at + steps));
-        highlight(entries[next]);
+        if (at >= 0) {
+            next = at + steps;
+        } else if (shownAt >= 0) {
+            // On an entry that cannot be picked (the current choice, disabled): from its place
+            const after = entries.findIndex(entry => all.indexOf(entry) > shownAt);
+            const firstAfter = after < 0 ? entries.length : after;
+            next = steps > 0 ? firstAfter + steps - 1 : firstAfter + steps;
+        } else {
+            next = steps > 0 ? steps - 1 : entries.length + steps;
+        }
+        highlight(entries[Math.max(0, Math.min(entries.length - 1, next))]);
     }
     // As many entries as one view of the list holds
     function _pageSteps() {

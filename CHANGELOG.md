@@ -18,6 +18,11 @@ section to the new version and date.
 ### Module API
 The interface modules are written against (`qs.api`), versioned on its own
 (`Api.version`; its reference is `api/Api.qml`).
+- Dropdown (no new properties): it takes the keyboard focus on Tab and on a click, and
+  keeps it while its list is open and after it closes; Space, Enter, Down or Up open the
+  list, the arrows, Home, End, the pages and a first letter move, Enter or Space picks,
+  Escape closes. A module that keeps the typing in a field of its own beside a dropdown
+  gives that field the focus back itself.
 - 1.43: module.json's `migrations`, an ordered list of the module's settings migrations
   (`{ "id": "taildrop-folder", "since": "0.8.0", "file": "migrations/TaildropFolder.qml",
   "scope": ["setting:taildrop.*", "store:folders"] }`): each a file inside the module, its

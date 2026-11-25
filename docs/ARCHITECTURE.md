@@ -2564,7 +2564,8 @@ after another) get the lock bed's virtual pointer and keyboard (`tests/lock/inpu
 on the run's private headless compositor, and send through `tests/input/InputDriver.qml`
 (`click`, `pointAt`, `wheel`, `key`, `type`), each call returning once the compositor has the
 input; the suite then waits on the state it expects. `tests/run-input.sh <Suite>…` runs some.
-`FloatingListInputTest` drives the dropdowns and floating lists this way.
+`FloatingListInputTest` drives the dropdowns and floating lists this way, `AuthPromptInputTest`
+the polkit prompt on a stand-in flow (its account picker hands the keys back to the password).
 
 `tests/device/` drives the running shell on a touch device through the whole stack — a
 virtual touchscreen (uinput) → Hyprland → the shell, and the on-screen keyboard reacting —

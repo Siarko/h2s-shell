@@ -25,7 +25,7 @@ LOCKTEST_INPUT=1
 # shellcheck source=headless.sh
 source "$REPO/tests/headless.sh"
 
-registered=$(sed -n 's/^ *property var _[A-Za-z0-9]*: \([A-Za-z0-9]*Test\) {}.*$/\1/p' "$REPO/tests-input.qml")
+registered=$(sed -n 's/^ *property var _[A-Za-z0-9]*: \([A-Za-z0-9]*Test\) {.*}.*$/\1/p' "$REPO/tests-input.qml")
 selected=()
 for name in "$@"; do
     grep -q -x -F -- "$name" <<< "$registered" || setup_error "no suite '$name' in tests-input.qml (the suites: $(paste -s -d ' ' <<< "$registered"))"

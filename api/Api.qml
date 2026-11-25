@@ -614,7 +614,9 @@ import qs.singletons.network
 //   Dropdown               (1.5) options ([{ value, label }]; other fields of an option
 //                          are dropped), value (the owner sets it),
 //                          placeholder (shown while the value is none of the options);
-//                          size: "xs" | "s" | "m"; picked(value) — the choice made
+//                          size: "xs" | "s" | "m"; picked(value) — the choice made.
+//                          It takes the keyboard focus on Tab and on a click, and keeps it
+//                          after its list closes; open, the keys move and pick (Escape closes)
 //   InputField             (1.5) text, placeholder, problem (the value is wrong now),
 //                          password (hidden, with an eye), revealed (the eye flips it);
 //                          size: "xs" | "s" | "m"; accepted(), textEdited(),

@@ -21,6 +21,9 @@ Rectangle {
     property bool open: false
     property int fontSize: Theme.fontSizeBody
     signal picked(var value)
+    // The list closed, whatever closed it (a pick, Escape, a press outside, its page hidden):
+    // where another field keeps the keyboard (a password), the owner hands the focus back
+    signal listClosed()
 
     readonly property var _current: options.find(option => option.value === value) ?? null
 
@@ -53,7 +56,12 @@ Rectangle {
         }
     }
     // Opened: on the current choice
-    onOpenChanged: if (open) Qt.callLater(() => _list.highlight(_list._entries().find(entry => entry.picked) ?? null))
+    onOpenChanged: {
+        if (open)
+            Qt.callLater(() => _list.highlight(_list._entries().find(entry => entry.picked) ?? null));
+        else
+            listClosed();
+    }
     Behavior on border.color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
     // A colour dot, when the option has a colour

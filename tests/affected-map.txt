@@ -151,6 +151,12 @@ tests/input/* self:tests/run-input.sh
 +components/Dropdown.qml self:tests/run-input.sh
 +components/WheelScroll.qml self:tests/run-input.sh
 +tests/lock/input/ltinput.py self:tests/run-input.sh
++components/ReorderList.qml self:tests/run-input.sh
++components/PointerArea.qml self:tests/run-input.sh
++components/FloatingListHeader.qml self:tests/run-input.sh
++polkit/AuthPrompt.qml self:tests/run-input.sh
++polkit/AuthAnnouncement.qml self:tests/run-input.sh
++tests/input/InputDriver.qml self:tests/run-input.sh
 # The mockups' runner, root entry, window and the runners' fixture mockups
 tests/run-mockups.sh self:tests/run-mockups-selftest.sh
 mockup.qml self:tests/run-mockups-selftest.sh mockup:all

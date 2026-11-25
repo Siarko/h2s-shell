@@ -30,6 +30,8 @@ ColumnLayout {
     property bool commandOpen: false
     signal commandToggled()
     signal identityPicked(int index)
+    // The account list closed (picked or not): the prompt gives the password field the keys back
+    signal identityListClosed()
 
     readonly property var layout: PolkitRules.promptLayout(announcement, identityNames.length)
     readonly property bool _polkitUnderCommand: layout.polkitMessage === "command"
@@ -78,6 +80,7 @@ ColumnLayout {
             options: root.identityNames.map((name, index) => ({ value: index, label: name }))
             value: root.identityIndex
             onPicked: index => root.identityPicked(index)
+            onListClosed: root.identityListClosed()
         }
 
         Label {

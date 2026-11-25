@@ -21,9 +21,10 @@ QtObject {
     readonly property bool _instant: { Theme.instantAnimations = true; return true; }
 
     property var _floatingListInput: FloatingListInputTest {}
+    property var _authPromptInput: AuthPromptInputTest { after: root._floatingListInput }
     // A new suite: its one line above this comment
 
-    readonly property var _suites: [_floatingListInput]
+    readonly property var _suites: [_floatingListInput, _authPromptInput]
     readonly property int _limitMs: 120000
     property int _waited: 0
 
