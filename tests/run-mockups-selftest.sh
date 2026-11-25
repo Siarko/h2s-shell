@@ -745,8 +745,11 @@ touch -d '2 days ago' "$shots"/components/good/2020*
 mkdir -p "$shots/components/good/20190101-000001-1" "$shots/components/good/20190101-000002-1" "$shots/components/effects/20180101-000000-1"
 head -c 2097152 /dev/zero > "$shots/components/effects/20180101-000000-1/00-text.png"
 # … and an older one still, of a run that is still going (its pid, in its name, is a live
-# run-mockups.sh): it stays
-bash -c 'exec -a run-mockups.sh sleep 60' &
+# run-mockups.sh): it stays. The stand-in is a bash named run-mockups.sh that waits on a
+# FIFO no one writes, with no child to outlive it; never `exec -a … sleep`: a multi-call
+# coreutils (NixOS) picks its program by that name and exits at once
+mkfifo "$work/prune-live.fifo"
+(exec -a run-mockups.sh bash -c 'read -r -t 60 <> "$0"' "$work/prune-live.fifo") &
 live=$!
 mkdir -p "$shots/components/effects/20170101-000000-$live"
 touch "$shots/components/effects/20170101-000000-$live/00-text.png"
