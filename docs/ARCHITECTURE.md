@@ -2557,6 +2557,15 @@ The window suites drive their window through `tests/WindowDriver.qml`, QtTest's 
 used by hand: it counts the window as shown once a frame of it was drawn, and `waitShown()`
 comes before the first event, in place of a fixed wait.
 
+Input whose path through the compositor matters — a mouse wheel (Qt on Wayland hands it over
+as from a touchpad), a click, a key going to the item with the focus — runs under
+`tests/run-input.sh`: its suites (`tests/input/`, registered in `tests-input.qml`, run one
+after another) get the lock bed's virtual pointer and keyboard (`tests/lock/input/ltinput.py`)
+on the run's private headless compositor, and send through `tests/input/InputDriver.qml`
+(`click`, `pointAt`, `wheel`, `key`, `type`), each call returning once the compositor has the
+input; the suite then waits on the state it expects. `tests/run-input.sh <Suite>…` runs some.
+`FloatingListInputTest` drives the dropdowns and floating lists this way.
+
 `tests/device/` drives the running shell on a touch device through the whole stack — a
 virtual touchscreen (uinput) → Hyprland → the shell, and the on-screen keyboard reacting —
 which QtTest, sending events to the Qt window directly, cannot reach. It finds what to tap

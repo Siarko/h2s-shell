@@ -82,6 +82,7 @@ unit suites take about a minute and the lock bed about 250 s. Its parts, each ru
 ```
 tests/run-unit.sh          # the unit suites, in parallel shards of private headless compositors (--log <file>)
 tests/run-modules.sh <dir> # a module's suites, against this tree (--suite <name> for some)
+tests/run-input.sh         # the suites under a real pointer and keyboard (tests-input.qml, tests/input/)
 tests/install-test.sh      # install.sh under stand-ins: what it would do, nothing done
 tests/run-helper.sh        # the helper built and run; its build script and launch.sh's look-up
 tests/run-system.sh        # this system's set (tests/system/nixos, tests/system/arch)

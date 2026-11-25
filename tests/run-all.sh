@@ -27,6 +27,8 @@
 #   tests/run-helper.sh                                 the helper (helper/), built and run;
 #                                                       its build and launch.sh's look-up
 #   tests/run-unit.sh                                   the unit suites
+#   tests/run-input.sh                                  the suites under a real pointer and
+#                                                       keyboard (tests-input.qml)
 #   tests/run-modules.sh tests/fixtures/modules/good tests/fixtures/modules/legacy-elevate
 #                                                       modules' suites, on the fixtures
 #   tests/run-modules.sh tests/fixtures/modules/privileged tests/fixtures/modules/privileged-undeclared
@@ -122,6 +124,7 @@ parts=(
     "install.sh under stand-ins|tests/install-test.sh"
     "helper|tests/run-helper.sh"
     "unit suites|tests/run-unit.sh"
+    "real input suites|tests/run-input.sh"
     "module fixture suites|tests/run-modules.sh tests/fixtures/modules/good tests/fixtures/modules/legacy-elevate"
     "privileged runs fixture|tests/run-modules.sh tests/fixtures/modules/privileged tests/fixtures/modules/privileged-undeclared"
     "NixOS root step fixture|tests/run-modules.sh tests/fixtures/modules/nixos-apply"

@@ -142,6 +142,15 @@ tests-helper.qml self:tests/run-helper.sh
 singletons/helper/ScreenSaverClient.qml self:tests/run-helper.sh
 +singletons/HelperRules.qml self:tests/run-helper.sh
 tests/fixtures/helper/* unit:HelperTest
+# The suites under a real pointer and keyboard: their runner, root and driver, and what they
+# drive (a closure only unit suites have)
+tests/run-input.sh self:tests/run-input.sh
+tests-input.qml self:tests/run-input.sh
+tests/input/* self:tests/run-input.sh
++components/FloatingList.qml self:tests/run-input.sh
++components/Dropdown.qml self:tests/run-input.sh
++components/WheelScroll.qml self:tests/run-input.sh
++tests/lock/input/ltinput.py self:tests/run-input.sh
 # The mockups' runner, root entry, window and the runners' fixture mockups
 tests/run-mockups.sh self:tests/run-mockups-selftest.sh
 mockup.qml self:tests/run-mockups-selftest.sh mockup:all

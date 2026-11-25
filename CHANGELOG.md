@@ -236,6 +236,10 @@ The interface modules are written against (`qs.api`), versioned on its own
   Without polkit rules it works as before; set to true beside them, it stops the build.
 
 ### Fixed
+- An open dropdown or picker list stays attached to its control while the page scrolls or
+  the control moves, and closes when the control scrolls out of view; it opens upwards, or
+  on the side with more room, when there is no room below. The wheel over a long list
+  scrolls the list, never the page under it.
 - A dropdown or picker list left open on a page that was then hidden no longer stays over
   the window taking every click; it is back when the page shows again.
 - "Lock before the computer sleeps": a sleep that began while the shell was starting or
