@@ -99,8 +99,9 @@ Singleton {
     }
 
     // A module's run (module.privileged.start). `handle`: the module's handle (moduleId,
-    // active, notify(), _privilegedKey, _hostKey); `facts`: { testMode, tools (PrivilegedRules
-    // .availability), declaration (PrivilegedRules.declaration: what its manifest declares) }
+    // active, notify(), _hostKey); `facts`: { owner (the handle's key in this queue: its runs
+    // leave together), testMode, tools (PrivilegedRules.availability), declaration
+    // (PrivilegedRules.declaration: what its manifest declares) }
     // → { running, cancel() }. `done` is called once, never inside
     // this call, and never while the module is off (a run asked for then is not answered).
     // `argv` and `options` are read once, here (CommandRules.argvSnapshot, a real array
@@ -111,7 +112,7 @@ Singleton {
         const snapshot = CommandRules.argvSnapshot(argv, true);
         const words = snapshot.words;
         const job = {
-            id: ++_lastId, kind: "module", owner: handle._privilegedKey, handle: handle,
+            id: ++_lastId, kind: "module", owner: String(facts?.owner ?? ""), handle: handle,
             moduleId: String(handle.moduleId), what: parsed.what, timeoutMs: parsed.timeoutMs,
             notifyFailures: parsed.notifyFailures,
             onStdout: parsed.callbacks.onStdout, onStderr: parsed.callbacks.onStderr, onLine: parsed.callbacks.onLine,

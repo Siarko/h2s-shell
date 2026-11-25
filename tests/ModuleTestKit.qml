@@ -137,7 +137,7 @@ import qs.components as Components
 Singleton {
     readonly property bool testMode: Modules.host.testMode
     readonly property var widgetEntries: Modules.host.widgetEntries
-    readonly property var opened: Api._opened
+    readonly property var opened: ApiInternals.opened
     readonly property var notified: Notifier.recorded
     readonly property var chooserCalls: FileChooser.testCalls
     readonly property bool chooserOpen: Modules.host.testMode && FileChooser.open
@@ -236,14 +236,14 @@ Singleton {
 
     function setNow(ms) {
         if (Modules.host.testMode)
-            Api._testNow = typeof ms === "number" && Number.isFinite(ms) && ms > 0 ? ms : 0;
+            ApiInternals.testNow = typeof ms === "number" && Number.isFinite(ms) && ms > 0 ? ms : 0;
     }
 
     function setRemembered(untilMs) {
         if (!Modules.host.testMode)
             return;
         const kept = typeof untilMs === "number" && Number.isFinite(untilMs) && untilMs > Date.now();
-        Api._testRemembered = Object.freeze({ kept: kept, untilMs: kept ? untilMs : 0 });
+        ApiInternals.testRemembered = Object.freeze({ kept: kept, untilMs: kept ? untilMs : 0 });
     }
 
     function setSystem(facts) {
@@ -251,7 +251,7 @@ Singleton {
             return Object.freeze(["module test mode is off"]);
         const checked = SystemFactsRules.testFacts(facts, {});
         if (facts === null || facts === undefined || typeof facts !== "object" || Array.isArray(facts)) {
-            Api._testSystemGiven = null;
+            ApiInternals.testSystemGiven = null;
             return Object.freeze(checked.problems);
         }
         // Only the fields taken, so the defaults (the temporary home once made) show through
@@ -260,7 +260,7 @@ Singleton {
             if (!checked.problems.some(problem => problem.startsWith(key + ":")))
                 taken[key] = checked.facts[key];
         }
-        Api._testSystemGiven = taken;
+        ApiInternals.testSystemGiven = taken;
         return Object.freeze(checked.problems);
     }
 
@@ -269,7 +269,7 @@ Singleton {
             return Object.freeze(["module test mode is off"]);
         const checked = ModuleRules.testDistributionName(id);
         if (checked.problems.length === 0)
-            Api._testDistributionName = checked.name;
+            ApiInternals.testDistributionName = checked.name;
         return Object.freeze(checked.problems);
     }
 
@@ -283,7 +283,7 @@ Singleton {
         } catch (error) {
             return Object.freeze(["the network facts are not plain data: " + error]);
         }
-        Api._testNetworkGiven = copy;
+        ApiInternals.testNetworkGiven = copy;
         return Object.freeze(ModuleRules.testNetworkFacts(copy).problems);
     }
 
@@ -304,13 +304,13 @@ Singleton {
     // The links, notifications and chooser calls recorded, and the clock setNow set
     function clearRecords() {
         if (Modules.host.testMode) {
-            Api._testNow = 0;
-            Api._testSystemGiven = null;
-            Api._testNetworkGiven = null;
+            ApiInternals.testNow = 0;
+            ApiInternals.testSystemGiven = null;
+            ApiInternals.testNetworkGiven = null;
             setRemembered(0);
-            Api._testDistributionName = null;
+            ApiInternals.testDistributionName = null;
         }
-        Api._opened = [];
+        ApiInternals.opened = [];
         Notifier.clearRecorded();
         FileChooser.testClear();
     }

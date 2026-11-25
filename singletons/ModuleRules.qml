@@ -882,6 +882,13 @@ Singleton {
         return testMode === true && typeof testPrograms === "string" && testPrograms !== "" ? "test" : "path";
     }
 
+    // The verdicts a module's programs are read from (programSource): its own entry of
+    // `testVerdicts` ({ <id>: { <name>: verdict } }), else `verdicts`; {} for none
+    function programVerdictsOf(testMode, testPrograms, id, testVerdicts, verdicts) {
+        const chosen = programSource(testMode, testPrograms) === "test" ? testVerdicts?.[id] : verdicts;
+        return chosen !== null && typeof chosen === "object" ? chosen : {};
+    }
+
     // The absolute directory of a module's stand-ins ("" without one); `directory` is the
     // module's canonical directory
     function testProgramsDirectory(directory, testPrograms) {

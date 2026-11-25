@@ -139,22 +139,24 @@ TestCase {
         _clock.start();
     }
 
-    // What the handle reads of its stand-ins is frozen at every level: the module's code can
-    // neither swap its pkexec for another program nor add one
+    // What the handle reads of its stand-ins is out of the module's reach: no member of the
+    // handle holds the host's verdicts, and what it shows of them is frozen — the module's code
+    // can neither swap its pkexec for another program nor add one
     function _frozenStandIns() {
-        const verdicts = module._verdicts;
         const standIn = _path("pkexec");
-        assert(Object.isFrozen(verdicts) && Object.isFrozen(verdicts.pkexec), "the handle's stand-in verdicts are frozen");
-        for (const write of [() => { verdicts.pkexec = { path: "/usr/bin/pkexec", trusted: true }; },
-                             () => { verdicts.pkexec.path = "/usr/bin/pkexec"; },
-                             () => { verdicts.other = { path: "/usr/bin/pkexec" }; }]) {
+        assertEqual(module._verdicts, undefined, "the handle holds no verdicts object");
+        const programs = module.programs;
+        assert(Object.isFrozen(programs) && Object.isFrozen(programs.pkexec), "its programs are frozen");
+        for (const write of [() => { programs.pkexec = { path: "/usr/bin/pkexec", trusted: true }; },
+                             () => { programs.pkexec.path = "/usr/bin/pkexec"; },
+                             () => { programs.other = { path: "/usr/bin/pkexec" }; }]) {
             try {
                 write();
             } catch (error) {}
         }
-        assert(module._verdicts.pkexec.path === standIn && module._verdicts.other === undefined && standIn.endsWith("/tests/programs/pkexec"),
-               "… a write changes nothing: " + JSON.stringify(module._verdicts.pkexec));
-        assertEqual(module.programs.pkexec.path, standIn, "… its programs still name the stand-in");
+        assert(module.programs.pkexec.path === standIn && module.programs.other === undefined && standIn.endsWith("/tests/programs/pkexec"),
+               "… a write changes nothing: " + JSON.stringify(module.programs.pkexec));
+        assert(Object.isFrozen(module.privileged._tools) && module.privileged._tools.pkexec === standIn, "… nor the tools a run takes: frozen, the stand-in");
         _refusals();
     }
 

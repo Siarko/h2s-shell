@@ -94,51 +94,92 @@ QtObject {
     // (API 1.10) In module test mode, when its manifest names testPrograms: every program is
     // taken from that directory — { path: "<directory>/<testPrograms>/<name>", trusted: true,
     // reason: "test stand-in" }, or path "" when it is not there — and never from PATH.
-    readonly property var _verdicts: ModuleRules.programSource(ModuleHandleHosts.hostOf(root._hostKey)?.testMode === true, manifest?.testPrograms) === "test"
-        ? (ModuleHandleHosts.hostOf(root._hostKey)?.testProgramVerdicts?.[moduleId] ?? {}) : (ModuleHandleHosts.hostOf(root._hostKey)?.programVerdicts ?? {})
+    // The host's verdicts are read inline (ModuleRules.programVerdictsOf), never kept on the
+    // handle: they are the host's own object, behind every module's handle. The text holds
+    // this module's copy, and which of its programs have a verdict
     readonly property string _programsText: {
-        const verdicts = _verdicts;
+        const shellHost = ModuleHandleHosts.hostOf(root._hostKey);
+        const verdicts = ModuleRules.programVerdictsOf(shellHost?.testMode === true, manifest?.testPrograms, moduleId,
+                                                       shellHost?.testProgramVerdicts, shellHost?.programVerdicts);
         const own = {};
-        for (const name of _programNames) {
+        const names = _programNames();
+        for (const name of names) {
             const verdict = verdicts[name];
             if (verdict)
                 own[name] = { path: verdict.path, trusted: verdict.trusted === true, reason: verdict.reason };
         }
-        return JSON.stringify(own);
+        return JSON.stringify({ programs: own, ready: names.every(name => verdicts[name] !== undefined) });
     }
     readonly property var programs: {
-        const parsed = JSON.parse(_programsText);
+        const parsed = JSON.parse(_programsText).programs;
         for (const name of Object.keys(parsed))
             Object.freeze(parsed[name]);
         return Object.freeze(parsed);
     }
     // Every program it names has a verdict (the module loads only once they have)
-    readonly property bool programsReady: manifest !== null && _programNames.every(name => _verdicts[name] !== undefined)
+    readonly property bool programsReady: manifest !== null && JSON.parse(_programsText).ready
 
     // Looks its programs up again (installed or changed since): at most once every 2 s — a
     // call sooner is done when the 2 s are over. The verdicts stay until the new ones come.
     // The shell does this itself after the machine wakes, before `resumed()`.
     function recheckPrograms() {
-        const wait = ModuleRules.recheckDelay(_lastRecheck, Date.now(), ModuleRules.recheckMinMs);
-        if (wait === 0) {
-            _recheckNow();
-        } else if (!_recheckTimer.running) {
-            _recheckTimer.interval = wait;
-            _recheckTimer.start();
-        }
+        _own.recheckPrograms();
     }
 
-    readonly property var _programNames: (manifest?.programs ?? []).concat(manifest?.optionalPrograms ?? [])
-    property real _lastRecheck: 0
-
-    function _recheckNow() {
-        _lastRecheck = Date.now();
-        ModuleHandleHosts.hostOf(root._hostKey)?.recheckPrograms(moduleId);
+    // Its programs' names, required and optional: a new list at each call
+    function _programNames() {
+        return (manifest?.programs ?? []).concat(manifest?.optionalPrograms ?? []);
     }
 
-    property Timer _recheckTimer: Timer {
-        onTriggered: root._recheckNow()
-    }
+    // The handle's own working state — when it last looked its programs up and the timer of
+    // the next look, its key in PrivilegedRuns' queue, what it last logged per key — held in
+    // closures: a frozen object of functions, nothing of it a property a module could write
+    readonly property var _own: (function () {
+        let lastRecheck = 0;
+        let recheckTimer = null;
+        let privilegedKey = "";
+        const logWritten = new Map();
+        const recheckNow = () => {
+            lastRecheck = Date.now();
+            ModuleHandleHosts.hostOf(root._hostKey)?.recheckPrograms(root.moduleId);
+        };
+        return Object.freeze({
+            recheckPrograms: () => {
+                const wait = ModuleRules.recheckDelay(lastRecheck, Date.now(), ModuleRules.recheckMinMs);
+                if (wait === 0) {
+                    recheckNow();
+                    return;
+                }
+                if (recheckTimer === null) {
+                    recheckTimer = Qt.createQmlObject("import QtQuick; Timer {}", root, "ModuleHandleRecheck");
+                    recheckTimer.triggered.connect(recheckNow);
+                }
+                if (!recheckTimer.running) {
+                    recheckTimer.interval = wait;
+                    recheckTimer.start();
+                }
+            },
+            // Made at its first run as administrator
+            privilegedKey: () => {
+                if (privilegedKey === "")
+                    privilegedKey = PrivilegedRuns.newOwnerKey();
+                return privilegedKey;
+            },
+            privilegedKeyIfAny: () => privilegedKey,
+            logEntry: (level, text, key) => {
+                const entry = ModuleRules.logEntry(root.moduleId, level, text, key, logWritten, Profiles.value("general.debug") === true);
+                if (entry.write && entry.key !== "") {
+                    // Re-set at the end, so the oldest written goes first
+                    logWritten.delete(entry.key);
+                    logWritten.set(entry.key, entry.memo);
+                    if (logWritten.size > ModuleRules.maxLogKeys)
+                        logWritten.delete(logWritten.keys().next().value);
+                }
+                return entry;
+            },
+            forgetLog: () => logWritten.clear()
+        });
+    })()
 
     // ---- Running as administrator (API 1.11) ----
     // `privileged.start(argv, options)` runs a command as root through pkexec, in
@@ -146,23 +187,21 @@ QtObject {
     // shell knows the module by this handle: it is not told.
     readonly property QtObject privileged: QtObject {
         // pkexec and a trusted `timeout` found: { available, reason, pkexec, timeout }
-        readonly property var _tools: PrivilegedRules.availability({
+        readonly property var _tools: Object.freeze(PrivilegedRules.availability({
             testMode: ModuleHandleHosts.hostOf(root._hostKey)?.testMode === true,
             standIn: ModuleHandleHosts.hostOf(root._hostKey)?.testProgramVerdicts?.[root.moduleId]?.pkexec?.path ?? "",
             pkexecKnown: PrivilegedRuns.known, pkexec: PrivilegedRuns.pkexec, pkexecReason: PrivilegedRuns.pkexecReason,
             timeoutKnown: CommandTools.known, timeout: CommandTools.timeout
-        })
+        }))
         readonly property bool available: _tools.available
         readonly property string unavailableReason: _tools.reason
         // (API 1.39) What polkit keeps for the shell's process, frozen { kept, untilMs }: while
         // `kept`, a run through start() asks for no password until `untilMs` (ms since the
         // epoch; 0 when not kept). A new object when it changes, and when it runs out. In
         // module test mode the test kit's (ModuleTestKit.setRemembered)
-        readonly property var remembered: ModuleHandleHosts.hostOf(root._hostKey)?.testMode === true ? Api._testRemembered : RememberedAdmin.remembered
+        readonly property var remembered: ModuleHandleHosts.hostOf(root._hostKey)?.testMode === true ? ApiInternals.testRemembered : RememberedAdmin.remembered
 
         function start(argv, options) {
-            if (root._privilegedKey === "")
-                root._privilegedKey = PrivilegedRuns.newOwnerKey();
             // argv is read once, inside: the words judged are the ones that run. What the
             // manifest declares (API 1.36) is the host's to say, never the module's; and only
             // this module's own code may use it: the call's stack names its directory alone
@@ -172,19 +211,17 @@ QtObject {
             const declaration = crossing !== "" ? { problem: crossing, paths: [] }
                 : shellHost ? shellHost.privilegedDeclaration(root.moduleId, root.programs) : null;
             return PrivilegedRuns.start(root, argv, options, {
-                testMode: shellHost?.testMode === true, tools: _tools, declaration: declaration
+                owner: root._own.privilegedKey(), testMode: shellHost?.testMode === true, tools: _tools, declaration: declaration
             });
         }
     }
 
-    // What PrivilegedRuns knows its runs by ("" until the first)
-    property string _privilegedKey: ""
     // Turned off: its runs leave the queue, the started ones are cancelled, nothing is called
     onActiveChanged: {
-        if (!active && _privilegedKey !== "")
-            PrivilegedRuns.ownerGone(_privilegedKey);
+        if (!active && _own.privilegedKeyIfAny() !== "")
+            PrivilegedRuns.ownerGone(_own.privilegedKeyIfAny());
         if (!active) {
-            _logWritten.clear();
+            _own.forgetLog();
             FileChooser.ownerGone(root);
             Notifier.closeOwned(root);
         }
@@ -352,16 +389,9 @@ QtObject {
     // line while the setting is off is not, and is not remembered for its key). The keys are
     // forgotten when the module is turned off; at most 256 are kept.
     function log(level, text, key) {
-        const entry = ModuleRules.logEntry(moduleId, level, text, key, _logWritten, Profiles.value("general.debug") === true);
+        const entry = _own.logEntry(level, text, key);
         if (!entry.write)
             return false;
-        if (entry.key !== "") {
-            // Re-set at the end, so the oldest written goes first
-            _logWritten.delete(entry.key);
-            _logWritten.set(entry.key, entry.memo);
-            if (_logWritten.size > ModuleRules.maxLogKeys)
-                _logWritten.delete(_logWritten.keys().next().value);
-        }
         if (entry.level === "error")
             console.error(entry.line);
         else if (entry.level === "warn")
@@ -372,9 +402,6 @@ QtObject {
             console.log(entry.line);
         return true;
     }
-
-    // Each log key → the level and text it wrote last (ModuleRules.logEntry's memo)
-    property var _logWritten: new Map()
 
     // Opens one of its settings pages: "" its page "<id>", "<name>" → "<id>.<name>"
     function openSettings(page) {

@@ -2218,7 +2218,7 @@ blocked ("" | "locked" | "busy"), error }`; it returns `{ open, cancel() }`.
   mode the field is ignored. A stand-in counts only when it, and the directory, resolve
   with links followed to a place inside the module's real directory, as its `.qml` files
   must — a link out (to `/usr/bin/pkexec`, `/run/wrappers/bin/pkexec`, anything) is no
-  stand-in. `Api.openUrl` and `Notifier.send` record the call (`Api._opened`,
+  stand-in. `Api.openUrl` and `Notifier.send` record the call (`ApiInternals.opened`,
   `Notifier.recorded`) and open or send nothing. No command a module starts through the API
   (`CommandRunner`, `CommandAction`, `CommandQuery`, `PrivilegedAction`) holds a word whose
   last path part is `pkexec` — the program, or one handed to `env`, `timeout`, `setsid` —

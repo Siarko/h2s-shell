@@ -100,6 +100,39 @@ TestCase {
         return (list ?? []).some(entry => String(entry).includes(fragment));
     }
 
+    // The underscore members of an object the API hands a module that give it something of
+    // the shell's to change: a writable property, a QObject, a list, or an object not frozen
+    // at every level. A method is the object's own (it cannot be replaced)
+    function _shellOwnedMembers(object, label) {
+        const found = [];
+        const deeplyFrozen = (value, depth) => {
+            if (value === null || typeof value !== "object")
+                return true;
+            if (depth > 8 || Array.isArray(value) || typeof value.objectNameChanged === "function" || !Object.isFrozen(value))
+                return false;
+            return Object.getOwnPropertyNames(value).every(name => {
+                const descriptor = Object.getOwnPropertyDescriptor(value, name);
+                return descriptor.get !== undefined || deeplyFrozen(descriptor.value, depth + 1);
+            });
+        };
+        for (const key of Object.keys(object).filter(name => name.startsWith("_"))) {
+            const value = object[key];
+            if (typeof value === "function")
+                continue;
+            let writable = true;
+            try {
+                object[key] = value;
+            } catch (error) {
+                writable = false;
+            }
+            if (writable)
+                found.push(label + "." + key + " (writable)");
+            else if (!deeplyFrozen(value, 0))
+                found.push(label + "." + key + " (a shell-owned object)");
+        }
+        return found;
+    }
+
     function _expectState(directoryName, state) {
         const status = _status(directoryName);
         assertEqual(status?.state, state, directoryName + ": " + state + (status && status.state !== state ? " (errors: " + status.errors.join("; ") + ")" : ""));
@@ -166,11 +199,11 @@ TestCase {
             assertEqual(ModuleRules.logEntry("good", "debug", "d", "k", new Map(), true).write, true, "logEntry: a debug line, debug on → written");
             assert(Profiles.value("general.debug") !== true, "the test config has debug off");
             assert(!goodHandle.log("debug", "a debug line", "debug-key"), "log: a debug line with debug off → false");
-            assert(!goodHandle._logWritten.has("debug-key"), "… and not remembered, so it is written once debug is on");
             for (let i = 0; i < ModuleRules.maxLogKeys + 5; i++)
                 goodHandle.log("info", "line", "key" + i);
-            assertEqual(goodHandle._logWritten.size, ModuleRules.maxLogKeys, "log: at most maxLogKeys keys remembered");
-            assert(!goodHandle._logWritten.has("key0") && goodHandle._logWritten.has("key" + (ModuleRules.maxLogKeys + 4)), "… the oldest dropped first");
+            assert(!goodHandle.log("info", "line", "key5") && !goodHandle.log("info", "line", "key" + (ModuleRules.maxLogKeys + 4)),
+                   "log: the newest maxLogKeys keys remembered");
+            assert(goodHandle.log("info", "line", "key4"), "… the oldest dropped first");
             assertEqual(ModuleRules.minuteStart(1731400012345) + "|" + ModuleRules.minuteStart(NaN) + "|" + ModuleRules.minuteStart("5"), "1731399960000|0|0",
                         "minuteStart: the minute's start; not a number: 0");
 
@@ -286,7 +319,7 @@ TestCase {
         _then("good is disabled", () => _status("good")?.state === "disabled" && _goodState.mains === 0, () => {
             assertEqual(_status("good")?.enabled, false, "disabled: enabled false in its status");
             assertEqual(host.mainObject("good"), null, "disabled: no main");
-            assertEqual(host.handle("good")._logWritten.size, 0, "disabled: its log keys forgotten");
+            assert(host.handle("good").log("info", "line", "key" + (ModuleRules.maxLogKeys + 4)), "disabled: its log keys forgotten (a key's line again is written)");
             assertEqual(_goodState.mains, 0, "disabled: its main was destroyed (its onDestruction ran)");
             assertEqual(host.widgetEntries.map(entry => entry.module).join(","), "key-collision", "disabled: its widget gone");
             assertEqual(host.slotContributions("network.vpn.page").map(entry => entry.module).join(","), "broken-slot", "disabled: its slot contribution gone");
@@ -597,10 +630,10 @@ TestCase {
             // (1.39) Outside test mode what polkit keeps is the shell's own reading (not
             // started in a suite: nothing kept, the real polkit never asked) — never the test
             // kit's, whatever that says
-            const testRemembered = Api._testRemembered;
-            Api._testRemembered = Object.freeze({ kept: true, untilMs: Date.now() + 240000 });
+            const testRemembered = ApiInternals.testRemembered;
+            ApiInternals.testRemembered = Object.freeze({ kept: true, untilMs: Date.now() + 240000 });
             const realHandle = handle.privileged.remembered;
-            Api._testRemembered = testRemembered;
+            ApiInternals.testRemembered = testRemembered;
             assert(realHandle === RememberedAdmin.remembered && realHandle.kept === false,
                    "test mode off: module.privileged.remembered is the shell's own, not the test kit's: " + JSON.stringify(realHandle));
 
@@ -609,6 +642,11 @@ TestCase {
             assertEqual(handle.host, undefined, "a module's handle has no host on it");
             assert(!Object.keys(handle).some(key => { try { return handle[key] === host; } catch (error) { return false; } }),
                    "… nor under another name");
+            // Nothing of the shell's to change behind an underscore member, the program
+            // verdicts the host keeps for every module above all
+            assertEqual(_shellOwnedMembers(handle, "module").concat(_shellOwnedMembers(handle.privileged, "module.privileged"),
+                                                                    _shellOwnedMembers(Api, "Api")).join(", "), "",
+                        "no underscore member of the handle or Api hands out a writable or shell-owned object");
             const reached = host;
             let threw = false;
             try {

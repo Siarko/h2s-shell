@@ -3,7 +3,6 @@ pragma Singleton
 import Quickshell
 import QtQuick
 import qs.singletons
-import qs.singletons.io as Io
 import qs.singletons.network
 
 // The module API: everything a
@@ -1262,27 +1261,17 @@ Singleton {
     })
 
     // (1.12) The start of the current minute, in ms; in test mode the test kit's
-    readonly property real minuteNow: ModuleRules.minuteStart(testMode && _testNow > 0 ? _testNow : _minuteClock.date.getTime())
-    property SystemClock _minuteClock: SystemClock {
-        precision: SystemClock.Minutes
-    }
-    // Set by ModuleTestKit.setNow in test mode (0: the real clock)
-    property real _testNow: 0
-    // (1.39) module.privileged.remembered in test mode, set by ModuleTestKit.setRemembered
-    property var _testRemembered: RememberRules.remembered(null, 5, 0)
+    // (the clock and the test kit's seams live in ApiInternals: no module writes them through Api)
+    readonly property real minuteNow: ModuleRules.minuteStart(testMode && ApiInternals.testNow > 0 ? ApiInternals.testNow
+                                                                                                    : ApiInternals.minuteClock.date.getTime())
 
     // (1.13) System facts (above): the shell's reading, or in test mode the test kit's
-    readonly property var system: testMode ? _systemObject(_testSystemFacts, true, _distribution) : _systemObject(SystemFacts.facts, false, _distribution)
-    // Set by ModuleTestKit.setSystem in test mode (null: the made-up defaults)
-    property var _testSystemGiven: null
-    readonly property var _testSystemFacts: SystemFactsRules.testFacts(_testSystemGiven, SystemFactsRules.testDefaults(Modules.host.testHome)).facts
+    readonly property var system: testMode ? _systemObject(ApiInternals.testSystemFacts, true, _distribution) : _systemObject(SystemFacts.facts, false, _distribution)
 
     // (1.40) Api.system.distribution: a frozen copy of Distribution's answer, never the
     // singleton or its integration; in test mode the one ModuleTestKit.setDistribution named
     readonly property var _distribution: ModuleRules.apiDistribution(testMode
-        ? ModuleRules.testDistribution(_testDistributionName, Distribution.detection) : Distribution.detection)
-    // Set by ModuleTestKit.setDistribution in test mode (null: not answered)
-    property var _testDistributionName: null
+        ? ModuleRules.testDistribution(ApiInternals.testDistributionName, Distribution.detection) : Distribution.detection)
 
     function _systemObject(facts, test, distribution) {
         const forwarding = test ? Object.freeze({ ipv4: facts.ipForwarding?.ipv4 ?? null, ipv6: facts.ipForwarding?.ipv6 ?? null }) : null;
@@ -1341,25 +1330,21 @@ Singleton {
     // when its value changes, so a module reacting to these is not woken by every re-read of
     // the profiles. In module test mode the test kit's (ModuleTestKit.setNetworks), and the
     // shell's network singletons are not touched
-    readonly property string _networksText: testMode ? JSON.stringify(_testNetworkFacts.networks)
+    readonly property string _networksText: testMode ? JSON.stringify(ApiInternals.testNetworkFacts.networks)
         : NetworkProfiles.listRead ? JSON.stringify(ModuleRules.apiNetworks(NetworkProfiles.profiles, NetworkProfiles.wifi)) : "[]"
     readonly property var networks: ModuleRules.frozenRows(_networksText)
-    readonly property bool networksReady: testMode ? _testNetworkFacts.networksReady
+    readonly property bool networksReady: testMode ? ApiInternals.testNetworkFacts.networksReady
         : ModuleRules.apiNetworksReady(NetworkProfiles.listRead && NetworkProfiles.listOk, NetworkProfiles.profiles, NetworkProfiles.wifi)
 
-    readonly property string _vpnsUpText: testMode ? JSON.stringify(_testNetworkFacts.vpnsUp)
+    readonly property string _vpnsUpText: testMode ? JSON.stringify(ApiInternals.testNetworkFacts.vpnsUp)
         : JSON.stringify(ModuleRules.apiVpnsUp(VpnManager.activeVpns, VpnManager.details))
     readonly property var vpnsUp: ModuleRules.frozenRows(_vpnsUpText)
 
-    readonly property bool localNetworksReady: testMode ? _testNetworkFacts.localNetworksReady : IpManager.devicesRead
-    readonly property string _localNetworksText: testMode ? JSON.stringify(_testNetworkFacts.localNetworks)
+    readonly property bool localNetworksReady: testMode ? ApiInternals.testNetworkFacts.localNetworksReady : IpManager.devicesRead
+    readonly property string _localNetworksText: testMode ? JSON.stringify(ApiInternals.testNetworkFacts.localNetworks)
         : IpManager.devicesRead ? JSON.stringify(ModuleRules.apiLocalNetworks(IpManager.devices, VpnManager.vpnInterfaces,
                                                                                   VpnManager.vpnAddresses, IpManager.ipv6Flags)) : "[]"
     readonly property var localNetworks: ModuleRules.frozenRows(_localNetworksText)
-
-    // Set by ModuleTestKit.setNetworks in test mode (null: the defaults — read, none)
-    property var _testNetworkGiven: null
-    readonly property var _testNetworkFacts: ModuleRules.testNetworkFacts(_testNetworkGiven).facts
 
     // Deprecated (1.19): listed in the calling module's `deprecations` (found in its code),
     // removed with the shell's next tightening
@@ -1387,8 +1372,8 @@ Singleton {
         if (checked.progress !== undefined) {
             // A progress notification needs an owner that closes it when the module goes:
             // the module's own handle (module.notify)
-            if (!_progressRefusedLogged) {
-                _progressRefusedLogged = true;
+            if (!ApiInternals.progressRefusedLogged) {
+                ApiInternals.progressRefusedLogged = true;
                 console.warn("[Api] notify with a progress is module.notify's: refused, nothing shown");
             }
             return null;
@@ -1396,8 +1381,6 @@ Singleton {
         Notifier.send(String(summary), checked);
         return null;
     }
-
-    property bool _progressRefusedLogged: false
 
     // What a module gets of Notifier's progress handle (io/NotificationHandle.qml): a frozen
     // plain object whose getters and functions close over the handle — open, state,
@@ -1435,11 +1418,11 @@ Singleton {
         }
         // Test mode: recorded, nothing opened
         if (testMode) {
-            _opened = _opened.concat([Object.freeze({ url: text, allowFile: options?.allowFile === true })]).slice(-200);
+            ApiInternals.opened = ApiInternals.opened.concat([Object.freeze({ url: text, allowFile: options?.allowFile === true })]).slice(-200);
             return true;
         }
         // No time limit: where xdg-open starts the program itself it lasts as long as it
-        _opener.start(["xdg-open", text], {
+        ApiInternals.opener.start(["xdg-open", text], {
             timeoutMs: 0,
             maxOutputBytes: 4096,
             done: result => {
@@ -1458,9 +1441,4 @@ Singleton {
     function openSettings(page) {
         Shell.openSettings(String(page ?? ""));
     }
-
-    property Io.CommandRunner _opener: Io.CommandRunner {}
-    // What openUrl was asked in test mode, oldest first: frozen { url, allowFile } (read by
-    // tests/ModuleTestKit.qml)
-    property var _opened: []
 }

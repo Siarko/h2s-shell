@@ -195,6 +195,14 @@ TestCase {
         assertEqual(rules.programSource(true, ""), "path", "… test mode without testPrograms: PATH");
         assertEqual(rules.programSource("true", "x") + rules.programSource(1, "x") + rules.programSource(true, null), "pathpathpath",
                     "… only test mode that is `true`, and only a directory given");
+        const testVerdicts = { a: { sh: { path: "/m/a/bin/sh" } }, b: null };
+        const pathVerdicts = { sh: { path: "/usr/bin/sh" } };
+        assertEqual(JSON.stringify(rules.programVerdictsOf(true, "bin", "a", testVerdicts, pathVerdicts)), JSON.stringify(testVerdicts.a),
+                    "verdicts: in test mode with testPrograms, the module's own stand-in verdicts");
+        assert(rules.programVerdictsOf(false, "bin", "a", testVerdicts, pathVerdicts) === pathVerdicts
+               && rules.programVerdictsOf(true, "", "a", testVerdicts, pathVerdicts) === pathVerdicts, "… else the ones found on PATH");
+        assertEqual(JSON.stringify(rules.programVerdictsOf(true, "bin", "b", testVerdicts, pathVerdicts)) + JSON.stringify(rules.programVerdictsOf(true, "bin", "c", testVerdicts, pathVerdicts))
+                    + JSON.stringify(rules.programVerdictsOf(false, "", "a", undefined, null)), "{}{}{}", "… none known: {}, never another module's");
         assertEqual(rules.testProgramsDirectory("/m/good/", "tests/programs/"), "/m/good/tests/programs", "the stand-ins' directory");
         assertEqual(rules.testProgramsDirectory("relative", "x") + rules.testProgramsDirectory("/m", ""), "", "… none for a relative module directory or no testPrograms");
         assertEqual(JSON.stringify(rules.testStandIns([{ directory: "/m/a", testPrograms: "bin" }, { directory: "/m/b", testPrograms: "" }, null])),
