@@ -6,11 +6,14 @@ import qs.singletons
 // (MigrationNoticeRules.notice on their reports), one critical notification without timeout,
 // plain text, whose click opens Settings at the failure's entry
 // (panels/settings/MigrationFailureEntry.qml); its buttons Keep defaults and Restore previous
-// settings (a session that saves nothing: Start with default settings). A successful run
+// settings (a failed whole-config migration: Start with default settings). A successful run
 // sends nothing; the test runner neither. The questions are the entry's (`asked`): the
 // notification's button opens Settings and asks there. Restore (restore()) and Start with
 // default settings (startWithDefaults()) write through a ConfigRestore, then restart the
-// shell.
+// shell — only once the runs are done (a run's write would land over the restore), and only
+// while the shell can restart (else config.json would be replaced under a shell that goes on
+// with the old settings). A restart refused after all leaves saving held, and the entry back
+// with the problem and Restart shell (retryRestart()).
 QtObject {
     id: root
 
@@ -34,6 +37,10 @@ QtObject {
     property var releaseSaves: () => {}
     // Restarts the shell → whether it started (Modules.restartShell)
     property var restartShell: () => false
+    // Whether the shell can restart now: not while the session is locked (Modules.canRestartShell)
+    property var canRestart: () => true
+    // A migration run goes on (Config.migrationBusy)
+    property bool busy: false
     // Shows the Settings window (Shell.showSettings)
     property var openSettings: () => {}
     // How long after the load phase's report the notice waits for the after-seed phase's
@@ -48,15 +55,18 @@ QtObject {
     readonly property var current: MigrationNoticeRules.notice(reports, saveBlocked, version, registry)
     // What the entry shows: the failure, until Keep defaults or a restore started; a session
     // that saves nothing until it ends
-    readonly property bool entryShown: current.kind !== "" && !_acting
-        && (current.kind === "readOnly" || _keptKey !== current.key)
+    readonly property bool entryShown: _settled && current.kind !== ""
+        && (restartPending || (!_acting && (current.kind === "readOnly" || _keptKey !== current.key)))
     readonly property bool canRestore: current.kind === "reset" && current.backup !== "" && !testRunner
     // Why the last restore or start with defaults did not finish ("" none)
     readonly property string problem: _problem
+    // config.json was replaced but the shell did not restart: saving stays held until it does
+    readonly property bool restartPending: _restartPending
 
     property string _keptKey: ""
     property string _sentKey: ""
     property bool _acting: false
+    property bool _restartPending: false
     property string _problem: ""
     property var _handle: null
     property bool _settled: false
@@ -104,12 +114,12 @@ QtObject {
             return;
         _withdraw();
         _sentKey = notice.key;
-        const actions = [{ id: "default", label: "Settings", onTriggered: () => root.openSettings() }];
+        const actions = [{ id: "default", label: "Open Settings", onTriggered: () => root.openSettings() }];
         if (notice.kind === "reset") {
             actions.push({ id: "keep", label: "Keep defaults", onTriggered: () => root.keepDefaults(notice.key) });
             if (canRestore)
                 actions.push({ id: "restore", label: "Restore previous settings", onTriggered: () => root._ask("restore") });
-        } else {
+        } else if (notice.startDefaults) {
             actions.push({ id: "defaults", label: "Start with default settings", onTriggered: () => root._ask("defaults") });
         }
         _handle = notifier.send(notice.summary, {
@@ -163,16 +173,20 @@ QtObject {
         const notice = current;
         if (typeof key === "string" && key !== "" && key !== notice.key)
             return "The failure asked about is not the current one";
-        if (notice.kind !== "readOnly")
-            return "The settings are saved as normal";
+        if (notice.kind !== "readOnly" || !notice.startDefaults)
+            return "No failed whole-settings update";
         if (testRunner)
             return "Not under the test runner";
         return _act(() => _restorer.startWithDefaults(root.registry, root._written), "starting with default settings");
     }
 
     function _act(start, line) {
-        if (_acting || _restorer.running)
+        if (_acting || _restorer.running || _restartPending)
             return "Already under way";
+        if (!_settled || busy)
+            return "The settings update is still running";
+        if (!canRestart())
+            return "The shell cannot restart now";
         _problem = "";
         holdSaves();
         _acting = true;
@@ -196,8 +210,28 @@ QtObject {
         }
         if (result.backup !== "")
             _log("the settings replaced were backed up: " + result.backup);
-        if (!restartShell())
-            console.warn("[Migrations] the shell could not restart itself: restart it to finish");
+        _restart();
+    }
+
+    function _restart() {
+        if (restartShell()) {
+            _problem = "";
+            return;
+        }
+        // config.json holds the restored settings: saving the running ones would undo it
+        _restartPending = true;
+        _problem = "Restart the shell to finish. Changes are not saved until then.";
+        console.warn("[Migrations] the shell could not restart itself: restart it to finish");
+    }
+
+    // Restart shell, on the entry after a restart that was refused. → "" restarted, else why not
+    function retryRestart() {
+        if (!_restartPending)
+            return "Nothing to finish";
+        if (!canRestart())
+            return "The shell cannot restart now";
+        _restart();
+        return "";
     }
 
     property ConfigRestore _restorer: ConfigRestore {

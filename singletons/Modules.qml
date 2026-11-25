@@ -146,6 +146,10 @@ Singleton {
         startDetached(["bash", Quickshell.shellDir + "/scripts/launch.sh", "--restart"]);
         return true;
     }
+    // Whether restartShell would restart now
+    function canRestartShell() {
+        return !_host.testMode && !_host.locked;
+    }
     // How restartShell starts the launcher (the suites put a recorder here: nothing of theirs
     // may restart a shell)
     property var startDetached: argv => Quickshell.execDetached(argv)

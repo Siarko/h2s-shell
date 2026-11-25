@@ -101,8 +101,8 @@ The interface modules are written against (`qs.api`), versioned on its own
 - A settings update that fails at start is told: one critical notification ("Updating
   settings to <version> failed"), whose click opens Settings at the failure, listing the
   parts reset to defaults, with Keep defaults and Restore previous settings (the settings
-  from before the update, with the failed parts held until another version). When the
-  settings cannot be saved at all, Start with default settings. IPC `settings migrations`
+  from before the update, with the failed parts held until another version). When a
+  whole-settings update fails (nothing can be saved), Start with default settings. IPC `settings migrations`
   and `settings restoreMigrationBackup`.
 - Settings → System → NixOS, listed only on NixOS: the system's NixOS configuration as the
   shell finds it (a flake or a classic configuration.nix, in any folder; Change… picks

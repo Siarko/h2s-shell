@@ -20,6 +20,8 @@ Singleton {
         holdSaves: () => Config.holdSaves()
         releaseSaves: () => Config.releaseSaves()
         restartShell: () => Modules.restartShell()
+        canRestart: () => Modules.canRestartShell()
+        busy: Config.migrationBusy
         openSettings: () => Shell.showSettings()
     }
 

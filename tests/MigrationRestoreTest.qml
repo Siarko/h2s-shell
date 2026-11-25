@@ -13,7 +13,10 @@ import qs.singletons
 // restarts — the next start under the same version holds them (the old values kept), under
 // another runs them; a session that saves nothing ("*" failure) offers Start with default
 // settings, which backs up the file and writes the new-config baseline; a backup gone
-// leaves everything and saves again; the test runner sends and writes nothing.
+// leaves everything and saves again; nothing is written while a run goes on or while the
+// shell cannot restart (the session locked); a restart refused after the write keeps saving
+// held and brings the entry back with the problem and Restart shell; a migration run whose
+// config is being replaced writes nothing; the test runner sends and writes nothing.
 TestCase {
     id: suite
     suiteName: "MigrationRestore"
@@ -87,6 +90,8 @@ TestCase {
             property int holds: 0
             property int releases: 0
             property int restarts: 0
+            property bool restartWorks: true
+            property bool restartAllowed: true
             property var askedFor: []
             logging: false
             settleMs: 50
@@ -161,8 +166,9 @@ TestCase {
         notice.releaseSaves = () => notice.releases++;
         notice.restartShell = () => {
             notice.restarts++;
-            return true;
+            return notice.restartWorks;
         };
+        notice.canRestart = () => notice.restartAllowed;
         return notice;
     }
 
@@ -189,6 +195,8 @@ TestCase {
         _failedAndRestored();
         _keepDefaults();
         _backupGone();
+        _cannotRestart();
+        _writesHeld();
         _readOnlySession();
         _testRunner();
         _clock.start();
@@ -240,7 +248,7 @@ TestCase {
             assertEqual(sent.options.body, "Defaults are used where possible. See Settings for details.", "told: the body");
             assertEqual(sent.options.urgency + "|" + sent.options.expireTime + "|" + sent.options.format, "critical|0|plain", "told: critical, no timeout, plain");
             assertEqual(sent.options.actions.map(action => action.id + ":" + action.label).join("|"),
-                        "default:Settings|keep:Keep defaults|restore:Restore previous settings", "told: its click and its two buttons");
+                        "default:Open Settings|keep:Keep defaults|restore:Restore previous settings", "told: its click and its two buttons");
             assertEqual(notice.current.parts.join(","), "music widget presets", "told: the part reset, in words");
             assert(notice.entryShown, "told: the entry shown");
             sent.options.actions[0].onTriggered();
@@ -255,6 +263,10 @@ TestCase {
             assertEqual(notice.askedFor.join(","), "restore", "restore button: … and the question asked there, nothing restored yet");
             assertEqual(notice.holds + notice.restarts, 0, "restore button: nothing written before the answer");
             assertEqual(notice.restore("an old key"), "The failure asked about is not the current one", "restore: an answer to another failure refused");
+            notice.busy = true;
+            assertEqual(notice.restore(""), "The settings update is still running", "restore: refused while a run goes on");
+            notice.busy = false;
+            assertEqual(notice.holds, 0, "restore: … nothing held"); 
             assertEqual(notice.restore(notice.current.key), "", "restore: started");
             assertEqual(notice.holds, 1, "restore: saving held first");
             assert(!notice.entryShown, "restore: the entry gone");
@@ -346,6 +358,60 @@ TestCase {
             assertEqual(notice.restarts, 0, "gone: no restart");
             assertEqual(_read(dir + "/config.json"), before, "gone: the file left as it was");
             assert(notice.entryShown, "gone: the entry stays");
+        });
+    }
+
+    // ---- The shell cannot restart: nothing written; refused after the write: finished later ----
+    function _cannotRestart() {
+        const dir = _scratch + "/locked";
+        const registry = [_broken];
+        let config = null;
+        let notice = null;
+        let before = "";
+        _then("the locked case's folder", () => true, () => {
+            _write(dir + "/config.json", _oldText);
+            config = _open(dir, registry);
+            notice = _newNotice(config, registry);
+            config.load();
+        });
+        _then("the locked case told", () => notice !== null && notice.sent.length > 0, () => {
+            before = _read(dir + "/config.json");
+            notice.restartAllowed = false;
+            assertEqual(notice.restore(""), "The shell cannot restart now", "locked: restore refused before anything is written");
+            assertEqual(notice.holds + notice.restarts, 0, "locked: nothing held, no restart");
+            assert(notice.entryShown, "locked: the entry stays");
+            notice.restartAllowed = true;
+            notice.restartWorks = false;
+            assertEqual(notice.restore(""), "", "refused restart: started");
+        });
+        _then("the refused restart answered", () => notice.restarts > 0, () => {
+            assert(_read(dir + "/config.json") !== before, "refused restart: the restore written");
+            assert(notice.restartPending && notice.entryShown, "refused restart: the entry back");
+            assertEqual(notice.problem, "Restart the shell to finish. Changes are not saved until then.", "refused restart: the problem said");
+            assertEqual(notice.holds + "|" + notice.releases, "1|0", "refused restart: saving stays held (the running settings would undo the restore)");
+            assertEqual(notice.restore(""), "Already under way", "refused restart: no second restore");
+            notice.restartAllowed = false;
+            assertEqual(notice.retryRestart(), "The shell cannot restart now", "refused restart: Restart shell refused while locked");
+            notice.restartAllowed = true;
+            notice.restartWorks = true;
+            assertEqual(notice.retryRestart(), "", "refused restart: Restart shell");
+            assertEqual(notice.restarts + "|" + notice.problem, "2|", "refused restart: restarted, the problem gone");
+        });
+    }
+
+    // ---- A run whose config is being replaced writes nothing ----
+    function _writesHeld() {
+        const dir = _scratch + "/held";
+        let config = null;
+        _then("the held case's folder", () => true, () => {
+            _write(dir + "/config.json", _oldText);
+            config = _open(dir, [_rename]);
+            config.writesHeld = true;
+            config.load();
+        });
+        _then("the held case read", () => config.reads === 1 && !config.migrationBusy, () => {
+            assertEqual(_read(dir + "/config.json"), _oldText, "writes held: the run writes nothing over the file");
+            assert(String(config.migrationReports.load?.problem).includes("being replaced"), "writes held: the report says why");
         });
     }
 

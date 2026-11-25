@@ -48,13 +48,19 @@ Singleton {
     // → { kind: "" | "reset" | "readOnly", key (changes when what is said changes), summary,
     //   body, parts: [label] (the parts reset to defaults), held: [id] (what a restore holds:
     //   the failed migrations and those skipped after them), heldParts: [label], backup (the
-    //   backup taken before the first run that wrote one; "" none) }
+    //   backup taken before the first run that wrote one; "" none), startDefaults (a
+    //   whole-config ("*") migration failed: Start with default settings is the way out — not
+    //   for a file that could not be read or written, which the next start tries again) }
     function notice(reports, saveBlocked, version, registry) {
         const phases = [reports?.load ?? null, reports?.afterSeed ?? null].filter(report => report !== null && typeof report === "object");
         const reset = [];
         const held = [];
         let backup = "";
+        let whole = false;
         for (const report of phases) {
+            const failed = _list(registry).find(each => each?.migrationId === report.failure?.id && typeof report.failure?.id === "string");
+            if (failed && MigrationRules.parseScope(failed.scope).whole)
+                whole = true;
             for (const entry of _list(report.reset))
                 if (typeof entry?.id === "string" && !reset.includes(entry.id))
                     reset.push(entry.id);
@@ -67,13 +73,14 @@ Singleton {
         const kind = saveBlocked === true ? "readOnly" : reset.length > 0 ? "reset" : "";
         const shown = typeof version === "string" ? version : "";
         const result = {
-            kind: kind, summary: "", body: "", parts: [], held: [], heldParts: [], backup: "", key: ""
+            kind: kind, summary: "", body: "", parts: [], held: [], heldParts: [], backup: "", startDefaults: false, key: ""
         };
         if (kind === "")
             return result;
         result.summary = "Updating settings to " + shown + " failed";
         if (kind === "readOnly") {
             result.body = "Changes are not saved. See Settings for details.";
+            result.startDefaults = whole;
         } else {
             result.body = "Defaults are used where possible. See Settings for details.";
             result.parts = _labels(reset, registry);
@@ -81,7 +88,7 @@ Singleton {
             result.heldParts = _labels(held, registry);
             result.backup = backup;
         }
-        result.key = JSON.stringify([kind, shown, result.parts, result.held, result.backup]);
+        result.key = JSON.stringify([kind, shown, result.parts, result.held, result.backup, result.startDefaults]);
         return result;
     }
 
@@ -152,10 +159,12 @@ Singleton {
         return { ok: true, text: MigrationRules.configText(config), problem: "" };
     }
 
-    // A new config with the defaults: nothing but every registered migration recorded as done
-    // (the new-config baseline) and the version that wrote it
+    // A new config with the defaults: the registered migrations recorded as done, but for those
+    // that reach side files (file: paths): the side files stay as they are, so whether those
+    // are migrated is the next start's own check — and the version that wrote it
     function defaultsConfig(registry, version) {
-        return MigrationRules.configText({ migratedKeys: MigrationRules.baseline(registry, []), writtenBy: version });
+        const reachFiles = migration => MigrationRules.parseScope(migration?.scope).paths.some(path => path.kind === "file");
+        return MigrationRules.configText({ migratedKeys: MigrationRules.baseline(_list(registry).filter(migration => !reachFiles(migration)), []), writtenBy: version });
     }
 
     // The last runs as IPC tells them: the notice and both reports, as JSON

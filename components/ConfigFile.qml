@@ -37,6 +37,8 @@ JsonConfigFile {
     property var registry: Migrations.all()
     // Nothing written: no migration result, no backup (the test runner)
     property bool readOnly: false
+    // config.json is being replaced (Config.savesHeld): a migration run writes nothing more
+    property bool writesHeld: false
     // Where a config migrated in memory only is put for a moment, for the adapter to read
     // — the runtime folder, private to the user; none without it (never a shared folder: the
     // config holds the Google tokens)
@@ -83,6 +85,7 @@ JsonConfigFile {
         readOnly: root.readOnly
         version: root.version
         viewDir: root.viewDir
+        writesHeld: root.writesHeld
         onPruned: root.backupsPruned()
         // Taken at once: a save before the run ends keeps what the run wrote, and a key it
         // removed stays removed

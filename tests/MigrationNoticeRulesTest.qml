@@ -16,7 +16,8 @@ TestCase {
     readonly property var _registry: [
         { migrationId: "2026-11-25-x-music-popup", scopeLabel: "music widget presets", summary: "Music popup" },
         { migrationId: "2026-11-25-y-music-more", summary: "More music" },
-        { migrationId: "2026-11-25-z-other" }
+        { migrationId: "2026-11-25-z-other" },
+        { migrationId: "2026-11-25-w-everything", scope: ["*"], wholeScopeReason: "a test" }
     ]
     readonly property string _backup: "/c/config.json.bak-2026-01-15T10-29-03-120Z-migration"
 
@@ -73,6 +74,13 @@ TestCase {
         assertEqual(notice.kind, "readOnly", "readOnly: a session that saves nothing");
         assertEqual(notice.summary + "|" + notice.body, "Updating settings to 2.2.0 failed|Changes are not saved. See Settings for details.", "readOnly: the texts");
         assertEqual(notice.held.length + "|" + notice.backup, "0|", "readOnly: nothing to restore");
+        assert(!notice.startDefaults, "readOnly: a failure that is no registered \"*\" migration: no Start with default settings");
+        const whole = rules.notice({ load: null, afterSeed: _report({ failure: { id: "2026-11-25-w-everything", error: "broken" } }) }, true, "2.2.0", _registry);
+        assert(whole.startDefaults, "readOnly: a \"*\" migration failed: Start with default settings");
+        assert(whole.key !== notice.key, "readOnly: … another key");
+        const unreadable = rules.notice({ load: _report({ failure: { id: "", error: "themes/dark.json could not be read" } }) }, true, "2.2.0", _registry);
+        assert(!unreadable.startDefaults, "readOnly: a file that could not be read: no Start with default settings (the next start tries again)");
+        assert(!rules.notice({ load: _report({ failure: { id: "2026-11-25-w-everything", error: "x" } }) }, false, "2.2.0", _registry).startDefaults, "readOnly: none while saving works");
         const both = rules.notice({ load: _report({ reset: [{ id: "a", error: "x" }], backup: _backup }) }, true, "2.2.0", _registry);
         assertEqual(both.kind, "readOnly", "readOnly: wins over a reset");
     }
@@ -120,8 +128,10 @@ TestCase {
         assertEqual(parsed.migratedKeys.join(","), "a-1,held:2026-11-25-x-music-popup@2.2.0", "restored config: with the holds");
         assert(!rules.restoredConfig("not json", [], "2.2.0").ok && !rules.restoredConfig("[1]", [], "2.2.0").ok && !rules.restoredConfig("", [], "2.2.0").ok,
                "restored config: a backup that is not a settings file refused");
-        const defaults = JSON.parse(rules.defaultsConfig([{ migrationId: "2026-11-25-a" }, { migrationId: "2026-11-25-b" }], "2.2.0"));
-        assertEqual(JSON.stringify(defaults), JSON.stringify({ migratedKeys: ["2026-11-25-a", "2026-11-25-b"], writtenBy: "2.2.0" }), "defaults config: the baseline, nothing else");
+        const defaults = JSON.parse(rules.defaultsConfig([{ migrationId: "2026-11-25-a", scope: ["setting:a.*"] }, { migrationId: "2026-11-25-t", scope: ["setting:bar.*", "file:themes/*.json"] },
+                                                          { migrationId: "2026-11-25-b", scope: ["*"] }], "2.2.0"));
+        assertEqual(JSON.stringify(defaults), JSON.stringify({ migratedKeys: ["2026-11-25-a", "2026-11-25-b"], writtenBy: "2.2.0" }),
+                    "defaults config: the baseline but for the migrations of side files (left to the next start's check), nothing else");
     }
 
     function _ipc() {

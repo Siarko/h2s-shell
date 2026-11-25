@@ -571,9 +571,13 @@ run's backup back with `held:<id>@<this version>` for the failed migrations and 
 after them (`components/ConfigRestore.qml`), and restarts the shell; at the next start under
 this version those are held — their part keeps its old values, unused —, and under any other
 version they run again on the old values. A session that saves nothing (a `*` failure, a
-write that failed) gets the same notification with "Changes are not saved." and **Start with
-default settings**: the file is copied the same way and a new config holding only the
-new-config baseline is written, then the shell restarts. IPC: `settings migrations` (the
+file that could not be read or written) gets the same notification with "Changes are not
+saved."; after a `*` failure it offers **Start with default settings**: the file is copied the
+same way and a new config is written recording every migration as done but those that reach
+side files (whether those still need migrating is the next start's check), then the shell
+restarts. Neither writes while a run goes on (a run's writes stop once saving is held) or while
+the shell cannot restart (the session locked); a restart refused after the write keeps saving
+held and puts the entry back with Restart shell. IPC: `settings migrations` (the
 notice and the last runs' reports, JSON), `settings restoreMigrationBackup`. Nothing is sent
 or written under the test runner.
 

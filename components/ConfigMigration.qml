@@ -25,6 +25,8 @@ QtObject {
     // Where a config migrated in memory only is put for the adapter to read (removed once
     // read): a private folder (the runtime folder); "" for none, and then none is made
     property string viewDir: ""
+    // config.json is being replaced (a restore): a run not yet written writes nothing more
+    property bool writesHeld: false
     // A run goes on (until `finished`)
     readonly property bool running: _phase !== ""
     readonly property bool busy: running || _pruneLister.running || _pruneRemover.running
@@ -260,6 +262,10 @@ QtObject {
     }
 
     function _writeSideFiles() {
+        if (writesHeld) {
+            _failed("config.json is being replaced: the migrations run again at the next start", true);
+            return;
+        }
         if (_phase === "afterSeed" && typeof _source === "function" && !_againOnCurrent())
             return;
         for (const file of Object.keys(_outcome.files)) {

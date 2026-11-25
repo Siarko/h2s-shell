@@ -16,7 +16,8 @@ TestCase {
 
     readonly property var _registry: [
         { migrationId: "2026-11-25-x-music-popup", scopeLabel: "music widget presets" },
-        { migrationId: "2026-11-25-z-tailscale", scopeLabel: "Tailscale module settings" }
+        { migrationId: "2026-11-25-z-tailscale", scopeLabel: "Tailscale module settings" },
+        { migrationId: "2026-11-25-w-everything", scope: ["*"], wholeScopeReason: "a test" }
     ]
     readonly property string _backup: "/c/config.json.bak-2026-01-15T10-29-03-120Z-migration"
 
@@ -29,7 +30,9 @@ TestCase {
         readonly property bool entryShown: current.kind !== "" && !hidden
         readonly property bool canRestore: current.kind === "reset" && current.backup !== ""
         property string problem: ""
+        property bool restartPending: false
         property var calls: []
+        function retryRestart() { calls = calls.concat(["restart"]); return ""; }
         signal asked(string what)
         function keepDefaults(key) { calls = calls.concat(["keep:" + key]); return true; }
         function restore(key) { calls = calls.concat(["restore:" + key]); return ""; }
@@ -126,8 +129,21 @@ TestCase {
         notice.reports = { load: { reset: [{ id: "2026-11-25-x-music-popup", error: "x" }], skipped: [], backup: "" } };
         assertEqual(_shown(entry, "migrationRestore").length, 0, "no backup: no Restore");
 
+        notice.restartPending = true;
+        assert(_shown(entry, "migrationRestartShell").length === 1 && _shown(entry, "migrationKeepDefaults").length === 0 && _shown(entry, "migrationRestore").length === 0,
+               "restart refused: only Restart shell");
+        notice.calls = [];
+        _named(entry, "migrationRestartShell")[0].clicked();
+        assertEqual(notice.calls.join(","), "restart", "restart refused: Restart shell tries again");
+        notice.restartPending = false;
+        assertEqual(_shown(entry, "migrationRestartShell").length, 0, "no restart pending: no Restart shell");
+
         notice.calls = [];
         notice.saveBlocked = true;
+        notice.reports = { load: { failure: { id: "", error: "a file could not be read" } } };
+        assertEqual(_named(entry, "migrationFailureLead")[0].text, "Changes are not saved.", "saves nothing (a file): said");
+        assertEqual(_shown(entry, "migrationStartDefaults").length, 0, "saves nothing (a file): no Start with default settings");
+        notice.reports = { load: { failure: { id: "2026-11-25-w-everything", error: "x" } } };
         assertEqual(_named(entry, "migrationFailureLead")[0].text, "Changes are not saved.", "saves nothing: said");
         assertEqual(_named(entry, "migrationFailurePart").length, 0, "saves nothing: no parts");
         assert(_shown(entry, "migrationKeepDefaults").length === 0 && _shown(entry, "migrationStartDefaults").length === 1, "saves nothing: Start with default settings…");

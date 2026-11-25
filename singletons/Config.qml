@@ -93,6 +93,8 @@ Singleton {
     // stays as it is for the session — changes take effect, they are not saved. Only the save
     // reads it; everything else runs as normal (readOnly means the test runner)
     readonly property bool saveBlocked: _file.migrationReadOnly
+    // A migration run goes on (or its backups are pruned)
+    readonly property bool migrationBusy: _file.migrationBusy
     property bool _refusedSave: false
     // config.json is being replaced (MigrationFailureNotice's restore): nothing is saved over it
     property bool savesHeld: false
@@ -165,6 +167,7 @@ Singleton {
         id: _file
         configPath: StandardPaths.writableLocation(StandardPaths.GenericConfigLocation) + "/h2s_shell/config.json"
         readOnly: root.readOnly
+        writesHeld: root.savesHeld
         onAdapterUpdated: _saveTimer.restart()
         onRead: {
             if (newerNotice.shown)
