@@ -494,8 +494,13 @@ sleep (`sleepEnabled`, `sleepTimeout`) and hibernation (`hibernateEnabled`,
   followed, after a fresh read of its inhibitors, by a plain `Suspend`, so the computer
   still sleeps.
   - **NixOS**: `/etc` is generated: set the delay with
-    `programs.h2s-shell.idle.hibernateDelay = "3h";` (it goes into sleep.conf). Hibernation
-    itself needs a swap device (`swapDevices`) and `boot.resumeDevice`.
+    `programs.h2s-shell.idle.hibernateDelay = "3h";` (it goes into sleep.conf). Once the
+    shell's settings file is in force (Settings → System → NixOS), Apply writes the time into
+    that file and rebuilds NixOS (the build first, then Apply now and the password), and Undo
+    rebuilds with the value before; the NixOS page shows the same row. A
+    `systemd.sleep.settings.Sleep.HibernateDelaySec` of the configuration's own wins over
+    the shell's: the section says "Set in your configuration: …" and offers no Apply.
+    Hibernation itself needs a swap device (`swapDevices`) and `boot.resumeDevice`.
   - **Arch**: Apply writes `/etc/systemd/sleep.conf.d/h2s-shell.conf` (`[Sleep]`,
     `HibernateDelaySec=`) through pkexec, asking for the password on that click, keeping the
     file it replaces as a backup that Undo puts back; Undo goes back one change, to the file as

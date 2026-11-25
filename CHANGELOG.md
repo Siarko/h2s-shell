@@ -89,6 +89,14 @@ The interface modules are written against (`qs.api`), versioned on its own
   only that click asks for the password and switches. Closing the panel does not stop the
   build; the NixOS page shows where it is, with Show and Undo. A configuration only root can
   build carries the lock on its Build button.
+- NixOS: the hibernation delay is the first setting applied through the configuration: once
+  the shell's file is in force, Behaviour → When away (and the NixOS page's "Hibernate
+  after") offer Apply, which writes the time into the shell's file and rebuilds, and Undo,
+  which rebuilds with the value before. A `systemd.sleep.settings.Sleep.HibernateDelaySec` of
+  your own wins: the page says "Set in your configuration: 10 min" and offers nothing over
+  it. The module now defines HibernateDelaySec below such a line instead of clashing with it
+  ("conflicting definition values"), and publishes the merged value in
+  `/etc/h2s-shell/settings.json` (`system`).
 - Settings → System → Authentication: "Sign-in rules" for sudo and administrator prompts
   (polkit) — what is in force as steps, rows of methods (fingerprint, security key,
   password, a raw PAM line) tried from the top with their control words and details, one list

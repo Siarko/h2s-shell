@@ -55,8 +55,9 @@ QtObject {
 
     // The user's Apply of `value`: `request` { current (readInForce's `file` as the user saw
     // it), replace (the user was told that file is not exactly the shell's), anyway (the user
-    // asked to write where the system's configuration makes /etc) } → the integration's
-    // { started, refusal }
+    // asked to write where the system's configuration makes /etc), flow (the Settings
+    // window's way to the rebuild, for a setting kept in the system's configuration) } → the
+    // integration's { started, refusal }
     function apply(value, request) {
         if (_busy !== "")
             return { started: false, refusal: EtcFilesRules.refusal("busy") };
@@ -64,6 +65,8 @@ QtObject {
         const handlers = { replace: request?.replace === true, anyway: request?.anyway === true, done: outcome => root?._finish("apply", outcome) };
         if (request?.current !== undefined && request?.current !== null)
             handlers.current = request.current;
+        if (request?.flow)
+            handlers.flow = request.flow;
         // Before the run: its answer may come at once
         _forget();
         const started = _started(integration.apply(kind, value, handlers));
@@ -74,8 +77,9 @@ QtObject {
         return started;
     }
 
-    // Put back what the last change of this object replaced → as apply
-    function undo() {
+    // Put back what the last change of this object replaced; `request` { flow } as apply's →
+    // as apply
+    function undo(request) {
         if (_busy !== "")
             return { started: false, refusal: EtcFilesRules.refusal("busy") };
         if (_last === null)
@@ -83,7 +87,10 @@ QtObject {
         _busy = "undo";
         // Before the run: its answer may come at once
         _forget();
-        const started = _started(integration.undo(kind, { from: _last, done: outcome => root?._finish("undo", outcome) }));
+        const handlers = { from: _last, done: outcome => root?._finish("undo", outcome) };
+        if (request?.flow)
+            handlers.flow = request.flow;
+        const started = _started(integration.undo(kind, handlers));
         if (!started.started) {
             _busy = "";
             read();

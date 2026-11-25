@@ -160,7 +160,9 @@ What a change to the system is on this distribution is its **integration**'s
 (`distributions/Integration.qml`, one per distribution in `distributions/<id>/`; the answers'
 shapes are `singletons/IntegrationRules.qml`'s). `Distribution` forwards to the one the system
 is: per change kind (`sleep.hibernateDelay`, …) `capability(kind)` says how the system makes it
-— `apply` (the shell writes it), `declare`, `copy` (the line for the system's configuration)
+— `apply` (the shell writes it), `declare` (kept in the shell's file in the system's
+configuration and applied by rebuilding: NixOS's hibernation delay while connected,
+`distributions/nixos/NixosDeclare.qml`, `NixosDeclareRules`), `copy` (the line for the system's configuration)
 or `unavailable` with its reason — and `plan`, `apply`, `undo` and `readInForce` act on it;
 while the distribution is not known nothing is offered and nothing runs. `readInForce` says
 what the system really uses, read as the system merges it (for the hibernation delay

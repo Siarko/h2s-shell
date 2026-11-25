@@ -26,11 +26,15 @@ let
     in if orders == [ ] then 10000 else lib.foldl' lib.min (lib.head orders) orders;
 
   # The system's delay before a sleep the shell starts turns into hibernation: sleep.conf's
-  # HibernateDelaySec, through whichever option this NixOS has for it
+  # HibernateDelaySec, through whichever option this NixOS has for it. Never above mkDefault:
+  # the configuration's own HibernateDelaySec wins over the shell's option instead of
+  # clashing with it; a value from the shell's settings file (priority 1001, below mkDefault)
+  # stays below a profile's mkDefault of it too.
   hibernateDelay = toString cfg.idle.hibernateDelay;
+  sleepPriority = lib.max 1000 options.programs.h2s-shell.idle.hibernateDelay.highestPrio;
   sleepConfig =
     if options.systemd.sleep ? settings
-    then { systemd.sleep.settings.Sleep.HibernateDelaySec = hibernateDelay; }
+    then { systemd.sleep.settings.Sleep.HibernateDelaySec = lib.mkOverride sleepPriority hibernateDelay; }
     else { systemd.sleep.extraConfig = "HibernateDelaySec=${hibernateDelay}\n"; };
 in
 {
@@ -56,8 +60,10 @@ in
         with hibernation on (Settings, When away, Hibernate): systemd's HibernateDelaySec in
         sleep.conf — seconds, or a systemd time span such as "3h". It is one setting for the
         whole machine, and /etc is generated here, so the shell shows it and names this
-        option instead of writing it. null leaves systemd's default (estimated from the
-        battery; 2 h without one).
+        option instead of writing it, or sets it through its settings file (settingsFile).
+        A HibernateDelaySec of the configuration's own
+        (systemd.sleep.settings.Sleep.HibernateDelaySec) wins over this option. null leaves
+        systemd's default (estimated from the battery; 2 h without one).
       '';
     };
   };

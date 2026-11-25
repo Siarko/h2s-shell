@@ -60,6 +60,9 @@ Flickable {
     property var delayInForce: Idle.hibernateDelayInForce
     property string delayBusy: Idle.hibernateDelayBusy
     property bool delayUndoable: Idle.hibernateDelayUndoable
+    // The Settings window's way to the rebuild of NixOS (NixosRebuildFlow), for a delay kept
+    // in the system's configuration; null elsewhere
+    property var nixosFlow: null
     // Where the system's configuration sets the delay, in the integration's words
     property string delayHint: Distribution.plan("sleep.hibernateDelay", _hibernate.after).preview?.hint ?? ""
     // What the section offers under the times: its line, Apply and Undo, labels and effects
@@ -611,7 +614,7 @@ Flickable {
                         kind: "save"
                         available: root._delayOffer.apply.available
                         fontSize: Theme.fontSizeSmall
-                        onClicked: Idle.applyHibernateDelay(root._delayOffer.apply.request)
+                        onClicked: Idle.applyHibernateDelay(root._delayOffer.apply.request, root.nixosFlow)
                     }
                     // A setting the change would override (another file read before the shell's,
                     // the shell's own changed outside it): Apply acts only on a second click
@@ -626,7 +629,7 @@ Flickable {
                         // The question is about this file and this time: another resets it
                         readonly property string subject: JSON.stringify(root._delayOffer.apply.request)
                         onSubjectChanged: asking = false
-                        onConfirmed: Idle.applyHibernateDelay(root._delayOffer.apply.request)
+                        onConfirmed: Idle.applyHibernateDelay(root._delayOffer.apply.request, root.nixosFlow)
                     }
                     SmallButton {
                         objectName: "hibernateUndo"
@@ -634,7 +637,7 @@ Flickable {
                         label: root._delayOffer.undo.label
                         available: root._delayOffer.undo.available
                         fontSize: Theme.fontSizeSmall
-                        onClicked: Idle.undoHibernateDelay()
+                        onClicked: Idle.undoHibernateDelay(root.nixosFlow)
                     }
                 }
             }

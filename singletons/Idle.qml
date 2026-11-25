@@ -93,18 +93,19 @@ Singleton {
     }
 
     // The Hibernate section's Apply (the user's click; polkit asks for the password):
-    // `request` HibernateRules.delayOffer's { seconds, current, replace } → false when not
-    // started (said in the log)
-    function applyHibernateDelay(request) {
-        const started = _delayChange.apply(request?.seconds, { current: request?.current, replace: request?.replace === true });
+    // `request` HibernateRules.delayOffer's { seconds, current, replace }, `flow` the Settings
+    // window's way to the rebuild of NixOS (a delay kept in the system's configuration) →
+    // false when not started (said in the log)
+    function applyHibernateDelay(request, flow) {
+        const started = _delayChange.apply(request?.seconds, { current: request?.current, replace: request?.replace === true, flow: flow ?? null });
         if (!started.started)
             _log("warning", "the system's delay before hibernating not set: " + started.refusal?.text);
         return started.started;
     }
 
     // The Hibernate section's Undo: the delay's file as it was before this run's last Apply
-    function undoHibernateDelay() {
-        const started = _delayChange.undo();
+    function undoHibernateDelay(flow) {
+        const started = _delayChange.undo({ flow: flow ?? null });
         if (!started.started)
             _log("warning", "the system's delay before hibernating not put back: " + started.refusal?.text);
         return started.started;

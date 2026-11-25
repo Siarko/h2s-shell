@@ -16,7 +16,8 @@ import qs.singletons.network
 //              "copy"         the system's configuration sets it: the shell gives the text
 //              "unavailable"  not on this system: `reason` says so
 //     trial    the change is tried before it is applied
-//     undo     the applied change can be put back
+//     undo     the applied or declared change can be put back (declared: rebuilt with the
+//              shell's previous values)
 //     inForce  readInForce reads what is in force
 //     anyway   "copy" or "declare": the shell can still write its file where the system's
 //              configuration makes /etc, when the user asks (apply's `handlers.anyway`;
@@ -30,7 +31,8 @@ import qs.singletons.network
 //              the value's checks refuse) }], backups (the folder each change is kept in) };
 //              "copy", "declare": { option, snippet ("" while the value's checks refuse),
 //              hint (the integration's words naming where the setting is made) }
-//   apply / undo → { started, refusal }
+//   apply / undo → { started, refusal } ("declare": through the kind's writer, which may need
+//     more in `handlers`, e.g. the window's way to the rebuild)
 //   readInForce → what the system uses, read as the system merges it (inForceCommand), and
 //     the shell's own file: { state, value, from, elsewhere, file, afterOwn, shadowed }
 //     state      "set" (a file sets it), "default" (none does: the system's own default),
@@ -90,9 +92,11 @@ Singleton {
         const entry = table !== null && typeof table === "object" && Object.prototype.hasOwnProperty.call(table, kind) ? table[kind] : null;
         if (entry === null || typeof entry !== "object" || !modes.includes(entry.mode) || entry.mode === "unavailable")
             return _unavailable(typeof entry?.reason === "string" && entry.reason !== "" ? entry.reason : unsupported, true);
-        // Only an applied change is tried or undone by the shell
+        // Only an applied change is tried by the shell; an applied or declared one may be
+        // undone (a declared one by rebuilding with the shell's previous values)
         const applied = entry.mode === "apply";
-        return { mode: entry.mode, trial: applied && entry.trial === true, undo: applied && entry.undo === true,
+        const undoable = applied || entry.mode === "declare";
+        return { mode: entry.mode, trial: applied && entry.trial === true, undo: undoable && entry.undo === true,
                  inForce: entry.inForce === true, anyway: !applied && entry.anyway === true, reason: "", known: true };
     }
 
@@ -122,7 +126,11 @@ Singleton {
             return false;
         if (answer.mode === "unavailable")
             return answer.reason !== "" && !answer.trial && !answer.undo && !answer.inForce && !answer.anyway;
-        return answer.known && answer.reason === "" && (answer.mode === "apply" ? !answer.anyway : !answer.trial && !answer.undo);
+        if (!answer.known || answer.reason !== "")
+            return false;
+        if (answer.mode === "apply")
+            return !answer.anyway;
+        return !answer.trial && (answer.mode === "declare" || !answer.undo);
     }
 
     // Whether `value` is one for the kind
@@ -226,7 +234,7 @@ Singleton {
     function applyRefusal(answer, anyway) {
         if (answer.mode === "unavailable")
             return refusal(answer.known === false ? "unknown" : "unavailable", answer.reason);
-        return answer.mode === "apply" || (anyway === true && answer.anyway === true) ? null : refusal("mode");
+        return answer.mode === "apply" || answer.mode === "declare" || (anyway === true && answer.anyway === true) ? null : refusal("mode");
     }
 
     // Why undo may not start: null when it may

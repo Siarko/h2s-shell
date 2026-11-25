@@ -10,7 +10,9 @@
 # value or schema version is an assertion naming the key; a key this module does not know
 # (a newer shell's) is a warning and is ignored. What was taken in, and what is in force
 # for the same options, is published as /etc/h2s-shell/settings.json for the shell to read
-# unprivileged; the file's presence says the line is in place.
+# unprivileged, with what the system's own options merged for the same settings (`system`:
+# HibernateDelaySec, which the configuration may set itself); the file's presence says the
+# line is in place.
 { config, options, lib, ... }:
 
 let
@@ -160,6 +162,12 @@ let
     version = schemaVersion;
     settings = nested (map asOption result.taken);
     inForce = nested (map (path: { inherit path; value = data (lib.getAttrFromPath path cfg); }) leaves);
+    # What the system's own options merge to for the settings the module passes on to them:
+    # a definition of the configuration's own there wins over the shell's (module.nix), and
+    # the shell tells it from the file's value by this
+    system.idle.hibernateDelay =
+      if options.systemd.sleep ? settings then config.systemd.sleep.settings.Sleep.HibernateDelaySec or null
+      else cfg.idle.hibernateDelay;
   };
 in
 {

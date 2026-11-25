@@ -5,7 +5,9 @@
 # The fixture (tests/fixtures/settings-nixos/settings.json) gives the same options and the
 # same /etc files as the same values written as options by hand, and publishes what it took
 # in as /etc/h2s-shell/settings.json; a definition of the configuration's own, plain or at
-# mkDefault, wins alone over the file's value, and sudo's and polkit's rules are one unit;
+# mkDefault, wins alone over the file's value, and sudo's and polkit's rules are one unit; the
+# configuration's own systemd HibernateDelaySec wins over the file's hibernateDelay without a
+# clash, and the published file holds both;
 # without the file, or with the shell off, nothing is read and nothing is published. Then the refusals (a wrong version or
 # value: an assertion naming the version or the key) and the warnings (a key the module does
 # not know: ignored, the rest still taken).
@@ -158,6 +160,30 @@ let
      in result (pamOf config == { rules = null; sudo = [ "password" "system" ]; polkit = null; } && ourWarnings config == [ ]) "the file's own sudo rules alone: taken, no warning" (builtins.toJSON (pamOf config)))
   ];
 
+  # The configuration's own HibernateDelaySec beside the file's hibernateDelay (the owner's
+  # shape): it wins, nothing clashes, and the published file tells the two apart
+  collidedOf = own: configOf { programs.h2s-shell.settingsFile = fixturePath; systemd.sleep.settings.Sleep.HibernateDelaySec = own; };
+  collided = collidedOf "10min";
+  collidedDefault = collidedOf (lib.mkDefault "10min");
+  collidedPublished = builtins.fromJSON (etcText collided "h2s-shell/settings.json");
+  # … and beside the shell's own option written by hand: the configuration's systemd line wins too
+  collidedOption = configOf { programs.h2s-shell.idle.hibernateDelay = "3h"; systemd.sleep.settings.Sleep.HibernateDelaySec = "10min"; };
+  collisions = [
+    (result (lib.hasInfix "HibernateDelaySec=10min" (etcText collided "systemd/sleep.conf") && !(lib.hasInfix "HibernateDelaySec=3h" (etcText collided "systemd/sleep.conf")))
+      "the configuration's own HibernateDelaySec beside the file's: it wins, no conflicting definitions" (builtins.toJSON (etcText collided "systemd/sleep.conf")))
+    (result (failedOf collided == [ ]) "… and evaluation succeeds" (builtins.toJSON (failedOf collided)))
+    (result (collidedPublished.settings.idle.hibernateDelay or null == "3h" && collidedPublished.system.idle.hibernateDelay or null == "10min")
+      "… the published file has the file's value and the system's merged one" (builtins.toJSON collidedPublished))
+    (result (lib.hasInfix "HibernateDelaySec=10min" (etcText collidedDefault "systemd/sleep.conf"))
+      "the configuration's own HibernateDelaySec at mkDefault beside the file's: it wins too" (builtins.toJSON (etcText collidedDefault "systemd/sleep.conf")))
+    (result (lib.hasInfix "HibernateDelaySec=10min" (etcText collidedOption "systemd/sleep.conf"))
+      "the configuration's own HibernateDelaySec beside a hand-written idle.hibernateDelay: it wins, no clash" (builtins.toJSON (etcText collidedOption "systemd/sleep.conf")))
+    (result ((published.system.idle.hibernateDelay or null) == "3h")
+      "the file's hibernateDelay alone: the published system value is it" (builtins.toJSON (published.system or null)))
+    (let p = builtins.fromJSON (etcText (configOf (withFile { version = 1; })) "h2s-shell/settings.json");
+     in result (p ? system && p.system.idle.hibernateDelay == null) "no hibernateDelay anywhere: the published system value is null" (builtins.toJSON p))
+  ];
+
   refused = description: settings: expected:
     let failed = failedOf (configOf (withFile settings));
     in result (lib.any (message: lib.hasInfix expected message && lib.hasInfix "programs.h2s-shell.settingsFile" message) failed)
@@ -213,5 +239,5 @@ let
     (result (!(lib.hasInfix "future" (etcText unknown "h2s-shell/settings.json"))) "… and the published file leaves the unknown out" (builtins.toJSON (etcText unknown "h2s-shell/settings.json")))
   ];
 in
-let lines = equivalence ++ overrides ++ units ++ refusals ++ [ optionalRow ] ++ warnings;
+let lines = equivalence ++ overrides ++ units ++ collisions ++ refusals ++ [ optionalRow ] ++ warnings;
 in lib.concatStringsSep "\n" ([ "count\t${toString (lib.length lines)}\t" ] ++ lines) + "\n"

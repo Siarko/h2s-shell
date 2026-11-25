@@ -83,7 +83,13 @@ Singleton {
 
     readonly property var _integrations: ({ arch: _arch, nixos: _nixos, generic: _generic })
     property ArchIntegration _arch: ArchIntegration {}
-    property NixosIntegration _nixos: NixosIntegration {}
+    // The configuration's reading and the rebuild only on NixOS: the Nixos singleton is made
+    // on first use
+    readonly property bool _onNixos: detection.ready && detection.id === "nixos"
+    property NixosIntegration _nixos: NixosIntegration {
+        configuration: root._onNixos ? Nixos.configuration : null
+        rebuild: root._onNixos ? Nixos.rebuild : null
+    }
     property GenericIntegration _generic: GenericIntegration {}
 
     onDetectionChanged: {

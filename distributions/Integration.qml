@@ -12,7 +12,8 @@ import qs.singletons.io
 // applies, or writes anyway when the user asks, is written by `files` (EtcFiles; null where
 // nothing is written), or by its own writer in `writers` ({ <kind>: an object with apply(value,
 // handlers), undo(handlers) and busy }: a change made in steps, such as the PAM rules after
-// their trial; the value is one step, which the writer's own rules check). Every function
+// their trial; the value is one step, which the writer's own rules check; a writer with its
+// own readInForce(done, otherwise) reads what is in force itself). Every function
 // answers: apply and undo
 // at once with { started, refusal } and, when started, `handlers.done` once later;
 // readInForce always later, once.
@@ -84,6 +85,17 @@ QtObject {
     // done({ state, value, from, elsewhere, file }) once, later: the setting as the system
     // merges it, and the shell's own file where it writes one (IntegrationRules.inForceOf)
     function readInForce(kind, done) {
+        // A writer that reads what is in force itself (a setting kept in the system's
+        // configuration), with this reading for what it does not keep
+        const writer = _writerOf(kind);
+        if (writer !== null && typeof writer.readInForce === "function") {
+            writer.readInForce(done, answered => root._readMerged(kind, answered));
+            return;
+        }
+        _readMerged(kind, done);
+    }
+
+    function _readMerged(kind, done) {
         const command = Object.prototype.hasOwnProperty.call(inForceCommands, kind) ? inForceCommands[kind]
             : IntegrationRules.inForceCommand(kind, Quickshell.shellDir);
         // The shell's own file, where it may write one

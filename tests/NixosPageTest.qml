@@ -101,6 +101,14 @@ TestCase {
             configuration: suite._configuration
             creator: suite._creator
             copyText: text => suite._copied = text
+            delayCapability: suite._delayCapability
+            delayInForce: suite._delayInForce
+            delayBusy: ""
+            delayUndoable: suite._delayUndoable
+            delayPicked: 10800
+            readDelay: () => suite._delayReads++
+            applyDelay: (request, flow) => suite._delayCalls = suite._delayCalls.concat(["apply " + JSON.stringify(request)])
+            undoDelay: flow => suite._delayCalls = suite._delayCalls.concat(["undo"])
             chooseFolder: (start, done) => {
                 suite._chooserCalls = suite._chooserCalls.concat([start]);
                 suite._chooserDone = done;
@@ -108,6 +116,12 @@ TestCase {
         }
     }
     property var _page: null
+    // The hibernation delay's stand-ins: copied until a test says otherwise
+    property var _delayCapability: ({ mode: "copy", trial: false, undo: false, inForce: true, anyway: false, reason: "", known: true })
+    property var _delayInForce: null
+    property bool _delayUndoable: false
+    property int _delayReads: 0
+    property var _delayCalls: []
 
     // ── Readings ──
 
@@ -363,6 +377,33 @@ TestCase {
         assertEqual([_shown("nixos:change"), _shown("nixos:lookAgain"), _shown("nixos:setup"), _shown("nixos:caption")].join(" "), "true false false false",
                     "… Change…, no Look again, no setup");
         assertEqual(_writer.runs.length, 3, "only the three Create clicks asked the root step");
+
+        // The hibernation delay, kept in the shell's file
+        assert(!_shown("nixos:delay") && !_shown("nixos:delayTitle"), "the delay copied (not connected for it): no row");
+        assert(_delayReads > 0, "… what is in force read with the page");
+        _delayCapability = { mode: "declare", trial: false, undo: true, inForce: true, anyway: false, reason: "", known: true };
+        _delayInForce = { state: "set", value: 600, from: "/srv/nixos-config", elsewhere: "/srv/nixos-config", file: null, afterOwn: true, shadowed: null };
+        assert(_until(() => _shown("nixos:delay")), "declared: the row shows");
+        assertEqual(_text("nixos:delayTitle"), "Hibernate after", "… its title");
+        assertEqual(_text("nixos:delayLine"), "Set in your configuration: 10 min. Your own line wins. To change it here, remove it from your configuration.",
+                    "the configuration's own value: said");
+        assert(!_shown("nixos:delayApply") && !_shown("nixos:delayUndo"), "… no Apply over it, no Undo");
+        _delayInForce = { state: "set", value: 3600, from: "/srv/nixos-config/h2s-shell.json", elsewhere: "", file: null, afterOwn: false, shadowed: null };
+        assert(_until(() => _shown("nixos:delayApply")), "the shell's own in force: Apply");
+        assertEqual(_text("nixos:delayLine"), "Picked 3 h; the system now hibernates after 1 h. Apply rebuilds NixOS.", "… what is picked and in force");
+        assert(_click("nixos:delayApply") && _until(() => _delayCalls.length === 1), "Apply clicked");
+        assertEqual(_delayCalls[0], "apply " + JSON.stringify({ seconds: 10800, current: null, replace: false }), "… the picked time applied");
+        _delayInForce = { state: "set", value: 10800, from: "/srv/nixos-config/h2s-shell.json", elsewhere: "", file: null, afterOwn: false, shadowed: null };
+        _delayUndoable = true;
+        assert(_until(() => _shown("nixos:delayUndo")), "applied: Undo");
+        assertEqual(_shown("nixos:delayApply") + " | " + _text("nixos:delayLine"), "false | Undo puts back the shell's previous value and rebuilds NixOS.",
+                    "… no Apply for the time in force");
+        assert(_click("nixos:delayUndo") && _until(() => _delayCalls.length === 2 && _delayCalls[1] === "undo"), "Undo clicked");
+        _delayUndoable = false;
+        _delayInForce = null;
+        assert(_until(() => !_shown("nixos:delayApply") && _text("nixos:delayLine") === "Picked 3 h; the system's delay could not be read. What NixOS has in force could not be read."),
+               "not read: no Apply, said");
+        _delayCapability = { mode: "copy", trial: false, undo: false, inForce: true, anyway: false, reason: "", known: true };
 
         // Shown again, with Create offered: read again, nothing asked
         assert(_show(_reading()), "found again: shown");

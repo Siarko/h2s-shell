@@ -49,7 +49,10 @@ TestCase {
                     show({ mode: "apply", trial: false, undo: false, inForce: false, anyway: false, reason: "", known: true }), "… said as true only");
         assertEqual(show(rules.capability({ [kind]: { mode: "copy", trial: true, undo: true, inForce: true } }, kind)),
                     show({ mode: "copy", trial: false, undo: false, inForce: true, anyway: false, reason: "", known: true }), "copied: never tried or undone by the shell");
-        assertEqual(show(rules.capability({ [kind]: { mode: "declare", undo: true } }, kind)).indexOf('"undo":false') > 0, true, "… nor declared (not yet)");
+        assertEqual(show(rules.capability({ [kind]: { mode: "declare", trial: true, undo: true, inForce: true } }, kind)),
+                    show({ mode: "declare", trial: false, undo: true, inForce: true, anyway: false, reason: "", known: true }),
+                    "declared: undone (a rebuild with the shell's previous values), read, never tried");
+        assertEqual(rules.capability({ [kind]: { mode: "declare", undo: "yes" } }, kind).undo, false, "… undone only when said");
         assertEqual(rules.capability({ [kind]: { mode: "copy", anyway: true } }, kind).anyway, true, "copied: written anyway when the table says so");
         assertEqual(rules.capability({ [kind]: { mode: "copy", anyway: 1 } }, kind).anyway, false, "… said as true only");
         assertEqual(rules.capability({ [kind]: { mode: "apply", anyway: true } }, kind).anyway, false, "… never where applied (it is applied anyway)");
@@ -81,6 +84,8 @@ TestCase {
                                   ["nothing", null]])
             assert(!rules.valid(bad), "not valid: " + why);
         assert(rules.valid(Object.assign({}, good, { mode: "copy", undo: false, anyway: true })), "valid: copied, written anyway when asked");
+        assert(rules.valid(Object.assign({}, good, { mode: "declare" })), "valid: declared, with Undo");
+        assert(!rules.valid(Object.assign({}, good, { mode: "declare", trial: true })), "not valid: declared but tried");
 
         // ── values and plans ──
         assert(rules.validValue(kind, 60) && rules.validValue(kind, 86400), "the delay: a minute to a day");
@@ -114,6 +119,9 @@ TestCase {
         assertEqual(rules.undoRefusal(rules.capability({ [kind]: { mode: "apply", undo: true } }, kind)), null, "undo: where applied and undone");
         assertEqual(rules.undoRefusal(rules.capability(applied, kind)).code, "noUndo", "… not without Undo");
         assertEqual(rules.undoRefusal(rules.capability(copied, kind)).code, "mode", "… not where copied");
+        assertEqual(rules.applyRefusal(rules.capability({ [kind]: { mode: "declare" } }, kind)), null, "apply: where declared (through its writer)");
+        assertEqual(rules.undoRefusal(rules.capability({ [kind]: { mode: "declare", undo: true } }, kind)), null, "undo: where declared and undone");
+        assertEqual(rules.undoRefusal(rules.capability({ [kind]: { mode: "declare" } }, kind)).code, "noUndo", "… not without Undo");
         assertEqual(rules.undoRefusal(rules.unknownCapability()).code, "unknown", "… not while not known");
         assertEqual(rules.refusal("value").text, "Not a value for this setting.", "plain reasons");
         assertEqual(rules.refusal("x").text, rules.texts.value, "… an unknown code: the value's");

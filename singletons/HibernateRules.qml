@@ -234,7 +234,10 @@ Singleton {
     // A setting in another file is the user's or the system's: named with its value; read
     // after the shell's file, Apply could not win over it and is not offered; read before
     // it, Apply asks first (warn, never forbid). The shell's own file changed outside it is
-    // replaced only on a second click too. "copy" and "declare" give the integration's hint;
+    // replaced only on a second click too. "declare" (kept in the system's configuration)
+    // offers Apply, a rebuild, once what is in force was read, and Undo after one; a setting
+    // of the configuration's own (inForce's `elsewhere`) wins: said, with nothing offered over
+    // it. "copy" gives the integration's hint;
     // "unavailable" says why (nothing while the distribution is not known). The line says
     // first the time picked and what the system does now — the picked time takes effect only
     // after Apply
@@ -243,7 +246,8 @@ Singleton {
         const capability = given?.capability ?? {};
         const busy = typeof given?.busy === "string" ? given.busy : "";
         const path = EtcFilesRules.files["sleep.hibernateDelay"];
-        const undoShown = capability.mode === "apply" && capability.undo === true && given?.undoable === true;
+        const declared = capability.mode === "declare";
+        const undoShown = (capability.mode === "apply" || declared) && capability.undo === true && given?.undoable === true;
         // The user's or the system's own setting the shell's drop-in overrides: always said
         const shadowed = capability.mode === "apply" && given?.inForce?.elsewhere === "" && typeof given?.inForce?.shadowed?.from === "string"
             ? given.inForce.shadowed : null;
@@ -255,8 +259,20 @@ Singleton {
             apply: { button: "none", label: busy === "apply" ? "Applying…" : "Apply", question: "", available: busy === "", request: null },
             undo: { shown: undoShown, label: "Undo", available: busy === "" }
         };
+        // Kept in the system's configuration, which sets it itself: its line wins, the shell
+        // offers nothing over it
+        const inForceGiven = given?.inForce ?? null;
+        if (declared && typeof inForceGiven?.elsewhere === "string" && inForceGiven.elsewhere !== "") {
+            offer.shown = true;
+            offer.undo.shown = false;
+            offer.line = "Set in your configuration: " + (inForceGiven.state === "set" ? label(inForceGiven.value) : "systemd's default")
+                + ". Your own line wins. To change it here, remove it from your configuration.";
+            return offer;
+        }
+        const undoLine = !undoShown ? "" : declared ? "Undo puts back the shell's previous value and rebuilds NixOS."
+            : "Undo puts back " + path + " as it was before the last Apply.";
         if (given?.differs !== true) {
-            offer.line = [overrides, undoShown ? "Undo puts back " + path + " as it was before the last Apply." : ""].filter(part => part !== "").join(" ");
+            offer.line = [overrides, undoLine].filter(part => part !== "").join(" ");
             return offer;
         }
         const delay = given?.delay;
@@ -265,7 +281,18 @@ Singleton {
             + (delay?.state === "set" ? "the system now hibernates after " + label(delay.seconds) + "."
                : delay?.state === "unset" ? "the system's delay is not set (systemd's default)."
                : "the system's delay could not be read.");
-        if (capability.mode === "copy" || capability.mode === "declare") {
+        // Kept in the system's configuration: Apply rebuilds NixOS with the picked time, once
+        // what is in force was read
+        if (declared) {
+            const read = inForceGiven?.state === "set" || inForceGiven?.state === "default";
+            offer.line = now + (read ? " Apply rebuilds NixOS." : " What NixOS has in force could not be read.");
+            if (read) {
+                offer.apply.button = "plain";
+                offer.apply.request = { seconds: picked, current: null, replace: false };
+            }
+            return offer;
+        }
+        if (capability.mode === "copy") {
             const hint = typeof given?.hint === "string" ? given.hint : "";
             offer.line = hint !== "" ? now + " " + hint : now;
             return offer;

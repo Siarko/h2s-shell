@@ -58,9 +58,34 @@ TestCase {
                 "network.vpnLockdown": "apply undo -" },
         nixos: { "sleep.hibernateDelay": "copy - inForce", "network.connectivityUri": "copy - inForce", "pam.rules": "copy - -",
                  "network.vpnLockdown": "copy - -" },
+        // NixOS with its configuration connected: the hibernation delay kept in the shell's file
+        nixosConnected: { "sleep.hibernateDelay": "declare undo inForce", "network.connectivityUri": "copy - inForce", "pam.rules": "copy - -",
+                          "network.vpnLockdown": "copy - -" },
         generic: { "sleep.hibernateDelay": "unavailable - -", "network.connectivityUri": "unavailable - -", "pam.rules": "unavailable - -",
                    "network.vpnLockdown": "unavailable - -" }
     })
+
+    // NixOS's configuration connected, as read: the configuration sets the delay itself
+    property QtObject _connected: QtObject {
+        readonly property string state: "connected"
+        property int revision: 0
+        function current() {
+            return { state: "connected", configuration: { found: true, folder: "/srv/nixos-config" },
+                     file: { path: "/srv/nixos-config/h2s-shell.json", state: "present", sha256: "", text: "{\"version\":1}\n" },
+                     publishedSettings: { version: 1, settings: {}, inForce: { idle: { hibernateDelay: null } }, system: { idle: { hibernateDelay: "10min" } } } };
+        }
+        function read() {
+            Qt.callLater(() => revision++);
+        }
+    }
+    // A rebuild that counts what it is asked
+    property QtObject _rebuild: QtObject {
+        property var state: NixosRebuildRules.initial()
+        readonly property bool busy: false
+        property int calls: 0
+        function announce(request) { calls++; return { taken: false, refusal: null }; }
+        function undo(reading) { calls++; return { taken: false, refusal: null }; }
+    }
 
     property var _integrations: []
     // Per integration id: the runs its stand-in was handed
@@ -98,8 +123,13 @@ TestCase {
         };
     }
 
+    // An integration's name in the answers: its distribution, or the variant's objectName
+    function _nameOf(integration) {
+        return integration.objectName !== "" ? integration.objectName : integration.distribution;
+    }
+
     function _check(integration) {
-        const id = integration.distribution;
+        const id = _nameOf(integration);
         for (const kind of _kinds) {
             const label = id + " " + kind + ": ";
             const capability = integration.capability(kind);
@@ -168,7 +198,7 @@ TestCase {
 
     // Undo before any change, then apply: each answers at once, `done` once when started
     function _changes(integration, kind, capability, value, label) {
-        const id = integration.distribution;
+        const id = _nameOf(integration);
         // Before any change: nothing to put back
         const undone = integration.undo(kind, { done: _counter(id + " undo " + kind) });
         assert(typeof undone?.started === "boolean" && (undone.started ? undone.refusal === null : typeof undone.refusal?.text === "string"),
@@ -207,9 +237,11 @@ TestCase {
             _integrations = [
                 _arch.createObject(suite, { start: _standIn("arch"), base: _scratch, inForceCommands: _merged }),
                 _nixos.createObject(suite, { start: _standIn("nixos"), base: _scratch, inForceCommands: _merged }),
-                _generic.createObject(suite)
+                _generic.createObject(suite),
+                _nixos.createObject(suite, { objectName: "nixosConnected", start: _standIn("nixosConnected"), base: _scratch, inForceCommands: _merged,
+                                             configuration: _connected, rebuild: _rebuild })
             ];
-            assertEqual(_integrations.map(integration => integration.distribution).sort().join(" "), DistributionRules.ids.slice().sort().join(" "),
+            assertEqual(_integrations.slice(0, 3).map(integration => integration.distribution).sort().join(" "), DistributionRules.ids.slice().sort().join(" "),
                         "an integration for every shipped distribution");
             for (const integration of _integrations)
                 _check(integration);
@@ -227,10 +259,11 @@ TestCase {
                 fail(key + ": answered, though not started");
             for (const integration of _integrations) {
                 for (const kind of _kinds) {
-                    const answer = (_answers[integration.distribution + " readInForce " + kind] ?? [])[0];
-                    assert(IntegrationRules.validInForce(answer), integration.distribution + " " + kind + ": what is in force, " + JSON.stringify(answer));
+                    const name = _nameOf(integration);
+                    const answer = (_answers[name + " readInForce " + kind] ?? [])[0];
+                    assert(IntegrationRules.validInForce(answer), name + " " + kind + ": what is in force, " + JSON.stringify(answer));
                     if (!integration.capability(kind).inForce)
-                        assertEqual(JSON.stringify(answer), JSON.stringify(IntegrationRules.inForceUnknown()), integration.distribution + " " + kind + ": … unknown where it is not read");
+                        assertEqual(JSON.stringify(answer), JSON.stringify(IntegrationRules.inForceUnknown()), name + " " + kind + ": … unknown where it is not read");
                 }
             }
             assertEqual((_answers["arch apply sleep.hibernateDelay"] ?? [])[0]?.quiet, true, "arch: the hibernation delay's apply ran (its prompt dismissed)");
@@ -240,6 +273,11 @@ TestCase {
                         "arch: the delay in force, set elsewhere (read before the shell's file), and the shell's own file (none in the scratch tree)");
             const nixosDelay = (_answers["nixos readInForce sleep.hibernateDelay"] ?? [])[0];
             assertEqual(nixosDelay?.elsewhere + " " + nixosDelay?.value + " " + nixosDelay?.file, "/etc/systemd/sleep.conf 7200 null", "nixos: the delay in force, no file of the shell's");
+            const connectedDelay = (_answers["nixosConnected readInForce sleep.hibernateDelay"] ?? [])[0];
+            assertEqual(connectedDelay?.elsewhere + " " + connectedDelay?.value, "/srv/nixos-config 600",
+                        "nixos, connected: the delay read from the configuration, the configuration's own value");
+            assertEqual((_answers["nixosConnected apply sleep.hibernateDelay"] ?? []).length + " " + _rebuild.calls, "0 0",
+                        "… its Apply without the window's way to the rebuild: not started, nothing announced");
             assertEqual(JSON.stringify(Object.assign({}, _runs, { arch: (_runs.arch ?? []).slice().sort() })),
                         JSON.stringify({ arch: ["Change the connectivity check's address", "Change the time before hibernating", "Install the VPN blocking's script"] }),
                         "runs as administrator: only arch's applied kinds, once each; none from nixos or generic");

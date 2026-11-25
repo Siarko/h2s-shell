@@ -72,6 +72,7 @@ QtObject {
     property var _nixosRebuildViewRules: NixosRebuildViewRulesTest {}
     property var _nixosRebuildPanel: NixosRebuildPanelTest {}
     property var _nixosPage: NixosPageTest {}
+    property var _nixosDeclare: NixosDeclareTest {}
     property var _etcFiles: EtcFilesTest {}
     property var _integrationChange: IntegrationChangeTest {}
     property var _distributionContract: DistributionContractTest {}

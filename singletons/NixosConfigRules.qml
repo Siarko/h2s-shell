@@ -373,9 +373,10 @@ Singleton {
     // owner (configurationOwner's), rootWrites (only a root-owned chain: an unknown one is the
     // user's for writing), git ("present" | "absent" | "unknown"), gitAccess (gitAccess's),
     // gitKnowsFile ("" without git, "unknown" until withGit), host, file { path, state
-    // ("absent" | "present" | "unreadable"), sha256 ("" unknown or none) }, fileStatus,
-    // module ("present" | "absent" | "unknown"), published ("present" | "absent" |
-    // "unknown"), generations, state, homeWarning, facts }. `inputs` { base, chosenFolder,
+    // ("absent" | "present" | "unreadable"), sha256 ("" unknown or none), text ("" unless
+    // present) }, fileStatus, module ("present" | "absent" | "unknown"), published ("present"
+    // | "absent" | "unknown"), publishedSettings (settings.json as an object while present,
+    // else null), generations, state, homeWarning, facts }. `inputs` { base, chosenFolder,
     // chosenHost, nixPath, acknowledged (the real paths whose home-folder warning the user
     // took) }.
     function reading(inputs, raw) {
@@ -391,7 +392,8 @@ Singleton {
         const file = {
             path: filePath,
             state: fileAnswer?.absent === true ? "absent" : typeof fileAnswer?.text === "string" ? "present" : "unreadable",
-            sha256: typeof fileAnswer?.text === "string" ? (raw?.sha256?.[filePath] ?? "") : ""
+            sha256: typeof fileAnswer?.text === "string" ? (raw?.sha256?.[filePath] ?? "") : "",
+            text: typeof fileAnswer?.text === "string" ? fileAnswer.text : ""
         };
         const owner = configurationOwner(raw, configuration, file.state);
         const settingsAnswer = raw?.files?.[where.settings];
@@ -415,6 +417,7 @@ Singleton {
             fileStatus: status,
             module,
             published,
+            publishedSettings: published === "present" ? _object(settingsAnswer.text) : null,
             generations: generations(raw?.lists?.[where.profiles], raw?.links?.[where.systemProfile]),
             state: state(found, module, published),
             homeWarning: found && owner !== "root" && !(real !== "" && acknowledged.includes(real))
