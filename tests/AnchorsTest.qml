@@ -174,8 +174,10 @@ TestCase {
         return texts;
     }
 
-    function _then(description, condition, action, timeoutMs) {
-        _steps.push({ description: description, condition: condition, action: action, deadline: timeoutMs ?? 10000 });
+    // `explain` (optional): what to log when the step times out, so a one-off failure in any
+    // run says why
+    function _then(description, condition, action, timeoutMs, explain) {
+        _steps.push({ description: description, condition: condition, action: action, deadline: timeoutMs ?? 10000, explain: explain ?? null });
     }
 
     property Timer _clock: Timer {
@@ -200,8 +202,17 @@ TestCase {
                 return;
             waited = 0;
             suite._steps.shift();
-            if (!ready)
+            if (!ready) {
                 suite.fail("timed out waiting: " + step.description);
+                if (step.explain) {
+                    try {
+                        for (const line of step.explain())
+                            console.log("  INFO: why: " + line);
+                    } catch (error) {
+                        console.log("  INFO: why: the explanation threw: " + error);
+                    }
+                }
+            }
             try {
                 step.action();
             } catch (error) {
@@ -694,6 +705,53 @@ TestCase {
     property int _windowCycles: 0
 
     // The anchor block at `path` under `item` (the first found), or null
+    // What a timed-out wait on a popup's module elements needs to be told apart: the module's
+    // state, the elements the module host offers for the place, the panel's hosts at the place
+    // and any host whose own properties or key list (its KeyedModel) read undefined — Qt
+    // dropped them (it logs "Cannot find member data") — each with its owner chain, what it
+    // lists and builds, and its keys
+    function _explainPopupHosts(panel, path) {
+        const lines = [];
+        const status = Modules.status("anchors-popups");
+        lines.push("module: " + JSON.stringify(status ? { state: status.state, errors: status.errors, warnings: status.warnings } : null)
+                   + ", settled " + _generalSettled() + ", network pinned " + _networkPinned()
+                   + ", the module host lists for " + path + " append: " + JSON.stringify(Modules.host.anchorContent(path, "append", "").map(entry => entry.key)));
+        if (!panel) {
+            lines.push("no panel");
+            return lines;
+        }
+        const typeOf = item => String(item).replace(/\(.*$/, "").replace(/_QML(TYPE)?_\d+/g, "");
+        const describe = value => value === undefined ? "undefined" : JSON.stringify(value);
+        const chain = item => {
+            const names = [];
+            for (let at = item; at && at !== panel; at = at.parent) {
+                if (at === item || at.isAnchorBlock === true)
+                    names.push(typeOf(at) + (at.isAnchorBlock === true ? "[" + describe(at.path) + "]" : ""));
+            }
+            return names.join(" < ");
+        };
+        let hosts = 0;
+        const walk = item => {
+            for (const child of item?.children ?? []) {
+                if (typeOf(child) === "AnchorContent") {
+                    hosts++;
+                    const keyed = (child.resources ?? []).find(each => typeOf(each) === "KeyedModel") ?? null;
+                    const dropped = child.count === undefined || child.contributions === undefined || keyed === null || keyed.keys === undefined;
+                    if (child.path === path || dropped)
+                        lines.push((dropped ? "DROPPED " : "") + "host " + describe(child.path) + " " + describe(child.placement) + " (" + chain(child) + "): count "
+                                   + describe(child.count) + ", contributions " + describe(child.contributions?.map(entry => entry.key))
+                                   + ", built " + describe(child.built) + ", items " + describe(child.items?.length)
+                                   + ", keyed " + (keyed ? "keys " + describe(keyed.keys) + ", values " + describe(keyed.values?.length)
+                                                   + ", model " + describe(keyed.model?.values) : "none found"));
+                }
+                walk(child);
+            }
+        };
+        walk(panel);
+        lines.push(hosts + " hosts in the panel");
+        return lines;
+    }
+
     function _blockAt(item, path) {
         for (const child of item?.children ?? []) {
             if (child.isAnchorBlock === true && child.path === path)
@@ -2646,7 +2704,7 @@ TestCase {
             _closePopupView();
             _holdNetworks(_standInNetworks(12));
             _openPopupView("network", "../panels/NetworkPanel.qml", _cutHeight);
-        });
+        }, undefined, () => _explainPopupHosts(_popupView?.loader.item, "popup.network.connections"));
         _then("the network popup at a height that cuts its list", () => _networkPinned() && _popupView.loader.item
               && _ready(_blockAt(_popupView.loader.item, "popup.network.connections")?.appendHost ?? { items: [] }, 2)
               && _partsLaidOut(_popupView.loader.item, _networkExpected(true)), () => {
@@ -2664,7 +2722,7 @@ TestCase {
             _closePopupView();
             _holdNetworks(_standInNetworks(2));
             _openPopupView("notifications", "../panels/NotificationPanel.qml", 600);
-        });
+        }, undefined, () => _explainPopupHosts(_popupView?.loader.item, "popup.network.connections"));
         _then("the notifications popup is laid out, with the module's elements",
               () => _popupView.loader.item && _ready(_blockAt(_popupView.loader.item, "popup.notifications")?.prependHost ?? { items: [] }, 2)
               && _partsLaidOut(_popupView.loader.item, _notificationsExpected(true)), () => {
