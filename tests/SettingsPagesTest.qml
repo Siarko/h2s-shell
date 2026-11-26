@@ -62,6 +62,7 @@ TestCase {
         "api/VpnProvider.qml",
         "components/SettingsRow.qml",
         "components/ExpandingRow.qml",
+        "components/Notice.qml",
         "api/CommandAction.qml",
         "api/CommandQuery.qml",
         "api/CommandRunner.qml",
@@ -212,6 +213,7 @@ TestCase {
         _whenAwayPage();
         _networkConnectivity();
         _themeDelete();
+        _editorStore();
     }
 
     // The Themes page after a delete: a failed one says why on the page and keeps the theme
@@ -241,6 +243,38 @@ TestCase {
             assertEqual(problem(), null, "another theme picked: the problem gone");
         } finally {
             page.destroy();
+        }
+    }
+
+    // A setting's editor on a stand-in store (its `store`, a mockup's seam): what it shows
+    // comes from the store, what it writes goes there, the shell's profiles untouched
+    function _editorStore() {
+        const writes = [];
+        const store = {
+            profiles: [{ name: "Base", set: {} }, { name: "Work", set: {} }],
+            effectiveGlobals: {},
+            inheritedValue: (index, key) => key === "media.visualizerStyle" ? "bars" : undefined,
+            inheritedFrom: (index, key) => key === "media.visualizerStyle" ? "Base" : "",
+            setBy: key => "",
+            writeSetting: (index, key, value) => writes.push(["write", index, key, value]),
+            clearOverride: (index, key) => writes.push(["clear", index, key]),
+            pinGlobal: key => writes.push(["pin", key]),
+            unpinGlobal: key => writes.push(["unpin", key])
+        };
+        const profilesBefore = Config.profiles;
+        const globalsBefore = Config.globals;
+        const component = Qt.createComponent(Qt.resolvedUrl("../panels/settings/SchemaSettingEditor.qml"));
+        const editor = component.createObject(_stage, { key: "media.visualizerStyle", editIndex: 1, store: store });
+        if (editor === null)
+            return fail("the editor builds on a stand-in store: " + component.errorString().trim());
+        try {
+            assertEqual(editor.shownValue + " " + editor.inherits + " " + editor.inheritedFrom, "bars true Base", "the value and where it comes from are the store's");
+            assert(_find(editor, item => item.text === "inherited from Base") !== null, "… said beside the control");
+            editor.edited("dots");
+            assertEqual(JSON.stringify(writes), JSON.stringify([["write", 1, "media.visualizerStyle", "dots"]]), "an edit is written to the store, at the edited profile");
+            assertEqual(Config.profiles + "|" + Config.globals, profilesBefore + "|" + globalsBefore, "the shell's profiles left as they were");
+        } finally {
+            editor.destroy();
         }
     }
 

@@ -15,8 +15,12 @@ Item {
     id: root
 
     required property string key
-    // Index of the edited profile in Profiles.profiles
+    // Index of the edited profile in the store's profiles
     required property int editIndex
+    // Where the profiles are read and written: the shell's (Profiles), or a stand-in with
+    // the members used here (profiles, effectiveGlobals, inheritedValue, inheritedFrom,
+    // setBy, writeSetting, clearOverride, pinGlobal, unpinGlobal) — a mockup's
+    property var store: Profiles
     // False greys the editor out and ignores input, e.g. a timeout while its feature is off
     property bool available: true
     // Replaces the schema label where the page knows better, e.g. "Lock after screensaver"
@@ -39,39 +43,39 @@ Item {
     // False leaves the label out (a switch on a section's title line, whose title says it)
     property bool labelShown: true
 
-    readonly property var _profile: Profiles.profiles[editIndex] ?? null
+    readonly property var _profile: root.store.profiles[editIndex] ?? null
     // The value this profile sets, or undefined when it inherits
     readonly property var ownValue: _profile?.set?.[key]
     // What applies at this profile's place when it sets nothing
-    readonly property var inheritedValue: Profiles.inheritedValue(editIndex, key)
+    readonly property var inheritedValue: root.store.inheritedValue(editIndex, key)
     // The profile it comes from, or "" for the default
-    readonly property string inheritedFrom: Profiles.inheritedFrom(editIndex, key)
+    readonly property string inheritedFrom: root.store.inheritedFrom(editIndex, key)
     // A later active profile that currently overrides this key, or ""
     readonly property string overriddenBy: {
-        const setter = Profiles.setBy(key);
-        return Profiles.profiles.findIndex(profile => profile.name === setter) > editIndex ? setter : "";
+        const setter = root.store.setBy(key);
+        return root.store.profiles.findIndex(profile => profile.name === setter) > editIndex ? setter : "";
     }
 
     // Pinned as global, by the user or always by the schema: one value for every profile
-    readonly property bool global: key in Profiles.effectiveGlobals
+    readonly property bool global: key in root.store.effectiveGlobals
     readonly property bool systemGlobal: entry?.global === true
 
     function edited(newValue) {
         if (editHook)
             editHook(newValue);
         else
-            Profiles.writeSetting(editIndex, key, newValue);
+            root.store.writeSetting(editIndex, key, newValue);
     }
 
     function reset() {
-        Profiles.clearOverride(editIndex, key);
+        root.store.clearOverride(editIndex, key);
     }
 
     readonly property var entry: SettingsSchema.entry(key)
     readonly property bool inherits: ownValue === undefined
     // The value as stored, and as the shell uses it: a number setting outside its range, or
     // not a number, is shown at the value in use, with a note saying what the file holds
-    readonly property var _storedValue: global ? Profiles.effectiveGlobals[key] : (inherits ? inheritedValue : ownValue)
+    readonly property var _storedValue: global ? root.store.effectiveGlobals[key] : (inherits ? inheritedValue : ownValue)
     readonly property var _checked: ProfileRules.checkedNumber(entry, _storedValue)
     readonly property var shownValue: _checked.value
     // Shown dimmed: the value is not this profile's own
@@ -343,9 +347,9 @@ Item {
                         if (root.systemGlobal)
                             return;
                         if (root.global)
-                            Profiles.unpinGlobal(root.key);
+                            root.store.unpinGlobal(root.key);
                         else
-                            Profiles.pinGlobal(root.key);
+                            root.store.pinGlobal(root.key);
                     }
                 }
 
