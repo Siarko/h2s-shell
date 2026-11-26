@@ -26,6 +26,11 @@ Item {
     readonly property bool editing: _day.input.activeFocus || _month.input.activeFocus || _year.input.activeFocus
     // The calendar fills this field on the next day clicked (the event form's pick target)
     property bool armed: false
+    // Drawn as with the keyboard in the day, without it: a preview of the look (the mockups'
+    // keyboard states) — the field's border and the day's text selected, as a click leaves
+    // them. Only the look: no key is taken
+    property bool shownFocused: false
+    readonly property bool _focusLook: editing || shownFocused
 
     function focusDay() {
         _day.focusAll();
@@ -40,7 +45,15 @@ Item {
         _day.input.text = parts[2] ?? "";
         _month.input.text = parts[1] ?? "";
         _year.input.text = parts[0] ?? "";
+        _showSelection();
     }
+
+    // The preview's selection: a text set anew drops it
+    function _showSelection() {
+        if (shownFocused)
+            _day.input.selectAll();
+    }
+    onShownFocusedChanged: if (shownFocused) _showSelection(); else _day.input.deselect()
 
     function _commit() {
         const year = parseInt(_year.completed(_year.input.text));
@@ -92,7 +105,7 @@ Item {
         height: _day.height
         text: "."
         font: _digits.font
-        color: root.editing ? Theme.textSecondary : Theme.textMuted
+        color: root._focusLook ? Theme.textSecondary : Theme.textMuted
         horizontalAlignment: Text.AlignHCenter
         verticalAlignment: Text.AlignVCenter
     }
@@ -107,8 +120,8 @@ Item {
         anchors.fill: parent
         radius: Theme.field.radius
         color: Theme.popupBackground
-        border.color: root.editing || root.armed ? Theme.accent : Theme.outline
-        border.width: root.armed && !root.editing ? Theme.border.selectedWidth : Theme.border.width
+        border.color: root._focusLook || root.armed ? Theme.accent : Theme.outline
+        border.width: root.armed && !root._focusLook ? Theme.border.selectedWidth : Theme.border.width
         Behavior on border.color { ColorAnimation { duration: Theme.duration("state"); easing: Theme.curve("state") } }
 
         // A click outside the segments focuses the day

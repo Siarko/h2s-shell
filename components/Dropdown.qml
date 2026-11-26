@@ -20,6 +20,11 @@ Rectangle {
     property string placeholder: "Choose"
     property bool open: false
     property int fontSize: Theme.fontSizeBody
+    // A preview of the button's look (the mockups' pointer and keyboard states, every
+    // dropdown of a state at once): drawn as under the pointer, and as with the keyboard.
+    // Only the look: no click, no key
+    property bool shownLit: false
+    property bool shownFocused: false
     signal picked(var value)
     // The list closed, whatever closed it (a pick, Escape, a press outside, its page hidden):
     // where another field keeps the keyboard (a password), the owner hands the focus back
@@ -32,7 +37,7 @@ Rectangle {
     radius: Theme.dropdown.radius
     color: Theme.popupBackground
     border.width: Theme.border.width
-    border.color: open ? Theme.accent : activeFocus ? Theme.textSecondary : (_area.lit ? Theme.textMuted : Theme.outline)
+    border.color: open ? Theme.accent : activeFocus || shownFocused ? Theme.textSecondary : (_area.lit ? Theme.textMuted : Theme.outline)
     activeFocusOnTab: true
 
     // Open, Escape is the list's: a side panel's or a window's Escape waits for the next one
@@ -104,6 +109,7 @@ Rectangle {
 
     PointerArea {
         id: _area
+        shownLit: root.shownLit
         cursorShape: Qt.PointingHandCursor
         onClicked: {
             root.forceActiveFocus();

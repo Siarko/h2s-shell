@@ -7,7 +7,8 @@ import qs.singletons
 // The shell's buttons as they are drawn (SmallButton, DeleteButton): each kind's fill,
 // label and border at rest, under the pointer, asking and not available; the question's
 // two parts under one border; a label shown as written; a narrow button's label elided; the
-// preview of a look without the pointer or the keyboard (`shownLit`, `shownFocused`).
+// preview of a look without the pointer or the keyboard (`shownLit`, `shownFocused`, on
+// both buttons; a question's × lit with it).
 // The rule alone (which colour for which kind and state): ThemeTest, ThemeRules.buttonLook.
 // What is expected here is written out, not asked of that rule.
 //
@@ -135,6 +136,22 @@ TestCase {
             }
             SmallButton {
                 id: ringed
+                label: "Ringed"
+                shownFocused: true
+            }
+            DeleteButton {
+                id: litDelete
+                label: "Lit"
+                shownLit: true
+            }
+            DeleteButton {
+                id: litAsking
+                label: "Lit"
+                asking: true
+                shownLit: true
+            }
+            DeleteButton {
+                id: ringedDelete
                 label: "Ringed"
                 shownFocused: true
             }
@@ -317,6 +334,19 @@ TestCase {
                "shownFocused, without the keyboard: the keyboard's ring, the fill at rest");
         ringed.shownFocused = false;
         assert(!ring.visible, "shownFocused off: no ring");
+
+        const litParts = _parts(litDelete);
+        assert(!litParts.area.containsMouse && _is(litParts.face.color, "error") && _is(litParts.label.color, "textPrimary"),
+               "a DeleteButton with shownLit, no pointer over it: drawn as under the pointer (error)");
+        const litAskingParts = _parts(litAsking);
+        assert(_is(litAskingParts.cancel.color, "surfaceHover"), "asking, with shownLit: the × lit too");
+        litAsking.shownLit = false;
+        assert(_until(() => _is(litAskingParts.cancel.color, "surface")), "shownLit off: the × at rest");
+        const deleteRing = _child(_parts(ringedDelete).face, "QQuickRectangle", 1);
+        assert(!ringedDelete.activeFocus && deleteRing.visible && _is(deleteRing.border.color, "textSecondary"),
+               "a DeleteButton with shownFocused, without the keyboard: the ring inside its border");
+        ringedDelete.shownFocused = false;
+        assert(!deleteRing.visible, "shownFocused off: no ring");
 
         _window.visible = false;
         finish();

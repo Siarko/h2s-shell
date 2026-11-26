@@ -24,6 +24,10 @@ Rectangle {
     // A border at rest too, not only while focused
     property bool outlined: false
     readonly property bool editing: _input.activeFocus
+    // Drawn as with the keyboard, without it: a preview of the look (the mockups' keyboard
+    // states, every field of a state at once). Only the look: the input takes no keys
+    property bool shownFocused: false
+    readonly property bool _focusLook: _input.activeFocus || shownFocused
 
     signal accepted
     signal editingFinished
@@ -42,7 +46,7 @@ Rectangle {
     color: fieldColor
     border.width: Theme.border.width
     border.color: problem ? Theme.error
-        : _input.activeFocus ? Theme.accent
+        : _focusLook ? Theme.accent
         : outlined ? Theme.outline : Qt.alpha(Theme.outline, 0)
     Behavior on border.color { ColorAnimation { duration: Theme.duration("state"); easing: Theme.curve("state") } }
 
@@ -82,7 +86,7 @@ Rectangle {
         Text {
             anchors.verticalCenter: parent.verticalCenter
             width: parent.width
-            visible: parent.text === "" && !parent.activeFocus && root.placeholder !== ""
+            visible: parent.text === "" && !root._focusLook && root.placeholder !== ""
             text: root.placeholder
             textFormat: Text.PlainText
             maximumLineCount: 1

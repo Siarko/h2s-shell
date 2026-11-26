@@ -118,6 +118,7 @@ QtObject {
     property var _buttonKeys: ButtonKeysTest {}
     property var _toastDrag: ToastDragTest {}
     property var _pillSizes: PillSizesTest {}
+    property var _fieldPreview: FieldPreviewTest {}
     property var _apiElements: ApiElementsTest {}
     property var _sidePanel: SidePanelTest {}
     property var _settingsModal: SettingsModalTest {}

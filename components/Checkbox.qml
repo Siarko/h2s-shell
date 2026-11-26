@@ -12,6 +12,9 @@ Item {
 
     property bool checked: false
     property string label: ""
+    // Drawn as with the keyboard, without it: a preview of the look (the mockups' keyboard
+    // states). Only the look: no key is taken
+    property bool shownFocused: false
 
     signal toggled
 
@@ -31,7 +34,7 @@ Item {
         height: 14
         radius: Theme.checkbox.radius
         color: root.checked ? Theme.accent : "transparent"
-        border.color: root.activeFocus ? Theme.textSecondary : (root.checked ? Theme.accent : Theme.textDisabled)
+        border.color: root.activeFocus || root.shownFocused ? Theme.textSecondary : (root.checked ? Theme.accent : Theme.textDisabled)
         border.width: Theme.border.width
 
         Text {

@@ -33,6 +33,7 @@ Item {
         const parts = (timeString || "").split(":");
         _hours.input.text = parts[0] ?? "";
         _minutes.input.text = parts[1] ?? "";
+        _showSelection();
     }
 
     function clear() {
@@ -48,6 +49,18 @@ Item {
     }
 
     readonly property bool _editing: _hours.input.activeFocus || _minutes.input.activeFocus
+    // Drawn as with the keyboard in the hours, without it: a preview of the look (the
+    // mockups' keyboard states) — the field's border and the hours' text selected, as a
+    // click leaves them. Only the look: no key is taken
+    property bool shownFocused: false
+    readonly property bool _focusLook: _editing || shownFocused
+
+    // The preview's selection: a text set anew drops it
+    function _showSelection() {
+        if (shownFocused)
+            _hours.input.selectAll();
+    }
+    onShownFocusedChanged: if (shownFocused) _showSelection(); else _hours.input.deselect()
 
     implicitHeight: Math.max(26, _digits.height + 8)
 
@@ -64,7 +77,7 @@ Item {
         radius: Theme.field.radius
         color: Theme.popupBackground
         border.width: Theme.border.width
-        border.color: root._editing ? Theme.accent : Theme.outline
+        border.color: root._focusLook ? Theme.accent : Theme.outline
         Behavior on border.color { ColorAnimation { duration: Theme.duration("state"); easing: Theme.curve("state") } }
 
         // A click outside the segments focuses the hours
@@ -95,7 +108,7 @@ Item {
                 height: _hours.height
                 text: ":"
                 font: _digits.font
-                color: root._editing ? Theme.textSecondary : Theme.textMuted
+                color: root._focusLook ? Theme.textSecondary : Theme.textMuted
                 horizontalAlignment: Text.AlignHCenter
                 verticalAlignment: Text.AlignVCenter
 

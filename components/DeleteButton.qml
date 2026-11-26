@@ -45,13 +45,18 @@ Row {
     property bool wraps: false
     // As wide as it is uncut: what a wrapper asks a layout for, so that the cap does not
     // feed back into the width it is given
+    // A preview of the look (the mockups' pointer and keyboard states, every button of a
+    // state at once): drawn as under the pointer — while asking, both parts — and as with the
+    // keyboard. Only the look: no click, no key, no tip
+    property bool shownLit: false
+    property bool shownFocused: false
     readonly property real fullWidth: _button.implicitWidth + (asking ? _cancel.width : 0)
 
     signal confirmed
     // The first click, for owners that track which item is being asked about
     signal askingStarted
 
-    readonly property var _look: ThemeRules.buttonLook(kind, { hot: _area.lit && available, asking: asking, focused: activeFocus })
+    readonly property var _look: ThemeRules.buttonLook(kind, { hot: _area.lit && available, asking: asking, focused: activeFocus || shownFocused })
     readonly property var _shape: Theme[_look.group]
 
     spacing: 0
@@ -171,6 +176,7 @@ Row {
 
         PointerArea {
             id: _area
+            shownLit: root.shownLit
             cursorShape: root.available ? Qt.PointingHandCursor : Qt.ArrowCursor
             onClicked: root._press()
         }
@@ -207,6 +213,7 @@ Row {
 
         PointerArea {
             id: _cancelArea
+            shownLit: root.shownLit
             centred: false
             anchors.fill: parent
             enabled: root.available
