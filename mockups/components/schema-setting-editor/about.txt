@@ -1,0 +1,13 @@
+# Each state's cell is one setting's editor in a settings column (408 px), the profile
+# "Work" edited, "Base" above it, on stand-in profiles (the editor's store).
+description: One setting's editor, its control by the setting's type, where its value comes from
+state: bool             A switch, set in this profile: the reset after the pin
+state: enum-pills       A choice as pills, one picked, set in this profile
+state: interval-pills   An interval as pills (Paused, 1 s … 1 min), set in this profile
+state: string           A text field, set in this profile
+state: number-field     A whole number in a field, with its unit, set in this profile
+state: slider           A bounded number on a slider, set in this profile
+state: text-list        A list of texts: a field each, a remove each, Add
+state: inherited        Not set here: the value from Base dimmed, "inherited from Base"
+state: global           Pinned as global: one value for every profile, the pin lit
+state: out-of-range     A number stored above its maximum: shown at the maximum, with a note

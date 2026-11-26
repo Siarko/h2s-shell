@@ -1,0 +1,9 @@
+# Each state's cell is a settings column (308 px) with one row.
+description: One line of a settings page: a label, a hint, a value or controls on the right
+state: label                A label alone
+state: label-hint           A label with a hint under it, wrapped
+state: value                A label and its value on the right
+state: controls             A label and two controls on the right
+state: value-and-controls   A label, its value and a control after it
+state: long-value           A value too long for the room: cut at its end, the label whole
+state: long-label           A long label beside a value, a long hint wrapped under it

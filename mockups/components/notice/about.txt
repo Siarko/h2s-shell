@@ -1,0 +1,6 @@
+# Each state's cell is a settings column (308 px) with one notice.
+description: A line that says what needs the user, or what went well
+state: warning    The default kind: something needs the user
+state: danger     Something failed
+state: success    Something went well
+state: wrapped    A long notice of each kind, wrapped at the column's width

@@ -1,0 +1,9 @@
+# Each state's cell is a settings column (308 px) with one switch row.
+description: A setting that is a switch: its label, a line on what it does, the switch
+state: off            Off, a label alone
+state: on             On
+state: hint           With a line under the label on what it does, wrapped
+state: privileged     Changing it asks for an administrator's password: the lock before it
+state: not-allowed    Not allowed for this user: the crossed mark, the switch dimmed
+state: kept           Asks, but a password given lately is kept: the open lock, dimmed
+state: disabled       Not enabled by its page: the switch dimmed, the texts as they are
