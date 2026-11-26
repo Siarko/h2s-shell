@@ -6,8 +6,8 @@ import qs.singletons
 // one): reads the config (the load phase: the file as it is on disk; the after-seed phase:
 // the text it is handed) and the side files the registered migrations name, asks
 // MigrationRules.startup what to do, and does it — the backup first (only when something
-// changed or a scope was reset; with the side files it overwrites or removes, readable by
-// the user only), the side files, then the config with the records, each write atomic, and
+// changed or a scope was reset; with the side files it overwrites or removes and the list
+// of those it creates, readable by the user only), the side files, then the config with the records, each write atomic, and
 // only then the side files it removes —; then prunes the config backups to the newest
 // automatic ones (MigrationRules.backupsToKeep). Read-only (the test runner): nothing
 // written, no backup, nothing pruned; what the migrations made is handed back for the
@@ -191,6 +191,8 @@ QtObject {
             _backup = _dir + "/" + MigrationRules.backupName(new Date().toISOString(), "migration");
             for (const file of _backedUpSideFiles())
                 folders.push(_parent(_sideBackup(_backup) + "/" + file));
+            if (_createdSideFiles().length > 0)
+                folders.push(_sideBackup(_backup));
         }
         _prepare.command = ["sh", "-c", "umask 077 && mkdir -p -- \"$@\"", "sh"].concat(folders);
         _prepare.running = true;
@@ -213,6 +215,12 @@ QtObject {
     function _backedUpSideFiles() {
         return Object.keys(_outcome.files).concat(_outcome.removed)
             .filter(file => Object.prototype.hasOwnProperty.call(_sideTexts, file));
+    }
+
+    // The side files the run writes that are not there now: listed with the backup, so that
+    // a restore of it removes them (ConfigRestore)
+    function _createdSideFiles() {
+        return Object.keys(_outcome.files).filter(file => !Object.prototype.hasOwnProperty.call(_sideTexts, file));
     }
 
     property Process _prepare: Process {
@@ -244,9 +252,14 @@ QtObject {
                 return;
             }
         }
+        const created = _createdSideFiles();
+        if (created.length > 0 && !_write(_sideBackup(_backup) + "/" + ConfigBackupRules.createdFilesName, created.join("\n") + "\n")) {
+            _failed("could not list the side files the run creates: " + _writeError);
+            return;
+        }
         console.log("[Migrations] Backup of the config before the run:", _backup);
         // It holds the Google tokens: readable by the user only, whatever the folder's mode
-        _protect.command = ["chmod", "-R", "go-rwx", "--", _backup].concat(sideFiles.length > 0 ? [_sideBackup(_backup)] : []);
+        _protect.command = ["chmod", "-R", "go-rwx", "--", _backup].concat(sideFiles.length + created.length > 0 ? [_sideBackup(_backup)] : []);
         _protect.running = true;
     }
 

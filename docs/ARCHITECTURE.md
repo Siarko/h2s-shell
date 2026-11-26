@@ -585,7 +585,16 @@ or written under the test runner.
 
 One backup per run, before the first write, only when some migration changed something or a
 scope was reset: `config.json.bak-<stamp>-migration` (`MigrationRules.backupName`), the side
-files the run overwrites or removes beside it. After a backup is written, the automatic
+files the run overwrites or removes beside it (`backup-side-files/<backup>/`, with
+`.created-files` listing those it creates). A restore of a backup (Restore previous settings,
+Apply) puts those side files back with `config.json` and removes the ones the run created, so
+the migrations run again on what they first ran on (`ConfigRestore`): everything is staged
+in a private folder beside the config, the files it replaces are kept with the restore's own
+`-restore` backup (which restores back to them), then `config.json` and each side file are
+renamed into place, the config first; a step that fails puts back everything done before it.
+A linked `backup-side-files` or side folder, a link or a non-regular file among the side files
+or in their places, and a name that is no path inside the folder
+(`ConfigBackupRules.sideFilePlan`) refuse the whole restore, nothing changed. After a backup is written, the automatic
 backups (`-migration`, `-restore`, `-module`, and those with no reason) beyond the newest ten
 (`MigrationRules.backupsKept`, by the stamp in the name) are deleted with their side files
 (`MigrationRules.backupsToKeep`). Only names of that exact pattern count; nothing else in the

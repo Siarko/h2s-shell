@@ -9,7 +9,8 @@ import QtQuick
 // version that wrote it, a newer writer marked, an unreadable file shown as such), Apply's
 // in-memory preview of the migrations the backup still needs (how many, which fail under this
 // version and are held, a whole-config failure), the opened row's line and Apply's question
-// as a steps list; Make a backup now's and Delete's refusals and Delete's question. Pure:
+// as a steps list; Make a backup now's and Delete's refusals and Delete's question; which side
+// files a restore puts back. Pure:
 // names, texts, the registry and the running version in. Checked by
 // tests/ConfigBackupRulesTest.qml.
 Singleton {
@@ -287,6 +288,53 @@ Singleton {
             cancelLabel: "Cancel",
             subject: { name: String(row?.name ?? "") }
         };
+    }
+
+    // The most side files one backup brings back (a run keeps only those it changes)
+    readonly property int maxSideFiles: 1000
+
+    // The name of the backup at `path` whose side files a restore puts back, when it is a
+    // backup in config.json's folder `dir` (only there is backup-side-files/<name> its own);
+    // "" otherwise
+    function sideBackupName(path, dir) {
+        const plain = String(path ?? "").replace(/^file:\/\//, "");
+        const folder = plain.substring(0, plain.lastIndexOf("/"));
+        // A `dir` that is no string is never equal to the folder
+        if (dir === "" || folder !== dir)
+            return "";
+        const parsed = parseName(plain);
+        return parsed.ok ? parsed.name : "";
+    }
+
+    // In a backup's side folder: the side files the run created (one path a line), which a
+    // restore of it removes. Never a side file itself
+    readonly property string createdFilesName: ".created-files"
+
+    function _badSidePath(file) {
+        const parts = file.split("/");
+        return file.startsWith("/") || /[\u0000-\u001f\u007f]/.test(file)
+            || parts.some(part => part === "" || part === "." || part === "..")
+            || file === "config.json" || file === createdFilesName || parts[0].startsWith(_prefix)
+            || parts[0] === "backup-side-files" || parts[0].startsWith(".config-restore.");
+    }
+
+    // What a restore does with the side files, from the listing of backup-side-files/<name>
+    // (one path relative to it a line) and its list of the files the run created (`created`)
+    // → { ok, write: the files put back (sorted), remove: the ones the run created, removed
+    // (sorted; none also put back), problem }. Each is a path inside config.json's folder:
+    // relative, no empty, "." or ".." part, no control character, and none that a restore
+    // writes itself or that is a backup (config.json, config.json.bak-…, backup-side-files/…,
+    // the restore's own staging folder); a name that is not one refuses the whole restore
+    function sideFilePlan(listing, created) {
+        const listed = String(listing ?? "").split("\n").filter(line => line !== "");
+        const write = listed.filter(file => file !== createdFilesName);
+        const remove = String(created ?? "").split("\n").filter(line => line !== "" && !write.includes(line));
+        if (write.length + remove.length > maxSideFiles)
+            return { ok: false, write: [], remove: [], problem: "more than " + maxSideFiles + " side files" };
+        const bad = write.concat(remove).find(file => _badSidePath(file));
+        if (bad !== undefined)
+            return { ok: false, write: [], remove: [], problem: "a side file of the backup has a name it cannot have: " + JSON.stringify(bad).slice(0, 120) };
+        return { ok: true, write: write.slice().sort(), remove: Array.from(new Set(remove)).sort(), problem: "" };
     }
 
     // The line under the section's title after Make a backup now

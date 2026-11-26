@@ -10,7 +10,9 @@ import qs.singletons
 // the pruning of module-switch backups as automatic (MigrationRules.backupsToKeep); Make a
 // backup now's refusals and its line, manual backups kept by pruning past ten automatic ones;
 // Delete's refusals (only a backup's bare name, not under the test runner, not one at a time,
-// not the backup being applied or the one Restore previous settings needs) and its question.
+// not the backup being applied or the one Restore previous settings needs) and its question;
+// which side files a restore puts back or removes (only a backup in the config's folder has
+// them; a name that is no path inside the folder refuses, the limit).
 TestCase {
     id: suite
     suiteName: "ConfigBackupRules"
@@ -44,6 +46,46 @@ TestCase {
         _texts();
         _pruning();
         _manualAndDelete();
+        _sideFiles();
+    }
+
+    // Which side files a restore puts back and removes, and whose
+    function _sideFiles() {
+        const name = "config.json.bak-2026-01-12T09-14-40-123Z-migration";
+        assertEqual(rules.sideBackupName("/c/" + name, "/c"), name, "side files: a backup in the config's folder has them");
+        assertEqual(rules.sideBackupName("file:///c/" + name, "/c"), name, "… named by a file URL too");
+        assertEqual(rules.sideBackupName("/elsewhere/" + name, "/c"), "", "… one in another folder has none here");
+        assertEqual(rules.sideBackupName("/c/sub/" + name, "/c"), "", "… nor one in a folder inside it");
+        assertEqual(rules.sideBackupName("/c/notes.txt", "/c"), "", "… a file that is no backup has none");
+        assertEqual(rules.sideBackupName("/c/" + name, ""), "", "… nor without a config folder");
+        assertEqual(rules.sideBackupName("/" + name, ""), "", "… nor at the root without a config folder");
+        assertEqual(rules.sideBackupName("/c/" + name, undefined), "", "… nor with no folder named");
+        assertEqual(rules.sideFilePlan("/etc/passwd", "").problem, "a side file of the backup has a name it cannot have: \"/etc/passwd\"", "plan: the refused name said");
+
+        const plan = rules.sideFilePlan("themes/b.json\nthemes/a.json\n.created-files\n", "themes/new.json\nthemes/a.json\nthemes/new.json\n");
+        assertEqual(plan.ok, true, "plan: listed files and created ones");
+        assertEqual(plan.write.join(","), "themes/a.json,themes/b.json", "plan: the listed ones put back, sorted, the list of created ones not among them");
+        assertEqual(plan.remove.join(","), "themes/new.json", "plan: a created one removed once; one also kept is put back, not removed");
+        const empty = rules.sideFilePlan("", "");
+        assertEqual(empty.ok + "|" + empty.write.length + "|" + empty.remove.length, "true|0|0", "plan: none");
+        for (const bad of ["/etc/passwd", "../x.json", "themes/../../x", "themes//a.json", "./a.json", "themes/.", "config.json",
+                           ".created-files", "config.json.bak-2026-01-12T09-14-40-123Z", "backup-side-files/x/a.json",
+                           ".config-restore.abc/config.json", "themes/a\u0001.json", "themes/a\u007f.json"]) {
+            const refused = rules.sideFilePlan(bad, "");
+            // The list of created files is no side file: left out of what is put back
+            if (bad === ".created-files")
+                assert(refused.ok && refused.write.length === 0, "plan: the list of created files not put back");
+            else
+                assert(!refused.ok && refused.write.length === 0 && refused.problem.includes("cannot have"), "plan: " + JSON.stringify(bad) + " refused");
+            assert(!rules.sideFilePlan("themes/a.json", bad).ok, "plan: " + JSON.stringify(bad) + " refused as a created one too");
+        }
+        assert(rules.sideFilePlan("themes/config.json\nthemes/.created-files\nnotes/backup-side-files", "").ok, "plan: those names inside a folder are side files");
+        const many = [];
+        for (let i = 0; i <= rules.maxSideFiles; i++)
+            many.push("themes/" + i + ".json");
+        assert(rules.sideFilePlan(many.slice(1).join("\n"), "").ok, "plan: as many as the limit taken");
+        assert(!rules.sideFilePlan(many.join("\n"), "").ok, "plan: more than the limit refused");
+        assert(!rules.sideFilePlan(many.slice(2).join("\n"), "a.json\nb.json").ok, "plan: the created ones count towards the limit");
     }
 
     function _names() {

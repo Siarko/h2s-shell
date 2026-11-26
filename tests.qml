@@ -142,6 +142,7 @@ QtObject {
     property var _configMigration: ConfigMigrationTest {}
     property var _migrationNoticeRules: MigrationNoticeRulesTest {}
     property var _migrationRestore: MigrationRestoreTest {}
+    property var _restoreSideFiles: RestoreSideFilesTest {}
     property var _migrationFailureEntry: MigrationFailureEntryTest {}
     property var _configBackupRules: ConfigBackupRulesTest {}
     property var _configBackups: ConfigBackupsTest {}
