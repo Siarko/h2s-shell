@@ -548,8 +548,7 @@ TestCase {
             }
         }
 
-        // The public rows and the internal ones, in the same layouts. The line a notice is
-        // drawn as is the one on a network's card (panels/settings/NetworkProfileCard.qml).
+        // The public rows and the internal ones, in the same layouts.
         ColumnLayout {
             id: publicRows
             x: 10; y: 760
@@ -579,15 +578,7 @@ TestCase {
             ExpandingRow { label: "Closed"; hint: "A line"; Rectangle { implicitHeight: 20 } }
             ExpandingRow { label: "Open"; open: true; Rectangle { implicitHeight: 20 } }
             ExpandingRow { visible: false; label: "Hidden" }
-            Text {
-                Layout.fillWidth: true
-                wrapMode: Text.WordWrap
-                textFormat: Text.PlainText
-                text: "A notice long enough to wrap onto a second line of the column it stands in, and on"
-                font.family: Theme.fontFamily
-                font.pixelSize: Theme.fontSizeSmall
-                color: Theme.warning
-            }
+            Notice { text: "A notice long enough to wrap onto a second line of the column it stands in, and on" }
             Text { visible: false; text: "Hidden" }
         }
         RowLayout {
@@ -607,15 +598,7 @@ TestCase {
             spacing: 6
             SettingsRow { label: "Row"; value: "Value" }
             ExpandingRow { label: "Closed"; Rectangle { implicitHeight: 20 } }
-            Text {
-                Layout.fillWidth: true
-                wrapMode: Text.WordWrap
-                textFormat: Text.PlainText
-                text: "A notice"
-                font.family: Theme.fontFamily
-                font.pixelSize: Theme.fontSizeSmall
-                color: Theme.warning
-            }
+            Notice { text: "A notice" }
             SettingsRow { visible: false; label: "Hidden" }
         }
 
@@ -1172,7 +1155,7 @@ TestCase {
         driver.mouseMove(away, 5, 5);
 
         // --- the notice ---
-        const line = _texts(notice)[0];
+        const line = _within(notice);
         assert(_asWritten(line), "a notice with markup in it is shown as written");
         assertEqual(line.font.pixelSize + " " + line.wrapMode, Theme.fontSizeSmall + " " + Text.WordWrap, "small, wrapping");
         for (const entry of noticeKinds) {
@@ -1181,7 +1164,7 @@ TestCase {
         }
         assert(!Qt.colorEqual(Theme.warning, Theme.error) && !Qt.colorEqual(Theme.warning, Theme.success) && !Qt.colorEqual(Theme.error, Theme.success), "the three colours differ in the theme");
         notice.kind = "warning";
-        assert(Qt.colorEqual(_texts(mistypedNotice)[0].color, Theme.warning), "a kind that does not exist shows as warning");
+        assert(Qt.colorEqual(_within(mistypedNotice).color, Theme.warning), "a kind that does not exist shows as warning");
         assertEqual(ApiElements.warned.filter(key => key === "Notice.kind=info").length, 1, "… warned about once");
         assert(!ApiElements.warned.some(key => /^Notice\.kind=(warning|danger|success)$/.test(key)), "a kind it knows is not warned about");
 
@@ -1216,7 +1199,7 @@ TestCase {
                 "in " + pair.name + ", the hidden ones take no room: the layout wants the internal one's size");
         }
         assertEqual(_items(publicRows)[0].width + " " + _items(publicRows)[5].width, "300 300", "a row and a notice fill a column's width unasked");
-        assert(_items(publicRows)[5].height > _texts(_items(publicRowsAcross)[2])[0].height, "a notice too long for its width wraps");
+        assert(_items(publicRows)[5].height > _within(_items(publicRowsAcross)[2]).height, "a notice too long for its width wraps");
     }
 
     // Dropdown, InputField, Pill, Checkbox, ToggleSwitch, PrivilegedMark
