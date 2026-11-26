@@ -6,7 +6,8 @@ import qs.singletons
 
 // A deleted theme's file kept (ThemeBackups), on scratch folders: the backup holds the same
 // content, private, and the theme file is left for the caller to remove; a theme with no file
-// backs up nothing; a backup restored brings the theme back with that content, never over a
+// backs up nothing; a name with a space at its end and a 230-byte one kept under a hashed
+// name with a record, and restored under their own; a backup restored brings the theme back with that content, never over a
 // theme of the name, never from a name that is no backup; a linked theme-backups folder is
 // refused both ways, nothing copied where it points; one at a time.
 TestCase {
@@ -17,6 +18,7 @@ TestCase {
     readonly property string _scratch: (Quickshell.env("XDG_RUNTIME_DIR") || "/tmp") + "/h2s-theme-backups-test-" + Date.now() + "-" + Math.floor(Math.random() * 1e6)
     readonly property string _themes: _scratch + "/themes"
     readonly property string _backups: _scratch + "/theme-backups"
+    readonly property string _long: "a".repeat(230)
     readonly property string _content: "{\n  \"extends\": \"default\",\n  \"colors\": { \"accent\": \"#123456\" }\n}\n"
 
     property var _steps: []
@@ -95,14 +97,18 @@ TestCase {
         let second = null;
         let backup = "";
         let listing = null;
+        let made2 = null;
+        let odd = "";
+        let backups2 = "";
         const outside = _scratch + "/outside";
 
         _then("the stand-in folders", () => true, () => {
             made = _run(["sh", "-c", "mkdir -p -- \"$1\" \"$2\" && printf '%s' \"$3\" > \"$1/Power save.json\" && printf '%s' \"$3\" > \"$1/other.json\"",
                          "sh", _themes, outside, _content]);
+            made2 = _run(["sh", "-c", "mkdir -p -- \"$1\" && printf '%s' \"$2\" > \"$1/ x.json\" && printf '%s' \"$2\" > \"$1/$3.json\"", "sh", _themes, _content, _long]);
         });
-        _then("made", () => made.code !== -1, () => {
-            assertEqual(made.code, 0, "the stand-in themes made");
+        _then("made", () => made.code !== -1 && made2.code !== -1, () => {
+            assertEqual(made.code + "|" + made2.code, "0|0", "the stand-in themes made");
             assert(!_subject.backUp(_themes, _backups, "../escape", () => {}), "not a theme's name: not started");
             assert(!_subject.backUp("", _backups, "Power save", () => {}), "no themes folder: not started");
             assert(_subject.backUp(_themes, _backups, "Power save", answer => result = answer), "a backup started");
@@ -125,7 +131,44 @@ TestCase {
         });
         _then("no file", () => result !== null, () => {
             assertEqual(result.ok + "|" + result.backup, "true|", "no file: nothing to keep, no backup");
-            made = _run(["rm", "--", _themes + "/Power save.json"]);
+            result = null;
+            assert(_subject.backUp(_themes, _backups, " x", answer => result = answer), "a name with a space first: started");
+        });
+        _then("a space first: kept", () => result !== null, () => {
+            assertEqual(result.ok + "|" + result.problem, "true|", "kept");
+            odd = result.backup;
+            assert(odd.startsWith("theme-") && ThemeRules.parseThemeBackupName(odd).ok, "under a hashed name: " + odd);
+            assertEqual(_read(_backups + "/" + odd), _content, "with the content");
+            assertEqual(_subject.themeOf(_backups, odd), " x", "the record names the theme");
+            result = null;
+            assert(_subject.backUp(_themes, _backups, _long, answer => result = answer), "a 230-byte name: started");
+        });
+        _then("a long name: kept", () => result !== null, () => {
+            assertEqual(result.ok + "|" + result.problem, "true|", "kept");
+            assertEqual(_subject.themeOf(_backups, result.backup), _long, "the record names the theme");
+            assertEqual(_read(_backups + "/" + result.backup), _content, "with the content");
+            backups2 = result.backup;
+            made = _run(["rm", "--", _themes + "/Power save.json", _themes + "/ x.json", _themes + "/" + _long + ".json"]);
+        });
+        _then("odd names deleted", () => made.code !== -1, () => {
+            assertEqual(made.code, 0, "the odd themes deleted");
+            result = null;
+            assert(_subject.restore(_themes, _backups, odd, answer => result = answer), "restoring a space first: started");
+        });
+        _then("a space first: restored", () => result !== null, () => {
+            assertEqual(result.ok + "|" + result.theme, "true| x", "restored under its own name");
+            assertEqual(_read(_themes + "/ x.json"), _content, "with the content");
+            result = null;
+            assert(_subject.restore(_themes, _backups, backups2, answer => result = answer), "restoring a long name: started");
+        });
+        _then("a long name: restored", () => result !== null, () => {
+            assertEqual(result.ok + "|" + result.problem, "true|", "restored");
+            assertEqual(_read(_themes + "/" + _long + ".json"), _content, "under its own name, with the content");
+            listing = _run(["ls", "-A", "--", _themes]);
+        });
+        _then("no temporary files", () => listing.code !== -1, () => {
+            assertEqual(listing.output.split("\n").filter(line => line !== "").sort().join("|"), [" x.json", _long + ".json", "other.json"].sort().join("|"),
+                        "the themes folder: only themes, nothing left over");
         });
         _then("the theme deleted", () => made.code !== -1, () => {
             result = null;

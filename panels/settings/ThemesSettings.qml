@@ -50,6 +50,22 @@ Flickable {
         _renameInput.text = "";
         _newInput.text = "";
         _deleteButton.asking = false;
+        _deleteProblem = "";
+    }
+
+    // Why the delete asked on this page did not happen ("" none)
+    property string _deleteProblem: ""
+
+    Connections {
+        target: ThemeFiles
+        function onThemeDeleted(name) {
+            if (name === root.themeName)
+                root.themePicked("");
+        }
+        function onThemeDeleteFailed(name, problem) {
+            if (name === root.themeName)
+                root._deleteProblem = "Not deleted: " + problem;
+        }
     }
 
     component Label: Text {
@@ -225,9 +241,21 @@ Flickable {
                     : "Delete?"
                 cancelTip: "Cancel — keep the theme"
                 onConfirmed: {
-                    ThemeFiles.deleteTheme(root.themeName);
-                    root.themePicked("");
+                    const problem = ThemeFiles.deleteTheme(root.themeName);
+                    root._deleteProblem = problem === "" ? "" : "Not deleted: " + problem;
                 }
+            }
+            Text {
+                visible: root._deleteProblem !== ""
+                Layout.fillWidth: true
+                text: root._deleteProblem
+                textFormat: Text.PlainText
+                wrapMode: Text.Wrap
+                maximumLineCount: 3
+                elide: Text.ElideRight
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.fontSizeSmall
+                color: Theme.error
             }
             Hint {
                 text: "Profiles using it go back to the default theme; themes extending it extend what it extended. Its file is kept in theme-backups."

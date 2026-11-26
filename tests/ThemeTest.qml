@@ -216,12 +216,37 @@ TestCase {
         assert(ThemeRules.validThemeName("Power save"), "a theme name may have spaces inside");
         assert(!ThemeRules.validThemeName("a/b") && !ThemeRules.validThemeName(".hidden") && !ThemeRules.validThemeName(" x"),
             "but no slash, no leading dot, no spaces at its ends");
-        // A deleted theme's backup: <name>.json.bak-<stamp>, parsed back to the theme it holds
-        const backupName = ThemeRules.themeBackupName("Power save", "2026-11-26T09:05:07.042Z");
-        assertEqual(backupName, "Power save.json.bak-2026-11-26T09-05-07-042Z", "a theme backup is named after the theme and the time");
-        assertEqual(ThemeRules.themeBackupName("a/b", "2026-11-26T09:05:07.042Z") + "|" + ThemeRules.themeBackupName(".x", "2026-11-26T09:05:07.042Z")
-                    + "|" + ThemeRules.themeBackupName("dark", "yesterday") + "|" + ThemeRules.themeBackupName("dark", "2026-11-26T09:05:07Z"),
-                    "|||", "no backup name for a name that is no theme's, or a time that is not one");
+        // A deleted theme's backup: <name>.json.bak-<stamp>, parsed back to the theme it holds;
+        // a name that cannot stand in the backup's own (spaces at its ends, a dot first, too
+        // long for a file name with the stamp) is hashed, the name kept in a record beside it
+        const stamp = "2026-11-26T09:05:07.042Z";
+        const backup = ThemeRules.themeBackup("Power save", stamp);
+        const backupName = backup.file;
+        assertEqual(backupName + "|" + backup.record, "Power save.json.bak-2026-11-26T09-05-07-042Z|",
+                    "a theme backup is named after the theme and the time, no record");
+        const hashed = ThemeRules.themeBackup(" x", stamp);
+        assertEqual(hashed.file, "theme-" + Qt.md5(" x").slice(0, 16) + ".json.bak-2026-11-26T09-05-07-042Z", "a name with a space at its end: hashed");
+        assertEqual(hashed.record, JSON.stringify({ theme: " x" }) + "\n", "… its name kept in the record");
+        assertEqual(ThemeRules.themeBackup(".x", stamp).record, JSON.stringify({ theme: ".x" }) + "\n", "a dot first: hashed too");
+        const twoByteName = "é".repeat(100) + "x";
+        assertEqual(ThemeRules.themeBackup("a".repeat(200), stamp).record + "|" + ThemeRules.themeBackup(twoByteName, stamp).record.length,
+                    "|" + (JSON.stringify({ theme: twoByteName }) + "\n").length, "200 bytes: named; 201 bytes (two-byte letters): hashed");
+        assert(ThemeRules.themeBackup("é".repeat(125), stamp).file.length < 60, "a 250-byte name: a short backup name");
+        assertEqual(ThemeRules.themeBackup("a/b", stamp).file + "|" + ThemeRules.themeBackup("", stamp).file + "|" + ThemeRules.themeBackup("..", stamp).file
+                    + "|" + ThemeRules.themeBackup("a".repeat(251), stamp).file + "|" + ThemeRules.themeBackup(null, stamp).file
+                    + "|" + ThemeRules.themeBackup("dark", "yesterday").file + "|" + ThemeRules.themeBackup("dark", "2026-11-26T09:05:07Z").file,
+                    "||||||", "no backup for a name no file can have, or a time that is not one");
+        assert(ThemeRules.themeFileName(" x") && ThemeRules.themeFileName(".x") && ThemeRules.themeFileName("a".repeat(250)),
+               "a theme's file may have any name a file can: spaces at its ends, a dot first, 250 bytes");
+        assert(!ThemeRules.themeFileName("a".repeat(251)) && !ThemeRules.themeFileName(".") && !ThemeRules.themeFileName("a/b")
+               && !ThemeRules.themeFileName("") && !ThemeRules.themeFileName(42), "but not more, no slash, not . or empty");
+        assert(!ThemeRules.themeFileName("a\uD800"), "nor one that has no UTF-8 form (a lone surrogate)");
+        assertEqual(ThemeRules.themeBackupRecord(hashed.file), hashed.file + ".theme", "the record: beside the backup");
+        assertEqual(ThemeRules.restoredTheme(hashed.file, { theme: " x" }), " x", "restored as the record's name");
+        assertEqual(ThemeRules.restoredTheme(backupName, null), "Power save", "no record: the backup name's");
+        for (const record of [{ theme: "a/b" }, { theme: ".." }, { theme: "" }, { theme: 3 }, "x", []])
+            assertEqual(ThemeRules.restoredTheme(backupName, record), "Power save", "a record with no name a file can have: the backup name's — " + JSON.stringify(record));
+        assertEqual(ThemeRules.restoredTheme("dark.json", { theme: "x" }), "", "no backup: nothing");
         const parsedBackup = ThemeRules.parseThemeBackupName(backupName);
         assertEqual(parsedBackup.ok + "|" + parsedBackup.theme + "|" + parsedBackup.time, "true|Power save|" + Date.UTC(2026, 10, 26, 9, 5, 7, 42),
                     "a theme backup's name gives back its theme and time");

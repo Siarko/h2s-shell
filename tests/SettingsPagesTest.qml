@@ -211,6 +211,37 @@ TestCase {
         _firstSections();
         _whenAwayPage();
         _networkConnectivity();
+        _themeDelete();
+    }
+
+    // The Themes page after a delete: a failed one says why on the page and keeps the theme
+    // picked; a done one picks the active theme; another theme's outcome changes nothing
+    function _themeDelete() {
+        const component = Qt.createComponent(Qt.resolvedUrl("../panels/settings/ThemesSettings.qml"));
+        const page = component.createObject(_stage, { themeName: "stand-in" });
+        if (page === null)
+            return fail("the themes page builds: " + component.errorString().trim());
+        const picked = [];
+        page.themePicked.connect(name => picked.push(name));
+        const problem = () => _find(page, item => item.text !== undefined && String(item.text).startsWith("Not deleted"));
+        try {
+            assertEqual(problem(), null, "no problem shown at first");
+            ThemeFiles.themeDeleteFailed("another", "x");
+            ThemeFiles.themeDeleted("another");
+            assertEqual(problem(), null, "another theme's outcome: nothing said");
+            assertEqual(picked.length, 0, "… nothing picked");
+            ThemeFiles.themeDeleteFailed("stand-in", "its file could not be kept: theme-backups is a link: nothing kept");
+            assertEqual(problem()?.text, "Not deleted: its file could not be kept: theme-backups is a link: nothing kept", "a failed delete: said on the page");
+            assertEqual(problem()?.textFormat, Text.PlainText, "… as plain text");
+            assertEqual(picked.length, 0, "… the theme stays picked");
+            ThemeFiles.themeDeleted("stand-in");
+            assertEqual(picked.join(","), "", "a done delete: the active theme picked");
+            assertEqual(picked.length, 1, "… once");
+            page.themeName = "other";
+            assertEqual(problem(), null, "another theme picked: the problem gone");
+        } finally {
+            page.destroy();
+        }
     }
 
     // The connectivity check's address on System → Network → Overview, with the distribution's

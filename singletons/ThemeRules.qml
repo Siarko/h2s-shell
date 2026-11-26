@@ -533,14 +533,57 @@ Singleton {
             && !name.includes("/") && !name.startsWith(".");
     }
 
+    // The bytes `text` takes in UTF-8; Infinity for one that cannot be encoded (a lone
+    // surrogate)
+    function _utf8Bytes(text) {
+        try {
+            return encodeURIComponent(text).replace(/%[0-9A-F]{2}/g, "x").length;
+        } catch (error) {
+            return Infinity;
+        }
+    }
+
+    // Whether `name` may be a theme file's name on disk (<name>.json) — what deleting and
+    // restoring accept: any name a file can have, also one made by hand that validThemeName
+    // refuses (spaces at its ends, a dot first). At most 250 bytes: 255 with ".json"
+    function themeFileName(name) {
+        return typeof name === "string" && name !== "" && name !== "." && name !== ".."
+            && !name.includes("/") && !name.includes("\0") && _utf8Bytes(name) <= 250;
+    }
+
+    // The longest theme name a backup's own name holds: with the stamp (34 bytes) and its
+    // record's ".theme" it stays well under a file name's 255 bytes
+    readonly property int maxNamedBackupBytes: 200
+
     // A deleted theme's file is kept in the theme backups folder (ThemeBackups) as
     // <name>.json.bak-<stamp>: its theme readable from the name, the time making it unique.
-    // "" for a name that is no theme's or a time that is not one (Date.toISOString())
-    function themeBackupName(name, isoTime) {
-        if (!validThemeName(name) || typeof isoTime !== "string"
+    // A name that cannot stand there (not a validThemeName, or longer than
+    // maxNamedBackupBytes) is hashed (theme-<md5>), the name kept in a record beside the
+    // backup (themeBackupRecord). → { file, record: the record's text, "" none }; file ""
+    // for a name no theme file can have or a time that is not one (Date.toISOString())
+    function themeBackup(name, isoTime) {
+        if (!themeFileName(name) || typeof isoTime !== "string"
                 || !/^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z$/.test(isoTime))
+            return { file: "", record: "" };
+        const stamp = ".json.bak-" + isoTime.replace(/[:.]/g, "-");
+        if (validThemeName(name) && _utf8Bytes(name) <= maxNamedBackupBytes)
+            return { file: name + stamp, record: "" };
+        return { file: "theme-" + Qt.md5(name).slice(0, 16) + stamp, record: JSON.stringify({ theme: name }) + "\n" };
+    }
+
+    // The record naming the theme of backup `file`, beside it
+    function themeBackupRecord(file) {
+        return file + ".theme";
+    }
+
+    // The theme backup `file` restores as: the name its record (parsed, or null) holds when
+    // that is one a theme file can have, else the one in the backup's name; "" no backup
+    function restoredTheme(file, record) {
+        const parsed = parseThemeBackupName(file);
+        if (!parsed.ok)
             return "";
-        return name + ".json.bak-" + isoTime.replace(/[:.]/g, "-");
+        const named = record !== null && typeof record === "object" ? record.theme : undefined;
+        return themeFileName(named) ? named : parsed.theme;
     }
 
     readonly property var _themeBackupPattern: /^(.+)\.json\.bak-([0-9]{4})-([0-9]{2})-([0-9]{2})T([0-9]{2})-([0-9]{2})-([0-9]{2})-([0-9]{3})Z$/

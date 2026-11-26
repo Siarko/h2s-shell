@@ -173,19 +173,29 @@ Singleton {
     }
 
     // Deletes a theme: its file is kept in the theme backups first — not kept, nothing
-    // changes —, then the themes extending it extend its parent instead, the profiles using
-    // it fall back to the default theme (the config backed up first), and the file goes.
-    // Deletes run one at a time, in the order asked. true when it is under way
+    // changes and themeDeleteFailed says why —, then the themes extending it extend its
+    // parent instead, the profiles using it fall back to the default theme (the config backed
+    // up first), the file goes and themeDeleted follows. Deletes run one at a time, in the
+    // order asked; one asked again while it is under way is that one. → "" under way, else
+    // why not
     function deleteTheme(name) {
-        if (Config.readOnly || !Theme.themeNames.includes(name) || _deletes.includes(name))
-            return false;
+        if (Config.readOnly)
+            return "Settings are read-only";
+        if (!Theme.themeNames.includes(name))
+            return "No theme file named " + String(name ?? "").slice(0, 80);
+        if (_deleting === name || _deletes.includes(name))
+            return "";
         _deletes = _deletes.concat([name]);
-        if (!_backups.running)
-            _nextDelete();
-        return true;
+        _nextDelete();
+        return "";
     }
 
+    signal themeDeleted(string name)
+    signal themeDeleteFailed(string name, string problem)
+
     property var _deletes: []
+    // The theme whose file is being kept now ("" none)
+    property string _deleting: ""
 
     property ThemeBackups _backups: ThemeBackups {}
 
@@ -194,25 +204,39 @@ Singleton {
             return;
         const name = _deletes[0];
         _deletes = _deletes.slice(1);
+        _deleting = name;
         const started = _backups.backUp(themesDir, backupsDir, name, result => {
+            root._deleting = "";
             root._backedUp(name, result);
             root._nextDelete();
         });
         if (!started) {
-            console.warn("[Theme] Not deleting", themePath(name), "— its file could not be kept");
+            _deleting = "";
+            _deleteFailed(name, "its file could not be kept");
             _nextDelete();
         }
     }
 
+    function _deleteFailed(name, problem) {
+        console.warn("[Theme] Not deleting", themePath(name), "—", problem);
+        themeDeleteFailed(name, problem);
+    }
+
     function _backedUp(name, result) {
         if (!result.ok) {
-            console.warn("[Theme] Not deleting", themePath(name), "— its file could not be kept:", result.problem);
+            _deleteFailed(name, "its file could not be kept: " + result.problem);
             return;
         }
-        // What changed while the copy was made wins: a theme gone or settings that cannot be
-        // saved now are left alone
-        if (Config.readOnly || !Theme.themeNames.includes(name))
+        // What changed while the copy was made wins: a theme gone is left gone, settings that
+        // cannot be saved now are not changed
+        if (!Theme.themeNames.includes(name)) {
+            themeDeleted(name);
             return;
+        }
+        if (Config.readOnly) {
+            _deleteFailed(name, "settings are read-only");
+            return;
+        }
         if (result.backup !== "")
             console.log("[Theme] Theme", name, "kept in", backupsDir + "/" + result.backup);
         const changed = ThemeRules.withoutExtends(Theme.themeFiles, name);
@@ -221,24 +245,39 @@ Singleton {
         _retargetProfiles(name, "default");
         Theme.dropDraft(name);
         remove(themePath(name));
+        themeDeleted(name);
     }
 
+    // The last restore's outcome, for IPC: "" none yet, else a line
+    property string restoreOutcome: ""
+
     // Puts the kept file `backup` (a name in the theme backups) back as its theme, unless a
-    // theme of that name exists; the backup stays. → "" started, else why not
+    // theme of that name exists; the backup stays. What can be told at once is answered;
+    // the rest (a linked folder, a failed copy) lands in restoreOutcome. → "" started, else why
+    // not
     function restoreTheme(backup) {
         if (Config.readOnly)
             return "Settings are read-only";
-        if (!ThemeRules.parseThemeBackupName(backup).ok || String(backup).includes("/"))
+        const theme = _backups.themeOf(backupsDir, backup);
+        if (theme === "")
             return "Not a theme backup: " + String(backup ?? "").slice(0, 80);
+        if (Theme.themeExists(theme))
+            return "A theme named " + theme.slice(0, 80) + " exists";
+        if (!readFile(backupsDir + "/" + backup).exists)
+            return "No such backup: " + backup.slice(0, 80);
         const started = _backups.restore(themesDir, backupsDir, backup, result => {
             if (result.ok)
                 console.log("[Theme] Theme", result.theme, "restored from", backupsDir + "/" + backup);
             else
                 console.warn("[Theme] Not restoring", backupsDir + "/" + backup, "—", result.problem);
+            root.restoreOutcome = result.ok ? "Restored " + result.theme : "Not restored: " + result.problem;
             Qt.callLater(Theme.reload);
             root._nextDelete();
         });
-        return started ? "" : "Busy: try again";
+        if (!started)
+            return "Busy: try again";
+        restoreOutcome = "Restoring " + theme.slice(0, 80);
+        return "";
     }
 
     function _retargetProfiles(oldName, newName) {

@@ -930,8 +930,11 @@ Changes are drafts (`~/.config/h2s_shell/theme-drafts/`), kept until saved, also
 restarts: each page has Save and Cancel, a banner saves or throws away all of the theme's
 changes, and ✎ marks pages and themes with unsaved changes. Themes are files in
 `~/.config/h2s_shell/themes/`. A deleted theme's file is kept first in
-`~/.config/h2s_shell/theme-backups/` as `<name>.json.bak-<time>`; `qs ipc call settings
-restoreTheme <that name>` brings it back (not over a theme of the same name).
+`~/.config/h2s_shell/theme-backups/` as `<name>.json.bak-<time>` (a name with spaces at its
+ends, a dot first or over 200 bytes as `theme-<hash>.json.bak-<time>`, its name in a
+`.theme` file beside it); when it cannot be kept the theme stays and the page says why.
+`qs ipc call settings restoreTheme <backup>` brings one back (not over a theme of the same
+name), `settings restoreThemeOutcome` says how it went.
 
 ### Backups
 
