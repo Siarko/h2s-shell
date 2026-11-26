@@ -12,10 +12,24 @@ import qs.mockups.kit
 //                 `now`: the open lock, dimmed
 //   disabled      `enabled: false`, as a page sets it where the setting does not apply: the
 //                 switch dims itself, the texts stay as they are
+// The mark's tooltip clock and its read of what polkit keeps are stood in for (its seams):
+// on a screen the tip says ten minutes left, nothing is asked of polkit.
 // Every state has a cell of its own (the kit's StateGrid lays them out), the shot cropped
 // to the state's cell.
 MockupWindow {
     id: root
+
+    // The row's mark on stand-ins: the kit's fixed time for its tooltip's clock, and no read
+    // of what polkit keeps (the real one would ask polkit as the pointer opens the tooltip)
+    function _standIn(item) {
+        for (const child of item.children) {
+            if (child.keptUntilMs !== undefined && child._refreshKept !== undefined) {
+                child._clock = () => root.now.getTime();
+                child._refreshKept = () => {};
+            }
+            _standIn(child);
+        }
+    }
 
     StateGrid {
         id: grid
@@ -36,6 +50,7 @@ MockupWindow {
                     width: grid.cellWidth - 32
 
                     SwitchRow {
+                        id: _row
                         label: cell.name === "off" || cell.name === "on" ? "Wi-Fi" : "Wake on LAN"
                         hint: cell.name === "off" || cell.name === "on" ? ""
                             : "Lets another computer on the network wake this one from sleep."
@@ -44,6 +59,7 @@ MockupWindow {
                             : cell.name === "not-allowed" ? "no" : ""
                         remembered: cell.name === "kept" ? { kept: true, untilMs: root.now.getTime() + 600000 } : null
                         enabled: cell.name !== "disabled"
+                        Component.onCompleted: root._standIn(_row)
                     }
                 }
             }

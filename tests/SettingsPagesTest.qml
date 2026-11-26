@@ -268,11 +268,23 @@ TestCase {
         if (editor === null)
             return fail("the editor builds on a stand-in store: " + component.errorString().trim());
         try {
-            assertEqual(editor.shownValue + " " + editor.inherits + " " + editor.inheritedFrom, "bars true Base", "the value and where it comes from are the store's");
+            assertEqual(JSON.stringify([editor.shownValue, editor.inherits, editor.inheritedFrom]), JSON.stringify(["bars", true, "Base"]),
+                        "the value and where it comes from are the store's");
             assert(_find(editor, item => item.text === "inherited from Base") !== null, "… said beside the control");
             editor.edited("dots");
             assertEqual(JSON.stringify(writes), JSON.stringify([["write", 1, "media.visualizerStyle", "dots"]]), "an edit is written to the store, at the edited profile");
-            assertEqual(Config.profiles + "|" + Config.globals, profilesBefore + "|" + globalsBefore, "the shell's profiles left as they were");
+            editor.reset();
+            assertEqual(JSON.stringify(writes.slice(1)), JSON.stringify([["clear", 1, "media.visualizerStyle"]]), "the reset drops the edited profile's value in the store");
+            const pinArea = _find(editor, item => item.objectName === "pinArea");
+            assert(pinArea !== null, "the pin's area");
+            pinArea.clicked(null);
+            assertEqual(JSON.stringify(writes.slice(2)), JSON.stringify([["pin", "media.visualizerStyle"]]), "the pin pins it as global in the store");
+            store.effectiveGlobals = { "media.visualizerStyle": "dots" };
+            editor.store = Object.assign({}, store);
+            assertEqual(JSON.stringify([editor.global, editor.shownValue]), JSON.stringify([true, "dots"]), "pinned in the store: global, at the store's global value");
+            pinArea.clicked(null);
+            assertEqual(JSON.stringify(writes.slice(3)), JSON.stringify([["unpin", "media.visualizerStyle"]]), "the pin then unpins it in the store");
+            assertEqual(JSON.stringify([Config.profiles, Config.globals]), JSON.stringify([profilesBefore, globalsBefore]), "the shell's profiles left as they were");
         } finally {
             editor.destroy();
         }

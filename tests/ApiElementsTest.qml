@@ -1323,9 +1323,11 @@ TestCase {
         assert(_until(() => !_within(variedMark)._counting, 5000), "… pointed away: the clock stops");
         const leftAt = refreshes;
         assertEqual(refreshes, leftAt, "… nothing read again on leaving");
+        _within(variedMark)._clock = () => kept.untilMs - 90000;
         driver.mouseMove(variedMark, 2, 2);
         assert(_until(() => _within(variedMark)._counting, 5000), "… pointed at again");
         assertEqual(refreshes, leftAt + 1, "… read again once, as the tooltip opens again");
+        assertEqual(_within(variedMark)._now, kept.untilMs - 90000, "… the clock its seam gives (a mockup's fixed time)");
         driver.mouseMove(away, 5, 5);
         assert(_until(() => !_within(variedMark)._counting, 5000), "… pointed away");
         variedMark.remembered = Object.freeze({ kept: false, untilMs: 0 });

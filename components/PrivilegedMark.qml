@@ -40,18 +40,19 @@ Text {
     readonly property bool _counting: root.kept && _area.containsMouse && root.visible && (root.Window.window?.visible ?? false)
     on_CountingChanged: {
         if (_counting) {
-            _now = Date.now();
+            _now = _clock();
             _refreshKept();
         }
     }
-    // A suite's seam: what reads it again
+    // A suite's or a mockup's seams: what reads it again, and the wall clock in ms
     property var _refreshKept: () => RememberedAdmin.refresh()
+    property var _clock: () => Date.now()
 
     Timer {
         interval: 1000
         repeat: true
         running: root._counting
-        onTriggered: root._now = Date.now()
+        onTriggered: root._now = root._clock()
     }
 
     HoverTip {

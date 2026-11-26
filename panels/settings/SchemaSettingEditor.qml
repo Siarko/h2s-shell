@@ -342,6 +342,7 @@ Item {
 
                 PointerArea {
                     id: _pinArea
+                    objectName: "pinArea"
                     cursorShape: root.systemGlobal ? Qt.ArrowCursor : Qt.PointingHandCursor
                     onClicked: {
                         if (root.systemGlobal)
