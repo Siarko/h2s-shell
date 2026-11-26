@@ -1,0 +1,9 @@
+# Each state's cell stands in for the panel the list floats in (an overlay host): a button
+# opens the list, 180 px wide, its entries stand-ins drawn as a dropdown's.
+description: A list that floats over the page under its button, for pickers and dropdowns
+state: below           Room below the button: the list under it
+state: above           No room below (the button at the bottom): the list over it
+state: scrolling       Taller than its most (120 px): cut at the bottom, it scrolls
+state: groups          Entries under their groups' titles (FloatingListHeader)
+state: current         The keys on an entry: ringed and lit
+state: disabled-entry  An entry that cannot be picked: dimmed, the keys pass it by

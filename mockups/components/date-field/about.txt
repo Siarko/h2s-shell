@@ -1,0 +1,6 @@
+# Each state's cell holds the field at its own width, as the event form shows it.
+description: A date typed in three parts: day, month, year
+state: empty       No date: the parts' placeholders
+state: filled      A date
+state: focus       With the keyboard in the day: the accent around it, the day selected
+state: armed       The next day clicked in the calendar fills it: a thicker accent border

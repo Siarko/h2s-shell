@@ -1,0 +1,12 @@
+# Each state's cell is a column: the delete kind with a short and a long label, then the
+# save kind (a button that asks before turning something on) the same; cut and wraps show
+# each kind's long label at rest and asking, at a narrow cap.
+description: The button that asks before it acts: its question with a cancelling ×
+state: rest           At rest: delete with its red border, save filled
+state: hover          Under the pointer: delete turns red, save lighter
+state: focus          With the keyboard: the ring inside the border
+state: asking         After the first click: the question in the kind's colour, the × beside it
+state: asking-hover   Asking, under the pointer: the question and the × lit together
+state: disabled       Not available: dimmed, at rest and asking
+state: cut            At most 96 px: the label and the question cut with …
+state: wraps          At most 140 px, wrapping: the label and the question on more lines

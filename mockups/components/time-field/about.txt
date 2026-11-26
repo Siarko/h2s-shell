@@ -1,0 +1,6 @@
+# Each state's cell holds the field, 80 px wide and 28 px tall.
+description: A time typed in two parts: hours and minutes
+state: empty           No time: the parts' placeholders
+state: filled          A time
+state: focus           With the keyboard in the hours: the accent around it, the hours selected
+state: one-digit-hour  A time given with a one-digit hour (7:05): the hour as given

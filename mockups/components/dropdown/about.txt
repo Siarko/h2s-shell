@@ -1,0 +1,12 @@
+# Each state's cell is a settings column (180 px wide dropdowns); a closed state shows a
+# plain choice and one with a colour dot, an open one its list under the button.
+description: A choice shown as a button, its options in a list that floats over the page
+state: closed           The current choice, plain and with its colour dot
+state: placeholder      Nothing chosen yet: the placeholder, dimmed
+state: hover            Under the pointer: the border lighter
+state: focus            With the keyboard: the border lighter still
+state: open             Open: the accent border, the list under it, the picked option tinted, ringed
+state: groups           Options under their groups' titles, with colour dots
+state: disabled-option  An option that cannot be picked: dimmed
+state: current          The keys moved off the picked option: the ring on theirs, the tint on the picked
+state: long-label       A long choice: cut with …, plain and with its dot
