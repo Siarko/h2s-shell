@@ -503,6 +503,7 @@ LazyLoader {
                 // destruction after Qt dropped the popup's properties still reads it)
                 const told = _told;
                 Component.destruction.connect(() => {
+                    told.gone = true;
                     if (told.screen !== null)
                         Toasts.setCentreArea(told.screen, null);
                 });
@@ -568,27 +569,38 @@ LazyLoader {
                 return { x: Math.round(full.x + popup._screenOffset.x), y: Math.round(full.y + popup._screenOffset.y),
                          width: Math.round(full.width), height: Math.round(full.height) };
             }
+            // Still on its way to where it stays: not shown yet, holding the old panel's size
+            // until the new one has rendered, the panel animating its own size, the popup
+            // resizing or sliding along the bar, or not yet on its whole pixel. Settling is
+            // read from the animations themselves, not from a quiet spell: on a slow machine
+            // frames can come further apart than any spell, which would tell the old panel's
+            // size, or one mid-resize, as where the centre stands.
+            readonly property bool _moving: !popup.showPopup || popup._holding || popup._contentAnimating
+                || Math.abs(across - popup.popupAcross) >= 0.5 || Math.abs(popup.shownLength - popup.totalLength) >= 0.5
+                || Math.abs(_anchored - _target) >= 0.5 || position !== Math.round(_exact)
             on_CentreAreaChanged: _reportCentreArea()
-            // Closed (or another panel) at once; open, when it has stopped changing
+            on_MovingChanged: _reportCentreArea()
+            // Closed (or another panel) at once; open, once it has stopped moving — read after
+            // the bindings of this turn have all followed, so that a change that starts a
+            // move is not told as a place first
             function _reportCentreArea() {
                 if (_centreArea === null) {
-                    _centreSettle.stop();
                     Toasts.setCentreArea(popupLoader.barScreen?.name ?? "", null);
                     _told.screen = null;
                 } else {
-                    _centreSettle.restart();
+                    Qt.callLater(_reportSettledCentreArea);
                 }
             }
-            Timer {
-                id: _centreSettle
-                interval: 80
-                onTriggered: {
-                    clipWrapper._told.screen = popupLoader.barScreen?.name ?? "";
-                    Toasts.setCentreArea(clipWrapper._told.screen, clipWrapper._centreArea);
-                }
+            // Called later: the popup may be gone by then (its _told then marked, or its
+            // properties already dropped)
+            function _reportSettledCentreArea() {
+                if (!_told || _told.gone || _centreArea === null || _moving)
+                    return;
+                _told.screen = popupLoader.barScreen?.name ?? "";
+                Toasts.setCentreArea(_told.screen, _centreArea);
             }
-            // The screen its area was last told for, null when none is
-            readonly property var _told: ({ screen: null })
+            // The screen its area was last told for, null when none is; gone once destroyed
+            readonly property var _told: ({ screen: null, gone: false })
 
             Behavior on _start {
                 enabled: popup.showPopup

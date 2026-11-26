@@ -268,6 +268,8 @@ The interface modules are written against (`qs.api`), versioned on its own
 - Deleting a theme keeps its file first, in `theme-backups/` beside the themes folder, as the
   hint now says; `qs ipc call settings restoreTheme <name>` brings one back. When the file
   cannot be kept, nothing is deleted and the Themes page says why.
+- On a slow machine the toasts no longer step aside for the panel open before the notification
+  centre, then again for the centre: they move once, when the centre has settled.
 - A notification's long body can be read: in a toast (6 lines) and in the notification centre
   (12 lines) the rest scrolls inside the card with the wheel, a touchpad or a finger, a fade
   showing where more is hidden.

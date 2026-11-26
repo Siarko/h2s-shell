@@ -1972,12 +1972,20 @@ TestCase {
     property var _popupCellA: null
     property var _popupCellB: null
     property int _popupCycles: 0
-    // The centre's places told to the toasts (Toasts.centreArea), open ones only
+    // The centre's places told to the toasts (Toasts.centreArea), open ones only, and those
+    // told while the popup was still moving: holding the old panel's size, resizing, sliding
+    // along the bar, or off its whole pixel
     property var _centreReports: []
+    property var _centreReportsMoving: []
     function _countCentreReport() {
         const area = Toasts.centreArea;
-        if (area !== null)
-            _centreReports = _centreReports.concat([{ x: area.x, y: area.y, width: area.width, height: area.height }]);
+        if (area === null)
+            return;
+        const report = { x: area.x, y: area.y, width: area.width, height: area.height };
+        _centreReports = _centreReports.concat([report]);
+        const body = _realPopup?.item?.contentItem.children.find(child => child.objectName === "popupBody") ?? null;
+        if (!body || body._moving)
+            _centreReportsMoving = _centreReportsMoving.concat([report]);
     }
 
     function _makePopup() {
@@ -2700,6 +2708,7 @@ TestCase {
                 // what it tells the toasts on the way (Toasts.centreArea) is counted
                 if (number === 1) {
                     _centreReports = [];
+                    _centreReportsMoving = [];
                     Toasts.centreAreaChanged.connect(_countCentreReport);
                 }
                 _realPopup.open(_popupCellB, false, "notifications", null, number % 2 === 0);
@@ -2714,13 +2723,15 @@ TestCase {
                     _realPopup.close();
             });
             if (number === 1) {
-                _then("the centre settled", () => Date.now() >= _waitUntil && !_realPopup.item._contentAnimating, () => {
+                _then("the centre settled", () => Date.now() >= _waitUntil && !_realPopup.item._contentAnimating && !_realPopup.item.animating, () => {
                     Toasts.centreAreaChanged.disconnect(_countCentreReport);
                     const body = _realPopup.item.contentItem.children.find(child => child.objectName === "popupBody") ?? null;
                     const area = body?._centreArea ?? null;
                     assert(area !== null && _centreReports.length === 1 && JSON.stringify(_centreReports[0]) === JSON.stringify(area),
                            "moving over to the centre and resizing: its place told the toasts once, as it settled ("
                            + JSON.stringify(_centreReports) + " vs " + JSON.stringify(area) + ")");
+                    assertEqual(JSON.stringify(_centreReportsMoving), "[]",
+                                "… and none while it was still moving, whatever the time between frames");
                     _realPopup.close();
                 });
             }
