@@ -306,35 +306,72 @@ Singleton {
         return parsed.ok ? parsed.name : "";
     }
 
-    // In a backup's side folder: the side files the run created (one path a line), which a
-    // restore of it removes. Never a side file itself
+    // In a backup's side folder: the side files the run created, a line each: the MD5 of the
+    // text written (Qt.md5) and the path. A restore of it removes them while unchanged. Never a
+    // side file itself
     readonly property string createdFilesName: ".created-files"
 
-    function _badSidePath(file) {
-        const parts = file.split("/");
-        return file.startsWith("/") || /[\u0000-\u001f\u007f]/.test(file)
+    // The list of created files read → [{ hash, path }]; a line of another shape is left out
+    // (its file is never removed)
+    function createdEntries(text) {
+        const entries = [];
+        for (const line of String(text ?? "").split("\n")) {
+            const match = /^([0-9a-f]{32}) (.+)$/.exec(line);
+            if (match)
+                entries.push({ hash: match[1], path: match[2] });
+        }
+        return entries;
+    }
+
+    // The list of created files as a run writes it: `files` { path: the text written }
+    function createdText(files) {
+        return Object.keys(files ?? {}).sort().map(path => Qt.md5(String(files[path])) + " " + path + "\n").join("");
+    }
+
+    // Why `file` cannot be a side file a restore writes or removes ("" it can): a path inside
+    // config.json's folder — relative, no empty, "." or ".." part, no control character — and
+    // none a restore writes itself or that is a backup (config.json, config.json.bak-…,
+    // backup-side-files/…, the list of created files, the restore's own staging folder)
+    function sidePathProblem(file) {
+        const text = String(file ?? "");
+        const parts = text.split("/");
+        // An empty path and an absolute one have an empty part
+        const bad = /[\u0000-\u001f\u007f]/.test(text)
             || parts.some(part => part === "" || part === "." || part === "..")
-            || file === "config.json" || file === createdFilesName || parts[0].startsWith(_prefix)
+            || text === "config.json" || text === createdFilesName || parts[0].startsWith(_prefix)
             || parts[0] === "backup-side-files" || parts[0].startsWith(".config-restore.");
+        return bad ? "a side file of the backup has a name it cannot have: " + JSON.stringify(text).slice(0, 120) : "";
     }
 
     // What a restore does with the side files, from the listing of backup-side-files/<name>
-    // (one path relative to it a line) and its list of the files the run created (`created`)
-    // → { ok, write: the files put back (sorted), remove: the ones the run created, removed
-    // (sorted; none also put back), problem }. Each is a path inside config.json's folder:
-    // relative, no empty, "." or ".." part, no control character, and none that a restore
-    // writes itself or that is a backup (config.json, config.json.bak-…, backup-side-files/…,
-    // the restore's own staging folder); a name that is not one refuses the whole restore
-    function sideFilePlan(listing, created) {
-        const listed = String(listing ?? "").split("\n").filter(line => line !== "");
-        const write = listed.filter(file => file !== createdFilesName);
-        const remove = String(created ?? "").split("\n").filter(line => line !== "" && !write.includes(line));
-        if (write.length + remove.length > maxSideFiles)
+    // (one path relative to it a line), its created files (createdEntries), the migrations
+    // (`registry`) and the MD5 of each created file as it is now (`current`, path → hash, ""
+    // when gone or empty) → { ok, write: the files put back (sorted), remove: the created
+    // ones removed (sorted), problem }. A created file is removed only when it is not put
+    // back, a registered migration's file scope names it and it is what the run wrote (one
+    // changed or made again since is the user's); a name that is no side file's
+    // (sidePathProblem) refuses the whole restore
+    function sideFilePlan(listing, created, registry, current) {
+        const write = String(listing ?? "").split("\n").filter(line => line !== "" && line !== createdFilesName);
+        const entries = _list(created).filter(entry => typeof entry?.path === "string" && !write.includes(entry.path));
+        if (write.length + entries.length > maxSideFiles)
             return { ok: false, write: [], remove: [], problem: "more than " + maxSideFiles + " side files" };
-        const bad = write.concat(remove).find(file => _badSidePath(file));
-        if (bad !== undefined)
-            return { ok: false, write: [], remove: [], problem: "a side file of the backup has a name it cannot have: " + JSON.stringify(bad).slice(0, 120) };
+        for (const file of write.concat(entries.map(entry => entry.path))) {
+            const problem = sidePathProblem(file);
+            if (problem !== "")
+                return { ok: false, write: [], remove: [], problem: problem };
+        }
+        const named = MigrationRules.sideFilesIn(registry, entries.map(entry => entry.path));
+        const now = current ?? {};
+        const remove = entries.filter(entry => named.includes(entry.path) && Object.prototype.hasOwnProperty.call(now, entry.path)
+                                       && now[entry.path] === entry.hash).map(entry => entry.path);
         return { ok: true, write: write.slice().sort(), remove: Array.from(new Set(remove)).sort(), problem: "" };
+    }
+
+    // The backups kept whatever their age because a restore replaced side files with them: the
+    // "-restore" ones with a side folder (`sideFolders`: the names in backup-side-files)
+    function keptForSideFiles(sideFolders) {
+        return _list(sideFolders).filter(name => typeof name === "string" && parseName(name).ok && parseName(name).reason === "restore");
     }
 
     // The line under the section's title after Make a backup now

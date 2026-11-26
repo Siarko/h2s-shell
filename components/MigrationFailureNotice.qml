@@ -284,6 +284,7 @@ QtObject {
 
     property ConfigRestore _restorer: ConfigRestore {
         configPath: root.configPath
+        registry: root.registry
         readOnly: root.testRunner
         version: root.version
         keep: () => root.current.backup !== "" ? [root.current.backup] : []

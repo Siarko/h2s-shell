@@ -62,30 +62,64 @@ TestCase {
         assertEqual(rules.sideBackupName("/c/" + name, undefined), "", "… nor with no folder named");
         assertEqual(rules.sideFilePlan("/etc/passwd", "").problem, "a side file of the backup has a name it cannot have: \"/etc/passwd\"", "plan: the refused name said");
 
-        const plan = rules.sideFilePlan("themes/b.json\nthemes/a.json\n.created-files\n", "themes/new.json\nthemes/a.json\nthemes/new.json\n");
+        const themes = [{ migrationId: "2026-11-26-testonly-themes", scope: ["file:themes/*.json"] }];
+        const hashA = Qt.md5("a\n");
+        const hashNew = Qt.md5("new\n");
+        const created = c => rules.createdEntries(c);
+        assertEqual(JSON.stringify(created(hashNew + " themes/new one.json\nnot a line\n" + "0".repeat(31) + " x\n" + hashA.toUpperCase() + " y\n\n")),
+                    JSON.stringify([{ hash: hashNew, path: "themes/new one.json" }]), "created list: hash and path (spaces kept), other lines left out");
+        assertEqual(rules.createdText({ "themes/b.json": "new\n", "themes/a.json": "a\n" }), hashA + " themes/a.json\n" + hashNew + " themes/b.json\n",
+                    "created list as written: a line each, sorted");
+        assertEqual(JSON.stringify(created(rules.createdText({ "themes/x y.json": "new\n" }))), JSON.stringify([{ hash: hashNew, path: "themes/x y.json" }]),
+                    "created list: read back as written");
+        const plan = rules.sideFilePlan("themes/b.json\nthemes/a.json\n.created-files\n",
+                                        created(hashNew + " themes/new.json\n" + hashA + " themes/a.json\n" + hashNew + " themes/new.json\n"),
+                                        themes, { "themes/new.json": hashNew, "themes/a.json": hashA });
         assertEqual(plan.ok, true, "plan: listed files and created ones");
         assertEqual(plan.write.join(","), "themes/a.json,themes/b.json", "plan: the listed ones put back, sorted, the list of created ones not among them");
         assertEqual(plan.remove.join(","), "themes/new.json", "plan: a created one removed once; one also kept is put back, not removed");
-        const empty = rules.sideFilePlan("", "");
+        const removed = (path, now, registry) => rules.sideFilePlan("", created(hashNew + " " + path), registry ?? themes, now).remove.join(",");
+        assertEqual(removed("themes/new.json", { "themes/new.json": hashNew }), "themes/new.json", "plan: a created one unchanged removed");
+        assertEqual(removed("themes/new.json", { "themes/new.json": hashA }), "", "plan: … changed since: kept");
+        assertEqual(removed("themes/new.json", { "themes/new.json": "" }), "", "plan: … gone or empty: nothing to remove");
+        assertEqual(removed("themes/new.json", {}), "", "plan: … not read: kept");
+        assertEqual(removed("themes/new.json", undefined), "", "plan: … nothing read at all: kept");
+        assertEqual(removed("other/new.json", { "other/new.json": hashNew }), "", "plan: … no registered migration's file: kept");
+        assertEqual(removed("themes/new.json", { "themes/new.json": hashNew }, []), "", "plan: … no migrations: kept");
+        const empty = rules.sideFilePlan("", []);
         assertEqual(empty.ok + "|" + empty.write.length + "|" + empty.remove.length, "true|0|0", "plan: none");
         for (const bad of ["/etc/passwd", "../x.json", "themes/../../x", "themes//a.json", "./a.json", "themes/.", "config.json",
                            ".created-files", "config.json.bak-2026-01-12T09-14-40-123Z", "backup-side-files/x/a.json",
                            ".config-restore.abc/config.json", "themes/a\u0001.json", "themes/a\u007f.json"]) {
-            const refused = rules.sideFilePlan(bad, "");
+            const refused = rules.sideFilePlan(bad, []);
             // The list of created files is no side file: left out of what is put back
             if (bad === ".created-files")
                 assert(refused.ok && refused.write.length === 0, "plan: the list of created files not put back");
             else
                 assert(!refused.ok && refused.write.length === 0 && refused.problem.includes("cannot have"), "plan: " + JSON.stringify(bad) + " refused");
-            assert(!rules.sideFilePlan("themes/a.json", bad).ok, "plan: " + JSON.stringify(bad) + " refused as a created one too");
+            assert(!rules.sideFilePlan("themes/a.json", [{ hash: hashA, path: bad }], themes, {}).ok, "plan: " + JSON.stringify(bad) + " refused as a created one too");
+            assert(rules.sidePathProblem(bad) !== "", "path: " + JSON.stringify(bad) + " no side file's");
         }
-        assert(rules.sideFilePlan("themes/config.json\nthemes/.created-files\nnotes/backup-side-files", "").ok, "plan: those names inside a folder are side files");
+        assertEqual(rules.sidePathProblem(""), "a side file of the backup has a name it cannot have: \"\"", "path: an empty one none");
+        assertEqual(rules.sidePathProblem("themes/a.json"), "", "path: a side file's");
+        assert(rules.sideFilePlan("themes/config.json\nthemes/.created-files\nother/backup-side-files", []).ok, "plan: those names inside a folder are side files");
         const many = [];
         for (let i = 0; i <= rules.maxSideFiles; i++)
             many.push("themes/" + i + ".json");
-        assert(rules.sideFilePlan(many.slice(1).join("\n"), "").ok, "plan: as many as the limit taken");
-        assert(!rules.sideFilePlan(many.join("\n"), "").ok, "plan: more than the limit refused");
-        assert(!rules.sideFilePlan(many.slice(2).join("\n"), "a.json\nb.json").ok, "plan: the created ones count towards the limit");
+        assert(rules.sideFilePlan(many.slice(1).join("\n"), []).ok, "plan: as many as the limit taken");
+        assert(!rules.sideFilePlan(many.join("\n"), []).ok, "plan: more than the limit refused");
+        assert(!rules.sideFilePlan(many.slice(2).join("\n"), created(hashA + " a.json\n" + hashA + " b.json")).ok, "plan: the created ones count towards the limit");
+
+        const restore = "config.json.bak-2026-01-12T09-14-40-123Z-restore";
+        assertEqual(rules.keptForSideFiles([restore, name, "config.json.bak-2026-01-12T09-14-40-123Z-manual", "notes", 3]).join(","), restore,
+                    "kept: a restore's backup with side files, no other");
+        assertEqual(rules.keptForSideFiles(undefined).length, 0, "kept: none listed");
+        const automatic = [];
+        for (let i = 10; i < 21; i++)
+            automatic.push("config.json.bak-2026-02-" + i + "T00-00-00-000Z-migration");
+        const older = "config.json.bak-2025-01-01T00-00-00-000Z-restore";
+        const plan2 = MigrationRules.backupsToKeep(automatic.concat([older]), { written: automatic[10], neverPrune: rules.keptForSideFiles([older]) });
+        assert(plan2.keep.includes(older) && plan2.delete.length === 1 && plan2.delete[0] === automatic[0], "kept: never pruned, no place among the ten");
     }
 
     function _names() {

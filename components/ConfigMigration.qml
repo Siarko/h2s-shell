@@ -102,6 +102,20 @@ QtObject {
             return false;
         _phase = phase === "afterSeed" ? "afterSeed" : "load";
         _source = _phase === "afterSeed" && typeof source === "function" ? source : null;
+        // A restore cut short (the shell ended mid-swap) is put back before anything is read
+        if (_phase === "load" && !readOnly && _swap.recover(_dir, result => {
+                if (!result.ok)
+                    console.warn("[Migrations] " + result.problem);
+                root._begin();
+            }))
+            return true;
+        _begin();
+        return true;
+    }
+
+    property ConfigSideSwap _swap: ConfigSideSwap {}
+
+    function _begin() {
         _sideTexts = {};
         _written = null;
         _diskText = _read(_file);
@@ -122,11 +136,10 @@ QtObject {
         const depth = MigrationRules.sideFileDepth(registry);
         if (depth === 0) {
             _decide({}, []);
-            return true;
+            return;
         }
         _lister.command = ["find", _dir, "-mindepth", "1", "-maxdepth", String(depth), "-xtype", "f", "-printf", "%P\\n"];
         _lister.running = true;
-        return true;
     }
 
     property Process _lister: Process {
@@ -253,10 +266,6 @@ QtObject {
             }
         }
         const created = _createdSideFiles();
-        if (created.length > 0 && !_write(_sideBackup(_backup) + "/" + ConfigBackupRules.createdFilesName, created.join("\n") + "\n")) {
-            _failed("could not list the side files the run creates: " + _writeError);
-            return;
-        }
         console.log("[Migrations] Backup of the config before the run:", _backup);
         // It holds the Google tokens: readable by the user only, whatever the folder's mode
         _protect.command = ["chmod", "-R", "go-rwx", "--", _backup].concat(sideFiles.length + created.length > 0 ? [_sideBackup(_backup)] : []);
@@ -280,14 +289,29 @@ QtObject {
         }
         if (_phase === "afterSeed" && typeof _source === "function" && !_againOnCurrent())
             return;
+        // The files it creates listed with the backup before they are written (a restore of it
+        // removes them while they are what was written here)
+        const created = {};
+        for (const file of Object.keys(_outcome.files))
+            if (!Object.prototype.hasOwnProperty.call(_sideTexts, file))
+                Object.defineProperty(created, file, { value: _sideText(file), enumerable: true });
+        if (_backup !== "" && Object.keys(created).length > 0
+                && !_write(_sideBackup(_backup) + "/" + ConfigBackupRules.createdFilesName, ConfigBackupRules.createdText(created))) {
+            _failed("could not list the side files the run creates: " + _writeError);
+            return;
+        }
         for (const file of Object.keys(_outcome.files)) {
-            // As the theme files are written
-            if (!_write(_dir + "/" + file, JSON.stringify(_outcome.files[file], null, 2) + "\n")) {
+            if (!_write(_dir + "/" + file, _sideText(file))) {
                 _failed("could not write " + _dir + "/" + file + ": " + _writeError);
                 return;
             }
         }
         _writeConfig();
+    }
+
+    // A side file's text as written (as the theme files are)
+    function _sideText(file) {
+        return JSON.stringify(_outcome.files[file], null, 2) + "\n";
     }
 
     // After seeding the config is the adapter's and may have been saved since the run began:

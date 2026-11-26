@@ -5,12 +5,14 @@ import qs.singletons
 // Replaces config.json, keeping what it held: the current file is first copied to a backup
 // (config.json.bak-<stamp>-restore, readable by the user only), then the new content is
 // written (atomic). A restore of a backup in config.json's folder also puts back the side
-// files kept with it (backup-side-files/<name>/: what that migration run overwrote or removed),
-// with config.json as one step: everything staged first, the files they replace kept with the
-// new backup, then swapped; when any part fails, everything is put back as it was. A linked
-// backup-side-files or side folder, a link or a non-regular file among the side files or in
-// their places, and a name that is no path inside the folder (ConfigBackupRules.sideFilePlan)
-// refuse the whole restore. Two contents: a backup with migrations held (restore(): the settings from
+// files kept with it (backup-side-files/<name>/: what that migration run overwrote or removed)
+// and removes those the run created, while unchanged and in a registered migration's file
+// scope, with config.json as one step (ConfigSideSwap: everything staged first, the files
+// replaced or removed kept with the new backup, then swapped; when any part fails, everything
+// is put back as it was). A linked backup-side-files or side folder, a link or a non-regular
+// file among the side files or in their places, a name that is no path inside the folder
+// (ConfigBackupRules.sideFilePlan), and no config.json to back up while side files would be
+// replaced refuse the whole restore. Two contents: a backup with migrations held (restore(): the settings from
 // before a failed update, or any backup from the list, MigrationNoticeRules.restoredConfig),
 // or a new config with the defaults (startWithDefaults(): MigrationNoticeRules.defaultsConfig).
 // The shell restarts afterwards (the caller's): the migrations run once, before any reader, at
@@ -27,6 +29,9 @@ QtObject {
     readonly property bool running: _running
     // Backups its pruning always keeps (names or paths): the failure notice's backup
     property var keep: () => []
+    // The migrations (Migrations.all()): a file a backup's run created is removed by its restore
+    // only when one of their file scopes names it
+    property var registry: []
     // The backup a restore reads ("" none): kept by pruning, never deleted while it runs
     readonly property string reading: _reading
 
@@ -253,64 +258,6 @@ QtObject {
         + "|| { echo \"could not stage $file: nothing restored\" >&2; rm -rf -- \"$stage\"; exit 1; }; "
         + "done; printf '%s\\n' \"$stage\""
 
-    // $1 the folder, $2 the staging folder (config.json and new/ in it), $3 the backup just
-    // made ("" none), then an entry per side file: "w:<path>" put back from new/, "r:<path>"
-    // removed (the run created it). Every place checked first (no link, nothing but a file
-    // where a file goes), the files replaced or removed copied into the new backup's side
-    // folder (with the list of those this creates: a restore of that backup removes them) and
-    // kept in the staging folder, then config.json renamed into place and each side file
-    // after it (a crash between leaves the old config with newer side files, which the
-    // migrations run again on, never a migrated config with old side files, which they would
-    // not reach again); a step that fails puts back everything done before it. A folder made
-    // for a side file whose folder was gone stays. The staging folder is removed in every case
-    readonly property string _swapScript: "dir=$1; stage=$2; keep=$3; shift 3; side=\"$dir/backup-side-files\"; config=\"$dir/config.json\"; umask 077; "
-        + "count=0; configMoved=0; keepMade=0; "
-        + "rollback() { "
-        + "if [ $configMoved = 1 ]; then if [ -e \"$stage/old-config.json\" ]; then mv -f -- \"$stage/old-config.json\" \"$config\"; else rm -f -- \"$config\"; fi; fi; "
-        + "i=0; for entry in \"$@\"; do [ $i -lt $count ] || break; i=$((i + 1)); file=${entry#?:}; "
-        + "if [ -e \"$stage/old/$file\" ]; then mv -f -- \"$stage/old/$file\" \"$dir/$file\"; else rm -f -- \"$dir/$file\"; fi; done; "
-        + "if [ $keepMade = 1 ]; then rm -rf -- \"$side/$keep\"; fi; }; "
-        + "fail() { echo \"$1: nothing restored\" >&2; shift; rollback \"$@\"; rm -rf -- \"$stage\"; exit 1; }; "
-        + "if [ -L \"$config\" ]; then fail \"config.json is a link\" \"$@\"; fi; "
-        + "if [ -e \"$config\" ] && [ ! -f \"$config\" ]; then fail \"config.json is not a regular file\" \"$@\"; fi; "
-        + "if [ -L \"$stage/config.json\" ] || [ ! -f \"$stage/config.json\" ]; then fail \"the restored config was not staged\" \"$@\"; fi; "
-        + "for entry in \"$@\"; do file=${entry#?:}; "
-        + "path=$dir; rest=$file; "
-        + "while [ \"${rest#*/}\" != \"$rest\" ]; do path=\"$path/${rest%%/*}\"; rest=${rest#*/}; "
-        + "if [ -L \"$path\" ]; then fail \"${path#\"$dir\"/} is a link\" \"$@\"; fi; "
-        + "if [ -e \"$path\" ] && [ ! -d \"$path\" ]; then fail \"${path#\"$dir\"/} is not a folder\" \"$@\"; fi; done; "
-        + "if [ -L \"$dir/$file\" ]; then fail \"$file is a link\" \"$@\"; fi; "
-        + "if [ -e \"$dir/$file\" ] && [ ! -f \"$dir/$file\" ]; then fail \"$file is not a regular file\" \"$@\"; fi; "
-        + "case $entry in w:*) if [ -L \"$stage/new/$file\" ] || [ ! -f \"$stage/new/$file\" ]; then fail \"$file was not staged\" \"$@\"; fi;; "
-        + "r:*) ;; *) fail \"$entry is no side file entry\" \"$@\";; esac; "
-        + "done; "
-        + "if [ -n \"$keep\" ]; then "
-        + "if [ -L \"$side\" ]; then fail \"backup-side-files is a link\" \"$@\"; fi; "
-        + "if [ -e \"$side/$keep\" ] || [ -L \"$side/$keep\" ]; then fail \"the side files of $keep are there already\" \"$@\"; fi; "
-        + ": > \"$stage/created\" || fail \"could not list the files created\" \"$@\"; "
-        + "for entry in \"$@\"; do file=${entry#?:}; "
-        + "if [ -f \"$dir/$file\" ]; then keepMade=1; "
-        + "{ mkdir -p -- \"$side/$keep/$(dirname -- \"$file\")\" && cp -- \"$dir/$file\" \"$side/$keep/$file\"; } || fail \"could not back up $file\" \"$@\"; "
-        + "else case $entry in w:*) printf '%s\\n' \"$file\" >> \"$stage/created\" || fail \"could not list the files created\" \"$@\";; esac; fi; done; "
-        + "if [ -s \"$stage/created\" ]; then keepMade=1; "
-        + "{ mkdir -p -- \"$side/$keep\" && cp -- \"$stage/created\" \"$side/$keep/.created-files\"; } || fail \"could not list the files created\" \"$@\"; fi; "
-        + "fi; "
-        + "for entry in \"$@\"; do file=${entry#?:}; if [ -f \"$dir/$file\" ]; then "
-        + "{ mkdir -p -- \"$stage/old/$(dirname -- \"$file\")\" && { ln -- \"$dir/$file\" \"$stage/old/$file\" 2>/dev/null || cp -p -- \"$dir/$file\" \"$stage/old/$file\"; }; } "
-        + "|| fail \"could not keep $file\" \"$@\"; "
-        + "case $entry in w:*) chmod --reference=\"$dir/$file\" -- \"$stage/new/$file\" || fail \"could not keep the mode of $file\" \"$@\";; esac; fi; done; "
-        + "if [ -f \"$config\" ]; then "
-        + "{ { ln -- \"$config\" \"$stage/old-config.json\" 2>/dev/null || cp -p -- \"$config\" \"$stage/old-config.json\"; } "
-        + "&& chmod --reference=\"$config\" -- \"$stage/config.json\"; } || fail \"could not keep config.json\" \"$@\"; "
-        + "else chmod 600 -- \"$stage/config.json\" || fail \"could not restrict config.json\" \"$@\"; fi; "
-        + "mv -f -- \"$stage/config.json\" \"$config\" || fail \"could not write config.json\" \"$@\"; configMoved=1; "
-        + "for entry in \"$@\"; do file=${entry#?:}; "
-        + "case $entry in "
-        + "w:*) { mkdir -p -- \"$dir/$(dirname -- \"$file\")\" && mv -f -- \"$stage/new/$file\" \"$dir/$file\"; } || fail \"could not write $file\" \"$@\";; "
-        + "r:*) rm -f -- \"$dir/$file\" || fail \"could not remove $file\" \"$@\";; "
-        + "esac; count=$((count + 1)); done; "
-        + "rm -rf -- \"$stage\"; exit 0"
-
     // The scripts' own line comes last, after what a command it ran said
     function _sideProblem(text, fallback) {
         const lines = String(text ?? "").trim().split("\n");
@@ -327,9 +274,17 @@ QtObject {
                 return;
             }
             const listed = _sideListed.text;
-            const created = listed.split("\n").includes(ConfigBackupRules.createdFilesName)
-                ? root._read(root._pruner.sideFolder(root._sideName) + "/" + ConfigBackupRules.createdFilesName) : "";
-            const plan = ConfigBackupRules.sideFilePlan(listed, created);
+            const created = ConfigBackupRules.createdEntries(listed.split("\n").includes(ConfigBackupRules.createdFilesName)
+                ? root._read(root._pruner.sideFolder(root._sideName) + "/" + ConfigBackupRules.createdFilesName) : "");
+            // Each file the run created as it is now: removed only when it is still what the run wrote
+            const current = {};
+            for (const entry of created) {
+                if (ConfigBackupRules.sidePathProblem(entry.path) !== "")
+                    continue;
+                const text = root._read(root._dir + "/" + entry.path);
+                Object.defineProperty(current, entry.path, { value: text !== "" ? Qt.md5(text) : "", enumerable: true });
+            }
+            const plan = ConfigBackupRules.sideFilePlan(listed, created, root.registry, current);
             if (!plan.ok) {
                 root._finish(false, plan.problem + ": nothing restored");
                 return;
@@ -364,22 +319,18 @@ QtObject {
                 return;
             }
             const keep = root._backup !== "" ? root._backup.substring(root._backup.lastIndexOf("/") + 1) : "";
-            root._swapper.command = ["sh", "-c", root._swapScript, "sh", root._dir, staging, keep].concat(root._sideEntries);
-            root._swapper.running = true;
+            const started = root._swap.swap(root._dir, staging, keep, root._sideEntries, result => {
+                root._staging = "";
+                root._finish(result.ok, result.problem);
+            });
+            if (!started) {
+                root._dropStaging();
+                root._finish(false, "could not restore the side files of " + root._sideName);
+            }
         }
     }
 
-    property Process _swapper: Process {
-        stderr: StdioCollector { id: _swapErrors }
-        onExited: code => {
-            root._staging = "";
-            if (code !== 0) {
-                root._finish(false, root._sideProblem(_swapErrors.text, "could not restore the side files of " + root._sideName));
-                return;
-            }
-            root._finish(true, "");
-        }
-    }
+    property ConfigSideSwap _swap: ConfigSideSwap {}
 
     function _dropStaging() {
         if (_staging === "")

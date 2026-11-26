@@ -4,8 +4,9 @@ import qs.singletons
 
 // Prunes the config backups in config.json's folder after one was written: the folder's
 // regular files listed (a folder or a link of a backup's name is never a backup),
-// MigrationRules.backupsToKeep decides (the newest automatic ones; manual ones and the
-// protected never), each deleted backup removed with the folder of side files it holds
+// MigrationRules.backupsToKeep decides (the newest automatic ones; manual ones, the
+// protected and a restore's backup holding side files it replaced never:
+// ConfigBackupRules.keptForSideFiles), each deleted backup removed with the folder of side files it holds
 // (ConfigBackupRemover: nothing removed through a linked backup-side-files). One
 // at a time: a prune asked for while one runs runs again once it is done, with the last
 // names it was given.
@@ -43,11 +44,17 @@ QtObject {
             return;
         }
         _listing = true;
-        _lister.command = ["find", "-H", dir, "-mindepth", "1", "-maxdepth", "1", "-type", "f", "-printf", "%f\\n"];
+        _lister.command = ["sh", "-c", _listScript, "sh", dir];
         _lister.running = true;
     }
 
     property bool _listing: false
+
+    // $1 the folder: "f <name>" for each regular file in it, then "d <name>" for each folder
+    // in backup-side-files (none when it is a link); non-zero when the folder cannot be listed
+    readonly property string _listScript: "find -H \"$1\" -mindepth 1 -maxdepth 1 -type f -printf 'f %f\\n' || exit 1; "
+        + "side=\"$1/backup-side-files\"; "
+        + "if [ -d \"$side\" ] && [ ! -L \"$side\" ]; then find \"$side\" -mindepth 1 -maxdepth 1 -type d -printf 'd %f\\n' 2>/dev/null; fi; exit 0"
 
     property Process _lister: Process {
         stdout: StdioCollector { id: _names }
@@ -58,7 +65,12 @@ QtObject {
                 root._done();
                 return;
             }
-            const plan = MigrationRules.backupsToKeep(_names.text.split("\n"), { written: root._written, protect: root._protect });
+            const lines = _names.text.split("\n");
+            const files = lines.filter(line => line.startsWith("f ")).map(line => line.slice(2));
+            const sideFolders = lines.filter(line => line.startsWith("d ")).map(line => line.slice(2));
+            const plan = MigrationRules.backupsToKeep(files, {
+                written: root._written, protect: root._protect, neverPrune: ConfigBackupRules.keptForSideFiles(sideFolders)
+            });
             if (plan.delete.length === 0) {
                 root._done();
                 return;
