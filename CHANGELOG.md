@@ -205,6 +205,10 @@ The interface modules are written against (`qs.api`), versioned on its own
   reloads when it changes.
 
 ### Changed
+- Switches look the same everywhere, small or large: off, the track is a light grey that
+  shows on the settings page, cards, popups and side panels alike (in the Network and
+  Bluetooth popups it was darker, on a profile's card it was the popup's colour); under the
+  pointer the track turns lighter. Modules' switches look the same.
 - Dropdowns and "Add" lists work from the keyboard: Tab reaches them (a ring shows the
   focus), Space, Enter or Down open the list on the current choice, the arrows, Home, End,
   Page Up and Page Down move, a letter jumps to the next entry starting with it, Enter

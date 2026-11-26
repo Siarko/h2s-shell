@@ -60,6 +60,7 @@ QtObject {
     property var _themeMaps: ThemeMapsTest {}
     property var _themeBackups: ThemeBackupsTest {}
     property var _apiThemeTokens: ApiThemeTokensTest {}
+    property var _toggleSwitch: ToggleSwitchTest {}
     property var _format: FormatTest {}
     property var _addressRules: AddressRulesTest {}
     property var _systemFacts: SystemFactsTest {}

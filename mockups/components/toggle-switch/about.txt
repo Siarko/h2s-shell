@@ -1,7 +1,8 @@
-# Each state's cell is the settings' small switch and the popups' larger one side by side.
-description: The on/off switch, small and large
+# Each state's cell is a column: the settings' small switch above the popups' larger one.
+description: The on/off switch, small and large, the same colours in both
 state: off            Off
 state: on             On
-state: hover          Off, under the pointer
+state: hover          Off, under the pointer: the track lighter
+state: hover-on       On, under the pointer: the accent lighter
 state: disabled-off   Not enabled, off: dimmed
 state: disabled-on    Not enabled, on: dimmed

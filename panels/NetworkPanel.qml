@@ -99,7 +99,6 @@ Item {
                         ToggleSwitch {
                             implicitWidth: 44
                             implicitHeight: 24
-                            offColor: Theme.textDisabled
                             checked: EthernetManager.ethernetConnected
                             onToggled: EthernetManager.ethernetConnected
                                 ? EthernetManager.disconnect()
@@ -150,7 +149,6 @@ Item {
                 ToggleSwitch {
                     implicitWidth: 44
                     implicitHeight: 24
-                    offColor: Theme.textDisabled
                     checked: WifiManager.wifiEnabled
                     onToggled: WifiManager.toggleWifi()
                 }

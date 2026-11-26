@@ -641,6 +641,10 @@ Singleton {
     readonly property color fill: Qt.alpha(textDisabled, 0.15)      // an unselected pill, a dragged row
     readonly property color fillSubtle: Qt.alpha(textDisabled, 0.08)  // a row under the pointer in a list
     readonly property color track: Qt.alpha(textDisabled, 0.25)     // the empty part of a progress bar
+    // A switch's track when off: opaque, so it reads the same on every background (at least
+    // 3:1 against the popup and card backgrounds of the built-in theme), lighter under the pointer
+    readonly property color switchOff: textSecondary
+    readonly property color switchOffHover: Qt.tint(textSecondary, Qt.alpha(textPrimary, 0.35))
 
     // Status
     property color error: _colors.error

@@ -173,7 +173,6 @@ Flickable {
 
                         // Enabled
                         ToggleSwitch {
-                            offColor: Theme.popupBackground
                             checked: _card.profile.enabled !== false
                             onToggled: Profiles.updateProfile(_card.index, { enabled: _card.profile.enabled === false })
                         }

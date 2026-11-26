@@ -56,7 +56,6 @@ Item {
                 visible: root.adapter !== null
                 implicitWidth: 44
                 implicitHeight: 24
-                offColor: Theme.textDisabled
                 checked: root.adapter?.enabled ?? false
                 onToggled: BluetoothPower.setEnabled(!(root.adapter?.enabled ?? false))
             }

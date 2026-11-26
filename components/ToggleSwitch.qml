@@ -4,13 +4,19 @@ import qs.singletons
 // An on/off switch: a track filled with the accent when on, and a knob sliding to that
 // side. Reports a click with `toggled`; the owner changes `checked` (it follows the value
 // it shows, which may change elsewhere). Small by default, as in the settings; popups use
-// a larger one (width 44, height 24, with offColor Theme.textDisabled).
+// a larger one (width 44, height 24). Every size and place draws the same colours: the off
+// track is the theme's switchOff, which stands out from the popup, settings and card
+// backgrounds alike, so no caller picks one for its background.
 Rectangle {
     id: root
 
     property bool checked: false
-    property color offColor: Theme.surface
     signal toggled
+
+    // The track's colour now: by `checked`, lighter under the pointer
+    readonly property color trackColor: _area.lit
+        ? (checked ? Theme.accentHover : Theme.switchOffHover)
+        : (checked ? Theme.accent : Theme.switchOff)
 
     implicitWidth: 36
     implicitHeight: 20
@@ -19,7 +25,7 @@ Rectangle {
     radius: height / 2
     // Not enabled, it is dimmed as a button that is not available
     opacity: enabled ? 1 : 0.35
-    color: checked ? Theme.accent : offColor
+    color: trackColor
     Behavior on color { ColorAnimation { duration: Theme.duration("state"); easing: Theme.curve("state") } }
 
     Rectangle {
@@ -34,6 +40,7 @@ Rectangle {
 
     // At least Theme.target.minSize round it: a 24 px switch is small for a finger
     PointerArea {
+        id: _area
         enabled: root.enabled
         cursorShape: Qt.PointingHandCursor
         onClicked: root.toggled()

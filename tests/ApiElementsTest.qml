@@ -1251,7 +1251,7 @@ TestCase {
         assert(_names(_within(dropdown)).includes("fontSize") && _names(_within(dropdown)).includes("open"), "… the internal dropdown's own are not among them (it has fontSize, open)");
         assert(_names(_within(field)).includes("fieldColor") && _names(_within(field)).includes("outlined") && _names(_within(field)).includes("input"),
             "nor the internal field's (fieldColor, outlined, input)");
-        assert(_names(_within(pill)).includes("minimumHeight") && _names(_within(toggle)).includes("offColor"), "nor the pill's minimumHeight, the switch's offColor");
+        assert(_names(_within(pill)).includes("minimumHeight") && _names(_within(toggle)).includes("trackColor"), "nor the pill's minimumHeight, the switch's trackColor");
 
         // --- defaults ---
         assertEqual([unchosen.size, field.size, pill.size].join(" "), "m m m", "a dropdown, a field and a pill are of size m unless told");
