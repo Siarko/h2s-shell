@@ -128,6 +128,59 @@ Singleton {
         return { kind: known ? kind : "info", border: look.tone, tone: look.tone, icon: look.icon, titleColor: "textPrimary" };
     }
 
+    // ---- Switches: tracks and knobs that stand out whatever the theme ----
+    // Colours are anything with r, g, b in 0..1 (a Qt colour); alpha is dropped, so a track
+    // looks the same over every background.
+
+    // WCAG's relative luminance and contrast ratio
+    function luminance(color) {
+        const channel = value => value <= 0.03928 ? value / 12.92 : Math.pow((value + 0.055) / 1.055, 2.4);
+        return 0.2126 * channel(color.r) + 0.7152 * channel(color.g) + 0.0722 * channel(color.b);
+    }
+    function contrast(first, second) {
+        const a = luminance(first);
+        const b = luminance(second);
+        return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+    }
+    function _leastContrast(color, backgrounds) {
+        return Math.min(...backgrounds.map(background => contrast(color, background)));
+    }
+    // `color`, opaque, `amount` (0..1) of the way to white (toWhite) or black
+    function _mix(color, toWhite, amount) {
+        const end = toWhite ? 1 : 0;
+        return Qt.rgba(color.r + (end - color.r) * amount, color.g + (end - color.g) * amount,
+            color.b + (end - color.b) * amount, 1);
+    }
+    // Away from the backgrounds: toward white when white stands further from them than black
+    function _awayIsWhite(backgrounds) {
+        return _leastContrast(Qt.rgba(1, 1, 1, 1), backgrounds) >= _leastContrast(Qt.rgba(0, 0, 0, 1), backgrounds);
+    }
+
+    // A switch's off track: `base` made opaque, moved away from the backgrounds (toward white
+    // over dark ones, black over light ones) only as far as it takes to stand `minimum`:1
+    // from each of them, or as far as it goes
+    function switchTrack(base, backgrounds, minimum) {
+        const toWhite = _awayIsWhite(backgrounds);
+        let track = _mix(base, toWhite, 0);
+        for (let step = 1; step <= 20 && _leastContrast(track, backgrounds) < minimum; step++)
+            track = _mix(base, toWhite, step / 20);
+        return track;
+    }
+
+    // The off track under the pointer: a third further away from the backgrounds
+    function switchTrackHover(track, backgrounds) {
+        return _mix(track, _awayIsWhite(backgrounds), 0.35);
+    }
+
+    // The knob on `track`: whichever of `candidates` stands out from it most
+    function switchKnob(track, candidates) {
+        let best = candidates[0];
+        for (const candidate of candidates)
+            if (contrast(candidate, track) > contrast(best, track))
+                best = candidate;
+        return best;
+    }
+
     // The bar's geometry: sizes in pixels, corner radii in percent of half the bar's height
     readonly property var barTokens: ["barHeight", "reservedSpace", "topOffset", "leftMargin", "rightMargin",
         "leftPadding", "rightPadding", "radiusTopLeft", "radiusTopRight", "radiusBottomLeft", "radiusBottomRight",

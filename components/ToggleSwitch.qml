@@ -17,6 +17,8 @@ Rectangle {
     readonly property color trackColor: _area.lit
         ? (checked ? Theme.accentHover : Theme.switchOffHover)
         : (checked ? Theme.accent : Theme.switchOff)
+    // The knob: light or dark, whichever stands out from the track it is on
+    readonly property color knobColor: ThemeRules.switchKnob(trackColor, [Theme.textPrimary, Theme.popupBackground])
 
     implicitWidth: 36
     implicitHeight: 20
@@ -34,7 +36,8 @@ Rectangle {
         width: root.height - 4
         height: width
         radius: width / 2
-        color: Theme.textPrimary
+        color: root.knobColor
+        Behavior on color { ColorAnimation { duration: Theme.duration("state"); easing: Theme.curve("state") } }
         Behavior on x { NumberAnimation { duration: Theme.duration("state"); easing: Theme.curve("state") } }
     }
 
