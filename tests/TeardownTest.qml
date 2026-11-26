@@ -63,7 +63,9 @@ TestCase {
 
     // Destroys the owners kept in `owners` (an array emptied here) and collects their wrappers
     // before the deferred deletes: one more owner after them (the last one destroyed may still
-    // be held by the engine's registers), then a full collection
+    // be held by the engine's registers), then two full collections: the first may only end
+    // one already under way, which marked them before they were destroyed (seen in a shard
+    // whose other suites had the collector running: no owner reached the case)
     function _drop(owners) {
         _goneBefore = _tally.gone;
         _droppedBefore = _tally.dropped;
@@ -71,6 +73,7 @@ TestCase {
             _destroyAt(owners, index);
         owners.length = 0;
         _destroySpare();
+        gc();
         gc();
     }
     function _destroyAt(owners, index) {
