@@ -1617,7 +1617,7 @@ Scope {
                 job.backups = (job.backups ?? []).concat([id + "/" + backup.name]);
                 // What the module's settings migrations start from next is in this backup (or,
                 // for a restore, in the one restored): they take none of their own
-                host.noteBackupTaken(id);
+                host.noteBackupTaken(id, backup.name);
             }
             const finish = () => {
                 phase = before;
@@ -1661,8 +1661,13 @@ Scope {
     // the subject: a name the module has no readable backup of is refused): the current
     // configuration backed up first ("restore"), the module turned off, its settings
     // (through Profiles), its store and the data paths the backup names written back, and
-    // turned on again when it was on. The version does not change. → "" when it started
-    function restore(id, name) {
+    // turned on again when it was on. The version does not change. `options`: { held: [ids of
+    // its migrations], version } — "Restore previous settings" after a failed migration: those
+    // recorded as held under that version, so the broken one does not reset the part again.
+    // → "" when it started
+    function restore(id, name, options) {
+        const held = Array.isArray(options?.held) ? options.held.slice() : [];
+        const heldVersion = typeof options?.version === "string" ? options.version : "";
         const refusal = _refusal();
         if (refusal !== "")
             return refusal;
@@ -1704,6 +1709,8 @@ Scope {
                             _finish(job, false, "the session was locked: nothing restored");
                             return;
                         }
+                        // The run after it starts from the backup put back
+                        host.noteBackupTaken(id, name);
                         phase = "restoring";
                         if (plan.enableAfter)
                             host.setEnabled(id, false);
@@ -1724,7 +1731,8 @@ Scope {
                             // Its settings migrations run again on what comes back (each is
                             // idempotent); a hold stays, so a broken one does not reset it again
                             if (why === "")
-                                Config.migratedKeys = ModuleMigrationRules.recordsAfterRestore(id, host._plainList(Config.migratedKeys));
+                                Config.migratedKeys = ModuleMigrationRules.withHolds(id, ModuleMigrationRules.recordsAfterRestore(id, host._plainList(Config.migratedKeys)),
+                                                                                     held, heldVersion);
                             _backups.writeBack(id, plan, problems => {
                                 if (!_alive(job))
                                     return;

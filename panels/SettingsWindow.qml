@@ -159,6 +159,9 @@ FloatingWindow {
     // stand-in)
     property var migrationNotice: MigrationNotice.notice
     readonly property alias migrationEntry: _migrationEntry
+    // … and the modules' (ModuleMigrationNotice objects)
+    property var moduleMigrationNotices: MigrationNotice.modules.notices
+    readonly property alias migrationEntries: _migrationEntries
     signal restartClicked(bool started)
 
     // Where a page asks a question that needs more than a button's word (SettingsModalHost.ask)
@@ -600,13 +603,32 @@ FloatingWindow {
                 // A new page fades in, rising a little. Its root takes its place's base from
                 // here (anchorBase, root._showPage)
                 // A settings update failed at start (MigrationNotice): over every page until
-                // it is answered — the Dashboard's entry once there is a Dashboard
-                MigrationFailureEntry {
-                    id: _migrationEntry
-                    objectName: "migrationFailureEntry"
-                    notice: root.migrationNotice
-                    modalHost: root.modalHost
-                    anchors { left: parent.left; right: parent.right; top: parent.top; margins: visible ? Theme.settings.pageMargin : 0 }
+                // it is answered — the Dashboard's entry once there is a Dashboard. The core's
+                // first, then each module's whose own update failed
+                Column {
+                    id: _migrationEntries
+                    readonly property bool shown: height > 0
+                    anchors { left: parent.left; right: parent.right; top: parent.top; margins: shown ? Theme.settings.pageMargin : 0 }
+                    spacing: Theme.settings.pageMargin
+
+                    MigrationFailureEntry {
+                        id: _migrationEntry
+                        objectName: "migrationFailureEntry"
+                        width: parent.width
+                        notice: root.migrationNotice
+                        modalHost: root.modalHost
+                    }
+
+                    Repeater {
+                        model: ScriptModel { values: root.moduleMigrationNotices ?? [] }
+                        MigrationFailureEntry {
+                            required property var modelData
+                            objectName: "moduleMigrationFailureEntry"
+                            width: _migrationEntries.width
+                            notice: modelData
+                            modalHost: root.modalHost
+                        }
+                    }
                 }
 
                 // After "Later": a restart is pending for the modules an update queue updated —
@@ -618,7 +640,7 @@ FloatingWindow {
                     readonly property string text: root.restartUpdater && root.restartUpdater.restartOffer === null
                         ? ModuleUpdateRules.restartBannerText(root.restartUpdater.restartNeeded) : ""
                     visible: text !== ""
-                    anchors { left: parent.left; right: parent.right; top: _migrationEntry.visible ? _migrationEntry.bottom : parent.top; margins: visible ? Theme.settings.pageMargin : 0 }
+                    anchors { left: parent.left; right: parent.right; top: _migrationEntries.shown ? _migrationEntries.bottom : parent.top; margins: visible ? Theme.settings.pageMargin : 0 }
                     height: visible ? _restartRow.implicitHeight + 16 : 0
                     radius: Theme.settings.cardRadius
                     color: Qt.alpha(Theme.warning, 0.10)
@@ -649,7 +671,7 @@ FloatingWindow {
                 Loader {
                     id: _page
                     property string anchorBase: ""
-                    anchors { left: parent.left; right: parent.right; bottom: parent.bottom; top: _restartBanner.visible ? _restartBanner.bottom : _migrationEntry.visible ? _migrationEntry.bottom : parent.top }
+                    anchors { left: parent.left; right: parent.right; bottom: parent.bottom; top: _restartBanner.visible ? _restartBanner.bottom : _migrationEntries.shown ? _migrationEntries.bottom : parent.top }
                     transform: Translate { id: _pageShift }
                     onLoaded: _pageEnter.restart()
                 }

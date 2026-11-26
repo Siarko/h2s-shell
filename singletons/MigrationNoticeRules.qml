@@ -97,6 +97,60 @@ Singleton {
         return result;
     }
 
+    // The notice for module `moduleId`'s last settings migration run, its own beside the
+    // core's (the module's backup and records are its own). `name`: its display name ("" when
+    // it is gone: the id stands); `report`: ModuleHost.migrationReports[moduleId] (undefined
+    // none); `present`: it is installed (a restore needs it).
+    // → notice()'s shape, kind "" | "reset", with module: { id, name } and version (the
+    //   module's, which the holds name); backup is a module backup's name
+    function moduleNotice(moduleId, name, report, present) {
+        const result = {
+            kind: "", summary: "", body: "", parts: [], held: [], heldParts: [], backup: "", startDefaults: false, key: "",
+            module: null, version: ""
+        };
+        if (typeof moduleId !== "string" || moduleId === "" || report === null || typeof report !== "object")
+            return result;
+        const reset = _list(report.reset).filter(entry => typeof entry?.id === "string");
+        if (reset.length === 0)
+            return result;
+        const plain = text => String(text).replace(/\s+/g, " ").trim();
+        const named = typeof name === "string" && plain(name) !== "" ? plain(name) : moduleId;
+        const shown = named.length > 60 ? named.slice(0, 59) + "…" : named;
+        const version = typeof report.version === "string" ? plain(report.version).slice(0, 64) : "";
+        const entries = reset.concat(_list(report.skipped).filter(entry => typeof entry?.id === "string"));
+        const labels = list => {
+            const words = [];
+            for (const entry of list) {
+                const label = plain(partLabel(entry, entry.id)).slice(0, 200);
+                if (label !== "" && !words.includes(label))
+                    words.push(label);
+            }
+            return words;
+        };
+        result.kind = "reset";
+        result.module = { id: moduleId, name: shown };
+        result.version = version;
+        result.summary = "Updating " + shown + " settings" + (version !== "" ? " to " + version : "") + " failed";
+        result.body = "Defaults are used where possible. See Settings for details.";
+        result.parts = labels(reset);
+        result.held = entries.map(entry => entry.id).filter((id, index, all) => all.indexOf(id) === index);
+        result.heldParts = labels(entries);
+        result.backup = present === true && typeof report.backup === "string" ? report.backup : "";
+        result.key = JSON.stringify(["module", moduleId, shown, version, result.parts, result.held, result.backup]);
+        return result;
+    }
+
+    // A module backup's name ("<version>-YYYYMMDD-HHMMSS", UTC) for people: "15 Jan 2026,
+    // 10:29" in local time; "" when the name has no time
+    function moduleBackupDate(name) {
+        const match = /-(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})(?:-[^/]*)?$/.exec(String(name ?? ""));
+        if (!match)
+            return "";
+        const numbers = match.slice(1, 7).map(Number);
+        const time = Date.UTC(numbers[0], numbers[1] - 1, ...numbers.slice(2));
+        return isNaN(time) ? "" : Qt.formatDateTime(new Date(time), "d MMM yyyy, hh:mm");
+    }
+
     // The time in a config backup's name (ConfigBackupRules.parseName), a path or a bare
     // name → a Date, or null
     function backupTime(path) {
@@ -112,10 +166,20 @@ Singleton {
     // The question before Restore previous settings: the steps, naming the backup by its date
     // and the parts the settings update skips (held)
     function restoreQuestion(notice) {
-        const date = backupDate(notice?.backup);
         const parts = _list(notice?.heldParts);
+        const skipping = parts.length > 0 ? ", skipping " + parts.join(", ") : "";
+        if (notice?.module) {
+            const name = notice.module.name;
+            const shownDate = moduleBackupDate(notice.backup);
+            const moduleSteps = ["Create a new backup", "Load the backup of " + (shownDate !== "" ? shownDate : "before the update"),
+                                 name + " settings update" + (notice.version !== "" ? " to " + notice.version : "") + skipping, "Restart " + name];
+            return { kind: "warning", title: "Restore the settings from before the update?",
+                     body: ConfigBackupRules.steps(moduleSteps),
+                     buttons: [{ id: "restore", label: "Restore and restart", kind: "warning" }], cancelLabel: "Cancel" };
+        }
+        const date = backupDate(notice?.backup);
         const update = "Settings update to " + String(notice?.summary ?? "").replace(/^Updating settings to (.*) failed$/, "$1")
-            + (parts.length > 0 ? ", skipping " + parts.join(", ") : "");
+            + skipping;
         const steps = ["Create a new backup", "Load the backup of " + (date !== "" ? date : "before the update"), update, "Restart the shell"];
         return { kind: "warning", title: "Restore the settings from before the update?",
                  body: ConfigBackupRules.steps(steps),
@@ -167,12 +231,17 @@ Singleton {
         return MigrationRules.configText({ migratedKeys: MigrationRules.baseline(_list(registry).filter(migration => !reachFiles(migration)), []), writtenBy: version });
     }
 
-    // The last runs as IPC tells them: the notice and both reports, as JSON
-    function reportText(notice, reports) {
+    // The last runs as IPC tells them: the notice and both reports, and the modules' failed
+    // updates (moduleNotice's, those of kind "reset"), as JSON
+    function reportText(notice, reports, moduleNotices) {
+        const modules = _list(moduleNotices).filter(each => each?.kind === "reset" && each.module).map(each => ({
+            id: each.module.id, name: each.module.name, version: each.version, summary: each.summary,
+            parts: _list(each.parts), held: _list(each.held), backup: each.backup
+        }));
         return JSON.stringify({
             failed: notice?.kind !== "" && notice?.kind !== undefined, kind: notice?.kind ?? "",
             summary: notice?.summary ?? "", parts: _list(notice?.parts), held: _list(notice?.held), backup: notice?.backup ?? "",
-            load: reports?.load ?? null, afterSeed: reports?.afterSeed ?? null
+            load: reports?.load ?? null, afterSeed: reports?.afterSeed ?? null, modules: modules
         }, null, 2);
     }
 }

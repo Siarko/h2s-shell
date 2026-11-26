@@ -292,6 +292,7 @@ TestCase {
             assertEqual(JSON.stringify(host._plainList(Config.migratedKeys)), JSON.stringify(["2.1.0-core", "held:mod.kappa/broken@1.1.0", "mod.kappax/rename"]),
                         "its settings migrations' applied and reset records gone (they run again on what came back), its hold and every other record kept");
             assert(host._switchBackups.includes("kappa"), "… the restore's backup marked for its migrations' next run (it takes none of its own)");
+            assertEqual(host._switchBackupNames.kappa, _updateBackup, "… the backup put back named as what that run starts from");
             host.forgetBackupTaken("kappa");
         });
         _shell("restored: the files", "d=" + _dataDir + "; b=" + _backupsDir + "; "
@@ -315,9 +316,16 @@ TestCase {
     // A module turned off stays off after a restore
     function _offStaysOff() {
         _then("kappa turned off", _idle, () => assert(host.setEnabled("kappa", false), "kappa turned off"));
-        _job("a restore while it is off", () => installer.restore("kappa", _updateBackup), result =>
+        _then("records before a restore with holds", _idle, () => {
+            Config.migratedKeys = ["2.1.0-core", "mod.kappa/rename", "reset:mod.kappa/broken", "held:mod.kappa/broken@1.0.0", "mod.kappax/rename"];
+        });
+        _job("a restore while it is off", () => installer.restore("kappa", _updateBackup, { held: ["broken", "after"], version: "1.1.0" }), result =>
              assert(result.ok, "restored while off (" + result.message + ")"));
         _then("still off", _idle, () => {
+            assertEqual(JSON.stringify(host._plainList(Config.migratedKeys)),
+                        JSON.stringify(["2.1.0-core", "mod.kappax/rename", "held:mod.kappa/broken@1.1.0", "held:mod.kappa/after@1.1.0"]),
+                        "a restore with holds: the failed and skipped ones held under the version that failed, the older hold replaced");
+            host.forgetBackupTaken("kappa");
             assert(!host.isEnabled("kappa"), "kappa stays off after the restore");
             assert(host.setEnabled("kappa", true), "kappa turned on again");
         });

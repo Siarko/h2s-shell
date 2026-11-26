@@ -136,6 +136,23 @@ Singleton {
         });
     }
 
+    // The records with "held:mod.<id>/<mid>@<version>" for each of `held` (an older hold of
+    // the same migration replaced): after "Restore previous settings" those do not run again
+    // under the version that failed, and run under any other
+    function withHolds(moduleId, records, held, version) {
+        const kept = _records(records);
+        if (!_moduleIdOk(moduleId) || typeof version !== "string" || version === "" || version.includes("@"))
+            return kept;
+        const ids = (Array.isArray(held) ? held : []).filter((id, index, all) => validId(id) && all.indexOf(id) === index);
+        const result = kept.filter(entry => {
+            const record = parseRecord(moduleId, entry);
+            return !(record.kind === "held" && ids.includes(record.id));
+        });
+        for (const id of ids)
+            result.push("held:" + recordOf(moduleId, id) + "@" + version);
+        return result;
+    }
+
     // A first install with no settings of its own: every migration recorded, none run
     function baseline(moduleId, migrations, records) {
         const kept = _records(records);

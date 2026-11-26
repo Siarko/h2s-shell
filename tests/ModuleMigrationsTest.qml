@@ -228,7 +228,8 @@ TestCase {
                         "the run's report: what was applied, with each migration's summary from its file");
             assertEqual((report?.reset ?? []).map(entry => entry.id + ":" + entry.summary + ":" + entry.scope).join(" | "),
                         "broken:Broken settings in a new shape:setting:broken.* | hostile:Something it should not do:store:hostile", "… what was reset, with its summary and scope");
-            assertEqual(JSON.stringify(report?.skipped), JSON.stringify([{ id: "after-broken", after: "broken" }]), "… what was skipped");
+            assertEqual(JSON.stringify(report?.skipped), JSON.stringify([{ id: "after-broken", after: "broken", summary: "The broken level is a text" }]), "… what was skipped, with its summary");
+            assertEqual(report?.version, "2.0.0", "… the module's version");
             assert(/^2\.0\.0-\d{8}-\d{6}$/.test(report?.backup ?? ""), "… the backup taken before it: " + report?.backup);
 
             // The files that fail the check
@@ -290,11 +291,11 @@ TestCase {
         });
 
         // Right after the installer's backup (an update, a switch, a restore): none of its own
-        _offAndOn("after the installer's backup", () => host.noteBackupTaken("migrating"), () => {
+        _offAndOn("after the installer's backup", () => host.noteBackupTaken("migrating", "1.9.0-20260101-000000"), () => {
             assertEqual(_state("migrating"), "loaded", "loaded");
             assertEqual(_set("Full")["mod.migrating.town"] + " " + _set("Full")["mod.migrating.city"], "undefined Oslo", "city-rename ran (town dropped, the city set kept)");
             assert(_records().includes("mod.migrating/city-rename"), "… recorded");
-            assertEqual(host.migrationReports.migrating?.backup, "", "… no backup of its own");
+            assertEqual(host.migrationReports.migrating?.backup, "1.9.0-20260101-000000", "… no backup of its own: the installer's named as what it started from");
             _backupNames();
         });
         _then("still one backup after the installer's", () => _out !== null, () => assertEqual(_out.lines.filter(line => line !== "").length, 1, "… none on disk either"));

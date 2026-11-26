@@ -6,7 +6,9 @@ import qs.singletons
 // holding the failed and the skipped ones, the backup of the first run that wrote one,
 // "readOnly" for a session that saves nothing —, the backup's date from its name, the
 // questions as steps lists, the records a restore writes (held:<id>@<version>, an older hold
-// replaced), the restored and the default config, and the IPC report.
+// replaced), the restored and the default config, and the IPC report; a module's own notice
+// (named by its display name, its id when gone; its parts and holds, its backup's date and
+// question).
 TestCase {
     id: suite
     suiteName: "MigrationNoticeRules"
@@ -34,6 +36,44 @@ TestCase {
         _records();
         _configs();
         _ipc();
+        _module();
+    }
+
+    function _module() {
+        const report = { applied: [{ id: "a", summary: "A" }], reset: [{ id: "broken", summary: "Taildrop folder", scope: "setting:taildrop.*", error: "x" }, { id: "other", summary: "", error: "y" }],
+                         skipped: [{ id: "after", after: "broken", summary: "After it" }], held: [], backup: "0.8.0-20260115-102903", version: "0.8.0", fresh: false };
+        const notice = rules.moduleNotice("tailscale", "Tailscale", report, true);
+        assertEqual(notice.kind, "reset", "module: a migration reset");
+        assertEqual(notice.summary, "Updating Tailscale settings to 0.8.0 failed", "module: the heading names it by its display name");
+        assertEqual(notice.body, "Defaults are used where possible. See Settings for details.", "module: the core's short body");
+        assertEqual(JSON.stringify(notice.parts), JSON.stringify(["Taildrop folder", "other"]), "module: the parts reset, by summary, else id");
+        assertEqual(JSON.stringify(notice.held) + JSON.stringify(notice.heldParts), JSON.stringify(["broken", "other", "after"]) + JSON.stringify(["Taildrop folder", "other", "After it"]),
+                    "module: held, the failed ones and those skipped after them");
+        assertEqual(notice.backup + " " + notice.version + " " + notice.module.id + " " + notice.module.name, "0.8.0-20260115-102903 0.8.0 tailscale Tailscale", "module: its backup, version and names");
+        assert(notice.key !== "" && notice.key !== rules.moduleNotice("tailscale", "Tailscale", Object.assign({}, report, { backup: "0.8.0-20260116-102903" }), true).key,
+               "module: the key changes with the run");
+        assertEqual(rules.moduleNotice("tailscale", "", report, false).summary, "Updating tailscale settings to 0.8.0 failed", "module: gone, its id named");
+        assertEqual(rules.moduleNotice("tailscale", "", report, false).backup, "", "module: gone, nothing to restore into");
+        assertEqual(rules.moduleNotice("tailscale", "Tail\n<b>scale</b>", report, true).summary, "Updating Tail <b>scale</b> settings to 0.8.0 failed", "module: its name on one line, as text");
+        assertEqual(rules.moduleNotice("tailscale", "x".repeat(61), report, true).module.name, "x".repeat(59) + "…", "module: its name capped at 60");
+        assertEqual(rules.moduleNotice("tailscale", "x".repeat(60), report, true).module.name, "x".repeat(60), "module: a name of 60 kept whole");
+        assertEqual(rules.moduleNotice("tailscale", "T", Object.assign({}, report, { version: "1".repeat(100) }), true).version.length, 64, "module: its version capped");
+        assertEqual(notice.startDefaults + " " + rules.moduleNotice("tailscale", "T", null, true).startDefaults, "false false", "module: never Start with default settings");
+        assertEqual(JSON.stringify(rules.moduleNotice("tailscale", "T", Object.assign({}, report, { reset: [{ id: "p", summary: "Same" }, { id: "q", summary: "Same" }], skipped: [] }), true).parts),
+                    JSON.stringify(["Same"]), "module: a part named twice listed once");
+        assertEqual(rules.moduleNotice("tailscale", "Tailscale", Object.assign({}, report, { version: undefined }), true).summary, "Updating Tailscale settings failed", "module: no version known");
+        assertEqual(rules.moduleNotice("tailscale", "Tailscale", Object.assign({}, report, { reset: [] }), true).kind, "", "module: nothing reset, no notice");
+        assertEqual(rules.moduleNotice("tailscale", "Tailscale", undefined, true).kind + rules.moduleNotice("", "x", report, true).kind, "", "module: no report or no id, no notice");
+        assertEqual(rules.moduleBackupDate("0.8.0-20260115-102903"), Qt.formatDateTime(new Date(Date.UTC(2026, 0, 15, 10, 29, 3)), "d MMM yyyy, hh:mm"), "module backup: its date, local");
+        assertEqual(rules.moduleBackupDate("0.8.0-20260115-102903-2") !== "" && rules.moduleBackupDate("0.8.0") === "" && rules.moduleBackupDate(undefined) === "", true, "module backup: a suffixed name dated, none without a time");
+        const question = rules.restoreQuestion(notice);
+        assertEqual(question.title, "Restore the settings from before the update?", "module question: the core's title");
+        assertEqual(JSON.stringify(question.body), JSON.stringify(["Steps:", "1. Create a new backup", "2. Load the backup of " + rules.moduleBackupDate(report.backup),
+                                                                 "3. Tailscale settings update to 0.8.0, skipping Taildrop folder, other, After it", "4. Restart Tailscale"]),
+                    "module question: the steps name the module, its backup's date and the parts skipped");
+        const text = JSON.parse(rules.reportText(rules.notice({}, false, "2.2.0", []), {}, [notice, rules.moduleNotice("x", "X", null, true), { kind: "reset", module: null }]));
+        assertEqual(JSON.stringify(text.modules.map(each => each.id + ":" + each.summary)), JSON.stringify(["tailscale:Updating Tailscale settings to 0.8.0 failed"]),
+                    "report: the modules' failed updates listed");
     }
 
     function _none() {

@@ -737,7 +737,17 @@ globals, and its store:
 - records `mod.<id>/<mid>`, `reset:mod.<id>/<mid>`, `held:mod.<id>/<mid>@<module version>`,
   dropped when the module is removed with its data and settings;
 - its data directory is never migrated nor reset by the host: the module's own code handles
-  its files.
+  its files;
+- a run with a reset part is told on its own, beside the core's
+  (`components/ModuleMigrationNotice.qml`, one per module, held by
+  `MigrationNotice.modules`; texts from `MigrationNoticeRules.moduleNotice`): one critical
+  notification "Updating <module name> settings to <module version> failed" (its id when it
+  is gone) and its own entry in Settings with the parts reset (each migration's `summary`).
+  **Restore previous settings** restores the module backup that run started from (its own,
+  or the installer's just before) through `ModuleInstaller.restore` with
+  `held:mod.<id>/<mid>@<module version>` for the failed ones and those skipped after them;
+  the module is turned off and on, the shell does not restart. `settings migrations` lists
+  the modules' failures too.
 
 The scope guards against a migration's mistakes; it is **not a sandbox**: a migration file is
 the module's own code and runs with all the rights the module's code has.

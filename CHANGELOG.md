@@ -100,6 +100,10 @@ The interface modules are written against (`qs.api`), versioned on its own
   for 4 min"). In module test mode `ModuleTestKit.setRemembered(untilMs)` sets it.
 
 ### Added
+- A module's settings update that fails is told the same way, on its own: a critical
+  notification naming the module, its entry in Settings listing the parts reset, Keep
+  defaults and Restore previous settings (the module's backup from before the update put
+  back, the failed parts held until another version of the module).
 - A settings update that fails at start is told: one critical notification ("Updating
   settings to <version> failed"), whose click opens Settings at the failure, listing the
   parts reset to defaults, with Keep defaults and Restore previous settings (the settings

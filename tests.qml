@@ -167,6 +167,7 @@ QtObject {
     property var _moduleWaitingNotice: ModuleWaitingNoticeTest {}
     property var _moduleBackup: ModuleBackupTest {}
     property var _moduleMigrations: ModuleMigrationsTest {}
+    property var _moduleMigrationNotice: ModuleMigrationNoticeTest {}
     property var _idleRules: IdleRulesTest {}
     property var _awayViewRules: AwayViewRulesTest {}
     property var _sleepNoticeRules: SleepNoticeRulesTest {}

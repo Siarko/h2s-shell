@@ -1206,10 +1206,14 @@ Scope {
     // How long a run waits for the module's store to be read
     property int migrationStoreTimeoutMs: 10000
     // The last run of each module's migrations, by id: { applied: [{ id, summary }], reset:
-    // [{ id, summary, scope, error }], skipped: [{ id, after }], held: [id], backup, fresh }
+    // [{ id, summary, scope, error }], skipped: [{ id, after, summary }], held: [id], backup
+    // (what the run started from: its own backup, or the installer's just before; "" none),
+    // version (the module's), fresh }
     property var migrationReports: ({})
     // Ids whose configuration the installer has just backed up: their next run takes none
     property var _switchBackups: []
+    // … and by id, the backup that holds what that run starts from ("" not known)
+    property var _switchBackupNames: ({})
     property int _migrationToken: 0
     // Runs waiting for their module's store to be read again: [{ record, token, store, reads
     // (its read count before), deadline }]
@@ -1218,14 +1222,29 @@ Scope {
     // The job that took it failed: the run that follows takes its own
     function forgetBackupTaken(id) {
         _switchBackups = _switchBackups.filter(each => each !== id);
+        _forgetBackupName(id);
+    }
+
+    function _forgetBackupName(id) {
+        if (!Object.prototype.hasOwnProperty.call(_switchBackupNames, id))
+            return;
+        const names = Object.assign({}, _switchBackupNames);
+        delete names[id];
+        _switchBackupNames = names;
     }
 
     // The installer has just backed up module `id`'s configuration, before switching its
     // version or restoring a backup — what the run that follows starts from is in that backup
-    // or in the one restored: the run does not take another
-    function noteBackupTaken(id) {
-        if (typeof id === "string" && ModuleManifestRules.validId(id) && !_switchBackups.includes(id))
+    // or in the one restored: the run does not take another. `name`: that backup's (a later
+    // note replaces it: a restore names the backup it puts back)
+    function noteBackupTaken(id, name) {
+        if (typeof id !== "string" || !ModuleManifestRules.validId(id))
+            return;
+        if (!_switchBackups.includes(id))
             _switchBackups = _switchBackups.concat([id]);
+        const names = Object.assign({}, _switchBackupNames);
+        names[id] = typeof name === "string" && ModuleBackupRules.validName(name) ? name : "";
+        _switchBackupNames = names;
     }
 
     function _migrationsKnown(record) {
@@ -1354,9 +1373,11 @@ Scope {
             return;
         }
         const switchBackup = _switchBackups.includes(id);
+        const switchName = switchBackup ? _switchBackupNames[id] ?? "" : "";
         _switchBackups = _switchBackups.filter(each => each !== id);
+        _forgetBackupName(id);
         if (!ModuleMigrationRules.backupNeeded(first.report, switchBackup) || !backups) {
-            _migrationWrite(record, token, store, built, first, "");
+            _migrationWrite(record, token, store, built, first, switchName);
             return;
         }
         backups.take(id, record.manifest, { version: record.manifest.version, commit: "", reason: "migration", protect: [] }, backup => {
@@ -1425,7 +1446,8 @@ Scope {
             console.log("[Modules] " + id + ": settings migration " + migrationId + " held: the previous settings were restored after it failed under this version");
         const reports = Object.assign({}, migrationReports);
         reports[id] = { applied: report.applied.map(each => ({ id: each, summary: summaries[each] ?? "" })), reset: resets,
-                        skipped: report.skipped.slice(), held: report.held.slice(), backup: backupName, fresh: report.fresh === true && report.write };
+                        skipped: report.skipped.map(entry => ({ id: entry.id, after: entry.after, summary: summaries[entry.id] ?? "" })),
+                        held: report.held.slice(), backup: backupName, version: record.manifest.version, fresh: report.fresh === true && report.write };
         migrationReports = reports;
         _migrationsDone(record, token, "", built.objects);
     }

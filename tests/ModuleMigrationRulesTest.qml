@@ -337,5 +337,12 @@ TestCase {
                     JSON.stringify(["2.1.0-core", "held:mod.tailscale/b@1.0.0", "mod.tailscalex/a", "reset:mod.other/c"]),
                     "recordsAfterRestore: its applied and reset records go, its hold and every other record stay");
         assertEqual(rules.summaryOf(undefined) + rules.summaryOf(5), "", "… none declared: empty");
+        assertEqual(JSON.stringify(rules.withHolds("tailscale", ["2.1.0-core", "held:mod.tailscale/b@0.9.0", "held:mod.tailscale/c@0.9.0", "held:mod.other/b@1.0.0", 5],
+                                                   ["b", "d", "d", "Bad id", 7], "1.0.0")),
+                    JSON.stringify(["2.1.0-core", "held:mod.tailscale/c@0.9.0", "held:mod.other/b@1.0.0", "held:mod.tailscale/b@1.0.0", "held:mod.tailscale/d@1.0.0"]),
+                    "withHolds: a hold for each valid id once, an older hold of the same one replaced, every other record kept");
+        assertEqual(JSON.stringify(rules.withHolds("tailscale", ["x"], ["b"], "")) + JSON.stringify(rules.withHolds("tailscale", ["x"], ["b"], "1@2"))
+                    + JSON.stringify(rules.withHolds("Bad", ["x"], ["b"], "1.0.0")),
+                    "[\"x\"][\"x\"][\"x\"]", "withHolds: no version, a version with @ or a bad module id: nothing held");
     }
 }
