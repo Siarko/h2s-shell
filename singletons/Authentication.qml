@@ -185,11 +185,16 @@ Singleton {
         _tellAboutAgents(appeared);
     }
 
+    // Whether the shell looks at the agents running and decides the setting by itself: not
+    // in the test runner (Config.readOnly), where the first-start decision would reach for
+    // polkit and change a setting every suite of the process shares, 20 s into the run
+    readonly property bool watchesAgents: !Config.readOnly
+
     property bool _firstStartDue: false
     Timer {
         // Agents started with the session come up in the first seconds
         interval: 20000
-        running: true
+        running: root.watchesAgents
         onTriggered: {
             root._firstStartDue = true;
             root._requestScan();

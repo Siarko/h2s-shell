@@ -361,15 +361,19 @@ TestCase {
             });
         });
 
-        // Destroyed mid-trial: while PAM asks, and while the staging run is held
+        // Destroyed mid-trial: while PAM asks, and while the staging run is held. With the
+        // marker, as every trial here: a PAM child blocked in pam_start (PamTrialRules.firstWordMs)
+        // is started again, never waited for past the step's deadline
         let doomed = null, doomedDirectory = "";
+        const doomedTrial = () => _trialComponent.createObject(suite, {
+            filesCommand: [_scratch + "/tree/scripts/pam-files.sh"],
+            stageCommand: [_scratch + "/held-stage"],
+            stagingParent: _scratch + "/run",
+            environment: _trial.environment,
+            markerModule: _modules + "/pam_echo.so"
+        });
         _then("a trial to destroy, at its question", () => _ready, () => {
-            doomed = _trialComponent.createObject(suite, {
-                filesCommand: [_scratch + "/tree/scripts/pam-files.sh"],
-                stageCommand: [_scratch + "/held-stage"],
-                stagingParent: _scratch + "/run",
-                environment: _trial.environment
-            });
+            doomed = doomedTrial();
             _ready = false;
             _sh("printf 'no\\n' > \"$1/finger\"; printf '0\\n' > \"$1/count\"", [_scratch], () => {
                 doomed.start("sudo", fingerFirst);
@@ -379,21 +383,20 @@ TestCase {
         _then("the doomed trial asks", () => _ready && doomed.state.phase === "running" && doomed.state.prompt !== null, () => {
             doomedDirectory = doomed.state.staging;
             assert(doomedDirectory.startsWith(_scratch + "/run/h2s-pam-trial."), "the doomed trial's staging directory: " + doomedDirectory);
-            doomed.destroy();
-            doomed = null;
             _ready = false;
-            _sh(_goneScript, [doomedDirectory], result => {
-                suite.assertEqual(result.stdout.trim(), "gone", "destroyed while PAM asks: the staging directory removed");
-                suite._ready = true;
+            _sh("head -n 1 \"$1/sudo\"", [doomedDirectory], first => {
+                suite.assertEqual(first.stdout.trim(), "auth [default=ignore] " + suite._modules + "/pam_echo.so " + PamTrialRules.markerPrefix + doomedDirectory.slice(-8),
+                                  "the doomed trial staged with the marker line");
+                doomed.destroy();
+                doomed = null;
+                suite._sh(suite._goneScript, [doomedDirectory], result => {
+                    suite.assertEqual(result.stdout.trim(), "gone", "destroyed while PAM asks: the staging directory removed");
+                    suite._ready = true;
+                });
             });
         });
         _then("a trial to destroy while staging", () => _ready, () => {
-            doomed = _trialComponent.createObject(suite, {
-                filesCommand: [_scratch + "/tree/scripts/pam-files.sh"],
-                stageCommand: [_scratch + "/held-stage"],
-                stagingParent: _scratch + "/run",
-                environment: _trial.environment
-            });
+            doomed = doomedTrial();
             _ready = false;
             _sh("touch \"$1/hold\"", [_scratch], () => {
                 doomed.start("sudo", fingerFirst);

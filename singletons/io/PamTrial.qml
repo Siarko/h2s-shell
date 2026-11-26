@@ -188,8 +188,11 @@ Scope {
         onTriggered: root._dispatch({ type: "pamSilent", trial: trial, start: start })
     }
 
-    // pam_echo.so in the first of the module directories that has it
-    onModuleDirectoriesChanged: _findMarker()
+    // pam_echo.so in the first of the module directories that has it. Not while the object
+    // is made: the list's own default arrives as a change then, and its empty search would
+    // clear a markerModule handed in (Component.onCompleted searches the list it ends with)
+    onModuleDirectoriesChanged: if (_made) _findMarker()
+    property bool _made: false
     property int _markerSearch: 0
     function _findMarker() {
         // A list handed in may arrive as a sequence, not an Array
@@ -208,6 +211,7 @@ Scope {
     // Staging directories whose shell is gone (killed mid-trial) are removed; a running
     // shell's — another instance's, a test run's — and one without the shell's record are not
     Component.onCompleted: {
+        _made = true;
         if (Array.from(moduleDirectories ?? []).length > 0)
             _findMarker();
         if (stagingParent === "")

@@ -184,6 +184,9 @@ TestCase {
         assertEqual(rules.firstStart([], null), "try", "none running: tried");
         assertEqual(rules.firstStart([], true), "on", "tried and registered: on");
         assertEqual(rules.firstStart([], false), "off", "tried, not registered (an unknown agent holds it): off");
+        // The agent itself in the test runner: its first-start decision tries a registration
+        // and writes the setting every suite of the process shares, 20 s in
+        assertEqual(Authentication.watchesAgents, false, "the test runner: the shell neither looks at the agents nor decides the setting itself");
 
         // --- what is told ---
         assertEqual(rules.state("", false, []), "deciding", "undecided");
