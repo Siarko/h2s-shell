@@ -14,6 +14,8 @@ import qs.api as Api
 // deferred delete — then everything declared inside reads undefined, 0, "" or false in its
 // Component.onDestruction, and a function of its own is "not a function". A probe beside the
 // subject (TeardownProbe) shows each step reached that case; an error line fails the run.
+// It is the explicit gc() that collects the wrappers, so the case is reached whichever way the
+// collector runs otherwise: sliced (Qt's default) or whole (QV4_GC_TIMELIMIT=0), both seen.
 TestCase {
     id: suite
     suiteName: "Teardown"
