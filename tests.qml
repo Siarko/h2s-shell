@@ -120,6 +120,7 @@ QtObject {
     property var _pillSizes: PillSizesTest {}
     property var _fieldPreview: FieldPreviewTest {}
     property var _listAndFieldLooks: ListAndFieldLooksTest {}
+    property var _focusRing: FocusRingTest {}
     property var _apiElements: ApiElementsTest {}
     property var _sidePanel: SidePanelTest {}
     property var _settingsModal: SettingsModalTest {}

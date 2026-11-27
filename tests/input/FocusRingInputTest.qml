@@ -218,8 +218,8 @@ TestCase {
     }
 
     // The window hidden and shown again (a popup reopened, the Settings window shown again,
-    // which keeps its page), or made inactive and active again: the focus comes back, and a
-    // ring that was out after a click stays out — ordinary pointer use never shows it
+    // which keeps its page), or made inactive and active again: the focus comes back, and the
+    // ring is as it was — out after a click (ordinary pointer use never shows it), lit after Tab
     function _returning() {
         const window = dropdown.Window.window;
         _reset(_controls[3]);
@@ -254,8 +254,7 @@ TestCase {
         input.key("Tab");
         assert(_until(() => _lit(dropdown)), "Tab to the dropdown then: lit");
 
-        // Lit by Tab, then the window made inactive and active again: the focus coming back
-        // with the window is not the keyboard's
+        // Lit by Tab, then the window made inactive and active again: as it was, lit
         _reset(_controls[3]);
         input.key("Tab");
         assert(_until(() => _lit(dropdown)), "Tab lights the dropdown's ring");
@@ -264,7 +263,7 @@ TestCase {
         _otherShown = false;
         assert(_until(() => dropdown.activeFocus), "… and gives it back");
         driver.wait(100);
-        assert(!_lit(dropdown), "the focus came back with the window: no ring");
+        assert(_lit(dropdown), "the focus came back with the window: lit as it was");
         input.key("Tab");
         input.key("Tab");
         assert(_until(() => _hasKeyboard(field)), "Tab on, past the next stop");

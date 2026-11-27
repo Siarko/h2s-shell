@@ -13,8 +13,8 @@ import qs.singletons
 // press on the control, or within the least target round it (Theme.target), that gives it
 // the focus does not light it, and a press on a control lit already puts it out. Nor does
 // the focus coming back with its window — shown again (a popup reopened, the Settings window
-// shown again with its page) or active again (a click back from another app): the window's
-// return is the pointer's, never a keyboard's move to the control. `pressed`
+// shown again with its page) or active again (a click back from another app): the ring is
+// then as it was when the window went. `pressed`
 // adds a press the control sees elsewhere (a slider's track beside its knob). `shown` draws
 // it whatever the focus: a preview (the mockups' keyboard states) or a list's keys' entry.
 //
@@ -38,10 +38,13 @@ Item {
     // that takes the focus on the click is seen as the pointer's too
     readonly property bool _pointerDown: _press.active || pressed
 
-    // The control had the focus when its window went (hidden or inactive): when it comes back
-    // with the window, it is not lit
+    // The window's item with the keyboard: null while the window has none (hidden, or another
+    // window has the keyboard). A seam: tests set it with `focused` in either order
+    property Item windowFocusItem: Window.activeFocusItem
+    // The focus left to nowhere — the window went, hidden or inactive — rather than to another
+    // control: when it comes back, the ring is as it was then
     property bool _returning: false
-    readonly property bool _windowActive: Window.active
+    property bool _keptByPointer: false
 
     readonly property real _reach: inside ? 0 : Theme.focus.gap + Theme.focus.width
 
@@ -50,36 +53,40 @@ Item {
     // watches it (a passive grab) and passes it on
     z: 1
 
+    // Decided by where the focus went, never by when the window says it is inactive: that
+    // may come before or after the focus leaves
     onFocusedChanged: {
         if (focused) {
-            _byPointer = _returning || _pointerDown;
+            _byPointer = (_returning && _keptByPointer) || _pointerDown;
             _returning = false;
-        } else if (!_windowActive) {
-            _returning = true;
         } else {
-            // The window may say it went only after the focus has: decided once both are in
-            Qt.callLater(_settleLoss);
+            _keptByPointer = _byPointer;
+            _returning = windowFocusItem === null || _ours(windowFocusItem);
         }
     }
-    on_WindowActiveChanged: {
-        if (!_windowActive && focused)
-            _returning = true;
-        else if (_windowActive)
-            Qt.callLater(_settleReturn);
+    // Settled at each change, in whichever order the two come (no deferred call: one could
+    // run on a ring already destroyed)
+    onWindowFocusItemChanged: {
+        if (!focused && windowFocusItem !== null && !_ours(windowFocusItem))
+            _returning = false;
     }
     on_PointerDownChanged: {
         if (_pointerDown && focused)
             _byPointer = true;
     }
 
-    function _settleLoss() {
-        if (!focused && !_windowActive)
-            _returning = true;
-    }
-    // Back without the focus coming here: a later move of the keyboard to it is the keyboard's
-    function _settleReturn() {
-        if (!focused)
-            _returning = false;
+    // Whether the window's item with the keyboard is this control's — one the ring lies in,
+    // or one inside the ring's parent (a field's input beside the ring, a date field's
+    // segments): the window may still name it for a while after the focus left. Another
+    // item: the keyboard went to another control, and a later move to this one is new
+    function _ours(item) {
+        for (let up = parent; up; up = up.parent)
+            if (up === item)
+                return true;
+        for (let up = item; up; up = up.parent)
+            if (up === parent)
+                return true;
+        return false;
     }
 
     PointHandler {
