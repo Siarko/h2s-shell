@@ -7,7 +7,7 @@ import qs.mockups.kit
 // label, every button of the cell in the state's look:
 //   rest           at rest, not asking
 //   hover          drawn as under the pointer (the button's `shownLit`)
-//   focus          drawn as with the keyboard (its `shownFocused`): the ring inside
+//   focus          drawn as with the keyboard (its `shownFocused`): the keyboard's ring around it
 //   asking         `asking: true`: the question, the × attached
 //   asking-hover   asking, drawn as under the pointer: the question and the × lit at once
 //                  (one pointer would light one of them; the preview lights both)

@@ -8,7 +8,8 @@ import qs.singletons
 // that follow each other with the same `group` are listed under its title; a `disabled`
 // one is shown dimmed and cannot be picked (the keys pass it by).
 //
-// It takes the focus on Tab and on a click (a ring shows it). Space, Enter, Down or Up open
+// It takes the focus on Tab and on a click (the keyboard's ring, FocusRing, shows it when
+// the keyboard brought it there). Space, Enter, Down or Up open
 // the list on the current choice; open, the list's keys apply (FloatingList: arrows, Home,
 // End, the pages, a letter), Enter or Space picks, Escape closes it — the focus stays here
 // all along — and Tab closes it on the way to the next control.
@@ -37,7 +38,7 @@ Rectangle {
     radius: Theme.dropdown.radius
     color: Theme.popupBackground
     border.width: Theme.border.width
-    border.color: open ? Theme.accent : activeFocus || shownFocused ? Theme.textSecondary : (_area.lit ? Theme.textMuted : Theme.outline)
+    border.color: open ? Theme.accent : (_area.lit ? Theme.textMuted : Theme.outline)
     activeFocusOnTab: true
 
     // Open, Escape is the list's: a side panel's or a window's Escape waits for the next one
@@ -117,6 +118,11 @@ Rectangle {
         }
     }
 
+    FocusRing {
+        focused: root.activeFocus
+        shown: root.shownFocused
+    }
+
     FloatingList {
         id: _list
         anchorItem: root
@@ -169,9 +175,6 @@ Rectangle {
                     height: Math.max(24, _optionLabel.implicitHeight + 6)
                     radius: Theme.listItem.radius
                     color: picked ? Theme.accentTint : ((_optionArea.lit || current) && available ? Theme.surfaceHover : Theme.surfaceHoverClear)
-                    // The keys' entry, also when it is the picked one
-                    border.width: current ? Theme.border.width : 0
-                    border.color: Theme.textSecondary
                     Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
                     Row {
@@ -203,6 +206,12 @@ Rectangle {
                         anchors.fill: parent
                         cursorShape: _row.available ? Qt.PointingHandCursor : Qt.ArrowCursor
                         onClicked: _row.floatingActivate()
+                    }
+
+                    // The keys' entry, also when it is the picked one
+                    FocusRing {
+                        inside: true
+                        shown: _row.current
                     }
                 }
             }

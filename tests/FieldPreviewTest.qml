@@ -60,11 +60,11 @@ TestCase {
             { ready: () => _is(_input.border.color, "error"), run: _inputProblem },
             { ready: () => _input.border.color.a === 0, run: _inputBack },
             { ready: () => _is(_box().border.color, "textDisabled"), run: _checkboxAtRest },
-            { ready: () => _is(_box().border.color, "textSecondary"), run: _checkboxFocused },
+            { ready: () => _ringLit(_checkbox), run: _checkboxFocused },
             { ready: () => _is(_box().border.color, "textDisabled"), run: _checkboxBack },
             { ready: () => _is(_dropdown.border.color, "outline"), run: _dropdownAtRest },
             { ready: () => _is(_dropdown.border.color, "textMuted"), run: _dropdownLit },
-            { ready: () => _is(_dropdown.border.color, "textSecondary"), run: _dropdownFocused },
+            { ready: () => _ringLit(_dropdown), run: _dropdownFocused },
             { ready: () => _is(_dropdown.border.color, "outline"), run: _dropdownBack },
             { ready: () => _is(_dateFrame().border.color, "outline"), run: _dateAtRest },
             { ready: () => _is(_dateFrame().border.color, "accent"), run: _dateFocused },
@@ -104,6 +104,7 @@ TestCase {
     }
     function _inputFocused() {
         assert(!_input.editing && _is(_input.border.color, "accent"), "shownFocused, without the keyboard: the accent border");
+        assert(_ringLit(_input), "… and the keyboard's ring");
         assert(!_placeholder().visible, "… and no placeholder, as with the keyboard");
         _input.problem = true;
     }
@@ -116,7 +117,13 @@ TestCase {
         assert(_input.border.color.a === 0 && _placeholder().visible, "shownFocused off: at rest again");
     }
 
-    // --- Checkbox: the box's border in the secondary text colour ---
+    // The keyboard's ring of a control (FocusRing) is lit
+    function _ringLit(item) {
+        const walk = node => Array.from(node.children).some(child => (child.focusRing === true && child.lit) || walk(child));
+        return walk(item);
+    }
+
+    // --- Checkbox: the keyboard's ring round the box, its border as it was ---
     function _box() {
         return _all(_checkbox, "QQuickRectangle")[0];
     }
@@ -125,14 +132,15 @@ TestCase {
         _checkbox.shownFocused = true;
     }
     function _checkboxFocused() {
-        assert(!_checkbox.activeFocus && _is(_box().border.color, "textSecondary"), "shownFocused, without the keyboard: the box's border lighter");
+        assert(!_checkbox.activeFocus && _ringLit(_checkbox), "shownFocused, without the keyboard: the keyboard's ring");
+        assert(_is(_box().border.color, "textDisabled"), "… the box's border as at rest");
         _checkbox.shownFocused = false;
     }
     function _checkboxBack() {
-        assert(_is(_box().border.color, "textDisabled"), "shownFocused off: at rest again");
+        assert(_is(_box().border.color, "textDisabled") && !_ringLit(_checkbox), "shownFocused off: at rest again");
     }
 
-    // --- Dropdown: lighter under the pointer, lighter still with the keyboard ---
+    // --- Dropdown: lighter under the pointer, the keyboard's ring with the keyboard ---
     function _dropdownAtRest() {
         assert(_is(_dropdown.border.color, "outline"), "a dropdown at rest: the outline");
         _dropdown.shownLit = true;
@@ -142,12 +150,13 @@ TestCase {
         _dropdown.shownFocused = true;
     }
     function _dropdownFocused() {
-        assert(!_dropdown.activeFocus && _is(_dropdown.border.color, "textSecondary"), "shownFocused, without the keyboard: drawn as with it");
+        assert(!_dropdown.activeFocus && _ringLit(_dropdown), "shownFocused, without the keyboard: the keyboard's ring");
+        assert(_is(_dropdown.border.color, "textMuted"), "… the border as under the pointer");
         _dropdown.shownLit = false;
         _dropdown.shownFocused = false;
     }
     function _dropdownBack() {
-        assert(_is(_dropdown.border.color, "outline"), "both off: at rest again");
+        assert(_is(_dropdown.border.color, "outline") && !_ringLit(_dropdown), "both off: at rest again");
         assert(!_dropdown.open, "a preview opens nothing");
     }
 
@@ -166,7 +175,7 @@ TestCase {
         assertEqual(_day().selectedText, "03", "a date set anew: the new day selected");
     }
     function _dateFocused() {
-        assert(!_date.editing && _is(_dateFrame().border.color, "accent"), "shownFocused, without the keyboard: the accent border");
+        assert(!_date.editing && _is(_dateFrame().border.color, "accent") && _ringLit(_date), "shownFocused, without the keyboard: the accent border and the keyboard's ring");
         _date.shownFocused = false;
         assertEqual(_day().selectedText, "", "shownFocused off: nothing selected");
     }
@@ -198,7 +207,7 @@ TestCase {
         assertEqual(_time.text, "07:05", "the preview leaves the value as it is");
     }
     function _timeFocused() {
-        assert(_is(_timeFrame().border.color, "accent"), "shownFocused, without the keyboard: the accent border");
+        assert(_is(_timeFrame().border.color, "accent") && _ringLit(_time), "shownFocused, without the keyboard: the accent border and the keyboard's ring");
         _time.shownFocused = false;
         assertEqual(_hours().selectedText, "", "shownFocused off: nothing selected");
     }

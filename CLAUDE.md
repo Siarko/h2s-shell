@@ -328,6 +328,11 @@ Shell code never imports from `mockups/`.
   `MouseArea`'s `containsMouse` — so a tap shows too, and small controls get a larger
   target. Rows of a list that touch take `centred: false`. See "Conventions" in
   `docs/ARCHITECTURE.md`.
+- **A control shows it has the keyboard with `components/FocusRing.qml`**, the one look for
+  every control (the theme's `focusRing` colour and `focus` group), lit only when the keyboard
+  or code brought the focus, never by a click; no border shade or ring of its own. A list's
+  keys' entry wears it `inside`. `tests/input/FocusRingInputTest.qml` checks every gallery
+  control.
 - **A Settings page or section that reads the system reads it on `components/PageShown.qml`'s
   `becameShown`** (which also comes when it is built on screen), not in
   `Component.onCompleted`: the window hides instead of closing and keeps its page. A read

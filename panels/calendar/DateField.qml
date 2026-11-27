@@ -1,4 +1,5 @@
 import QtQuick
+import qs.components
 import qs.singletons
 import qs.singletons.googlecalendar
 
@@ -123,6 +124,11 @@ Item {
         border.color: root._focusLook || root.armed ? Theme.accent : Theme.outline
         border.width: root.armed && !root._focusLook ? Theme.border.selectedWidth : Theme.border.width
         Behavior on border.color { ColorAnimation { duration: Theme.duration("state"); easing: Theme.curve("state") } }
+
+        FocusRing {
+            focused: root.editing
+            shown: root.shownFocused
+        }
 
         // A click outside the segments focuses the day
         MouseArea {

@@ -329,11 +329,11 @@ TestCase {
             assert(!button.hovered && _is(button.color, expected.hotFill) && _is(_child(button, "QQuickText").color, expected.hotLabel),
                    "\"" + expected.kind + "\" with shownLit, no pointer over it: drawn as under the pointer (" + expected.hotFill + ")");
         }
-        const ring = _child(ringed, "QQuickRectangle");
-        assert(!ringed.activeFocus && ring.visible && _is(ring.border.color, "textSecondary") && _is(ringed.color, "surface"),
+        const ring = Array.from(ringed.children).find(child => child.focusRing === true);
+        assert(!ringed.activeFocus && ring.lit && _is(ring.children[0].border.color, "focusRing") && _is(ringed.color, "surface"),
                "shownFocused, without the keyboard: the keyboard's ring, the fill at rest");
         ringed.shownFocused = false;
-        assert(!ring.visible, "shownFocused off: no ring");
+        assert(!ring.lit, "shownFocused off: no ring");
 
         const litParts = _parts(litDelete);
         assert(!litParts.area.containsMouse && _is(litParts.face.color, "error") && _is(litParts.label.color, "textPrimary"),
@@ -342,11 +342,11 @@ TestCase {
         assert(_is(litAskingParts.cancel.color, "surfaceHover"), "asking, with shownLit: the × lit too");
         litAsking.shownLit = false;
         assert(_until(() => _is(litAskingParts.cancel.color, "surface")), "shownLit off: the × at rest");
-        const deleteRing = _child(_parts(ringedDelete).face, "QQuickRectangle", 1);
-        assert(!ringedDelete.activeFocus && deleteRing.visible && _is(deleteRing.border.color, "textSecondary"),
-               "a DeleteButton with shownFocused, without the keyboard: the ring inside its border");
+        const deleteRing = Array.from(_parts(ringedDelete).face.children).find(child => child.focusRing === true);
+        assert(!ringedDelete.activeFocus && deleteRing.lit && _is(deleteRing.children[0].border.color, "focusRing"),
+               "a DeleteButton with shownFocused, without the keyboard: the keyboard's ring round it");
         ringedDelete.shownFocused = false;
-        assert(!deleteRing.visible, "shownFocused off: no ring");
+        assert(!deleteRing.lit, "shownFocused off: no ring");
 
         _window.visible = false;
         finish();

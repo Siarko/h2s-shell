@@ -11,7 +11,7 @@ import qs.mockups.kit
 //   disabled         `available: false`
 //   checked          `checked: true` (a toggle that is on: the plain kinds take the accent)
 //   hover            drawn as under the pointer (the button's `shownLit`)
-//   focus            with the keyboard's ring (the button's `shownFocused`)
+//   focus            with the keyboard's ring around it (the button's `shownFocused`)
 //   pressed          the same as hover: a press lights the button as the pointer does, it
 //                    has no look of its own
 //   checked-hover    checked, under the pointer (the plain kinds: accentHover)

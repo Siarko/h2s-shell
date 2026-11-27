@@ -50,6 +50,10 @@ RowLayout {
         border.width: _replyInput.activeFocus ? 1 : 0
         border.color: Theme.accent
 
+        FocusRing {
+            focused: _replyInput.activeFocus
+        }
+
         Text {
             anchors { fill: parent; leftMargin: 8; rightMargin: 8 }
             text: root.placeholder !== "" ? root.placeholder : "Reply…"

@@ -222,7 +222,7 @@ TestCase {
         before.forceActiveFocus();
         assert(input.key("Tab"), "Tab sent");
         assert(_until(() => plain.activeFocus), "Tab gives the dropdown the focus");
-        assertEqual(plain.border.color.toString(), Theme.textSecondary.toString(), "… and shows its focus ring");
+        assert(Array.from(plain.children).some(child => child.focusRing === true && child.lit), "… and shows its focus ring");
         input.key("space");
         assert(_until(() => plain.open && _listOf(plain)?.visible === true), "Space opens the list");
         assert(_until(() => _current(plain) === "Apple"), "… on the picked entry (" + _current(plain) + ")");

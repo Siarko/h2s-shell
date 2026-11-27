@@ -18,8 +18,9 @@ import qs.singletons
 // the cap.
 //
 // Tab reaches it while it is available; Space or Enter then acts as a click (the first asks,
-// the second deletes) and Escape, while it asks, cancels as the "×" does. A ring inside the
-// button shows it has the keyboard. A click does not take the keyboard.
+// the second deletes) and Escape, while it asks, cancels as the "×" does. The keyboard's ring
+// (FocusRing) round the button, and its "×" while it asks, shows it has the keyboard. A
+// click does not take the keyboard.
 //
 //   DeleteButton {
 //       confirmLabel: "Delete everywhere?"
@@ -56,7 +57,7 @@ Row {
     // The first click, for owners that track which item is being asked about
     signal askingStarted
 
-    readonly property var _look: ThemeRules.buttonLook(kind, { hot: _area.lit && available, asking: asking, focused: activeFocus || shownFocused })
+    readonly property var _look: ThemeRules.buttonLook(kind, { hot: _area.lit && available, asking: asking })
     readonly property var _shape: Theme[_look.group]
 
     spacing: 0
@@ -161,17 +162,14 @@ Row {
             border.color: root._look.border !== "" ? Theme[root._look.border] : "transparent"
         }
 
-        // While it has the keyboard: a line inside the border, which keeps the kind's colour
-        Rectangle {
-            anchors.fill: parent
-            anchors.margins: Theme.border.width
-            visible: root._look.ring !== ""
-            radius: Math.max(0, root._shape.radius - Theme.border.width)
-            topRightRadius: root.asking ? 0 : radius
-            bottomRightRadius: root.asking ? 0 : radius
-            color: "transparent"
-            border.width: Theme.border.width
-            border.color: root._look.ring !== "" ? Theme[root._look.ring] : "transparent"
+        // Round the button, and its "×" while it asks: one control
+        FocusRing {
+            anchors.fill: undefined
+            width: parent.width + (root.asking ? _cancel.width : 0)
+            height: parent.height
+            radius: root._shape.radius
+            focused: root.activeFocus
+            shown: root.shownFocused
         }
 
         PointerArea {

@@ -2,7 +2,8 @@ import QtQuick
 import QtQuick.Layouts
 import qs.singletons
 
-// Draggable volume slider built from basic QtQuick primitives
+// Draggable volume slider built from basic QtQuick primitives. Tab reaches it, the arrows
+// move it; the keyboard's ring (FocusRing) round the knob shows it has the keyboard
 Item {
     id: slider
     Layout.fillWidth: true
@@ -52,6 +53,12 @@ Item {
         width: 14; height: 14; radius: 7
         color: sliderArea.pressed ? Theme.textSecondary : Theme.textPrimary
         Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
+
+        // A press anywhere on the track takes the keyboard: the pointer's, not lit
+        FocusRing {
+            focused: slider.activeFocus
+            pressed: sliderArea.pressed
+        }
     }
 
     PointerArea {

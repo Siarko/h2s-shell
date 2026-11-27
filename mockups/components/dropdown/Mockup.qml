@@ -10,7 +10,7 @@ import qs.mockups.kit
 //   closed           the current choice
 //   placeholder      no `value`: the placeholder "Choose", dimmed
 //   hover            drawn as under the pointer (the dropdown's `shownLit`)
-//   focus            drawn as with the keyboard (its `shownFocused`)
+//   focus            drawn as with the keyboard (its `shownFocused`): the keyboard's ring
 //   open             `open: true`: the list, the picked option tinted; the dropdown opens
 //                    with the keys on it, so it is ringed too
 //   groups           options with `group` (a title over each group's first) and `color`

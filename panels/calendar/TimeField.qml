@@ -1,4 +1,5 @@
 import QtQuick
+import qs.components
 import qs.singletons
 
 // A time typed as two segments (FieldSegment), hours and minutes, each with its
@@ -79,6 +80,11 @@ Item {
         border.width: Theme.border.width
         border.color: root._focusLook ? Theme.accent : Theme.outline
         Behavior on border.color { ColorAnimation { duration: Theme.duration("state"); easing: Theme.curve("state") } }
+
+        FocusRing {
+            focused: root._editing
+            shown: root.shownFocused
+        }
 
         // A click outside the segments focuses the hours
         MouseArea {

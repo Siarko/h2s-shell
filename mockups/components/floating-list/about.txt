@@ -6,5 +6,5 @@ state: below           Room below the button: the list under it
 state: above           No room below (the button at the bottom): the list over it
 state: scrolling       Taller than its most (120 px): cut at the bottom, it scrolls
 state: groups          Entries under their groups' titles (FloatingListHeader)
-state: current         The keys on an entry: ringed and lit
+state: current         The keys on an entry: the keyboard's ring inside it, lit
 state: disabled-entry  An entry that cannot be picked: dimmed, the keys pass it by

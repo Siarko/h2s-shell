@@ -7,8 +7,8 @@ import qs.mockups.kit
 //   empty, filled  the placeholder; a text longer than the box (the input scrolled to its
 //                  end, as a text set from outside leaves it)
 //   focus          drawn as with the keyboard (the field's `shownFocused`): the accent
-//                  border, no placeholder; no cursor is drawn (the window never takes the
-//                  keyboard)
+//                  border and the keyboard's ring, no placeholder; no cursor is drawn (the
+//                  window never takes the keyboard)
 //   problem        `problem: true`: the red border, filled and focused alike
 //   password       `password: true`: dots and the eye
 //   revealed       `password` with `revealed: true`: the text and the open eye

@@ -345,14 +345,10 @@ Item {
                         }
                     }
 
-                    // The focus ring
-                    Rectangle {
-                        anchors { fill: parent; margins: 2 }
-                        visible: _addRow.activeFocus
+                    FocusRing {
+                        inside: true
                         radius: Theme.listItem.radius
-                        color: "transparent"
-                        border.width: Theme.border.width
-                        border.color: Theme.textSecondary
+                        focused: _addRow.activeFocus
                     }
 
                     Text {
@@ -407,8 +403,6 @@ Item {
                                     anchors.rightMargin: 4
                                     radius: Theme.listItem.radius
                                     color: _optionArea.lit || _picker.currentItem === _option ? Theme.surfaceHover : Theme.surfaceHoverClear
-                                    border.width: _picker.currentItem === _option ? Theme.border.width : 0
-                                    border.color: Theme.textSecondary
                                     Behavior on color { ColorAnimation { duration: Theme.duration("hover"); easing: Theme.curve("hover") } }
 
                                     Text {
@@ -429,6 +423,12 @@ Item {
                                         anchors.fill: parent
                                         cursorShape: Qt.PointingHandCursor
                                         onClicked: root._add(_option.modelData)
+                                    }
+
+                                    // The keys' entry
+                                    FocusRing {
+                                        inside: true
+                                        shown: _picker.currentItem === _option
                                     }
                                 }
                             }

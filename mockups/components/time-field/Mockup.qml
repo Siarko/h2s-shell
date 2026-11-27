@@ -7,7 +7,8 @@ import qs.mockups.kit
 //   empty           no time: the placeholders HH:MM
 //   filled          10:30 (the kit's `now`)
 //   focus           drawn as with the keyboard in the hours (the field's `shownFocused`): the
-//                   accent border, the colon lighter, the hours selected; no cursor is drawn
+//                   accent border and the keyboard's ring, the colon lighter, the hours
+//                   selected; no cursor is drawn
 //   one-digit-hour  "7:05": the hour shown as given, one digit (its `text` reads 07:05)
 MockupWindow {
     id: root

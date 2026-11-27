@@ -6,7 +6,8 @@ import qs.mockups.kit
 //   empty    no `date`: the placeholders DD.MM.YYYY
 //   filled   `date` 2026-01-15 (the kit's `now`)
 //   focus    drawn as with the keyboard in the day (the field's `shownFocused`): the accent
-//            border, the separators lighter, the day's digits selected; no cursor is drawn
+//            border and the keyboard's ring, the separators lighter, the day's digits
+//            selected; no cursor is drawn
 //   armed    `armed: true`: the calendar's next click fills it, a thicker accent border
 MockupWindow {
     id: root

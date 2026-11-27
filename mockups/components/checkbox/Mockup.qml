@@ -7,8 +7,8 @@ import qs.mockups.kit
 //   off, on     `checked` false, true, with a short label
 //   hover       the checkbox has no look under the pointer (its MouseArea changes nothing):
 //               drawn as at rest, off and on
-//   focus       drawn as with the keyboard (the checkbox's `shownFocused`): the box's border
-//               in the secondary text colour, off and on
+//   focus       drawn as with the keyboard (the checkbox's `shownFocused`): the keyboard's
+//               ring around the box, off and on
 //   disabled    `enabled: false`: no look of its own either, off and on
 //   wrapped     a long label at the column's width: it wraps, the box level with its first
 //               line

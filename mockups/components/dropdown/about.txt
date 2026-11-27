@@ -5,9 +5,9 @@ family: choices
 state: closed           The current choice, plain and with its colour dot
 state: placeholder      Nothing chosen yet: the placeholder, dimmed
 state: hover            Under the pointer: the border lighter
-state: focus            With the keyboard: the border lighter still
-state: open             Open: the accent border, the list under it, the picked option tinted, ringed
+state: focus            With the keyboard: the keyboard's ring around it
+state: open             Open: the accent border, the list under it, the picked option tinted, its ring inside
 state: groups           Options under their groups' titles, with colour dots
 state: disabled-option  An option that cannot be picked: dimmed
-state: current          The keys moved off the picked option: the ring on theirs, the tint on the picked
+state: current          The keys moved off the picked option: the keyboard's ring on theirs, the tint on the picked
 state: long-label       A long choice: cut with …, plain and with its dot

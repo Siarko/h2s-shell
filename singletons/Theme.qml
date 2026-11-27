@@ -502,6 +502,7 @@ Singleton {
     readonly property var lock: values.lock
     readonly property var wallpaper: values.wallpaper
     readonly property var border: values.border
+    readonly property var focus: values.focus
     readonly property var popupWidthScale: values.popupWidth
 
     // How much bigger the theme's text is than the built-in's: what fixed widths grow by,
@@ -664,6 +665,9 @@ Singleton {
     ThemeColorBehavior on privileged {}
     property color success: _colors.success
     ThemeColorBehavior on success {}
+    // The keyboard's ring (FocusRing)
+    property color focusRing: _colors.focusRing
+    ThemeColorBehavior on focusRing {}
 
     // Workspaces
     readonly property color workspaceFocused: accentDark

@@ -213,6 +213,12 @@ The interface modules are written against (`qs.api`), versioned on its own
   light or dark, whichever stands out from the track. Modules' switches look the same.
 - A hidden password's dots in the shell's fields (Wi-Fi, network connections, calendar
   accounts, modules' fields) stand apart, as on the lock screen and in the password prompt.
+- Every control shows it has the keyboard the same way: a clear ring around it (buttons,
+  delete buttons, checkboxes, dropdowns, text, date and time fields, the volume slider,
+  "Add" rows), and inside the entry the keys are on in a dropdown or an "Add" list. It shows
+  only when the keyboard brought the focus there, not after a click. Its colour (Keyboard
+  focus, under Colors → Borders; the primary text's until set), width and gap (Controls →
+  Keyboard focus) are the theme's.
 - A hidden password's dots stand further apart: on the lock screen, in the password prompt
   and in the shell's fields (Wi-Fi, network connections, calendar accounts, modules' fields).
 - A group's title in a dropdown or an "Add" list is bold and set a little further in

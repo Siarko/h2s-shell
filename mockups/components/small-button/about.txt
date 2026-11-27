@@ -6,7 +6,7 @@ state: rest             No pointer, no keyboard
 state: disabled         Not available: dimmed
 state: checked          Checked (a toggle that is on): the plain kinds take the accent
 state: hover            Under the pointer
-state: focus            With the keyboard (its ring)
+state: focus            With the keyboard: the keyboard's ring around it, every kind alike
 state: pressed          Pressed: drawn as under the pointer
 state: checked-hover    Checked, under the pointer
 state: disabled-hover   Not available, under the pointer: no light

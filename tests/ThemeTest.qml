@@ -148,10 +148,20 @@ TestCase {
         assertEqual(look("success", asking), "successButton surface success success", "asking, a good outcome: in the success colour");
         assertEqual(look("save", asking), "saveButton surface confirm confirm", "asking before turning something on: in the confirm colour");
         assertEqual(look("normal", asking), "button surface textPrimary outline", "asking, a plain button: bright text, the ordinary outline");
-        assertEqual(ThemeRules.buttonLook("delete", { focused: true }).ring, "textSecondary", "with the keyboard: a ring in the colour a focused checkbox takes");
-        assertEqual(look("delete", { focused: true }), "deleteButton surface textSecondary error", "… the kind's colours kept");
-        assertEqual(ThemeRules.buttonLook("save", { asking: true, focused: true }).ring, "textSecondary", "… asking too");
-        assertEqual(ThemeRules.buttonLook("save", {}).ring + "|" + ThemeRules.buttonLook("save", undefined).ring, "|", "without it: no ring");
+        assertEqual(ThemeRules.buttonLook("delete", {}).ring, undefined, "the keyboard's ring is no kind's: FocusRing draws it");
+        // The keyboard's ring: built in, the primary text's colour, seen on every surface it
+        // lies on (at least 3:1, the least contrast for a control's mark)
+        assertEqual(Theme.focusRing.toString(), Theme.textPrimary.toString(), "the keyboard's ring follows the primary text until a theme sets it");
+        const luminance = colour => [colour.r, colour.g, colour.b]
+            .map(channel => channel <= 0.04045 ? channel / 12.92 : Math.pow((channel + 0.055) / 1.055, 2.4))
+            .reduce((sum, channel, i) => sum + channel * [0.2126, 0.7152, 0.0722][i], 0);
+        for (const surface of ["barBackground", "popupBackground", "surface", "surfaceHover"]) {
+            const lighter = Math.max(luminance(Theme.focusRing), luminance(Theme[surface]));
+            const darker = Math.min(luminance(Theme.focusRing), luminance(Theme[surface]));
+            assert((lighter + 0.05) / (darker + 0.05) >= 3, "the keyboard's ring stands out on " + surface);
+        }
+        assert(!["warning", "error", "success", "accent"].some(kind => Theme[kind].toString() === Theme.focusRing.toString()),
+               "… in no kind's colour: told apart from a warning button's outline");
         for (const kind of ["normal", "cancel", "save", "saveChange", "delete", "warning", "success", "action"])
             for (const state of [{}, hot, asking, { checked: true }, { checked: true, hot: true }, { asking: true, hot: true }]) {
                 const found = ThemeRules.buttonLook(kind, state);

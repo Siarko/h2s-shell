@@ -52,7 +52,10 @@ Singleton {
             // Music: empty follows the accent (ThemeRules.colorFollows) until a theme sets it
             "visualizer": "",                // the music visualiser
             // Empty follows the warning colour until a theme sets it
-            "privileged": ""                 // the mark on what asks for an administrator's password
+            "privileged": "",                // the mark on what asks for an administrator's password
+            // Empty follows the primary text until a theme sets it: text is made to be read on
+            // every surface, so the ring is seen on each of them too
+            "focusRing": ""                  // the ring around the control that has the keyboard
         },
         "fonts": {
             "family": "JetBrainsMono Nerd Font",
@@ -130,6 +133,9 @@ Singleton {
         "target": { "minSize": 36 },
         "lock": { "cardRadius": 16, "controlRadius": 8, "controlHeight": 40 },
         "border": { "width": 1, "selectedWidth": 2 },  // ordinary outlines; selection rings
+        // The keyboard's ring (FocusRing, in the colour focusRing): its width, and the gap
+        // between it and the control it is drawn around
+        "focus": { "width": 2, "gap": 2 },
         // Popups' widths, in percent of their width at the built-in fonts: `all` for every
         // popup, then each one's own, multiplied (popupWidth())
         "popupWidth": { "all": 100, "network": 100, "bluetooth": 100, "hardware": 100, "sound": 100,

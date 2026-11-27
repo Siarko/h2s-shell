@@ -2,7 +2,8 @@ import QtQuick
 import qs.singletons
 
 // A one-line text field: a box with the input in it, a placeholder while it is empty, the
-// accent around it while it has focus and red while `problem`. As tall as a line of its
+// accent around it while it has focus (and the keyboard's ring, FocusRing, when the keyboard
+// brought it there) and red while `problem`. As tall as a line of its
 // text needs, never less than 26 px. `password` hides the text, with an eye to show it;
 // whether it shows is `revealed`, which the field toggles itself unless the owner keeps it
 // (`ownsReveal: false`, listening to `revealToggled`) — e.g. per Wi-Fi network.
@@ -97,6 +98,11 @@ Rectangle {
             font.pixelSize: parent.font.pixelSize
             color: Theme.textDisabled
         }
+    }
+
+    FocusRing {
+        focused: _input.activeFocus
+        shown: root.shownFocused
     }
 
     // Shows or hides a password

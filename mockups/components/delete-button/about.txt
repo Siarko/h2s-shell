@@ -5,7 +5,7 @@ description: The button that asks before it acts: its question with a cancelling
 parent: small-button
 state: rest           At rest: delete with its red border, save filled
 state: hover          Under the pointer: delete turns red, save lighter
-state: focus          With the keyboard: the ring inside the border
+state: focus          With the keyboard: the keyboard's ring around it, apart from the kind's border
 state: asking         After the first click: the question in the kind's colour, the × beside it
 state: asking-hover   Asking, under the pointer: the question and the × lit together
 state: disabled       Not available: dimmed, at rest and asking

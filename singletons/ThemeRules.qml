@@ -63,7 +63,7 @@ Singleton {
         "powerMenu", "button", "saveButton", "cancelButton", "deleteButton", "warningButton",
         "successButton", "iconButton", "pill", "field",
         "notificationCard", "osdToast", "osdVolume", "osdMessage", "tooltip", "progress", "settings", "calendar",
-        "checkbox", "lock", "border", "target", "popupWidth", "modal"]
+        "checkbox", "lock", "border", "focus", "target", "popupWidth", "modal"]
 
     // A pill's least height for its `size`, from the theme's `pill` group: "s", "m" or
     // "l". Any other word is "s".
@@ -76,9 +76,8 @@ Singleton {
     // theme's group its radius comes from, `fill`, `label` and `border` are colours of
     // Theme; `border` is "" for a kind without one. `state`: `hot` (under the pointer or a
     // pressing finger, and available), `checked` (a toggle that is on), `asking` (the first
-    // click of a button that asks was made), `focused` (it has the keyboard). `ring` is the
-    // colour of the line drawn inside the button while it has the keyboard, the colour a
-    // focused checkbox's box takes; "" without it.
+    // click of a button that asks was made). The keyboard's ring is FocusRing's, the same on
+    // every kind.
     //
     // Three kinds have a tone and wear it as a border, filled with it while hot: "delete"
     // (stops or removes), "warning" (goes on, but think), "success" (a good outcome).
@@ -87,11 +86,6 @@ Singleton {
     // word are plain. Asking, every kind is plain, with its label and a border in the kind's
     // colour.
     function buttonLook(kind, state) {
-        const look = _buttonColours(kind, state);
-        look.ring = state?.focused === true ? "textSecondary" : "";
-        return look;
-    }
-    function _buttonColours(kind, state) {
         const hot = state?.hot === true;
         const tone = ownValue({ "delete": "error", "warning": "warning", "success": "success" }, kind) ?? "";
         const filled = ownValue({ "save": "confirm", "saveChange": "confirmSecondary", "action": "accent" }, kind) ?? "";
@@ -227,7 +221,7 @@ Singleton {
     // modified. Returns { group: { token: value } } for every group.
     // Colours that take another's value until a theme sets them — built in as "" — so a
     // theme that changes the accent changes them too
-    readonly property var colorFollows: ({ visualizer: "accent", privileged: "warning" })
+    readonly property var colorFollows: ({ visualizer: "accent", privileged: "warning", focusRing: "textPrimary" })
 
     function resolve(builtin, chain, palettes) {
         const result = {};
@@ -297,6 +291,7 @@ Singleton {
         { group: "Borders", token: "popupBorder", label: "Popups", hint: "Around popups, when their border width is above 0" },
         { group: "Borders", token: "osdToastBorder", label: "Notification toasts", hint: "Around toasts, when their border width is above 0" },
         { group: "Borders", token: "osdVolumeBorder", label: "Volume OSD", hint: "Around the volume OSD, when its border width is above 0" },
+        { group: "Borders", token: "focusRing", label: "Keyboard focus", hint: "The ring around the control that has the keyboard; follows Primary until set" },
         { group: "Borders", token: "osdMessageBorder", label: "Shell messages", hint: "Around the shell's message pill, when its border width is above 0" },
         { group: "Music", token: "visualizer", label: "Visualiser", hint: "The music visualiser; follows the accent until set" }
     ]
@@ -416,6 +411,9 @@ Singleton {
             border: [
                 { token: "width", label: "Outline width", hint: "Ordinary outlines: fields, lists, pills, tooltips", from: 0, to: 6, suffix: px },
                 { token: "selectedWidth", label: "Selection width", hint: "Selection rings: colour swatches, curve handles, an event's colour edge", from: 0, to: 8, suffix: px }],
+            focus: [
+                { token: "width", label: "Ring width", hint: "The ring around the control that has the keyboard", from: 1, to: 6, suffix: px },
+                { token: "gap", label: "Gap", hint: "Between a control and its ring", from: 0, to: 8, suffix: px }],
             osdToast: [radius("A notification toast, and the queue count beside it"),
                 { token: "padding", label: "Padding", hint: "Around a toast's content", from: 0, to: 40, suffix: px },
                 { token: "width", label: "Width", hint: "A toast's width", from: 200, to: 700, suffix: px },

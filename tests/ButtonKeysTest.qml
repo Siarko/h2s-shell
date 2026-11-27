@@ -126,11 +126,11 @@ TestCase {
         return condition();
     }
 
-    // The ring a button draws inside itself while it has the keyboard
+    // The keyboard's ring of a button (FocusRing), drawn while `visible` here
     function _ring(item) {
         for (const child of item.children)
-            if (child instanceof Rectangle && child.color.a === 0 && child.anchors.margins === Theme.border.width)
-                return child;
+            if (child.focusRing === true)
+                return { get visible() { return child.lit; }, get border() { return child.children[0].border; } };
         return null;
     }
 
@@ -222,7 +222,7 @@ TestCase {
         // --- Tab ---
         _tab();
         assert(button.activeFocus, "Tab from the field: the button");
-        assert(buttonRing.visible && buttonRing.border.color === Theme.textSecondary, "… its ring shows, in the colour a focused checkbox takes");
+        assert(buttonRing.visible && buttonRing.border.color === Theme.focusRing, "… its ring shows, in the theme's keyboard colour");
         _tab();
         assert(!off.activeFocus && remove.activeFocus, "Tab again: past the unavailable button, to the delete button");
         assert(removeRing.visible && !buttonRing.visible, "… its ring shows, the other's hides");

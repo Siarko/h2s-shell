@@ -18,6 +18,7 @@ ShapeSettings {
         { title: "Tooltips", group: "tooltip" },
         { title: "Progress bars", group: "progress" },
         { title: "Outlines", group: "border" },
+        { title: "Keyboard focus", group: "focus", hint: "The ring around the control that has the keyboard" },
         { title: "Targets", group: "target", hint: "How far around a control a click or a tap still reaches it" }
     ]
 }

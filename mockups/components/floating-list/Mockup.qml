@@ -12,8 +12,8 @@ import qs.mockups.kit
 //   above           the button at the cell's bottom: no room below, the list over it
 //   scrolling       ten entries, `maximumHeight: 120`: cut at the bottom (it scrolls)
 //   groups          FloatingListHeader over each group's first entry
-//   current         `highlight` on the second entry as the list shows: the keys' ring and
-//                   light
+//   current         `highlight` on the second entry as the list shows: the keyboard's ring
+//                   inside it (FocusRing) and light
 //   disabled-entry  an entry with `floatingEntryEnabled: false`: dimmed
 // The list is held open by its `open` binding: on screen a click outside it changes nothing.
 MockupWindow {
@@ -41,8 +41,11 @@ MockupWindow {
         height: 24
         radius: Theme.listItem.radius
         color: current && available ? Theme.surfaceHover : Theme.surfaceHoverClear
-        border.width: current ? Theme.border.width : 0
-        border.color: Theme.textSecondary
+
+        FocusRing {
+            inside: true
+            shown: entry.current
+        }
 
         Text {
             anchors { left: parent.left; right: parent.right; leftMargin: 6; rightMargin: 6; verticalCenter: parent.verticalCenter }

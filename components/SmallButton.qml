@@ -12,9 +12,9 @@ import qs.singletons
 // label needs, never less than 24 px, so a larger font in a theme grows it rather than
 // spilling out; made narrower than its label, the label ends in "…".
 //
-// Tab reaches it while it is available, and Space or Enter then acts as a click (a ring
-// inside it shows it has the keyboard). A click does not take the keyboard: a field being
-// typed in keeps it.
+// Tab reaches it while it is available, and Space or Enter then acts as a click (the
+// keyboard's ring, FocusRing, shows it has the keyboard). A click does not take the
+// keyboard: a field being typed in keeps it.
 Rectangle {
     id: root
 
@@ -34,7 +34,7 @@ Rectangle {
     signal clicked
 
     readonly property bool _hot: _area.lit && available
-    readonly property var _look: ThemeRules.buttonLook(kind, { hot: _hot, checked: checked, focused: activeFocus || shownFocused })
+    readonly property var _look: ThemeRules.buttonLook(kind, { hot: _hot, checked: checked })
     // The theme's group for this kind of button: its own radius; padding and height are
     // the general button's
     readonly property var _shape: Theme[_look.group]
@@ -63,17 +63,6 @@ Rectangle {
             clicked();
     }
 
-    // While it has the keyboard: a line inside the border, which keeps the kind's colour
-    Rectangle {
-        anchors.fill: parent
-        anchors.margins: Theme.border.width
-        visible: root._look.ring !== ""
-        radius: Math.max(0, root.radius - Theme.border.width)
-        color: "transparent"
-        border.width: Theme.border.width
-        border.color: root._look.ring !== "" ? Theme[root._look.ring] : "transparent"
-    }
-
     Text {
         id: _label
         anchors.centerIn: parent
@@ -93,6 +82,11 @@ Rectangle {
         shownLit: root.shownLit
         cursorShape: root.available ? Qt.PointingHandCursor : Qt.ArrowCursor
         onClicked: if (root.available) root.clicked()
+    }
+
+    FocusRing {
+        focused: root.activeFocus
+        shown: root.shownFocused
     }
 
     HoverTip {

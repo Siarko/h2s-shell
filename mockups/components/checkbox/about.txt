@@ -5,7 +5,7 @@ family: choices
 state: off         Not checked
 state: on          Checked: filled with the accent, the tick
 state: hover       Under the pointer: no look of its own, drawn as at rest
-state: focus       With the keyboard: the box's border lighter, off and on
+state: focus       With the keyboard: the keyboard's ring around the box, off and on
 state: disabled    Not enabled: no look of its own, drawn as at rest
 state: wrapped     A long label at the column's width: on more lines, the box by the first
 state: no-label    The box alone, off and on

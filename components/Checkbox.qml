@@ -3,7 +3,8 @@ import qs.singletons
 
 // A checkbox with an optional label beside it. Clicking either, or Space while it has the
 // focus, emits `toggled`; the owner flips `checked`, so the box can follow state kept
-// elsewhere (a calendar enabled in GoogleCalendar, say). Takes the focus on Tab; an owner
+// elsewhere (a calendar enabled in GoogleCalendar, say). Takes the focus on Tab (the
+// keyboard's ring, FocusRing, round the box shows it); an owner
 // that wants Tab to go somewhere particular sets `Keys.onTabPressed`. Given a width, a long
 // label wraps to more lines inside it, the box level with the first; without one it is as
 // wide as its label on one line.
@@ -34,7 +35,7 @@ Item {
         height: 14
         radius: Theme.checkbox.radius
         color: root.checked ? Theme.accent : "transparent"
-        border.color: root.activeFocus || root.shownFocused ? Theme.textSecondary : (root.checked ? Theme.accent : Theme.textDisabled)
+        border.color: root.checked ? Theme.accent : Theme.textDisabled
         border.width: Theme.border.width
 
         Text {
@@ -44,6 +45,13 @@ Item {
             color: Theme.textPrimary
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSizeTiny
+        }
+
+        // A press on the label is the checkbox's too
+        FocusRing {
+            focused: root.activeFocus
+            shown: root.shownFocused
+            pressed: _mouse.pressed
         }
     }
 
@@ -68,6 +76,7 @@ Item {
     }
 
     MouseArea {
+        id: _mouse
         anchors.fill: parent
         cursorShape: Qt.PointingHandCursor
         onClicked: root.toggled()
