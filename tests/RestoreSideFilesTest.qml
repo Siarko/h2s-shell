@@ -468,8 +468,9 @@ TestCase {
 
     // ---- Cut short anywhere: nothing lost ----
     // A shell script on a scratch folder: config.json and themes/a.json replaced, themes/new.json
-    // made, themes/b.json removed. The swap stopped after each of its steps, then the putting
-    // back stopped after each of its own and run again: the folder as before (or, stopped once
+    // made, themes/b.json removed. The swap stopped after each of its steps (once: a copy of
+    // what it left, hard links kept, for each putting back; NixOS starts processes slowly, and
+    // this suite shares a process with others), then the putting back stopped after each of its own and run again: the folder as before (or, stopped once
     // done, as the whole swap leaves it), no staging folder left. Three puttings back at once
     // (each on a cut swap), the same. A journal line naming a path outside, a `keep` that is
     // no name, a copy gone: refused, the staging folder kept, nothing changed. The staging
@@ -494,9 +495,10 @@ TestCase {
         + "  if [ $code = 0 ]; then echo \"steps $((k - 1))\"; break; fi\n"
         + "  [ $code = 3 ] || say \"swap cut at $k: exit $code\"\n"
         + "  if [ -f \"$stg/done\" ]; then expected=$after; else expected=$before; fi\n"
+        + "  rm -rf -- \"$base/snap\"; cp -a -- \"$d\" \"$base/snap\"\n"
         + "  j=1\n"
         + "  while [ $j -lt 40 ]; do\n"
-        + "    setup cut; doswap $k; dorec $j; rc=$?; dorec \"\"; rc2=$?; combos=$((combos + 1))\n"
+        + "    rm -rf -- \"$d\"; cp -a -- \"$base/snap\" \"$d\"; dorec $j; rc=$?; dorec \"\"; rc2=$?; combos=$((combos + 1))\n"
         + "    [ \"$(state \"$d\")\" = \"$expected\" ] || say \"swap cut at $k, putting back cut at $j: $(state \"$d\" | tr '\\n' ' ')\"\n"
         + "    [ $rc2 = 0 ] && [ \"$(stages \"$d\")\" = 0 ] || say \"swap cut at $k, putting back cut at $j: exit $rc2, staging folders $(stages \"$d\")\"\n"
         + "    [ $rc = 3 ] || break\n"

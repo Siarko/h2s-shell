@@ -319,8 +319,11 @@ TestCase {
         // Changed by hand
         _then("read before the hand edit", () => _read !== null, () => {
             const before = _request(15);
-            _shell("printf '// mine\\n' >> \"$1/usr/share/polkit-1/rules.d/40-h2s-shell.rules\"", () => {
-                suite._outcome = null;
+            // The outcome dropped before the edit: the next step must not take the one before
+            // (the edit never takes less than a few of the clock's ticks, so that it would fail
+            // every run)
+            _outcome = null;
+            _shell("sleep 0.1; printf '// mine\\n' >> \"$1/usr/share/polkit-1/rules.d/40-h2s-shell.rules\"", () => {
                 suite.assert(suite._install.install(before).started, "Install from a reading taken before a hand edit: started");
             });
         });

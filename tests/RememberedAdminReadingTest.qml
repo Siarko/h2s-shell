@@ -422,12 +422,18 @@ TestCase {
         });
         // The read under way when a revoke starts answers while the revoke is still held:
         // its list may show what the revoke ends, so it must not be published
-        _then("the read held", () => _reader._runner.running > 0, () => _sh("while [ ! -e \"$1/bus/held\" ]; do sleep 0.02; done", [_scratch], () => {
-            suite._reader.forget();
-            suite._sh("while [ ! -e \"$1/bus/held-revoke\" ]; do sleep 0.02; done; rm -f \"$1/bus/held\"; "
-                      + "while [ ! -e \"$1/bus/released\" ]; do sleep 0.02; done", [suite._scratch], () => suite._ready = true);
-            suite._ready = false;
-        }));
+        // Not ready until the read is held, the revoke started and the read answered: the next
+        // step must not take the `_ready` of an earlier one while the read is still held (as
+        // under load; the wait is never shorter than a few of the clock's ticks, so that such a
+        // step would fail every run)
+        _then("the read held", () => _reader._runner.running > 0, () => {
+            _ready = false;
+            _sh("sleep 0.1; while [ ! -e \"$1/bus/held\" ]; do sleep 0.02; done", [_scratch], () => {
+                suite._reader.forget();
+                suite._sh("while [ ! -e \"$1/bus/held-revoke\" ]; do sleep 0.02; done; rm -f \"$1/bus/held\"; "
+                          + "while [ ! -e \"$1/bus/released\" ]; do sleep 0.02; done", [suite._scratch], () => suite._ready = true);
+            });
+        });
         _then("the read answered, the revoke still held", () => _ready && _reader._runner.running === 1, () => {
             assertEqual(staleShown, false, "the read from before the revoke is dropped: its stale entry never shown");
             assertEqual(_reader._revoking, true, "… while the revoke is still under way");
@@ -439,7 +445,13 @@ TestCase {
             assertEqual(_reader.kept.entries.length, 0, "after the revoke: nothing kept");
             _write({ ["tree" + RememberRules.confPath]: RememberRules.confText(600) });
         });
-        _then("a moment", () => _ready, () => _sh("chmod 000 \"$1\"", [_tree + RememberRules.confPath], () => read()));
+        // The count taken before the chmod: the next step must not take a reading from before
+        // it (the wait is never shorter than a few of the clock's ticks, so that it would fail
+        // every run)
+        _then("a moment", () => _ready, () => {
+            readings = _reader.readings;
+            _sh("sleep 0.1; chmod 000 \"$1\"", [_tree + RememberRules.confPath], () => read());
+        });
         _then("the conf unreadable", () => _reader.readings > readings, () => {
             assertEqual(_reader.installed.seconds + " " + _reader.installed.secondsReason, "-1 unreadable", "a conf that cannot be read: the length unknown");
             const block = RememberRules.ruleText({ user: "alex", timeout: _timeout, program: _reader.program });
