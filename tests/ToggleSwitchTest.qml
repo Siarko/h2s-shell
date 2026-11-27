@@ -63,8 +63,27 @@ TestCase {
         const hoverLight = rules.switchTrackHover(onLight, light);
         assert(rules.contrast(hoverDark, dark[0]) > rules.contrast(far, dark[0]), "under the pointer, over dark backgrounds, the track stands further out (lighter)");
         assert(rules.contrast(hoverLight, light[0]) > rules.contrast(onLight, light[0]), "under the pointer, over light backgrounds, the track stands further out (darker)");
+        // One twentieth of the way to white is enough here (2.82:1 before, 3.02:1 after): the
+        // track is that mix exactly, not one step further
+        const oneStep = rules.switchTrack(Qt.color("#959595"), dark, 3);
+        const oneStepValue = 0x95 / 255 + (1 - 0x95 / 255) / 20;
+        assert(Math.abs(oneStep.r - oneStepValue) < 0.001 && Math.abs(oneStep.b - oneStepValue) < 0.001,
+            "a track one twentieth short of 3:1 moves one twentieth of the way to white: " + oneStep);
+        const unreachable = rules.switchTrack(Qt.color("#5a5a5a"), dark, 25);
+        assertEqual(unreachable.toString(), "#ffffff", "a contrast no colour reaches: the track goes all the way, to white");
+        assertEqual(unreachable.r, 1, "… and no further");
+        const exactly = rules.switchTrack(Qt.color("#5a5a5a"), [dark[0]], rules.contrast(Qt.color("#5a5a5a"), dark[0]));
+        assertEqual(exactly.toString(), "#5a5a5a", "a track exactly at the asked contrast stays as it is");
+        // A mid-grey background (luminance 0.2) stands further from black (5:1) than from white
+        // (4.2:1): the track moves toward black
+        const mid = [Qt.color("#7c7c7c")];
+        const onMid = rules.switchTrack(Qt.color("#888888"), mid, 3);
+        assert(rules.luminance(onMid) < rules.luminance(Qt.color("#888888")), "over a mid-grey background a track moves darker: " + onMid);
         const white = Qt.color("white");
         const grey = Qt.color("#4d4d4d");
+        assertEqual(rules.switchKnob(Qt.color("#202020"), [grey]).toString(), grey.toString(), "one candidate: the knob is that one");
+        const seeThroughWhite = Qt.rgba(1, 1, 1, 0.5);
+        assertEqual(rules.switchKnob(Qt.color("#202020"), [white, seeThroughWhite]).a, 1, "candidates that stand out alike: the first is kept");
         assertEqual(rules.switchKnob(Qt.color("#aaaaaa"), [white, grey]).toString(), grey.toString(), "the knob on a light track is the dark one");
         assertEqual(rules.switchKnob(Qt.color("#202020"), [white, grey]).toString(), white.toString(), "the knob on a dark track is the light one");
     }

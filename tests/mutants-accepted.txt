@@ -180,3 +180,24 @@ singletons/ConfigBackupRules.qml	1 -> 2	#2	return result.sort((first, second) =>
 
 # reason: the indent of the IPC text is layout for people; the JSON read back is the same
 singletons/ConfigBackupRules.qml	2 -> 3	#1	})) }, null, 2);
+
+# reason: WCAG's two formulas meet at 0.03928 (both give 0.00304 there); a channel of a Qt
+# colour is a 16-bit step, never exactly 0.03928, so < and <= pick the same branch
+singletons/ThemeRules.qml	<= -> <	#1	const channel = value => value <= 0.03928 ? value / 12.92 : Math.pow((value + 0.055) / 1.055, 2.4);
+
+# reason: Qt.rgba clamps each channel and the alpha to 0..1: a 2 there is a 1 (a mix of
+# the mix's alpha, white's three channels and alpha, black's alpha: the same colours)
+singletons/ThemeRules.qml	1 -> 2	#1	color.b + (end - color.b) * amount, 1);
+singletons/ThemeRules.qml	1 -> 2	#1	return _leastContrast(Qt.rgba(1, 1, 1, 1), backgrounds) >= _leastContrast(Qt.rgba(0, 0, 0, 1), backgrounds);
+singletons/ThemeRules.qml	1 -> 2	#2	return _leastContrast(Qt.rgba(1, 1, 1, 1), backgrounds) >= _leastContrast(Qt.rgba(0, 0, 0, 1), backgrounds);
+singletons/ThemeRules.qml	1 -> 2	#3	return _leastContrast(Qt.rgba(1, 1, 1, 1), backgrounds) >= _leastContrast(Qt.rgba(0, 0, 0, 1), backgrounds);
+singletons/ThemeRules.qml	1 -> 2	#4	return _leastContrast(Qt.rgba(1, 1, 1, 1), backgrounds) >= _leastContrast(Qt.rgba(0, 0, 0, 1), backgrounds);
+singletons/ThemeRules.qml	1 -> 2	#5	return _leastContrast(Qt.rgba(1, 1, 1, 1), backgrounds) >= _leastContrast(Qt.rgba(0, 0, 0, 1), backgrounds);
+
+# reason: white and black stand out exactly alike only at a background luminance of
+# sqrt(0.0525) - 0.05, which no 16-bit Qt colour has, so > and >= decide alike
+singletons/ThemeRules.qml	>= -> >	#1	return _leastContrast(Qt.rgba(1, 1, 1, 1), backgrounds) >= _leastContrast(Qt.rgba(0, 0, 0, 1), backgrounds);
+
+# reason: a 21st step is 21/20 of the way, which Qt.rgba clamps to white: the 20th step's
+# colour again
+singletons/ThemeRules.qml	20 -> 21	#1	for (let step = 1; step <= 20 && _leastContrast(track, backgrounds) < minimum; step++)
