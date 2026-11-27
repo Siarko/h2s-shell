@@ -746,8 +746,11 @@ globals, and its store:
   **Restore previous settings** restores the module backup that run started from (its own,
   or the installer's just before) through `ModuleInstaller.restore` with
   `held:mod.<id>/<mid>@<module version>` for the failed ones and those skipped after them;
-  the module is turned off and on, the shell does not restart. `settings migrations` lists
-  the modules' failures too.
+  the module is turned off and on, the shell does not restart; a restore that fails keeps
+  the entry with its problem until it is answered. A module removed drops its report, and
+  a name that changes (or a module gone) never tells a failure again. IPC: `settings
+  migrations` lists the modules' failures too, `settings restoreModuleMigrationBackup <id>`
+  restores one (`modules restore` restores a backup without holds).
 
 The scope guards against a migration's mistakes; it is **not a sandbox**: a migration file is
 the module's own code and runs with all the rights the module's code has.

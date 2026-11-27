@@ -625,7 +625,14 @@ TestCase {
             assertEqual(preview.orphans.map(each => each.id).join(","), "gamma", "… the dependency installed for it alone offered");
             assert(preview.orphans[0].label.startsWith("Also remove Gamma (installed for "), "… with its label (" + preview.orphans[0].label + ")");
         });
-        _job("a hand-made link", () => installer.remove("linked", temp + "/outside/linked", {}), result => assert(result.ok, "a link placed by hand removed (" + result.message + ")"));
+        _job("a hand-made link", () => {
+            // A settings update of its that failed: its report goes with it
+            host.migrationReports = Object.assign({}, host.migrationReports, { linked: { reset: [{ id: "x" }] }, aaa: { reset: [] } });
+            return installer.remove("linked", temp + "/outside/linked", {});
+        }, result => {
+            assert(result.ok, "a link placed by hand removed (" + result.message + ")");
+            assert(host.migrationReports.linked === undefined && host.migrationReports.aaa !== undefined, "… its settings migrations' report dropped, another's kept");
+        });
         _job("a hand-placed folder", () => installer.remove("handmade", _data() + "/modules/handmade", { planKey: suite._handKey }), result => assert(result.ok, "a folder placed by hand removed (" + result.message + ")"));
         _then("the link's target is read", _idle, () => _sh("cat \"$1/outside/linked/module.json\" > /dev/null && echo there", [temp]));
         _then("the link's target was read", () => _out !== null, () => assertEqual(_out.lines[0], "there", "the link's target is untouched"));

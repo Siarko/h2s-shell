@@ -14,8 +14,10 @@ import qs.singletons.io
 // failed core update (MigrationFailureNotice on a stand-in report), each told and shown on
 // its own; Restore asks the module's steps and restores the backup taken before the run
 // through the installer (a stand-in) with the failed and skipped ones held under the
-// module's version; a failed restore brings the entry back with the problem, a restore
-// done withdraws it; Keep defaults withdraws it; a module gone is named by its id. Changes
+// module's version; a failed restore brings the entry back with the problem, kept on the
+// failure it answers through the run after it, a restore done withdraws it; a module whose
+// name is gone is named by its id and not told again; Keep defaults withdraws it; a module
+// removed drops its report and nothing is told again. Changes
 // the profiles, the records and the modules turned off through Config: in a process of its own.
 TestCase {
     id: suite
@@ -194,6 +196,42 @@ TestCase {
         return found;
     }
 
+    property Component _loneComponent: Component {
+        ModuleMigrationNotice {
+            moduleId: "lone"
+            moduleName: "Lone"
+            present: true
+            notifier: suite.notifier
+            installer: suite.installer
+            logging: false
+        }
+    }
+
+    // A failed restore keeps the failure it answered only while the module's report is there
+    // and names no other failure
+    function _answeredThenGone() {
+        const failed = id => ({ reset: [{ id: id, summary: id + " part" }], skipped: [], backup: "1.0.0-20261101-000000", version: "2.0.0" });
+        const lone = _loneComponent.createObject(suite, { report: failed("a") });
+        const asked = installer.calls.length;
+        assertEqual(lone.restore(""), "", "lone: a restore started");
+        assertEqual(installer.calls.length, asked + 1, "… asked of the installer");
+        installer.finished({ ok: false, action: "restore", ids: ["lone"], message: "not restored" });
+        lone.report = { reset: [], skipped: [], backup: "", version: "2.0.0" };
+        assert(lone.entryShown && lone.problem === "not restored", "lone: the failure answered kept with its problem through a run with nothing failed");
+        lone.report = failed("b");
+        assertEqual(lone.current.parts.join(","), "b part", "lone: another failure shown in its place");
+        assertEqual(lone.problem, "", "… without the problem of the restore before");
+        lone.report = { reset: [], skipped: [], backup: "", version: "2.0.0" };
+        assert(!lone.entryShown, "… and the one answered not brought back");
+        lone.report = failed("a");
+        assertEqual(lone.restore(""), "", "lone: restored again");
+        installer.finished({ ok: false, action: "restore", ids: ["lone"], message: "not restored" });
+        assert(lone.entryShown, "… failed: shown");
+        lone.report = undefined;
+        assert(!lone.entryShown && lone.problem === "" && !lone.canRestore, "lone: its report dropped (removed): nothing shown, nothing to restore");
+
+    }
+
     function _parts(entry) {
         return _named(entry, "migrationFailurePart").map(part => part.text).join("|");
     }
@@ -277,15 +315,29 @@ TestCase {
         });
         _then("a failed restore brings the entry back", () => _moduleEntry.visible, () => {
             assertEqual(_named(_moduleEntry, "migrationFailureProblem")[0].text, "it did not stop in time: nothing restored", "… with the problem");
+            // The module came on again after the failed restore: its run fails nothing now
+            host.setEnabled("migrating", false);
+        });
+        _then("off after the failed restore", () => _settled() && host.statuses.some(status => status.id === "migrating" && status.state === "disabled"),
+              () => host.setEnabled("migrating", true));
+        _then("on again: a run with nothing failed", () => _settled() && host.statuses.some(status => status.id === "migrating" && status.state === "loaded")
+              && (host.migrationReports.migrating?.reset ?? [null]).length === 0, () => {
+            assert(_moduleEntry.visible, "the failure it answered still shown until answered");
+            assertEqual(_named(_moduleEntry, "migrationFailureProblem")[0].text, "it did not stop in time: nothing restored", "… with its problem");
+            assertEqual(_named(_moduleEntry, "migrationFailureTitle")[0].text, "Updating Migrating fixture settings to 2.0.0 failed", "… and its heading");
+            assertEqual(_sentFor("Migrating fixture").length, 1, "… not told again");
             installer.finished({ ok: true, action: "restore", ids: ["other"], message: "" });
             assert(_moduleEntry.visible, "another module's restore: nothing changes");
-            modalHost.onAnswer({ button: "restore", cancelled: false, subject: modalHost.spec.subject });
-            assertEqual(installer.calls.length, 2, "asked again: restored again");
+            assertEqual(modules.restore("nothere"), "No failed settings update of that module", "IPC restore: a module with no failure refused");
+            assertEqual(modules.restore("migrating"), "", "IPC restore (no question there): started");
+            assertEqual(installer.calls.length, 2, "… restored again");
+            assertEqual(JSON.stringify(installer.calls[1]?.options), JSON.stringify(installer.calls[0]?.options), "… with the same holds");
+            assertEqual(installer.calls[1]?.name, installer.calls[0]?.name, "… from the backup of the failure it answers");
             installer.finished({ ok: true, action: "restore", ids: ["migrating"], message: "" });
             assert(!_moduleEntry.visible, "a restore done: the entry gone");
             assert(_coreEntry.visible, "… the core's stays until answered");
 
-            // A later run of the same failure, then Keep defaults
+            // A later run of the same failure
             Config.migratedKeys = host._plainList(Config.migratedKeys).filter(entry => !entry.includes("mod.migrating/"));
             const list = JSON.parse(Config.profiles);
             list[0].set["mod.migrating.broken.level"] = 4;
@@ -297,16 +349,24 @@ TestCase {
             host.setEnabled("migrating", true);
         });
         _then("a new run told again", () => _settled() && _sentFor("Migrating fixture").length === 1 && _moduleEntry.visible, () => {
-            const key = _moduleNotice().current.key;
-            _named(_moduleEntry, "migrationKeepDefaults")[0].clicked();
-            assert(!_moduleEntry.visible && !_sentFor("Migrating fixture")[0].handle.open, "Keep defaults: the entry and the notification gone");
-            assertEqual(_moduleNotice().current.key, key, "… the defaults kept, the failure unchanged");
-
-            // The module gone: its id named, nothing to restore into
+            // Its name no longer known (removed, or the host failed): named by its id, not told again
             suite.names = {};
         });
         _then("gone: named by its id", () => _moduleNotice()?.current?.summary === "Updating migrating settings to 2.0.0 failed", () => {
             assert(!_moduleNotice().canRestore, "… nothing to restore into");
+            assertEqual(sent.length, 1, "… not told again");
+            assert(sent[0].handle.open, "… the notification sent stays");
+            const key = _moduleNotice().current.key;
+            _named(_moduleEntry, "migrationKeepDefaults")[0].clicked();
+            assert(!_moduleEntry.visible && !sent[0].handle.open, "Keep defaults: the entry and the notification gone");
+            assertEqual(_moduleNotice().current.key, key, "… the defaults kept, the failure unchanged");
+            // Removed: its report goes, nothing is told again
+            host.forgetMigrationReport("migrating");
+        });
+        _then("removed: its report gone", () => host.migrationReports.migrating === undefined, () => {
+            assertEqual(sent.length, 1, "removed: not told again");
+            assert(_moduleNotice() !== null && _moduleNotice().current.kind === "" && !_moduleEntry.visible, "… its notice stays listed, telling nothing");
+            _answeredThenGone();
         });
         _clock.start();
     }

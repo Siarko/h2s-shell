@@ -13,9 +13,10 @@ import qs.singletons.io
 // the named data files; the link out refused, the link inside kept as a link, nothing
 // followed); a restore while locked, of a staging leftover or of a name it has none of is
 // refused; a restore round trip (settings, store and files back, the module off and on
-// again, the current configuration backed up first); a module turned off stays off after a
-// restore; switches back and forth take one each, under and over the cap of 5, a staging
-// leftover never counted nor deleted. Changes the acknowledgements, the modules turned off
+// again, the current configuration backed up first, the backup put back marked for the
+// module's next migration run only once its settings are written); a module turned off
+// stays off after a restore; switches back and forth take one each, under and over the cap
+// of 5, a staging leftover never counted nor deleted. Changes the acknowledgements, the modules turned off
 // through Config and the profiles, as other suites do: in a process of its own.
 TestCase {
     id: suite
@@ -275,8 +276,15 @@ TestCase {
             Config.globals = JSON.stringify({ "mod.kappax.refresh": 30 });
             Config.migratedKeys = ["2.1.0-core", "mod.kappa/rename", "reset:mod.kappa/broken", "held:mod.kappa/broken@1.1.0", "mod.kappax/rename"];
         });
-        _job("the update's backup restored", () => installer.restore("kappa", _updateBackup), result => {
+        _job("the update's backup restored", () => {
+            suite._markedWhen = [];
+            suite._watchRestoring = true;
+            return installer.restore("kappa", _updateBackup);
+        }, result => {
             assert(result.ok, "restored (" + result.message + ")");
+            suite._watchRestoring = false;
+            assert(suite._markedWhen.length > 0 && suite._markedWhen.every(back => back),
+                   "… the backup put back marked for the next run only once its settings were written (" + JSON.stringify(suite._markedWhen) + ")");
             assertEqual((result.details?.backups ?? []).length, 1, "… the current configuration backed up first");
         });
         _then("restored: kappa runs again", () => _idle() && host.status("kappa")?.state === "loaded" && _backups().length === 2, () => {
@@ -432,6 +440,18 @@ TestCase {
             assert(host.isEnabled("kappa"), "… kappa still on");
         });
         _unchanged("the restore the lock stopped");
+    }
+
+    // While set, whether kappa's settings were back each time the backup put back was marked
+    // for its next migration run
+    property bool _watchRestoring: false
+    property var _markedWhen: []
+    property Connections _marks: Connections {
+        target: suite.host
+        function on_SwitchBackupNamesChanged() {
+            if (suite._watchRestoring && suite.host._switchBackupNames.kappa === suite._updateBackup)
+                suite._markedWhen = suite._markedWhen.concat([suite._setting("Full", "mod.kappa.city") === "Oslo"]);
+        }
     }
 
     property var _state: null

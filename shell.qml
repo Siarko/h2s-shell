@@ -174,6 +174,7 @@ QtObject {
     //   qs ipc call settings close
     //   qs ipc call settings migrations              (the last settings update at start, JSON)
     //   qs ipc call settings restoreMigrationBackup  (after a failed one: the settings from before it)
+    //   qs ipc call settings restoreModuleMigrationBackup <id>  (the same for a module's)
     //   qs ipc call settings backups                 (the config backups, JSON; reads them again)
     //   qs ipc call settings restoreBackup <name>    (apply one: backs up the current, restarts)
     //   qs ipc call settings backup                  (make a backup now: kept until deleted)
@@ -213,6 +214,12 @@ QtObject {
         // "" when the restore started (the shell restarts once it is written), else why not
         function restoreMigrationBackup(): string {
             return MigrationNotice.notice.restore("");
+        }
+
+        // The same for module `id`'s failed settings update: its backup from before the run,
+        // the failed migrations held. "" when the restore started, else why not
+        function restoreModuleMigrationBackup(id: string): string {
+            return MigrationNotice.modules.restore(id);
         }
 
         // The list as last read ("known": false until read once); each call reads it again

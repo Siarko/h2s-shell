@@ -156,6 +156,8 @@ singletons/NixosApplyRules.qml	<= -> <	#1	if (full.length <= PrivilegedRules.wha
 # reason: _put's objects are only read, copied through JSON (_copy) or merged into such a copy,
 # never have a key deleted or redefined, so whether their keys are configurable is never seen
 singletons/ModuleMigrationRules.qml	true -> false	#3	Object.defineProperty(object, key, { value: value, enumerable: true, writable: true, configurable: true });
+# reason: a module id is at most 32 characters (ModuleRules.idPattern): its cap of 60 is never reached
+singletons/MigrationNoticeRules.qml	60 -> 61	#1	const shown = cleaned !== "" ? cleaned : plain(moduleId, 60);
 # reason: a module backup's name has six numbers, the match no seventh group: slice(1, 8) is slice(1, 7)
 singletons/MigrationNoticeRules.qml	7 -> 8	#1	const numbers = match.slice(1, 7).map(Number);
 # reason: the IPC report's indentation is only its layout

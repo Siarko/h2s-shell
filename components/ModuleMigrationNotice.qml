@@ -10,8 +10,10 @@ import qs.singletons
 // the failed migrations and those skipped after them held under the module's version
 // (ModuleInstaller.restore: the current configuration backed up first, the module turned off
 // and on again; the shell does not restart). Its outcome comes with the installer's
-// `finished`: a failed restore brings the entry back with the problem. The test runner
-// sends nothing.
+// `finished`: a failed restore brings the entry back with the problem, on the failure it
+// answered (the run after the module came on again may report nothing failed), until Keep
+// defaults, a restore that works, another failure reported or the report dropped (the
+// module removed). The test runner sends nothing.
 QtObject {
     id: root
 
@@ -35,9 +37,13 @@ QtObject {
     // A question is wanted on the entry: "restore"
     signal asked(string what)
 
-    readonly property var current: MigrationNoticeRules.moduleNotice(moduleId, moduleName, report, present)
+    // What its last run's report tells
+    readonly property var _reported: MigrationNoticeRules.moduleNotice(moduleId, moduleName, report, present)
+    // The failure a restore answers stays the one shown until it is answered, unless the
+    // report is dropped (the module removed) or names another failure
+    readonly property var current: _answering !== null && report && _reported.kind === "" ? _answering : _reported
     readonly property bool entryShown: current.kind !== "" && !_acting && _keptKey !== current.key
-    readonly property bool canRestore: current.kind === "reset" && current.backup !== "" && !testRunner && installer !== null
+    readonly property bool canRestore: current.kind === "reset" && current.backup !== "" && present && !testRunner && installer !== null
     readonly property string problem: _problem
     // The entry's interface: a module restore never waits for a shell restart
     readonly property bool restartPending: false
@@ -45,10 +51,19 @@ QtObject {
     property string _keptKey: ""
     property string _sentKey: ""
     property bool _acting: false
-    property string _actingKey: ""
+    property var _answering: null
     property string _problem: ""
     property var _handle: null
 
+    on_ReportedChanged: _letGo()
+
+    // Its report gone, or naming another failure: the one answered is no longer shown
+    function _letGo() {
+        if (_answering !== null && !_acting && (!report || (_reported.kind !== "" && _reported.key !== _answering.key))) {
+            _answering = null;
+            _problem = "";
+        }
+    }
     onCurrentChanged: Qt.callLater(_evaluate)
     onEntryShownChanged: Qt.callLater(_evaluate)
     Component.onCompleted: Qt.callLater(_evaluate)
@@ -98,6 +113,7 @@ QtObject {
         if (current.kind !== "reset" || (typeof key === "string" && key !== "" && key !== current.key))
             return false;
         _keptKey = current.key;
+        _answering = null;
         _problem = "";
         _withdraw();
         _log("defaults kept");
@@ -122,7 +138,7 @@ QtObject {
         }
         _problem = "";
         _acting = true;
-        _actingKey = notice.key;
+        _answering = notice;
         _withdraw();
         _log("restoring its settings from " + notice.backup + ", holding " + notice.held.join(", "));
         return "";
@@ -146,9 +162,12 @@ QtObject {
             root._acting = false;
             if (result.ok) {
                 // Done: the run that follows (when it is on) reports afresh
-                root._keptKey = root._actingKey;
+                root._keptKey = root._answering?.key ?? "";
+                root._answering = null;
             } else {
                 root._problem = String(result.message ?? "Not restored");
+                // A run while it was under way may have reported another failure
+                root._letGo();
             }
         }
     }

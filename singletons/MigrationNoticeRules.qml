@@ -100,7 +100,8 @@ Singleton {
     // The notice for module `moduleId`'s last settings migration run, its own beside the
     // core's (the module's backup and records are its own). `name`: its display name ("" when
     // it is gone: the id stands); `report`: ModuleHost.migrationReports[moduleId] (undefined
-    // none); `present`: it is installed (a restore needs it).
+    // none); `present`: it is installed (a restore needs it). The key names the failure: its
+    // run's backup, version, parts and holds, never the name or `present`.
     // → notice()'s shape, kind "" | "reset", with module: { id, name } and version (the
     //   module's, which the holds name); backup is a module backup's name
     function moduleNotice(moduleId, name, report, present) {
@@ -113,15 +114,15 @@ Singleton {
         const reset = _list(report.reset).filter(entry => typeof entry?.id === "string");
         if (reset.length === 0)
             return result;
-        const plain = text => String(text).replace(/\s+/g, " ").trim();
-        const named = typeof name === "string" && plain(name) !== "" ? plain(name) : moduleId;
-        const shown = named.length > 60 ? named.slice(0, 59) + "…" : named;
-        const version = typeof report.version === "string" ? plain(report.version).slice(0, 64) : "";
+        const plain = (text, most) => ModuleInstallRules._plain(String(text), most);
+        const cleaned = typeof name === "string" ? plain(name, 60) : "";
+        const shown = cleaned !== "" ? cleaned : plain(moduleId, 60);
+        const version = typeof report.version === "string" ? plain(report.version, 64) : "";
         const entries = reset.concat(_list(report.skipped).filter(entry => typeof entry?.id === "string"));
         const labels = list => {
             const words = [];
             for (const entry of list) {
-                const label = plain(partLabel(entry, entry.id)).slice(0, 200);
+                const label = plain(partLabel(entry, entry.id), 200);
                 if (label !== "" && !words.includes(label))
                     words.push(label);
             }
@@ -135,8 +136,11 @@ Singleton {
         result.parts = labels(reset);
         result.held = entries.map(entry => entry.id).filter((id, index, all) => all.indexOf(id) === index);
         result.heldParts = labels(entries);
-        result.backup = present === true && typeof report.backup === "string" ? report.backup : "";
-        result.key = JSON.stringify(["module", moduleId, shown, version, result.parts, result.held, result.backup]);
+        const backup = typeof report.backup === "string" ? report.backup : "";
+        result.backup = present === true ? backup : "";
+        // Not the name nor whether it is installed: those change without a new failure (a
+        // removal, the host failing) and must not tell it again
+        result.key = JSON.stringify(["module", moduleId, version, result.parts, result.held, backup]);
         return result;
     }
 

@@ -1423,6 +1423,9 @@ Scope {
                     }
                 }
                 job.ids = plans.map(each => each.subject.id);
+                // A module removed is answered: its last migration run is not told again
+                for (const removed of job.ids)
+                    host.forgetMigrationReport(removed);
                 if (!written)
                     problems.push("the record of installed modules could not be written");
                 _reload(job, () => {
@@ -1709,8 +1712,6 @@ Scope {
                             _finish(job, false, "the session was locked: nothing restored");
                             return;
                         }
-                        // The run after it starts from the backup put back
-                        host.noteBackupTaken(id, name);
                         phase = "restoring";
                         if (plan.enableAfter)
                             host.setEnabled(id, false);
@@ -1728,6 +1729,10 @@ Scope {
                                 return;
                             }
                             const why = Profiles.restoreModuleSettings(prefix, saved);
+                            // The run after it starts from the backup put back, once its
+                            // settings are (else from the one taken just before)
+                            if (why === "")
+                                host.noteBackupTaken(id, name);
                             // Its settings migrations run again on what comes back (each is
                             // idempotent); a hold stays, so a broken one does not reset it again
                             if (why === "")

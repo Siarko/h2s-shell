@@ -1219,6 +1219,15 @@ Scope {
     // (its read count before), deadline }]
     property var _migrationWaits: []
 
+    // Module `id` removed: its last run's report goes with it
+    function forgetMigrationReport(id) {
+        if (typeof id !== "string" || !Object.prototype.hasOwnProperty.call(migrationReports, id))
+            return;
+        const reports = Object.assign({}, migrationReports);
+        delete reports[id];
+        migrationReports = reports;
+    }
+
     // The job that took it failed: the run that follows takes its own
     function forgetBackupTaken(id) {
         _switchBackups = _switchBackups.filter(each => each !== id);

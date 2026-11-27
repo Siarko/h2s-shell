@@ -55,6 +55,8 @@ TestCase {
         assertEqual(rules.moduleNotice("tailscale", "", report, false).summary, "Updating tailscale settings to 0.8.0 failed", "module: gone, its id named");
         assertEqual(rules.moduleNotice("tailscale", "", report, false).backup, "", "module: gone, nothing to restore into");
         assertEqual(rules.moduleNotice("tailscale", "Tail\n<b>scale</b>", report, true).summary, "Updating Tail <b>scale</b> settings to 0.8.0 failed", "module: its name on one line, as text");
+        assertEqual(rules.moduleNotice("tailscale", "Tail\u202escale\u0007", report, true).module.name, "Tailscale", "module: its name without direction overrides or controls");
+        assertEqual(rules.moduleNotice("tailscale", "", report, false).key, notice.key, "module: the key the same when its name or presence changes (no new failure)");
         assertEqual(rules.moduleNotice("tailscale", "x".repeat(61), report, true).module.name, "x".repeat(59) + "…", "module: its name capped at 60");
         assertEqual(rules.moduleNotice("tailscale", "x".repeat(60), report, true).module.name, "x".repeat(60), "module: a name of 60 kept whole");
         assertEqual(rules.moduleNotice("tailscale", "T", Object.assign({}, report, { version: "1".repeat(100) }), true).version.length, 64, "module: its version capped");
