@@ -13,7 +13,8 @@ import Quickshell.Io
 // (old/, old-config.json), renames config.json into place and then each side file (a crash
 // between leaves the old config with newer side files, which the migrations run again on,
 // never a migrated config with old side files, which they would not reach again), marks
-// `done` and removes the staging folder. A step that fails, and recover() on a staging folder
+// `done` and removes the staging folder, its journal (`entries`) first: a removal cut short
+// leaves a folder without one, which is finished. A step that fails, and recover() on a staging folder
 // left by a crash, put back what the journal says was done, under the same lock. Each step is
 // journalled before it is taken, with whether its file was there before; putting back copies
 // from old/ and never removes it, so a putting back cut short anywhere is taken again from the
@@ -34,7 +35,9 @@ QtObject {
     // path is one a restore may write (ConfigBackupRules.sidePathProblem's rules). `placeok`:
     // no link and nothing but a folder on the way to $dir/$1 (the problem on stdout).
     // `putback`: $1 copied (linked) to $2 by a rename, $1 left in place (nothing when $2 is $1
-    // already: a step cut short before it was taken)
+    // already: a step cut short before it was taken). `drop`: a staging folder removed, `entries`
+    // first (one unlink), so that what a removal cut short leaves is never taken for a swap
+    // not finished
     readonly property string _commonFunctions: "tick() { ticks=$((ticks + 1)); if [ \"$stop\" = \"$ticks\" ]; then exit 3; fi; }; "
         + "sidepath() { case $1 in ''|/*|*/|.|..|./*|../*|*/.|*/..|*/./*|*/../*|*//*|config.json|.created-files|*[[:cntrl:]]*) return 1;; esac; "
         + "case ${1%%/*} in config.json.bak-*|backup-side-files|.config-restore.*) return 1;; esac; return 0; }; "
@@ -46,19 +49,23 @@ QtObject {
         + "putback() { if [ \"$1\" -ef \"$2\" ]; then return 0; fi; rm -f -- \"$st/put\" && { ln -- \"$1\" \"$st/put\" 2>/dev/null || cp -p -- \"$1\" \"$st/put\"; } "
         + "&& mkdir -p -- \"$(dirname -- \"$2\")\" && mv -f -- \"$st/put\" \"$2\"; }; "
         + "keepok() { case $1 in '') return 0;; */*|*[[:cntrl:]]*) return 1;; config.json.bak-?*) return 0;; esac; return 1; }; "
+        + "drop() { rm -f -- \"$1/entries\" && rm -rf -- \"$1\"; }; "
 
     // The putting back, a shell function: $1 the staging folder, $dir the config's folder. The
     // journal: `keep` and `entries` (written whole before any change), `moved` (a line per step,
     // "<w|r><1|0>:<path>", 1 when the file was there before, written just before the step),
     // `config-moved` (1 or 0 the same, written before config.json is renamed). Undone newest
     // first, a step's line dropped once it is undone; the copies in old/ stay until the end,
-    // so undoing a step again gives the same. The new backup's copies are removed last, only
-    // when every file is back as old/ holds it
+    // so undoing a step again gives the same. A last line without its newline was cut short
+    // while written, before its step: dropped. The new backup's copies are removed last, only
+    // when every file they hold is back as they hold it (a copy and the file compared: never
+    // on a copy missing from old/)
     readonly property string _recoverFunction: "recover() { st=$1; "
-        + "if [ ! -f \"$st/entries\" ] || [ -f \"$st/done\" ]; then rm -rf -- \"$st\"; return 0; fi; "
+        + "if [ ! -f \"$st/entries\" ] || [ -f \"$st/done\" ]; then drop \"$st\"; return 0; fi; "
         + "bad() { echo \"the journal in $st cannot be read ($1): kept\" >&2; return 1; }; "
         + "[ -f \"$st/keep\" ] || { bad keep; return 1; }; keep=$(cat -- \"$st/keep\") || { bad keep; return 1; }; "
         + "keepok \"$keep\" || { bad keep; return 1; }; "
+        + "if [ -s \"$st/moved\" ] && [ -n \"$(tail -c 1 -- \"$st/moved\")\" ]; then sed -i '$d' -- \"$st/moved\" || { bad moved; return 1; }; fi; "
         + "while [ -s \"$st/moved\" ]; do entry=$(tail -n 1 -- \"$st/moved\") || { bad moved; return 1; }; "
         + "kind=${entry%%:*}; file=${entry#*:}; "
         + "case $kind in w0|w1|r0|r1) ;; *) bad \"$entry\"; return 1;; esac; "
@@ -69,7 +76,7 @@ QtObject {
         + "putback \"$st/old/$file\" \"$dir/$file\";; "
         + "*) rm -f -- \"$dir/$file\";; esac "
         + "|| { echo \"could not put back $file: kept in $st\" >&2; return 1; }; tick; "
-        + "sed -i '$d' -- \"$st/moved\" || return 1; tick; done; "
+        + "sed -i '$d' -- \"$st/moved\" || { echo \"could not update the journal: kept in $st\" >&2; return 1; }; tick; done; "
         + "if [ -f \"$st/config-moved\" ]; then "
         + "if [ -d \"$dir/config.json\" ] && [ ! -L \"$dir/config.json\" ]; then echo \"could not put back config.json (a folder): kept in $st\" >&2; return 1; fi; "
         + "case $(cat -- \"$st/config-moved\") in "
@@ -78,21 +85,25 @@ QtObject {
         + "0) rm -f -- \"$dir/config.json\";; "
         + "*) bad config-moved; return 1;; esac "
         + "|| { echo \"could not put back config.json: kept in $st\" >&2; return 1; }; tick; "
-        + "rm -f -- \"$st/config-moved\" || return 1; tick; fi; "
+        + "rm -f -- \"$st/config-moved\" || { echo \"could not update the journal: kept in $st\" >&2; return 1; }; tick; fi; "
         + "copies=\"$dir/backup-side-files/$keep\"; "
         + "if [ -n \"$keep\" ] && [ ! -L \"$dir/backup-side-files\" ] && [ ! -L \"$copies\" ] && [ -d \"$copies\" ]; then same=1; "
         + "while IFS= read -r entry; do file=${entry#?:}; "
-        + "if [ -f \"$st/old/$file\" ] && [ \"$(md5sum < \"$st/old/$file\")\" != \"$(md5sum < \"$dir/$file\" 2>/dev/null)\" ]; then same=0; fi; "
+        + "if [ -e \"$copies/$file\" ] || [ -L \"$copies/$file\" ]; then "
+        + "if [ -L \"$copies/$file\" ] || [ ! -f \"$copies/$file\" ] || [ -L \"$dir/$file\" ] || [ ! -f \"$dir/$file\" ] "
+        + "|| [ \"$(md5sum < \"$copies/$file\")\" != \"$(md5sum < \"$dir/$file\")\" ]; then same=0; fi; fi; "
         + "done < \"$st/entries\"; "
-        + "if [ \"$same\" = 1 ]; then rm -rf -- \"$copies\" || return 1; else echo \"$copies kept: a file put back differs from its copy\" >&2; fi; tick; fi; "
-        + "rm -rf -- \"$st\"; return 0; }; "
+        + "if [ \"$same\" = 1 ]; then rm -rf -- \"$copies\" || { echo \"could not remove $copies: kept in $st\" >&2; return 1; }; else echo \"$copies kept: a file put back differs from its copy\" >&2; fi; tick; fi; "
+        + "drop \"$st\"; return 0; }; "
 
     // $1 the folder, $2 the staging folder, $3 the backup just made ("" none), $4 stopAfter,
     // then an entry per side file: "w:<path>" put back from new/, "r:<path>" removed. Exit 4:
-    // it failed and could not put back what it had done (the staging folder kept)
+    // it failed and could not put back what it had done (the staging folder kept, the files
+    // part old and part new until the next start puts them back)
     readonly property string _swapScript: "dir=$1; stage=$2; keep=$3; stop=$4; shift 4; side=\"$dir/backup-side-files\"; config=\"$dir/config.json\"; umask 077; ticks=0; "
         + _commonFunctions + _recoverFunction
-        + "fail() { echo \"$1: nothing restored\" >&2; stop=; recover \"$stage\" || exit 4; exit 1; }; "
+        + "fail() { stop=; if recover \"$stage\"; then echo \"$1: nothing restored\" >&2; exit 1; fi; "
+        + "echo \"$1: not all put back, kept in $stage for the next start\" >&2; exit 4; }; "
         + "exec 9< \"$stage\" || { echo \"could not open the staging folder: nothing restored\" >&2; exit 1; }; "
         + "flock -w 30 9 || { echo \"could not lock the staging folder: nothing restored\" >&2; exit 1; }; "
         + "if [ ! -d \"$stage\" ]; then echo \"the staging folder is gone: nothing restored\" >&2; exit 1; fi; "
@@ -141,7 +152,7 @@ QtObject {
         + "w:*) mkdir -p -- \"$dir/$(dirname -- \"$file\")\" && mv -f -- \"$stage/new/$file\" \"$dir/$file\";; "
         + "r:*) rm -f -- \"$dir/$file\";; "
         + "esac || fail \"could not change $file\"; tick; done; "
-        + ": > \"$stage/done\"; tick; rm -rf -- \"$stage\"; exit 0"
+        + ": > \"$stage/done\"; tick; drop \"$stage\"; exit 0"
 
     // $1 the folder, $2 recoverStopAfter: each staging folder left there put back (or
     // finished: `done`), each under its lock; one another shell removed meanwhile is done
