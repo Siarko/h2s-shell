@@ -112,287 +112,182 @@ The interface modules are written against (`qs.api`), versioned on its own
   for 4 min"). In module test mode `ModuleTestKit.setRemembered(untilMs)` sets it.
 
 ### Added
-- A module's settings update that fails is told the same way, on its own: a critical
-  notification naming the module, its entry in Settings listing the parts reset, Keep
-  defaults and Restore previous settings (the module's backup from before the update put
-  back, the failed parts held until another version of the module).
-- A settings update that fails at start is told: one critical notification ("Updating
-  settings to <version> failed"), whose click opens Settings at the failure, listing the
-  parts reset to defaults, with Keep defaults and Restore previous settings (the settings
-  from before the update, with the failed parts held until another version). When a
-  whole-settings update fails (nothing can be saved), Start with default settings. IPC `settings migrations`
-  and `settings restoreMigrationBackup`.
-- Settings → System → Backups lists the settings backups, newest first, with the date, why
-  each was made (before a settings update, before a restore, before a module update naming
-  the module and versions, made by you — kept, never pruned) and the version that wrote it.
-  Apply loads one: it backs up the current settings, brings the backup up to this version at
-  the next start (a part whose update fails under this version is held, as after a failed
-  update) and restarts the shell; a backup from a newer shell is marked and loaded as it is.
-  A backup from before a settings update also brings back the theme files that update
-  changed, and removes the ones it made unless changed since (as does Restore previous
-  settings); what it replaces is kept with the backup it makes first, which is then never
-  pruned (marked Kept). One cut short is put back at the next start; until it can be, the
-  settings are not saved ("Restoring settings did not finish").
-  A module update or version switch now backs up the settings first. IPC `settings backups`
-  and `settings restoreBackup <name>`.
-- Backups: Make a backup now saves a backup of the current settings, kept until you delete
-  it; Delete… on any backup removes it after asking (not the one being applied or the one
-  Restore previous settings needs). IPC `settings backup` and `settings deleteBackup <name>`.
-- Settings → System → NixOS, listed only on NixOS: the system's NixOS configuration as the
-  shell finds it (a flake or a classic configuration.nix, in any folder): under the status
-  its folder, or the folders looked in while none is found, with Select directory to pick
-  another; its facts one per line, and whether it is connected — the shell's file
-  `h2s-shell.json` in force. The one-time setup: Create the file (a root-owned
-  configuration asks the administrator password at that click; one of yours is written
-  without), then the line `programs.h2s-shell.settingsFile = ./h2s-shell.json;` to add once,
-  with Copy. A configuration in your own folder is warned about once.
-- NixOS: applying through the configuration — a modal announces the rebuild ("Rebuild
-  NixOS"; Undo's "Undo the last Apply"), the new system is built as you without a password,
-  and the Settings window's side panel shows the steps, progress, elapsed time and nix's last
-  lines, with Cancel build. When it is built the panel says "Built in … " with "Apply now":
-  only that click asks for the password and switches. Closing the panel does not stop the
-  build; the NixOS page shows where it is, with Show and Undo. A configuration only root can
-  build carries the lock on its Build button.
-- NixOS: the hibernation delay is the first setting applied through the configuration: once
-  the shell's file is in force, Behaviour → When away offers Apply, which writes the time
-  into the shell's file and rebuilds, and Undo, which rebuilds with the value before. A
-  `systemd.sleep.settings.Sleep.HibernateDelaySec` of your own wins: When away shows the
-  value in force with Apply disabled (with sleep on, the time too) and the NixOS mark beside
-  it. The NixOS page has no setting of its own. The module now defines HibernateDelaySec below such a line instead of clashing with it
-  ("conflicting definition values"), and publishes the merged value in
-  `/etc/h2s-shell/settings.json` (`system`).
-- Settings → System → Authentication: "Sign-in rules" for sudo and administrator prompts
-  (polkit) — what is in force as steps, rows of methods (fingerprint, security key,
-  password, a raw PAM line) tried from the top with their control words and details, one list
-  for both or one each, checks under each list, the file it would write. Rows that could let
-  anyone in or lock you out are red warnings: Apply asks "Save anyway?" first, naming the
-  risk. Arch: Apply tries the new rules first, then writes each file as administrator with a backup; Undo; a file
-  changed outside the shell is shown and can be replaced. NixOS: the module's options, with
-  Copy. Under it, "Unlocking the lock screen": switches for the fingerprint and the security
-  key.
-- NixOS: the module's `programs.h2s-shell.settingsFile = ./h2s-shell.json;` reads the
-  shell's settings file, JSON whose keys are the module's options with a `version` (now 1):
-  `idle.hibernateDelay`, `pam.rules`, `pam.sudo.rules`, `pam.polkit.rules`,
-  `polkit.rememberAdmin.{enable,users,minutes}`. Each value is taken just below `mkDefault`, so
-  the same option in the configuration wins, even at `mkDefault`; when the configuration sets
-  any of the three PAM rule lists, none of the file's are taken (a warning); a wrong value (type, range, a hibernation delay that is no
-  systemd time span, a PAM row with a field the rows do not have) or schema version stops
-  the build with an assertion naming the key; an unknown key is a warning and is ignored.
-  What was taken in and what is in force is published as `/etc/h2s-shell/settings.json`.
-  Unset (the default), nothing is read and nothing published.
-- NixOS: the module's `programs.h2s-shell.pam.rules` (sudo and polkit) — or
-  `pam.sudo.rules` and `pam.polkit.rules`, one list per service — set sudo's and polkit's
-  `auth` rules as an ordered list of rows: fingerprint (`timeout` 1–600 s and `tries`
-  1–20, each -1 for no limit), security key (`pin`; the machine's
-  `security.pam.u2f.settings` apply as they are, always with `cue`; a setting with a tab
-  or a line break stops the build), password (`counted`), a raw line (`module`, `args`), and
-  `{ method = "system"; }` for NixOS's own rules below them; without that row the list ends
-  with closing lines that keep NixOS's own rules from being reached.
-  `control` is PAM's word (`sufficient` by default; `optional` only on a raw row — a
-  fingerprint, key or password row's result would be ignored). NixOS's own fingerprint and
-  key rules are off for a service with rules. An optional fingerprint, key or password row,
-  or a module of another package named without its path stops the build with an assertion;
-  a list nobody could get in with (an empty one too), a required reader the machine does not
-  have, both services without a password (each saying that sudo may become unreachable), a
-  raw line that lets anyone in on its own (a module that asks for nothing, with no other row
-  that must pass and still asks), a reader as the only way in, a store path written out (`"${pkgs.…}/lib/security/…"` is
-  the way), a module from outside the store, a required raw line of a module the shell does
-  not know without the `system` row (it lets in a user the module says it does not apply
-  to), a raw line that asks for nothing beside a row that still asks, and a fingerprint with
-  no time limit above a password (the password waits for the finger) are warnings. null (the default) leaves the service as NixOS makes it.
-- Settings → System → Authentication: "Remember the password" — after the administrator
-  password is typed for one of the shell's own root runs, the next ones pass without asking
-  for "Remember for" minutes (1–60, default 5). One box says whether the rule is installed,
-  how long the system keeps a password and where that comes from, and, while kept,
-  "Remembered, 4 min left" with "Forget now"; it is also forgotten at lock and when the shell
-  restarts. Arch: Install / Install again / Remove / Undo, one password prompt each, with
-  backups in `/var/lib/h2s-shell/polkit-backup`; a file changed outside the shell is shown
-  and replaced only through "Replace…", which names every file it touches. NixOS: the
-  module's option, with Copy. The shell's prompt says "Remembered for N min" under the field
-  for its own and its modules' runs while the rule is installed; "Try the prompt" says no
-  prompt will show while a password is kept.
-- NixOS: the module's `programs.h2s-shell.polkit.rememberAdmin = { enable; users; minutes; }`
-  remembers the administrator password for the shell's own root runs, for the listed users:
-  a polkit rule keeps a typed password for the shell's process; `minutes` (1–60, default 5)
-  above polkit's 5 sets polkitd's `ExpirationSeconds` for the whole system, and polkit
-  reloads when it changes.
-- Settings: a setting the system's configuration sets itself is shown disabled, with the
-  NixOS mark beside it ("This setting is controlled by your system configuration" on hover)
-  and no line explaining it; the NixOS hibernation delay is the first. The mark is NixOS's
-  own blue with a thin black outline, whatever the theme.
+- **Settings updates:** a settings update that fails at start is told by one critical
+  notification ("Updating settings to <version> failed"). Its click opens Settings at the
+  failure: the parts reset to defaults, with Keep defaults or Restore previous settings
+  (the failed parts are held until another version). If nothing can be saved, Start with
+  default settings. A module's failed settings update is told the same way, on its own.
+- **Settings backups:** Settings → System → Backups lists the backups of the settings,
+  newest first, with the date, why each was made and the version that wrote it.
+  - Apply loads one: it backs up the current settings first, brings the backup up to this
+    version and restarts the shell. A backup from a newer shell is marked and loaded as it
+    is. A backup from before a settings update also puts back the theme files that update
+    changed.
+  - Make a backup now saves the current settings; backups you make are kept until you
+    delete them. Delete… removes a backup after asking.
+  - A module update or a switch of a module's version now backs up the settings first.
+- **NixOS page:** Settings → System → NixOS (listed only on NixOS) shows the system's NixOS
+  configuration as the shell finds it (a flake or a classic `configuration.nix`; Select
+  directory picks another folder) and whether the shell's file `h2s-shell.json` is in force.
+  The one-time setup: Create the file, then add this line to the configuration once (Copy
+  on the page) and rebuild:
+  `programs.h2s-shell.settingsFile = ./h2s-shell.json;`
+- **NixOS, applying settings:** a setting applied through the configuration builds the new
+  system as you, without a password, with the steps and nix's output in the Settings
+  window's side panel (Cancel build). Only "Apply now", once it is built, asks for the
+  password and switches. Closing the panel does not stop the build; the NixOS page shows
+  it, with Show and Undo.
+- **NixOS-controlled settings:** a setting your system configuration sets itself is shown
+  disabled on its own page, with the NixOS mark beside it. The NixOS page has no copies of
+  the settings.
+- **Hibernation delay on NixOS:** the first setting applied through the configuration.
+  Under Settings → When away, Apply writes the delay into the shell's file and rebuilds;
+  Undo rebuilds with the previous value. A `systemd.sleep.settings.Sleep.HibernateDelaySec`
+  of your own wins: the page shows it with the NixOS mark and Apply disabled. The module no
+  longer clashes with such a line ("conflicting definition values").
+- **Sign-in rules:** Settings → System → Authentication edits how sudo and administrator
+  prompts (polkit) ask: an ordered list of methods (fingerprint, security key, password, a
+  raw PAM line), shared or one per service. Risky rows (that could let anyone in or lock you
+  out) are red warnings, and Apply asks "Save anyway?". On Arch, Apply tests the rules,
+  then writes them as administrator with a backup, with Undo (a file changed outside the
+  shell is shown and can be replaced); on NixOS the page gives the
+  module's options to copy. Below, "Unlocking the lock screen" has switches for the
+  fingerprint and the security key.
+- **Remember the password:** in Settings → System → Authentication. After you type the
+  administrator password for one of the shell's own root runs, the next ones pass without
+  asking for "Remember for" minutes (1–60, default 5). The box shows whether the rule is
+  installed and the time left, with "Forget now"; the password is also forgotten at lock
+  and when the shell restarts. On Arch, Install / Remove / Undo (one password prompt each;
+  a file changed outside the shell is replaced only through "Replace…"); on NixOS, the
+  module's option to copy.
+- **NixOS module:**
+  - `programs.h2s-shell.settingsFile` reads the shell's settings file. Your own
+    configuration always wins over the file's value, even at `mkDefault`. A wrong value
+    stops the build naming the key; an unknown key is a warning. What is in force is
+    published in `/etc/h2s-shell/settings.json`. Unset (the default), nothing is read.
+  - `programs.h2s-shell.pam.rules` (or `pam.sudo.rules` and `pam.polkit.rules`, one per
+    service) sets sudo's and polkit's sign-in rules as an ordered list of rows: fingerprint,
+    security key, password, a raw PAM line, and `{ method = "system"; }` for NixOS's own
+    rules below. Without the `system` row, NixOS's own rules are not reached; NixOS's own
+    fingerprint and key rules are off for a service with rules. Rows that cannot work stop
+    the build; risky lists (one nobody could get in with, one that lets anyone in, both
+    services without a password, …) are warnings. null (the default) leaves the service as
+    NixOS makes it. If the configuration sets any of these lists, the settings file's are
+    not taken (a warning).
+  - `programs.h2s-shell.polkit.rememberAdmin = { enable; users; minutes; }` remembers the
+    administrator password for the shell's own root runs, for the listed users. `minutes`
+    above 5 also raises polkitd's `ExpirationSeconds` for the whole system.
+- **IPC:** `settings migrations`, `settings restoreMigrationBackup`, `settings backups`,
+  `settings restoreBackup <name>`, `settings backup`, `settings deleteBackup <name>`.
 
 ### Changed
-- Switches look the same everywhere, small or large: off, the track is the theme's
-  secondary text colour, which shows on the settings page, cards, popups and side panels
-  alike (in the Network and Bluetooth popups it was darker, on a profile's card it was the
-  popup's colour; a theme whose secondary text is too close to its backgrounds gets a track
-  moved away from them). Under the pointer the track stands out further, and the knob is
-  light or dark, whichever stands out from the track. Modules' switches look the same.
-- Every control shows it has the keyboard the same way: a clear ring around it (buttons,
-  delete buttons, checkboxes, dropdowns, text, date and time fields, an event's
-  description, a hardware source's label, the volume slider, "Add" rows), and inside the entry the keys are on in a dropdown or an "Add" list. It shows
-  only when the keyboard brought the focus there: not after a click, nor when the focus
-  comes back with its window (a popup or the Settings window shown again, a click back
-  from another app). Its colour (Keyboard
-  focus, under Colors → Borders; the primary text's until set), width and gap (Controls →
-  Keyboard focus) are the theme's.
-- A hidden password's dots stand further apart: on the lock screen, in the password prompt
-  and in the shell's fields (Wi-Fi, network connections, calendar accounts, modules' fields).
-- A group's title in a dropdown or an "Add" list is bold and set a little further in
-  than its entries, so it no longer reads as one of them.
-- Dropdowns and "Add" lists work from the keyboard: Tab reaches them (a ring shows the
-  focus), Space, Enter or Down open the list on the current choice, the arrows, Home, End,
-  Page Up and Page Down move, a letter jumps to the next entry starting with it, Enter
-  picks, Escape closes the list and leaves the focus on the control. Modules' dropdowns
-  get the same.
-- A missing package is named as this system gets it, never as a command to type: the
-  warning about a missing Nerd Font names Arch's package or NixOS's option, or the package
-  for `fonts.packages` (and,
-  on another system, the font's upstream name), and the lock screen's fingerprint and
-  security key switches, while the computer lacks one, say what they need (fprintd or
-  pam_u2f, as Arch's package or NixOS's option, and an enrolled finger or a registered key).
-- `install.sh` runs the Arch installer, now `distributions/arch/install.sh`, on Arch and
-  systems based on it (EndeavourOS, …); another system with pacman (and its
-  `/etc/pacman.conf`) gets a warning and the same installer; NixOS and systems without
-  pacman are told it does not support them, and nothing changes. The README's
-  `curl … | bash` line and `install.sh --update` (from a checkout, on any system but NixOS)
-  work as before.
-- Only through the VPN: the blocking runs only the installed script, never the shell's own
-  copy. Without it installed nothing switches and nothing asks for a password by itself;
-  the page says the blocking needs its script. A password question raised by an automatic
-  run of the installed script is closed at once; "Apply again" runs it on a click.
-- Arch: "Password-free blocking" installs the script to /usr/local/libexec/h2s-vpn-lockdown
-  and its polkit rule to /usr/share/polkit-1/rules.d (readable, so the page shows what is
-  there), with Undo; a script or rule there not written by the shell is shown and replaced
-  only after "Replace…" asks.
-- Settings → When away → Hibernate: Apply of the system's delay keeps the file it replaces
-  as a backup, and Undo puts it back. A delay set in another file is shown as "Set in
-  <file>: <value>": one read after the shell's file wins and no Apply is offered; one read
-  before it (your own sleep.conf) is overridden only after Apply asks; a hand-edited copy of
-  the shell's own file is replaced only after Apply asks again ("Replace?"). On a
-  distribution the shell does not know, no Apply: "Not supported on this distribution."
-- Settings → System → Network → Overview, the connectivity check's address: on Arch, Save and
-  Default keep the file they replace as a backup, Undo puts it back, and NetworkManager reads
-  its configuration again after each. An address set in another of NetworkManager's files is
-  shown as "Set in <file>: <address>": one read after the shell's file wins and no Save is
-  offered; one read before it (NetworkManager.conf, a NixOS configuration's setting) is
-  overridden only after Save or Write anyway asks; a hand-edited copy of the shell's own file
-  is replaced or removed only after it asks again ("Replace?", "Remove?"). The distribution's
-  packaged address (Arch's 20-connectivity.conf) counts as the default, not as set elsewhere.
-  On a distribution the shell does not know, no Save: "Not supported on this distribution."
-  An address of yours that the shell's file overrides is shown too ("Set in <file>:
-  <address>; the shell's file overrides it"; Default puts yours back), and a notification says
-  when the file was written but NetworkManager did not read it again. On NixOS, "Write anyway"
-  with the field emptied says "Default" (it removes the shell's file).
-- Settings → When away → Hibernate: a delay of yours that the shell's drop-in overrides is
-  shown ("Set in <file>: <time>; the shell's file overrides it").
-- Settings → System → Authentication, sign-in rules: on a distribution the shell does not
-  know, the rules are not edited there (no Apply, no lists): "Not supported on this
-  distribution." Arch and NixOS are as before.
-- The machine's u2f settings are no longer changed: a security key row of
-  `programs.h2s-shell.pam` keeps `nouserok`, `alwaysok`, `userpresence`, `interactive` and
-  `pinverification` from `security.pam.u2f.settings` instead of stripping them or stopping
-  the build. Where they let someone in without a key or a touch (`alwaysok`,
-  `userpresence = 0`), or turn a row that must pass into one that no longer asks, the build
-  warns (for a key row and for the lock screen), the sign-in rules page warns under the row
-  (for an own key row and a raw pam_u2f line, from `/etc/security/pam_u2f.conf` too on
-  Arch), and the lock screen's security key switch says so. The lock screen alone leaves
-  `interactive` out (it cannot answer the Enter prompt) and says so on its switch; a
-  `security.pam.u2f.settings.conf` file, or a raw pam_u2f row's own `conf=`, is a warning:
-  its options are not checked.
-- The shell's own runs as administrator (the sign-in rules' Apply, the Hibernate section's
-  Apply, "Remember the password"'s Install / Remove / Undo) run inside the shell's
-  `timeout`, as modules' runs do: ended after 5 minutes at most, and covered by a
-  remembered password.
-- NixOS: `programs.h2s-shell.polkit.passwordFirst` is deprecated (a warning when set): a
-  password row above the fingerprint row in `programs.h2s-shell.pam.rules` does the same.
+- **Controls and keyboard:**
+  - Switches look the same everywhere, small or large, in the shell and in modules.
+  - Every control shows the keyboard focus the same way, with a clear ring, only when the
+    keyboard moved it there (not after a click). Its colour (Colors → Borders → Keyboard
+    focus), width and gap (Controls → Keyboard focus) are the theme's.
+  - Dropdowns and "Add" lists work from the keyboard: Tab, Space / Enter / Down to open,
+    the arrows, Home, End, Page Up / Down, a letter to jump, Enter to pick, Escape to close.
+    The same in modules.
+  - A group's title in a dropdown or "Add" list is bold and set apart from its entries.
+  - A hidden password's dots stand further apart (lock screen, password prompt, the shell's
+    and modules' fields).
+- **Missing packages** are named as this system gets them (Arch's package or NixOS's
+  option), never as a command to type: the Nerd Font warning and the lock screen's
+  fingerprint and security key switches.
+- **Installer:** `install.sh` runs on Arch and systems based on it (EndeavourOS, …);
+  another system with pacman gets a warning; NixOS and systems without pacman are told it
+  does not support them, and nothing changes. The README's `curl … | bash` line and
+  `install.sh --update` work as before.
+- **Only through the VPN:** the blocking runs only the installed script, never the shell's
+  own copy. Without it installed nothing switches and nothing asks for a password; the page
+  says the script is needed. On Arch, "Password-free blocking" installs the script and its
+  polkit rule, with Undo; one there not written by the shell is replaced only after
+  "Replace…" asks.
+- **System files the shell writes** (the hibernation delay under Settings → When away →
+  Hibernate, the connectivity check address under Settings → System → Network → Overview):
+  - Apply / Save keep the file they replace as a backup, and Undo puts it back.
+  - A value set in another file is shown ("Set in <file>: <value>"). If that file wins, no
+    Apply / Save is offered; if the shell's file would override yours, it asks first. A
+    hand-edited copy of the shell's own file is replaced only after asking.
+  - On a distribution the shell does not know, no Apply / Save: "Not supported on this
+    distribution." The same for the sign-in rules.
+  - NetworkManager reads its configuration again after each change; a notification says when
+    it did not.
+- **Security key settings are no longer changed:** a security key row now keeps your
+  `security.pam.u2f.settings` (`nouserok`, `alwaysok`, `userpresence`, `interactive`,
+  `pinverification`) instead of stripping them or stopping the build. Where they let someone
+  in without a key or a touch, the build, the sign-in rules page and the lock screen's
+  security key switch warn.
+- **Administrator runs:** the shell's own root runs (sign-in rules, hibernation delay,
+  Remember the password) end after 5 minutes at most, as modules' runs do, and are covered
+  by a remembered password.
+- **Deprecated:** NixOS `programs.h2s-shell.polkit.passwordFirst` (a warning when set). Put
+  a password row above the fingerprint row in `programs.h2s-shell.pam.rules` instead.
   Without polkit rules it works as before; set to true beside them, it stops the build.
 
 ### Fixed
-- Shift+Tab moves back again in the Settings window's questions, side panels and a
-  notification's reply under a real keyboard (it did nothing there).
-- Deleting a theme keeps its file first, in `theme-backups/` beside the themes folder, as the
-  hint now says; `qs ipc call settings restoreTheme <name>` brings one back. When the file
-  cannot be kept, nothing is deleted and the Themes page says why.
-- On a slow machine the toasts no longer step aside for the panel open before the notification
-  centre, then again for the centre: they move once, when the centre has settled.
-- A notification's long body can be read: in a toast (6 lines) and in the notification centre
-  (12 lines) the rest scrolls inside the card with the wheel, a touchpad or a finger, a fade
-  showing where more is hidden.
-- An open dropdown or picker list stays attached to its control while the page scrolls or
-  the control moves, and closes when the control scrolls out of view; it opens upwards, or
-  on the side with more room, when there is no room below. The wheel over a long list
-  scrolls the list, never the page under it.
-- A dropdown or picker list left open on a page that was then hidden no longer stays over
-  the window taking every click, and is closed when the page shows again; Escape in a side
-  panel no longer counts such a hidden list before closing the panel.
-- "Lock before the computer sleeps": a sleep that began while the shell was starting or
-  reloading, before it had read its settings, now locks the screen too.
-- A fast wheel turn of two notches or more over the Music widget skips a track per notch,
-  not one; a popup mode stored with a value the shell does not know opens the popup on click
-  (the default) instead of never.
-- Settings updates for a new version run before the shell reads the config, take one backup
-  per run, and keep only the newest ten automatic backups; backups made by hand are kept.
-- When a settings update for a new version fails, only the settings it covers go back to
-  their defaults and the rest of the update goes on; the previous settings stay in the
-  backup. An update that cannot be limited to its part leaves the config file as it was and
-  the shell does not save changes until the next start.
-- Moving the bar's geometry from an older version's profiles into themes can no longer undo
-  other settings brought over from that version at the same start.
-- A profile list in the config file that cannot be read is no longer replaced by an empty
-  one when settings from an older version are brought over: the file is left as it is and
-  changes are not saved until it is fixed.
-- Settings a newer version of the shell wrote in the config file (at its top level and inside
-  its sections, such as the Google account's) are no longer dropped when an older version
-  saves it, and a config written by a newer version shows a warning under the bar.
-- NixOS: the lock screen's PAM services the module writes (`h2s-shell-password`,
-  `h2s-shell-fingerprint`, `h2s-shell-u2f`) start with the lock's marker line, as the
-  shipped Arch configs do, so a check stuck before its first module is started again after
-  8 s there too, instead of the right password doing nothing for 90 s. It takes effect at
-  the next `nixos-rebuild switch`.
-- The screensaver started by hand (or by an app) soon after the shell started now locks the
-  session at "Lock after" as it does later on; before, no idle lock came in that idle period.
-- With the screensaver started by hand (or by an app), changing the sleep time while an app
-  was blocking the sleep no longer puts the sleep off by the whole new time: it comes once the
-  block goes.
-- Buttons can be used from the keyboard: Tab reaches them (a ring shows which), Space or
-  Enter presses one, and Escape cancels a button's question; an unavailable button is passed
-  over. Tab stays inside an open side panel and inside a toast, and a Settings page scrolls to
-  the control Tab reaches.
-- A module's popup panel that declares `availableHeight` or `popupAnimating` readonly no
-  longer stops the popup giving it the other one: it keeps its own value, and the module's
-  status names the panel and the property.
-- The Arch installer: a checkout of a fork, or of another repository whose address contains
-  this one's name, is no longer taken for an install ("Already installed"), but left alone
-  with where it comes from (never its user or password); this repository is recognised in
-  any spelling of GitHub's address, but not under an SSH host alias, for which it says how
-  to go on. What is in the target is checked before anything is installed: a folder without
-  `shell.qml` that is not empty, one that cannot be read, a file or a `shell.qml` link to
-  nothing is left alone with the installer's own message instead of `git clone`'s error.
-  Without a terminal or without `sudo` it stops with its own message naming what is
-  missing; run as root it runs `pacman` without `sudo`; packages that were not installed
-  are said plainly; an `fc-list` that fails no longer ends the install silently.
-- A number setting edited by hand outside its range is used at the nearest bound, a
-  fraction in a whole-number setting rounded; one that is not a number — a number written as
-  text ("30") included — falls back to the default. The config file keeps what was written;
-  a banner under the bar names the settings, the log says so once, and Settings shows the
-  value in use with a note.
-- A screensaver that came late (a profile switched while you were away, the computer slow
-  to check what keeps the screen on) went dark at once where the screen was due off by
-  then: the screen now turns off only once the screensaver has faded in on it.
-- A run as administrator that ignored the end of its time limit and had to be killed is
-  told as "It did not end within <limit> s", not with its last output line; one that wrote
-  more than 1 MB of errors before failing is told with its last line, not an early one.
-- Settings pages that read the system read it again each time the window is shown, not only
-  when the page is first built: the sign-in rules and the lock screen's switches (a security
-  key registered meanwhile), "Remember the password", what sleep logind allows, the
-  installed VPN plugins, the installed modules and the icon themes.
-- The plus before "Add a row", "Add widget", "Add source" and "Add" is the icon font's: it
-  showed as an empty box where no font had the full-width plus. The theme drafts' pencil, the
-  bar section editor's cog, the power menu's restart and the drag handles are the icon
-  font's too, not drawn from another font.
-- The network pages watch the connection state and scan for Wi-Fi networks only while the
-  Settings window shows them, not while it is hidden.
+- **Keyboard:**
+  - Buttons work from the keyboard: Tab reaches them (a ring shows which), Space or Enter
+    presses, Escape cancels a button's question; unavailable buttons are skipped. Tab stays
+    inside an open side panel or toast, and a Settings page scrolls to the focused control.
+  - Shift+Tab moves back again in the Settings window's questions, side panels and a
+    notification's reply.
+- **Dropdowns and lists:** an open list stays attached to its control while the page
+  scrolls, closes when the control scrolls out of view, and opens upwards when there is no
+  room below. The wheel over a long list scrolls the list, not the page. A list left open
+  on a hidden page no longer takes every click.
+- **Notifications:** a long body can be read: it scrolls inside the card (6 lines in a
+  toast, 12 in the notification centre). On a slow machine, toasts move aside once when the
+  notification centre opens, not twice.
+- **Lock and idle:**
+  - "Lock before the computer sleeps" also locks for a sleep that began while the shell was
+    starting or reloading.
+  - A screensaver started by hand (or by an app) soon after the shell started now locks at
+    "Lock after"; changing the sleep time meanwhile no longer puts the sleep off by the
+    whole new time.
+  - A late screensaver no longer lets the screen go dark at once; the screen turns off only
+    after the screensaver has faded in.
+  - NixOS: the right password no longer does nothing for 90 s when a lock screen check gets
+    stuck; it is restarted after 8 s, as on Arch. Takes effect at the next
+    `nixos-rebuild switch`.
+- **Settings updates and the config file:**
+  - Settings updates take one backup per run and keep the newest ten automatic backups
+    (backups you made are kept).
+  - A failed settings update resets only the settings it covers; the rest goes on, and the
+    previous settings stay in the backup.
+  - Bringing settings over from an older version no longer undoes other settings, nor
+    replaces an unreadable profile list with an empty one.
+  - Settings written by a newer version are no longer dropped when an older version saves;
+    a config from a newer version shows a warning under the bar.
+  - A number setting edited by hand outside its range is used at the nearest bound; one that
+    is not a number (also "30" as text) falls back to the default. The file keeps what you
+    wrote; a banner under the bar and Settings name it.
+- **Themes:** deleting a theme keeps its file in `theme-backups/` beside the themes folder;
+  if it cannot be kept, nothing is deleted and the Themes page says why.
+- **Bar:** a fast wheel turn over the Music widget skips one track per notch. A widget's
+  popup mode with an unknown value in the config opens the popup on click (the default)
+  instead of never.
+- **Settings pages** that read the system (sign-in rules, lock screen switches, Remember the
+  password, sleep, VPN plugins, modules, icon themes) read it again each time the window is
+  shown. The network pages watch the connection and scan for Wi-Fi only while shown.
+- **Icons:** the plus of "Add" rows, the theme drafts' pencil, the bar section editor's cog,
+  the power menu's restart and the drag handles come from the icon font (the plus showed as
+  an empty box with some fonts).
+- **Administrator runs:** one killed at its time limit says "It did not end within <limit>
+  s"; one that failed after much error output shows its last line.
+- **Modules:** a module's popup panel that declares `availableHeight` or `popupAnimating`
+  readonly no longer stops the popup giving it the other one; the module's status names it.
+- **Arch installer:**
+  - A checkout of a fork or another repository is no longer taken for an install
+    ("Already installed"); it is left alone, saying where it comes from. Under an SSH host
+    alias it says how to go on.
+  - A target folder it cannot use (not empty, unreadable, a file, a broken link) is left
+    alone with a clear message instead of `git clone`'s error.
+  - Without a terminal or `sudo` it stops saying what is missing; run as root it runs
+    `pacman` directly; packages not installed are said plainly; a failing `fc-list` no
+    longer ends the install silently.
+- **IPC:** `settings restoreTheme <name>` brings back a deleted theme.
 
 ## [2.1.0] - 2026-11-23
 
