@@ -277,6 +277,10 @@ Item {
             border.color: _descInput.activeFocus ? Theme.textSecondary : Theme.textDisabled
             radius: Theme.field.radius
 
+            FocusRing {
+                focused: _descInput.activeFocus
+            }
+
             TextEdit {
                 id: _descInput
                 selectionColor: Theme.selection

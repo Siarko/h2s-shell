@@ -68,6 +68,10 @@ ReorderList {
                     ? Theme.fillSubtle
                     : "transparent"
 
+            FocusRing {
+                focused: _labelInput.activeFocus
+            }
+
             Text {
                 anchors { fill: parent; leftMargin: 4 }
                 verticalAlignment: Text.AlignVCenter

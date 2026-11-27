@@ -201,6 +201,80 @@ TestCase {
         _reset(control);
     }
 
+    // Another window that takes the keyboard while shown: this suite's window is no longer
+    // active, as when the user clicks another app, and active again when it goes
+    property bool _otherShown: false
+    property var _other: PanelWindow {
+        visible: suite._otherShown
+        anchors { bottom: true; right: true }
+        implicitWidth: 60
+        implicitHeight: 60
+        color: Theme.surface
+        exclusionMode: ExclusionMode.Ignore
+        WlrLayershell.layer: WlrLayer.Overlay
+        WlrLayershell.namespace: "h2s-tests"
+        WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive
+        Item { focus: true }
+    }
+
+    // The window hidden and shown again (a popup reopened, the Settings window shown again,
+    // which keeps its page), or made inactive and active again: the focus comes back, and a
+    // ring that was out after a click stays out — ordinary pointer use never shows it
+    function _returning() {
+        const window = dropdown.Window.window;
+        _reset(_controls[3]);
+        assert(input.click(dropdown, dropdown.width / 2, dropdown.height / 2), "a click on the dropdown");
+        assert(_until(() => dropdown.open && dropdown.activeFocus), "… opens it, the keyboard in it");
+        dropdown.open = false;
+        assert(_until(() => !dropdown.open) && !_lit(dropdown), "closed: the keyboard kept, no ring");
+
+        _shown = false;
+        assert(_until(() => !window.visible), "the window hidden");
+        _shown = true;
+        assert(driver.waitShown(), "… and shown again");
+        assert(_until(() => dropdown.activeFocus), "the keyboard back in the dropdown");
+        driver.wait(100);
+        assert(!_lit(dropdown), "… still no ring");
+
+        _otherShown = true;
+        assert(_until(() => !dropdown.activeFocus), "another window takes the keyboard: the dropdown loses it");
+        _otherShown = false;
+        assert(_until(() => dropdown.activeFocus), "that window gone: the keyboard back in the dropdown");
+        driver.wait(100);
+        assert(!_lit(dropdown), "… still no ring");
+
+        // Hidden with the keyboard in the dropdown, shown with it elsewhere (another page):
+        // nothing kept for the next time Tab brings it there
+        _shown = false;
+        assert(_until(() => !window.visible), "hidden again");
+        beforeButton.forceActiveFocus();
+        _shown = true;
+        assert(driver.waitShown() && _until(() => beforeButton.activeFocus), "shown with the keyboard elsewhere");
+        _reset(_controls[3]);
+        input.key("Tab");
+        assert(_until(() => _lit(dropdown)), "Tab to the dropdown then: lit");
+
+        // Lit by Tab, then the window made inactive and active again: the focus coming back
+        // with the window is not the keyboard's
+        _reset(_controls[3]);
+        input.key("Tab");
+        assert(_until(() => _lit(dropdown)), "Tab lights the dropdown's ring");
+        _otherShown = true;
+        assert(_until(() => !dropdown.activeFocus), "another window takes the keyboard");
+        _otherShown = false;
+        assert(_until(() => dropdown.activeFocus), "… and gives it back");
+        driver.wait(100);
+        assert(!_lit(dropdown), "the focus came back with the window: no ring");
+        input.key("Tab");
+        input.key("Tab");
+        assert(_until(() => _hasKeyboard(field)), "Tab on, past the next stop");
+        // Not carried to the next time the dropdown is reached by the keyboard
+        _reset(_controls[3]);
+        input.key("Tab");
+        assert(_until(() => _lit(dropdown)), "Tab to the dropdown later: lit again");
+        _reset(_controls[3]);
+    }
+
     // The dropdown's list: the keys' entry wears the ring, inside the entry
     function _listEntry() {
         _reset(_controls[3]);
@@ -237,6 +311,7 @@ TestCase {
         for (const control of _controls)
             _check(control);
         _listEntry();
+        _returning();
         _shown = false;
         finish();
     }

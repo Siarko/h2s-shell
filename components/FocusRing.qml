@@ -11,7 +11,10 @@ import qs.singletons
 // Shown while `focused` — the control has the keyboard — when the keyboard brought it there
 // (Tab, Shift+Tab, a control's own keys) or the code did, never when the pointer did: a
 // press on the control, or within the least target round it (Theme.target), that gives it
-// the focus does not light it, and a press on a control lit already puts it out. `pressed`
+// the focus does not light it, and a press on a control lit already puts it out. Nor does
+// the focus coming back with its window — shown again (a popup reopened, the Settings window
+// shown again with its page) or active again (a click back from another app): the window's
+// return is the pointer's, never a keyboard's move to the control. `pressed`
 // adds a press the control sees elsewhere (a slider's track beside its knob). `shown` draws
 // it whatever the focus: a preview (the mockups' keyboard states) or a list's keys' entry.
 //
@@ -35,6 +38,11 @@ Item {
     // that takes the focus on the click is seen as the pointer's too
     readonly property bool _pointerDown: _press.active || pressed
 
+    // The control had the focus when its window went (hidden or inactive): when it comes back
+    // with the window, it is not lit
+    property bool _returning: false
+    readonly property bool _windowActive: Window.active
+
     readonly property real _reach: inside ? 0 : Theme.focus.gap + Theme.focus.width
 
     anchors.fill: parent
@@ -42,10 +50,36 @@ Item {
     // watches it (a passive grab) and passes it on
     z: 1
 
-    onFocusedChanged: _byPointer = focused && _pointerDown
+    onFocusedChanged: {
+        if (focused) {
+            _byPointer = _returning || _pointerDown;
+            _returning = false;
+        } else if (!_windowActive) {
+            _returning = true;
+        } else {
+            // The window may say it went only after the focus has: decided once both are in
+            Qt.callLater(_settleLoss);
+        }
+    }
+    on_WindowActiveChanged: {
+        if (!_windowActive && focused)
+            _returning = true;
+        else if (_windowActive)
+            Qt.callLater(_settleReturn);
+    }
     on_PointerDownChanged: {
         if (_pointerDown && focused)
             _byPointer = true;
+    }
+
+    function _settleLoss() {
+        if (!focused && !_windowActive)
+            _returning = true;
+    }
+    // Back without the focus coming here: a later move of the keyboard to it is the keyboard's
+    function _settleReturn() {
+        if (!focused)
+            _returning = false;
     }
 
     PointHandler {
