@@ -15,14 +15,11 @@ section to the new version and date.
 
 ## [Unreleased]
 
+## [2.2.0] - 2026-11-27
+
 ### Module API
 The interface modules are written against (`qs.api`), versioned on its own
 (`Api.version`; its reference is `api/Api.qml`).
-- Dropdown (no new properties): it takes the keyboard focus on Tab and on a click, and
-  keeps it while its list is open and after it closes; Space, Enter, Down or Up open the
-  list, the arrows, Home, End, the pages and a first letter move, Enter or Space picks,
-  Escape closes. A module that keeps the typing in a field of its own beside a dropdown
-  gives that field the focus back itself.
 - 1.44: `module.ask(from, question, done)`, a question in the shell's own modal, asked
   from a module's settings page, its side panel, or a bar popup (over the screen below the
   bar, dimmed, the bar left usable): title, body, a plain list (`items`), checkboxes and
@@ -46,6 +43,13 @@ The interface modules are written against (`qs.api`), versioned on its own
   module's other files (a missing, linked-out or unbuildable one fails the module). The scope
   guards against mistakes; it is not a sandbox. A restored module backup has its migrations
   run again. `module.store.flush()` returns false when a write was due and did not happen.
+- 1.43: the id `backups` is reserved (the core's Settings page of that id): a module can no
+  longer take it.
+- 1.43: Dropdown (no new properties): it takes the keyboard focus on Tab and on a click, and
+  keeps it while its list is open and after it closes; Space, Enter, Down or Up open the
+  list, the arrows, Home, End, the pages and a first letter move, Enter or Space picks,
+  Escape closes. A module that keeps the typing in a field of its own beside a dropdown
+  gives that field the focus back itself.
 - 1.42: a module's VPN provider must have its module id as `providerId`: another id (one
   of another module, or the shell's reserved `fake`) is refused, the reason among the
   module's errors — a module that loaded first could otherwise take another module's id and
@@ -78,8 +82,6 @@ The interface modules are written against (`qs.api`), versioned on its own
 - 1.42: on a VPN card's name's line (`settings.network_vpn.vpns.card.title`, every module's
   elements) `context.provider` is null for an element of another module than the VPN's
   provider: a module's live provider object goes only to its own module's elements.
-- 1.43: the id `backups` is reserved (the core's Settings page of that id): a module can no
-  longer take it.
 - 1.42: the id `nixos` is reserved (the core's Settings page of that id): a module can no
   longer take it.
 - 1.41: a list or object inside the plain data the API hands out is a new frozen copy at
@@ -226,8 +228,6 @@ The interface modules are written against (`qs.api`), versioned on its own
   popup's colour; a theme whose secondary text is too close to its backgrounds gets a track
   moved away from them). Under the pointer the track stands out further, and the knob is
   light or dark, whichever stands out from the track. Modules' switches look the same.
-- A hidden password's dots in the shell's fields (Wi-Fi, network connections, calendar
-  accounts, modules' fields) stand apart, as on the lock screen and in the password prompt.
 - Every control shows it has the keyboard the same way: a clear ring around it (buttons,
   delete buttons, checkboxes, dropdowns, text, date and time fields, an event's
   description, a hardware source's label, the volume slider, "Add" rows), and inside the entry the keys are on in a dropdown or an "Add" list. It shows
