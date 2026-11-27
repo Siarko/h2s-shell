@@ -249,6 +249,14 @@ QtObject {
     }
 
     function _written(result) {
+        // Not put back: the next start puts back the files as they were, over anything this
+        // session would save, so saving stays held
+        if (!result.ok && result.stuck === true) {
+            _acting = false;
+            _problem = "Restoring did not finish. Changes are not saved until the shell restarts.";
+            console.warn("[Migrations] " + result.problem + ": saving held until the next start");
+            return;
+        }
         if (!result.ok) {
             _acting = false;
             releaseSaves();

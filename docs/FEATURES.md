@@ -942,7 +942,8 @@ Settings → System → Backups lists the backups of the settings file (all prof
 modules' stores and data are on the Modules page), newest first: the date, why it was made
 (before a settings update, before a restore, before updating a module from one version to
 another, made by you — marked Kept, never pruned — or an older backup with no reason), and the
-shell version that wrote it. Of the automatic ones the newest 10 are kept. A row clicked shows
+shell version that wrote it. Of the automatic ones the newest 10 are kept, and a backup made
+before a restore that put back theme files (marked Kept). A row clicked shows
 its file and what Apply would do ("Apply: 1 settings update brings it up to 2.2.0.", the parts
 whose update would fail). Apply… asks with the steps: create a new backup, load the selected
 backup, the settings update (only for a backup from an older version), restart the shell. A

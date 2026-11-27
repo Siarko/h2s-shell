@@ -109,13 +109,15 @@ Singleton {
     // The list's rows. `entries`: [{ name, text, readable, tooLarge }] — each file in the
     // config's folder with its content (`readable` false: it could not be read; `tooLarge`: over
     // maxBackupBytes, not read); `version` the running shell's; `registry` the migrations (a
-    // newer writer by its records); `moduleNames` { id: display name } of the modules there now.
-    // Names that are no backup are left out; a backup that cannot be read or is not a settings
+    // newer writer by its records); `moduleNames` { id: display name } of the modules there now;
+    // `sideFolders` the names in backup-side-files (a "-restore" backup with one is kept, as the
+    // pruner keeps it: keptForSideFiles). Names that are no backup are left out; a backup that cannot be read or is not a settings
     // file stays, as such. Newest first; equal times by name, the same each time.
     // → [{ key, name, time, date, reason, reasonText, module, kept, readable, writtenBy,
     //   versionText, newer, newerLine }]
-    function rows(entries, version, registry, moduleNames) {
+    function rows(entries, version, registry, moduleNames, sideFolders) {
         const names = moduleNames !== null && typeof moduleNames === "object" ? moduleNames : {};
+        const keptForSides = keptForSideFiles(sideFolders);
         const result = [];
         for (const entry of _list(entries)) {
             const parsed = parseName(entry?.name);
@@ -130,7 +132,7 @@ Singleton {
             result.push({
                 key: parsed.name, name: parsed.name, time: parsed.time, date: date(parsed.name),
                 reason: parsed.reason, reasonText: reasonText(parsed, moduleName), module: parsed.module,
-                kept: parsed.reason === "manual", readable: config !== null, writtenBy: writtenBy,
+                kept: parsed.reason === "manual" || keptForSides.includes(parsed.name), readable: config !== null, writtenBy: writtenBy,
                 versionText: tooLarge ? "too large" : config === null ? "can't be read" : writtenBy !== "" ? writtenBy : "version unknown",
                 newer: newer.newer === true,
                 newerLine: newerLine({ newer: newer.newer, writtenBy: writtenBy, byVersion: byVersion })

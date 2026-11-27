@@ -12,7 +12,9 @@ import qs.singletons
 // automatic ones (MigrationRules.backupsToKeep). Read-only (the test runner): nothing
 // written, no backup, nothing pruned; what the migrations made is handed back for the
 // readers only. A write that fails leaves the rest unwritten (the records last: the run
-// repeats at the next start) and saving blocked for the session.
+// repeats at the next start) and saving blocked for the session. A restore cut short is put
+// back first (ConfigSideSwap.recover); when it cannot be, the session writes nothing and saves
+// nothing (the report's `restoreUnfinished`): the next start puts it back over what it wrote.
 QtObject {
     id: root
 
@@ -102,10 +104,14 @@ QtObject {
             return false;
         _phase = phase === "afterSeed" ? "afterSeed" : "load";
         _source = _phase === "afterSeed" && typeof source === "function" ? source : null;
-        // A restore cut short (the shell ended mid-swap) is put back before anything is read
+        // A restore cut short (the shell ended mid-swap) is put back before anything is read;
+        // one that cannot be leaves its staging folder, which the next start puts back over
+        // whatever this session would write: nothing is written this session
         if (_phase === "load" && !readOnly && _swap.recover(_dir, result => {
                 if (!result.ok)
                     console.warn("[Migrations] " + result.problem);
+                if (result.stuck)
+                    root._restoreStuck = true;
                 root._begin();
             }))
             return true;
@@ -114,6 +120,8 @@ QtObject {
     }
 
     property ConfigSideSwap _swap: ConfigSideSwap {}
+    // A restore cut short could not be put back (its staging folder stays): the session is read-only
+    property bool _restoreStuck: false
 
     function _begin() {
         _sideTexts = {};
@@ -188,10 +196,12 @@ QtObject {
         _unreadable = unreadable;
         _outcome = MigrationRules.startup(registry, _raw, files, unreadable, _options());
         _backup = "";
+        if (_restoreStuck)
+            _outcome.report.restoreUnfinished = true;
         _log(_outcome);
-        if (!_outcome.write || readOnly) {
+        if (!_outcome.write || readOnly || _restoreStuck) {
             const shown = _outcome.view ?? (_outcome.write && !_outcome.report.fresh ? _outcome.config : null);
-            _finish(_outcome.readOnly, false, shown);
+            _finish(_outcome.readOnly || _restoreStuck, false, shown);
             return;
         }
         // FileView does not create folders; the backup's side files go into a folder named
@@ -463,6 +473,8 @@ QtObject {
             console.warn("[Migrations] " + entry.id + " not run: it depends on " + entry.after + ", which did not run");
         for (const id of report.held)
             console.log("[Migrations] " + id + " held: the previous settings were restored after it failed under this version");
+        if (report.restoreUnfinished === true)
+            console.warn("[Migrations] a restore cut short could not be put back: the config is not saved this session");
         if (outcome.readOnly)
             console.warn("[Migrations] " + (report.failure?.id ? report.failure.id + " failed: " : "") + (report.failure?.error ?? report.problem)
                          + ": the config is used unchanged and not saved this session");

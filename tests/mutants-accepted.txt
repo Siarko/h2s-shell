@@ -156,8 +156,6 @@ singletons/NixosApplyRules.qml	<= -> <	#1	if (full.length <= PrivilegedRules.wha
 # reason: _put's objects are only read, copied through JSON (_copy) or merged into such a copy,
 # never have a key deleted or redefined, so whether their keys are configurable is never seen
 singletons/ModuleMigrationRules.qml	true -> false	#3	Object.defineProperty(object, key, { value: value, enumerable: true, writable: true, configurable: true });
-# reason: Date.UTC takes seven numbers; the eighth, the reason part of the name, is never used
-singletons/MigrationNoticeRules.qml	8 -> 9	#1	const numbers = match.slice(1, 8).map(Number);
 # reason: the IPC report's indentation is only its layout
 singletons/MigrationNoticeRules.qml	2 -> 3	#1	}, null, 2);
 

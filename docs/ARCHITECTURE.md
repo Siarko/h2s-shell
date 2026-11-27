@@ -595,10 +595,16 @@ everything is staged in a private folder beside the config (`.config-restore.*`)
 it replaces or removes are kept with the restore's own `-restore` backup (which restores back
 to them, and which pruning then never takes), then `config.json` and each side file are
 renamed into place, the config first, each step journalled in the staging folder just
-before it is taken; a step that fails puts back everything done before it, newest first. A
-staging folder left by a crash is put back the same way at the next start, before the config
-is read; when a step of putting back fails, the staging folder and the copies stay for the
-next start, and it is logged. A linked `backup-side-files` or side folder, a link or a
+before it is taken, with whether its file was there before; a step that fails puts back
+everything done before it, newest first, from copies in the staging folder that stay until
+the end, so a putting back cut short anywhere is taken again from the start with the same
+result. The swap and each putting back hold the staging folder's lock (`flock`), so two
+shells never put one back at once, and a restore is refused while another is not put back
+yet. A staging folder left by a crash is put back the same way at the next start, before the
+config is read; when a step of putting back fails, the staging folder and the copies stay for
+the next start, it is logged, and the session saves nothing (the failure notice says
+"Restoring settings did not finish"; a restore whose own putting back failed keeps saving
+held the same way). A linked `backup-side-files` or side folder, a link or a
 non-regular file among the side files or in their places, a name that is no path inside the
 folder (`ConfigBackupRules.sideFilePlan`), and no `config.json` to back up while side files
 would be replaced refuse the whole restore, nothing changed. After a backup is written, the automatic
@@ -606,7 +612,8 @@ backups (`-migration`, `-restore`, `-module`, and those with no reason) beyond t
 (`MigrationRules.backupsKept`, by the stamp in the name) are deleted with their side files
 (`MigrationRules.backupsToKeep`). Only names of that exact pattern count; nothing else in the
 folder is touched. The backup just written is always kept; a manual backup (`-manual`) is
-never pruned and takes no place among the ten, the one just written neither. A module's own backups (its store and data, `ModuleBackups`) keep their own
+never pruned and takes no place among the ten, the one just written neither, nor a `-restore`
+backup holding side files (marked Kept in the list, `ConfigBackupRules.keptForSideFiles`). A module's own backups (its store and data, `ModuleBackups`) keep their own
 limit. The pruning is `components/ConfigBackupPruner.qml`, run after every config backup:
 the run's, a restore's and a module switch's.
 

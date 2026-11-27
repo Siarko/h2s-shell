@@ -50,14 +50,19 @@ Singleton {
     //   the failed migrations and those skipped after them), heldParts: [label], backup (the
     //   backup taken before the first run that wrote one; "" none), startDefaults (a
     //   whole-config ("*") migration failed: Start with default settings is the way out — not
-    //   for a file that could not be read or written, which the next start tries again) }
+    //   for a file that could not be read or written, which the next start tries again) }. A
+    //   report with `restoreUnfinished` (a restore cut short could not be put back: the session
+    //   saves nothing) says so in the summary
     function notice(reports, saveBlocked, version, registry) {
         const phases = [reports?.load ?? null, reports?.afterSeed ?? null].filter(report => report !== null && typeof report === "object");
         const reset = [];
         const held = [];
         let backup = "";
         let whole = false;
+        let unfinished = false;
         for (const report of phases) {
+            if (report.restoreUnfinished === true)
+                unfinished = true;
             const failed = _list(registry).find(each => each?.migrationId === report.failure?.id && typeof report.failure?.id === "string");
             if (failed && MigrationRules.parseScope(failed.scope).whole)
                 whole = true;
@@ -77,7 +82,7 @@ Singleton {
         };
         if (kind === "")
             return result;
-        result.summary = "Updating settings to " + shown + " failed";
+        result.summary = unfinished && kind === "readOnly" ? "Restoring settings did not finish" : "Updating settings to " + shown + " failed";
         if (kind === "readOnly") {
             result.body = "Changes are not saved. See Settings for details.";
             result.startDefaults = whole;

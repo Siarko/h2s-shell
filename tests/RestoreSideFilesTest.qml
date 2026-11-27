@@ -12,7 +12,10 @@ import qs.singletons
 // undoes it; the migrations run again on that give what a clean run gives. A step that fails
 // midway puts everything back (config.json and each side file as they were, no staging
 // folder left); a linked backup-side-files, a linked side folder, a link among the side files
-// and a link in a side file's place refuse the whole restore, nothing changed.
+// and a link in a side file's place refuse the whole restore, nothing changed. The swap cut
+// short after any of its steps, its putting back cut short after any of its own and taken
+// again, three puttings back at once, and a journal tampered with lose nothing; a start that
+// cannot put one back, and a restore that could not, save nothing.
 TestCase {
     id: suite
     suiteName: "RestoreSideFiles"
@@ -22,8 +25,8 @@ TestCase {
 
     property var _steps: []
 
-    function _then(description, condition, action) {
-        _steps.push({ description: description, condition: condition, action: action });
+    function _then(description, condition, action, timeoutMs) {
+        _steps.push({ description: description, condition: condition, action: action, timeoutMs: timeoutMs ?? 15000 });
     }
 
     property Timer _clock: Timer {
@@ -43,7 +46,7 @@ TestCase {
             try {
                 ready = step.condition();
             } catch (error) {}
-            if (!ready && waited < 15000)
+            if (!ready && waited < step.timeoutMs)
                 return;
             waited = 0;
             suite._steps.shift();
@@ -192,6 +195,8 @@ TestCase {
         _changedSince();
         _pruning();
         _links();
+        _cuts();
+        _stuckRestore();
         _clock.start();
     }
 
@@ -344,8 +349,9 @@ TestCase {
         let again = null;
         _then("the crash case's folder", () => true, () => {
             backup = _partialFolder(dir, 3);
-            // Stopped after config.json, a/new.json, a/x.json and c/made.json
-            restorer = _restore(dir, backup, [_otherFiles], each => each._swap.stopAfter = 3);
+            // Stopped after config.json, a/new.json, a/x.json and c/made.json: the journal, the
+            // copies, the copies kept, config.json's line and step, then a line and a step each
+            restorer = _restore(dir, backup, [_otherFiles], each => each._swap.stopAfter = 11);
         });
         _then("the crash case cut short", () => restorer.result !== null, () => {
             assertEqual(restorer.result.ok, false, "cut short: not done");
@@ -354,11 +360,21 @@ TestCase {
             // a/ cannot take its file back: the first putting back fails
             locked = _run(["chmod", "500", "--", dir + "/a"]);
         });
+        let cutText = "";
         _then("a locked", () => locked.lines !== null, () => {
-            start = _open(dir, []);
+            cutText = _read(dir + "/config.json");
+            // A migration that would write config.json and a theme file
+            start = _open(dir, [_accentTheme]);
             start.load();
         });
         _then("the start after the cut", () => start.reads === 1 && !start.migrationBusy, () => {
+            assertEqual(start.migrationReadOnly, true, "not put back: the session saves nothing");
+            assertEqual(start.migrationReports.load?.restoreUnfinished, true, "not put back: the report says so");
+            assertEqual(_read(dir + "/config.json"), cutText, "not put back: the migrations wrote nothing");
+            assertEqual(_read(dir + "/themes/accent.json"), "", "not put back: … no side file either");
+            const notice = MigrationNoticeRules.notice(start.migrationReports, start.migrationReadOnly, "2.2.0", [_accentTheme]);
+            assertEqual(notice.kind + "|" + notice.summary + "|" + notice.body, "readOnly|Restoring settings did not finish|Changes are not saved. See Settings for details.",
+                        "not put back: the failure notice says it");
             state = _leftovers(dir);
         });
         _then("the folder after a putting back that failed", () => state.lines !== null, () => {
@@ -447,6 +463,107 @@ TestCase {
             assert(listing.lines.includes(withSides), "pruning: a restore's backup with side files kept, however old");
             assert(!listing.lines.includes(without), "pruning: one without them pruned as before");
             assertEqual(listing.lines.filter(name => name.endsWith("-migration")).length, 10, "pruning: it takes no place among the ten");
+        });
+    }
+
+    // ---- Cut short anywhere: nothing lost ----
+    // A shell script on a scratch folder: config.json and themes/a.json replaced, themes/new.json
+    // made, themes/b.json removed. The swap stopped after each of its steps, then the putting
+    // back stopped after each of its own and run again: the folder as before (or, stopped once
+    // done, as the whole swap leaves it), no staging folder left. Three puttings back at once
+    // (each on a cut swap), the same. A journal line naming a path outside, a `keep` that is
+    // no name, a copy gone: refused, the staging folder kept, nothing changed. "FAIL …" a line
+    // each; "steps N" the swap's steps, "combos N" the cuts tried, "end"
+    readonly property string _cutsDriver: "swap=$1; rec=$2; base=$3; combos=0; keep=config.json.bak-2026-01-01T00-00-00-000Z-restore\n"
+        + "say() { echo \"FAIL $*\"; }\n"
+        + "setup() { d=$base/$1; rm -rf -- \"$d\"; mkdir -p -- \"$d/themes\"; echo cfg-now > \"$d/config.json\"; echo a-now > \"$d/themes/a.json\"; echo b-now > \"$d/themes/b.json\"; stg=$(mktemp -d \"$d/.config-restore.XXXXXX\"); echo cfg-then > \"$stg/config.json\"; mkdir -p -- \"$stg/new/themes\"; echo a-then > \"$stg/new/themes/a.json\"; echo new-then > \"$stg/new/themes/new.json\"; }\n"
+        + "state() { (cd -- \"$1\" && find . -path './.config-restore.*' -prune -o -type f -print | sort | while IFS= read -r f; do echo \"$f=$(cat -- \"$f\")\"; done); }\n"
+        + "stages() { ls -A -- \"$1\" | grep -c '^[.]config-restore[.]'; }\n"
+        + "doswap() { sh -c \"$swap\" sh \"$d\" \"$stg\" \"$keep\" \"$1\" w:themes/a.json w:themes/new.json r:themes/b.json 2>/dev/null; }\n"
+        + "dorec() { sh -c \"$rec\" sh \"$d\" \"$1\" 2>/dev/null; }\n"
+        + "setup whole; before=$(state \"$d\"); doswap \"\"; [ $? = 0 ] || say \"the whole swap failed\"; after=$(state \"$d\")\n"
+        + "[ \"$after\" != \"$before\" ] || say \"the whole swap changed nothing\"\n"
+        + "k=1\n"
+        + "while [ $k -lt 40 ]; do\n"
+        + "  setup cut; doswap $k; code=$?\n"
+        + "  if [ $code = 0 ]; then echo \"steps $((k - 1))\"; break; fi\n"
+        + "  [ $code = 3 ] || say \"swap cut at $k: exit $code\"\n"
+        + "  if [ -f \"$stg/done\" ]; then expected=$after; else expected=$before; fi\n"
+        + "  j=1\n"
+        + "  while [ $j -lt 40 ]; do\n"
+        + "    setup cut; doswap $k; dorec $j; rc=$?; dorec \"\"; rc2=$?; combos=$((combos + 1))\n"
+        + "    [ \"$(state \"$d\")\" = \"$expected\" ] || say \"swap cut at $k, putting back cut at $j: $(state \"$d\" | tr '\\n' ' ')\"\n"
+        + "    [ $rc2 = 0 ] && [ \"$(stages \"$d\")\" = 0 ] || say \"swap cut at $k, putting back cut at $j: exit $rc2, staging folders $(stages \"$d\")\"\n"
+        + "    [ $rc = 3 ] || break\n"
+        + "    j=$((j + 1))\n"
+        + "  done\n"
+        + "  k=$((k + 1))\n"
+        + "done\n"
+        + "echo \"combos $combos\"\n"
+        + "i=0; bad=0\n"
+        + "while [ $i -lt 10 ]; do\n"
+        + "  setup together; doswap 8; dorec \"\" & dorec \"\" & dorec \"\" & wait\n"
+        + "  [ \"$(state \"$d\")\" = \"$before\" ] && [ \"$(stages \"$d\")\" = 0 ] || bad=$((bad + 1))\n"
+        + "  i=$((i + 1))\n"
+        + "done\n"
+        + "[ $bad = 0 ] || say \"three putting back at once: $bad of 10 lost or kept something\"\n"
+        + "for tamper in path keep copy; do\n"
+        + "  setup \"tamper-$tamper\"; doswap 7; st=$stg; echo outside > \"$base/outside.json\"; mkdir -p -- \"$base/x\"; echo x > \"$base/x/file\"\n"
+        + "  case $tamper in\n"
+        + "    path) echo 'w:../outside.json' >> \"$st/entries\"; echo 'w0:../outside.json' >> \"$st/moved\";;\n"
+        + "    keep) echo '../../x' > \"$st/keep\";;\n"
+        + "    copy) rm -f -- \"$st/old/themes/a.json\";;\n"
+        + "  esac\n"
+        + "  dorec \"\"; rc=$?\n"
+        + "  [ $rc = 1 ] && [ \"$(stages \"$d\")\" = 1 ] || say \"$tamper: exit $rc, staging folders $(stages \"$d\")\"\n"
+        + "  [ \"$(cat -- \"$base/outside.json\")\" = outside ] && [ -f \"$base/x/file\" ] || say \"$tamper: something outside changed\"\n"
+        + "  [ \"$(cat -- \"$d/themes/a.json\" 2>/dev/null)\" = a-then ] || say \"$tamper: a side file changed\"\n"
+        + "done\n"
+        + "echo end\n"
+
+    property Component _swapComponent: Component {
+        ConfigSideSwap {}
+    }
+
+    function _cuts() {
+        let run = null;
+        _then("the cuts' script", () => true, () => {
+            const swap = _swapComponent.createObject(suite);
+            run = _run(["sh", "-c", _cutsDriver, "sh", swap._swapScript, swap._recoverScript, _scratch + "/cuts"]);
+        });
+        _then("the cuts tried", () => run.lines !== null, () => {
+            assertEqual(run.lines.filter(line => line.startsWith("FAIL ")).slice(0, 5).join("\n"), "", "cuts: nothing lost, nothing left, nothing outside touched");
+            assert(run.lines.includes("steps 12"), "cuts: every step of the swap cut: " + run.lines.filter(line => line.startsWith("steps")).join(","));
+            const combos = Number((run.lines.find(line => line.startsWith("combos ")) ?? "combos 0").slice(7));
+            assert(combos >= 50, "cuts: each putting back cut at each of its steps: " + combos);
+            assertEqual(run.lines[run.lines.length - 1], "end", "cuts: the script ran to its end");
+        }, 60000);
+    }
+
+    // ---- A restore whose own putting back failed: saving stays held ----
+    property Component _noticeComponent: Component {
+        MigrationFailureNotice {
+            property int releases: 0
+            logging: false
+            notifier: QtObject {
+                function send(summary, options) {
+                    return null;
+                }
+            }
+            releaseSaves: () => releases++
+        }
+    }
+
+    function _stuckRestore() {
+        _then("a restore not put back", () => true, () => {
+            const notice = _noticeComponent.createObject(suite);
+            notice._acting = true;
+            notice._written({ ok: false, problem: "could not put back themes/a.json: kept in .config-restore.x", backup: "", stuck: true });
+            assertEqual(notice.releases, 0, "stuck restore: saving stays held");
+            assertEqual(notice.problem, "Restoring did not finish. Changes are not saved until the shell restarts.", "stuck restore: said");
+            notice._acting = true;
+            notice._written({ ok: false, problem: "could not write config.json: nothing restored", backup: "", stuck: false });
+            assertEqual(notice.releases, 1, "failed restore put back: saving again");
         });
     }
 

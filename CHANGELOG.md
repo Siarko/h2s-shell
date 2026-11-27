@@ -115,7 +115,8 @@ The interface modules are written against (`qs.api`), versioned on its own
   A backup from before a settings update also brings back the theme files that update
   changed, and removes the ones it made unless changed since (as does Restore previous
   settings); what it replaces is kept with the backup it makes first, which is then never
-  pruned.
+  pruned (marked Kept). One cut short is put back at the next start; until it can be, the
+  settings are not saved ("Restoring settings did not finish").
   A module update or version switch now backs up the settings first. IPC `settings backups`
   and `settings restoreBackup <name>`.
 - Backups: Make a backup now saves a backup of the current settings, kept until you delete

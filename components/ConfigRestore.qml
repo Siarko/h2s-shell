@@ -80,7 +80,7 @@ QtObject {
     }
 
     // The backup at `backupPath` written back as config.json with `held` held under this
-    // version. `done({ ok, problem, backup })` — `backup` the copy of the file replaced.
+    // version. `done({ ok, problem, backup, stuck })` — `backup` the copy of the file replaced.
     // false when it cannot start (read-only, one runs, no backup named)
     function restore(backupPath, held, done) {
         if (_running || readOnly || _file === "" || typeof backupPath !== "string" || backupPath === "")
@@ -321,7 +321,7 @@ QtObject {
             const keep = root._backup !== "" ? root._backup.substring(root._backup.lastIndexOf("/") + 1) : "";
             const started = root._swap.swap(root._dir, staging, keep, root._sideEntries, result => {
                 root._staging = "";
-                root._finish(result.ok, result.problem);
+                root._finish(result.ok, result.problem, result.stuck === true);
             });
             if (!started) {
                 root._dropStaging();
@@ -342,9 +342,11 @@ QtObject {
 
     property Process _stagingRemover: Process {}
 
-    function _finish(ok, problem) {
+    // `stuck`: a failed swap could not put back what it had done (its staging folder stays for
+    // the next start to put back, over anything saved meanwhile)
+    function _finish(ok, problem, stuck) {
         const done = _done;
-        const result = { ok: ok, problem: problem, backup: _backup };
+        const result = { ok: ok, problem: problem, backup: _backup, stuck: stuck === true };
         _running = false;
         _reading = "";
         _done = null;

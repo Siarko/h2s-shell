@@ -233,7 +233,7 @@ Item {
                 Layout.fillWidth: true
                 Layout.topMargin: 4
                 wrapMode: Text.WordWrap
-                text: "Automatic backups: the newest " + MigrationRules.backupsKept + " are kept."
+                text: "Automatic backups: the newest " + MigrationRules.backupsKept + " are kept, and those marked Kept."
                 textFormat: Text.PlainText
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeSmall

@@ -61,8 +61,10 @@ QtObject {
             return;
         }
         _again = false;
-        // Each file with its size: one too large is not read
-        _lister.command = ["find", "-H", dir, "-mindepth", "1", "-maxdepth", "1", "-type", "f", "-printf", "%s\\t%f\\n"];
+        // Each file with its size (one too large is not read), then each folder in
+        // backup-side-files (none when it is a link)
+        _lister.command = ["sh", "-c", "find -H \"$1\" -mindepth 1 -maxdepth 1 -type f -printf 'f %s\\t%f\\n' || exit 1; side=\"$1/backup-side-files\"; "
+            + "if [ -d \"$side\" ] && [ ! -L \"$side\" ]; then find \"$side\" -mindepth 1 -maxdepth 1 -type d -printf 'd %f\\n' 2>/dev/null; fi; exit 0", "sh", dir];
         _lister.running = true;
     }
 
@@ -85,7 +87,12 @@ QtObject {
             }
             const entries = [];
             const sizes = {};
-            for (const line of _names.text.split("\n")) {
+            const lines = _names.text.split("\n");
+            const sideFolders = lines.filter(line => line.startsWith("d ")).map(line => line.slice(2));
+            for (const listed of lines) {
+                if (!listed.startsWith("f "))
+                    continue;
+                const line = listed.slice(2);
                 const tab = line.indexOf("\t");
                 const name = line.slice(tab + 1);
                 if (tab < 0 || !ConfigBackupRules.parseName(name).ok)
@@ -103,7 +110,7 @@ QtObject {
             try {
                 names = root.moduleNames() ?? {};
             } catch (error) {}
-            root.rows = ConfigBackupRules.rows(entries, root.version, root.registry, names);
+            root.rows = ConfigBackupRules.rows(entries, root.version, root.registry, names, sideFolders);
             root.known = true;
         }
     }

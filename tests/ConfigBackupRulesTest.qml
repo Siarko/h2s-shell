@@ -198,6 +198,10 @@ TestCase {
         assert(!large.readable && large.versionText === "too large", "rows: a file too large: not read, said");
         assertEqual(by("2026-01-10").reasonText, "Before a settings update", "rows: before a settings update");
         assertEqual(by("2026-01-05").reasonText, "Made by you", "rows: manual");
+        const sided = rules.rows(entries, "2.2.0", [_rename], {}, ["config.json.bak-2026-01-14T18-02-11-000Z-restore", "config.json.bak-2026-01-10T08-41-02-000Z-migration"]);
+        assertEqual(sided.filter(row => row.kept).map(row => row.name.slice(16, 26)).join(","), "2026-01-14,2026-01-05",
+                    "rows: a restore's backup with side files kept (as pruning keeps it), the manual one; a migration's with side files not");
+        assertEqual(rows.filter(row => row.kept).length, 1, "rows: no side folders listed: the manual one alone kept");
         assert(by("2026-01-05").kept && !by("2026-01-10").kept && !by("2025-12-20").kept, "rows: only a manual one kept");
         assertEqual(by("2025-12-20").reasonText, "Older backup, reason not recorded", "rows: an older one, no reason");
         assertEqual(by("2025-12-20").versionText, "version unknown", "rows: no version recorded");
