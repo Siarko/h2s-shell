@@ -946,10 +946,14 @@ TestCase {
             const root = _scratch + "/linked/h2s-shell/module-data";
             assertEqual(_dataHost.handle("good").dataDirectory, root + "/good", "a data directory that failed: made again when the module is turned on");
             assertEqual(_dataHost.statuses.find(status => status.id === "good")?.warnings.length, 0, "… the warning gone");
-            // Removed while the shell runs: made again at the next load
-            _sh("rm -r \"$1/good\"", [root], () => suite._dataHost.load(_dirs(["good"]), {}));
+            // Removed while the shell runs: made again at the next load. The pause widens the
+            // window before the load: a wait that does not wait for the load itself passes
+            // at once, on the statuses before it, and fails the count below every run
+            suite._loadsBefore = _dataHost.loadCount;
+            _sh("rm -r \"$1/good\"; sleep 0.5", [root], () => suite._dataHost.load(_dirs(["good"]), {}));
         });
-        _then("good loads again", () => _dataHost.statuses.length > 0 && _dataHost.statuses.every(status => status.state !== "pending") && !_dataHost._makingData, () => {
+        _then("good loads again", () => _dataHost.loadCount > _loadsBefore && _dataHost.statuses.length > 0 && _dataHost.statuses.every(status => status.state !== "pending") && !_dataHost._makingData, () => {
+            assertEqual(_dataHost.loadCount, _loadsBefore + 1, "the load after the removal ran before its directory is read");
             _sh("stat -c '%a' \"$1/linked/h2s-shell/module-data/good\"", [_scratch], (code, output) => suite._exists = output.trim());
         });
         _then("the removed directory's mode is read", () => _exists !== null, () => {
@@ -1544,6 +1548,7 @@ TestCase {
     property var _goodState: null
     property var _dataHost: null
     property bool _switchedRoot: false
+    property int _loadsBefore: 0
     property string _testDataDirectory: ""
     // The suite's own host while a second one, in test mode, is `host`
     property var _mainHost: null

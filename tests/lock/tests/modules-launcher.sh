@@ -166,5 +166,7 @@ make_module "$home_modules/delta" delta
 check "modules rediscover: started" test -z "$(shell_ipc modules rediscover)"
 check_within 15 "… the module put there while the shell runs is found, off until confirmed" module_state_is delta unconfirmed
 check "… without a restart" test "$SHELL_PID" = "$fourth"
-check "… the others still loaded" module_states_are "explicit: loaded, alpha: loaded, beta: loaded, delta: unconfirmed, gamma: loaded, beta-copy: duplicate, zeta: loaded"
+# The others load again too, a moment after delta: a load makes their data directories again
+# first (a run of its own), which delta, off, does not wait for
+check_within 15 "… the others still loaded" module_states_are "explicit: loaded, alpha: loaded, beta: loaded, delta: unconfirmed, gamma: loaded, beta-copy: duplicate, zeta: loaded"
 check "the supervisor is still the first one" kill -0 "$SUPERVISOR_PID"

@@ -36,6 +36,7 @@ TestCase {
         "settings-row": "a row the controls checked here sit in",
         "status-pill": "a bar cell, not reached by the keyboard",
         "switch-row": "its switch is not reached by the keyboard",
+        "system-controlled-mark": "a mark shown beside a control; it takes no focus",
         "toggle-switch": "not reached by the keyboard"
     })
 
