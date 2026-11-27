@@ -50,26 +50,6 @@ Flickable {
     }
     readonly property var rebuildLine: NixosRebuildViewRules.pageLine(_rebuildState, _rebuild?.times ?? null, _now)
     readonly property bool undoOffered: NixosRebuildViewRules.canUndo(_rebuildState)
-    // The hibernation delay, the first setting kept in the shell's file (Idle's change of it,
-    // handed in by a suite): what the system can do for it, what is in force, a run, Undo; the
-    // time picked in Behaviour → When away
-    property var delayCapability: Idle.hibernateDelayCapability
-    property var delayInForce: Idle.hibernateDelayInForce
-    property string delayBusy: Idle.hibernateDelayBusy
-    property bool delayUndoable: Idle.hibernateDelayUndoable
-    property int delayPicked: Profiles.value("lockscreen.hibernateTimeout") ?? 0
-    property var applyDelay: (request, flow) => Idle.applyHibernateDelay(request, flow)
-    property var undoDelay: flow => Idle.undoHibernateDelay(flow)
-    property var readDelay: () => Idle.readHibernateDelay()
-    readonly property bool delayShown: delayCapability?.mode === "declare"
-    // What NixOS has in force, as the delay HibernateRules reads
-    readonly property var _delayInForce: delayInForce?.state === "set" ? { state: "set", seconds: delayInForce.value }
-        : delayInForce?.state === "default" ? { state: "unset" } : { state: "unknown" }
-    readonly property var delayOffer: HibernateRules.delayOffer({
-        delay: _delayInForce, picked: delayPicked, differs: HibernateRules.delayDiffers(_delayInForce, delayPicked),
-        capability: delayCapability, hint: "", inForce: delayInForce, busy: delayBusy, undoable: delayUndoable
-    }, seconds => Format.duration(seconds))
-    readonly property bool _delayUndoShown: delayShown && delayOffer.undo.shown
     // What the last Create said ("" nothing)
     property string createNote: ""
     property bool copied: false
@@ -80,7 +60,6 @@ Flickable {
 
     function lookAgain() {
         root.configuration?.read();
-        root.readDelay?.();
     }
 
     function create() {
@@ -413,65 +392,11 @@ Flickable {
             }
             SmallButton {
                 objectName: "nixos:undo"
-                visible: root.undoOffered && !root._delayUndoShown
+                visible: root.undoOffered
                 label: "Undo"
                 fontSize: Theme.fontSizeSmall
                 tooltip: "Puts back the shell's previous settings and rebuilds"
                 onClicked: root.flow.undo()
-            }
-        }
-        // The first setting kept in the shell's file: the hibernation delay, with Apply (a
-        // rebuild) and Undo, or the configuration's own line that wins over it: then Apply is
-        // disabled and marked as the system's
-        SectionTitle {
-            objectName: "nixos:delayTitle"
-            visible: root.delayShown
-            Layout.fillWidth: true
-            Layout.topMargin: 22
-            text: "Hibernate after"
-        }
-        Hint {
-            visible: root.delayShown
-            text: "From Behaviour → When away, shown here as the example of a setting applied through NixOS."
-        }
-        RowLayout {
-            objectName: "nixos:delay"
-            visible: root.delayShown
-            Layout.fillWidth: true
-            Layout.topMargin: 8
-            spacing: 8
-            Label {
-                objectName: "nixos:delayLine"
-                Layout.fillWidth: true
-                color: root.delayOffer.controlled ? Theme.textMuted : Theme.textPrimary
-                text: root.delayOffer.line !== "" ? root.delayOffer.line
-                    : "In force: " + HibernateRules.delayWords(root._delayInForce, seconds => Format.duration(seconds)) + "."
-            }
-            PrivilegedMark {
-                visible: root.delayOffer.apply.button === "plain" && !root.delayOffer.controlled
-            }
-            SystemControlledMark {
-                objectName: "nixos:delayControlled"
-                shown: root.delayOffer.controlled
-            }
-            SmallButton {
-                objectName: "nixos:delayApply"
-                visible: root.delayOffer.apply.button === "plain"
-                label: root.delayOffer.apply.label
-                kind: "save"
-                available: root.delayOffer.apply.available
-                fontSize: Theme.fontSizeSmall
-                tooltip: root.delayOffer.controlled ? "" : "Rebuilds NixOS: a build first, then your password"
-                onClicked: root.applyDelay(root.delayOffer.apply.request, root.flow)
-            }
-            SmallButton {
-                objectName: "nixos:delayUndo"
-                visible: root._delayUndoShown
-                label: root.delayOffer.undo.label
-                available: root.delayOffer.undo.available
-                fontSize: Theme.fontSizeSmall
-                tooltip: "Puts back the shell's previous value and rebuilds"
-                onClicked: root.undoDelay(root.flow)
             }
         }
         Hint {

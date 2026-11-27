@@ -821,10 +821,17 @@ TestCase {
         page.delayCapability = capabilityOf({ [kind]: { mode: "declare", undo: true, inForce: true } });
         page.delayInForce = inForce({ from: "/srv/nixos-config", elsewhere: "/srv/nixos-config" });
         assertEqual(named("hibernateDelayLine").text, "In force: 2 h.", "declared, set by the configuration: only the value");
-        assertEqual([named("hibernateControlled").shown, page._delayOffer.apply.button, apply.available].join(" "), "true plain false",
-                    "… the system's mark beside a disabled Apply");
+        assertEqual([named("hibernateTimeout").available, named("hibernateTimeoutControlled").shown, page._delayOffer.apply.button, apply.available,
+                     named("hibernateControlled").shown].join(" "), "false true plain false false",
+                    "… sleep on: the time (the system's delay then) disabled with the system's mark beside it, Apply disabled, one mark");
+        assertEqual(named("hibernateTimeoutControlled").tip, "This setting is controlled by your system configuration", "… the mark's tooltip");
+        _away({ "lockscreen.hibernateEnabled": true, "lockscreen.hibernateTimeout": 10800 });
+        assertEqual([named("hibernateTimeout").available, named("hibernateTimeoutControlled").shown, named("hibernateControlled").shown, apply.available].join(" "),
+                    "true false true false", "… sleep off: the time the shell's own, editable; the mark beside the disabled Apply");
+        _away({ "lockscreen.hibernateEnabled": true, "lockscreen.sleepEnabled": true, "lockscreen.hibernateTimeout": 10800 });
         page.delayInForce = inForce({ from: "/srv/nixos-config/h2s-shell.json" });
-        assertEqual([named("hibernateControlled").shown, apply.available].join(" "), "false true", "the shell's own in force: no mark, Apply");
+        assertEqual([named("hibernateControlled").shown, named("hibernateTimeoutControlled").shown, named("hibernateTimeout").available, apply.available].join(" "),
+                    "false false true true", "the shell's own in force: no mark, the time editable, Apply");
         page.delayInForce = inForce();
         page.delayCapability = IntegrationRules.unknownCapability();
         assertEqual(named("hibernateDelayLine").text, "Picked 3 h; the system now hibernates after 2 h.",

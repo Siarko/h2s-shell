@@ -70,6 +70,9 @@ Flickable {
         delay: _hibernation.delay, picked: _hibernate.after, differs: _delayDiffers, capability: delayCapability, hint: delayHint,
         inForce: delayInForce, busy: delayBusy, undoable: delayUndoable
     }, seconds => Format.duration(seconds))
+    // With sleep on the time is the system's delay: set by the system's configuration itself,
+    // it is not the shell's to change (disabled, the system's mark beside it)
+    readonly property bool _delayControlled: _config.sleepAfter > 0 && _delayOffer.controlled === true
     readonly property var _monitorMap: _edited("lockscreen.monitorIdle")
     // The map comes from a profile above, or the default: its cards' choices dimmed
     readonly property bool _mapInherited: !("lockscreen.monitorIdle" in Profiles.effectiveGlobals)
@@ -581,12 +584,21 @@ Flickable {
             Reveal {
                 objectName: "hibernateTimes"
                 open: root._hibernateOn && root._hibernateUnavailable === ""
-                SchemaSettingEditor {
-                    objectName: "hibernateTimeout"
-                    key: "lockscreen.hibernateTimeout"
-                    editIndex: root.editIndex
-                    inline: true
-                    label: AwayViewRules.hibernatePillsLabel(root._hibernate.from)
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+                    SchemaSettingEditor {
+                        objectName: "hibernateTimeout"
+                        key: "lockscreen.hibernateTimeout"
+                        editIndex: root.editIndex
+                        inline: true
+                        available: !root._delayControlled
+                        label: AwayViewRules.hibernatePillsLabel(root._hibernate.from)
+                    }
+                    SystemControlledMark {
+                        objectName: "hibernateTimeoutControlled"
+                        shown: root._delayControlled
+                    }
                 }
                 Hint {
                     objectName: "hibernateLine"
@@ -608,9 +620,10 @@ Flickable {
                         Layout.fillWidth: true
                     }
                     // Set by the system's configuration: Apply disabled, the mark beside it
+                    // unless it stands beside the time already
                     SystemControlledMark {
                         objectName: "hibernateControlled"
-                        shown: root._delayOffer.controlled === true
+                        shown: root._delayOffer.controlled === true && !root._delayControlled
                     }
                     SmallButton {
                         objectName: "hibernateApply"

@@ -2,7 +2,7 @@ description: Settings → System → NixOS and the rebuild side panel, on stand-
 state: not-connected          No configuration found: Choose folder…, Look again
 state: found-not-in-force     A classic configuration.nix, not in git: the one-time setup and the line
 state: home-folder            A flake in the home folder: the one-time warning, Use it
-state: ready                  Connected (a flake in git): the facts, a delay picked 3 h, in force 1 h, Apply
+state: ready                  Connected (a flake in git): the facts, the generations line
 state: apply-announcement     The Apply's modal "Rebuild NixOS"
 state: building               The build as the user, 41 s, "Building 4 of 7", Cancel build
 state: built-apply-now        "Built in 1 min 12 s." with Apply now
@@ -12,6 +12,5 @@ state: applied                Generation 15, Undo offered
 state: build-failed           An error in the configuration (a classic one at /etc/nixos)
 state: applied-with-errors    Applied, but a unit did not start again
 state: cancelled              Cancel build pressed
-state: set-in-configuration   The configuration sets the delay: its value, Apply disabled, the NixOS mark
 state: undo-announcement      Undo's modal "Undo the last Apply"
 state: undo-building          Undo's build in the same panel

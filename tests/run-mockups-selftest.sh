@@ -431,7 +431,7 @@ ringed=$("$LOCKTEST_MAGICK" compare -metric AE "$work/modal-all-focus.png" "$wor
 check "$([ -s "$work/modal-all-focus.png" ] && awk -v n="${ringed:-0}" 'BEGIN { exit !(n > 10) }'; echo $?)" "settings-modal's focus-button cell: the same question as enable-module's, with the ring ($ringed pixels apart)"
 
 echo "on screen: the mockups in all their states"
-for entry in components/pill:4 components/small-button:8 components/status-pill:5 components/system-controlled-mark:3 components/toggle-switch:5 views/nixos-page:16 views/settings-modal:10; do
+for entry in components/pill:4 components/small-button:8 components/status-pill:5 components/system-controlled-mark:3 components/toggle-switch:5 views/nixos-page:15 views/settings-modal:10; do
     mockup=${entry%%:*} count=${entry#*:}
     on_screen_cells "all-${mockup#*/}" mockups "$mockup"
     labels=$(tail -n +2 <<< "$cells_answer" | sed 's/ — .*//')

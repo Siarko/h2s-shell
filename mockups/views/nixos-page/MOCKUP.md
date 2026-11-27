@@ -22,7 +22,7 @@ them from the first state on (no state simulates a pointer).
 
 not-connected · found-not-in-force · home-folder · ready · apply-announcement · building ·
 built-apply-now · waiting-password · switching · applied · build-failed ·
-applied-with-errors · cancelled · set-in-configuration · undo-announcement · undo-building
+applied-with-errors · cancelled · undo-announcement · undo-building
 
 ## Compared with the plan
 
@@ -32,15 +32,10 @@ applied-with-errors · cancelled · set-in-configuration · undo-announcement ·
   plan did not have; the panel's time counts from the click, not from the build.
 - **No "Locked during the build"**: the run no longer stops on a lock; a build goes on, and
   only the Apply now click starts the root run.
-- **The delay's place**: the plan's page showed the times as pills and "In force: 1 h" with
-  Apply/Undo and a hint; the implemented page shows one line ("Picked 3 h; the system now
-  hibernates after 1 h. Apply rebuilds NixOS.") with Apply. The times are picked in
-  Behaviour → When away. Not connected, the page shows no delay section and no line to copy:
-  When away keeps the copy line.
-- **Set in your configuration**: only "In force: 10 min." (muted), Apply disabled and the
-  system-controlled mark (`SystemControlledMark`: the NixOS logo, its tooltip "This setting
-  is controlled by your system configuration") beside it; no line explaining it. The
-  tooltip itself is shown in `components/system-controlled-mark`.
+- **No "Hibernate after" section**: the page shows no setting of its own; the hibernation
+  delay is applied through NixOS from Behaviour → When away (its time disabled, with the
+  system-controlled mark, when the configuration sets the delay itself). The run's states
+  here start from that Apply, through the window's flow.
 - **Applied, with errors**: "Applied, with errors: some services did not start again." / "The
   new values are in force." — the failed unit is not named in the box (it is in the output's
   lines), and no journalctl hint.
@@ -49,8 +44,7 @@ applied-with-errors · cancelled · set-in-configuration · undo-announcement ·
 - **The build's lines**: nix's own lines as the rules keep them (the derivations, "building
   '…'"), not the plan's "copying … to a scratch folder" and "evaluating …" lines;
   Output's caption is "nix's last lines" for a failed build only.
-- **Undo**: on the page it sits on the delay's line ("Undo puts back the shell's previous
-  value and rebuilds NixOS.") once an Apply ran, not beside Apply.
+- **Undo**: on the page it sits on the rebuild's line once an Apply ran, not beside Apply.
 - **Generation**: "Applied in 9 s. Generation 15 is in use." — the time is the root run's
   from the Apply now click.
 - **The configuration's folder**: the button beside "NixOS configuration" is "Select

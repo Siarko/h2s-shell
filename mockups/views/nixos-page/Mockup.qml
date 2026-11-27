@@ -32,8 +32,7 @@ import qs.mockups.kit
 //   found-not-in-force   a classic configuration.nix at /etc/nixos, not in git, root's: the
 //                        one-time setup, Create with the privileged mark, the line, Copy
 //   home-folder          a flake in the home folder: the one-time warning, Use it
-//   ready                connected (a flake at /srv/nixos-config, in git): the facts, the
-//                        hibernation delay picked 3 h, in force 1 h, Apply
+//   ready                connected (a flake at /srv/nixos-config, in git): the facts
 //   apply-announcement   the Apply's modal "Rebuild NixOS"
 //   building             the build as the user, 41 s, "Building 4 of 7", Cancel build
 //   built-apply-now      "Built in 1 min 12 s." with Apply now (no prompt before that click)
@@ -43,8 +42,6 @@ import qs.mockups.kit
 //   build-failed         an error in the configuration (a classic one at /etc/nixos)
 //   applied-with-errors  a unit did not start again
 //   cancelled            Cancel build pressed
-//   set-in-configuration the configuration sets the delay itself: the value in force, Apply
-//                        disabled, the system-controlled mark beside it
 //   undo-announcement    Undo's modal "Undo the last Apply"
 //   undo-building        Undo's build in the same panel
 MockupWindow {
@@ -65,8 +62,6 @@ MockupWindow {
     // When each run's build starts (ms), as the cell's clock reads it
     readonly property real startMs: root.now.getTime()
     readonly property string fileBefore: JSON.stringify({ version: 1, idle: { hibernateDelay: 3600 } }, null, 2) + "\n"
-    readonly property var capability: ({ mode: "declare", trial: false, undo: true, inForce: true, anyway: false, reason: "", known: true })
-    readonly property var notConnectedCapability: ({ mode: "copy", trial: false, undo: false, inForce: true, anyway: false, reason: "", known: true })
 
     // A configuration's reading → NixosConfigRules.reading's shape, with its facts
     function reading(more) {
@@ -128,24 +123,20 @@ MockupWindow {
             : name === "found-not-in-force" ? reading({ kind: "classic", folder: "/etc/nixos", state: "found" })
             : name === "home-folder" ? reading({ folder: "/home/alex/nixos-config", owner: "alex", host: "laptop", state: "found", homeWarning: true })
             : name === "build-failed" ? reading({ kind: "classic", folder: "/etc/nixos" })
-            : name === "set-in-configuration" ? reading({ inForce: "10min", own: true })
             : connected;
-        cell.delayCapability = ["not-connected", "found-not-in-force", "home-folder"].includes(name) ? notConnectedCapability : capability;
-        if (["not-connected", "found-not-in-force", "home-folder", "ready", "set-in-configuration"].includes(name))
+        if (["not-connected", "found-not-in-force", "home-folder", "ready"].includes(name))
             return;
-        // An Apply: the page's request, its modal, the Build click
+        // An Apply (When away's, through the window's flow): its request, its modal, the Build click
         const made = NixosDeclareRules.request(cell.value, "sleep.hibernateDelay", 10800);
         cell.flow.apply(made.request);
         if (name === "apply-announcement")
             return;
-        cell.busy = "apply";
         cell.nowMs = startMs;
         cell.host.modal.answered(0);
         if (name === "build-failed") {
             cell.builder.feed(failLines);
             cell.nowMs = startMs + 23000;
             cell.builder.finish({ code: 1, stdout: "" });
-            cell.busy = "";
             return;
         }
         if (name === "building" || name === "cancelled") {
@@ -153,7 +144,6 @@ MockupWindow {
             cell.nowMs = startMs + (name === "building" ? 41000 : 29000);
             if (name === "cancelled") {
                 cell.flow.cancel();
-                cell.busy = "";
             }
             return;
         }
@@ -183,8 +173,6 @@ MockupWindow {
         cell.writer.finish(NixosApplyRules.reply(errors ? { code: 4, stdout: "applied-with-errors 15 h2s-shell.json.20260115T103000Z\n", stderr: "" }
                                                         : { code: 0, stdout: "applied 15 h2s-shell.json.20260115T103000Z\n", stderr: "" }, expected));
         // What the page reads after it: the shell's file with 3 h, in force, generation 15
-        cell.busy = "";
-        cell.undoable = true;
         cell.value = reading({ fileText: made.request.text, inForce: "3h", generations: 15 });
         if (name === "applied" || name === "applied-with-errors")
             return;
@@ -193,7 +181,6 @@ MockupWindow {
         cell.flow.undo();
         if (name === "undo-announcement")
             return;
-        cell.busy = "undo";
         const undoStart = startMs + 600000;
         cell.nowMs = undoStart;
         cell.host.modal.answered(0);
@@ -237,10 +224,6 @@ MockupWindow {
                 property var value: null
                 property int revision: 0
                 property real nowMs: root.startMs
-                property var delayCapability: root.capability
-                property string busy: ""
-                property bool undoable: false
-                readonly property var delayInForce: NixosDeclareRules.inForce(value, "sleep.hibernateDelay")
                 property alias flow: _flow
                 property alias host: _host
                 property alias builder: _builder
@@ -335,14 +318,6 @@ MockupWindow {
                     flow: _flow
                     copyText: text => {}
                     chooseFolder: (start, done) => {}
-                    delayCapability: cell.delayCapability
-                    delayInForce: cell.delayInForce
-                    delayBusy: cell.busy
-                    delayUndoable: cell.undoable
-                    delayPicked: 10800
-                    applyDelay: (request, flow) => {}
-                    undoDelay: flow => {}
-                    readDelay: () => {}
                 }
 
                 SideDrawer {

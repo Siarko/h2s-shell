@@ -499,10 +499,10 @@ sleep (`sleepEnabled`, `sleepTimeout`) and hibernation (`hibernateEnabled`,
     `programs.h2s-shell.idle.hibernateDelay = "3h";` (it goes into sleep.conf). Once the
     shell's settings file is in force (Settings → System → NixOS), Apply writes the time into
     that file and rebuilds NixOS (the build first, then Apply now and the password), and Undo
-    rebuilds with the value before; the NixOS page shows the same row. A
-    `systemd.sleep.settings.Sleep.HibernateDelaySec` of the configuration's own wins over
-    the shell's: the section shows the value in force with Apply disabled and the NixOS
-    mark beside it (its tooltip: "This setting is controlled by your system configuration").
+    rebuilds with the value before. A `systemd.sleep.settings.Sleep.HibernateDelaySec` of
+    the configuration's own wins over the shell's: the section shows the value in force with
+    Apply disabled and, with sleep on, the time disabled; the NixOS mark stands beside them
+    (its tooltip: "This setting is controlled by your system configuration").
     Hibernation itself needs a swap device (`swapDevices`) and `boot.resumeDevice`.
   - **Arch**: Apply writes `/etc/systemd/sleep.conf.d/h2s-shell.conf` (`[Sleep]`,
     `HibernateDelaySec=`) through pkexec, asking for the password on that click, keeping the

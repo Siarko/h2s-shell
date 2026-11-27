@@ -141,11 +141,11 @@ The interface modules are written against (`qs.api`), versioned on its own
   build; the NixOS page shows where it is, with Show and Undo. A configuration only root can
   build carries the lock on its Build button.
 - NixOS: the hibernation delay is the first setting applied through the configuration: once
-  the shell's file is in force, Behaviour → When away (and the NixOS page's "Hibernate
-  after") offer Apply, which writes the time into the shell's file and rebuilds, and Undo,
-  which rebuilds with the value before. A `systemd.sleep.settings.Sleep.HibernateDelaySec` of
-  your own wins: the page shows the value in force with Apply disabled and the NixOS mark
-  beside it. The module now defines HibernateDelaySec below such a line instead of clashing with it
+  the shell's file is in force, Behaviour → When away offers Apply, which writes the time
+  into the shell's file and rebuilds, and Undo, which rebuilds with the value before. A
+  `systemd.sleep.settings.Sleep.HibernateDelaySec` of your own wins: When away shows the
+  value in force with Apply disabled (with sleep on, the time too) and the NixOS mark beside
+  it. The NixOS page has no setting of its own. The module now defines HibernateDelaySec below such a line instead of clashing with it
   ("conflicting definition values"), and publishes the merged value in
   `/etc/h2s-shell/settings.json` (`system`).
 - Settings → System → Authentication: "Sign-in rules" for sudo and administrator prompts
