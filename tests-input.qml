@@ -24,13 +24,10 @@ QtObject {
     property var _authPromptInput: AuthPromptInputTest { after: root._floatingListInput }
     property var _notificationScrollInput: NotificationScrollInputTest { after: root._authPromptInput }
     property var _focusRingInput: FocusRingInputTest { after: root._notificationScrollInput }
+    property var _modalAskInput: ModalAskInputTest { after: root._focusRingInput }
     // A new suite: its one line above this comment
 
-    readonly property var _suites: [_floatingListInput, _authPromptInput, _notificationScrollInput, _focusRingInput]
-    property var _modalAskInput: ModalAskInputTest { after: root._notificationScrollInput }
-    // A new suite: its one line above this comment
-
-    readonly property var _suites: [_floatingListInput, _authPromptInput, _notificationScrollInput, _modalAskInput]
+    readonly property var _suites: [_floatingListInput, _authPromptInput, _notificationScrollInput, _focusRingInput, _modalAskInput]
     readonly property int _limitMs: 120000
     property int _waited: 0
 
