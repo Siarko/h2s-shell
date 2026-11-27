@@ -10,7 +10,7 @@ import qs.singletons
 // (Nixos.creator: the password asked only at that click, for a root-owned configuration), the
 // line to add once, with Copy. A configuration in the user's own folder shows its warning
 // once. What is shown for which reading is NixosViewRules'. Read when the page shows and on
-// "Look again"; Select directory picks another folder.
+// "Look again"; Select directory, beside the folder under the status, picks another folder.
 Flickable {
     id: root
 
@@ -128,13 +128,6 @@ Flickable {
             Layout.fillWidth: true
             divider: false
             text: NixosViewRules.texts.title
-            SmallButton {
-                objectName: "nixos:change"
-                visible: root.view.change
-                label: "Select directory"
-                fontSize: Theme.fontSizeSmall
-                onClicked: root.change()
-            }
         }
         Hint {
             objectName: "nixos:intro"
@@ -173,19 +166,34 @@ Flickable {
                         text: root.view.status.text
                     }
                     SmallButton {
-                        objectName: "nixos:chooseFolder"
-                        visible: root.view.chooseFolder
-                        label: "Choose folder…"
-                        fontSize: Theme.fontSizeSmall
-                        onClicked: root.change()
-                    }
-                    SmallButton {
                         objectName: "nixos:lookAgain"
                         visible: root.view.lookAgain.shown
                         available: root.view.lookAgain.available
                         label: "Look again"
                         fontSize: Theme.fontSizeSmall
                         onClicked: root.lookAgain()
+                    }
+                }
+                // The configuration's folder, or where the shell looked, and the one folder button
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+                    Text {
+                        objectName: "nixos:folder"
+                        Layout.fillWidth: true
+                        textFormat: Text.PlainText
+                        wrapMode: Text.WrapAnywhere
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.fontSizeBody
+                        color: root.reading?.configuration?.found === true ? Theme.textPrimary : Theme.textMuted
+                        text: root.view.folder
+                    }
+                    SmallButton {
+                        objectName: "nixos:selectDirectory"
+                        Layout.alignment: Qt.AlignTop
+                        label: "Select directory"
+                        fontSize: Theme.fontSizeSmall
+                        onClicked: root.change()
                     }
                 }
                 Hint {
@@ -260,12 +268,6 @@ Flickable {
                         kind: "save"
                         fontSize: Theme.fontSizeSmall
                         onClicked: root.useHome()
-                    }
-                    SmallButton {
-                        objectName: "nixos:chooseAnother"
-                        label: "Choose another…"
-                        fontSize: Theme.fontSizeSmall
-                        onClicked: root.change()
                     }
                 }
             }

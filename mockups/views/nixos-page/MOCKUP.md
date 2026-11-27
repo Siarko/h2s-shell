@@ -47,5 +47,7 @@ applied-with-errors · cancelled · undo-announcement · undo-building
 - **Undo**: on the page it sits on the rebuild's line once an Apply ran, not beside Apply.
 - **Generation**: "Applied in 9 s. Generation 15 is in use." — the time is the root run's
   from the Apply now click.
-- **The configuration's folder**: the button beside "NixOS configuration" is "Select
-  directory" (the plan's "Change…").
+- **The configuration's folder**: under the status, always, the folder (or the folders
+  looked in while none is found) with "Select directory", the page's one folder button —
+  the plan had "Change…" beside the title, "Choose folder…" in the status line and the
+  folder as the Configuration fact (gone).

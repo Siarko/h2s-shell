@@ -79,6 +79,15 @@ Singleton {
         return list;
     }
 
+    // The folders looked in, in order, each once: a chosen folder alone (as chosen, plain or
+    // not), else /etc/nixos and NIX_PATH's nixos-config folder
+    function searched(inputs) {
+        const chosen = inputs?.chosenFolder ?? "";
+        if (chosen !== "")
+            return [chosen];
+        return candidates(inputs).map(each => each.folder).filter((folder, index, all) => all.indexOf(folder) === index);
+    }
+
     // The words for scripts/nixos-config.sh: everything the reading needs, in one run
     function readArgs(inputs) {
         const where = places(inputs?.base);
@@ -376,9 +385,9 @@ Singleton {
     // ("absent" | "present" | "unreadable"), sha256 ("" unknown or none), text ("" unless
     // present) }, fileStatus, module ("present" | "absent" | "unknown"), published ("present"
     // | "absent" | "unknown"), publishedSettings (settings.json as an object while present,
-    // else null), generations, state, homeWarning, facts }. `inputs` { base, chosenFolder,
-    // chosenHost, nixPath, acknowledged (the real paths whose home-folder warning the user
-    // took) }.
+    // else null), generations, state, homeWarning, searched (the folders looked in:
+    // searched()), facts }. `inputs` { base, chosenFolder, chosenHost, nixPath, acknowledged
+    // (the real paths whose home-folder warning the user took) }.
     function reading(inputs, raw) {
         const where = places(inputs?.base);
         const configuration = choose(inputs, raw);
@@ -420,7 +429,8 @@ Singleton {
             publishedSettings: published === "present" ? _object(settingsAnswer.text) : null,
             generations: generations(raw?.lists?.[where.profiles], raw?.links?.[where.systemProfile]),
             state: state(found, module, published),
-            homeWarning: found && owner !== "root" && !(real !== "" && acknowledged.includes(real))
+            homeWarning: found && owner !== "root" && !(real !== "" && acknowledged.includes(real)),
+            searched: searched(inputs)
         };
         result.facts = facts(result);
         return result;
@@ -444,13 +454,13 @@ Singleton {
         return published === "present" ? "connected" : "found";
     }
 
-    // The facts, one per line: [{ name, value }] (Generations only while connected)
+    // The facts, one per line: [{ name, value }] (Generations only while connected; the folder
+    // is the page's line of its own)
     function facts(reading) {
         if (!reading?.configuration?.found)
             return [];
         const status = { inForce: "In force", created: "Created, not in force yet", notCreated: "Not created", unknown: "Unknown" };
         const rows = [
-            { name: "Configuration", value: reading.configuration.folder },
             { name: "Type", value: reading.configuration.type === "flake" ? "Flake" : "Classic (" + reading.configuration.entry + ")" },
             { name: "Git", value: reading.git === "present" ? "Yes" : reading.git === "absent" ? "No" : "Unknown" },
             { name: "Host", value: reading.host !== "" ? reading.host : "Unknown" },

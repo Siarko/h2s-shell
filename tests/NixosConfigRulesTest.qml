@@ -127,7 +127,7 @@ TestCase {
         assertEqual(reading.host, "nixos", "the host from /etc/hostname");
         assertEqual(JSON.stringify(reading.generations), JSON.stringify({ count: 3, current: 48 }), "generations counted, the current one");
         assertEqual(JSON.stringify(reading.facts.map(row => row.name + "=" + row.value)),
-                    JSON.stringify(["Configuration=/etc/nixos", "Type=Flake", "Git=No", "Host=nixos", "The shell's file=/etc/nixos/h2s-shell.json",
+                    JSON.stringify(["Type=Flake", "Git=No", "Host=nixos", "The shell's file=/etc/nixos/h2s-shell.json",
                                     "File status=In force", "Generations=3"]), "the facts, one per line");
 
         // ── The owner chain ──
@@ -194,6 +194,14 @@ TestCase {
         assertEqual(reading.facts.map(row => row.name).includes("Generations"), false, "the generations shown only while connected");
         reading = readingOf(usual, changed(connected, spec => { spec.exists["/etc/nixos/flake.nix"] = "absent"; spec.exists["/etc/nixos/configuration.nix"] = "absent"; }));
         assertEqual(reading.facts.length + " " + reading.homeWarning + " " + reading.owner, "0 false ", "no configuration: no facts, no warning");
+        assertEqual(JSON.stringify(reading.searched), JSON.stringify(["/etc/nixos"]), "… the places looked in: /etc/nixos");
+        assertEqual(JSON.stringify(readingOf(usual, connected).searched), JSON.stringify(["/etc/nixos"]), "… the same while found");
+        assertEqual(JSON.stringify(readingOf(Object.assign({}, usual, { nixPath: "nixos-config=/srv/c/configuration.nix" }), connected).searched),
+                    JSON.stringify(["/etc/nixos", "/srv/c"]), "… NIX_PATH's nixos-config folder after /etc/nixos");
+        assertEqual(JSON.stringify(readingOf(Object.assign({}, usual, { nixPath: "nixos-config=/etc/nixos/configuration.nix" }), connected).searched),
+                    JSON.stringify(["/etc/nixos"]), "… a place named twice: once");
+        assertEqual(JSON.stringify(readingOf(Object.assign({}, usual, { chosenFolder: "/srv/my cfg" }), connected).searched),
+                    JSON.stringify(["/srv/my cfg"]), "… a chosen folder: only that one, even one not plain"); 
         reading = readingOf(usual, changed(connected, spec => spec.files["/etc/nixos/h2s-shell.json"] = "absent"));
         assertEqual(reading.fileStatus + " " + reading.file.state + " " + reading.file.sha256, "notCreated absent ", "the file not created");
 
@@ -215,7 +223,7 @@ TestCase {
         assertEqual(rules.host({ chosenFolder: "", chosenHost: "laptop" }, { text: "nixos\n" }), "nixos", "… only with a chosen folder");
         assertEqual(rules.host({ chosenFolder: "/srv/c", chosenHost: "a b" }, { text: " nixos \n" }), "nixos", "a chosen host that is not a name: /etc/hostname's");
         assertEqual(rules.host({}, { text: "bad.name\n" }) + rules.host({}, { unreadable: true }), "", "a hostname the root step would not take, or none: unknown");
-        assertEqual(readingOf(usual, changed(connected, spec => spec.files["/etc/hostname"] = "unreadable")).facts[3].value, "Unknown", "the Host fact unknown");
+        assertEqual(readingOf(usual, changed(connected, spec => spec.files["/etc/hostname"] = "unreadable")).facts[2].value, "Unknown", "the Host fact unknown");
 
         // ── git ──
         const gitTail = argv => argv.slice(argv.indexOf("git"));
@@ -238,7 +246,7 @@ TestCase {
             spec.chains["/etc/nixos/.git"] = { real: "/etc/nixos/.git", parts: rootChain.concat([["/etc/nixos/.git", "0", "755"]]) };
         });
         reading = readingOf(usual, inGit);
-        assertEqual(reading.git + " " + reading.gitKnowsFile + " " + reading.facts[2].value, "present unknown Yes", "a .git beside it: in git, not asked yet");
+        assertEqual(reading.git + " " + reading.gitKnowsFile + " " + reading.facts[1].value, "present unknown Yes", "a .git beside it: in git, not asked yet");
         assertEqual(rules.withGit(reading, { ok: true, code: 0 }).gitKnowsFile, "tracked", "git's answer added");
         assertEqual(reading.gitKnowsFile, "unknown", "… to a new reading, the old one unchanged");
         assertEqual(rules.withGit(readingOf(usual, connected), { ok: true, code: 0 }).gitKnowsFile, "", "no git: nothing added");
@@ -276,7 +284,7 @@ TestCase {
         assertEqual(readingOf(usual, changed(connected, spec => spec.files["/etc/h2s-shell/settings.json"] = "{")).published, "unknown", "settings.json not JSON: unknown");
         assertEqual(rules.withGit(null, { ok: true }), null, "no reading: nothing added");
         reading = readingOf(usual, changed(connected, spec => spec.lists["/nix/var/nix/profiles"] = []));
-        assertEqual(reading.facts[6].value, "0", "no generations: 0, not unknown");
+        assertEqual(reading.facts[5].value, "0", "no generations: 0, not unknown");
 
         // ── The entry file and the shell's file count in the owner chain ──
         const home = [["/", "0", "755"], ["/home", "0", "755"], ["/home/someone", "1000", "700"], ["/home/someone/dotfiles", "1000", "755"]];

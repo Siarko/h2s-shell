@@ -232,7 +232,8 @@ TestCase {
         _exec(["mkdir", "-p", _scratch + "/home/nixos-config", _scratch + "/locked"], () => ready = true);
         assert(_until(() => ready), "the scratch folders made");
         _creator = _creatorComponent.createObject(suite, { writer: suite._writer });
-        _configuration.value = _reading({ state: "notConnected" });
+        _configuration.value = _reading({ state: "notConnected", configuration: { found: false, folder: "", entry: "", type: "" },
+                                          searched: ["/etc/nixos", "/srv/c"] });
 
         _window.visible = true;
         assert(_until(() => _window.visible && driver.waitShown()), "the window shows");
@@ -246,14 +247,18 @@ TestCase {
         assertEqual(_text("nixos:status"), "Not connected", "not connected: the status");
         assertEqual(_text("nixos:caption"), "No NixOS configuration found that imports the shell's NixOS module. Built on another machine? Then keep copying the lines.",
                     "… the lines to copy stay");
-        assertEqual([_shown("nixos:chooseFolder"), _shown("nixos:lookAgain"), _shown("nixos:change"), _shown("nixos:setup"), _shown("nixos:fact:Configuration")].join(" "),
-                    "true true false false false", "… Choose folder… and Look again, no facts, no setup");
+        assertEqual(_text("nixos:folder"), "/etc/nixos, /srv/c", "… under the status: the places looked in");
+        assertEqual([_shown("nixos:selectDirectory"), _shown("nixos:lookAgain"), _shown("nixos:setup"), _shown("nixos:fact:Type")].join(" "),
+                    "true true false false", "… Select directory and Look again, no facts, no setup");
+        assertEqual(_item("nixos:selectDirectory").label, "Select directory", "… the folder's button: its label");
+        assert(_item("nixos:change") === null && _item("nixos:chooseFolder") === null && _item("nixos:chooseAnother") === null,
+               "… the only folder button: none beside the title, no Choose folder…, no Choose another…");
         const reads = _configuration.reads;
         assert(_click("nixos:lookAgain") && _until(() => _configuration.reads === reads + 1), "Look again reads again");
 
-        // Choose folder…: the chooser, its answer chosen and read
+        // Select directory: the chooser, its answer chosen and read
         const chooserCalls = _chooserCalls.length;
-        assert(_click("nixos:chooseFolder") && _until(() => _chooserCalls.length === chooserCalls + 1), "Choose folder… opens the chooser");
+        assert(_click("nixos:selectDirectory") && _until(() => _chooserCalls.length === chooserCalls + 1), "Select directory opens the chooser");
         const readsBefore = _configuration.reads;
         _chooserDone(FileChooserRules.result({ paths: ["/srv/other"] }));
         assert(_until(() => _configuration.reads === readsBefore + 1), "… a folder chosen: read again");
@@ -264,12 +269,13 @@ TestCase {
         // --- found, root-owned ---
         assert(_show(_reading()), "found: shown");
         assertEqual(_text("nixos:status"), "Found, not connected yet: the shell's file is not in force.", "found: the status");
-        assertEqual(["Configuration", "Type", "Git", "Host", "The shell's file", "File status"].map(name => _text("nixos:fact:" + name)).join(" | "),
-                    "/srv/nixos-config | Flake | Yes | nixos | /srv/nixos-config/h2s-shell.json | Not created", "… the facts, one per line");
+        assertEqual(["Type", "Git", "Host", "The shell's file", "File status"].map(name => _text("nixos:fact:" + name)).join(" | "),
+                    "Flake | Yes | nixos | /srv/nixos-config/h2s-shell.json | Not created", "… the facts, one per line");
+        assertEqual(_text("nixos:folder") + " | " + _text("nixos:fact:Configuration"), "/srv/nixos-config | (hidden)",
+                    "… the folder under the status, no Configuration fact");
         assert(!_shown("nixos:fact:Generations") && !_shown("nixos:generations"), "… no Generations yet");
-        assertEqual([_shown("nixos:change"), _shown("nixos:lookAgain"), _shown("nixos:chooseFolder"), _shown("nixos:home")].join(" "),
-                    "true true false false", "… Select directory and Look again");
-        assertEqual(_item("nixos:change").label, "Select directory", "… the folder's button: its label");
+        assertEqual([_shown("nixos:selectDirectory"), _shown("nixos:lookAgain"), _shown("nixos:home")].join(" "),
+                    "true true false", "… Select directory and Look again");
         assertEqual(_text("nixos:createStep") + " | " + _shown("nixos:create") + " " + _shown("nixos:createMark"),
                     "Create the shell's file, h2s-shell.json. | true true", "… step 1: Create, marked as asking the password");
         assertEqual(_text("nixos:line"), "{ programs.h2s-shell.settingsFile = ./h2s-shell.json; }", "… step 2: the line, a module for the flake's list");
@@ -305,10 +311,10 @@ TestCase {
         // --- the home folder's warning ---
         const home = _scratch + "/home/nixos-config";
         assert(_show(_reading({ folder: home, owner: "yours", rootWrites: false, homeWarning: true, gitKnowsFile: "untracked" })), "home folder: shown");
-        assertEqual([_shown("nixos:home"), _shown("nixos:setup"), _shown("nixos:useIt"), _shown("nixos:chooseAnother")].join(" "), "true false true true",
-                    "… the warning, Use it and Choose another…, the setup held back");
+        assertEqual([_shown("nixos:home"), _shown("nixos:setup"), _shown("nixos:useIt"), _shown("nixos:selectDirectory")].join(" "), "true false true true",
+                    "… the warning with Use it, Select directory, the setup held back");
         const chooserHome = _chooserCalls.length;
-        assert(_click("nixos:chooseAnother") && _until(() => _chooserCalls.length === chooserHome + 1), "Choose another… opens the chooser");
+        assert(_click("nixos:selectDirectory") && _until(() => _chooserCalls.length === chooserHome + 1), "Select directory opens the chooser");
         assertEqual(_chooserCalls[_chooserCalls.length - 1], home, "… starting at the folder shown");
         const readsHome = _configuration.reads;
         assert(_click("nixos:useIt") && _until(() => _configuration.reads === readsHome + 1), "Use it: read again");
@@ -361,8 +367,8 @@ TestCase {
         assertEqual(_text("nixos:status"), "Connected", "connected: the status");
         assertEqual(_text("nixos:fact:File status") + " | " + _text("nixos:fact:Generations"), "In force | 14", "… File status and Generations");
         assertEqual(_text("nixos:generations"), "Each Apply adds a generation. The shell never deletes them.", "… the generations line");
-        assertEqual([_shown("nixos:change"), _shown("nixos:lookAgain"), _shown("nixos:setup"), _shown("nixos:caption")].join(" "), "true false false false",
-                    "… Select directory, no Look again, no setup");
+        assertEqual([_text("nixos:folder"), _shown("nixos:selectDirectory"), _shown("nixos:lookAgain"), _shown("nixos:setup"), _shown("nixos:caption")].join(" "),
+                    "/srv/nixos-config true false false false", "… the folder, Select directory, no Look again, no setup");
         assertEqual(_writer.runs.length, 3, "only the three Create clicks asked the root step");
 
         // The hibernation delay is When away's: the page has no section for it

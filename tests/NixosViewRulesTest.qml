@@ -37,27 +37,31 @@ TestCase {
 
         // Nothing read yet
         const none = rules.view(null, true);
-        assertEqual(none.state + "|" + none.status.text + "|" + none.facts.length + "|" + none.change + "|" + none.setup.shown + "|" + none.lookAgain.available,
-                    "|Looking for the configuration…|0|false|false|false", "before a reading: looking, nothing else, Look again waits");
+        assertEqual(none.state + "|" + none.status.text + "|" + none.facts.length + "|" + none.folder + "|" + none.setup.shown + "|" + none.lookAgain.available,
+                    "|Looking for the configuration…|0||false|false", "before a reading: looking, no folder, nothing else, Look again waits");
+        assertEqual([none.change, none.chooseFolder].join(" "), " ", "… no fields for other folder buttons: Select directory is always the page's");
 
         // Not connected
-        const off = rules.view(reading({ state: "notConnected" }), false);
+        const off = rules.view(reading({ state: "notConnected", configuration: { found: false, folder: "", entry: "", type: "" }, searched: ["/etc/nixos", "/srv/c"] }), false);
         assertEqual(off.status.text + "|" + off.status.tone + "|" + off.caption, "Not connected|muted|" + rules.texts.notConnectedCaption,
                     "not connected: the status and the lines-to-copy caption");
-        assertEqual([off.facts.length, off.change, off.chooseFolder, off.lookAgain.shown, off.home, off.setup.shown, off.generationsShown].join(" "),
-                    "0 false true true false false false", "… no facts, Choose folder… and Look again, no setup");
+        assertEqual([off.facts.length, off.folder, off.lookAgain.shown, off.home, off.setup.shown, off.generationsShown].join(" "),
+                    "0 /etc/nixos, /srv/c true false false false", "… no facts, the places looked in, Look again, no setup");
         assertEqual(show(off.setup), show({ shown: false, create: { shown: false, way: "", privileged: false, available: false, tooltip: "" }, step: "", stepDone: false, git: false,
                     line: "", lineCaption: "" }), "… the setup all off");
         assert(!rules.view(reading({ state: "notConnected", homeWarning: true }), false).home, "… no home-folder warning without a configuration");
+        assertEqual(rules.view(reading({ state: "notConnected" }), false).folder, folder, "… a configuration found without the shell's module: its folder");
+        assertEqual(rules.view(reading({ state: "notConnected", configuration: { found: false, folder: "", entry: "", type: "" } }), false).folder, "",
+                    "… no places told: none");
 
         // Found: the root's Create
         const found = rules.view(reading(), false);
         assertEqual(found.status.text + "|" + found.status.tone, "Found, not connected yet: the shell's file is not in force.|warning", "found: the status");
-        assertEqual(found.facts.map(row => row.name).join(", "), "Configuration, Type, Git, Host, The shell's file, File status",
-                    "… the facts, one per line, no Generations");
-        assertEqual(found.facts[0].value + " " + found.facts[5].value, folder + " Not created", "… their values");
-        assertEqual([found.change, found.chooseFolder, found.lookAgain.shown, found.generationsShown].join(" "), "true false true false",
-                    "… Select directory and Look again");
+        assertEqual(found.facts.map(row => row.name).join(", "), "Type, Git, Host, The shell's file, File status",
+                    "… the facts, one per line, no Generations, no Configuration (the folder's line says it)");
+        assertEqual(found.facts[4].value, "Not created", "… their values");
+        assertEqual([found.folder, found.lookAgain.shown, found.generationsShown].join(" "), folder + " true false",
+                    "… the configuration's folder, Look again");
         assertEqual(show(found.setup), show({ shown: true, create: { shown: true, way: "root", privileged: true, available: true, tooltip: "Asks for an administrator's password" },
                                              step: "Create the shell's file, h2s-shell.json.", stepDone: false, git: false,
                                              line: "{ programs.h2s-shell.settingsFile = ./h2s-shell.json; }",
@@ -88,7 +92,7 @@ TestCase {
         const there = rules.view(reading({ file: { path: folder + "/h2s-shell.json", state: "present", sha256: "a" }, fileStatus: "created" }), false);
         assertEqual([there.setup.step, there.setup.stepDone, there.setup.create.shown].join("|"), "h2s-shell.json is created.|true|false",
                     "the file created: step 1 done, no Create");
-        assertEqual(there.facts[5].value, "Created, not in force yet", "… its status");
+        assertEqual(there.facts[4].value, "Created, not in force yet", "… its status");
         const unread = rules.view(reading({ file: { path: folder + "/h2s-shell.json", state: "unreadable", sha256: "" }, fileStatus: "unknown" }), false);
         assertEqual([unread.setup.step, unread.setup.create.shown].join("|"), "h2s-shell.json could not be read.|false", "the file unread: said, no Create");
         assertEqual(rules.createWay(reading({ state: "connected" })), "", "createWay: none once connected");
@@ -96,12 +100,16 @@ TestCase {
         // Connected
         const on = rules.view(reading({ state: "connected", fileStatus: "inForce", file: { path: folder + "/h2s-shell.json", state: "present", sha256: "a" } }), false);
         assertEqual(on.status.text + "|" + on.status.tone, "Connected|success", "connected: the status");
-        assertEqual(on.facts.map(row => row.name + "=" + row.value).slice(5).join(", "), "File status=In force, Generations=14", "… File status and Generations");
-        assertEqual([on.generationsShown, on.change, on.lookAgain.shown, on.chooseFolder, on.setup.shown].join(" "), "true true false false false",
-                    "… the generations line, Select directory, no Look again, no setup");
+        assertEqual(on.facts.map(row => row.name + "=" + row.value).slice(4).join(", "), "File status=In force, Generations=14", "… File status and Generations");
+        assertEqual([on.generationsShown, on.folder, on.lookAgain.shown, on.setup.shown].join(" "), "true " + folder + " false false",
+                    "… the generations line, the folder, no Look again, no setup");
         assert(rules.view(reading({ state: "connected", homeWarning: true }), false).home, "… a home folder's warning once while connected too");
-        assertEqual(rules.view(reading({ configuration: { found: true, folder: "/" + "x".repeat(1000), entry: "flake.nix", type: "flake" } }), false).facts[0].value.length, 400,
-                    "a fact's value is capped");
+        const long = "/" + "x".repeat(1000);
+        assertEqual(rules.view(reading({ file: { path: long, state: "absent", sha256: "" } }), false).facts[3].value.length, 400, "a fact's value is capped");
+        assertEqual(rules.view(reading({ configuration: { found: true, folder: long, entry: "flake.nix", type: "flake" } }), false).folder.length, 400,
+                    "… the folder too");
+        assertEqual(rules.view(reading({ state: "notConnected", configuration: { found: false }, searched: [long, long] }), false).folder.length, 400,
+                    "… and the folders looked in");
 
         // Create's answers
         assertEqual(show(rules.userCreateOutcome({ ok: true, code: 0, stdout: "created" })), show({ ok: true, quiet: false, error: "" }), "userCreateOutcome: created");

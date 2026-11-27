@@ -127,8 +127,9 @@ The interface modules are written against (`qs.api`), versioned on its own
   it; Delete… on any backup removes it after asking (not the one being applied or the one
   Restore previous settings needs). IPC `settings backup` and `settings deleteBackup <name>`.
 - Settings → System → NixOS, listed only on NixOS: the system's NixOS configuration as the
-  shell finds it (a flake or a classic configuration.nix, in any folder; Select directory picks
-  another), its facts one per line, and whether it is connected — the shell's file
+  shell finds it (a flake or a classic configuration.nix, in any folder): under the status
+  its folder, or the folders looked in while none is found, with Select directory to pick
+  another; its facts one per line, and whether it is connected — the shell's file
   `h2s-shell.json` in force. The one-time setup: Create the file (a root-owned
   configuration asks the administrator password at that click; one of yours is written
   without), then the line `programs.h2s-shell.settingsFile = ./h2s-shell.json;` to add once,

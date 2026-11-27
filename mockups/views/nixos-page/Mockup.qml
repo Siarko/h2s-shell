@@ -28,7 +28,7 @@ import qs.mockups.kit
 // shooting, only the state's cell shown; one under another on screen). No pointer is ever simulated over a cell: it rests on a strip below them from the
 // first state on, so nothing shown or hidden is ever under it.
 //
-//   not-connected        no configuration found: Choose folder…, Look again
+//   not-connected        no configuration found: the folder looked in, Select directory, Look again
 //   found-not-in-force   a classic configuration.nix at /etc/nixos, not in git, root's: the
 //                        one-time setup, Create with the privileged mark, the line, Copy
 //   home-folder          a flake in the home folder: the one-time warning, Use it
@@ -119,7 +119,7 @@ MockupWindow {
     function setUp(cell, name) {
         const connected = reading({});
         const flake = !["found-not-in-force", "home-folder", "build-failed"].includes(name);
-        cell.value = name === "not-connected" ? { configuration: { found: false }, state: "notConnected", facts: [] }
+        cell.value = name === "not-connected" ? { configuration: { found: false }, state: "notConnected", facts: [], searched: ["/etc/nixos"] }
             : name === "found-not-in-force" ? reading({ kind: "classic", folder: "/etc/nixos", state: "found" })
             : name === "home-folder" ? reading({ folder: "/home/alex/nixos-config", owner: "alex", host: "laptop", state: "found", homeWarning: true })
             : name === "build-failed" ? reading({ kind: "classic", folder: "/etc/nixos" })

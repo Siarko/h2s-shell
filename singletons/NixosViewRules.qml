@@ -98,8 +98,8 @@ Singleton {
     // The page for a reading (null: none yet), `busy` (a read or a Create under way) →
     // { state ("" | "notConnected" | "found" | "connected"), status { text, tone ("muted" |
     // "warning" | "success") }, caption (under the status, "" none), facts [{ name, value }],
-    // generationsShown, change (Select directory beside the title), chooseFolder (Choose
-    // folder… in the status line), lookAgain { shown, available }, home (the home-folder warning), setup {
+    // generationsShown, folder (under the status: the configuration's folder, else the
+    // folders looked in, ", "-joined; "" before a reading), lookAgain { shown, available }, home (the home-folder warning), setup {
     // shown, create { shown, way, privileged, available, tooltip }, step (step 1's text),
     // stepDone (step 1 done or not possible: muted), git (the git line shown), line and
     // lineCaption (settingsLine's) } }
@@ -117,8 +117,8 @@ Singleton {
             caption: state === "notConnected" ? texts.notConnectedCaption : "",
             facts: known && Array.isArray(reading.facts) ? reading.facts.map(row => ({ name: String(row.name), value: String(row.value).slice(0, 400) })) : [],
             generationsShown: connected,
-            change: known,
-            chooseFolder: state === "notConnected",
+            folder: (state === "" ? "" : reading.configuration?.found === true ? String(reading.configuration.folder ?? "")
+                : Array.isArray(reading.searched) ? reading.searched.map(String).join(", ") : "").slice(0, 400),
             lookAgain: { shown: !connected, available: !working },
             home: known && reading.homeWarning === true,
             setup: { shown: false, create: { shown: false, way: "", privileged: false, available: false, tooltip: "" }, step: "", stepDone: false, git: false,

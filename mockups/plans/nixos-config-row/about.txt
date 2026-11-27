@@ -1,5 +1,5 @@
-description: NixOS page: the configuration's folder on one row at the top, with its buttons
-scene: not-connected            Nothing found: today's status line buttons vs the row "Configuration: Not found"
-scene: found                    Found, not connected: Select directory beside the title vs the row with the folder
-scene: connected                Connected: the Configuration fact in the table vs the row; no Look again
+description: NixOS page: the configuration's folder under the status, with Select directory
+scene: not-connected            Nothing found: the folder looked in, Select directory, Look again
+scene: found                    Found, not connected: the folder under the status; no Configuration fact
+scene: connected                Connected: the folder, Select directory; no Look again
 scene: nixos-config-row-live    Live: Select directory (a stand-in picker), Look again, the three readings

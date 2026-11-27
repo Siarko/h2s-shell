@@ -128,7 +128,7 @@ TestCase {
 
         let answer = reading("connected");
         assertEqual(answer.state, "connected", "the module's files and settings.json: connected");
-        assertEqual(facts("connected"), "Configuration=" + _scratch + "/connected/etc/nixos; Type=Flake; Git=Yes; Host=testhost; The shell's file="
+        assertEqual(facts("connected"), "Type=Flake; Git=Yes; Host=testhost; The shell's file="
                     + _scratch + "/connected/etc/nixos/h2s-shell.json; File status=In force; Generations=3", "the facts read off the tree");
         assertEqual(answer.gitKnowsFile, "tracked", "git asked with the read-only words: it knows the file");
         assertEqual(answer.generations.current, 3, "the current generation from the system link");
@@ -163,6 +163,7 @@ TestCase {
         answer = reading("empty");
         assertEqual(answer.state + " " + answer.configuration.problem + " " + answer.module + " " + answer.facts.length, "notConnected none absent 0",
                     "an empty system: no configuration, not connected");
+        assertEqual(JSON.stringify(answer.searched), JSON.stringify([_scratch + "/empty/etc/nixos"]), "… the folder looked in told");
 
         answer = reading("locked");
         assertEqual(answer.state + " " + answer.fileStatus + " " + answer.published, "found unknown unknown",
@@ -173,6 +174,7 @@ TestCase {
 
         answer = reading("gone");
         assertEqual(answer.state + " " + answer.configuration.problem, "notConnected chosenMissing", "a chosen folder that is gone: not passed over");
+        assertEqual(JSON.stringify(answer.searched), JSON.stringify([_scratch + "/nowhere"]), "… that folder told as the one looked in");
 
         answer = reading("replaced");
         assertEqual(answer.configuration.candidate + " " + answer.state + " " + _readers.replaced.revision, "etc connected 1",
@@ -180,7 +182,7 @@ TestCase {
 
         const copy = reading("connected");
         copy.facts.push({ name: "x", value: "y" });
-        assertEqual(reading("connected").facts.length, 7, "each caller gets a copy of its own");
+        assertEqual(reading("connected").facts.length, 6, "each caller gets a copy of its own");
 
         _sh("chmod -R u+rwx \"$1\" && rm -rf \"$1\"", [_scratch], code => {
             suite.assertEqual(code, 0, "the scratch trees removed");
