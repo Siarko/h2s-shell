@@ -148,8 +148,10 @@ TestCase {
         prompt.applyKey("", "lt-7");
         assertEqual(field.echoMode, TextInput.Normal, "an answer allowed to show is in plain sight");
         assertEqual(field.displayText, "lt-7", "as typed");
+        assertEqual(field.font.letterSpacing, 0, "… not spaced as a password's dots");
         prompt.view = _view({ fieldEpoch: 1, placeholder: "STRESS Password:", answerVisible: false });
         assertEqual(field.echoMode, TextInput.Password, "a hidden one is masked");
+        assertEqual(field.font.letterSpacing, Theme.passwordLetterSpacing, "… its dots apart again");
         assert(field.displayText !== "lt-7", "never shown");
         prompt.view = _view({ fieldEpoch: 2 });
         driver.wait(50);
