@@ -57,7 +57,7 @@ TestCase {
                     "… the facts, one per line, no Generations");
         assertEqual(found.facts[0].value + " " + found.facts[5].value, folder + " Not created", "… their values");
         assertEqual([found.change, found.chooseFolder, found.lookAgain.shown, found.generationsShown].join(" "), "true false true false",
-                    "… Change… and Look again");
+                    "… Select directory and Look again");
         assertEqual(show(found.setup), show({ shown: true, create: { shown: true, way: "root", privileged: true, available: true, tooltip: "Asks for an administrator's password" },
                                              step: "Create the shell's file, h2s-shell.json.", stepDone: false, git: false,
                                              line: "{ programs.h2s-shell.settingsFile = ./h2s-shell.json; }",
@@ -98,7 +98,7 @@ TestCase {
         assertEqual(on.status.text + "|" + on.status.tone, "Connected|success", "connected: the status");
         assertEqual(on.facts.map(row => row.name + "=" + row.value).slice(5).join(", "), "File status=In force, Generations=14", "… File status and Generations");
         assertEqual([on.generationsShown, on.change, on.lookAgain.shown, on.chooseFolder, on.setup.shown].join(" "), "true true false false false",
-                    "… the generations line, Change…, no Look again, no setup");
+                    "… the generations line, Select directory, no Look again, no setup");
         assert(rules.view(reading({ state: "connected", homeWarning: true }), false).home, "… a home folder's warning once while connected too");
         assertEqual(rules.view(reading({ configuration: { found: true, folder: "/" + "x".repeat(1000), entry: "flake.nix", type: "flake" } }), false).facts[0].value.length, 400,
                     "a fact's value is capped");

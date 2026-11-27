@@ -12,6 +12,6 @@ state: applied                Generation 15, Undo offered
 state: build-failed           An error in the configuration (a classic one at /etc/nixos)
 state: applied-with-errors    Applied, but a unit did not start again
 state: cancelled              Cancel build pressed
-state: set-in-configuration   The configuration sets the delay itself: its line wins, no Apply
+state: set-in-configuration   The configuration sets the delay: its value, Apply disabled, the NixOS mark
 state: undo-announcement      Undo's modal "Undo the last Apply"
 state: undo-building          Undo's build in the same panel

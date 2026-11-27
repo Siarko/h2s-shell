@@ -501,7 +501,8 @@ sleep (`sleepEnabled`, `sleepTimeout`) and hibernation (`hibernateEnabled`,
     that file and rebuilds NixOS (the build first, then Apply now and the password), and Undo
     rebuilds with the value before; the NixOS page shows the same row. A
     `systemd.sleep.settings.Sleep.HibernateDelaySec` of the configuration's own wins over
-    the shell's: the section says "Set in your configuration: …" and offers no Apply.
+    the shell's: the section shows the value in force with Apply disabled and the NixOS
+    mark beside it (its tooltip: "This setting is controlled by your system configuration").
     Hibernation itself needs a swap device (`swapDevices`) and `boot.resumeDevice`.
   - **Arch**: Apply writes `/etc/systemd/sleep.conf.d/h2s-shell.conf` (`[Sleep]`,
     `HibernateDelaySec=`) through pkexec, asking for the password on that click, keeping the
@@ -960,7 +961,7 @@ backup being applied and the one Restore previous settings needs cannot be delet
 #### NixOS
 
 Settings → System → NixOS shows the system's NixOS configuration as the shell finds it, read
-as you when the page shows and on "Look again": the folder you chose with "Change…", else
+as you when the page shows and on "Look again": the folder you chose with "Select directory", else
 `/etc/nixos/flake.nix`, else the classic `configuration.nix` (`NIX_PATH`'s `nixos-config=`,
 or `/etc/nixos`). One fact per line: Configuration, Type, Git, Host, The shell's file, File
 status and, once connected, Generations. "Not connected" when no configuration imports the

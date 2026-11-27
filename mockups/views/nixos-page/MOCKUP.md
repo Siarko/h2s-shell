@@ -37,9 +37,10 @@ applied-with-errors · cancelled · set-in-configuration · undo-announcement ·
   hibernates after 1 h. Apply rebuilds NixOS.") with Apply. The times are picked in
   Behaviour → When away. Not connected, the page shows no delay section and no line to copy:
   When away keeps the copy line.
-- **Set in your configuration**: one line, "Set in your configuration: 10 min. Your own line
-  wins. To change it here, remove it from your configuration.", without the dot and the
-  separate caption.
+- **Set in your configuration**: only "In force: 10 min." (muted), Apply disabled and the
+  system-controlled mark (`SystemControlledMark`: the NixOS logo, its tooltip "This setting
+  is controlled by your system configuration") beside it; no line explaining it. The
+  tooltip itself is shown in `components/system-controlled-mark`.
 - **Applied, with errors**: "Applied, with errors: some services did not start again." / "The
   new values are in force." — the failed unit is not named in the box (it is in the output's
   lines), and no journalctl hint.
@@ -52,3 +53,5 @@ applied-with-errors · cancelled · set-in-configuration · undo-announcement ·
   value and rebuilds NixOS.") once an Apply ran, not beside Apply.
 - **Generation**: "Applied in 9 s. Generation 15 is in use." — the time is the root run's
   from the Apply now click.
+- **The configuration's folder**: the button beside "NixOS configuration" is "Select
+  directory" (the plan's "Change…").

@@ -43,7 +43,7 @@ JsonAdapter {
         property string lockdown: "{}"
     }
 
-    // The NixOS configuration chosen with "Change…" (an absolute folder, "" for the
+    // The NixOS configuration chosen with "Select directory" (an absolute folder, "" for the
     // usual places) and the flake's host chosen with it ("" for /etc/hostname's), and
     // the real paths of configurations outside root's folders whose one-time warning
     // the user took

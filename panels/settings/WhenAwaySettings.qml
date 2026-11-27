@@ -607,6 +607,11 @@ Flickable {
                         text: root._delayOffer.line
                         Layout.fillWidth: true
                     }
+                    // Set by the system's configuration: Apply disabled, the mark beside it
+                    SystemControlledMark {
+                        objectName: "hibernateControlled"
+                        shown: root._delayOffer.controlled === true
+                    }
                     SmallButton {
                         objectName: "hibernateApply"
                         visible: root._delayOffer.apply.button === "plain"

@@ -1,0 +1,5 @@
+# Each cell is a settings row: its label, the mark, the disabled control.
+description: The mark beside a setting the system's configuration sets: the NixOS logo, a tooltip
+state: beside-button    Beside a disabled Apply, the value muted
+state: beside-switch    Beside a disabled switch
+state: tip              Under the pointer: the tooltip open above it

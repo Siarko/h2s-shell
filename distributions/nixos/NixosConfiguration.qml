@@ -11,8 +11,8 @@ import qs.singletons.io
 //
 // read() is called by the page that shows it, when it is shown and on "Look again"; a read
 // started while one runs replaces it, and the older one's answers are dropped. The folder and
-// host chosen with "Change…" and the home-folder acknowledgements are Config's (machine
-// state, not preferences); a suite hands its own, with a scratch `base` for the system's
+// host chosen with "Select directory" and the home-folder acknowledgements are Config's
+// (machine state, not preferences); a suite hands its own, with a scratch `base` for the system's
 // places and stand-in programs.
 QtObject {
     id: root
@@ -96,8 +96,8 @@ QtObject {
         });
     }
 
-    // The user chose a folder (and a flake's host, "" for /etc/hostname's) with "Change…";
-    // "" goes back to the usual places
+    // The user chose a folder (and a flake's host, "" for /etc/hostname's) with "Select
+    // directory"; "" goes back to the usual places
     function choose(folder, host) {
         Config.nixos.folder = typeof folder === "string" ? folder : "";
         Config.nixos.host = typeof host === "string" ? host : "";

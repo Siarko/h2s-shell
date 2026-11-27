@@ -127,7 +127,7 @@ The interface modules are written against (`qs.api`), versioned on its own
   it; Delete… on any backup removes it after asking (not the one being applied or the one
   Restore previous settings needs). IPC `settings backup` and `settings deleteBackup <name>`.
 - Settings → System → NixOS, listed only on NixOS: the system's NixOS configuration as the
-  shell finds it (a flake or a classic configuration.nix, in any folder; Change… picks
+  shell finds it (a flake or a classic configuration.nix, in any folder; Select directory picks
   another), its facts one per line, and whether it is connected — the shell's file
   `h2s-shell.json` in force. The one-time setup: Create the file (a root-owned
   configuration asks the administrator password at that click; one of yours is written
@@ -144,8 +144,8 @@ The interface modules are written against (`qs.api`), versioned on its own
   the shell's file is in force, Behaviour → When away (and the NixOS page's "Hibernate
   after") offer Apply, which writes the time into the shell's file and rebuilds, and Undo,
   which rebuilds with the value before. A `systemd.sleep.settings.Sleep.HibernateDelaySec` of
-  your own wins: the page says "Set in your configuration: 10 min" and offers nothing over
-  it. The module now defines HibernateDelaySec below such a line instead of clashing with it
+  your own wins: the page shows the value in force with Apply disabled and the NixOS mark
+  beside it. The module now defines HibernateDelaySec below such a line instead of clashing with it
   ("conflicting definition values"), and publishes the merged value in
   `/etc/h2s-shell/settings.json` (`system`).
 - Settings → System → Authentication: "Sign-in rules" for sudo and administrator prompts
@@ -203,6 +203,9 @@ The interface modules are written against (`qs.api`), versioned on its own
   a polkit rule keeps a typed password for the shell's process; `minutes` (1–60, default 5)
   above polkit's 5 sets polkitd's `ExpirationSeconds` for the whole system, and polkit
   reloads when it changes.
+- Settings: a setting the system's configuration sets itself is shown disabled, with the
+  NixOS mark beside it ("This setting is controlled by your system configuration" on hover)
+  and no line explaining it; the NixOS hibernation delay is the first.
 
 ### Changed
 - Switches look the same everywhere, small or large: off, the track is the theme's

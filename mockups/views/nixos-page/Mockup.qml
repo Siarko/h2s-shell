@@ -43,7 +43,8 @@ import qs.mockups.kit
 //   build-failed         an error in the configuration (a classic one at /etc/nixos)
 //   applied-with-errors  a unit did not start again
 //   cancelled            Cancel build pressed
-//   set-in-configuration the configuration sets the delay itself: its line wins, no Apply
+//   set-in-configuration the configuration sets the delay itself: the value in force, Apply
+//                        disabled, the system-controlled mark beside it
 //   undo-announcement    Undo's modal "Undo the last Apply"
 //   undo-building        Undo's build in the same panel
 MockupWindow {

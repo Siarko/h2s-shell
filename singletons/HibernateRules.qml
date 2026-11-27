@@ -225,9 +225,10 @@ Singleton {
     // configuration sets it: the integration's words), inForce (readInForce's answer; null
     // before one or while a change runs), busy ("apply" or "undo" while one runs, else ""),
     // undoable (a change of the shell's in this run that Undo puts back) } → { shown, line,
-    // apply: { button ("none", "plain": acts on the click, "ask": acts on a second click
-    // after its question), label, question, available, request: { seconds, current, replace }
-    // | null }, undo: { shown, label, available } }.
+    // controlled (set by the system's configuration, not to be changed here), apply: {
+    // button ("none", "plain": acts on the click, "ask": acts on a second click after its
+    // question), label, question, available, request: { seconds, current, replace } | null },
+    // undo: { shown, label, available } }.
     //
     // By the capability's mode: "apply" offers Apply once what is in force was read, the
     // shell's file as the user saw it being what the change is checked against (`current`).
@@ -236,9 +237,9 @@ Singleton {
     // it, Apply asks first (warn, never forbid). The shell's own file changed outside it is
     // replaced only on a second click too. "declare" (kept in the system's configuration)
     // offers Apply, a rebuild, once what is in force was read, and Undo after one; a setting
-    // of the configuration's own (inForce's `elsewhere`) wins: said, with nothing offered over
-    // it. "copy" gives the integration's hint;
-    // "unavailable" says why (nothing while the distribution is not known). The line says
+    // of the configuration's own (inForce's `elsewhere`) wins: its value said, Apply disabled
+    // and `controlled` (the page marks it as the system's). "copy" gives the integration's
+    // hint; "unavailable" says why (nothing while the distribution is not known). The line says
     // first the time picked and what the system does now — the picked time takes effect only
     // after Apply
     function delayOffer(given, durationOf) {
@@ -256,17 +257,21 @@ Singleton {
         const offer = {
             shown: given?.differs === true || undoShown || shadowed !== null,
             line: "",
+            controlled: false,
             apply: { button: "none", label: busy === "apply" ? "Applying…" : "Apply", question: "", available: busy === "", request: null },
             undo: { shown: undoShown, label: "Undo", available: busy === "" }
         };
-        // Kept in the system's configuration, which sets it itself: its line wins, the shell
-        // offers nothing over it
+        // Kept in the system's configuration, which sets it itself: its line wins. The value
+        // in force is said, Apply shown disabled and marked as the system's (`controlled`),
+        // nothing offered over it
         const inForceGiven = given?.inForce ?? null;
         if (declared && typeof inForceGiven?.elsewhere === "string" && inForceGiven.elsewhere !== "") {
             offer.shown = true;
+            offer.controlled = true;
             offer.undo.shown = false;
-            offer.line = "Set in your configuration: " + (inForceGiven.state === "set" ? label(inForceGiven.value) : "systemd's default")
-                + ". Your own line wins. To change it here, remove it from your configuration.";
+            offer.apply.button = "plain";
+            offer.apply.available = false;
+            offer.line = "In force: " + (inForceGiven.state === "set" ? label(inForceGiven.value) : "systemd's default") + ".";
             return offer;
         }
         const undoLine = !undoShown ? "" : declared ? "Undo puts back the shell's previous value and rebuilds NixOS."

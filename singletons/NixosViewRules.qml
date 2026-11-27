@@ -98,8 +98,8 @@ Singleton {
     // The page for a reading (null: none yet), `busy` (a read or a Create under way) →
     // { state ("" | "notConnected" | "found" | "connected"), status { text, tone ("muted" |
     // "warning" | "success") }, caption (under the status, "" none), facts [{ name, value }],
-    // generationsShown, change (Change… beside the title), chooseFolder (Choose folder… in the
-    // status line), lookAgain { shown, available }, home (the home-folder warning), setup {
+    // generationsShown, change (Select directory beside the title), chooseFolder (Choose
+    // folder… in the status line), lookAgain { shown, available }, home (the home-folder warning), setup {
     // shown, create { shown, way, privileged, available, tooltip }, step (step 1's text),
     // stepDone (step 1 done or not possible: muted), git (the git line shown), line and
     // lineCaption (settingsLine's) } }

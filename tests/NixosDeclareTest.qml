@@ -183,12 +183,15 @@ TestCase {
             delay: { state: "set", seconds: 3600 }, picked: 10800, differs: true, capability, hint: "", inForce: inForceAnswer, busy: "", undoable: false
         }, more ?? {}));
         const overridden = offer(theirs);
-        assertEqual(overridden.shown + "|" + overridden.apply.button + "|" + overridden.undo.shown, "true|none|false",
-                    "offer: the configuration's own value: shown, no Apply, no Undo");
-        assertEqual(overridden.line, "Set in your configuration: 600 s. Your own line wins. To change it here, remove it from your configuration.", "… its words");
-        assertEqual(offer(theirs, { differs: false, undoable: true }).apply.button + "|" + offer(theirs, { differs: false }).shown, "none|true",
+        assertEqual([overridden.shown, overridden.controlled, overridden.apply.button, overridden.apply.available, overridden.apply.request, overridden.undo.shown].join("|"),
+                    "true|true|plain|false||false", "offer: the configuration's own value: shown, controlled by it, Apply disabled with nothing to apply, no Undo");
+        assertEqual(overridden.line, "In force: 600 s.", "… its words: only the value");
+        const same = offer(theirs, { differs: false, undoable: true });
+        assertEqual([same.controlled, same.apply.available, same.undo.shown, offer(theirs, { differs: false }).shown].join("|"), "true|false|false|true",
                     "… also when the picked time is the same");
+        assertEqual(offer(theirs, { busy: "apply" }).apply.available, false, "… and while a run goes on");
         const plain = offer(own);
+        assertEqual(plain.controlled, false, "offer: the shell's own in force: not controlled by the configuration");
         assertEqual(plain.apply.button + "|" + JSON.stringify(plain.apply.request), "plain|" + JSON.stringify({ seconds: 10800, current: null, replace: false }),
                     "offer: the shell's own in force: Apply, for the picked time");
         assertEqual(plain.line, "Picked 10800 s; the system now hibernates after 3600 s. Apply rebuilds NixOS.", "… its words");

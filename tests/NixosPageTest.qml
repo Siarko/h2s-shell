@@ -8,7 +8,7 @@ import qs.panels.settings
 
 // Settings → System → NixOS (panels/settings/NixosSettings.qml) under clicks, on stand-in
 // readings: each state — not connected, found (the one-time setup), the home-folder warning,
-// connected — its facts one per line, reading when shown and on Look again, Change… and
+// connected — its facts one per line, reading when shown and on Look again, Select directory and
 // Choose another… through the folder chooser, Use it; Create through the root step only on
 // its click (a stand-in writer records it; a dismissed prompt is quiet, a refusal said), and
 // Create of the user's own configuration's file by the real scripts/nixos-create.sh as the
@@ -282,7 +282,8 @@ TestCase {
                     "/srv/nixos-config | Flake | Yes | nixos | /srv/nixos-config/h2s-shell.json | Not created", "… the facts, one per line");
         assert(!_shown("nixos:fact:Generations") && !_shown("nixos:generations"), "… no Generations yet");
         assertEqual([_shown("nixos:change"), _shown("nixos:lookAgain"), _shown("nixos:chooseFolder"), _shown("nixos:home")].join(" "),
-                    "true true false false", "… Change… and Look again");
+                    "true true false false", "… Select directory and Look again");
+        assertEqual(_item("nixos:change").label, "Select directory", "… the folder's button: its label");
         assertEqual(_text("nixos:createStep") + " | " + _shown("nixos:create") + " " + _shown("nixos:createMark"),
                     "Create the shell's file, h2s-shell.json. | true true", "… step 1: Create, marked as asking the password");
         assertEqual(_text("nixos:line"), "{ programs.h2s-shell.settingsFile = ./h2s-shell.json; }", "… step 2: the line, a module for the flake's list");
@@ -375,7 +376,7 @@ TestCase {
         assertEqual(_text("nixos:fact:File status") + " | " + _text("nixos:fact:Generations"), "In force | 14", "… File status and Generations");
         assertEqual(_text("nixos:generations"), "Each Apply adds a generation. The shell never deletes them.", "… the generations line");
         assertEqual([_shown("nixos:change"), _shown("nixos:lookAgain"), _shown("nixos:setup"), _shown("nixos:caption")].join(" "), "true false false false",
-                    "… Change…, no Look again, no setup");
+                    "… Select directory, no Look again, no setup");
         assertEqual(_writer.runs.length, 3, "only the three Create clicks asked the root step");
 
         // The hibernation delay, kept in the shell's file
@@ -385,11 +386,13 @@ TestCase {
         _delayInForce = { state: "set", value: 600, from: "/srv/nixos-config", elsewhere: "/srv/nixos-config", file: null, afterOwn: true, shadowed: null };
         assert(_until(() => _shown("nixos:delay")), "declared: the row shows");
         assertEqual(_text("nixos:delayTitle"), "Hibernate after", "… its title");
-        assertEqual(_text("nixos:delayLine"), "Set in your configuration: 10 min. Your own line wins. To change it here, remove it from your configuration.",
-                    "the configuration's own value: said");
-        assert(!_shown("nixos:delayApply") && !_shown("nixos:delayUndo"), "… no Apply over it, no Undo");
+        assertEqual(_text("nixos:delayLine"), "In force: 10 min.", "the configuration's own value: only the value said");
+        assertEqual([_shown("nixos:delayControlled"), _shown("nixos:delayApply"), _item("nixos:delayApply").available, _shown("nixos:delayUndo")].join(" "),
+                    "true true false false", "… the system's mark beside a disabled Apply, no Undo");
+        assertEqual(_item("nixos:delayControlled").tip, "This setting is controlled by your system configuration", "… the mark's tooltip");
         _delayInForce = { state: "set", value: 3600, from: "/srv/nixos-config/h2s-shell.json", elsewhere: "", file: null, afterOwn: false, shadowed: null };
-        assert(_until(() => _shown("nixos:delayApply")), "the shell's own in force: Apply");
+        assert(_until(() => _shown("nixos:delayApply") && _item("nixos:delayApply").available), "the shell's own in force: Apply");
+        assert(!_shown("nixos:delayControlled"), "… no system's mark");
         assertEqual(_text("nixos:delayLine"), "Picked 3 h; the system now hibernates after 1 h. Apply rebuilds NixOS.", "… what is picked and in force");
         assert(_click("nixos:delayApply") && _until(() => _delayCalls.length === 1), "Apply clicked");
         assertEqual(_delayCalls[0], "apply " + JSON.stringify({ seconds: 10800, current: null, replace: false }), "… the picked time applied");

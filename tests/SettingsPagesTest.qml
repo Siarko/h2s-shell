@@ -817,6 +817,15 @@ TestCase {
         page.delayCapability = capabilityOf({});
         assertEqual(named("hibernateDelayLine").text, "Picked 3 h; the system now hibernates after 2 h. Not supported on this distribution.",
                     "generic: not supported, no Apply");
+        // Kept in the system's configuration, which sets it itself: the value, Apply disabled, the mark
+        page.delayCapability = capabilityOf({ [kind]: { mode: "declare", undo: true, inForce: true } });
+        page.delayInForce = inForce({ from: "/srv/nixos-config", elsewhere: "/srv/nixos-config" });
+        assertEqual(named("hibernateDelayLine").text, "In force: 2 h.", "declared, set by the configuration: only the value");
+        assertEqual([named("hibernateControlled").shown, page._delayOffer.apply.button, apply.available].join(" "), "true plain false",
+                    "… the system's mark beside a disabled Apply");
+        page.delayInForce = inForce({ from: "/srv/nixos-config/h2s-shell.json" });
+        assertEqual([named("hibernateControlled").shown, apply.available].join(" "), "false true", "the shell's own in force: no mark, Apply");
+        page.delayInForce = inForce();
         page.delayCapability = IntegrationRules.unknownCapability();
         assertEqual(named("hibernateDelayLine").text, "Picked 3 h; the system now hibernates after 2 h.",
                     "the distribution not known: no Apply promised");

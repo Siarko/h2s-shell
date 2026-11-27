@@ -10,7 +10,7 @@ import qs.singletons
 // (Nixos.creator: the password asked only at that click, for a root-owned configuration), the
 // line to add once, with Copy. A configuration in the user's own folder shows its warning
 // once. What is shown for which reading is NixosViewRules'. Read when the page shows and on
-// "Look again"; Change… picks another folder.
+// "Look again"; Select directory picks another folder.
 Flickable {
     id: root
 
@@ -152,7 +152,7 @@ Flickable {
             SmallButton {
                 objectName: "nixos:change"
                 visible: root.view.change
-                label: "Change…"
+                label: "Select directory"
                 fontSize: Theme.fontSizeSmall
                 onClicked: root.change()
             }
@@ -421,7 +421,8 @@ Flickable {
             }
         }
         // The first setting kept in the shell's file: the hibernation delay, with Apply (a
-        // rebuild) and Undo, or the configuration's own line that wins over it
+        // rebuild) and Undo, or the configuration's own line that wins over it: then Apply is
+        // disabled and marked as the system's
         SectionTitle {
             objectName: "nixos:delayTitle"
             visible: root.delayShown
@@ -442,11 +443,16 @@ Flickable {
             Label {
                 objectName: "nixos:delayLine"
                 Layout.fillWidth: true
+                color: root.delayOffer.controlled ? Theme.textMuted : Theme.textPrimary
                 text: root.delayOffer.line !== "" ? root.delayOffer.line
                     : "In force: " + HibernateRules.delayWords(root._delayInForce, seconds => Format.duration(seconds)) + "."
             }
             PrivilegedMark {
-                visible: root.delayOffer.apply.button === "plain"
+                visible: root.delayOffer.apply.button === "plain" && !root.delayOffer.controlled
+            }
+            SystemControlledMark {
+                objectName: "nixos:delayControlled"
+                shown: root.delayOffer.controlled
             }
             SmallButton {
                 objectName: "nixos:delayApply"
@@ -455,7 +461,7 @@ Flickable {
                 kind: "save"
                 available: root.delayOffer.apply.available
                 fontSize: Theme.fontSizeSmall
-                tooltip: "Rebuilds NixOS: a build first, then your password"
+                tooltip: root.delayOffer.controlled ? "" : "Rebuilds NixOS: a build first, then your password"
                 onClicked: root.applyDelay(root.delayOffer.apply.request, root.flow)
             }
             SmallButton {
