@@ -67,10 +67,12 @@ Item {
     onPageChanged: cancel("page")
 
     readonly property bool _locked: ApiElements.sessionLocked
-    readonly property bool _windowShown: Window.window?.visible ?? false
+    // The place is on screen: its window shown (a popup's host: the popup, not closing). Not
+    // shown, no question opens, and an open one is withdrawn ("window")
+    property bool placeShown: Window.window?.visible ?? false
 
     on_LockedChanged: if (_locked) cancel("lock")
-    on_WindowShownChanged: if (!_windowShown) cancel("window")
+    onPlaceShownChanged: if (!placeShown) cancel("window")
     // Gone while open: cancelled for "window", without the values (the modal's content is
     // going with it)
     Component.onCompleted: {
@@ -97,7 +99,7 @@ Item {
     }
 
     function ask(spec, onAnswer) {
-        const refusal = ApiElementRules.modalRefusal(open || (shared && ModalQuestions.busy), _locked);
+        const refusal = ApiElementRules.modalRefusal(open || (shared && ModalQuestions.busy), _locked, placeShown);
         if (refusal !== "") {
             if (_lastRefusal !== refusal)
                 console.warn("[SettingsModal] not opened: " + refusal);

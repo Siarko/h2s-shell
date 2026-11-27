@@ -104,7 +104,8 @@ LazyLoader {
     // instant as the leave, before the close could start
     property Timer _hoverClose: Timer {
         interval: 120
-        onTriggered: popupLoader.close()
+        // Not while a question is open over it (one asked again from the last one's answer)
+        onTriggered: if (!(popupLoader.item?.questionOpen ?? false)) popupLoader.close()
     }
 
     // Start the close animation instead of immediately deactivating
@@ -303,6 +304,8 @@ LazyLoader {
         implicitHeight: popup.screen.height
 
         property bool showPopup: false
+        // A question is open over it (its host below)
+        readonly property bool questionOpen: _question.open
 
         // A module's panel that stays on screen: the widget that opened it again — when its
         // root declares `property var opener`, decided as its first build was given it
@@ -915,6 +918,7 @@ LazyLoader {
                 anchors.fill: parent
                 placeRoot: clipWrapper
                 placeRefusal: popupLoader.contentType === "tray-menu" ? "the tray menu takes no question" : ""
+                placeShown: popup.visible && !popupLoader.closing
                 onOpenChanged: {
                     // Answered with the pointer away from the popup: it closes as on leaving it
                     if (!open && !hoverHandler.hovered && !popupLoader.persistent && !popupLoader.touchOpened)

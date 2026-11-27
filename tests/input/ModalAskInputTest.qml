@@ -155,8 +155,14 @@ TestCase {
         return answer ? [answer.button, answer.cancelled, answer.blocked].join(" ") : "none";
     }
 
+    // A click on the item's middle, once the pointer is seen over it (a button's hover): the
+    // item may still be moving into place as its surface is drawn
     function _clickAt(item) {
-        return input.click(item, item.width / 2, item.height / 2);
+        if (!input.pointAt(item, item.width / 2, item.height / 2))
+            return false;
+        if (item.hovered !== undefined && !_until(() => item.hovered, 3000))
+            return false;
+        return input.send("click left");
     }
 
     // Tab presses, the name of the item with the keyboard after each
@@ -209,7 +215,7 @@ TestCase {
         assert(x("modalButton:0") < x("modalButton:1") && x("modalButton:1") < x("modalButton:2"), "… left to right");
         assertEqual(_tabs(host, 1, true).join(" "), "modalButton:2", "Shift+Tab: back to Cancel");
 
-        assert(_clickAt(_window.behind), "a click on a button behind");
+        assert(input.click(_window.behind, _window.behind.width / 2, _window.behind.height / 2), "a click on a button behind");
         driver.wait(100);
         assertEqual(behindClicks + " " + host.open, "0 true", "… does nothing, the question stays");
 
@@ -296,6 +302,7 @@ TestCase {
         const clickAt = (item, x, y) => {
             const point = item.mapToItem(null, x, y);
             return input.send("abs " + Math.round(point.x + offset.x) + " " + Math.round(point.y + offset.y) + " " + screen.width + " " + screen.height)
+                && (item.hovered === undefined || _until(() => item.hovered, 3000))
                 && input.send("click left");
         };
         // A check that nothing happens: longer than the popup's hover close
@@ -316,6 +323,27 @@ TestCase {
         assert(_until(() => !_popup.active || _popup.closing), "answered with the pointer away: the popup closes");
         assert(_until(() => !_popup.active), "… and goes");
 
+        // Opened by hover again: a question asked once more from the first one's answer stays,
+        // the popup with it, though the pointer is away
+        _popup.open(_bar.cellA, false, "notifications", null);
+        assert(_until(() => _popup.item?.showPopup === true), "opened by hover again");
+        const reBody = _find(_popup.item.contentItem, "overlayHost");
+        const reHost = ModalQuestions.hostAbove(reBody);
+        let again = null;
+        ModalQuestions.ask(standIn, reBody, question, answer => {
+            suite.remember(answer);
+            again = ModalQuestions.ask(standIn, reBody, question, suite.remember);
+        });
+        const reCount = answers.length;
+        reHost.cancel("escape");
+        assert(answers.length === reCount + 1 && again?.open === true && reHost.open, "asked again from the answer: open");
+        // A check that nothing happens: longer than the popup's hover close
+        driver.wait(400);
+        assert(_popup.active && !_popup.closing && reHost.open && again.open, "… still open, the popup too");
+        reHost.cancel("escape");
+        assertEqual(_shape(_last()), "cancel true ", "… answered by the user, not withdrawn");
+        assert(_until(() => !_popup.active), "… then, the pointer away, the popup closes");
+
         // A real click on a button; then withdrawn by the popup closing, another cell, going
         _popup.open(_bar.cellA, true, "notifications", null);
         assert(_until(() => _popup.item?.showPopup === true), "opened again (by a click: it stays)");
@@ -326,17 +354,24 @@ TestCase {
         const shownBlocker = _find(shown.modal, "modalBlocker");
         input.send("abs " + (probe.x + 5) + " " + probe.y + " " + screen.width + " " + screen.height);
         assert(_until(() => shownBlocker.containsMouse), "… its surface takes the pointer");
+        const beforeClick = answers.length;
         assert(clickAt(_find(shown.modal, "modalButton:1"), 10, 5), "Keep both clicked");
-        assert(_until(() => answers.length === counted + 2), "… answered");
+        assert(_until(() => answers.length === beforeClick + 1), "… answered");
         assertEqual(_shape(_last()), "keepBoth false ", "… Keep both");
         assert(_popup.active && !_popup.closing, "… the popup opened by a click stays");
 
         ask(_find(_popup.item.contentItem, "overlayHost"));
         _popup.open(_bar.cellB, true, "notifications", null);
         assertEqual(_shape(_last()), "cancel false closed", "opened from another cell: withdrawn, blocked \"closed\"");
-        ask(_find(_popup.item.contentItem, "overlayHost"));
+        const closingBody = _find(_popup.item.contentItem, "overlayHost");
+        ask(closingBody);
         _popup.close();
         assertEqual(_shape(_last()), "cancel false closed", "the popup closing: blocked \"closed\"");
+        const beforeClosing = answers.length;
+        const whileClosing = ask(closingBody);
+        assert(!whileClosing.open && !ModalQuestions.busy, "asked while it closes: not opened");
+        assert(_until(() => answers.length === beforeClosing + 1), "asked while it closes: answered");
+        assertEqual(_shape(_last()) + " " + ModalQuestions.busy, "cancel false closed false", "… blocked \"closed\", the shell free");
         assert(_until(() => !_popup.active), "… it goes");
         _popup.open(_bar.cellA, true, "notifications", null);
         assert(_until(() => _popup.item?.showPopup === true), "opened again");

@@ -306,6 +306,8 @@ TestCase {
             TeardownProbe { tally: suite._tally }
             SettingsModalHost {
                 id: _host
+                // In no window: shown as far as the test goes
+                placeShown: true
             }
         }
     }

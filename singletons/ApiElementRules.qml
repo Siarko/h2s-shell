@@ -316,11 +316,14 @@ Singleton {
         return Math.max(0, Math.min(wanted, room));
     }
 
-    // Whether a modal may open: "" when it may, else why not — the session locked, or another
+    // Whether a modal may open: "" when it may, else why not — the session locked, the place
+    // it would show in not shown (`shown` false: a hidden window, a popup closing), or another
     // open (a question never replaces another under the user's pointer)
-    function modalRefusal(open, locked) {
+    function modalRefusal(open, locked, shown) {
         if (locked === true)
             return "the session is locked";
+        if (shown === false)
+            return "its window is not shown";
         if (open === true)
             return "another question is open";
         return "";
@@ -391,15 +394,18 @@ Singleton {
     // Whether a module's question may be asked: "" when it may, else its answer's `blocked` —
     // "module" (the module is off: then not answered at all), "locked" (the session is
     // locked), "place" (no host above the asking item, or one that takes no question: the
-    // bar, the tray menu, an anchor in no popup or window, the lock screen), "busy" (a
-    // question is open, anywhere in the shell)
-    function modalAskRefusal(active, locked, hostFound, hostRefuses, busy) {
+    // bar, the tray menu, an anchor in no popup or window, the lock screen), "closed" (the
+    // place is not shown: its window hidden, its popup closing), "busy" (a question is open,
+    // anywhere in the shell)
+    function modalAskRefusal(active, locked, hostFound, hostRefuses, busy, placeShown) {
         if (active !== true)
             return "module";
         if (locked === true)
             return "locked";
         if (hostFound !== true || hostRefuses === true)
             return "place";
+        if (placeShown === false)
+            return "closed";
         if (busy === true)
             return "busy";
         return "";

@@ -62,6 +62,23 @@ TestCase {
             anchors.fill: parent
         }
         Item { id: nowhere }
+    }
+
+    // A window not shown (the Settings window hidden, its page kept): its place takes no question
+    property var _hiddenWindow: FloatingWindow {
+        visible: false
+        implicitWidth: 200
+        implicitHeight: 200
+        Item {
+            id: hiddenPlace
+            anchors.fill: parent
+            Item { id: hiddenAsker }
+            SettingsModalHost {
+                id: hiddenHost
+                anchors.fill: parent
+                placeRoot: hiddenPlace
+            }
+        }
 
         WindowDriver {
             id: driver
@@ -166,11 +183,14 @@ TestCase {
                     JSON.stringify(["Save all five files now", "Do not save these files"]),
                     "modalLongLabels: more than four words, the cancel's too");
 
-        assertEqual(["module", "locked", "place", "place", "busy", ""].join(" "),
-            [rules.modalAskRefusal(false, true, false, false, true), rules.modalAskRefusal(true, true, false, false, true),
-             rules.modalAskRefusal(true, false, false, false, true), rules.modalAskRefusal(true, false, true, true, true),
-             rules.modalAskRefusal(true, false, true, false, true), rules.modalAskRefusal(true, false, true, false, false)].join(" "),
-            "modalAskRefusal: the module off, then the lock, then the place, then busy");
+        assertEqual(["module", "locked", "place", "place", "closed", "busy", ""].join(" "),
+            [rules.modalAskRefusal(false, true, false, false, true, false), rules.modalAskRefusal(true, true, false, false, true, false),
+             rules.modalAskRefusal(true, false, false, false, true, false), rules.modalAskRefusal(true, false, true, true, true, false),
+             rules.modalAskRefusal(true, false, true, false, true, false), rules.modalAskRefusal(true, false, true, false, true, true),
+             rules.modalAskRefusal(true, false, true, false, false, true)].join(" "),
+            "modalAskRefusal: the module off, then the lock, then the place, then the place not shown, then busy");
+        assert(rules.modalRefusal(false, false, false) !== "" && rules.modalRefusal(false, false, true) === "",
+               "modalRefusal: a place not shown refused");
 
         const answer = (reason, active, button, cancelled) => _shape(rules.modalAnswer({ button: button ?? "cancel", cancelled: cancelled ?? true, reason: reason, values: {} }, active ?? true));
         assertEqual(answer("button", true, "stopAll", false), "stopAll false ", "modalAnswer: a button, as clicked");
@@ -201,10 +221,20 @@ TestCase {
         assertEqual(_last().blocked, "place", "… blocked \"place\"");
         ModalQuestions.ask(standIn, null, _question, _remember);
         assert(_until(() => answers.length === 3) && _last().blocked === "place", "no item: blocked \"place\"");
+        // A window not shown: refused, its slot not taken
+        ModalQuestions.ask(standIn, hiddenAsker, _question, _remember);
+        assert(_until(() => answers.length === 4), "a place whose window is not shown: answered");
+        assertEqual(_shape(_last()) + " " + hiddenHost.open + " " + ModalQuestions.busy, "cancel false closed false false",
+                    "… blocked \"closed\", nothing open");
+        assert(hiddenHost.ask({ title: "Own" }, () => {}) !== "" && !hiddenHost.open, "… the shell's own question there refused too");
+        // Refused, then the module turned off before the answer is handed over: not answered
+        ModalQuestions.ask(standIn, nowhere, _question, _remember);
         standIn.active = false;
+        driver.wait(30);
+        assertEqual(answers.length, 4, "a refusal to a module turned off meanwhile: not handed over");
         const offCall = ModalQuestions.ask(standIn, asker, _question, _remember);
         driver.wait(30);
-        assertEqual(answers.length + " " + offCall.open + " " + host.open, "3 false false", "the module off: nothing opens, never answered");
+        assertEqual(answers.length + " " + offCall.open + " " + host.open, "4 false false", "the module off: nothing opens, never answered");
         standIn.active = true;
 
         // --- asked: drawn in the place's host ---

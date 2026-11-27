@@ -87,7 +87,8 @@ Singleton {
         const spec = ApiElementRules.modalQuestion(question);
         const host = hostAbove(from);
         const refusal = ApiElementRules.modalAskRefusal(handle?.active === true, locked, host !== null,
-                                                        host !== null && host.placeRefusal !== "", busy || host?.open === true);
+                                                        host !== null && host.placeRefusal !== "", busy || host?.open === true,
+                                                        host?.placeShown === true);
         if (refusal === "module") {
             call.answered = true;
             return callHandle;
@@ -112,7 +113,7 @@ Singleton {
         });
         if (asked !== "") {
             call.host = null;
-            _refuse(call, locked ? "locked" : "busy", spec.subject);
+            _refuse(call, locked ? "locked" : host.placeShown !== true ? "closed" : "busy", spec.subject);
             return callHandle;
         }
         _moduleCall = call;
@@ -130,7 +131,11 @@ Singleton {
     function _refuse(call, blocked, subject) {
         call.answered = true;
         const answer = ApiElementRules.modalRefused(blocked, subject);
-        Qt.callLater(() => root._deliver(call, answer));
+        // Not to a module turned off meanwhile
+        Qt.callLater(() => {
+            if (call.handle?.active === true)
+                root._deliver(call, answer);
+        });
     }
 
     function _deliver(call, answer) {
