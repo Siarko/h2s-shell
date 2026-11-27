@@ -119,6 +119,7 @@ QtObject {
     property var _toastDrag: ToastDragTest {}
     property var _pillSizes: PillSizesTest {}
     property var _fieldPreview: FieldPreviewTest {}
+    property var _listAndFieldLooks: ListAndFieldLooksTest {}
     property var _apiElements: ApiElementsTest {}
     property var _sidePanel: SidePanelTest {}
     property var _settingsModal: SettingsModalTest {}

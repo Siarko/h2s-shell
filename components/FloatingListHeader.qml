@@ -10,7 +10,8 @@ Text {
 
     // A title the Repeater lets go of while everything goes has no parent any more
     width: parent ? parent.width : 0
-    leftPadding: 6
+    // Further in than an entry's text (6 px), so it does not read as one
+    leftPadding: 10
     rightPadding: 6
     topPadding: 6
     bottomPadding: 2
@@ -19,6 +20,6 @@ Text {
     elide: Text.ElideRight
     font.family: Theme.fontFamily
     font.pixelSize: Theme.fontSizeSmall
-    font.weight: Font.DemiBold
+    font.weight: Theme.fontWeightBold
     color: Theme.textMuted
 }

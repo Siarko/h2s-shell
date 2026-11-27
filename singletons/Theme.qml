@@ -583,6 +583,9 @@ Singleton {
     readonly property int fontSizeLargeDisplay: _fonts.sizeLargeDisplay
     readonly property int fontSizeXXLargeDisplay: _fonts.sizeXXLargeDisplay
     readonly property int fontSizeHero: _fonts.sizeHero
+    // The weight of a title that sets itself off from the entries under it (a list's
+    // group). Not a theme file's token: the same in every theme
+    readonly property int fontWeightBold: Font.Bold
 
     // Backgrounds
     property color barBackground: _colors.barBackground
