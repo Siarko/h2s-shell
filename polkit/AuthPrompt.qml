@@ -309,7 +309,7 @@ PanelWindow {
                         selectedTextColor: Theme.selectedText
                         font.family: Theme.fontFamily
                         font.pixelSize: Theme.fontSizeBody
-                        font.letterSpacing: _visible ? 0 : 4
+                        font.letterSpacing: _visible ? 0 : Theme.passwordLetterSpacing
                         focus: true
                         onTextChanged: {
                             root._held = false;

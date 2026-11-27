@@ -588,7 +588,7 @@ Singleton {
     readonly property int fontWeightBold: Font.Bold
     // Between a hidden password's dots, which otherwise run together (a password field, the
     // lock screen's, the polkit prompt's). The same in every theme
-    readonly property real passwordLetterSpacing: 4
+    readonly property real passwordLetterSpacing: 8
 
     // Backgrounds
     property color barBackground: _colors.barBackground

@@ -146,7 +146,7 @@ Item {
                 color: root.view.busy ? Theme.glassTextMuted : Theme.textPrimary
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSizeBody
-                font.letterSpacing: 4
+                font.letterSpacing: Theme.passwordLetterSpacing
                 // Never focused: keys come only through applyKey (LockSurface.qml)
                 focus: false
                 activeFocusOnPress: false

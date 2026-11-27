@@ -129,6 +129,7 @@ TestCase {
 
         // --- the password: hidden, forwarded keys edit it, Enter submits ---
         assertEqual(field.echoMode, TextInput.Password, "a password is never shown");
+        assertEqual(field.font.letterSpacing, Theme.passwordLetterSpacing, "… its dots apart by the theme's spacing");
         prompt.applyKey("", "pa");
         prompt.applyKey("", "sé");
         prompt.applyKey("Backspace", "");

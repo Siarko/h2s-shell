@@ -63,6 +63,7 @@ TestCase {
         const picker = _find(prompt.contentItem, child => child.objectName === "identityPicker");
         assert(field !== null && picker !== null && picker.visible, "the prompt with its password field and the account picker");
         assert(_until(() => field.activeFocus), "the password field has the keys");
+        assertEqual(field.font.letterSpacing, Theme.passwordLetterSpacing, "… its dots apart by the theme's spacing");
 
         const pick = picker;
         const clickPicker = () => input.click(picker, 20, picker.height / 2);
