@@ -963,9 +963,10 @@ backup being applied and the one Restore previous settings needs cannot be delet
 Settings → System → NixOS shows the system's NixOS configuration as the shell finds it, read
 as you when the page shows and on "Look again": the folder you chose with "Select directory", else
 `/etc/nixos/flake.nix`, else the classic `configuration.nix` (`NIX_PATH`'s `nixos-config=`,
-or `/etc/nixos`). Under the status, always: the configuration's folder, or while none is
-found the folders looked in (a chosen folder that holds none: that folder), with "Select
-directory", the page's one button for the folder. One fact per line: Type, Git, Host, The
+or `/etc/nixos`). Under the status, always, labelled "Configuration": the configuration's
+folder, or while none is found the folders looked in (a chosen folder that holds none: that
+folder), kept on screen while the page looks again, with "Select directory", the page's one
+button for the folder (it waits, as "Look again" does, while the page looks). One fact per line: Type, Git, Host, The
 shell's file, File status and, once connected, Generations. "Not connected" when no configuration imports the
 shell's NixOS module: every setting keeps its lines to copy. "Found, not connected yet" leads
 through the one-time setup: Create the shell's file `h2s-shell.json` beside the configuration

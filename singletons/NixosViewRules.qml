@@ -95,15 +95,26 @@ Singleton {
         return { ok: false, quiet: false, error: typeof outcome?.error === "string" && outcome.error !== "" ? outcome.error : NixosApplyRules.texts.unclear };
     }
 
-    // The page for a reading (null: none yet), `busy` (a read or a Create under way) →
+    // The folder a reading shows: the configuration's, else the folders looked in, ", "-joined
+    // ("" for no reading)
+    function folderOf(reading) {
+        if (reading === null || typeof reading !== "object")
+            return "";
+        return (reading.configuration?.found === true ? String(reading.configuration.folder ?? "")
+            : Array.isArray(reading.searched) ? reading.searched.map(String).join(", ") : "").slice(0, 400);
+    }
+
+    // The page for a reading (null: none yet), `busy` (a read or a Create under way),
+    // `lastFolder` (the folder the page showed last, kept while a read runs) →
     // { state ("" | "notConnected" | "found" | "connected"), status { text, tone ("muted" |
     // "warning" | "success") }, caption (under the status, "" none), facts [{ name, value }],
     // generationsShown, folder (under the status: the configuration's folder, else the
-    // folders looked in, ", "-joined; "" before a reading), lookAgain { shown, available }, home (the home-folder warning), setup {
+    // folders looked in, ", "-joined; while none is read yet `lastFolder`), selectDirectory {
+    // available (not while a read runs) }, lookAgain { shown, available }, home (the home-folder warning), setup {
     // shown, create { shown, way, privileged, available, tooltip }, step (step 1's text),
     // stepDone (step 1 done or not possible: muted), git (the git line shown), line and
     // lineCaption (settingsLine's) } }
-    function view(reading, busy) {
+    function view(reading, busy, lastFolder) {
         const working = busy === true;
         const state = reading === null || typeof reading !== "object" ? "" : String(reading.state ?? "");
         const connected = state === "connected", found = state === "found";
@@ -117,8 +128,8 @@ Singleton {
             caption: state === "notConnected" ? texts.notConnectedCaption : "",
             facts: known && Array.isArray(reading.facts) ? reading.facts.map(row => ({ name: String(row.name), value: String(row.value).slice(0, 400) })) : [],
             generationsShown: connected,
-            folder: (state === "" ? "" : reading.configuration?.found === true ? String(reading.configuration.folder ?? "")
-                : Array.isArray(reading.searched) ? reading.searched.map(String).join(", ") : "").slice(0, 400),
+            folder: state !== "" ? folderOf(reading) : (typeof lastFolder === "string" ? lastFolder : "").slice(0, 400),
+            selectDirectory: { available: !working && state !== "" },
             lookAgain: { shown: !connected, available: !working },
             home: known && reading.homeWarning === true,
             setup: { shown: false, create: { shown: false, way: "", privileged: false, available: false, tooltip: "" }, step: "", stepDone: false, git: false,

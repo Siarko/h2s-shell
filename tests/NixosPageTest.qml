@@ -273,6 +273,16 @@ TestCase {
                     "Flake | Yes | nixos | /srv/nixos-config/h2s-shell.json | Not created", "… the facts, one per line");
         assertEqual(_text("nixos:folder") + " | " + _text("nixos:fact:Configuration"), "/srv/nixos-config | (hidden)",
                     "… the folder under the status, no Configuration fact");
+        assertEqual(_text("nixos:folderLabel"), "Configuration", "… labelled on the left, as the facts are");
+        // While looking: the folder stays, Select directory and Look again wait
+        assert(_item("nixos:selectDirectory").available && _item("nixos:lookAgain").available, "… at rest: both buttons available");
+        const shownBefore = _configuration.value;
+        _configuration.value = null;
+        _page.lookAgain();
+        assertEqual([_text("nixos:status"), _text("nixos:folder"), _item("nixos:selectDirectory").available, _item("nixos:lookAgain").available].join(" | "),
+                    "Looking for the configuration… | /srv/nixos-config | false | false", "looking: the folder kept, both buttons disabled");
+        assert(_show(shownBefore), "… the reading back");
+        assert(_item("nixos:selectDirectory").available, "… Select directory available again");
         assert(!_shown("nixos:fact:Generations") && !_shown("nixos:generations"), "… no Generations yet");
         assertEqual([_shown("nixos:selectDirectory"), _shown("nixos:lookAgain"), _shown("nixos:home")].join(" "),
                     "true true false", "… Select directory and Look again");

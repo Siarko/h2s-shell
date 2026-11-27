@@ -8,12 +8,13 @@ directory" beside the title once found, "Choose another…" in the home-folder w
 folder only as the "Configuration" fact. Decided (the owner, 2026-11-27) and now in the real
 page: in the status box, directly under the status, always
 
-    /srv/nixos-config                                  [Select directory]
-    /etc/nixos                                         [Select directory]   (nothing found: where the shell looked)
+    Configuration   /srv/nixos-config                  [Select directory]
+    Configuration   /etc/nixos                         [Select directory]   (nothing found: where the shell looked)
 
 — the configuration's folder, or while none is found the folders looked in (a chosen folder
 that holds none: that folder) — with "Select directory", the page's one folder button. "Look
-again" stays in the status line. No "Configuration" fact.
+again" stays in the status line. No "Configuration" fact: the row carries its label. While
+the page looks, the folder stays shown and both buttons wait.
 
 - Headless: `tests/run-mockups.sh --shoot plans/nixos-config-row`.
 - On a screen: `tools/mockup.sh open plans/nixos-config-row`.

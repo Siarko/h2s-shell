@@ -35,7 +35,11 @@ Flickable {
         { mode: "folder", title: NixosViewRules.texts.chooserTitle, startDirectory: startDirectory }, done, Quickshell.env("HOME") ?? "/")
 
     readonly property var reading: (configuration?.revision, configuration?.current() ?? null)
-    readonly property var view: NixosViewRules.view(reading, configuration?.busy === true || creator?.busy === true)
+    // The folder the page showed last: kept on screen while a read runs
+    property string _folderSeen: ""
+    readonly property var view: NixosViewRules.view(reading, configuration?.busy === true || creator?.busy === true, _folderSeen)
+    readonly property string _folderNow: NixosViewRules.folderOf(reading)
+    on_FolderNowChanged: if (_folderNow !== "") _folderSeen = _folderNow
     readonly property var _rebuild: flow?.rebuild ?? null
     readonly property var _rebuildState: _rebuild?.state ?? NixosRebuildRules.initial()
     // The run's clock: once a second while a build counts and the page shows
@@ -174,13 +178,26 @@ Flickable {
                         onClicked: root.lookAgain()
                     }
                 }
-                // The configuration's folder, or where the shell looked, and the one folder button
-                RowLayout {
+                // The configuration's folder (or where the shell looked) with the one folder
+                // button, then one fact per line: the folder's row labelled as the facts are
+                GridLayout {
                     Layout.fillWidth: true
-                    spacing: 8
+                    columns: 3
+                    columnSpacing: 16
+                    rowSpacing: 6
+                    Text {
+                        objectName: "nixos:folderLabel"
+                        Layout.alignment: Qt.AlignVCenter | Qt.AlignLeft
+                        textFormat: Text.PlainText
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.fontSizeSmall
+                        color: Theme.textMuted
+                        text: "Configuration"
+                    }
                     Text {
                         objectName: "nixos:folder"
                         Layout.fillWidth: true
+                        Layout.alignment: Qt.AlignVCenter | Qt.AlignLeft
                         textFormat: Text.PlainText
                         wrapMode: Text.WrapAnywhere
                         font.family: Theme.fontFamily
@@ -190,24 +207,11 @@ Flickable {
                     }
                     SmallButton {
                         objectName: "nixos:selectDirectory"
-                        Layout.alignment: Qt.AlignTop
+                        available: root.view.selectDirectory.available
                         label: "Select directory"
                         fontSize: Theme.fontSizeSmall
                         onClicked: root.change()
                     }
-                }
-                Hint {
-                    objectName: "nixos:caption"
-                    visible: text !== ""
-                    text: root.view.caption
-                }
-                // One fact per line
-                GridLayout {
-                    visible: root.view.facts.length > 0
-                    Layout.fillWidth: true
-                    columns: 2
-                    columnSpacing: 16
-                    rowSpacing: 6
                     Repeater {
                         model: ScriptModel {
                             values: root.view.facts.reduce((keys, row) => keys.concat(["name:" + row.name, "value:" + row.name]), [])
@@ -218,6 +222,7 @@ Flickable {
                             readonly property string factName: modelData.slice(modelData.indexOf(":") + 1)
                             objectName: isName ? "" : "nixos:fact:" + factName
                             Layout.fillWidth: !isName
+                            Layout.columnSpan: isName ? 1 : 2
                             Layout.alignment: Qt.AlignTop | Qt.AlignLeft
                             Layout.topMargin: isName ? 2 : 0
                             textFormat: Text.PlainText
@@ -228,6 +233,11 @@ Flickable {
                             text: isName ? factName : (root.view.facts.find(row => row.name === factName)?.value ?? "")
                         }
                     }
+                }
+                Hint {
+                    objectName: "nixos:caption"
+                    visible: text !== ""
+                    text: root.view.caption
                 }
                 Hint {
                     objectName: "nixos:generations"

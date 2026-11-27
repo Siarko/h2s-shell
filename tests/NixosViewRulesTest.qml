@@ -40,6 +40,9 @@ TestCase {
         assertEqual(none.state + "|" + none.status.text + "|" + none.facts.length + "|" + none.folder + "|" + none.setup.shown + "|" + none.lookAgain.available,
                     "|Looking for the configuration…|0||false|false", "before a reading: looking, no folder, nothing else, Look again waits");
         assertEqual([none.change, none.chooseFolder].join(" "), " ", "… no fields for other folder buttons: Select directory is always the page's");
+        assertEqual(none.selectDirectory.available, false, "… Select directory waits too");
+        assertEqual(rules.view(null, true, "/srv/x").folder, "/srv/x", "… the folder last shown kept while looking");
+        assertEqual([rules.folderOf(null), rules.folderOf(reading())].join(" "), " " + folder, "folderOf: none without a reading, else the reading's");
 
         // Not connected
         const off = rules.view(reading({ state: "notConnected", configuration: { found: false, folder: "", entry: "", type: "" }, searched: ["/etc/nixos", "/srv/c"] }), false);
@@ -62,6 +65,8 @@ TestCase {
         assertEqual(found.facts[4].value, "Not created", "… their values");
         assertEqual([found.folder, found.lookAgain.shown, found.generationsShown].join(" "), folder + " true false",
                     "… the configuration's folder, Look again");
+        assertEqual([found.selectDirectory.available, rules.view(reading(), true).selectDirectory.available, rules.view(reading(), false, "/old").folder].join(" "),
+                    "true false " + folder, "… Select directory available, not while a read runs; the reading's folder over the one last shown");
         assertEqual(show(found.setup), show({ shown: true, create: { shown: true, way: "root", privileged: true, available: true, tooltip: "Asks for an administrator's password" },
                                              step: "Create the shell's file, h2s-shell.json.", stepDone: false, git: false,
                                              line: "{ programs.h2s-shell.settingsFile = ./h2s-shell.json; }",
