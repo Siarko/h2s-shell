@@ -1,0 +1,10 @@
+# The plan of HS-228: the shell's modal in the module API, also outside the Settings window
+description: The shell's modal for modules and outside Settings: bar popup, side panel, module questions
+scene: settings-today    Today: the shell's own question over the Settings window (deleting a theme)
+scene: popup-inside      Option A: Taildrop Save in the bar popup, dimmed and drawn inside the popup only
+scene: popup-screen      Option B (proposed): the same, the screen below the bar dimmed, the usual width
+scene: side-panel        Taildrop Save all from the Files… side panel: two names taken, window and panel dimmed
+scene: module-logout     Tailscale Log out from its settings page: danger, asked through the API
+scene: module-stop-all   Tailscale Serve Stop all: danger, what stops named in a list
+scene: keyboard          Keyboard: nothing lit on opening; Tab goes left to right, the cancel last
+scene: modal-api-live    Live: Save from the popup, answer, or lock / close the popup to withdraw
