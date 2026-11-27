@@ -23,6 +23,16 @@ The interface modules are written against (`qs.api`), versioned on its own
   list, the arrows, Home, End, the pages and a first letter move, Enter or Space picks,
   Escape closes. A module that keeps the typing in a field of its own beside a dropdown
   gives that field the focus back itself.
+- 1.44: `module.ask(from, question, done)`, a question in the shell's own modal, asked
+  from a module's settings page, its side panel, or a bar popup (over the screen below the
+  bar, dimmed, the bar left usable): title, body, a plain list (`items`), checkboxes and
+  buttons with kinds, the cancel always last; `done` once with `{ button, cancelled,
+  blocked, values, subject }` — `blocked` "locked", "busy" (one question in the whole
+  shell), "place" (the bar, the tray menu, an anchor in no popup or window, the lock
+  screen), "closed" (its window, page or popup closed) or "module" (turned off). Labels
+  follow the button text rule (at most 4 words; a longer one is logged once). The test kit's
+  `pageFrame` shows its questions, answered with `ModuleTestKit.answerQuestion` and
+  `cancelQuestion`.
 - 1.43: module.json's `migrations`, an ordered list of the module's settings migrations
   (`{ "id": "taildrop-folder", "since": "0.8.0", "file": "migrations/TaildropFolder.qml",
   "scope": ["setting:taildrop.*", "store:folders"] }`): each a file inside the module, its
@@ -299,6 +309,8 @@ The interface modules are written against (`qs.api`), versioned on its own
   Without polkit rules it works as before; set to true beside them, it stops the build.
 
 ### Fixed
+- Shift+Tab moves back again in the Settings window's questions, side panels and a
+  notification's reply under a real keyboard (it did nothing there).
 - Deleting a theme keeps its file first, in `theme-backups/` beside the themes folder, as the
   hint now says; `qs ipc call settings restoreTheme <name>` brings one back. When the file
   cannot be kept, nothing is deleted and the Themes page says why.

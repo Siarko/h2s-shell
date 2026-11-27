@@ -331,6 +331,111 @@ Singleton {
         return first !== undefined && first !== null && JSON.stringify(first) === JSON.stringify(second);
     }
 
+    // A modal's list under its body: plain strings, each on one line (it wraps at the modal's
+    // width) cut at `modalLineCap`, an empty one left out, at most `modalItemsCap` of them.
+    // Not a list: none.
+    readonly property int modalItemsCap: 50
+    function modalItems(items) {
+        return (Array.isArray(items) ? items : []).map(item => oneLine(item, modalLineCap))
+            .filter(item => item !== "").slice(0, modalItemsCap);
+    }
+
+    // ---- (1.44) A module's question (module.ask; singletons/ModalQuestions.qml) ----
+
+    // The button text rule: a label of one line, at most this many words
+    readonly property int modalLabelWords: 4
+    // A module's question's size when it names none (or one the modal does not have)
+    readonly property string modalQuestionSize: "s"
+
+    // Plain data through JSON, or undefined when it is none: nothing live of the module's
+    // (a function, an object of its own) reaches the shell's modal
+    function _plain(value) {
+        try {
+            const text = JSON.stringify(value);
+            return text === undefined ? undefined : JSON.parse(text);
+        } catch (error) {
+            return undefined;
+        }
+    }
+
+    // A module's question as its host is given it (SettingsModalHost.ask's spec): copies of
+    // what the modal draws — kind, title, body, items, checks, buttons ({ id, label, kind,
+    // privileged, cancel } each), cancelLabel, size ("s" or "m", else "s") and subject —
+    // never a Component of the module's (`content` is left out). Not an object: {} — an
+    // empty question.
+    function modalQuestion(question) {
+        const given = question !== null && typeof question === "object" && !Array.isArray(question) ? question : {};
+        const buttons = _plain(given.buttons);
+        return {
+            kind: typeof given.kind === "string" ? given.kind : "info",
+            title: oneLine(given.title, modalTitleCap),
+            body: modalBody(_plain(given.body)),
+            items: modalItems(_plain(given.items)),
+            checks: modalChecks(_plain(given.checks)),
+            buttons: (Array.isArray(buttons) ? buttons : []).filter(button => button !== null && typeof button === "object")
+                .map(button => ({ id: button.id, label: button.label, kind: button.kind, privileged: button.privileged === true,
+                                  cancel: button.cancel === true })),
+            cancelLabel: oneLine(given.cancelLabel),
+            size: given.size === "s" || given.size === "m" ? given.size : modalQuestionSize,
+            subject: _plain(given.subject)
+        };
+    }
+
+    // The labels of a question's buttons (its spec's, the cancel's too) that break the button
+    // text rule: more than `modalLabelWords` words
+    function modalLongLabels(spec) {
+        return modalButtons(spec?.buttons, spec?.cancelLabel).buttons.map(button => button.label)
+            .filter(label => label.trim().split(/\s+/).length > modalLabelWords);
+    }
+
+    // Whether a module's question may be asked: "" when it may, else its answer's `blocked` —
+    // "module" (the module is off: then not answered at all), "locked" (the session is
+    // locked), "place" (no host above the asking item, or one that takes no question: the
+    // bar, the tray menu, an anchor in no popup or window, the lock screen), "busy" (a
+    // question is open, anywhere in the shell)
+    function modalAskRefusal(active, locked, hostFound, hostRefuses, busy) {
+        if (active !== true)
+            return "module";
+        if (locked === true)
+            return "locked";
+        if (hostFound !== true || hostRefuses === true)
+            return "place";
+        if (busy === true)
+            return "busy";
+        return "";
+    }
+
+    // A module's answer, frozen: { button, cancelled, blocked, values, subject }, from the
+    // host's ({ button, cancelled, reason, values, subject }). The user's own answer — a
+    // button, "×", Escape — and the module's own cancel() ("asker") keep button and
+    // cancelled, blocked "". Every other reason is a withdrawal, button "cancel", cancelled
+    // false: "lock" → blocked "locked"; "module", or any while the module is off → "module";
+    // the rest (the window, page or popup closed, the subject gone) → "closed". `values`: the
+    // checkboxes' states (true/false by key), `subject` a frozen copy of the question's.
+    function modalAnswer(answer, ownerActive) {
+        const reason = String(answer?.reason ?? "");
+        const own = reason === "button" || reason === "close" || reason === "escape" || reason === "asker";
+        const blocked = own ? "" : reason === "lock" ? "locked" : reason === "module" || ownerActive !== true ? "module" : "closed";
+        const values = {};
+        const given = answer?.values !== null && typeof answer?.values === "object" ? answer.values : {};
+        for (const key of Object.keys(given))
+            if (typeof given[key] === "boolean")
+                values[key] = given[key];
+        return Object.freeze({
+            button: own ? String(answer.button) : "cancel",
+            cancelled: own && answer.cancelled === true,
+            blocked: blocked,
+            values: Object.freeze(values),
+            subject: ReadOnlyRules.copy(answer?.subject)
+        });
+    }
+
+    // The answer of a question not asked (`blocked` modalAskRefusal's word), frozen
+    function modalRefused(blocked, subject) {
+        return Object.freeze({ button: "cancel", cancelled: false, blocked: String(blocked), values: Object.freeze({}),
+                               subject: ReadOnlyRules.copy(subject) });
+    }
+
     // Whether a mark with this need shows anything: the lock, or "not allowed"
     function markShown(need) {
         const inside = markNeed(need).value;

@@ -223,6 +223,7 @@ QtObject {
         if (!active) {
             _own.forgetLog();
             FileChooser.ownerGone(root);
+            ModalQuestions.ownerGone(root);
             Notifier.closeOwned(root);
         }
     }
@@ -233,6 +234,15 @@ QtObject {
     // `done` dropped, when the module is turned off.
     function chooseFiles(options, done) {
         return FileChooser.choose(root, options, done, Api.system.home);
+    }
+
+    // ---- A question (API 1.44) ----
+    // `ask(from, question, done)` asks the user in the shell's modal, over the place the item
+    // `from` stands in: the Settings window (a settings page, its side panel) or a bar popup
+    // (singletons/ModalQuestions.qml; Api.qml says what it does). Withdrawn, `done` told
+    // blocked "module", when the module is turned off.
+    function ask(from, question, done) {
+        return ModalQuestions.ask(root, from, question, done);
     }
 
     // ---- Its data directory (API 1.13) ----

@@ -314,14 +314,19 @@ TestCase {
     function _modals() {
         _answers = [];
         _modalOwners = _make(_modalOwner, _owners);
+        // One open question is the shell's (ModalQuestions.busy); the others do not share the
+        // rule, so that all are open at once
+        _modalOwners.forEach((owner, index) => owner.host.shared = index === 0);
         _modalOwners.forEach((owner, index) => owner.host.ask({ title: "Teardown", subject: { index: index } }, answer => suite._answers.push(answer)));
         assert(_modalOwners.every(owner => owner.host.open), "SettingsModalHost: each host's modal is open");
+        assert(ModalQuestions.busy, "… the shared one counts as the shell's open question");
         _drop(_modalOwners);
         _then("the modal hosts' owners are destroyed", _allGone, () => {
             _reachedDropped("SettingsModalHost");
             assertEqual(JSON.stringify(_answers.map(answer => [answer.button, answer.cancelled, answer.reason, answer.subject.index]).sort()),
                         JSON.stringify([0, 1, 2, 3, 4, 5].map(index => ["cancel", true, "window", index])),
                         "SettingsModalHost: destroyed while open, the asker is answered: cancelled for \"window\", with its subject");
+            assertEqual(ModalQuestions.busy, false, "… and ModalQuestions forgets the open question");
             _hoverTips();
         });
     }

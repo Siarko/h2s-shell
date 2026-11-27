@@ -85,7 +85,10 @@ Item {
         onActivated: root.cycle(true)
     }
     Shortcut {
-        sequences: ["Backtab", "Shift+Tab"]
+        // One sequence: a real keyboard sends Shift+Tab as Backtab with Shift held, which
+        // matches "Backtab" and "Shift+Tab" both — two sequences of one Shortcut are
+        // ambiguous then, and neither acts
+        sequence: "Shift+Tab"
         enabled: root._working
         onActivated: root.cycle(false)
     }

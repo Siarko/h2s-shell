@@ -2316,6 +2316,29 @@ blocked ("" | "locked" | "busy"), error }`; it returns `{ open, cancel() }`.
 - NixOS and Arch: the same; which dialog appears follows the user's Qt platform theme on
   either.
 
+**A question** (`module.ask(from, question, done)` on the handle; `singletons/ModalQuestions.qml`,
+its decisions in `singletons/ApiElementRules.qml`): the shell's own modal
+(`components/SettingsModal.qml` in a `components/SettingsModalHost.qml`), asked by a module.
+- **Places**: a host registers the root of the items it covers (`placeRoot`); the asking item
+  `from` finds the nearest one above it. The Settings window's host covers the window, a
+  module's page and its side panels included; each bar popup has a host of its own, on a
+  surface of its own shown while a question is open: anchored to the screen's four edges and
+  kept clear of the bar by its exclusive zone, on the overlay layer with the keyboard
+  exclusively (a compositor may hand the keyboard only to an overlay surface, and only as it
+  maps), so the area below the bar is dimmed and the bar stays usable. While it is open the
+  popup does not close on the pointer leaving it; the popup closing, turning to another panel
+  or opened from another cell withdraws it. The tray menu's popup refuses (`placeRefusal`);
+  the bar, the lock screen and an anchor in no popup or window have no place.
+- **One question in the whole shell** (`ModalQuestions.busy`): each host says so when it opens
+  one and when it closes, also at its destruction through its key alone; a module's second
+  question is `blocked: "busy"`, the shell's own refused.
+- **Answers**: the host's (`button`, `cancelled`, `reason`) mapped by
+  `ApiElementRules.modalAnswer` to the module's `{ button, cancelled, blocked, values,
+  subject }`; a withdrawal is `blocked` ("locked", "closed", "module"), never `cancelled`.
+  The answer owed is held in a closure: a host destroyed while open (the popup's loader
+  destroys its content on close) answers through it, during the teardown.
+- NixOS and Arch: the same.
+
 - **Tests**: `tests/CommandRulesTest.qml` and `tests/CommandRunnerTest.qml` (the runner's
   rules, and the runner against `sh -c` scripts), `tests/PrivilegedRulesTest.qml` (the rules
   of runs as administrator, the queue's life among them) and the fixture
@@ -2372,6 +2395,9 @@ blocked ("" | "locked" | "busy"), error }`; it returns `{ open, cancel() }`.
   and its runs see the test kit's polkit agent and lock, never the shell's.
   `module.chooseFiles` opens no dialog: each call that would open one is recorded and waits
   for the suite's answer, and the lock it sees is the test kit's.
+  `module.ask` shows the real modal, over the kit's `pageFrame` (`ModulePageFrame.ownQuestions`)
+  or a popup; the suite answers it as the user would (`ModuleTestKit.answerQuestion`,
+  `cancelQuestion`).
   `Api.system` and the network facts are then the test kit's made-up facts, nothing read, and the data
   directories lie below a private temporary home the host makes before the first module
   loads (`ModuleHost.testHome`: `mktemp -d` in `XDG_RUNTIME_DIR`, else `/tmp`), never in the

@@ -714,10 +714,13 @@ FloatingWindow {
         }
 
         // A question over the whole window, above everything in it (SettingsModalHost)
+        // — the place of every item in the window, a module's page and its side panels too
+        // (module.ask)
         SettingsModalHost {
             id: _modalHost
             anchors.fill: parent
             page: root.selectedPage
+            placeRoot: parent
         }
     }
 

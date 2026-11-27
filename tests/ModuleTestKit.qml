@@ -130,6 +130,21 @@ import qs.components as Components
 //                                { width: 600, height: 400 });
 //                            const page = pageComponent.createObject(frame.body, { module: module });
 //                          Destroying the frame is the page going (closed("page"))
+//                          (1.44) Its page's questions (module.ask) show over the frame, as
+//                          over the settings window
+//   (1.44, questions: module.ask shows the shell's real modal in test mode — over a
+//   pageFrame, or a popup's — and a suite answers it as the user would)
+//   questionOpen           a module's question is open
+//   question               the open one as shown, frozen { moduleId, kind, title, body
+//                          (the lines' texts), items, checks (the keys), buttons: [{ id,
+//                          label, kind }] (the cancel last, id "cancel") }, or null
+//   answerQuestion(moduleId, buttonId, checked)
+//                          the user ticked the checkboxes `checked` names ({ key: true }) and
+//                          clicked the button `buttonId` ("cancel": the cancel) of module
+//                          `moduleId`'s question → "" when answered, else why not (none open,
+//                          another module's, no such button)
+//   cancelQuestion(moduleId)
+//                          the user pressed Escape: `done` gets cancelled: true → "" or why not
 //   privilegedIdle         no run as administrator waits or runs, of any module
 // All of them do nothing outside test mode.
 //
@@ -297,8 +312,25 @@ Singleton {
         }
     }
 
+    readonly property bool questionOpen: Modules.host.testMode && ModalQuestions._moduleCall !== null
+    readonly property var question: questionOpen ? ModalQuestions.testQuestion() : null
+
+    function answerQuestion(moduleId, buttonId, checked) {
+        return Modules.host.testMode ? ModalQuestions.testAnswer(moduleId, buttonId, checked) : "module test mode is off";
+    }
+
+    function cancelQuestion(moduleId) {
+        if (!Modules.host.testMode)
+            return "module test mode is off";
+        const problem = ModalQuestions._testProblem(moduleId);
+        if (problem !== "")
+            return problem;
+        ModalQuestions._moduleCall.host.cancel("escape");
+        return "";
+    }
+
     readonly property Component pageFrame: Component {
-        Components.ModulePageFrame {}
+        Components.ModulePageFrame { ownQuestions: true }
     }
 
     // The links, notifications and chooser calls recorded, and the clock setNow set

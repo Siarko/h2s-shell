@@ -124,6 +124,7 @@ QtObject {
     property var _apiElements: ApiElementsTest {}
     property var _sidePanel: SidePanelTest {}
     property var _settingsModal: SettingsModalTest {}
+    property var _modalQuestions: ModalQuestionsTest {}
     property var _statusPill: StatusPillTest {}
     property var _modulesPage: ModulesPageTest {}
     property var _hud: HudTest {}

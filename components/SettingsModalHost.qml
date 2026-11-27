@@ -1,12 +1,14 @@
 import QtQuick
 import qs.singletons
 
-// Where the Settings window's modal shows (SettingsModal): a layer over the whole window,
-// one modal at a time. A page asks with `ask(spec, onAnswer)`:
+// Where the shell's modal shows (SettingsModal): a layer over the Settings window, or over
+// the screen below the bar from a bar popup; one modal at a time in the whole shell
+// (ModalQuestions). A page asks with `ask(spec, onAnswer)`:
 //
-//   spec: { kind, title, body, checks, content, buttons, cancelLabel, size, subject }
+//   spec: { kind, title, body, items, checks, content, buttons, cancelLabel, size, subject }
 //     kind     "danger", "warning", "success" or "info" (ThemeRules.modalLook)
 //     body     lines: strings or { text, strong }, plain text
+//     items    a list under the body: plain strings (ApiElementRules.modalItems)
 //     checks   checkboxes, [{ key, label }], unchecked each time it opens
 //     content  an optional Component under them; its item's `values`, when it has one, are
 //              added to the answer's
@@ -17,13 +19,18 @@ import qs.singletons
 //   onAnswer(answer): { button, cancelled, reason, values, subject } — `button` the id of
 //     the button clicked, "cancel" when cancelled; `reason` "button", "close" (×),
 //     "escape", "lock" (the session locked), "window" (the window hid or went), "page"
-//     (the window turned to another page: `page` changed), "subject" (withdrawn); `values` the checkboxes' states by key and the content's; `subject` the
+//     (the window turned to another page: `page` changed), "subject" (withdrawn), or the
+//     word given to `cancel(reason)` ("asker", "module": ModalQuestions'); `values` the checkboxes' states by key and the content's; `subject` the
 //     spec's, so the answer acts on what was asked about. A host destroyed while open
 //     answers cancelled for "window" with `values` {} (its content is going with it).
 //
-// `ask` returns "" when the modal opens, else why not: another is open (a question never
-// replaces another under the user's pointer), or the session is locked — said in the log
-// once until the outcome changes.
+// `ask` returns "" when the modal opens, else why not: another is open, here or anywhere in
+// the shell (a question never replaces another under the user's pointer), or the session is
+// locked — said in the log once until the outcome changes.
+//
+// With `placeRoot` set, the host is the place of the items under that root: a module's
+// question asked from one of them (module.ask) shows here, unless `placeRefusal` says why
+// not ("" when it takes questions).
 Item {
     id: root
 
@@ -34,7 +41,23 @@ Item {
     // The open modal's answer handler and subject, in a JavaScript object the destruction's
     // closure holds: Qt may drop the host's properties before its destruction runs, and the
     // asker must still get its cancelled answer then
-    readonly property var _asking: ({ onAnswer: null, subject: undefined })
+    readonly property var _asking: ({ onAnswer: null, subject: undefined, key: 0, placeKey: 0 })
+
+    // The items whose questions show here (ModalQuestions' place), and why none may ("")
+    property Item placeRoot: null
+    property string placeRefusal: ""
+    // Counts in the shell's one question at a time; false only for a host no one sees (a
+    // suite's several at once)
+    property bool shared: true
+    onPlaceRootChanged: _registerPlace()
+    function _registerPlace() {
+        if (_asking.placeKey === 0)
+            _asking.placeKey = ModalQuestions.newKey();
+        if (placeRoot)
+            ModalQuestions.addPlace(_asking.placeKey, placeRoot, root);
+        else
+            ModalQuestions.forgetPlace(_asking.placeKey);
+    }
     // The last refusal logged: the same one again is not (log on a change of outcome)
     property string _lastRefusal: ""
 
@@ -52,11 +75,17 @@ Item {
     // going with it)
     Component.onCompleted: {
         const asking = _asking;
+        _asking.key = ModalQuestions.newKey();
+        if (placeRoot)
+            _registerPlace();
         Component.destruction.connect(() => {
             const callback = asking.onAnswer;
             const subject = asking.subject;
             asking.onAnswer = null;
             asking.subject = undefined;
+            ModalQuestions.closed(asking.key);
+            if (asking.placeKey !== 0)
+                ModalQuestions.forgetPlace(asking.placeKey);
             if (!callback)
                 return;
             try {
@@ -68,7 +97,7 @@ Item {
     }
 
     function ask(spec, onAnswer) {
-        const refusal = ApiElementRules.modalRefusal(open, _locked);
+        const refusal = ApiElementRules.modalRefusal(open || (shared && ModalQuestions.busy), _locked);
         if (refusal !== "") {
             if (_lastRefusal !== refusal)
                 console.warn("[SettingsModal] not opened: " + refusal);
@@ -79,6 +108,8 @@ Item {
         _spec = spec !== null && typeof spec === "object" ? spec : {};
         _asking.onAnswer = typeof onAnswer === "function" ? onAnswer : null;
         _asking.subject = _spec.subject;
+        if (shared)
+            ModalQuestions.opened(_asking.key);
         return "";
     }
 
@@ -112,6 +143,7 @@ Item {
         _asking.onAnswer = null;
         _asking.subject = undefined;
         _lastRefusal = "";
+        ModalQuestions.closed(_asking.key);
         if (!callback)
             return;
         try {
@@ -128,6 +160,7 @@ Item {
         kind: root._spec?.kind ?? "info"
         title: root._spec?.title ?? ""
         body: root._spec?.body ?? []
+        items: root._spec?.items ?? []
         checks: root._spec?.checks ?? []
         content: root._spec?.content ?? null
         buttons: root._spec?.buttons ?? []

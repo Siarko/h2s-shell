@@ -16,6 +16,10 @@ Item {
     default property alias page: _body.data
     readonly property Item body: _body
     readonly property alias sidePanelHost: _host
+    // A modal host of its own over the frame, the place of the page's questions (module.ask):
+    // for a frame in no Settings window (the test kit's), whose window's host is the place
+    property bool ownQuestions: false
+    readonly property var modalHost: _questions.item
 
     clip: true
 
@@ -49,6 +53,15 @@ Item {
     SidePanelHost {
         id: _host
         anchors.fill: parent
+    }
+
+    Loader {
+        id: _questions
+        anchors.fill: parent
+        active: root.ownQuestions
+        sourceComponent: SettingsModalHost {
+            placeRoot: root
+        }
     }
 
     Component.onCompleted: ApiElements.addFrame(root, _host)

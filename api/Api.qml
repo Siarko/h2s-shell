@@ -8,7 +8,7 @@ import qs.singletons.network
 // The module API: everything a
 // module may use of the shell. A module imports `qs.api` and reaches:
 //
-//   Api.version            "1.43" — this shell's module API, "major.minor". A module's manifest
+//   Api.version            "1.44" — this shell's module API, "major.minor". A module's manifest
 //                          asks for one ("api"); it loads when the major is the same, this
 //                          minor is at least the one asked for, and the one asked for is not
 //                          below the shell's floor (ModuleRules.apiFloor: the oldest version
@@ -1094,6 +1094,63 @@ import qs.singletons.network
 //                          answerChooser(moduleId, paths), cancelChooser(moduleId)); the
 //                          lock is the test kit's (setSessionLocked, or setChooserLocked for
 //                          the chooser alone).
+//
+// A question (1.44), on a module's handle (api/ModuleHandle.qml; singletons/ModalQuestions.qml).
+//   module.ask(from, question, done)   asks the user in the shell's own modal (the look and
+//                          keys of the Settings window's questions) → a handle { open (bool),
+//                          cancel() }, frozen. Callback and handle, as chooseFiles.
+//                            from      an Item of the module's where it asks (the clicked
+//                                      button): the question shows over the place it stands
+//                                      in — the Settings window (a settings page, its side
+//                                      panel, an anchor there): over the whole window; a bar
+//                                      popup (its panel, an anchor in it, the notification
+//                                      centre): over the screen below the bar, dimmed, the
+//                                      bar left usable, the popup held open meanwhile
+//                            question  read once, plain data only (copied):
+//                              kind        "danger" | "warning" | "success" | "info" (the
+//                                          default): the border's and the icon's colour
+//                              title       one line, at most 120 characters
+//                              body        lines: strings or { text, strong } (bold)
+//                              items       a plain list under the body: strings, one a line,
+//                                          at most 50 (what else the action affects)
+//                              checks      checkboxes, [{ key, label }], unchecked at opening
+//                              buttons     [{ id, label, kind, privileged }] left to right,
+//                                          kind a SmallButton kind ("delete", "warning",
+//                                          "save", …), privileged: the button's answer asks
+//                                          for an administrator's password (its mark shown).
+//                                          The cancel is always added last (cancelLabel,
+//                                          "Cancel" by default); none of its own: the modal
+//                                          only informs, its one button "OK"
+//                              cancelLabel the cancel's label
+//                              size        "s" (the default) | "m"
+//                              subject     the ids it acts on (plain data), handed back in
+//                                          the answer: act on those, not on what is current
+//                            Labels follow the button text rule: one line, at most 4 words
+//                            (a longer one is shown, and logged once). Text is shown as
+//                            plain text. Nothing is focused at opening; Tab goes left to
+//                            right through the checkboxes and buttons, Shift+Tab back, Space
+//                            or Enter on a button answers it, Escape and "×" cancel.
+//                            done(answer)  called once, frozen: { button (the id clicked,
+//                                          "cancel" otherwise), cancelled (the user's own
+//                                          no: the cancel, "×", Escape — or cancel() was
+//                                          called), blocked, values (the checkboxes'
+//                                          true/false by key), subject (a copy) }
+//                          blocked, told apart from cancelled: "" (answered by the user) |
+//                          "locked" (the session is locked: not asked, or the lock withdrew
+//                          it) | "busy" (a question is open already — one at a time in the
+//                          whole shell, the shell's own included) | "place" (asked where no
+//                          question stands: the bar itself, the tray menu, an anchor in no
+//                          popup or window, the lock screen, an item that is not one) |
+//                          "closed" (the window, the page or the popup it stood in closed,
+//                          or the popup turned to another panel or cell) | "module" (the
+//                          module was turned off while it was open). A question not asked
+//                          is answered after ask() returns; one asked while the module is
+//                          off is not answered at all. "closed" and "module" may come while
+//                          the module's views are torn down: the handler only sets the
+//                          module's own state.
+//                          In module test mode the modal is real, over ModuleTestKit.pageFrame
+//                          (or a popup): a suite answers it (ModuleTestKit.question,
+//                          answerQuestion(moduleId, buttonId, checked), cancelQuestion(moduleId)).
 //
 // A module's settings migrations (1.43; the format and the rules:
 // singletons/ModuleMigrationRules.qml). Declared in module.json, in the order they run:

@@ -419,7 +419,7 @@ LazyLoader {
 
         // A tap outside the popup and the bar closes one opened by touch
         OutsideTapCatcher {
-            visible: popupLoader.touchOpened && !popupLoader.closing
+            visible: popupLoader.touchOpened && !popupLoader.closing && !_question.open
             screen: popupLoader.barScreen
             popupHole: Qt.rect(clipWrapper.x + popup._screenOffset.x, clipWrapper.y + popup._screenOffset.y,
                                clipWrapper.width, clipWrapper.height)
@@ -884,8 +884,54 @@ LazyLoader {
                 onHoveredChanged: {
                     if (hovered)
                         popupLoader._hoverClose.stop();
-                    else if (!popupLoader.persistent)
+                    else if (!popupLoader.persistent && !_question.open)
                         popupLoader._hoverClose.restart();
+                }
+            }
+        }
+
+        // A question asked from the popup's content (module.ask; the notification centre's
+        // too): the screen below the bar dimmed, the modal at its usual width, the popup
+        // held open meanwhile — no close on leaving it. The bar stays usable: the popup
+        // closing, or turning to another panel or cell, withdraws it. The tray menu takes
+        // none. Its own surface, shown while a question is open: kept clear of the bar by its
+        // exclusive zone, and on the overlay layer with the keyboard exclusively, mapped so —
+        // a compositor may hand the keyboard only to an overlay surface, and only as it maps
+        // (labwc), so Tab and Escape reach the question wherever the pointer is
+        PanelWindow {
+            id: _questionWindow
+            screen: popupLoader.barScreen
+            visible: _question.open
+            anchors { top: true; bottom: true; left: true; right: true }
+            exclusionMode: ExclusionMode.Normal
+            color: "transparent"
+            WlrLayershell.layer: WlrLayer.Overlay
+            WlrLayershell.namespace: "h2s-popup-question"
+            WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive
+
+            SettingsModalHost {
+                id: _question
+                objectName: "popupQuestion"
+                anchors.fill: parent
+                placeRoot: clipWrapper
+                placeRefusal: popupLoader.contentType === "tray-menu" ? "the tray menu takes no question" : ""
+                onOpenChanged: {
+                    // Answered with the pointer away from the popup: it closes as on leaving it
+                    if (!open && !hoverHandler.hovered && !popupLoader.persistent && !popupLoader.touchOpened)
+                        popupLoader._hoverClose.restart();
+                }
+                Connections {
+                    target: popupLoader
+                    function onClosingChanged() {
+                        if (popupLoader.closing)
+                            _question.cancel("window");
+                    }
+                    function onContentTypeChanged() {
+                        _question.cancel("window");
+                    }
+                    function onOpenedByChanged() {
+                        _question.cancel("window");
+                    }
                 }
             }
         }

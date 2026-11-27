@@ -6,12 +6,12 @@ import qs.singletons
 // A question over the Settings window that needs more than a button's word: a list of what
 // else it affects, a checkbox, an explanation. A centred panel with an opaque background and
 // a border in its kind's colour (ThemeRules.modalLook: "danger", "warning", "success",
-// "info"), a header with the kind's icon, the title and "×", the body's lines, its checkboxes
+// "info"), a header with the kind's icon, the title and "×", the body's lines, a list, its checkboxes
 // and optional content, and a row of buttons; behind it the area it fills dimmed with
 // Theme.modalDim, every click and the wheel stopped there. Sizes from Theme.modal.
 //
 // Text from outside the shell may stand in the title, the body and the labels: each is drawn
-// as plain text, on one line cut at a length (ApiElementRules.modalBody, oneLine) and wrapped
+// as plain text, on one line cut at a length (ApiElementRules.modalBody, modalItems, oneLine) and wrapped
 // at the panel's width. The buttons are ApiElementRules.modalButtons': always one cancel,
 // last; with none of its own the one button informs.
 //
@@ -29,6 +29,8 @@ Item {
     property string title: ""
     // Lines: strings, or { text, strong }
     property var body: []
+    // A list under the body: plain strings (what else an action affects)
+    property var items: []
     // Checkboxes: [{ key, label }]
     property var checks: []
     // Optional content under the checkboxes (a list, say), built while open; laid out at
@@ -50,6 +52,7 @@ Item {
     readonly property var buttonList: _buttons.buttons
     readonly property bool informing: _buttons.informing
     readonly property var _body: ApiElementRules.modalBody(body)
+    readonly property var _items: ApiElementRules.modalItems(items)
     readonly property var _checks: ApiElementRules.modalChecks(checks)
     property var values: ({})
 
@@ -176,7 +179,7 @@ Item {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 Layout.preferredHeight: _middle.implicitHeight
-                visible: root._body.length > 0 || root._checks.length > 0 || root.content !== null
+                visible: root._body.length > 0 || root._items.length > 0 || root._checks.length > 0 || root.content !== null
                 contentWidth: width
                 contentHeight: _middle.implicitHeight
                 flickableDirection: Flickable.VerticalFlick
@@ -203,6 +206,27 @@ Item {
                             font.pixelSize: Theme.fontSizeBody
                             font.bold: line.strong
                             color: line.strong ? Theme.textPrimary : Theme.textSecondary
+                        }
+                    }
+
+                    // The list, one item a line under the body, wrapped at the panel's width
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        visible: root._items.length > 0
+                        spacing: 4
+                        Repeater {
+                            model: ScriptModel { values: root._items.map((item, index) => String(index)) }
+                            Text {
+                                required property string modelData
+                                objectName: "modalItem"
+                                Layout.fillWidth: true
+                                text: "• " + (root._items[Number(modelData)] ?? "")
+                                textFormat: Text.PlainText
+                                wrapMode: Text.Wrap
+                                font.family: Theme.fontFamily
+                                font.pixelSize: Theme.fontSizeBody
+                                color: Theme.textPrimary
+                            }
                         }
                     }
 

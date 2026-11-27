@@ -320,7 +320,8 @@ Shell code never imports from `mockups/`.
   time-outs. The owner resets `asking` when the item it acts on changes. A button that asks
   before something else (turning a hotspot on) is the same component with its `kind`
   (`"save"`): the question takes the kind's colour. A question with a list, a choice or an
-  explanation opens the Settings modal. Don't
+  explanation opens the shell's modal (`SettingsModalHost.ask`; a module: `module.ask`, also
+  from a bar popup). Don't
   hand-roll another confirm; not everything needs a modal.
 - **How a button looks is `ThemeRules.buttonLook(kind, state)`**: `SmallButton` and
   `DeleteButton` draw what it names. A new kind or state is added there, with its cases.

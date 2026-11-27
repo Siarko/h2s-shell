@@ -333,6 +333,8 @@ MockupWindow {
                 SettingsModalHost {
                     id: _host
                     anchors.fill: parent
+                    // Every state's question open side by side: not the shell's one at a time
+                    shared: false
                 }
             }
         }
