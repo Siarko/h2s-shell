@@ -1,4 +1,5 @@
 description: A bar pill with an icon, a label and parts that can unfold
+parent: pill
 state: kinds            One pill of each status kind, no parts
 state: parts            An icon, a label and three parts of different kinds, folded
 state: hover            The same under the pointer

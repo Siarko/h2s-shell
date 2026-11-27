@@ -57,7 +57,8 @@ ShellRoot {
     readonly property var _bases: ["mockups", "tests/fixtures/mockups"]
     property var _window: null
 
-    // _readAbout(<kind>/<name> folder URL, word): { description, names, descriptions, error },
+    // _readAbout(<kind>/<name> folder URL, word): { description, family, parent, names,
+    // descriptions, error },
     // by tests/mockup-about.sh's rules
     function _readAbout(folder, word) {
         const other = word === "state" ? "scene" : "state";
@@ -66,14 +67,14 @@ ShellRoot {
         const text = file.text();
         const failed = file.failed;
         file.destroy();
-        const answer = { description: "", names: [], descriptions: [], error: "" };
+        const answer = { description: "", family: "", parent: "", names: [], descriptions: [], error: "" };
         if (failed || text === "") {
             answer.error = "about.txt is missing, empty or unreadable: every element declares its description and its " + word + "s there";
             return answer;
         }
         const errors = [];
         const seen = Object.create(null);
-        let descriptions = 0, declared = 0;
+        let descriptions = 0, declared = 0, families = 0, parents = 0;
         const lines = text.split("\n");
         if (lines.length > 0 && lines[lines.length - 1] === "")
             lines.pop();
@@ -84,7 +85,7 @@ ShellRoot {
                 continue;
             const match = /^([a-z]+):(.*)$/.exec(line);
             if (!match) {
-                errors.push(at + "not 'description:', '" + word + ":' or a comment");
+                errors.push(at + "not 'description:', '" + word + ":', 'family:', 'parent:' or a comment");
                 continue;
             }
             const rest = match[2].trim();
@@ -116,17 +117,29 @@ ShellRoot {
                     answer.names.push(name);
                     answer.descriptions.push(description);
                 }
+            } else if (match[1] === "family" || match[1] === "parent") {
+                const count = match[1] === "family" ? ++families : ++parents;
+                if (count > 1)
+                    errors.push(at + "a second " + match[1]);
+                else if (!/^[a-z0-9][a-z0-9-]*$/.test(rest))
+                    errors.push(at + "the " + match[1] + " '" + rest + "' is not lowercase letters, digits and '-'");
+                else
+                    answer[match[1]] = rest;
             } else if (match[1] === other) {
                 errors.push(at + (word === "state" ? "'scene:' is a plan's; a component or a view declares 'state:' lines"
                                                    : "'state:' is a component's or a view's; a plan declares 'scene:' lines"));
             } else {
-                errors.push(at + "'" + match[1] + ":' is not 'description:' or '" + word + ":'");
+                errors.push(at + "'" + match[1] + ":' is not 'description:', '" + word + ":', 'family:' or 'parent:'");
             }
         }
         if (descriptions === 0)
             errors.push("about.txt: no 'description:' line");
         if (declared === 0)
             errors.push("about.txt: no '" + word + ":' line");
+        if (families > 0 && parents > 0)
+            errors.push("about.txt: a family and a parent: a part takes its parent's family");
+        if (answer.parent !== "" && answer.parent === path.split("/").slice(-2)[0])
+            errors.push("about.txt: the parent is the element itself");
         if (answer.names.length > 30)
             errors.push("about.txt: " + answer.names.length + " " + word + "s, over 30");
         answer.error = errors.join("; ");

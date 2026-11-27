@@ -1,6 +1,7 @@
 # Each state's cell is a settings column (180 px wide dropdowns); a closed state shows a
 # plain choice and one with a colour dot, an open one its list under the button.
 description: A choice shown as a button, its options in a list that floats over the page
+family: choices
 state: closed           The current choice, plain and with its colour dot
 state: placeholder      Nothing chosen yet: the placeholder, dimmed
 state: hover            Under the pointer: the border lighter

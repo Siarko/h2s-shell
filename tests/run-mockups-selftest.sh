@@ -44,7 +44,7 @@
 #   - `ipc call mockup theme <name>` on screen shows it in that theme and answers the name;
 #   - the gallery (H2S_MOCKUP=gallery, on mockups/), in the built-in theme and opened in a
 #     fixture theme (tests/fixtures/mockup-themes/, H2S_MOCKUP_THEME): a section per
-#     component on disk, in order, no view, each built once jumped to and at the top of the view then, in all its states
+#     component on disk, by family (about.txt's family: and parent:), no view, each built once jumped to and at the top of the view then, in all its states
 #     labelled from about.txt, no error or warning, at rest using next to no processor time;
 #     the filter keeps only matching sections; the theme switched over IPC to default and
 #     back, an unknown one refused with the list;
@@ -55,7 +55,7 @@
 #     server, sends nothing and has no helper;
 #   - a bad name, a base it does not take, a missing file, a load error, a root that is not
 #     a MockupWindow, each broken form of about.txt (missing, no description, the other
-#     kind's keyword, a bad, a repeated, an empty or an undescribed name, too long), a Mockup.qml still
+#     kind's keyword, a bad, a repeated, an empty or an undescribed name, too long, a family beside a parent), a Mockup.qml still
 #     setting names, an unknown first state, the old
 #     planning/ folder, H2S_MOCKUP_SCENE for a component and H2S_MOCKUP_STATE for a plan, a
 #     mockup still setting the kit's old `scenes`, a theme while shooting (the baselines are
@@ -492,8 +492,35 @@ gallery_run() {
     finish_entry "$case"
 }
 
-# The elements on disk, as the gallery lists them, and each one's states from about.txt
-elements_on_disk=$(cd "$REPO/mockups" && for folder in components/*/; do echo "${folder%/}"; done)
+# The elements on disk, in the gallery's order (its familyOrder, about.txt's family: and
+# parent:, worked out here on their own), and each one's states from about.txt
+gallery_order() {
+    local -A family=() parent=()
+    local families folder name top chain rank known index
+    families=$(grep -o 'familyOrder: \[.*\]' "$REPO/mockups/kit/Gallery.qml" | grep -o '"[a-z0-9-]*"' | tr -d '"')
+    for folder in "$REPO"/mockups/components/*/; do
+        folder=${folder%/}
+        name=${folder##*/}
+        family[$name]=$(sed -n 's/^family:[[:space:]]*//p' "$folder/about.txt")
+        parent[$name]=$(sed -n 's/^parent:[[:space:]]*//p' "$folder/about.txt")
+    done
+    for name in "${!family[@]}"; do
+        top=$name chain=$name
+        while [ -n "${parent[$top]}" ] && [ -n "${family[${parent[$top]}]+set}" ] \
+            && ! [[ " $chain " == *" ${parent[$top]} "* ]]; do
+            top=${parent[$top]}
+            chain="$top $chain"
+        done
+        known=$(grep -n -x -F -- "${family[$top]}" <<< "$families" | cut -d: -f1)
+        index=$(grep -c . <<< "$families")
+        if [ -n "${family[$top]}" ] && [ -n "$known" ]; then rank=$((known - 1))
+        elif [ -n "${family[$top]}" ]; then rank=$index
+        else rank=$((index + 1)); fi
+        printf '%02d %s %s\t%s\n' "$rank" "${family[$top]}" "$chain" "components/$name"
+    done | LC_ALL=C sort | cut -f2
+}
+elements_on_disk=$(gallery_order)
+check "$(grep -q -x 'components/input-field' <<< "$elements_on_disk" && [ "$(grep -A1 -x 'components/input-field' <<< "$elements_on_disk" | tail -n 1)" = components/schema-setting-editor ]; echo $?)" "the gallery's order worked out: a part (schema-setting-editor) right after its parent (input-field) ($(paste -s -d ' ' <<< "$elements_on_disk"))"
 theme_config=$work/theme-config
 mkdir -p "$theme_config/h2s_shell/themes"
 echo '{}' > "$theme_config/h2s_shell/config.json"
@@ -507,7 +534,7 @@ for run in built-in contrast; do
         echo "the gallery opened in a theme file (H2S_MOCKUP_THEME), switched over IPC"
         gallery_run gallery-$run XDG_CONFIG_HOME="$theme_config" H2S_MOCKUP_THEME=contrast
     fi
-    check "$([ "$(awk '{ print $1 }' <<< "$sections_answer")" = "$elements_on_disk" ]; echo $?)" "$run: a section per component on disk, alphabetical, no view (was '$(awk '{ print $1 }' <<< "$sections_answer" | paste -s -d ' ')')"
+    check "$([ "$(awk '{ print $1 }' <<< "$sections_answer")" = "$elements_on_disk" ]; echo $?)" "$run: a section per component on disk, by family, each part after its parent, no view (was '$(awk '{ print $1 }' <<< "$sections_answer" | paste -s -d ' ')')"
     check "$([ -n "$sections_answer" ] && ! grep -q -v ' built$' <<< "$sections_answer"; echo $?)" "$run: every section built once jumped to ($(grep -v ' built$' <<< "$sections_answer" | paste -s -d ';'))"
     tops=$(for element in $elements_on_disk; do [ "${top_of[$element]:-}" = "$element" ] || echo "$element:${top_of[$element]:-}"; done)
     check "$([ -z "$tops" ]; echo $?)" "$run: each section jumped to at the top of the view, the sections above it grown ($tops)"
@@ -907,6 +934,7 @@ errors=(
     "about.txt: a repeated name|about.txt line 4: the state name 'first' is repeated (line 2)|${fixtures[*]} H2S_MOCKUP=components/repeated-name"
     "about.txt: a state without a name|about.txt line 2: a state without a name|${fixtures[*]} H2S_MOCKUP=components/empty-name"
     "about.txt: a state without its description|about.txt line 2: the state 'first' has no description|${fixtures[*]} H2S_MOCKUP=components/no-state-description"
+    "about.txt: a family and a parent|about.txt: a family and a parent: a part takes its parent's family|${fixtures[*]} H2S_MOCKUP=components/family-and-parent"
     "about.txt: a description too long|about.txt line 1: the description is 101 characters, over 100|${fixtures[*]} H2S_MOCKUP=components/too-long"
     "names set in Mockup.qml|the states are declared in about.txt, not in Mockup.qml|${fixtures[*]} H2S_MOCKUP=components/sets-names"
     "a check of a broken about.txt|about.txt line 2: 'state:' is a component's or a view's|H2S_MOCKUP_BASE=tests/fixtures/mockups H2S_MOCKUP_CHECK=1 H2S_MOCKUP=plans/wrong-keyword"

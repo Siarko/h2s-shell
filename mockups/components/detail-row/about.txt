@@ -1,6 +1,7 @@
 # Each state's cell is a settings column (308 px) of three details, the middle one the
 # state's.
 description: A detail's label and its value, selectable to copy
+family: rows
 state: value        A short value beside its label
 state: long-value   A value too long for its line: wrapped anywhere
 state: empty        No value: its row hidden, the rows around it close up

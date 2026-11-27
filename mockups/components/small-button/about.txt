@@ -1,6 +1,7 @@
 # Each state's cell is a column of every kind ThemeRules.buttonLook names, all of them in
 # the state's look; the save kind reads "Create", saveChange "Update".
 description: The small text button in every kind and look
+family: buttons
 state: rest             No pointer, no keyboard
 state: disabled         Not available: dimmed
 state: checked          Checked (a toggle that is on): the plain kinds take the accent

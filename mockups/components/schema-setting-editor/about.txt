@@ -1,6 +1,8 @@
 # Each state's cell is one setting's editor in a settings column (408 px), the profile
 # "Work" edited, "Base" above it, on stand-in profiles (the editor's store).
 description: One setting's editor, its control by the setting's type, where its value comes from
+# Beside input-field in the gallery: most of its controls are fields (string, number, list)
+parent: input-field
 state: bool             A switch, set in this profile: the reset after the pin
 state: enum-pills       A choice as pills, one picked, set in this profile
 state: interval-pills   An interval as pills (Paused, 1 s … 1 min), set in this profile

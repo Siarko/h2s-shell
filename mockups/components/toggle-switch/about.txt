@@ -1,5 +1,8 @@
 # Each state's cell is a column: the settings' small switch above the popups' larger one.
 description: The on/off switch, small and large, the same colours in both
+# Each state's cell is the settings' small switch and the popups' larger one side by side.
+description: The on/off switch, small and large
+family: choices
 state: off            Off
 state: on             On
 state: hover          Off, under the pointer: the track lighter

@@ -7,7 +7,7 @@ import qs.singletons
 import qs.components
 
 // The gallery (H2S_MOCKUP=gallery, made by the entry, mockup.qml): every component in one
-// scrollable window, alphabetical. A section per component: its name, about.txt's
+// scrollable window, by family (sectionOrder). A section per component: its name, about.txt's
 // description, and the component's own Mockup.qml in all its states, every cell labelled as
 // in the all-states window. Views and plans are not in it: a view is opened on its own.
 //
@@ -45,7 +45,7 @@ QtObject {
     id: root
 
     // Set by the entry: the folder holding components/, and its about.txt reader
-    // (folder URL, word): { description, names, descriptions, error }
+    // (folder URL, word): { description, family, parent, names, descriptions, error }
     property url baseUrl
     property var readAbout: null
     property bool visible: true
@@ -133,24 +133,51 @@ QtObject {
 
     onFilterTextChanged: Qt.callLater(_buildNear)
 
+    // The families in the order the gallery shows them (about.txt's `family:`); one not
+    // listed comes after these, by name, and an element with no family last
+    readonly property var familyOrder: ["fields", "choices", "buttons", "rows", "text", "overlays", "bar"]
+
+    // The sections' order: by family, alphabetical within it, each part (about.txt's
+    // `parent:`) right after its parent, in the parent's family. Each section's sort key is
+    // its family's rank and name, then the names from its topmost parent down to its own,
+    // apart by a space (below '-', so a part comes before a sibling whose name only starts
+    // with its parent's). A parent that is no section, or a chain that comes round, counts
+    // as none. abouts: { <name>: about.txt's answer }; the names, in order
+    function sectionOrder(abouts) {
+        const keyOf = name => {
+            const chain = [name];
+            let top = name;
+            while ((abouts[top]?.parent ?? "") !== "" && abouts[abouts[top].parent] !== undefined
+                   && !chain.includes(abouts[top].parent)) {
+                top = abouts[top].parent;
+                chain.unshift(top);
+            }
+            const family = abouts[top]?.family ?? "";
+            const known = familyOrder.indexOf(family);
+            const rank = known >= 0 ? known : family !== "" ? familyOrder.length : familyOrder.length + 1;
+            return String(rank).padStart(2, "0") + " " + family + " " + chain.join(" ");
+        };
+        const keys = {};
+        for (const name of Object.keys(abouts))
+            keys[name] = keyOf(name);
+        return Object.keys(abouts).sort((a, b) => keys[a] < keys[b] ? -1 : keys[a] > keys[b] ? 1 : 0);
+    }
+
     // Reads the components' folder once it is listed: the sections and their about.txt
     function _list() {
         if (_listed || _componentsFolder.status !== FolderListModel.Ready)
             return;
         _listed = true;
-        const keys = [];
         const about = {};
-        const names = [];
-        for (let i = 0; i < _componentsFolder.count; i++)
-            names.push(_componentsFolder.get(i, "fileName"));
-        names.sort();
-        for (const name of names) {
+        const byName = {};
+        for (let i = 0; i < _componentsFolder.count; i++) {
+            const name = _componentsFolder.get(i, "fileName");
             const key = "components/" + name;
-            keys.push(key);
             about[key] = readAbout(Qt.resolvedUrl(baseUrl + "/" + key), "state");
+            byName[name] = about[key];
         }
         _about = about;
-        sectionKeys = keys;
+        sectionKeys = sectionOrder(byName).map(name => "components/" + name);
     }
 
     // Makes the window; "" or why not

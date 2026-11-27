@@ -1,5 +1,6 @@
 # Each state's cell is a row of the three sizes (s, m, l).
 description: The rounded label every bar widget sits in, in three sizes
+family: bar
 state: idle         Not picked, no pointer
 state: picked       Picked: filled with the accent
 state: hover        Under the pointer, each size: the background lit

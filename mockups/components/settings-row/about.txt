@@ -1,5 +1,6 @@
 # Each state's cell is a settings column (308 px) with one row.
 description: One line of a settings page: a label, a hint, a value or controls on the right
+family: rows
 state: label                A label alone
 state: label-hint           A label with a hint under it, wrapped
 state: value                A label and its value on the right

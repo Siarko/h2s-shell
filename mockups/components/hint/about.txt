@@ -1,4 +1,5 @@
 # Each state's cell is a hint at a settings column's width (308 px).
 description: The small muted line on a settings page that explains a setting
+family: text
 state: short      One line
 state: wrapped    A long hint wrapped onto several lines at the column's width

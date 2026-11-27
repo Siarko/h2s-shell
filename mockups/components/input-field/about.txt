@@ -1,6 +1,7 @@
 # Each state's cell is a settings column (200 px) with the field in it: empty above, filled
 # below where the state has both.
 description: The one-line text field: placeholder, focus, problem, password with its eye
+family: fields
 state: empty       Nothing typed: the placeholder in the box
 state: filled      A text longer than the box: its end shown, the start cut
 state: focus       With the keyboard: the accent around it, the placeholder gone

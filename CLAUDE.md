@@ -178,6 +178,7 @@ list is declared:
 ```
 # Comments and blank lines are skipped.
 description: The rounded label every bar widget sits in, in three sizes
+family: bar
 state: idle         Not picked, no pointer
 state: hover-s      The pointer over the small pill
 ```
@@ -186,7 +187,9 @@ one `description:` line, then a `state:` line per state (a plan: `scene:` per sc
 other kind's word is an error) in shot order — the name (letters, digits, `-`, unique, at
 most 30) and its description (required); each description at most 100 characters
 (`tests/mockup-about.sh`, the runner's and the screen tool's reader; the entry reads it by
-the same rules). Its root is the kit's
+the same rules). A component may say where the gallery puts it: `family: <family>` (fields,
+choices, buttons, rows, text, overlays, bar: the kit's `Gallery.familyOrder`), or, for a part
+of another element, `parent: <element>` instead, shown right after it in its family. Its root is the kit's
 `MockupWindow` (`import qs.mockups.kit`), which holds the contract — `names` and
 `descriptions` (about.txt's, read-only: a `Mockup.qml` that sets them fails; not
 `states`/`state`, which every Qt Quick Item has), `current`, `subject`,
@@ -234,7 +237,8 @@ state or scene, `--theme <name>` in one of the user's theme files (`H2S_MOCKUP_T
 `Theme.preview`, saved nowhere; `ipc call mockup theme <name>` switches it; refused while
 shooting: baselines are always the built-in theme's). `open gallery` opens
 `mockups/kit/Gallery.qml` (`H2S_MOCKUP=gallery`): every component in one scrollable
-window (views are opened on their own), a section each, in all its states, labelled from `about.txt`; a bar with the theme,
+window (views are opened on their own), a section each, by family, alphabetical within it,
+each part after its parent, in all its states, labelled from `about.txt`; a bar with the theme,
 a filter and a button per section. Each section's `Mockup.qml` is created hosted (the kit's
 `host`: no window, no `IpcHandler`) when it scrolls near the view; the gallery has no
 baseline of its own (its parts have theirs) and answers the IPC target `mockup` itself

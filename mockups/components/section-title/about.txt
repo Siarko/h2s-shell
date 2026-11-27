@@ -1,6 +1,7 @@
 # Each state's cell is a settings column (308 px): the title, then a hint under it as the
 # section's first line.
 description: A section's title on a settings page, with the line above it
+family: text
 state: plain      After the page's rows: the line above it
 state: first      The first section under a page's heading: no line
 state: controls   A switch and a button at the right end of its line

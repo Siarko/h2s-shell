@@ -1,5 +1,6 @@
 # Each state's cell is a settings column (308 px) with one switch row.
 description: A setting that is a switch: its label, a line on what it does, the switch
+parent: settings-row
 state: off            Off, a label alone
 state: on             On
 state: hint           With a line under the label on what it does, wrapped

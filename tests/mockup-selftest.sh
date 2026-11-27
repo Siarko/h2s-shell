@@ -299,10 +299,26 @@ about_read "$about_dir" state
 check "$?" "100 characters, the description's and a state's: taken"
 printf 'description: d\ndescription: e\nstate: a %sx\nlabel: x\n' "$long" > "$about_dir/about.txt"
 about_read "$about_dir" state
-check "$([ $? = 1 ] && [ "${about_errors[*]}" = "about.txt line 2: a second description about.txt line 3: the state 'a' has a description of 101 characters, over 100 about.txt line 4: 'label:' is not 'description:' or 'state:'" ]; echo $?)" "a second description, a state's 101 characters and an unknown keyword, each named (${about_errors[*]})"
+check "$([ $? = 1 ] && [ "${about_errors[*]}" = "about.txt line 2: a second description about.txt line 3: the state 'a' has a description of 101 characters, over 100 about.txt line 4: 'label:' is not 'description:', 'state:', 'family:' or 'parent:'" ]; echo $?)" "a second description, a state's 101 characters and an unknown keyword, each named (${about_errors[*]})"
 { echo "description: d"; for i in $(seq 31); do echo "state: s$i The state $i"; done; } > "$about_dir/about.txt"
 about_read "$about_dir" state
 check "$([ $? = 1 ] && [ "${about_errors[*]}" = "about.txt: 31 states, over 30" ]; echo $?)" "31 states: over the limit"
+# The gallery's family and parent: read when declared, each once, a part without a family
+printf 'description: d\nfamily: fields\nstate: a A\n' > "$about_dir/about.txt"
+about_read "$about_dir" state
+check "$([ $? = 0 ] && [ "$about_family|$about_parent" = "fields|" ]; echo $?)" "a family: read ($about_family|$about_parent)"
+printf 'description: d\nparent: input-field\nstate: a A\n' > "$about_dir/about.txt"
+about_read "$about_dir" state
+check "$([ $? = 0 ] && [ "$about_family|$about_parent" = "|input-field" ]; echo $?)" "a parent: read ($about_family|$about_parent)"
+printf 'description: d\nfamily: a\nfamily: b\nparent: x\nparent: Bad_Name\nstate: a A\n' > "$about_dir/about.txt"
+about_read "$about_dir" state
+check "$([ $? = 1 ] && [ "${about_errors[*]}" = "about.txt line 3: a second family about.txt line 5: a second parent about.txt: a family and a parent: a part takes its parent's family" ]; echo $?)" "a second family, a second parent, both together: each named (${about_errors[*]})"
+printf 'description: d\nparent: Bad_Name\nstate: a A\n' > "$about_dir/about.txt"
+about_read "$about_dir" state
+check "$([ $? = 1 ] && [ "${about_errors[*]}" = "about.txt line 2: the parent 'Bad_Name' is not lowercase letters, digits and '-'" ]; echo $?)" "a parent not lowercase: refused (${about_errors[*]})"
+printf 'description: d\nparent: about\nstate: a A\n' > "$about_dir/about.txt"
+about_read "$about_dir" state
+check "$([ $? = 1 ] && [ "${about_errors[*]}" = "about.txt: the parent is the element itself" ]; echo $?)" "the element its own parent: refused (${about_errors[*]})"
 # Every real element's about.txt is as the format says, plans included
 for folder in "$REPO"/mockups/{components,views,plans}/*/; do
     folder=${folder%/}

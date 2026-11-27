@@ -1,0 +1,4 @@
+description: A fixture declaring both a family and a parent
+family: fields
+parent: good
+state: first   The first state

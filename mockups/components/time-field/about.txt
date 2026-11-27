@@ -1,5 +1,6 @@
 # Each state's cell holds the field, 80 px wide and 28 px tall.
 description: A time typed in two parts: hours and minutes
+family: fields
 state: empty           No time: the parts' placeholders
 state: filled          A time
 state: focus           With the keyboard in the hours: the accent around it, the hours selected

@@ -1,4 +1,5 @@
 # Each state's cell is a settings column (308 px): the heading, then a hint under it.
 description: A settings page's heading
+family: text
 state: plain      The heading alone
 state: controls   A switch at the right end of its line

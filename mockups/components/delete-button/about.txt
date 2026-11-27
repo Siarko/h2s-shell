@@ -2,6 +2,7 @@
 # save kind (a button that asks before turning something on) the same; cut and wraps show
 # each kind's long label at rest and asking, at a narrow cap.
 description: The button that asks before it acts: its question with a cancelling ×
+parent: small-button
 state: rest           At rest: delete with its red border, save filled
 state: hover          Under the pointer: delete turns red, save lighter
 state: focus          With the keyboard: the ring inside the border

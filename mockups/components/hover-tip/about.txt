@@ -1,6 +1,7 @@
 # Each state's cell stands in for the window the tip lives in: the tip is kept inside it,
 # above its target where there is room.
 description: The small tooltip over a control, kept inside the window
+family: overlays
 state: short       A short tip above its button
 state: wrapped     A long tip at its widest (260 px): on more lines
 state: below       No room above the button (at the window's top): the tip under it
