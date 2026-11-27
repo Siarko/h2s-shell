@@ -475,8 +475,10 @@ TestCase {
     // no name, a copy gone: refused, the staging folder kept, nothing changed. The staging
     // folder's removal cut short in any order (a stand-in rm removing some of its parts only):
     // the next start leaves the whole swap, the backup's copies kept. A last journal line cut
-    // short while written: dropped, the rest put back. A copy gone from old/ where the file
-    // differs from the backup's copy: the backup's copy kept. "FAIL …" a line each; "steps N" the swap's steps, "combos N" the cuts tried, "end"
+    // short while written: dropped, the rest put back. Put back, the backup's copies are
+    // removed even where they differ from the file (a file edited since, a copy cut short): a
+    // backup copy cut short (disk full: cp failing or not saying so) fails the swap with
+    // nothing changed and no copy left. "FAIL …" a line each; "steps N" the swap's steps, "combos N" the cuts tried, "end"
     readonly property string _cutsDriver: "swap=$1; rec=$2; base=$3; combos=0; keep=config.json.bak-2026-01-01T00-00-00-000Z-restore\n"
         + "say() { echo \"FAIL $*\"; }\n"
         + "setup() { d=$base/$1; rm -rf -- \"$d\"; mkdir -p -- \"$d/themes\"; echo cfg-now > \"$d/config.json\"; echo a-now > \"$d/themes/a.json\"; echo b-now > \"$d/themes/b.json\"; stg=$(mktemp -d \"$d/.config-restore.XXXXXX\"); echo cfg-then > \"$stg/config.json\"; mkdir -p -- \"$stg/new/themes\"; echo a-then > \"$stg/new/themes/a.json\"; echo new-then > \"$stg/new/themes/new.json\"; }\n"
@@ -531,7 +533,15 @@ TestCase {
         + "setup cutline; doswap 7; st=$stg; printf 'w0:themes/ne' >> \"$st/moved\"; dorec \"\"; rc=$?\n"
         + "[ $rc = 0 ] && [ \"$(state \"$d\")\" = \"$before\" ] && [ \"$(stages \"$d\")\" = 0 ] || say \"a journal line cut short: exit $rc, $(state \"$d\" | tr '\\n' ' ')\"\n"
         + "setup oldgone; doswap 3; st=$stg; rm -rf -- \"$st/old\"; echo a-edited > \"$d/themes/a.json\"; dorec \"\"; rc=$?\n"
-        + "[ \"$(cat -- \"$d/backup-side-files/$keep/themes/a.json\" 2>/dev/null)\" = a-now ] || say \"a copy gone from the staging folder: the backup's copy of a file that differs removed\"\n"
+        + "[ $rc = 0 ] && [ \"$(cat -- \"$d/themes/a.json\")\" = a-edited ] && [ ! -e \"$d/backup-side-files/$keep\" ] || say \"nothing swapped yet, a file edited since: exit $rc, $(state \"$d\" | tr '\\n' ' ')\"\n"
+        + "realcp=$(command -v cp); mkdir -p -- \"$base/fakecp\"\n"
+        + "printf '#!/bin/sh\\nfor a; do last=$a; done\\ncase $last in */backup-side-files/*/.created-files) ;; */backup-side-files/*) printf cut > \"$last\"; exit $CPEXIT;; esac\\nexec %s \"$@\"\\n' \"$realcp\" > \"$base/fakecp/cp\"; chmod +x -- \"$base/fakecp/cp\"\n"
+        + "for cpexit in 1 0; do\n"
+        + "  setup truncated; CPEXIT=$cpexit PATH=\"$base/fakecp:$PATH\" doswap \"\"; rc=$?\n"
+        + "  [ $rc = 1 ] && [ \"$(state \"$d\")\" = \"$before\" ] && [ \"$(stages \"$d\")\" = 0 ] && [ ! -e \"$d/backup-side-files/$keep\" ] || say \"a backup copy cut short (cp exit $cpexit): exit $rc, $(state \"$d\" | tr '\\n' ' ')\"\n"
+        + "done\n"
+        + "setup brokencopy; doswap 5; echo cut > \"$d/backup-side-files/$keep/themes/a.json\"; dorec \"\"; rc=$?\n"
+        + "[ $rc = 0 ] && [ \"$(state \"$d\")\" = \"$before\" ] && [ \"$(stages \"$d\")\" = 0 ] || say \"a broken backup copy, then put back: exit $rc, $(state \"$d\" | tr '\\n' ' ')\"\n"
         + "echo end\n"
 
     property Component _swapComponent: Component {

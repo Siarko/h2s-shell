@@ -1,26 +1,27 @@
 import QtQuick
 import Quickshell.Io
 
-// The last step of a restore that puts back side files (ConfigRestore), and the clean-up of
-// one cut short (ConfigMigration, at start, before the config is read). A staging folder in
-// config.json's folder (`.config-restore.*`, private) holds the restored config.json and the
-// side files under new/; swap() takes the folder's lock (flock: a second shell's clean-up
-// waits for it), checks every place (no link, nothing but a file where a file goes; a file it
-// replaces or removes needs a backup to be kept in; no other restore cut short and not yet
-// put back), writes its journal (`keep`, `entries`), copies the files it replaces or removes
-// into the new backup's side folder with the list of those it creates (hash and path: a
-// restore of that backup removes them only unchanged), keeps them in the staging folder
-// (old/, old-config.json), renames config.json into place and then each side file (a crash
-// between leaves the old config with newer side files, which the migrations run again on,
-// never a migrated config with old side files, which they would not reach again), marks
-// `done` and removes the staging folder, its journal (`entries`) first: a removal cut short
-// leaves a folder without one, which is finished. A step that fails, and recover() on a staging folder
-// left by a crash, put back what the journal says was done, under the same lock. Each step is
-// journalled before it is taken, with whether its file was there before; putting back copies
-// from old/ and never removes it, so a putting back cut short anywhere is taken again from the
-// start with the same result. When a step of it fails, the staging folder and the backup's
-// copies stay where they are (the next start tries again) and it is said (`stuck`). A folder
-// made for a side file whose folder was gone stays.
+// The last step of a restore that puts back side files (ConfigRestore), and the clean-up of one
+// cut short (ConfigMigration, at start, before the config is read). A staging folder in
+// config.json's folder (`.config-restore.*`, private) holds the restored config.json and the side
+// files under new/; swap() takes the folder's lock (flock: a second shell's clean-up waits for
+// it), checks every place (no link, nothing but a file where a file goes; a file it replaces or
+// removes needs a backup to be kept in; no other restore cut short and not yet put back), writes
+// its journal (`keep`, `entries`), copies the files it replaces or removes into the new backup's
+// side folder with the list of those it creates (hash and path: a restore of that backup removes
+// them only unchanged), keeps them in the staging folder (old/, old-config.json), each copy
+// compared with its file once written, renames config.json into place and then each side file (a
+// crash between leaves the old config with newer side files, which the migrations run again on,
+// never a migrated config with old side files, which they would not reach again), marks `done` and
+// removes the staging folder, its journal (`entries`) first: a removal cut short leaves a folder
+// without one, which is finished. A step that fails, and recover() on a staging folder left by a
+// crash, put back what the journal says was done, under the same lock. Each step is journalled
+// before it is taken, with whether its file was there before; putting back copies from old/ and
+// never removes it, so a putting back cut short anywhere is taken again from the start with the
+// same result; at its end the new backup's copies are removed (the restore did not happen: the
+// files are as they were). When a step of it fails, the staging folder and the backup's copies
+// stay where they are (the next start tries again) and it is said (`stuck`). A folder made for a
+// side file whose folder was gone stays.
 QtObject {
     id: root
 
@@ -37,7 +38,7 @@ QtObject {
     // `putback`: $1 copied (linked) to $2 by a rename, $1 left in place (nothing when $2 is $1
     // already: a step cut short before it was taken). `drop`: a staging folder removed, `entries`
     // first (one unlink), so that what a removal cut short leaves is never taken for a swap
-    // not finished
+    // not finished. `same`: $1 and $2 hold the same (md5; false when either cannot be read)
     readonly property string _commonFunctions: "tick() { ticks=$((ticks + 1)); if [ \"$stop\" = \"$ticks\" ]; then exit 3; fi; }; "
         + "sidepath() { case $1 in ''|/*|*/|.|..|./*|../*|*/.|*/..|*/./*|*/../*|*//*|config.json|.created-files|*[[:cntrl:]]*) return 1;; esac; "
         + "case ${1%%/*} in config.json.bak-*|backup-side-files|.config-restore.*) return 1;; esac; return 0; }; "
@@ -46,10 +47,11 @@ QtObject {
         + "if [ -L \"$_path\" ]; then echo \"${_path#\"$dir\"/} is a link\"; return 1; fi; "
         + "if [ -e \"$_path\" ] && [ ! -d \"$_path\" ]; then echo \"${_path#\"$dir\"/} is not a folder\"; return 1; fi; done; "
         + "if [ -d \"$dir/$1\" ] && [ ! -L \"$dir/$1\" ]; then echo \"$1 is a folder\"; return 1; fi; return 0; }; "
-        + "putback() { if [ \"$1\" -ef \"$2\" ]; then return 0; fi; rm -f -- \"$st/put\" && { ln -- \"$1\" \"$st/put\" 2>/dev/null || cp -p -- \"$1\" \"$st/put\"; } "
+        + "putback() { if [ \"$1\" -ef \"$2\" ]; then return 0; fi; rm -f -- \"$st/put\" && { ln -- \"$1\" \"$st/put\" 2>/dev/null || cp -p -- \"$1\" \"$st/put\"; } && same \"$1\" \"$st/put\" "
         + "&& mkdir -p -- \"$(dirname -- \"$2\")\" && mv -f -- \"$st/put\" \"$2\"; }; "
         + "keepok() { case $1 in '') return 0;; */*|*[[:cntrl:]]*) return 1;; config.json.bak-?*) return 0;; esac; return 1; }; "
         + "drop() { rm -f -- \"$1/entries\" && rm -rf -- \"$1\"; }; "
+        + "same() { _a=$(md5sum < \"$1\") && _b=$(md5sum < \"$2\") && [ \"$_a\" = \"$_b\" ]; }; "
 
     // The putting back, a shell function: $1 the staging folder, $dir the config's folder. The
     // journal: `keep` and `entries` (written whole before any change), `moved` (a line per step,
@@ -57,9 +59,11 @@ QtObject {
     // `config-moved` (1 or 0 the same, written before config.json is renamed). Undone newest
     // first, a step's line dropped once it is undone; the copies in old/ stay until the end,
     // so undoing a step again gives the same. A last line without its newline was cut short
-    // while written, before its step: dropped. The new backup's copies are removed last, only
-    // when every file they hold is back as they hold it (a copy and the file compared: never
-    // on a copy missing from old/)
+    // while written, before its step: dropped. The new backup's copies (its side folder, which
+    // the swap made) are removed last: every file the swap changed is back from old/ and the
+    // others were never touched, so they are never the only copy, and one that differs from
+    // the file in place is cut short (disk full) or older than an edit made since; kept, it
+    // would hold the backup back from pruning with contents a restore of it would write
     readonly property string _recoverFunction: "recover() { st=$1; "
         + "if [ ! -f \"$st/entries\" ] || [ -f \"$st/done\" ]; then drop \"$st\"; return 0; fi; "
         + "bad() { echo \"the journal in $st cannot be read ($1): kept\" >&2; return 1; }; "
@@ -87,13 +91,8 @@ QtObject {
         + "|| { echo \"could not put back config.json: kept in $st\" >&2; return 1; }; tick; "
         + "rm -f -- \"$st/config-moved\" || { echo \"could not update the journal: kept in $st\" >&2; return 1; }; tick; fi; "
         + "copies=\"$dir/backup-side-files/$keep\"; "
-        + "if [ -n \"$keep\" ] && [ ! -L \"$dir/backup-side-files\" ] && [ ! -L \"$copies\" ] && [ -d \"$copies\" ]; then same=1; "
-        + "while IFS= read -r entry; do file=${entry#?:}; "
-        + "if [ -e \"$copies/$file\" ] || [ -L \"$copies/$file\" ]; then "
-        + "if [ -L \"$copies/$file\" ] || [ ! -f \"$copies/$file\" ] || [ -L \"$dir/$file\" ] || [ ! -f \"$dir/$file\" ] "
-        + "|| [ \"$(md5sum < \"$copies/$file\")\" != \"$(md5sum < \"$dir/$file\")\" ]; then same=0; fi; fi; "
-        + "done < \"$st/entries\"; "
-        + "if [ \"$same\" = 1 ]; then rm -rf -- \"$copies\" || { echo \"could not remove $copies: kept in $st\" >&2; return 1; }; else echo \"$copies kept: a file put back differs from its copy\" >&2; fi; tick; fi; "
+        + "if [ -n \"$keep\" ] && [ ! -L \"$dir/backup-side-files\" ] && { [ -e \"$copies\" ] || [ -L \"$copies\" ]; }; then "
+        + "rm -rf -- \"$copies\" || { echo \"could not remove $copies: kept in $st\" >&2; return 1; }; tick; fi; "
         + "drop \"$st\"; return 0; }; "
 
     // $1 the folder, $2 the staging folder, $3 the backup just made ("" none), $4 stopAfter,
@@ -130,17 +129,17 @@ QtObject {
         + "|| fail \"could not write the journal\"; tick; "
         + "for entry in \"$@\"; do file=${entry#?:}; "
         + "if [ -f \"$dir/$file\" ]; then "
-        + "{ mkdir -p -- \"$side/$keep/$(dirname -- \"$file\")\" && cp -- \"$dir/$file\" \"$side/$keep/$file\"; } || fail \"could not back up $file\"; "
+        + "{ mkdir -p -- \"$side/$keep/$(dirname -- \"$file\")\" && cp -- \"$dir/$file\" \"$side/$keep/$file\" && same \"$dir/$file\" \"$side/$keep/$file\"; } || fail \"could not back up $file\"; "
         + "else case $entry in w:*) { hash=$(md5sum < \"$stage/new/$file\") && printf '%s %s\\n' \"${hash%% *}\" \"$file\" >> \"$stage/created\"; } "
         + "|| fail \"could not list the files created\";; esac; fi; done; "
         + "if [ -n \"$keep\" ] && [ -s \"$stage/created\" ]; then "
-        + "{ mkdir -p -- \"$side/$keep\" && cp -- \"$stage/created\" \"$side/$keep/.created-files\"; } || fail \"could not list the files created\"; fi; tick; "
+        + "{ mkdir -p -- \"$side/$keep\" && cp -- \"$stage/created\" \"$side/$keep/.created-files\" && same \"$stage/created\" \"$side/$keep/.created-files\"; } || fail \"could not list the files created\"; fi; tick; "
         + "for entry in \"$@\"; do file=${entry#?:}; if [ -f \"$dir/$file\" ]; then "
-        + "{ mkdir -p -- \"$stage/old/$(dirname -- \"$file\")\" && { ln -- \"$dir/$file\" \"$stage/old/$file\" 2>/dev/null || cp -p -- \"$dir/$file\" \"$stage/old/$file\"; }; } "
+        + "{ mkdir -p -- \"$stage/old/$(dirname -- \"$file\")\" && { ln -- \"$dir/$file\" \"$stage/old/$file\" 2>/dev/null || cp -p -- \"$dir/$file\" \"$stage/old/$file\"; } && same \"$dir/$file\" \"$stage/old/$file\"; } "
         + "|| fail \"could not keep $file\"; "
         + "case $entry in w:*) chmod --reference=\"$dir/$file\" -- \"$stage/new/$file\" || fail \"could not keep the mode of $file\";; esac; fi; done; "
         + "existed=0; if [ -f \"$config\" ]; then existed=1; "
-        + "{ { ln -- \"$config\" \"$stage/old-config.json\" 2>/dev/null || cp -p -- \"$config\" \"$stage/old-config.json\"; } "
+        + "{ { ln -- \"$config\" \"$stage/old-config.json\" 2>/dev/null || cp -p -- \"$config\" \"$stage/old-config.json\"; } && same \"$config\" \"$stage/old-config.json\" "
         + "&& chmod --reference=\"$config\" -- \"$stage/config.json\"; } || fail \"could not keep config.json\"; "
         + "else chmod 600 -- \"$stage/config.json\" || fail \"could not restrict config.json\"; fi; tick; "
         + "{ : > \"$stage/moved\" && printf '%s\\n' \"$existed\" > \"$stage/config-moved.new\" && mv -f -- \"$stage/config-moved.new\" \"$stage/config-moved\"; } "

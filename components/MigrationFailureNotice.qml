@@ -261,7 +261,9 @@ QtObject {
             _acting = false;
             releaseSaves();
             _problem = result.problem;
-            console.warn("[Migrations] " + result.problem + ": nothing restored");
+            // The restore's own problems mostly say it already
+            const said = String(result.problem ?? "");
+            console.warn("[Migrations] " + said + (said.endsWith("nothing restored") ? "" : ": nothing restored"));
             return;
         }
         if (result.backup !== "")
