@@ -76,6 +76,7 @@ Rectangle {
             : Qt.ImhNone
         font.family: Theme.fontFamily
         font.pixelSize: root.fontSize
+        font.letterSpacing: echoMode === TextInput.Password ? Theme.passwordLetterSpacing : 0
         color: Theme.textPrimary
         selectByMouse: true
         clip: true
@@ -91,7 +92,9 @@ Rectangle {
             textFormat: Text.PlainText
             maximumLineCount: 1
             elide: Text.ElideRight
-            font: parent.font
+            // The field's font without a password's spacing: the placeholder is words
+            font.family: parent.font.family
+            font.pixelSize: parent.font.pixelSize
             color: Theme.textDisabled
         }
     }

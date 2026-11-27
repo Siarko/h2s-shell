@@ -211,6 +211,8 @@ The interface modules are written against (`qs.api`), versioned on its own
   popup's colour; a theme whose secondary text is too close to its backgrounds gets a track
   moved away from them). Under the pointer the track stands out further, and the knob is
   light or dark, whichever stands out from the track. Modules' switches look the same.
+- A hidden password's dots in the shell's fields (Wi-Fi, network connections, calendar
+  accounts, modules' fields) stand apart, as on the lock screen and in the password prompt.
 - A group's title in a dropdown or an "Add" list is bold and set a little further in
   than its entries, so it no longer reads as one of them.
 - Dropdowns and "Add" lists work from the keyboard: Tab reaches them (a ring shows the

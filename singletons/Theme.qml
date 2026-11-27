@@ -586,6 +586,9 @@ Singleton {
     // The weight of a title that sets itself off from the entries under it (a list's
     // group). Not a theme file's token: the same in every theme
     readonly property int fontWeightBold: Font.Bold
+    // Between a hidden password's dots, which otherwise run together (a password field, the
+    // lock screen's, the polkit prompt's). The same in every theme
+    readonly property real passwordLetterSpacing: 4
 
     // Backgrounds
     property color barBackground: _colors.barBackground
