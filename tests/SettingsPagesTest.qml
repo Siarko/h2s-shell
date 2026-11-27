@@ -825,6 +825,10 @@ TestCase {
                      named("hibernateControlled").shown].join(" "), "false true plain false false",
                     "… sleep on: the time (the system's delay then) disabled with the system's mark beside it, Apply disabled, one mark");
         assertEqual(named("hibernateTimeoutControlled").tip, "This setting is controlled by your system configuration", "… the mark's tooltip");
+        const mark = named("hibernateTimeoutControlled");
+        assert(Qt.colorEqual(mark.color, "#7ebae4") && mark.style === Text.Outline && Qt.colorEqual(mark.styleColor, "#000000")
+               && mark.font.pixelSize === Theme.fontSizeBodyLarge && mark.opacity === 1,
+               "… the mark in NixOS's blue with a black outline, a size up from body text, never dimmed with the disabled time");
         _away({ "lockscreen.hibernateEnabled": true, "lockscreen.hibernateTimeout": 10800 });
         assertEqual([named("hibernateTimeout").available, named("hibernateTimeoutControlled").shown, named("hibernateControlled").shown, apply.available].join(" "),
                     "true false true false", "… sleep off: the time the shell's own, editable; the mark beside the disabled Apply");

@@ -205,7 +205,8 @@ The interface modules are written against (`qs.api`), versioned on its own
   reloads when it changes.
 - Settings: a setting the system's configuration sets itself is shown disabled, with the
   NixOS mark beside it ("This setting is controlled by your system configuration" on hover)
-  and no line explaining it; the NixOS hibernation delay is the first.
+  and no line explaining it; the NixOS hibernation delay is the first. The mark is NixOS's
+  own blue with a thin black outline, whatever the theme.
 
 ### Changed
 - Switches look the same everywhere, small or large: off, the track is the theme's

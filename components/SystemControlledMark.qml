@@ -16,8 +16,17 @@ Text {
     // Nerd Font: the NixOS logo
     text: ""
     font.family: Theme.fontFamily
-    font.pixelSize: Theme.fontSizeBody
-    color: Theme.accent
+    // NixOS's own brand colour (its logo's light blue), fixed: the logo is NixOS's, not the
+    // theme's. A thin black outline keeps it readable on light surfaces
+    readonly property color nixosBlue: "#7ebae4"
+    readonly property color outline: "#000000"
+
+    // A size up from the text beside it; never dimmed with the disabled control it stands
+    // beside
+    font.pixelSize: Theme.fontSizeBodyLarge
+    color: nixosBlue
+    style: Text.Outline
+    styleColor: outline
 
     MouseArea {
         id: _area
